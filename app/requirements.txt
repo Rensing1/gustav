@@ -1,0 +1,10 @@
+# FastAPI Framework und Server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# Template Engine
+jinja2==3.1.4
+
+# Für spätere Erweiterungen (aber schon mal dabei)
+python-multipart==0.0.12  # Für File-Uploads
+python-dotenv==1.0.1       # Für Umgebungsvariablen

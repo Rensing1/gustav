@@ -1,0 +1,543 @@
+{
+  "test_run": "20250910_151120",
+  "summary": {
+    "total": 49,
+    "passed": 45,
+    "failed": 4,
+    "success_rate": 91.83673469387756,
+    "by_page": {
+      "core/auth": {
+        "pass": 2,
+        "fail": 0,
+        "functions": [
+          "get_users_by_role",
+          "is_teacher_authorized_for_course"
+        ]
+      },
+      "core/session": {
+        "pass": 1,
+        "fail": 0,
+        "functions": [
+          "get_session_id"
+        ]
+      },
+      "1_Kurse.py": {
+        "pass": 4,
+        "fail": 0,
+        "functions": [
+          "get_courses_by_creator",
+          "get_course_by_id",
+          "update_course",
+          "get_course_students"
+        ]
+      },
+      "2_Lerneinheiten.py": {
+        "pass": 4,
+        "fail": 0,
+        "functions": [
+          "get_learning_units_by_creator",
+          "get_learning_unit_by_id",
+          "get_assigned_units_for_course",
+          "update_learning_unit"
+        ]
+      },
+      "5_Schueler.py": {
+        "pass": 4,
+        "fail": 0,
+        "functions": [
+          "get_students_in_course",
+          "get_teachers_in_course",
+          "remove_user_from_course",
+          "add_user_to_course"
+        ]
+      },
+      "6_Live-Unterricht.py": {
+        "pass": 8,
+        "fail": 0,
+        "functions": [
+          "get_sections_for_unit",
+          "get_section_statuses_for_unit_in_course",
+          "unpublish_section_for_course",
+          "publish_section_for_course",
+          "get_submission_status_matrix",
+          "get_task_details",
+          "get_submission_for_task",
+          "update_submission_teacher_override"
+        ]
+      },
+      "3_Meine_Aufgaben.py": {
+        "pass": 5,
+        "fail": 0,
+        "functions": [
+          "get_published_section_details_for_student",
+          "get_remaining_attempts",
+          "create_submission",
+          "get_submission_by_id",
+          "get_submission_history"
+        ]
+      },
+      "7_Wissensfestiger.py": {
+        "pass": 1,
+        "fail": 1,
+        "functions": [
+          "get_user_course_ids",
+          "get_next_mastery_task_or_unviewed_feedback"
+        ]
+      },
+      "9_Feedback_einsehen.py": {
+        "pass": 1,
+        "fail": 0,
+        "functions": [
+          "get_all_feedback"
+        ]
+      },
+      "8_Feedback.py": {
+        "pass": 1,
+        "fail": 0,
+        "functions": [
+          "submit_feedback"
+        ]
+      },
+      "intern": {
+        "pass": 8,
+        "fail": 0,
+        "functions": [
+          "get_tasks_for_section",
+          "get_regular_tasks_for_section",
+          "get_mastery_tasks_for_section",
+          "create_task_in_new_structure",
+          "move_task_down",
+          "move_task_up",
+          "get_section_tasks",
+          "update_task_in_new_structure"
+        ]
+      },
+      "enrollment": {
+        "pass": 2,
+        "fail": 0,
+        "functions": [
+          "get_student_courses",
+          "get_courses_assigned_to_unit"
+        ]
+      },
+      "progress": {
+        "pass": 3,
+        "fail": 0,
+        "functions": [
+          "get_submissions_for_course_and_unit",
+          "calculate_learning_streak",
+          "update_submission_ai_results"
+        ]
+      },
+      "mastery": {
+        "pass": 1,
+        "fail": 3,
+        "functions": [
+          "get_mastery_tasks_for_course",
+          "get_next_due_mastery_task",
+          "get_mastery_stats_for_student",
+          "get_mastery_overview_for_teacher"
+        ]
+      }
+    }
+  },
+  "configuration": {
+    "ai_timeout": 30,
+    "verbose_logging": true,
+    "real_sessions": true
+  },
+  "results": [
+    {
+      "function": "get_users_by_role",
+      "ui_page": "core/auth",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 2 teachers, test teacher included: True",
+      "timestamp": "2025-09-10T15:10:49.852592"
+    },
+    {
+      "function": "is_teacher_authorized_for_course",
+      "ui_page": "core/auth",
+      "result": "PASS",
+      "error": null,
+      "details": "Teacher authorized: True",
+      "timestamp": "2025-09-10T15:10:49.861699"
+    },
+    {
+      "function": "get_session_id",
+      "ui_page": "core/session",
+      "result": "PASS",
+      "error": null,
+      "details": "Session ID: test_7513b2e7-88...",
+      "timestamp": "2025-09-10T15:10:49.861740"
+    },
+    {
+      "function": "get_courses_by_creator",
+      "ui_page": "1_Kurse.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 19 courses, 19 test courses",
+      "timestamp": "2025-09-10T15:10:49.879183"
+    },
+    {
+      "function": "get_course_by_id",
+      "ui_page": "1_Kurse.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Got course: \ud83e\uddea TEST Kurs 20250910_151049",
+      "timestamp": "2025-09-10T15:10:49.887325"
+    },
+    {
+      "function": "update_course",
+      "ui_page": "1_Kurse.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Updated name to: \ud83e\uddea TEST Kurs 20250910_151049 - Updated",
+      "timestamp": "2025-09-10T15:10:49.895638"
+    },
+    {
+      "function": "get_course_students",
+      "ui_page": "1_Kurse.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 students",
+      "timestamp": "2025-09-10T15:10:49.905773"
+    },
+    {
+      "function": "get_learning_units_by_creator",
+      "ui_page": "2_Lerneinheiten.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 97 units, 97 test units",
+      "timestamp": "2025-09-10T15:10:49.914261"
+    },
+    {
+      "function": "get_learning_unit_by_id",
+      "ui_page": "2_Lerneinheiten.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Got unit: \ud83e\uddea TEST Lerneinheit 151049",
+      "timestamp": "2025-09-10T15:10:49.922262"
+    },
+    {
+      "function": "get_assigned_units_for_course",
+      "ui_page": "2_Lerneinheiten.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 assigned units",
+      "timestamp": "2025-09-10T15:10:49.930461"
+    },
+    {
+      "function": "update_learning_unit",
+      "ui_page": "2_Lerneinheiten.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Updated title to: \ud83e\uddea TEST Lerneinheit 151049 - Updated",
+      "timestamp": "2025-09-10T15:10:49.942587"
+    },
+    {
+      "function": "get_students_in_course",
+      "ui_page": "5_Schueler.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 students, test student included: True",
+      "timestamp": "2025-09-10T15:10:49.951201"
+    },
+    {
+      "function": "get_teachers_in_course",
+      "ui_page": "5_Schueler.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 teachers, test teacher included: False",
+      "timestamp": "2025-09-10T15:10:49.959521"
+    },
+    {
+      "function": "remove_user_from_course",
+      "ui_page": "5_Schueler.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Removed student from course",
+      "timestamp": "2025-09-10T15:10:49.968209"
+    },
+    {
+      "function": "add_user_to_course",
+      "ui_page": "5_Schueler.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Re-added student to course",
+      "timestamp": "2025-09-10T15:10:49.980446"
+    },
+    {
+      "function": "get_sections_for_unit",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 sections",
+      "timestamp": "2025-09-10T15:10:49.989151"
+    },
+    {
+      "function": "get_section_statuses_for_unit_in_course",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Status type: <class 'dict'>, published sections: 1",
+      "timestamp": "2025-09-10T15:10:49.997732"
+    },
+    {
+      "function": "unpublish_section_for_course",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Section unpublished",
+      "timestamp": "2025-09-10T15:10:50.006127"
+    },
+    {
+      "function": "publish_section_for_course",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Section re-published",
+      "timestamp": "2025-09-10T15:10:50.017987"
+    },
+    {
+      "function": "get_submission_status_matrix",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Sections: 1, Students: 1, Tasks: 1",
+      "timestamp": "2025-09-10T15:10:50.028328"
+    },
+    {
+      "function": "get_task_details",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Got task: None, type: None",
+      "timestamp": "2025-09-10T15:10:50.036590"
+    },
+    {
+      "function": "get_published_section_details_for_student",
+      "ui_page": "3_Meine_Aufgaben.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 sections with 1 tasks",
+      "timestamp": "2025-09-10T15:10:50.047304"
+    },
+    {
+      "function": "get_remaining_attempts",
+      "ui_page": "3_Meine_Aufgaben.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Remaining: 3, Max: 3",
+      "timestamp": "2025-09-10T15:10:50.055331"
+    },
+    {
+      "function": "create_submission",
+      "ui_page": "3_Meine_Aufgaben.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Created submission: f24b5950-54dd-4a0f-ba30-af07186d66e8",
+      "timestamp": "2025-09-10T15:10:50.095807"
+    },
+    {
+      "function": "get_submission_by_id",
+      "ui_page": "3_Meine_Aufgaben.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Got submission, is_processing: None",
+      "timestamp": "2025-09-10T15:11:20.521892"
+    },
+    {
+      "function": "get_submission_history",
+      "ui_page": "3_Meine_Aufgaben.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 submissions in history",
+      "timestamp": "2025-09-10T15:11:20.532499"
+    },
+    {
+      "function": "get_submission_for_task",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Got submission: f24b5950-54dd-4a0f-ba30-af07186d66e8",
+      "timestamp": "2025-09-10T15:11:20.542494"
+    },
+    {
+      "function": "update_submission_teacher_override",
+      "ui_page": "6_Live-Unterricht.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Teacher override added",
+      "timestamp": "2025-09-10T15:11:20.561744"
+    },
+    {
+      "function": "get_user_course_ids",
+      "ui_page": "7_Wissensfestiger.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 20 course IDs, test course included: False",
+      "timestamp": "2025-09-10T15:11:20.575685"
+    },
+    {
+      "function": "get_next_mastery_task_or_unviewed_feedback",
+      "ui_page": "7_Wissensfestiger.py",
+      "result": "FAIL",
+      "error": "Keine Aufgaben f\u00e4llig heute. Komm morgen wieder!",
+      "details": null,
+      "timestamp": "2025-09-10T15:11:20.601757"
+    },
+    {
+      "function": "get_all_feedback",
+      "ui_page": "9_Feedback_einsehen.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 56 feedback entries",
+      "timestamp": "2025-09-10T15:11:20.614014"
+    },
+    {
+      "function": "submit_feedback",
+      "ui_page": "8_Feedback.py",
+      "result": "PASS",
+      "error": null,
+      "details": "Feedback submitted",
+      "timestamp": "2025-09-10T15:11:20.624748"
+    },
+    {
+      "function": "get_tasks_for_section",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 tasks",
+      "timestamp": "2025-09-10T15:11:20.635189"
+    },
+    {
+      "function": "get_regular_tasks_for_section",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 regular tasks",
+      "timestamp": "2025-09-10T15:11:20.645379"
+    },
+    {
+      "function": "get_mastery_tasks_for_section",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 0 mastery tasks",
+      "timestamp": "2025-09-10T15:11:20.661537"
+    },
+    {
+      "function": "create_task_in_new_structure",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Created task via router: 01e3195a-29e7-4e77-8c32-44b3b3520929",
+      "timestamp": "2025-09-10T15:11:20.672520"
+    },
+    {
+      "function": "move_task_down",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Task moved down",
+      "timestamp": "2025-09-10T15:11:20.683691"
+    },
+    {
+      "function": "move_task_up",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Task moved up",
+      "timestamp": "2025-09-10T15:11:20.694215"
+    },
+    {
+      "function": "get_section_tasks",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 2 task items",
+      "timestamp": "2025-09-10T15:11:20.709650"
+    },
+    {
+      "function": "update_task_in_new_structure",
+      "ui_page": "intern",
+      "result": "PASS",
+      "error": null,
+      "details": "Task updated",
+      "timestamp": "2025-09-10T15:11:20.721027"
+    },
+    {
+      "function": "get_student_courses",
+      "ui_page": "enrollment",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 20 courses, test course included: True",
+      "timestamp": "2025-09-10T15:11:20.731622"
+    },
+    {
+      "function": "get_courses_assigned_to_unit",
+      "ui_page": "enrollment",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 1 courses using this unit",
+      "timestamp": "2025-09-10T15:11:20.741897"
+    },
+    {
+      "function": "get_submissions_for_course_and_unit",
+      "ui_page": "progress",
+      "result": "PASS",
+      "error": null,
+      "details": "Found 2 submissions",
+      "timestamp": "2025-09-10T15:11:20.756713"
+    },
+    {
+      "function": "calculate_learning_streak",
+      "ui_page": "progress",
+      "result": "PASS",
+      "error": null,
+      "details": "Current streak: 0 days",
+      "timestamp": "2025-09-10T15:11:20.766555"
+    },
+    {
+      "function": "update_submission_ai_results",
+      "ui_page": "progress",
+      "result": "PASS",
+      "error": null,
+      "details": "AI results updated",
+      "timestamp": "2025-09-10T15:11:20.776675"
+    },
+    {
+      "function": "get_mastery_tasks_for_course",
+      "ui_page": "mastery",
+      "result": "FAIL",
+      "error": "Fehler beim Abrufen der Mastery-Aufgaben: {'message': 'cannot cast type integer to interval', 'code': '42846', 'hint': None, 'details': None}",
+      "details": null,
+      "timestamp": "2025-09-10T15:11:20.786949"
+    },
+    {
+      "function": "get_next_due_mastery_task",
+      "ui_page": "mastery",
+      "result": "FAIL",
+      "error": "Keine Aufgaben f\u00e4llig heute. Komm morgen wieder!",
+      "details": null,
+      "timestamp": "2025-09-10T15:11:20.800674"
+    },
+    {
+      "function": "get_mastery_stats_for_student",
+      "ui_page": "mastery",
+      "result": "FAIL",
+      "error": "Fehler beim Abrufen der Mastery-Aufgaben: {'message': 'cannot cast type integer to interval', 'code': '42846', 'hint': None, 'details': None}",
+      "details": null,
+      "timestamp": "2025-09-10T15:11:20.810754"
+    },
+    {
+      "function": "get_mastery_overview_for_teacher",
+      "ui_page": "mastery",
+      "result": "PASS",
+      "error": null,
+      "details": "Overview for 0 students",
+      "timestamp": "2025-09-10T15:11:20.841294"
+    }
+  ]
+}

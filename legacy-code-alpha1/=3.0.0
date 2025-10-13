@@ -1,0 +1,128 @@
+Requirement already satisfied: dspy-ai in /usr/local/lib/python3.10/site-packages (2.5.43)
+Collecting dspy-ai
+  Downloading dspy_ai-3.0.2-py3-none-any.whl.metadata (285 bytes)
+Collecting dspy>=3.0.2 (from dspy-ai)
+  Downloading dspy-3.0.2-py3-none-any.whl.metadata (7.1 kB)
+Requirement already satisfied: backoff>=2.2 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (2.2.1)
+Requirement already satisfied: joblib~=1.3 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (1.5.1)
+Requirement already satisfied: openai>=0.28.1 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (1.59.9)
+Requirement already satisfied: regex>=2023.10.3 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (2025.7.34)
+Requirement already satisfied: ujson>=5.8.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (5.10.0)
+Requirement already satisfied: tqdm>=4.66.1 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (4.67.1)
+Requirement already satisfied: requests>=2.31.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (2.32.5)
+Requirement already satisfied: optuna>=3.4.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (4.5.0)
+Requirement already satisfied: pydantic>=2.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (2.11.7)
+Requirement already satisfied: magicattr>=0.1.6 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (0.1.6)
+Collecting litellm>=1.64.0 (from dspy>=3.0.2->dspy-ai)
+  Downloading litellm-1.76.0-py3-none-any.whl.metadata (41 kB)
+Requirement already satisfied: diskcache>=5.6.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (5.6.3)
+Requirement already satisfied: json-repair>=0.30.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (0.49.0)
+Requirement already satisfied: tenacity>=8.2.3 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (9.1.2)
+Requirement already satisfied: anyio in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (4.10.0)
+Requirement already satisfied: asyncer==0.0.8 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (0.0.8)
+Requirement already satisfied: cachetools>=5.5.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (6.1.0)
+Requirement already satisfied: cloudpickle>=3.0.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (3.1.1)
+Collecting rich>=13.7.1 (from dspy>=3.0.2->dspy-ai)
+  Downloading rich-14.1.0-py3-none-any.whl.metadata (18 kB)
+Requirement already satisfied: numpy>=1.26.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (2.2.6)
+Requirement already satisfied: xxhash>=3.5.0 in /usr/local/lib/python3.10/site-packages (from dspy>=3.0.2->dspy-ai) (3.5.0)
+Collecting gepa==0.0.4 (from gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai)
+  Downloading gepa-0.0.4-py3-none-any.whl.metadata (10 kB)
+Requirement already satisfied: datasets>=2.14.6 in /usr/local/lib/python3.10/site-packages (from gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (4.0.0)
+Ignoring litellm: markers 'extra != "dspy"' don't match your environment
+Ignoring datasets: markers 'extra != "dspy"' don't match your environment
+Requirement already satisfied: exceptiongroup>=1.0.2 in /usr/local/lib/python3.10/site-packages (from anyio->dspy>=3.0.2->dspy-ai) (1.3.0)
+Requirement already satisfied: idna>=2.8 in /usr/local/lib/python3.10/site-packages (from anyio->dspy>=3.0.2->dspy-ai) (3.10)
+Requirement already satisfied: sniffio>=1.1 in /usr/local/lib/python3.10/site-packages (from anyio->dspy>=3.0.2->dspy-ai) (1.3.1)
+Requirement already satisfied: typing_extensions>=4.5 in /usr/local/lib/python3.10/site-packages (from anyio->dspy>=3.0.2->dspy-ai) (4.14.1)
+Requirement already satisfied: filelock in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (3.19.1)
+Requirement already satisfied: pyarrow>=15.0.0 in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (21.0.0)
+Requirement already satisfied: dill<0.3.9,>=0.3.0 in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (0.3.8)
+Requirement already satisfied: pandas in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (2.3.1)
+Requirement already satisfied: multiprocess<0.70.17 in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (0.70.16)
+Requirement already satisfied: fsspec<=2025.3.0,>=2023.1.0 in /usr/local/lib/python3.10/site-packages (from fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (2025.3.0)
+Requirement already satisfied: huggingface-hub>=0.24.0 in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (0.34.4)
+Requirement already satisfied: packaging in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (25.0)
+Requirement already satisfied: pyyaml>=5.1 in /usr/local/lib/python3.10/site-packages (from datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (6.0.2)
+Requirement already satisfied: aiohttp!=4.0.0a0,!=4.0.0a1 in /usr/local/lib/python3.10/site-packages (from fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (3.12.15)
+Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (2.6.1)
+Requirement already satisfied: aiosignal>=1.4.0 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (1.4.0)
+Requirement already satisfied: async-timeout<6.0,>=4.0 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (5.0.1)
+Requirement already satisfied: attrs>=17.3.0 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (25.3.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (1.7.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (6.6.4)
+Requirement already satisfied: propcache>=0.2.0 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (0.3.2)
+Requirement already satisfied: yarl<2.0,>=1.17.0 in /usr/local/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.3.0,>=2023.1.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (1.20.1)
+Requirement already satisfied: hf-xet<2.0.0,>=1.1.3 in /usr/local/lib/python3.10/site-packages (from huggingface-hub>=0.24.0->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (1.1.8)
+Requirement already satisfied: click in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (8.2.1)
+Requirement already satisfied: httpx>=0.23.0 in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (0.28.0)
+Requirement already satisfied: importlib-metadata>=6.8.0 in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (8.7.0)
+Requirement already satisfied: jinja2<4.0.0,>=3.1.2 in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (3.1.6)
+Requirement already satisfied: jsonschema<5.0.0,>=4.22.0 in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (4.25.1)
+Collecting openai>=0.28.1 (from dspy>=3.0.2->dspy-ai)
+  Downloading openai-1.102.0-py3-none-any.whl.metadata (29 kB)
+Requirement already satisfied: python-dotenv>=0.2.0 in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (1.1.1)
+Requirement already satisfied: tiktoken>=0.7.0 in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (0.11.0)
+Requirement already satisfied: tokenizers in /usr/local/lib/python3.10/site-packages (from litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (0.21.4)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.10/site-packages (from jinja2<4.0.0,>=3.1.2->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (3.0.2)
+Requirement already satisfied: jsonschema-specifications>=2023.03.6 in /usr/local/lib/python3.10/site-packages (from jsonschema<5.0.0,>=4.22.0->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (2025.4.1)
+Requirement already satisfied: referencing>=0.28.4 in /usr/local/lib/python3.10/site-packages (from jsonschema<5.0.0,>=4.22.0->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (0.36.2)
+Requirement already satisfied: rpds-py>=0.7.1 in /usr/local/lib/python3.10/site-packages (from jsonschema<5.0.0,>=4.22.0->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (0.27.0)
+Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.10/site-packages (from pydantic>=2.0->dspy>=3.0.2->dspy-ai) (0.7.0)
+Requirement already satisfied: pydantic-core==2.33.2 in /usr/local/lib/python3.10/site-packages (from pydantic>=2.0->dspy>=3.0.2->dspy-ai) (2.33.2)
+Requirement already satisfied: typing-inspection>=0.4.0 in /usr/local/lib/python3.10/site-packages (from pydantic>=2.0->dspy>=3.0.2->dspy-ai) (0.4.1)
+Requirement already satisfied: certifi in /usr/local/lib/python3.10/site-packages (from httpx>=0.23.0->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (2025.8.3)
+Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.10/site-packages (from httpx>=0.23.0->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.10/site-packages (from httpcore==1.*->httpx>=0.23.0->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (0.16.0)
+Requirement already satisfied: zipp>=3.20 in /usr/local/lib/python3.10/site-packages (from importlib-metadata>=6.8.0->litellm>=1.64.0->dspy>=3.0.2->dspy-ai) (3.23.0)
+Requirement already satisfied: distro<2,>=1.7.0 in /usr/local/lib/python3.10/site-packages (from openai>=0.28.1->dspy>=3.0.2->dspy-ai) (1.9.0)
+Requirement already satisfied: jiter<1,>=0.4.0 in /usr/local/lib/python3.10/site-packages (from openai>=0.28.1->dspy>=3.0.2->dspy-ai) (0.10.0)
+Requirement already satisfied: alembic>=1.5.0 in /usr/local/lib/python3.10/site-packages (from optuna>=3.4.0->dspy>=3.0.2->dspy-ai) (1.16.4)
+Requirement already satisfied: colorlog in /usr/local/lib/python3.10/site-packages (from optuna>=3.4.0->dspy>=3.0.2->dspy-ai) (6.9.0)
+Requirement already satisfied: sqlalchemy>=1.4.2 in /usr/local/lib/python3.10/site-packages (from optuna>=3.4.0->dspy>=3.0.2->dspy-ai) (2.0.43)
+Requirement already satisfied: Mako in /usr/local/lib/python3.10/site-packages (from alembic>=1.5.0->optuna>=3.4.0->dspy>=3.0.2->dspy-ai) (1.3.10)
+Requirement already satisfied: tomli in /usr/local/lib/python3.10/site-packages (from alembic>=1.5.0->optuna>=3.4.0->dspy>=3.0.2->dspy-ai) (2.2.1)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.10/site-packages (from requests>=2.31.0->dspy>=3.0.2->dspy-ai) (3.4.3)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.10/site-packages (from requests>=2.31.0->dspy>=3.0.2->dspy-ai) (2.5.0)
+Collecting markdown-it-py>=2.2.0 (from rich>=13.7.1->dspy>=3.0.2->dspy-ai)
+  Downloading markdown_it_py-4.0.0-py3-none-any.whl.metadata (7.3 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich>=13.7.1->dspy>=3.0.2->dspy-ai)
+  Downloading pygments-2.19.2-py3-none-any.whl.metadata (2.5 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.7.1->dspy>=3.0.2->dspy-ai)
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Requirement already satisfied: greenlet>=1 in /usr/local/lib/python3.10/site-packages (from sqlalchemy>=1.4.2->optuna>=3.4.0->dspy>=3.0.2->dspy-ai) (3.2.4)
+Requirement already satisfied: python-dateutil>=2.8.2 in /usr/local/lib/python3.10/site-packages (from pandas->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /usr/local/lib/python3.10/site-packages (from pandas->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (2025.2)
+Requirement already satisfied: tzdata>=2022.7 in /usr/local/lib/python3.10/site-packages (from pandas->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (2025.2)
+Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.10/site-packages (from python-dateutil>=2.8.2->pandas->datasets>=2.14.6->gepa==0.0.4->gepa[dspy]==0.0.4->dspy>=3.0.2->dspy-ai) (1.17.0)
+Downloading dspy_ai-3.0.2-py3-none-any.whl (1.1 kB)
+Downloading dspy-3.0.2-py3-none-any.whl (260 kB)
+Downloading gepa-0.0.4-py3-none-any.whl (35 kB)
+Downloading litellm-1.76.0-py3-none-any.whl (9.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.0/9.0 MB 11.5 MB/s  0:00:00
+Downloading openai-1.102.0-py3-none-any.whl (812 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 812.0/812.0 kB 11.7 MB/s  0:00:00
+Downloading rich-14.1.0-py3-none-any.whl (243 kB)
+Downloading pygments-2.19.2-py3-none-any.whl (1.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 10.3 MB/s  0:00:00
+Downloading markdown_it_py-4.0.0-py3-none-any.whl (87 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Installing collected packages: pygments, mdurl, markdown-it-py, rich, openai, litellm, gepa, dspy, dspy-ai
+  Attempting uninstall: openai
+    Found existing installation: openai 1.59.9
+    Uninstalling openai-1.59.9:
+      Successfully uninstalled openai-1.59.9
+  Attempting uninstall: litellm
+    Found existing installation: litellm 1.51.0
+    Uninstalling litellm-1.51.0:
+      Successfully uninstalled litellm-1.51.0
+  Attempting uninstall: dspy
+    Found existing installation: dspy 2.5.42
+    Uninstalling dspy-2.5.42:
+      Successfully uninstalled dspy-2.5.42
+  Attempting uninstall: dspy-ai
+    Found existing installation: dspy-ai 2.5.43
+    Uninstalling dspy-ai-2.5.43:
+      Successfully uninstalled dspy-ai-2.5.43
+
+Successfully installed dspy-3.0.2 dspy-ai-3.0.2 gepa-0.0.4 litellm-1.76.0 markdown-it-py-4.0.0 mdurl-0.1.2 openai-1.102.0 pygments-2.19.2 rich-14.1.0

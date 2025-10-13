@@ -1,0 +1,109 @@
+-- Migration: Fix submission_text column references
+-- Purpose: Update all functions that incorrectly reference s.submission_text to use s.submission_data
+
+-- 1. Fix get_submission_by_id function
+CREATE OR REPLACE FUNCTION get_submission_by_id(
+    p_session_id TEXT,
+    p_submission_id UUID
+)
+RETURNS TABLE (
+    id UUID,
+    student_id UUID,
+    task_id UUID,
+    submission_text TEXT,
+    submission_data JSONB,
+    is_correct BOOLEAN,
+    submitted_at TIMESTAMP WITH TIME ZONE,
+    attempt_number INT,
+    -- Feedback queue fields
+    feedback_status TEXT,
+    retry_count INT,
+    processing_started_at TIMESTAMP WITH TIME ZONE,
+    -- AI feedback fields
+    ai_feedback TEXT,
+    ai_feedback_generated_at TIMESTAMP WITH TIME ZONE,
+    ai_insights JSONB,
+    ai_criteria_analysis JSONB,
+    feed_back_text TEXT,
+    feed_forward_text TEXT,
+    -- Teacher feedback fields
+    teacher_feedback TEXT,
+    teacher_feedback_generated_at TIMESTAMP WITH TIME ZONE,
+    teacher_override_feedback TEXT,
+    teacher_override_grade TEXT,
+    override_grade BOOLEAN,
+    feedback_viewed_at TIMESTAMP WITH TIME ZONE
+)
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_user_role TEXT;
+    v_is_valid BOOLEAN;
+    v_student_id UUID;
+BEGIN
+    -- Get user from session with role
+    SELECT user_id, user_role, is_valid
+    INTO v_user_id, v_user_role, v_is_valid
+    FROM public.validate_session_and_get_user(p_session_id);
+    
+    IF NOT v_is_valid OR v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Invalid or expired session';
+    END IF;
+    
+    -- Get student_id from submission
+    SELECT s.student_id INTO v_student_id
+    FROM submission s
+    WHERE s.id = p_submission_id;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Submission not found';
+    END IF;
+    
+    -- Authorization: student can view own submissions, teachers can view all
+    IF v_user_id != v_student_id AND v_user_role != 'teacher' THEN
+        RAISE EXCEPTION 'Not authorized to view this submission';
+    END IF;
+    
+    -- Return submission details
+    RETURN QUERY
+    SELECT 
+        s.id,
+        s.student_id,
+        s.task_id,
+        -- Fix: Use submission_data instead of non-existent submission_text
+        COALESCE(s.submission_data::text, '') as submission_text,
+        s.submission_data,
+        s.is_correct,
+        s.submitted_at,
+        s.attempt_number,
+        -- Feedback queue fields
+        s.feedback_status,
+        s.retry_count,
+        s.processing_started_at,
+        -- AI feedback fields
+        s.ai_feedback,
+        s.ai_feedback_generated_at,
+        s.ai_insights,
+        s.ai_criteria_analysis,
+        s.feed_back_text,
+        s.feed_forward_text,
+        -- Teacher feedback fields
+        s.teacher_feedback,
+        s.teacher_feedback_generated_at,
+        s.teacher_override_feedback,
+        s.teacher_override_grade,
+        s.override_grade,
+        s.feedback_viewed_at
+    FROM submission s
+    WHERE s.id = p_submission_id;
+END;
+$$;
+
+-- Grant permissions
+GRANT EXECUTE ON FUNCTION get_submission_by_id TO authenticated;
+
+-- Add comment
+COMMENT ON FUNCTION get_submission_by_id IS 'Gets submission details including feedback status and all feedback fields (fixed to use submission_data)';

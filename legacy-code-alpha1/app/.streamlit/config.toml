@@ -1,0 +1,6 @@
+[browser]
+gatherUsageStats = false
+
+[server]
+# Optional: Weitere Sicherheitseinstellungen
+fileWatcherType = "none"  # Deaktiviert File-Watching in Produktion

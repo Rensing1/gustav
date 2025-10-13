@@ -1,0 +1,70 @@
+docker exec gustav_feedback_worker python3 -c "
+      import requests
+      import base64
+      import time
+
+      # Original JPG
+      with open('/tmp/ex_submission.jpg', 'rb') as f:
+          jpg_data = f.read()
+          jpg_b64 = base64.b64encode(jpg_data).decode()
+
+      # Unser Transkriptions-Prompt
+      prompt = '''Du bist ein Transkriptionsassistent für deutsche Texte.
+
+      AUFGABE:
+      - Wandle den hochgeladenen handschriftlichen Text (Bild/PDF) in maschinenlesbaren Text
+      um.
+      - Übertrage den Text so exakt wie möglich.
+      - Beachte deutsche Umlaute (ä, ö, ü, ß) und Sonderzeichen.
+      - Erhalte die ursprüngliche Rechtschreibung, Zeichensetzung und Formatierung (Absätze,
+      Listen, Hervorhebungen).
+      - Ergänze nichts, interpretiere nichts und korrigiere nichts - auch keine
+      Rechtschreibfehler.
+      - Markiere unleserliche Stellen mit [UNLESERLICH].
+      - Markiere unsichere Stellen mit [?? unsicherer_text ??].
+      - WICHTIG: Vermeide Halluzinationen - schreibe ausschließlich das, was im Bild wirklich
+      steht.
+
+      AUSGABEFORMAT:
+      - Nur der transkribierte Text.
+      - Keine zusätzlichen Erklärungen, Kommentare oder Interpretationen.'''
+
+      print('🎯 CRITICAL TEST: Gemma3 mit Transkriptions-Prompt')
+      print(f'📊 JPG size: {len(jpg_data)} bytes')
+
+      start_time = time.time()
+
+      try:
+          response = requests.post('http://ollama:11434/api/generate', json={
+              'model': 'gemma3:12b',
+              'messages': [{
+                  'role': 'user',
+                  'content': prompt,
+                  'images': [jpg_b64]
+              }],
+              'stream': False,
+              'options': {
+                  'temperature': 0.05,
+                  'top_p': 0.8
+              }
+          }, timeout=300)
+
+          duration = time.time() - start_time
+
+          if response.status_code == 200:
+              result = response.json()
+              content = result.get('message', {}).get('content', '')
+              print(f'✅ Gemma3 TRANSCRIPTION in {duration:.2f}s')
+              print(f'📝 Response length: {len(content)} chars')
+              print('📄 Transcribed text:')
+              print('='*60)
+              print(content)
+              print('='*60)
+          else:
+              print(f'❌ Gemma3 TRANSCRIPTION FAILED - Status: {response.status_code}')
+              print(f'Error: {response.text[:300]}')
+
+      except Exception as e:
+          duration = time.time() - start_time
+          print(f'💥 Gemma3 TRANSCRIPTION ERROR after {duration:.2f}s: {e}')
+      "

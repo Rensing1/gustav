@@ -1,0 +1,213 @@
+Versuche .env aus Pfad zu laden: /app/../.env
+WARNUNG: .env Datei nicht gefunden unter /app/../.env. Umgebungsvariablen müssen anderweitig gesetzt sein.
+Konfigurationsvariablen erfolgreich geladen und validiert.
+  Supabase URL: http://host.docker.internal:54321
+  Ollama URL: http://ollama:11434
+2025-09-09 15:10:29.020 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+[15:10:29] [DEBUG] Mock Context für Cookies erstellt
+2025-09-09 15:10:29,022 - DEBUG - Mock Context für Cookies erstellt
+================================================================================
+Comprehensive DB Functions Test Runner - Improved Version
+Testing ALL functions with real sessions and extended timeouts
+================================================================================
+
+Konfiguration:
+  • AI Processing Timeout: 30s
+  • Verbose Logging: Aktiviert
+  • Real Session Auth: Aktiviert
+  • Test Accounts: test2@test.de, test1@test.de
+
+
+============================================================
+=== SETUP: Erstelle echte Sessions ===
+============================================================
+
+2025-09-09 15:10:29.022 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.023 WARNING streamlit.runtime.state.session_state_proxy: Session state does not function when running a script without `streamlit run`
+[15:10:29] [INFO] Erstelle Session für Lehrer: test2@test.de
+2025-09-09 15:10:29,023 - INFO - Erstelle Session für Lehrer: test2@test.de
+[15:10:29] [INFO] Erstelle echte Session für test2@test.de
+2025-09-09 15:10:29,023 - INFO - Erstelle echte Session für test2@test.de
+2025-09-09 15:10:29,077 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=5.0 socket_options=None
+2025-09-09 15:10:29,077 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff85394d90>
+2025-09-09 15:10:29,077 - DEBUG - send_request_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,077 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,077 - DEBUG - send_request_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,077 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,078 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,131 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json'), (b'Content-Length', b'1733'), (b'Connection', b'keep-alive'), (b'Vary', b'Origin'), (b'Date', b'Tue, 09 Sep 2025 15:10:29 GMT'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'53'), (b'X-Kong-Proxy-Latency', b'1'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,131 - INFO - HTTP Request: POST http://host.docker.internal:54321/auth/v1/token?grant_type=password "HTTP/1.1 200 OK"
+2025-09-09 15:10:29,131 - DEBUG - receive_response_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,132 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,132 - DEBUG - response_closed.started
+2025-09-09 15:10:29,132 - DEBUG - response_closed.complete
+[15:10:29] [SUCCESS] Auth erfolgreich - User ID: 7513b2e7-8884-4059-8688-45bcd534f21c
+2025-09-09 15:10:29,132 - INFO - Auth erfolgreich - User ID: 7513b2e7-8884-4059-8688-45bcd534f21c
+2025-09-09 15:10:29,141 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=120 socket_options=None
+2025-09-09 15:10:29,141 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff85395cf0>
+2025-09-09 15:10:29,141 - DEBUG - send_request_headers.started request=<Request [b'GET']>
+2025-09-09 15:10:29,141 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,141 - DEBUG - send_request_body.started request=<Request [b'GET']>
+2025-09-09 15:10:29,141 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,141 - DEBUG - receive_response_headers.started request=<Request [b'GET']>
+2025-09-09 15:10:29,142 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Tue, 09 Sep 2025 15:10:28 GMT'), (b'Server', b'postgrest/12.2.12'), (b'Content-Range', b'*/*'), (b'Content-Location', b'/profiles?id=eq.7513b2e7-8884-4059-8688-45bcd534f21c&select=%2A'), (b'Content-Profile', b'public'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'1'), (b'X-Kong-Proxy-Latency', b'0'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,142 - INFO - HTTP Request: GET http://host.docker.internal:54321/rest/v1/profiles?select=%2A&id=eq.7513b2e7-8884-4059-8688-45bcd534f21c "HTTP/1.1 200 OK"
+2025-09-09 15:10:29,142 - DEBUG - receive_response_body.started request=<Request [b'GET']>
+2025-09-09 15:10:29,142 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,142 - DEBUG - response_closed.started
+2025-09-09 15:10:29,142 - DEBUG - response_closed.complete
+[15:10:29] [DEBUG] Profile query result: []
+2025-09-09 15:10:29,144 - DEBUG - Profile query result: []
+[15:10:29] [WARNING] Fehler beim Profil-Abruf: Kein Profil gefunden
+2025-09-09 15:10:29,144 - WARNING - Fehler beim Profil-Abruf: Kein Profil gefunden
+2025-09-09 15:10:29,151 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=120 socket_options=None
+2025-09-09 15:10:29,151 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff851e91e0>
+2025-09-09 15:10:29,151 - DEBUG - send_request_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,151 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,151 - DEBUG - send_request_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,151 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,151 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,154 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 201, b'Created', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Tue, 09 Sep 2025 15:10:28 GMT'), (b'Server', b'postgrest/12.2.12'), (b'Content-Range', b'*/*'), (b'Preference-Applied', b'return=representation'), (b'Content-Profile', b'public'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'2'), (b'X-Kong-Proxy-Latency', b'1'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,154 - INFO - HTTP Request: POST http://host.docker.internal:54321/rest/v1/auth_sessions "HTTP/1.1 201 Created"
+2025-09-09 15:10:29,154 - DEBUG - receive_response_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,155 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,155 - DEBUG - response_closed.started
+2025-09-09 15:10:29,155 - DEBUG - response_closed.complete
+[15:10:29] [SUCCESS] Session in auth_sessions erstellt: test_7513b2e7-8884-4059-8688-45bcd534f21c_20250909151029
+2025-09-09 15:10:29,155 - INFO - Session in auth_sessions erstellt: test_7513b2e7-8884-4059-8688-45bcd534f21c_20250909151029
+[15:10:29] [DEBUG] Mock Cookie gesetzt: gustav_session=test_7513b2e7-8884-4059-8688-45bcd534f21c_20250909151029
+2025-09-09 15:10:29,155 - DEBUG - Mock Cookie gesetzt: gustav_session=test_7513b2e7-8884-4059-8688-45bcd534f21c_20250909151029
+2025-09-09 15:10:29.155 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.155 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.155 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.155 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+[15:10:29] [SUCCESS] Session State konfiguriert
+2025-09-09 15:10:29,155 - INFO - Session State konfiguriert
+  ✓ Lehrer-Session erstellt
+    ID: 7513b2e7-8884-4059-8688-45bcd534f21c
+    Session: test_7513b2e7-88...
+[15:10:29] [INFO] Erstelle Session für Schüler: test1@test.de
+2025-09-09 15:10:29,155 - INFO - Erstelle Session für Schüler: test1@test.de
+[15:10:29] [INFO] Erstelle echte Session für test1@test.de
+2025-09-09 15:10:29,155 - INFO - Erstelle echte Session für test1@test.de
+2025-09-09 15:10:29,159 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=5.0 socket_options=None
+2025-09-09 15:10:29,159 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff851ea590>
+2025-09-09 15:10:29,159 - DEBUG - send_request_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,160 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,160 - DEBUG - send_request_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,161 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,161 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,204 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json'), (b'Content-Length', b'1735'), (b'Connection', b'keep-alive'), (b'Vary', b'Origin'), (b'Date', b'Tue, 09 Sep 2025 15:10:29 GMT'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'43'), (b'X-Kong-Proxy-Latency', b'1'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,204 - INFO - HTTP Request: POST http://host.docker.internal:54321/auth/v1/token?grant_type=password "HTTP/1.1 200 OK"
+2025-09-09 15:10:29,204 - DEBUG - receive_response_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,204 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,204 - DEBUG - response_closed.started
+2025-09-09 15:10:29,204 - DEBUG - response_closed.complete
+[15:10:29] [SUCCESS] Auth erfolgreich - User ID: 814094e1-a5df-4195-8ad1-ac634bf6ebf1
+2025-09-09 15:10:29,205 - INFO - Auth erfolgreich - User ID: 814094e1-a5df-4195-8ad1-ac634bf6ebf1
+2025-09-09 15:10:29,212 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=120 socket_options=None
+2025-09-09 15:10:29,212 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff851e8d60>
+2025-09-09 15:10:29,212 - DEBUG - send_request_headers.started request=<Request [b'GET']>
+2025-09-09 15:10:29,212 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,212 - DEBUG - send_request_body.started request=<Request [b'GET']>
+2025-09-09 15:10:29,212 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,212 - DEBUG - receive_response_headers.started request=<Request [b'GET']>
+2025-09-09 15:10:29,213 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Tue, 09 Sep 2025 15:10:28 GMT'), (b'Server', b'postgrest/12.2.12'), (b'Content-Range', b'*/*'), (b'Content-Location', b'/profiles?id=eq.814094e1-a5df-4195-8ad1-ac634bf6ebf1&select=%2A'), (b'Content-Profile', b'public'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'1'), (b'X-Kong-Proxy-Latency', b'0'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,213 - INFO - HTTP Request: GET http://host.docker.internal:54321/rest/v1/profiles?select=%2A&id=eq.814094e1-a5df-4195-8ad1-ac634bf6ebf1 "HTTP/1.1 200 OK"
+2025-09-09 15:10:29,213 - DEBUG - receive_response_body.started request=<Request [b'GET']>
+2025-09-09 15:10:29,214 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,214 - DEBUG - response_closed.started
+2025-09-09 15:10:29,214 - DEBUG - response_closed.complete
+[15:10:29] [DEBUG] Profile query result: []
+2025-09-09 15:10:29,214 - DEBUG - Profile query result: []
+[15:10:29] [WARNING] Fehler beim Profil-Abruf: Kein Profil gefunden
+2025-09-09 15:10:29,215 - WARNING - Fehler beim Profil-Abruf: Kein Profil gefunden
+2025-09-09 15:10:29,222 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=120 socket_options=None
+2025-09-09 15:10:29,222 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff85200040>
+2025-09-09 15:10:29,222 - DEBUG - send_request_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,223 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,223 - DEBUG - send_request_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,223 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,223 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,224 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 201, b'Created', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Tue, 09 Sep 2025 15:10:28 GMT'), (b'Server', b'postgrest/12.2.12'), (b'Content-Range', b'*/*'), (b'Preference-Applied', b'return=representation'), (b'Content-Profile', b'public'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'1'), (b'X-Kong-Proxy-Latency', b'0'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,224 - INFO - HTTP Request: POST http://host.docker.internal:54321/rest/v1/auth_sessions "HTTP/1.1 201 Created"
+2025-09-09 15:10:29,224 - DEBUG - receive_response_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,225 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,225 - DEBUG - response_closed.started
+2025-09-09 15:10:29,225 - DEBUG - response_closed.complete
+[15:10:29] [SUCCESS] Session in auth_sessions erstellt: test_814094e1-a5df-4195-8ad1-ac634bf6ebf1_20250909151029
+2025-09-09 15:10:29,225 - INFO - Session in auth_sessions erstellt: test_814094e1-a5df-4195-8ad1-ac634bf6ebf1_20250909151029
+[15:10:29] [DEBUG] Mock Cookie gesetzt: gustav_session=test_814094e1-a5df-4195-8ad1-ac634bf6ebf1_20250909151029
+2025-09-09 15:10:29,225 - DEBUG - Mock Cookie gesetzt: gustav_session=test_814094e1-a5df-4195-8ad1-ac634bf6ebf1_20250909151029
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+[15:10:29] [SUCCESS] Session State konfiguriert
+2025-09-09 15:10:29,225 - INFO - Session State konfiguriert
+  ✓ Schüler-Session erstellt
+    ID: 814094e1-a5df-4195-8ad1-ac634bf6ebf1
+    Session: test_814094e1-a5...
+
+============================================================
+=== ERSTELLE TEST-DATEN ===
+============================================================
+
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-09 15:10:29.225 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+[15:10:29] [DEBUG] Session gewechselt zu: test_7513b2e7-88...
+2025-09-09 15:10:29,225 - DEBUG - Session gewechselt zu: test_7513b2e7-88...
+[15:10:29] [INFO] Erstelle Test-Kurs: 🧪 TEST Kurs 20250909_151029
+2025-09-09 15:10:29,225 - INFO - Erstelle Test-Kurs: 🧪 TEST Kurs 20250909_151029
+2025-09-09 15:10:29,233 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=120 socket_options=None
+2025-09-09 15:10:29,233 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff85201c60>
+2025-09-09 15:10:29,233 - DEBUG - send_request_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,233 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,233 - DEBUG - send_request_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,233 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,233 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,234 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Tue, 09 Sep 2025 15:10:28 GMT'), (b'Server', b'postgrest/12.2.12'), (b'Content-Range', b'0-0/*'), (b'Content-Profile', b'public'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'1'), (b'X-Kong-Proxy-Latency', b'0'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,234 - INFO - HTTP Request: POST http://host.docker.internal:54321/rest/v1/rpc/create_course "HTTP/1.1 200 OK"
+2025-09-09 15:10:29,236 - DEBUG - receive_response_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,237 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,237 - DEBUG - response_closed.started
+2025-09-09 15:10:29,237 - DEBUG - response_closed.complete
+  ✓ Kurs erstellt: de40c615-3a76-4228-ab2e-04afaacda357
+[15:10:29] [DEBUG] Kurs erfolgreich erstellt: {"id": "de40c615-3a76-4228-ab2e-04afaacda357", "name": "\ud83e\uddea TEST Kurs 20250909_151029", "created_at": "2025-09-09T15:10:29.233635+00:00"}
+2025-09-09 15:10:29,238 - DEBUG - Kurs erfolgreich erstellt: {"id": "de40c615-3a76-4228-ab2e-04afaacda357", "name": "\ud83e\uddea TEST Kurs 20250909_151029", "created_at": "2025-09-09T15:10:29.233635+00:00"}
+[15:10:29] [INFO] Füge Schüler 814094e1-a5df-4195-8ad1-ac634bf6ebf1 zum Kurs hinzu
+2025-09-09 15:10:29,238 - INFO - Füge Schüler 814094e1-a5df-4195-8ad1-ac634bf6ebf1 zum Kurs hinzu
+2025-09-09 15:10:29,245 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=120 socket_options=None
+2025-09-09 15:10:29,245 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff851e87f0>
+2025-09-09 15:10:29,245 - DEBUG - send_request_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,245 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,245 - DEBUG - send_request_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,245 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,245 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,247 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 204, b'No Content', [(b'Connection', b'keep-alive'), (b'Date', b'Tue, 09 Sep 2025 15:10:28 GMT'), (b'Server', b'postgrest/12.2.12'), (b'Content-Range', b'0-0/*'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'2'), (b'X-Kong-Proxy-Latency', b'0'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,248 - INFO - HTTP Request: POST http://host.docker.internal:54321/rest/v1/rpc/add_user_to_course "HTTP/1.1 204 No Content"
+2025-09-09 15:10:29,248 - DEBUG - receive_response_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,248 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,248 - DEBUG - response_closed.started
+2025-09-09 15:10:29,248 - DEBUG - response_closed.complete
+  ✓ Schüler hinzugefügt
+Erstelle Test-Lerneinheit: 🧪 TEST Lerneinheit 151029
+2025-09-09 15:10:29,255 - DEBUG - connect_tcp.started host='host.docker.internal' port=54321 local_address=None timeout=120 socket_options=None
+2025-09-09 15:10:29,255 - DEBUG - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x7aff85394ca0>
+2025-09-09 15:10:29,255 - DEBUG - send_request_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,255 - DEBUG - send_request_headers.complete
+2025-09-09 15:10:29,255 - DEBUG - send_request_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,255 - DEBUG - send_request_body.complete
+2025-09-09 15:10:29,255 - DEBUG - receive_response_headers.started request=<Request [b'POST']>
+2025-09-09 15:10:29,256 - DEBUG - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Tue, 09 Sep 2025 15:10:28 GMT'), (b'Server', b'postgrest/12.2.12'), (b'Content-Range', b'0-0/*'), (b'Content-Profile', b'public'), (b'Access-Control-Allow-Origin', b'*'), (b'X-Kong-Upstream-Latency', b'1'), (b'X-Kong-Proxy-Latency', b'0'), (b'Via', b'kong/2.8.1')])
+2025-09-09 15:10:29,256 - INFO - HTTP Request: POST http://host.docker.internal:54321/rest/v1/rpc/create_learning_unit "HTTP/1.1 200 OK"
+2025-09-09 15:10:29,256 - DEBUG - receive_response_body.started request=<Request [b'POST']>
+2025-09-09 15:10:29,256 - DEBUG - receive_response_body.complete
+2025-09-09 15:10:29,256 - DEBUG - response_closed.started
+2025-09-09 15:10:29,256 - DEBUG - response_closed.complete
+  ✗ Fehler: Fehler beim Erstellen der Lerneinheit
+
+❌ Konnte Test-Daten nicht erstellen. Tests abgebrochen.

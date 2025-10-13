@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    container_name: gustav-alpha2
+    ports:
+      - "8100:8000"
+    volumes:
+      # Live-Reload: App-Code wird eingebunden
+      - ./app:/app:z
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=debug
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
+
+networks:
+  gustav-alpha2-network:
+    driver: bridge

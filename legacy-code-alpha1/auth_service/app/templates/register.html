@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title | default("GUSTAV Registrierung") }}</title>
+    <link rel="stylesheet" href="/auth/static/login.css">
+    <link rel="icon" type="image/svg+xml" href="/auth/static/favicon.svg">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="logo-container">
+                <img src="/auth/static/gustav-logo.png" alt="GUSTAV Logo" class="logo">
+                <h1>GUSTAV</h1>
+            </div>
+            
+            <h2>Konto erstellen</h2>
+            <p class="subtitle">Registrieren Sie sich mit Ihrer @gymalf.de E-Mail-Adresse</p>
+            
+            {% if error %}
+            <div class="alert alert-error">
+                <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>{{ error_messages.get(error, "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.") }}</span>
+            </div>
+            {% endif %}
+            
+            <form method="POST" action="/auth/register" class="login-form" id="register-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                
+                <div class="form-group">
+                    <label for="email">E-Mail-Adresse</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        required 
+                        autofocus
+                        placeholder="vorname.nachname@gymalf.de"
+                        class="form-input"
+                        autocomplete="username"
+                        pattern=".*@gymalf\.de$"
+                        title="Bitte verwenden Sie Ihre @gymalf.de E-Mail-Adresse"
+                    >
+                    <small class="form-hint">Nur @gymalf.de E-Mail-Adressen sind erlaubt</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Passwort</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        required
+                        class="form-input"
+                        autocomplete="new-password"
+                        minlength="8"
+                    >
+                    <small class="form-hint">Mindestens 8 Zeichen</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password_confirm">Passwort bestätigen</label>
+                    <input 
+                        type="password" 
+                        id="password_confirm" 
+                        name="password_confirm" 
+                        required
+                        class="form-input"
+                        autocomplete="new-password"
+                    >
+                </div>
+                
+                <button type="submit" class="btn-primary">
+                    Registrieren
+                </button>
+            </form>
+            
+            <div class="links">
+                <p class="register-link">
+                    Bereits registriert? <a href="/auth/login">Anmelden</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Client-side validation
+        document.getElementById('register-form').addEventListener('submit', function(e) {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const passwordConfirm = document.getElementById('password_confirm').value;
+            
+            // Validate email domain
+            if (!email.toLowerCase().endsWith('@gymalf.de')) {
+                e.preventDefault();
+                alert('Bitte verwenden Sie Ihre @gymalf.de E-Mail-Adresse');
+                return;
+            }
+            
+            // Validate password match
+            if (password !== passwordConfirm) {
+                e.preventDefault();
+                alert('Die Passwörter stimmen nicht überein');
+                return;
+            }
+            
+            // Validate password length
+            if (password.length < 8) {
+                e.preventDefault();
+                alert('Das Passwort muss mindestens 8 Zeichen lang sein');
+                return;
+            }
+        });
+        
+        // Real-time password match validation
+        document.getElementById('password_confirm').addEventListener('input', function() {
+            const password = document.getElementById('password').value;
+            const passwordConfirm = this.value;
+            
+            if (passwordConfirm && password !== passwordConfirm) {
+                this.setCustomValidity('Passwörter stimmen nicht überein');
+            } else {
+                this.setCustomValidity('');
+            }
+        });
+    </script>
+</body>
+</html>

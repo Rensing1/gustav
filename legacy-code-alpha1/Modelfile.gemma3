@@ -1,2 +1,0 @@
-FROM gemma3:12b
-PARAMETER num_gpu 256

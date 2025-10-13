@@ -1,6 +1,0 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-pillow>=9.0.0
-pymupdf>=1.23.0
-requests==2.31.0
-# ollama==0.1.7  # Nicht mehr benötigt - nutzen HTTP API direkt

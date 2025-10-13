@@ -1,1 +1,0 @@
--- Content manually applied via Supabase Studio due to permissions issue.

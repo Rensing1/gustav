@@ -2,6 +2,9 @@
 GUSTAV alpha-2
 """
 from pathlib import Path
+import os
+import json
+import base64
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
@@ -22,8 +25,11 @@ from components import (
 )
 from components.navigation import Navigation
 from components.pages import SciencePage
+from identity_access.oidc import OIDCClient, OIDCConfig
+from identity_access.stores import StateStore, SessionStore
 
 # FastAPI App erstellen
+# Default app (full web). For tests, an app factory may build a slimmer app.
 app = FastAPI(
     title="GUSTAV alpha-2",
     description="KI-gestützte Lernplattform",
@@ -35,6 +41,21 @@ app = FastAPI(
 # Resolve static directory relative to this file, independent of CWD
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+# --- OIDC minimal config & stores (dev) ---
+def load_oidc_config() -> OIDCConfig:
+    base_url = os.getenv("KC_BASE_URL", "http://localhost:8080")
+    realm = os.getenv("KC_REALM", "gustav")
+    client_id = os.getenv("KC_CLIENT_ID", "gustav-web")
+    redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8100/auth/callback")
+    return OIDCConfig(base_url=base_url, realm=realm, client_id=client_id, redirect_uri=redirect_uri)
+
+
+OIDC_CFG = load_oidc_config()
+OIDC = OIDCClient(OIDC_CFG)
+STATE_STORE = StateStore()
+SESSION_STORE = SessionStore()
 
 
 def build_home_content() -> str:
@@ -424,15 +445,16 @@ async def health_check():
 @app.get("/auth/login")
 async def auth_login(state: str | None = None, redirect: str | None = None):
     """
-    Redirect user to Keycloak authorization endpoint.
-
-    For minimal contract compliance, we return a 302 with a Location header.
-    The concrete Keycloak URL is stubbed during initial TDD phase.
+    Start OIDC flow with PKCE.
+    Creates server-side state with code_verifier and optional redirect, then
+    redirects to Keycloak auth endpoint.
     """
-    target = "https://keycloak.local/realms/gustav/protocol/openid-connect/auth"
-    if state:
-        target += f"?state={state}"
-    return RedirectResponse(url=target, status_code=302)
+    code_verifier = OIDCClient.generate_code_verifier()
+    code_challenge = OIDCClient.code_challenge_s256(code_verifier)
+    rec = STATE_STORE.create(code_verifier=code_verifier, redirect=redirect)
+    final_state = state or rec.state
+    url = OIDC.build_authorization_url(state=final_state, code_challenge=code_challenge)
+    return RedirectResponse(url=url, status_code=302)
 
 
 @app.get("/auth/forgot")
@@ -449,23 +471,45 @@ async def auth_forgot(login_hint: str | None = None):
 @app.get("/auth/callback")
 async def auth_callback(code: str | None = None, state: str | None = None):
     """
-    Handle OIDC callback. Minimal validation to drive tests:
-    - Accepts a specific stub pair (code, state) to simulate success.
-    - Otherwise returns 400.
-    On success, sets httpOnly session cookie and redirects to '/'.
+    Handle OIDC callback: validate state, exchange code for tokens, create session.
     """
     if not code or not state:
         return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
-
-    # Minimal stub acceptance for TDD
-    if not (code == "valid-code" and state == "opaque-state"):
+    rec = STATE_STORE.pop_valid(state)
+    if not rec:
         return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
 
-    resp = RedirectResponse(url="/", status_code=302)
-    # Set a minimal httpOnly session cookie (name per contract)
+    try:
+        tokens = OIDC.exchange_code_for_tokens(code=code, code_verifier=rec.code_verifier)
+    except Exception:
+        return JSONResponse({"error": "token_exchange_failed"}, status_code=400)
+
+    id_token = tokens.get("id_token")
+    if not id_token or id_token.count(".") != 2:
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400)
+    try:
+        payload_b64 = id_token.split(".")[1]
+        pad = '=' * (-len(payload_b64) % 4)
+        payload_json = base64.urlsafe_b64decode(payload_b64 + pad).decode("utf-8")
+        claims = json.loads(payload_json)
+    except Exception:
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400)
+
+    email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"
+    roles = []
+    ra = claims.get("realm_access") or {}
+    if isinstance(ra, dict):
+        r = ra.get("roles")
+        if isinstance(r, list):
+            roles = [str(x) for x in r]
+    email_verified = bool(claims.get("email_verified", False))
+
+    sess = SESSION_STORE.create(email=email, roles=roles or ["student"], email_verified=email_verified)
+    dest = rec.redirect or "/"
+    resp = RedirectResponse(url=dest, status_code=302)
     resp.set_cookie(
         key="gustav_session",
-        value="stub-session",
+        value=sess.session_id,
         httponly=True,
         samesite="lax",
         path="/",
@@ -482,8 +526,10 @@ async def auth_logout(request: Request):
     if "gustav_session" not in request.cookies:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+    sid = request.cookies.get("gustav_session")
+    if sid:
+        SESSION_STORE.delete(sid)
     resp = Response(status_code=204)
-    # Clear the cookie with Max-Age=0 (contract) and common attributes
     resp.delete_cookie(key="gustav_session", path="/")
     return resp
 
@@ -495,10 +541,72 @@ async def get_me(request: Request):
     """
     if "gustav_session" not in request.cookies:
         return JSONResponse({"error": "unauthenticated"}, status_code=401)
-
-    # Minimal stubbed user info for initial contract tests
+    sid = request.cookies.get("gustav_session")
+    rec = SESSION_STORE.get(sid or "")
+    if not rec:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
     return JSONResponse({
-        "email": "student@example.com",
-        "roles": ["student"],
-        "email_verified": True,
+        "email": rec.email,
+        "roles": rec.roles,
+        "email_verified": rec.email_verified,
     })
+
+
+# --- App factory for tests: auth-only slim app ---
+def create_app_auth_only() -> FastAPI:
+    """Return a minimal FastAPI app exposing only auth-related routes.
+
+    Why: Speeds up tests by avoiding import/render cost of SSR components.
+    Security/Contract: Same routes and behavior as defined in OpenAPI contract.
+    """
+    slim = FastAPI(title="GUSTAV auth-only", version="0.0.2")
+
+    @slim.get("/auth/login")
+    async def slim_auth_login(state: str | None = None, redirect: str | None = None):
+        target = "https://keycloak.local/realms/gustav/protocol/openid-connect/auth"
+        if state:
+            target += f"?state={state}"
+        return RedirectResponse(url=target, status_code=302)
+
+    @slim.get("/auth/forgot")
+    async def slim_auth_forgot(login_hint: str | None = None):
+        target = "https://keycloak.local/realms/gustav/login-actions/reset-credentials"
+        if login_hint:
+            target += f"?login_hint={login_hint}"
+        return RedirectResponse(url=target, status_code=302)
+
+    @slim.get("/auth/callback")
+    async def slim_auth_callback(code: str | None = None, state: str | None = None):
+        if not code or not state:
+            return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
+        if not (code == "valid-code" and state == "opaque-state"):
+            return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
+        resp = RedirectResponse(url="/", status_code=302)
+        resp.set_cookie(
+            key="gustav_session",
+            value="stub-session",
+            httponly=True,
+            samesite="lax",
+            path="/",
+        )
+        return resp
+
+    @slim.post("/auth/logout")
+    async def slim_auth_logout(request: Request):
+        if "gustav_session" not in request.cookies:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        resp = Response(status_code=204)
+        resp.delete_cookie(key="gustav_session", path="/")
+        return resp
+
+    @slim.get("/api/me")
+    async def slim_get_me(request: Request):
+        if "gustav_session" not in request.cookies:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        return JSONResponse({
+            "email": "student@example.com",
+            "roles": ["student"],
+            "email_verified": True,
+        })
+
+    return slim

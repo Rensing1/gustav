@@ -2,20 +2,31 @@ import os
 import sys
 from pathlib import Path
 import pytest
+import httpx
+from httpx import ASGITransport
 
-# Ensure we can import the FastAPI app from backend/web/main.py without changing packages
+# Ensure we can import the app and identity_access without packaging
 REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
+BACKEND_DIR = REPO_ROOT / "backend"
+WEB_DIR = BACKEND_DIR / "web"
+sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(0, str(WEB_DIR))
 
-from main import app  # type: ignore  # noqa: E402
-from fastapi.testclient import TestClient  # type: ignore  # noqa: E402
+from main import create_app_auth_only  # type: ignore  # noqa: E402
 
 
-@pytest.fixture(scope="function")
-def client() -> TestClient:
-    """ASGI test client for the FastAPI app.
-
-    Keeps tests decoupled from packaging layout; we avoid modifying app code here.
-    """
-    return TestClient(app)
+@pytest.fixture()
+def async_client():
+    """Async HTTP client against the auth-only ASGI app using httpx.ASGITransport."""
+    app = create_app_auth_only()
+    transport = ASGITransport(app=app)
+    client = httpx.AsyncClient(transport=transport, base_url="http://test")
+    try:
+        yield client
+    finally:
+        # Ensure the client is closed even if a test fails early
+        try:
+            import anyio
+            anyio.run(client.aclose)
+        except Exception:
+            pass

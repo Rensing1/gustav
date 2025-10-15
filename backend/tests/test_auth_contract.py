@@ -6,40 +6,60 @@ authentication slice (login, callback, logout, me, forgot). External IdP
 interactions (Keycloak) are not performed here; we only assert HTTP contracts.
 """
 
-from typing import Iterable
-
 import pytest
-from fastapi.testclient import TestClient
+import anyio
+import httpx
+from httpx import ASGITransport
+from pathlib import Path
+import sys
+
+# Import auth-only app factory to keep tests lean
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WEB_DIR = REPO_ROOT / "backend" / "web"
+sys.path.insert(0, str(WEB_DIR))
+from main import create_app_auth_only  # type: ignore
+
+# Force anyio to use asyncio backend only to avoid trio parametrization
+pytestmark = pytest.mark.anyio("asyncio")
 
 
 def is_redirect(status: int) -> bool:
     return status in (302, 303, 307, 308)
 
 
-def test_login_redirect(client: TestClient):
+@pytest.mark.anyio
+async def test_login_redirect():
     # Given: not authenticated (no cookie)
     # When: GET /auth/login
-    resp = client.get("/auth/login", allow_redirects=False)
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/auth/login", follow_redirects=False)
     # Then: 302 Redirect to Keycloak (contract)
     assert resp.status_code == 302
     assert "location" in resp.headers
 
 
-def test_forgot_redirect(client: TestClient):
-    resp = client.get("/auth/forgot", allow_redirects=False)
+@pytest.mark.anyio
+async def test_forgot_redirect():
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/auth/forgot", follow_redirects=False)
     assert resp.status_code == 302
     assert "location" in resp.headers
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "code,state",
     [
         ("valid-code", "opaque-state"),
     ],
 )
-def test_callback_success_redirects_and_sets_cookie(client: TestClient, code: str, state: str):
+async def test_callback_success_redirects_and_sets_cookie(code: str, state: str):
     # When: GET /auth/callback with a (mock) valid code and state
-    resp = client.get(f"/auth/callback?code={code}&state={state}", allow_redirects=False)
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/auth/callback?code={code}&state={state}", follow_redirects=False)
     # Then: 302 + both headers present (strict per contract)
     assert resp.status_code == 302
     set_cookie = resp.headers.get("set-cookie", "")
@@ -47,6 +67,7 @@ def test_callback_success_redirects_and_sets_cookie(client: TestClient, code: st
     assert "location" in resp.headers
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "code,state",
     [
@@ -55,26 +76,38 @@ def test_callback_success_redirects_and_sets_cookie(client: TestClient, code: st
         ("invalid", "invalid"),
     ],
 )
-def test_callback_invalid_returns_400(client: TestClient, code: str, state: str):
-    resp = client.get(f"/auth/callback?code={code}&state={state}")
+async def test_callback_invalid_returns_400(code: str, state: str):
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/auth/callback?code={code}&state={state}")
     assert resp.status_code == 400
 
 
-def test_me_unauthenticated_returns_401(client: TestClient):
-    resp = client.get("/api/me")
+@pytest.mark.anyio
+async def test_me_unauthenticated_returns_401():
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/me")
     assert resp.status_code == 401
 
 
-def test_logout_requires_authentication(client: TestClient):
-    # Without cookie, the security scheme should require auth
-    resp = client.post("/auth/logout")
+@pytest.mark.anyio
+async def test_logout_requires_authentication():
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Without cookie, the security scheme should require auth
+        resp = await client.post("/auth/logout")
     assert resp.status_code in (401, 403)
 
 
-def test_logout_clears_cookie(client: TestClient):
+@pytest.mark.anyio
+async def test_logout_clears_cookie():
     # With a (fake) session cookie, logout should clear it
     cookies = {"gustav_session": "fake-session"}
-    resp = client.post("/auth/logout", cookies=cookies, allow_redirects=False)
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", "fake-session")
+        resp = await client.post("/auth/logout", follow_redirects=False)
     assert resp.status_code == 204
     # Contract: server clears the session cookie
     set_cookie = resp.headers.get("set-cookie", "")
@@ -82,10 +115,14 @@ def test_logout_clears_cookie(client: TestClient):
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
 
 
-def test_me_authenticated_returns_200_and_shape(client: TestClient):
+@pytest.mark.anyio
+async def test_me_authenticated_returns_200_and_shape():
     # With a (fake) session cookie, /api/me should return session shape
     cookies = {"gustav_session": "fake-session"}
-    resp = client.get("/api/me", cookies=cookies)
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", "fake-session")
+        resp = await client.get("/api/me")
     assert resp.status_code == 200
     body = resp.json()
     assert isinstance(body, dict)

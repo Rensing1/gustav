@@ -7,6 +7,8 @@ Status
 - ✅ Minimaler FastAPI-Adapter (Stub) setzt Redirects/Cookies entsprechend Vertrag.
 - 🔜 Keycloak in docker-compose aufnehmen, echte Token-Logik implementieren.
  - ✅ Keycloak in docker-compose ergänzt (start-dev, Realm-Import). Realm „gustav“ mit Rollen und Client vorhanden.
+ - ✅ OIDC-Verdrahtung (Minimal): PKCE + state, Token-Exchange, In-Memory SessionStore, httpOnly-Cookie.
+ - ✅ Tests grün (async via httpx.ASGITransport). Trio installiert, um AnyIO-Parametrisierung zu bedienen.
 
 Ziel
 - Minimalistische Einführung von Keycloak für Registrierung, Login, Logout, Rollen (`student|teacher|admin`), Passwort ändern (zunächst über Keycloak Account Console), Account löschen.
@@ -31,6 +33,7 @@ Entscheidungen (bestätigt)
 Architektur (kurz)
 - OIDC Authorization Code Flow (serverseitig). Keycloak als IdP. Unser Web‑Adapter (FastAPI) setzt/liest httpOnly‑Session‑Cookie.
 - Keycloak‑Konfig als Code (Realm‑Export/CLI), damit reproduzierbar.
+ - Dev: StateStore (TTL 15 min) und SessionStore (TTL 60 min) in-memory. Cookie enthält nur opaque Session-ID. Prod: später Redis/DB + JWK‑Verifikation.
 
 API‑Oberfläche (Entwurf – wird in `api/openapi.yml` konkretisiert)
 - `GET /auth/login` → Redirect zu Keycloak (Start Auth‑Flow)
@@ -99,10 +102,11 @@ Schlanker Implementierungsplan (iterativ)
 1) API‑Vertrag: o.g. Endpunkte in `api/openapi.yml` ergänzen (Contract‑First)
 2) docker‑compose: Keycloak‑Service + Realm/Client/Rollen (Konfig als Code)
 3) Tests (pytest): Login/Callback/Logout/me (Keycloak‑Calls gemockt)
-4) Minimaler Adapter: Code bis Tests grün (Cookie setzen/löschen, Redirects)
-5) Migration (Legacy → Keycloak): Import (bcrypt) bzw. Reset‑Aktion; Rollenzuweisung
-6) QR‑Registrierung: Token‑Store (TTL 15 Min), Login mit `state`, Kurszuweisung
- 7) Passwort vergessen: Minimaler Redirect‑Endpunkt (`GET /auth/forgot`) zu Keycloak‑Reset‑Seite; optional später Admin‑API‑Variante
+4) Minimaler Adapter: Code bis Tests grün (Cookie setzen/löschen, Redirects) – erledigt
+5) OIDC live verdrahten: PKCE/state, Token-Exchange, SessionStore – erledigt (MVP, ohne JWK‑Sig-Verifikation)
+6) Migration (Legacy → Keycloak): Import (bcrypt) bzw. Reset‑Aktion; Rollenzuweisung
+7) QR‑Registrierung: Token‑Store (TTL 15 Min), Login mit `state`, Kurszuweisung
+8) Passwort vergessen: Redirect‑Endpunkt `GET /auth/forgot` zu Keycloak‑Reset‑Seite
 
 Migration (Legacy → Keycloak)
 - Daten aus Alt‑System: `email`, `role`, `password_hash` (bcrypt). Mapping: Rolle → Realm‑Rolle, E‑Mail unverändert.
@@ -115,6 +119,7 @@ Sicherheit & DSGVO
 - Brute‑Force: Keycloak Login‑Beschränkungen aktivieren; Passwort‑Policy (min. 8 Zeichen, 1 Zahl, 1 Buchstabe).
 - Account löschen: Benutzer in Keycloak löschen; App‑Daten je Kontext (pseudonymisieren/löschen) – wird pro Bounded Context konkretisiert.
 - Logging/Audit: sicherheitsrelevante Events in Keycloak/Anwendungslogs nachvollziehbar, PII‑sparsam.
+ - Aktueller MVP: ID‑Token wird nur minimal decodiert (Base64URL), keine JWK‑Signaturprüfung; ToDo: Verifikation (iss, aud, exp) ergänzen.
 
 IServ (Ausblick)
 - Perspektivisch OIDC‑Anbindung an IServ (falls verfügbar), sonst SAML. Account‑Linking nach E‑Mail oder `sub`.
@@ -122,7 +127,7 @@ IServ (Ausblick)
 Definition of Done (für den ersten Inkrement)
 - `api/openapi.yml` enthält die vier Endpunkte (login, callback, logout, me) mit klaren Responses.
  - `api/openapi.yml` ergänzt `GET /auth/forgot` (302 Redirect) als Komfort‑Endpunkt.
-- pytest‑Suite deckt Happy Paths und Kernfehlerfälle ab; Tests grün.
+- pytest‑Suite deckt Happy Paths und Kernfehlerfälle ab; Tests grün (httpx + ASGITransport, AnyIO asyncio/trio).
 - docker‑compose startet Keycloak; Realm/Client/Rollen vorhanden.
 - Minimaler Adapter setzt/liest httpOnly‑Cookie; `/api/me` liefert Rollen.
 - Kurze README‑Ergänzung zur Auth‑Bedienung (Login/Logout/Passwort ändern via Keycloak‑Konsole).

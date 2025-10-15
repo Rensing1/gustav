@@ -12,11 +12,10 @@ from main import app  # type: ignore  # noqa: E402
 from fastapi.testclient import TestClient  # type: ignore  # noqa: E402
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def client() -> TestClient:
     """ASGI test client for the FastAPI app.
 
     Keeps tests decoupled from packaging layout; we avoid modifying app code here.
     """
     return TestClient(app)
-

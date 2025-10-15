@@ -1,6 +1,8 @@
 # Plan: Benutzerverwaltung mit Keycloak (minimalistisch)
 
 Stand: initial
+Status
+- OpenAPI‑Vertrag initial ergänzt (login, callback, logout, me, forgot). Nächster Schritt: Tests schreiben (TDD) und minimalen Adapter implementieren.
 
 Ziel
 - Minimalistische Einführung von Keycloak für Registrierung, Login, Logout, Rollen (`student|teacher|admin`), Passwort ändern (zunächst über Keycloak Account Console), Account löschen.

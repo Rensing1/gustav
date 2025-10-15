@@ -9,3 +9,4 @@ jinja2==3.1.4
 python-multipart==0.0.12  # Für File-Uploads
 python-dotenv==1.0.1       # Für Umgebungsvariablen
 python-jose[cryptography]==3.3.0  # JWT handling (ID token verification)
+requests==2.32.3           # HTTP client for OIDC token exchange

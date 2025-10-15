@@ -14,7 +14,10 @@ COPY backend/web/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Web-App-Code kopieren (SSR/HTMX)
+# Copy web layer first so reload still works as expected
 COPY backend/web/ .
+# Identity Access domain layer is located outside web package; copy it explicitly
+COPY backend/identity_access ./identity_access
 
 # Port freigeben
 EXPOSE 8000

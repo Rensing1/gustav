@@ -5,8 +5,8 @@ services:
     ports:
       - "8100:8000"
     volumes:
-      # Live-Reload: App-Code wird eingebunden
-      - ./app:/app:z
+      # Live-Reload: Web-Code (SSR) wird eingebunden
+      - ./backend/web:/app:z
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=debug

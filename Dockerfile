@@ -10,11 +10,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Python-Dependencies installieren
-COPY app/requirements.txt .
+COPY backend/web/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App-Code kopieren
-COPY app/ .
+# Web-App-Code kopieren (SSR/HTMX)
+COPY backend/web/ .
 
 # Port freigeben
 EXPOSE 8000

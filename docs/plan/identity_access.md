@@ -2,7 +2,10 @@
 
 Stand: initial
 Status
-- OpenAPI‑Vertrag initial ergänzt (login, callback, logout, me, forgot). Nächster Schritt: Tests schreiben (TDD) und minimalen Adapter implementieren.
+- ✅ API-Vertrag ergänzt (login, callback, logout, me, forgot) – Contract-first vorbereitet.
+- ✅ RED-Tests für Auth-Contract geschrieben, pytest auf `backend/tests` fokussiert, Tests laufen grün mit minimalem Adapter.
+- ✅ Minimaler FastAPI-Adapter (Stub) setzt Redirects/Cookies entsprechend Vertrag.
+- 🔜 Keycloak in docker-compose aufnehmen, echte Token-Logik implementieren.
 
 Ziel
 - Minimalistische Einführung von Keycloak für Registrierung, Login, Logout, Rollen (`student|teacher|admin`), Passwort ändern (zunächst über Keycloak Account Console), Account löschen.

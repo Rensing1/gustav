@@ -11,5 +11,5 @@ ui-concepts/
 # Alter Code
 legacy-code-alpha1/
 
-# Dokumentationen
-docs/
+# Dokumentationen (Repo-weit versioniert)
+# Hinweis: Einzelne Build-Artefakte ggf. gezielt ausschließen, aber nicht den gesamten Ordner.

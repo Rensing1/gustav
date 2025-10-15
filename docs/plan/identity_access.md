@@ -6,6 +6,7 @@ Status
 - ✅ RED-Tests für Auth-Contract geschrieben, pytest auf `backend/tests` fokussiert, Tests laufen grün mit minimalem Adapter.
 - ✅ Minimaler FastAPI-Adapter (Stub) setzt Redirects/Cookies entsprechend Vertrag.
 - 🔜 Keycloak in docker-compose aufnehmen, echte Token-Logik implementieren.
+ - ✅ Keycloak in docker-compose ergänzt (start-dev, Realm-Import). Realm „gustav“ mit Rollen und Client vorhanden.
 
 Ziel
 - Minimalistische Einführung von Keycloak für Registrierung, Login, Logout, Rollen (`student|teacher|admin`), Passwort ändern (zunächst über Keycloak Account Console), Account löschen.

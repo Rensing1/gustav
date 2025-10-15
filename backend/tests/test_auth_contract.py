@@ -6,6 +6,9 @@ authentication slice (login, callback, logout, me, forgot). External IdP
 interactions (Keycloak) are not performed here; we only assert HTTP contracts.
 """
 
+import os
+from http.cookies import SimpleCookie
+
 import pytest
 import anyio
 import httpx
@@ -13,9 +16,10 @@ from httpx import ASGITransport
 from pathlib import Path
 import sys
 import time
-from typing import Dict
+from typing import Dict, Callable
 from jose import jwt
 import types
+import requests
 
 TEST_ISSUER = "http://keycloak:8080/realms/gustav"
 TEST_AUDIENCE = "gustav-web"
@@ -61,7 +65,10 @@ pgHzCSzRQhVtXzZZ0A2UCNpeFvXOwRy64fo17PJnjpKTnwX7lLv4C8p//HcMYNYS
 GN5WQjPSsFmIFF2zP1JWIbM=
 -----END PRIVATE KEY-----"""
 
-def _make_id_token(claim_overrides: Dict[str, object] | None = None) -> str:
+def _make_id_token(
+    claim_overrides: Dict[str, object] | None = None,
+    header_overrides: Dict[str, object] | None = None,
+) -> str:
     """Build a signed RS256 ID token for tests."""
     now = int(time.time())
     claims: Dict[str, object] = {
@@ -77,11 +84,14 @@ def _make_id_token(claim_overrides: Dict[str, object] | None = None) -> str:
     }
     if claim_overrides:
         claims.update(claim_overrides)
+    headers = {"kid": TEST_KID, "typ": "JWT"}
+    if header_overrides:
+        headers.update(header_overrides)
     return jwt.encode(
         claims,
         TEST_PRIVATE_KEY,
         algorithm="RS256",
-        headers={"kid": TEST_KID, "typ": "JWT"},
+        headers=headers,
     )
 
 def _make_invalid_signature_token() -> str:
@@ -91,7 +101,14 @@ def _make_invalid_signature_token() -> str:
     return ".".join(parts[:2] + [tampered_signature])
 
 
-async def _call_auth_callback_with_token(monkeypatch: pytest.MonkeyPatch, id_token: str, *, expected_status: int) -> httpx.Response:
+async def _call_auth_callback_with_token(
+    monkeypatch: pytest.MonkeyPatch,
+    id_token: str,
+    *,
+    expected_status: int,
+    configure: Callable[[object, object, object], None] | None = None,
+    requests_get_override: Callable[[str, int], object] | None = None,
+) -> httpx.Response:
     """
     Helper to exercise the real auth callback endpoint with a controlled ID token.
     """
@@ -116,6 +133,9 @@ async def _call_auth_callback_with_token(monkeypatch: pytest.MonkeyPatch, id_tok
     monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
 
     record = state_store.create(code_verifier="verifier-for-test")
+
+    if configure is not None:
+        configure(record, state_store, session_store)
 
     class FakeOIDC:
         def __init__(self, id_token: str):
@@ -144,13 +164,16 @@ async def _call_auth_callback_with_token(monkeypatch: pytest.MonkeyPatch, id_tok
         monkeypatch.setattr(tokens_module, "JWKS_CACHE", cache)
 
     # Stub JWKS retrieval (future implementation will call requests.get)
-    def fake_requests_get(url: str, timeout: int = 5):
-        return types.SimpleNamespace(
-            status_code=200,
-            json=lambda: TEST_JWKS,
-        )
+    if requests_get_override is None:
+        def fake_requests_get(url: str, timeout: int = 5):
+            return types.SimpleNamespace(
+                status_code=200,
+                json=lambda: TEST_JWKS,
+            )
 
-    monkeypatch.setattr("requests.get", fake_requests_get, raising=False)
+        monkeypatch.setattr("requests.get", fake_requests_get, raising=False)
+    else:
+        monkeypatch.setattr("requests.get", requests_get_override, raising=False)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=full_app), base_url="http://test") as client:
         resp = await client.get(f"/auth/callback?code=valid-code&state={record.state}", follow_redirects=False)
@@ -261,6 +284,145 @@ async def test_callback_accepts_valid_id_token(monkeypatch: pytest.MonkeyPatch):
     resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=302)
     set_cookie = resp.headers.get("set-cookie", "")
     assert "gustav_session=" in set_cookie
+
+
+@pytest.mark.anyio
+async def test_callback_filters_unknown_roles(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token({"realm_access": {"roles": ["student", "teacher", "club-lead"]}})
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=302)
+    cookie_header = resp.headers.get("set-cookie", "")
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    session_id = cookie["gustav_session"].value
+
+    import main  # type: ignore  # noqa: E402
+
+    stored = main.SESSION_STORE.get(session_id)
+    assert stored is not None
+    assert stored.roles == ["student", "teacher"]
+
+
+@pytest.mark.anyio
+async def test_callback_defaults_to_student_when_roles_missing(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token({"realm_access": {}})
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=302)
+    cookie_header = resp.headers.get("set-cookie", "")
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    session_id = cookie["gustav_session"].value
+
+    import main  # type: ignore  # noqa: E402
+
+    stored = main.SESSION_STORE.get(session_id)
+    assert stored is not None
+    assert stored.roles == ["student"]
+
+
+@pytest.mark.anyio
+async def test_callback_handles_jwks_fetch_failure(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token()
+
+    def failing_requests_get(url: str, timeout: int = 5):
+        raise requests.RequestException("jwks unreachable")
+
+    resp = await _call_auth_callback_with_token(
+        monkeypatch,
+        token,
+        expected_status=400,
+        requests_get_override=failing_requests_get,
+    )
+    assert resp.json().get("error") == "invalid_id_token"
+
+
+@pytest.mark.anyio
+async def test_callback_rejects_expired_state(monkeypatch: pytest.MonkeyPatch):
+    def configure(record, *_):
+        monkeypatch.setattr("identity_access.stores._now", lambda: record.expires_at + 1)
+
+    token = _make_id_token()
+    resp = await _call_auth_callback_with_token(
+        monkeypatch,
+        token,
+        expected_status=400,
+        configure=configure,
+    )
+    assert resp.json().get("error") == "invalid_code_or_state"
+
+
+@pytest.mark.anyio
+async def test_api_me_returns_401_after_session_expired(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token()
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=302)
+
+    cookie_header = resp.headers.get("set-cookie", "")
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    session_id = cookie["gustav_session"].value
+
+    import main  # type: ignore  # noqa: E402
+
+    record = main.SESSION_STORE.get(session_id)
+    assert record is not None
+    assert record.expires_at is not None
+    future = record.expires_at + 1
+
+    monkeypatch.setattr("identity_access.stores._now", lambda: future)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", session_id)
+        resp_me = await client.get("/api/me")
+    assert resp_me.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_callback_sets_secure_cookie_flags_in_prod(monkeypatch: pytest.MonkeyPatch):
+    def configure(*_):
+        import main  # type: ignore  # noqa: E402
+        monkeypatch.setattr(main.SETTINGS, "_env_override", "prod", raising=False)
+
+    token = _make_id_token()
+    resp = await _call_auth_callback_with_token(
+        monkeypatch,
+        token,
+        expected_status=302,
+        configure=configure,
+    )
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "gustav_session=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=strict" in set_cookie
+
+
+@pytest.mark.anyio
+async def test_logout_uses_secure_cookie_flags_in_prod(monkeypatch: pytest.MonkeyPatch):
+    def configure(*_):
+        import main  # type: ignore  # noqa: E402
+        monkeypatch.setattr(main.SETTINGS, "_env_override", "prod", raising=False)
+
+    token = _make_id_token()
+    resp = await _call_auth_callback_with_token(
+        monkeypatch,
+        token,
+        expected_status=302,
+        configure=configure,
+    )
+    cookie_header = resp.headers.get("set-cookie", "")
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    session_id = cookie["gustav_session"].value
+
+    import main  # type: ignore  # noqa: E402
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", session_id)
+        resp_logout = await client.post("/auth/logout")
+
+    set_cookie = resp_logout.headers.get("set-cookie", "")
+    assert "gustav_session=" in set_cookie
+    assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=strict" in set_cookie
 
 
 @pytest.mark.anyio

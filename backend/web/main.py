@@ -3,6 +3,7 @@ GUSTAV alpha-2
 """
 from pathlib import Path
 import os
+import logging
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
@@ -26,6 +27,65 @@ from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
+
+
+class AuthSettings:
+    """Central settings helper to derive runtime flags with optional overrides."""
+
+    def __init__(self) -> None:
+        self._env_override: str | None = None
+
+    @property
+    def environment(self) -> str:
+        if self._env_override is not None:
+            return self._env_override
+        return os.getenv("GUSTAV_ENV", "dev").lower()
+
+    def override_environment(self, value: str | None) -> None:
+        self._env_override = value.lower() if value else None
+
+
+logger = logging.getLogger("gustav.identity_access")
+SETTINGS = AuthSettings()
+
+SESSION_COOKIE_NAME = "gustav_session"
+ALLOWED_ROLES = {"student", "teacher", "admin"}
+
+
+def _session_cookie_options() -> dict:
+    """Return cookie policy depending on environment (dev vs prod)."""
+    env = SETTINGS.environment
+    secure = env == "prod"
+    samesite = "strict" if secure else "lax"
+    return {"secure": secure, "samesite": samesite}
+
+
+def _set_session_cookie(response: Response, value: str) -> None:
+    """Attach the gustav session cookie with hardened flags."""
+    opts = _session_cookie_options()
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=value,
+        httponly=True,
+        secure=opts["secure"],
+        samesite=opts["samesite"],
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    """Fully expire the gustav session cookie with matching flags."""
+    opts = _session_cookie_options()
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value="",
+        httponly=True,
+        secure=opts["secure"],
+        samesite=opts["samesite"],
+        path="/",
+        expires=0,
+        max_age=0,
+    )
 
 # FastAPI App erstellen
 # Default app (full web). For tests, an app factory may build a slimmer app.
@@ -470,7 +530,23 @@ async def auth_forgot(login_hint: str | None = None):
 @app.get("/auth/callback")
 async def auth_callback(code: str | None = None, state: str | None = None):
     """
-    Handle OIDC callback: validate state, exchange code for tokens, create session.
+    Complete the OIDC authorization code flow after Keycloak redirect.
+
+    Why:
+        Exchanges the authorization code for tokens, verifies the ID token and
+        persists a server-side session so the browser only needs an opaque cookie.
+    Parameters:
+        code: Authorization code returned by Keycloak (query parameter).
+        state: Opaque state created in /auth/login to prevent CSRF and replay.
+    Behavior:
+        - Validates code/state and performs the token exchange via OIDC client.
+        - Verifies the ID token signature and claims, extracts e-mail and roles.
+        - Creates a session, sets hardened `gustav_session` cookie, redirects.
+        - Returns HTTP 400 without setting cookies on any failure path.
+    Permissions:
+        Only requests that present a previously issued state (from /auth/login)
+        succeed. No additional course role is required; the endpoint is part of
+        the public login flow.
     """
     if not code or not state:
         return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
@@ -480,7 +556,8 @@ async def auth_callback(code: str | None = None, state: str | None = None):
 
     try:
         tokens = OIDC.exchange_code_for_tokens(code=code, code_verifier=rec.code_verifier)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Token exchange failed: %s", exc.__class__.__name__)
         return JSONResponse({"error": "token_exchange_failed"}, status_code=400)
 
     id_token = tokens.get("id_token")
@@ -488,28 +565,31 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         return JSONResponse({"error": "invalid_id_token"}, status_code=400)
     try:
         claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
-    except IDTokenVerificationError:
+    except IDTokenVerificationError as exc:
+        logger.warning("ID token verification failed: %s", exc.code)
         return JSONResponse({"error": "invalid_id_token"}, status_code=400)
 
     email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"
-    roles = []
+    raw_roles: list[str] = []
     ra = claims.get("realm_access") or {}
     if isinstance(ra, dict):
         r = ra.get("roles")
         if isinstance(r, list):
-            roles = [str(x) for x in r]
+            raw_roles = [str(x) for x in r]
+    # Restrict roles to our known realm roles; ignore custom project roles.
+    roles = [role for role in raw_roles if role in ALLOWED_ROLES]
+    if len(roles) != len(raw_roles):
+        unknown = [role for role in raw_roles if role not in ALLOWED_ROLES]
+        if unknown:
+            logger.debug("Ignoring unknown Keycloak roles: %s", unknown)
+    if not roles:
+        roles = ["student"]
     email_verified = bool(claims.get("email_verified", False))
 
-    sess = SESSION_STORE.create(email=email, roles=roles or ["student"], email_verified=email_verified)
+    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
-    resp.set_cookie(
-        key="gustav_session",
-        value=sess.session_id,
-        httponly=True,
-        samesite="lax",
-        path="/",
-    )
+    _set_session_cookie(resp, sess.session_id)
     return resp
 
 
@@ -519,14 +599,14 @@ async def auth_logout(request: Request):
     Invalidate the current session and clear the session cookie.
     Requires an existing session cookie; otherwise 401.
     """
-    if "gustav_session" not in request.cookies:
+    if SESSION_COOKIE_NAME not in request.cookies:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    sid = request.cookies.get("gustav_session")
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
     if sid:
         SESSION_STORE.delete(sid)
     resp = Response(status_code=204)
-    resp.delete_cookie(key="gustav_session", path="/")
+    _clear_session_cookie(resp)
     return resp
 
 
@@ -535,9 +615,9 @@ async def get_me(request: Request):
     """
     Return minimal session info if authenticated; else 401.
     """
-    if "gustav_session" not in request.cookies:
+    if SESSION_COOKIE_NAME not in request.cookies:
         return JSONResponse({"error": "unauthenticated"}, status_code=401)
-    sid = request.cookies.get("gustav_session")
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
     rec = SESSION_STORE.get(sid or "")
     if not rec:
         return JSONResponse({"error": "unauthenticated"}, status_code=401)

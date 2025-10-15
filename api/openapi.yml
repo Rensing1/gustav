@@ -100,7 +100,10 @@ paths:
           description: Session established, redirect to application page
           headers:
             Set-Cookie:
-              description: httpOnly session cookie `gustav_session`
+              description: >-
+                httpOnly session cookie `gustav_session`.
+                Production: `HttpOnly; Secure; SameSite=strict`.
+                Development/Test: `HttpOnly; SameSite=lax`.
               schema:
                 type: string
             Location:

@@ -20,6 +20,9 @@ from jose.exceptions import JOSEError
 
 from .oidc import OIDCConfig
 
+import logging
+
+logger = logging.getLogger("gustav.identity_access.tokens")
 
 class IDTokenVerificationError(Exception):
     """Raised when the ID token fails verification."""
@@ -61,14 +64,18 @@ class JWKSCache:
         try:
             resp = requests.get(url, timeout=5)
         except requests.RequestException as exc:
+            logger.warning("JWKS fetch failed: %s", exc.__class__.__name__)
             raise IDTokenVerificationError("jwks_fetch_failed") from exc
         if resp.status_code != 200:
+            logger.warning("JWKS fetch returned status %s", resp.status_code)
             raise IDTokenVerificationError("jwks_fetch_failed")
         try:
             jwks = resp.json()
         except ValueError as exc:
+            logger.warning("JWKS payload invalid JSON")
             raise IDTokenVerificationError("jwks_invalid") from exc
         if not isinstance(jwks, dict) or "keys" not in jwks:
+            logger.warning("JWKS payload missing keys array")
             raise IDTokenVerificationError("jwks_invalid")
         return jwks
 
@@ -127,6 +134,7 @@ def verify_id_token(
             },
         )
     except JOSEError as exc:
+        logger.warning("ID token JOSE verification failed: %s", exc.__class__.__name__)
         raise IDTokenVerificationError("invalid_id_token") from exc
 
     _validate_temporal_claims(claims)

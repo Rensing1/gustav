@@ -1,112 +1,96 @@
-# GUSTAV v2 - Moderne Lernplattform
+# GUSTAV alpha‑2 – Moderne Lernplattform
 
-Eine KI-gestützte Lernplattform mit FastAPI und HTMX - ohne externe CSS-Framework-Abhängigkeiten.
+KI‑gestützte Lernplattform mit FastAPI und HTMX. Server‑seitiges Rendern (SSR) mit eigenen Python‑Komponenten, ohne externe CSS‑Frameworks.
 
-## 🚀 Schnellstart
+## Schnellstart
 
-### Voraussetzungen
-- Docker & Docker Compose installiert
-- Port 8100 frei
+- Voraussetzungen
+  - Docker & Docker Compose installiert
+  - Port `8100` ist frei
 
-### Installation & Start
+- Starten
+  - Projekt bauen: `docker compose build`
+  - Starten: `docker compose up`
+  - Öffnen: `http://localhost:8100`
 
-```bash
-# 1. In das Projektverzeichnis wechseln
-cd /home/felix/gustav-alpha2
+- Entwicklung (Live‑Reload)
+  - Volume ist auf `backend/web` gemountet, Änderungen werden erkannt
+  - Uvicorn reloadet automatisch; kein manueller Neustart nötig
 
-# 2. Container bauen
-docker-compose build
+- Nützliche Befehle
+  - Hintergrund: `docker compose up -d`
+  - Logs: `docker compose logs -f`
+  - Stoppen: `docker compose down`
+  - Neu bauen (nach `requirements.txt`‑Änderung): `docker compose build --no-cache`
 
-# 3. Container starten
-docker-compose up
-
-# 4. Browser öffnen
-# → http://localhost:8100
-```
-
-### Entwicklung
-
-Die App läuft mit **Live-Reload**:
-- Code-Änderungen in `/app` werden automatisch erkannt
-- Server startet automatisch neu
-- Keine manuellen Neustarts nötig!
-
-### Nützliche Befehle
-
-```bash
-# Container im Hintergrund starten
-docker-compose up -d
-
-# Logs anzeigen
-docker-compose logs -f
-
-# Container stoppen
-docker-compose down
-
-# Container neu bauen (nach requirements.txt Änderung)
-docker-compose build --no-cache
-```
-
-## 📁 Projekt-Struktur
+## Struktur
 
 ```
 gustav-alpha2/
-├── app/
-│   ├── main.py              # FastAPI Hauptdatei
-│   ├── requirements.txt     # Python-Pakete
-│   ├── static/              # Statische Dateien (aktuell leer)
-│   └── templates/           # HTML-Templates
-│       ├── base.html        # Basis-Template (sauberes HTML)
-│       └── index.html       # Startseite (ohne Framework-Abhängigkeiten)
-├── docker-compose.yml       # Docker Orchestrierung (Port 8100)
-├── Dockerfile              # Container-Definition
-└── .env.example            # Umgebungsvariablen Template
+├── api/
+│   └── openapi.yml          # API-Vertrag (Contract-First)
+├── backend/
+│   └── web/                 # Web-Adapter (FastAPI, SSR, HTMX)
+│       ├── main.py          # Routen, Seitenaufbau
+│       ├── components/      # UI-Komponenten
+│       ├── static/          # CSS/JS/Assets
+│       └── requirements.txt # Python-Dependencies
+├── docs/
+│   ├── ARCHITECTURE.md      # Überblick Architektur und Vorgehen
+│   ├── glossary.md          # Begriffe
+│   ├── bounded_contexts.md  # Kontextzuschnitte
+│   ├── database_schema.md   # DB-Schema (Platzhalter)
+│   └── UI-UX-Leitfaden.md   # UI/UX-Richtlinien
+├── docker-compose.yml
+├── Dockerfile
+└── legacy-code-alpha1/
 ```
 
-## 🎯 Entwicklungsstand
+Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 
-- [x] FastAPI Grundstruktur
-- [x] Docker-Setup (Port 8100)
-- [x] Template-System (Jinja2 mit Vererbung)
-- [x] Custom CSS (keine externen Abhängigkeiten)
-- [ ] HTMX Integration
-- [ ] Datenbank (Supabase)
-- [ ] Authentifizierung
-- [ ] KI-Features (Ollama)
+## Entwicklungs-Workflow
 
-## 🛠️ Technologie-Stack
+- Contract‑First
+  - Änderungen zuerst in `api/openapi.yml:1`
+  - BDD‑Szenarien (Given‑When‑Then) formulieren
+  - pytest‑Tests schreiben, dann minimal implementieren (Red‑Green‑Refactor)
 
-- **Backend:** FastAPI (Python 3.11)
-- **Frontend-Styling:** Custom CSS (DSGVO-konform, keine externen Abhängigkeiten!)
-- **Templates:** Jinja2 mit Template-Vererbung
-- **Container:** Docker & Docker Compose
-- **Interaktivität:** HTMX (kommt als nächstes)
-- **Datenbank:** Supabase (kommt später)
-- **KI:** Ollama (kommt später)
+- TDD
+  - Tests unter `backend/tests/` (wird schrittweise aufgebaut)
+  - Externe Abhängigkeiten mocken, gegen lokale Test‑DB prüfen
 
-## 📝 Hinweise zur Entwicklung
+- Branch‑Strategie
+  - `main`: stabil, release‑bereit
+  - `development`: aktiver Entwicklungszweig (Standard)
+  - Feature‑Branches: `feat/<kurz-beschreibung>`, Bugfix: `fix/<issue-nummer-oder-thema>`
+  - PRs nach `development`, regelmäßiges Merge nach `main`
 
-### CSS-Strategie
+## Technologie-Stack
 
-#### Aktueller Stand
-- Custom CSS ohne externe Frameworks
-- DSGVO-konform (keine externen CDN-Abhängigkeiten)
-- Einfach und wartbar (KISS-Prinzip)
-- Direkt verständlich für Lernzwecke
+- Backend: FastAPI (Python 3.11), Uvicorn
+- SSR/Interaktivität: Eigene Komponenten + HTMX (`backend/web/static/js/vendor/htmx.min.js`)
+- Styling: Custom CSS (`backend/web/static/css/gustav.css`)
+- Container: Docker & Docker Compose
+- Datenbank (geplant): PostgreSQL via Supabase (Migrationen später unter `supabase/migrations/`)
+- KI (geplant): Ollama + DSPy
 
-#### Vorteile unserer Lösung
-- **Keine Build-Tools nötig:** Einfaches CSS, direkt einsatzbereit
-- **Volle Kontrolle:** Eigenes Design-System ohne Framework-Zwänge
-- **Bildungskontext:** Schüler können den Code direkt verstehen
-- **Performance:** Nur die Styles die wir wirklich brauchen
-- **Sicherheit:** Keine externen Requests, DSGVO-konform
+## Hinweise zur UI-Entwicklung
 
-#### Nächste Schritte
-1. Basis-CSS-Datei mit Variablen für Farben und Abstände
-2. Einfache, semantische Klassen für wiederkehrende Komponenten
-3. Mobile-first Responsive Design mit CSS Grid/Flexbox
+- CSS
+  - Keine externen CDN/Frameworks → DSGVO‑konform, KISS
+  - Fokus auf Lesbarkeit und Lehrbarkeit
 
-### Template-System
-- `base.html` ist das Basis-Template
-- Alle anderen Templates erben davon mit `{% extends "base.html" %}`
-- Blocks: `title`, `head`, `navigation`, `content`, `footer`, `scripts`
+- Komponenten
+  - UI wird in Python‑Komponenten strukturiert (`backend/web/components/`)
+  - Seiten werden in `main.py` zusammengesetzt
+
+## Healthcheck
+
+- Endpoint: `GET /health` → `{"status": "healthy", "service": "gustav-v2"}`
+
+## Weiterführende Dokumentation
+
+- Architektur: `docs/ARCHITECTURE.md:1`
+- Begriffe: `docs/glossary.md:1`
+- Bounded Contexts: `docs/bounded_contexts.md:1`
+- DB‑Schema (Übersicht/Platzhalter): `docs/database_schema.md:1`

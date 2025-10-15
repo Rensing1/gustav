@@ -6,6 +6,7 @@ Ziel
 - Minimalistische Einführung von Keycloak für Registrierung, Login, Logout, Rollen (`student|teacher|admin`), Passwort ändern (zunächst über Keycloak Account Console), Account löschen.
 - Ein Realm (`gustav`), eine Schule. Cookies (HttpOnly, Secure, SameSite) für UX und Sicherheit.
 - Contract‑First (OpenAPI), TDD (pytest), KISS.
+ - „Passwort vergessen“ (Reset per E‑Mail über Keycloak) als minimaler Redirect‑Flow.
 
 Bezug: `docs/auth_legacy.md`
 - Bisherige Auth: Supabase (GoTrue), HttpOnly Cookies, Sessions in DB, Profile & RLS.
@@ -19,6 +20,7 @@ Entscheidungen (bestätigt)
 - QR‑Registrierung: Kurs‑Token (TTL 15 Minuten), nach Login Kurszuweisung.
 - Passwort ändern: vorerst über Keycloak Account Console (Link aus UI). Eigene UI später optional.
 - Migration: bevorzugt Import bestehender bcrypt‑Hashes; Fallback „Force password reset“.
+ - Passwort vergessen: Nutzung der Keycloak‑Funktion „Forgot Password“; optionaler Komfort‑Endpunkt in GUSTAV (`GET /auth/forgot`) leitet dorthin.
 
 Architektur (kurz)
 - OIDC Authorization Code Flow (serverseitig). Keycloak als IdP. Unser Web‑Adapter (FastAPI) setzt/liest httpOnly‑Session‑Cookie.
@@ -30,13 +32,19 @@ API‑Oberfläche (Entwurf – wird in `api/openapi.yml` konkretisiert)
 - `POST /auth/logout` → Session invalidieren, Cookie leeren
 - `GET /api/me` → 200 mit `{ email, roles }` wenn eingeloggt; sonst 401
 - (später) `POST /auth/qr` / `GET /auth/login?state=...` für QR‑Flow (Token‑State)
+ - `GET /auth/forgot` → Redirect zur Keycloak‑Seite „Passwort vergessen“ (Reset‑Mail anfordern)
 
 User Story (vereinfachte Form)
 - Als Schüler möchte ich mich mit E‑Mail/Passwort anmelden und automatisch meine Rolle `student` erhalten, damit ich auf meine Kurse zugreifen kann. In der Schule kann ich alternativ per QR beitreten.
 - Als Lehrer/Admin möchte ich Rollen verwalten (in Keycloak) und den Passwortwechsel Keycloak überlassen.
 - Als Benutzer möchte ich mich sicher abmelden können (Cookie löschen, Session invalidieren).
+ - Als Benutzer möchte ich bei „Passwort vergessen“ einen einfachen Weg haben, eine Reset‑Mail anzufordern (über Keycloak), ohne dass GUSTAV eine eigene Passwort‑UI bauen muss.
 
 BDD‑Szenarien (Auszug)
+- QR erzeugen (Lehrer)
+  - Given ein Kurs mit zugewiesener Klasse
+  - When der Lehrer „QR generieren“ klickt
+  - Then wird ein einmaliger Token mit 15 Minuten Gültigkeit erstellt und als QR angezeigt
 - Login (Happy Path)
   - Given ich bin nicht eingeloggt
   - When ich `GET /auth/login` aufrufe
@@ -67,6 +75,19 @@ BDD‑Szenarien (Auszug)
 - QR (abgelaufen)
   - Given ein abgelaufener Kurs‑Token
   - Then erhalte ich 410 (oder 400) mit verständlicher Info
+ - Passwort vergessen (Happy Path)
+  - Given ich bin nicht eingeloggt
+  - When ich `GET /auth/forgot` aufrufe
+  - Then werde ich zur Keycloak‑Seite „Passwort vergessen“ weitergeleitet
+  - And nach Eingabe meiner E‑Mail erhalte ich (in prod) einen Reset‑Link
+ - Passwort vergessen (unbekannte E‑Mail)
+  - Given eine E‑Mail, die nicht existiert
+  - When ich in Keycloak einen Reset anfordere
+  - Then wird aus Sicherheitsgründen keine Existenz bestätigt (neutrale Bestätigung)
+ - Domain‑Beschränkung (prod)
+  - Given Keycloak erzwingt E‑Mails mit `@gymalf.de`
+  - When Registrierung oder Reset mit anderer Domain versucht wird
+  - Then wird dies abgelehnt bzw. kein Reset‑Link versendet
 
 Schlanker Implementierungsplan (iterativ)
 1) API‑Vertrag: o.g. Endpunkte in `api/openapi.yml` ergänzen (Contract‑First)
@@ -75,6 +96,7 @@ Schlanker Implementierungsplan (iterativ)
 4) Minimaler Adapter: Code bis Tests grün (Cookie setzen/löschen, Redirects)
 5) Migration (Legacy → Keycloak): Import (bcrypt) bzw. Reset‑Aktion; Rollenzuweisung
 6) QR‑Registrierung: Token‑Store (TTL 15 Min), Login mit `state`, Kurszuweisung
+ 7) Passwort vergessen: Minimaler Redirect‑Endpunkt (`GET /auth/forgot`) zu Keycloak‑Reset‑Seite; optional später Admin‑API‑Variante
 
 Migration (Legacy → Keycloak)
 - Daten aus Alt‑System: `email`, `role`, `password_hash` (bcrypt). Mapping: Rolle → Realm‑Rolle, E‑Mail unverändert.
@@ -93,8 +115,8 @@ IServ (Ausblick)
 
 Definition of Done (für den ersten Inkrement)
 - `api/openapi.yml` enthält die vier Endpunkte (login, callback, logout, me) mit klaren Responses.
+ - `api/openapi.yml` ergänzt `GET /auth/forgot` (302 Redirect) als Komfort‑Endpunkt.
 - pytest‑Suite deckt Happy Paths und Kernfehlerfälle ab; Tests grün.
 - docker‑compose startet Keycloak; Realm/Client/Rollen vorhanden.
 - Minimaler Adapter setzt/liest httpOnly‑Cookie; `/api/me` liefert Rollen.
 - Kurze README‑Ergänzung zur Auth‑Bedienung (Login/Logout/Passwort ändern via Keycloak‑Konsole).
-

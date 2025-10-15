@@ -3,8 +3,6 @@ GUSTAV alpha-2
 """
 from pathlib import Path
 import os
-import json
-import base64
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
@@ -27,6 +25,7 @@ from components.navigation import Navigation
 from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
+from identity_access.tokens import IDTokenVerificationError, verify_id_token
 
 # FastAPI App erstellen
 # Default app (full web). For tests, an app factory may build a slimmer app.
@@ -485,14 +484,11 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         return JSONResponse({"error": "token_exchange_failed"}, status_code=400)
 
     id_token = tokens.get("id_token")
-    if not id_token or id_token.count(".") != 2:
+    if not id_token or not isinstance(id_token, str):
         return JSONResponse({"error": "invalid_id_token"}, status_code=400)
     try:
-        payload_b64 = id_token.split(".")[1]
-        pad = '=' * (-len(payload_b64) % 4)
-        payload_json = base64.urlsafe_b64decode(payload_b64 + pad).decode("utf-8")
-        claims = json.loads(payload_json)
-    except Exception:
+        claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
+    except IDTokenVerificationError:
         return JSONResponse({"error": "invalid_id_token"}, status_code=400)
 
     email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"

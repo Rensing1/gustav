@@ -10,6 +10,10 @@ services:
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=debug
+      - KC_BASE_URL=http://keycloak:8080
+      - KC_REALM=gustav
+      - KC_CLIENT_ID=gustav-web
+      - REDIRECT_URI=http://localhost:8100/auth/callback
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

@@ -1,6 +1,6 @@
 # Plan: Benutzerverwaltung mit Keycloak (minimalistisch)
 
-Stand: initial
+Stand: JWKS-Verifikation ergänzt (ID-Token wird signaturgeprüft)
 Status
 - ✅ API-Vertrag ergänzt (login, callback, logout, me, forgot) – Contract-first vorbereitet.
 - ✅ RED-Tests für Auth-Contract geschrieben, pytest auf `backend/tests` fokussiert, Tests laufen grün mit minimalem Adapter.
@@ -9,6 +9,7 @@ Status
  - ✅ Keycloak in docker-compose ergänzt (start-dev, Realm-Import). Realm „gustav“ mit Rollen und Client vorhanden.
  - ✅ OIDC-Verdrahtung (Minimal): PKCE + state, Token-Exchange, In-Memory SessionStore, httpOnly-Cookie.
  - ✅ Tests grün (async via httpx.ASGITransport). Trio installiert, um AnyIO-Parametrisierung zu bedienen.
+ - ✅ ID-Token wird jetzt gegen Keycloak-JWKS validiert (Signatur, `iss`, `aud`, `exp`), inkl. Tests für Fehlerfälle.
 
 Ziel
 - Minimalistische Einführung von Keycloak für Registrierung, Login, Logout, Rollen (`student|teacher|admin`), Passwort ändern (zunächst über Keycloak Account Console), Account löschen.
@@ -33,7 +34,7 @@ Entscheidungen (bestätigt)
 Architektur (kurz)
 - OIDC Authorization Code Flow (serverseitig). Keycloak als IdP. Unser Web‑Adapter (FastAPI) setzt/liest httpOnly‑Session‑Cookie.
 - Keycloak‑Konfig als Code (Realm‑Export/CLI), damit reproduzierbar.
- - Dev: StateStore (TTL 15 min) und SessionStore (TTL 60 min) in-memory. Cookie enthält nur opaque Session-ID. Prod: später Redis/DB + JWK‑Verifikation.
+ - Dev: StateStore (TTL 15 min) und SessionStore (TTL 60 min) in-memory. Cookie enthält nur opaque Session-ID. Prod: später Redis/DB + JWK‑Verifikation (Cache liegt aktuell im Prozess, später Redis).
 
 API‑Oberfläche (Entwurf – wird in `api/openapi.yml` konkretisiert)
 - `GET /auth/login` → Redirect zu Keycloak (Start Auth‑Flow)

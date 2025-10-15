@@ -12,6 +12,150 @@ import httpx
 from httpx import ASGITransport
 from pathlib import Path
 import sys
+import time
+from typing import Dict
+from jose import jwt
+import types
+
+TEST_ISSUER = "http://keycloak:8080/realms/gustav"
+TEST_AUDIENCE = "gustav-web"
+TEST_KID = "gustav-test-key"
+TEST_JWKS = {
+    "keys": [
+        {
+            "kty": "RSA",
+            "use": "sig",
+            "alg": "RS256",
+            "kid": TEST_KID,
+            "n": "vczfjmjDdWlk6rICRYDB-3Gp4WGtdu57_jsGphyr24OsCFuLf1N_mN17K1arvHudVqu38JR2j2Llj-XUqDJ1NCuyfG2l0O8GlPsO8CnzE3ql5UoFizdaWbLABAY2zBBkoHuWfvtA5y1rVT8E3-W4XrhJ7l8LoPyjCP1NB0n6mmebbYWLBDA7q8E-OcFluzq4kgyXj88KKcltALAWGsj9TjSgMdHXlX4AQfDLCewq_yUsB65UJFdJyl65lhWGqI23eIhJcI1hu6Qv5L0ROXyKnKvEH-UDxC7dIwl7oPAwxsJRGaWpjp3Re8wBmcw3j4DCRQE-auC3fzhM2Wyq4fhvZQ",
+            "e": "AQAB",
+        }
+    ]
+}
+TEST_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC9zN+OaMN1aWTq
+sgJFgMH7canhYa127nv+OwamHKvbg6wIW4t/U3+Y3XsrVqu8e51Wq7fwlHaPYuWP
+5dSoMnU0K7J8baXQ7waU+w7wKfMTeqXlSgWLN1pZssAEBjbMEGSge5Z++0DnLWtV
+PwTf5bheuEnuXwug/KMI/U0HSfqaZ5tthYsEMDurwT45wWW7OriSDJePzwopyW0A
+sBYayP1ONKAx0deVfgBB8MsJ7Cr/JSwHrlQkV0nKXrmWFYaojbd4iElwjWG7pC/k
+vRE5fIqcq8Qf5QPELt0jCXug8DDGwlEZpamOndF7zAGZzDePgMJFAT5q4Ld/OEzZ
+bKrh+G9lAgMBAAECggEABmLm4Mv99leUruBM0EQ2rWcT2sK7y0/XTzodjVL9+2Bm
+Vk+nlXdcner8knw+QhTSD1EEMEL77EjdGubrrWR+lMH6+vyA2FNlSs0EdyifhmJu
+7j9RNBp+3pweTDmzTVF94/fUnAgzP7QZCPYaYWLsPbpWDoBsi+mu81tROgi6DHOX
+fIj8Wfncn4zb3QF7OFTZZLIJL/lgh4Y/+L4GW/5qZLbjKdeBZaQhrUI/K1KC4DIV
+j1p2Vlpe8WWxXCSJJh7RKFN2iX3JTZ1Wj3RBk0VHtVkfm/JESnKDRpLmB7qo7GRK
+Oj8ES+i/GKJIgqatxtvi74Q9ITC8JWdv7FL2KyS6rwKBgQDp6skJuPBq/cr8hlP1
+B+I//AOiOabEUtH0cQrlEIS/tFYkAMtzlZqzWMAHRly6KwdpkdQ5ChlBi5LGIkD2
+9gxyjcJk1N4c0Ce5W2eXANpIUD6rKD6y6OYyuEqan05d65Brc3iC+56f3BX6Fua5
+qL66qzWLy2DiTAKzHAtwyHiK8wKBgQDPt+PQpYYiq1oa3WShOp9MlRhan/HsJskX
+0cxXVCBmpLrNI2w2oTFpgFmPSGLbr4hq5XOYQC4N/9caxLMmu58/GI6SeqN4nHhI
+ZSKCk6CT/gup10Fd1XuVm3baC6Hw/sV5PDv8bCPbzszJKKISFlEivRYiQLUZT1oN
+x/Ubv7wCRwKBgQCbtFUty5T9IwLDJQcty5mmzbH9gjKn7BklhTmjUGOM2BWe0Yib
+37GiQClSrlt68Ll2ZEPH1BkLsER67sIfoZiXiBUl2SwgMc6/a0CBG2gxSnjspVVW
+8gCJMnM2iWQ40FzJqYtGZQcpke5vEl9ypgiPaPezniVXfREu+DQFVuwmUQKBgDQI
+i5/7puNOa07pgMjGp5sGikhBYtfWS2+VFYwWvdsYjtbOddAlhvw3s7ep2WHQ0ep9
+Ofy8rwzAtwC0n3AnddfXbfeRkxumjpcMBp4RHxuTexZ7nptD3CZ5AEfUvCdjmtIo
+3Zn4+O6aGkCV1iuTvZVnKoFAFl2VvChRm7vsxssHAoGAHjSZQqXAJxdEWx9xbwfT
+Pczky567SfCjAPAKohA6cx4kCGpqxkXh6/XliBCoPaHAL78pLfUCVPaIdWs85AGC
+pgHzCSzRQhVtXzZZ0A2UCNpeFvXOwRy64fo17PJnjpKTnwX7lLv4C8p//HcMYNYS
+GN5WQjPSsFmIFF2zP1JWIbM=
+-----END PRIVATE KEY-----"""
+
+def _make_id_token(claim_overrides: Dict[str, object] | None = None) -> str:
+    """Build a signed RS256 ID token for tests."""
+    now = int(time.time())
+    claims: Dict[str, object] = {
+        "iss": TEST_ISSUER,
+        "aud": TEST_AUDIENCE,
+        "sub": "123456",
+        "exp": now + 300,
+        "iat": now,
+        "email": "student@gymalf.de",
+        "preferred_username": "student",
+        "realm_access": {"roles": ["student"]},
+        "email_verified": True,
+    }
+    if claim_overrides:
+        claims.update(claim_overrides)
+    return jwt.encode(
+        claims,
+        TEST_PRIVATE_KEY,
+        algorithm="RS256",
+        headers={"kid": TEST_KID, "typ": "JWT"},
+    )
+
+def _make_invalid_signature_token() -> str:
+    valid = _make_id_token()
+    parts = valid.split(".")
+    tampered_signature = "invalidsig"
+    return ".".join(parts[:2] + [tampered_signature])
+
+
+async def _call_auth_callback_with_token(monkeypatch: pytest.MonkeyPatch, id_token: str, *, expected_status: int) -> httpx.Response:
+    """
+    Helper to exercise the real auth callback endpoint with a controlled ID token.
+    """
+    # Import lazily to avoid circulars during collection
+    from main import app as full_app  # type: ignore
+    import main  # type: ignore
+    from identity_access.oidc import OIDCConfig
+    from identity_access.stores import StateStore, SessionStore
+
+    # Fresh in-memory stores per run to avoid leakage between tests
+    state_store = StateStore()
+    session_store = SessionStore()
+    monkeypatch.setattr(main, "STATE_STORE", state_store)
+    monkeypatch.setattr(main, "SESSION_STORE", session_store)
+
+    test_cfg = OIDCConfig(
+        base_url="http://keycloak:8080",
+        realm="gustav",
+        client_id="gustav-web",
+        redirect_uri="http://localhost:8100/auth/callback",
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+
+    record = state_store.create(code_verifier="verifier-for-test")
+
+    class FakeOIDC:
+        def __init__(self, id_token: str):
+            self.id_token = id_token
+            self.cfg = test_cfg
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            assert code == "valid-code"
+            assert code_verifier == "verifier-for-test"
+            return {
+                "access_token": "fake-access",
+                "refresh_token": "fake-refresh",
+                "id_token": self.id_token,
+            }
+
+    fake_client = FakeOIDC(id_token)
+    monkeypatch.setattr(main, "OIDC", fake_client)
+
+    # Reset JWKS cache for deterministic tests (no effect until verification module exists)
+    try:
+        from identity_access import tokens as tokens_module  # type: ignore
+    except ImportError:
+        tokens_module = None
+    if tokens_module and hasattr(tokens_module, "JWKSCache"):
+        cache = tokens_module.JWKSCache(ttl_seconds=0)
+        monkeypatch.setattr(tokens_module, "JWKS_CACHE", cache)
+
+    # Stub JWKS retrieval (future implementation will call requests.get)
+    def fake_requests_get(url: str, timeout: int = 5):
+        return types.SimpleNamespace(
+            status_code=200,
+            json=lambda: TEST_JWKS,
+        )
+
+    monkeypatch.setattr("requests.get", fake_requests_get, raising=False)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=full_app), base_url="http://test") as client:
+        resp = await client.get(f"/auth/callback?code=valid-code&state={record.state}", follow_redirects=False)
+    assert resp.status_code == expected_status
+    return resp
 
 # Import auth-only app factory to keep tests lean
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -81,6 +225,42 @@ async def test_callback_invalid_returns_400(code: str, state: str):
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(f"/auth/callback?code={code}&state={state}")
     assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_callback_rejects_expired_id_token(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token({"exp": int(time.time()) - 10})
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=400)
+    assert resp.json().get("error") == "invalid_id_token"
+
+
+@pytest.mark.anyio
+async def test_callback_rejects_wrong_issuer(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token({"iss": "http://attack.example/realm"})
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=400)
+    assert resp.json().get("error") == "invalid_id_token"
+
+
+@pytest.mark.anyio
+async def test_callback_rejects_wrong_audience(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token({"aud": "other-client"})
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=400)
+    assert resp.json().get("error") == "invalid_id_token"
+
+
+@pytest.mark.anyio
+async def test_callback_rejects_invalid_signature(monkeypatch: pytest.MonkeyPatch):
+    token = _make_invalid_signature_token()
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=400)
+    assert resp.json().get("error") == "invalid_id_token"
+
+
+@pytest.mark.anyio
+async def test_callback_accepts_valid_id_token(monkeypatch: pytest.MonkeyPatch):
+    token = _make_id_token()
+    resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=302)
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "gustav_session=" in set_cookie
 
 
 @pytest.mark.anyio

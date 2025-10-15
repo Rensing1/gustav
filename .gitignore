@@ -13,3 +13,6 @@ legacy-code-alpha1/
 
 # Dokumentationen (Repo-weit versioniert)
 # Hinweis: Einzelne Build-Artefakte ggf. gezielt ausschließen, aber nicht den gesamten Ordner.
+# Python bytecode cache
+__pycache__/
+*.pyc

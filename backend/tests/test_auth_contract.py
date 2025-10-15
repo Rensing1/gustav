@@ -40,14 +40,11 @@ def test_forgot_redirect(client: TestClient):
 def test_callback_success_redirects_and_sets_cookie(client: TestClient, code: str, state: str):
     # When: GET /auth/callback with a (mock) valid code and state
     resp = client.get(f"/auth/callback?code={code}&state={state}", allow_redirects=False)
-    # Then: 302 + Set-Cookie in contract
-    if resp.status_code == 302:
-        # Minimal contract: Set-Cookie present
-        cookies = resp.headers.get("set-cookie", "")
-        assert "gustav_session=" in cookies
-    else:
-        # Before implementation, this is expected RED
-        assert resp.status_code == 302
+    # Then: 302 + both headers present (strict per contract)
+    assert resp.status_code == 302
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "gustav_session=" in set_cookie
+    assert "location" in resp.headers
 
 
 @pytest.mark.parametrize(
@@ -73,3 +70,40 @@ def test_logout_requires_authentication(client: TestClient):
     resp = client.post("/auth/logout")
     assert resp.status_code in (401, 403)
 
+
+def test_logout_clears_cookie(client: TestClient):
+    # With a (fake) session cookie, logout should clear it
+    cookies = {"gustav_session": "fake-session"}
+    resp = client.post("/auth/logout", cookies=cookies, allow_redirects=False)
+    assert resp.status_code == 204
+    # Contract: server clears the session cookie
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "gustav_session=" in set_cookie
+    assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
+
+
+def test_me_authenticated_returns_200_and_shape(client: TestClient):
+    # With a (fake) session cookie, /api/me should return session shape
+    cookies = {"gustav_session": "fake-session"}
+    resp = client.get("/api/me", cookies=cookies)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, dict)
+    assert "email" in body and isinstance(body["email"], str)
+    assert "roles" in body and isinstance(body["roles"], list)
+
+
+def test_openapi_contains_auth_paths():
+    # Sanity check that contract includes expected paths
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    yml = (root / "api" / "openapi.yml").read_text(encoding="utf-8")
+    for p in [
+        "/auth/login",
+        "/auth/callback",
+        "/auth/logout",
+        "/auth/forgot",
+        "/api/me",
+    ]:
+        assert p in yml

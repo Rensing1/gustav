@@ -48,6 +48,25 @@ gustav-alpha2/
 
 Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 
+## Auth (Keycloak) lokal
+
+- Dienste: Keycloak läuft im Compose auf `http://localhost:8080` (Realm‑Import via `keycloak/realm-gustav.json`).
+- Der Web‑Adapter (FastAPI) nutzt OIDC Authorization Code Flow mit PKCE.
+- Konfiguration über Umgebungsvariablen (dev‑Defaults im Code):
+  - `KC_BASE_URL` (default: `http://localhost:8080`)
+  - `KC_REALM` (default: `gustav`)
+  - `KC_CLIENT_ID` (default: `gustav-web`)
+  - `REDIRECT_URI` (default: `http://localhost:8100/auth/callback`)
+- Cookies: httpOnly Session‑Cookie `gustav_session` (opaque ID). In Prod zusätzlich `Secure` und passendes `SameSite` setzen.
+- Sicherheit (MVP): ID‑Token wird derzeit nur minimal decodiert (ohne JWK‑Signaturprüfung). ToDo: Verifikation (iss, aud, exp).
+
+## Tests
+
+- Auth‑Contract‑Tests laufen asynchron mit `httpx` + `ASGITransport` direkt gegen die ASGI‑App.
+- Ausführen:
+  - `.venv/bin/python -m pytest -q -k auth_contract`
+- Hinweis: AnyIO parametrisiert standardmäßig `asyncio` und `trio`. Installiere `trio` im venv (`pip install trio`), wenn [trio]‑Fälle aktiv sind.
+
 ## Entwicklungs-Workflow
 
 - Contract‑First

@@ -7,9 +7,31 @@ services:
     volumes:
       # Live-Reload: Web-Code (SSR) wird eingebunden
       - ./backend/web:/app:z
+      # Identity Access layer must be mounted as well for imports
+      - ./backend/identity_access:/app/identity_access:z
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=debug
+      - KC_BASE_URL=http://keycloak:8080
+      - KC_REALM=gustav
+      - KC_CLIENT_ID=gustav-web
+      - REDIRECT_URI=http://localhost:8100/auth/callback
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: gustav-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # In dev we rely on the embedded DB; for prod, configure KC_DB=postgres and friends.
+    volumes:
+      - ./keycloak/realm-gustav.json:/opt/keycloak/data/import/realm-gustav.json:ro
+    ports:
+      - "8080:8080"
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

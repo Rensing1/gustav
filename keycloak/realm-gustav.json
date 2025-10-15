@@ -1,0 +1,37 @@
+{
+  "realm": "gustav",
+  "enabled": true,
+  "displayName": "GUSTAV Realm",
+  "registrationAllowed": true,
+  "loginWithEmailAllowed": true,
+  "verifyEmail": false,
+  "resetPasswordAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "student", "description": "Student role" },
+      { "name": "teacher", "description": "Teacher role" },
+      { "name": "admin", "description": "Admin role" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "gustav-web",
+      "name": "GUSTAV Web",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8100/*"
+      ],
+      "webOrigins": ["*"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ]
+}
+

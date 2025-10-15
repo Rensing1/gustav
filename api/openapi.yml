@@ -1,0 +1,173 @@
+openapi: 3.0.3
+info:
+  title: GUSTAV API
+  version: 0.1.0
+  description: >-
+    Contract-first API for minimal authentication/session integration with Keycloak.
+    Endpoints cover login redirect, callback handling, logout, session info, and a
+    convenience redirect for "forgot password". Sessions are represented by an
+    httpOnly cookie.
+
+servers:
+  - url: /
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: gustav_session
+  schemas:
+    Role:
+      type: string
+      enum: [student, teacher, admin]
+    Me:
+      type: object
+      required: [email, roles]
+      properties:
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        email_verified:
+          type: boolean
+          description: Whether the email address has been verified.
+        expires_at:
+          type: string
+          format: date-time
+          description: Session expiration timestamp (optional).
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+
+paths:
+  /auth/login:
+    get:
+      tags: [Auth]
+      summary: Start login via Keycloak
+      description: Redirects the user to the Keycloak authorization endpoint.
+      operationId: startLogin
+      parameters:
+        - in: query
+          name: state
+          schema:
+            type: string
+          description: >-
+            Optional opaque state token used for CSRF protection and QR-context.
+            Created and validated server-side.
+        - in: query
+          name: redirect
+          schema:
+            type: string
+            pattern: '^/[A-Za-z0-9_\-/]*$'
+          description: Optional in-app path to navigate to after login.
+      responses:
+        '302':
+          description: Redirect to Keycloak authorization endpoint
+          headers:
+            Location:
+              description: Authorization URL at Keycloak
+              schema:
+                type: string
+
+  /auth/callback:
+    get:
+      tags: [Auth]
+      summary: OAuth2/OIDC callback from Keycloak
+      description: Handles the authorization code, sets session cookie, and redirects.
+      operationId: authCallback
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Session established, redirect to application page
+          headers:
+            Set-Cookie:
+              description: >-
+                httpOnly session cookie `gustav_session`.
+                Production: `HttpOnly; Secure; SameSite=strict`.
+                Development/Test: `HttpOnly; SameSite=lax`.
+              schema:
+                type: string
+            Location:
+              description: In-app destination (e.g., "/" or a course page)
+              schema:
+                type: string
+        '400':
+          description: Invalid or expired code/state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout and clear session cookie
+      description: Invalidates the current session and clears the cookie.
+      operationId: logout
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Session terminated, cookie cleared
+
+  /auth/forgot:
+    get:
+      tags: [Auth]
+      summary: Redirect to Keycloak "Forgot Password" page
+      description: Convenience redirect endpoint to start the password reset flow in Keycloak.
+      operationId: forgotPassword
+      parameters:
+        - in: query
+          name: login_hint
+          schema:
+            type: string
+            format: email
+          description: Optional email to prefill on the reset page.
+      responses:
+        '302':
+          description: Redirect to Keycloak password reset page
+          headers:
+            Location:
+              schema:
+                type: string
+
+  /api/me:
+    get:
+      tags: [Auth]
+      summary: Return current user session info
+      description: Returns email and roles if authenticated.
+      operationId: getMe
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Session info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

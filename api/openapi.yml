@@ -128,6 +128,14 @@ paths:
       responses:
         '204':
           description: Session terminated, cookie cleared
+          headers:
+            Set-Cookie:
+              description: >-
+                Expires the httpOnly session cookie `gustav_session`.
+                Production: `HttpOnly; Secure; SameSite=strict; Max-Age=0`.
+                Development/Test: `HttpOnly; SameSite=lax; Max-Age=0`.
+              schema:
+                type: string
 
   /auth/forgot:
     get:
@@ -145,6 +153,27 @@ paths:
       responses:
         '302':
           description: Redirect to Keycloak password reset page
+          headers:
+            Location:
+              schema:
+                type: string
+
+  /auth/register:
+    get:
+      tags: [Auth]
+      summary: Redirect to Keycloak registration page
+      description: Convenience redirect to start the user self-registration in Keycloak.
+      operationId: startRegistration
+      parameters:
+        - in: query
+          name: login_hint
+          schema:
+            type: string
+            format: email
+          description: Optional email to prefill in the registration form.
+      responses:
+        '302':
+          description: Redirect to Keycloak registration page
           headers:
             Location:
               schema:

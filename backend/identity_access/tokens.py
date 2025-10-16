@@ -116,7 +116,8 @@ def verify_id_token(
     if not key_dict:
         raise IDTokenVerificationError("unknown_kid")
 
-    expected_issuer = f"{cfg.base_url}/realms/{cfg.realm}"
+    issuer_base = cfg.public_base_url or cfg.base_url
+    expected_issuer = f"{issuer_base}/realms/{cfg.realm}"
     try:
         claims = jwt.decode(
             id_token,

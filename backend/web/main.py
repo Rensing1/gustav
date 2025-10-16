@@ -28,9 +28,26 @@ from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
 
+# Load .env for local dev/test so environment variables are available outside Docker
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    # dotenv is optional; ignore if not available
+    pass
+
 
 class AuthSettings:
-    """Central settings helper to derive runtime flags with optional overrides."""
+    """Central settings helper to derive runtime flags with optional overrides.
+
+    Why:
+        Keep environment handling (dev/prod/e2e) in one place so cookie
+        hardening and other auth-related behavior can switch predictably.
+
+    Behavior:
+        - `environment` reads `GUSTAV_ENV` (default `dev`), unless overridden for tests.
+        - Accepted values: `dev`, `prod` (and `e2e` treated like `dev`).
+    """
 
     def __init__(self) -> None:
         self._env_override: str | None = None
@@ -53,7 +70,13 @@ ALLOWED_ROLES = {"student", "teacher", "admin"}
 
 
 def _session_cookie_options() -> dict:
-    """Return cookie policy depending on environment (dev vs prod)."""
+    """Return cookie policy depending on environment (dev vs prod).
+
+    Returns:
+        Dictionary with `secure` and `samesite` flags. In `prod` we set
+        `secure=True` and `SameSite=strict`; in `dev`/tests we keep
+        `secure=False` and `SameSite=lax` to allow localhost flows.
+    """
     env = SETTINGS.environment
     secure = env == "prod"
     samesite = "strict" if secure else "lax"
@@ -61,7 +84,18 @@ def _session_cookie_options() -> dict:
 
 
 def _set_session_cookie(response: Response, value: str) -> None:
-    """Attach the gustav session cookie with hardened flags."""
+    """Attach the gustav session cookie with hardened flags.
+
+    Parameters:
+        response: The outgoing response to attach the cookie to.
+        value: Opaque session ID; never store PII in the cookie.
+
+    Behavior:
+        - Always sets `HttpOnly` to prevent JS access.
+        - Uses environment-driven `Secure` and `SameSite` flags.
+        - Path is `/` to cover the entire app; no Domain is set to avoid
+          accidental subdomain leakage in multi-host setups.
+    """
     opts = _session_cookie_options()
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -74,7 +108,13 @@ def _set_session_cookie(response: Response, value: str) -> None:
 
 
 def _clear_session_cookie(response: Response) -> None:
-    """Fully expire the gustav session cookie with matching flags."""
+    """Fully expire the gustav session cookie with matching flags.
+
+    Behavior:
+        - Sends an empty cookie with `Max-Age=0` so browsers delete it.
+        - Uses the same `Secure`/`SameSite` profile as `_set_session_cookie`
+          to ensure consistent deletion across environments.
+    """
     opts = _session_cookie_options()
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -108,7 +148,14 @@ def load_oidc_config() -> OIDCConfig:
     realm = os.getenv("KC_REALM", "gustav")
     client_id = os.getenv("KC_CLIENT_ID", "gustav-web")
     redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8100/auth/callback")
-    return OIDCConfig(base_url=base_url, realm=realm, client_id=client_id, redirect_uri=redirect_uri)
+    public_base = os.getenv("KC_PUBLIC_BASE_URL", base_url)
+    return OIDCConfig(
+        base_url=base_url,
+        realm=realm,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        public_base_url=public_base,
+    )
 
 
 OIDC_CFG = load_oidc_config()
@@ -504,12 +551,30 @@ async def health_check():
 @app.get("/auth/login")
 async def auth_login(state: str | None = None, redirect: str | None = None):
     """
-    Start OIDC flow with PKCE.
-    Creates server-side state with code_verifier and optional redirect, then
-    redirects to Keycloak auth endpoint.
+    Start OIDC flow with PKCE and server-side state.
+
+    Why:
+        Initiate a secure Authorization Code Flow. We create and store a
+        `code_verifier` (for PKCE) and an opaque `state` (for CSRF/QR context),
+        then redirect the browser to Keycloak.
+
+    Parameters:
+        state: Optional externally supplied state (e.g., QR-context). If not
+            provided, a new opaque state is generated.
+        redirect: Optional in-app path to return to after successful login.
+
+    Behavior:
+        - Generates `code_verifier` and its S256 `code_challenge`.
+        - Persists state (with TTL) together with the verifier and redirect.
+        - Redirects to Keycloak’s realm auth endpoint with PKCE params.
+
+    Permissions:
+        Public endpoint. No authentication required.
     """
+    # Generate high-entropy verifier and derive PKCE challenge
     code_verifier = OIDCClient.generate_code_verifier()
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
+    # Persist state with verifier so callback can validate and exchange code
     rec = STATE_STORE.create(code_verifier=code_verifier, redirect=redirect)
     final_state = state or rec.state
     url = OIDC.build_authorization_url(state=final_state, code_challenge=code_challenge)
@@ -520,10 +585,46 @@ async def auth_login(state: str | None = None, redirect: str | None = None):
 async def auth_forgot(login_hint: str | None = None):
     """
     Convenience redirect to Keycloak's 'Forgot Password' page.
+
+    Why:
+        Offload password reset to Keycloak to keep credentials out of GUSTAV.
+    Parameters:
+        login_hint: Optional email to pre-fill on Keycloak's reset form.
+    Behavior:
+        - Builds the URL from configured base URL and realm.
+        - Forwards `login_hint` if provided, no cookies are set.
+    Permissions:
+        Public endpoint; no session required.
     """
-    target = "https://keycloak.local/realms/gustav/login-actions/reset-credentials"
-    if login_hint:
-        target += f"?login_hint={login_hint}"
+    from urllib.parse import urlencode
+
+    # Build redirect target from OIDC configuration (no hard-coded host)
+    base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/login-actions/reset-credentials"
+    query = {"login_hint": login_hint} if login_hint else None
+    target = f"{base}?{urlencode(query)}" if query else base
+    return RedirectResponse(url=target, status_code=302)
+
+
+@app.get("/auth/register")
+async def auth_register(login_hint: str | None = None):
+    """
+    Convenience redirect to Keycloak's self-registration page.
+
+    Why:
+        Keep credentials entirely in Keycloak. This endpoint only redirects to
+        the IdP's registration flow and sets no cookies.
+    Parameters:
+        login_hint: Optional email to pre-fill on the registration form.
+    Behavior:
+        - Constructs the registration URL from configured base URL + realm.
+        - Forwards `login_hint` as query if provided.
+    Permissions:
+        Public endpoint; no authentication required.
+    """
+    from urllib.parse import urlencode
+    base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
+    query = {"login_hint": login_hint} if login_hint else None
+    target = f"{base}?{urlencode(query)}" if query else base
     return RedirectResponse(url=target, status_code=302)
 
 
@@ -550,6 +651,7 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     """
     if not code or not state:
         return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
+    # State must have been issued by /auth/login and still be valid
     rec = STATE_STORE.pop_valid(state)
     if not rec:
         return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
@@ -589,6 +691,7 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
+    # Attach hardened session cookie (opaque ID only)
     _set_session_cookie(resp, sess.session_id)
     return resp
 
@@ -597,7 +700,18 @@ async def auth_callback(code: str | None = None, state: str | None = None):
 async def auth_logout(request: Request):
     """
     Invalidate the current session and clear the session cookie.
-    Requires an existing session cookie; otherwise 401.
+
+    Why:
+        Ensure users can reliably sign out and browsers drop the cookie.
+
+    Behavior:
+        - Requires an existing session cookie, else 401.
+        - Deletes the server-side session (if present).
+        - Sends a `gustav_session` cookie with `Max-Age=0` and matching flags
+          so clients remove it (per contract).
+
+    Permissions:
+        Authenticated route (requires `gustav_session` cookie).
     """
     if SESSION_COOKIE_NAME not in request.cookies:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -614,6 +728,16 @@ async def auth_logout(request: Request):
 async def get_me(request: Request):
     """
     Return minimal session info if authenticated; else 401.
+
+    Why:
+        Allow frontend to check login state and show principal info.
+
+    Behavior:
+        - Reads `gustav_session` from cookies, looks up server-side session.
+        - Returns `{ email, roles, email_verified }` when found; else 401.
+
+    Permissions:
+        Authenticated route (requires `gustav_session` cookie).
     """
     if SESSION_COOKIE_NAME not in request.cookies:
         return JSONResponse({"error": "unauthenticated"}, status_code=401)
@@ -646,9 +770,20 @@ def create_app_auth_only() -> FastAPI:
 
     @slim.get("/auth/forgot")
     async def slim_auth_forgot(login_hint: str | None = None):
-        target = "https://keycloak.local/realms/gustav/login-actions/reset-credentials"
-        if login_hint:
-            target += f"?login_hint={login_hint}"
+        """Slim forgot endpoint mirrors config-driven redirect in tests."""
+        from urllib.parse import urlencode
+        base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/login-actions/reset-credentials"
+        query = {"login_hint": login_hint} if login_hint else None
+        target = f"{base}?{urlencode(query)}" if query else base
+        return RedirectResponse(url=target, status_code=302)
+
+    @slim.get("/auth/register")
+    async def slim_auth_register(login_hint: str | None = None):
+        """Slim register endpoint mirrors config-driven redirect in tests."""
+        from urllib.parse import urlencode
+        base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
+        query = {"login_hint": login_hint} if login_hint else None
+        target = f"{base}?{urlencode(query)}" if query else base
         return RedirectResponse(url=target, status_code=302)
 
     @slim.get("/auth/callback")

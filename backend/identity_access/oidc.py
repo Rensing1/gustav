@@ -29,17 +29,20 @@ def http_post(url: str, data: Dict[str, str], headers: Dict[str, str]):
 
 @dataclass(frozen=True)
 class OIDCConfig:
-    base_url: str  # e.g., http://localhost:8080
+    base_url: str  # internal base URL (server-to-server), e.g., http://keycloak:8080
     realm: str  # e.g., gustav
     client_id: str  # e.g., gustav-web
     redirect_uri: str  # e.g., http://localhost:8100/auth/callback
+    public_base_url: str | None = None  # browser-facing URL, e.g., http://localhost:8080
 
     @property
     def auth_endpoint(self) -> str:
-        return f"{self.base_url}/realms/{self.realm}/protocol/openid-connect/auth"
+        base = self.public_base_url or self.base_url
+        return f"{base}/realms/{self.realm}/protocol/openid-connect/auth"
 
     @property
     def token_endpoint(self) -> str:
+        # Token exchange happens server-side; use internal base URL
         return f"{self.base_url}/realms/{self.realm}/protocol/openid-connect/token"
 
 
@@ -96,4 +99,3 @@ class OIDCClient:
         if resp.status_code != 200:
             raise ValueError("token_exchange_failed")
         return resp.json()
-

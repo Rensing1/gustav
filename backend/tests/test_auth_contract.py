@@ -216,6 +216,64 @@ async def test_forgot_redirect():
 
 
 @pytest.mark.anyio
+async def test_forgot_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
+    """Forgot redirect should be built from the configured base_url + realm."""
+    # Import full app to hit the real /auth/forgot implementation
+    import sys as _sys
+    REPO_ROOT = Path(__file__).resolve().parents[2]
+    WEB_DIR = REPO_ROOT / "backend" / "web"
+    _sys.path.insert(0, str(WEB_DIR))
+    import main  # type: ignore
+    from identity_access.oidc import OIDCConfig
+
+    # Given OIDC configuration with custom base URL/realm
+    test_cfg = OIDCConfig(
+        base_url="http://kc.example:8080",
+        realm="school",
+        client_id="gustav-web",
+        redirect_uri="http://localhost:8100/auth/callback",
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.get("/auth/forgot", follow_redirects=False)
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("location", "")
+    assert loc.startswith("http://kc.example:8080/realms/school/login-actions/reset-credentials")
+
+
+@pytest.mark.anyio
+async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
+    """Forgot redirect forwards login_hint as query param."""
+    import sys as _sys
+    REPO_ROOT = Path(__file__).resolve().parents[2]
+    WEB_DIR = REPO_ROOT / "backend" / "web"
+    _sys.path.insert(0, str(WEB_DIR))
+    import main  # type: ignore
+    from identity_access.oidc import OIDCConfig
+    from urllib.parse import urlparse, parse_qs
+
+    test_cfg = OIDCConfig(
+        base_url="http://kc.example:8080",
+        realm="school",
+        client_id="gustav-web",
+        redirect_uri="http://localhost:8100/auth/callback",
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.get("/auth/forgot?login_hint=student%40example.com", follow_redirects=False)
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("location", "")
+    url = urlparse(loc)
+    assert url.path.endswith("/realms/school/login-actions/reset-credentials")
+    qs = parse_qs(url.query)
+    assert qs.get("login_hint") == ["student@example.com"]
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "code,state",
     [
@@ -483,6 +541,72 @@ def test_openapi_contains_auth_paths():
         "/auth/callback",
         "/auth/logout",
         "/auth/forgot",
+        "/auth/register",
         "/api/me",
     ]:
         assert p in yml
+
+
+@pytest.mark.anyio
+async def test_register_redirect():
+    # Slim app: ensure endpoint exists and redirects
+    app = create_app_auth_only()
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/auth/register", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "location" in resp.headers
+
+
+@pytest.mark.anyio
+async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
+    """Registration redirect should be built from the configured base_url + realm."""
+    import sys as _sys
+    REPO_ROOT = Path(__file__).resolve().parents[2]
+    WEB_DIR = REPO_ROOT / "backend" / "web"
+    _sys.path.insert(0, str(WEB_DIR))
+    import main  # type: ignore
+    from identity_access.oidc import OIDCConfig
+
+    test_cfg = OIDCConfig(
+        base_url="http://kc.example:8080",
+        realm="school",
+        client_id="gustav-web",
+        redirect_uri="http://localhost:8100/auth/callback",
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.get("/auth/register", follow_redirects=False)
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("location", "")
+    assert loc.startswith("http://kc.example:8080/realms/school/protocol/openid-connect/registrations")
+
+
+@pytest.mark.anyio
+async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
+    import sys as _sys
+    REPO_ROOT = Path(__file__).resolve().parents[2]
+    WEB_DIR = REPO_ROOT / "backend" / "web"
+    _sys.path.insert(0, str(WEB_DIR))
+    import main  # type: ignore
+    from identity_access.oidc import OIDCConfig
+    from urllib.parse import urlparse, parse_qs
+
+    test_cfg = OIDCConfig(
+        base_url="http://kc.example:8080",
+        realm="school",
+        client_id="gustav-web",
+        redirect_uri="http://localhost:8100/auth/callback",
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.get("/auth/register?login_hint=new%40example.com", follow_redirects=False)
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("location", "")
+    url = urlparse(loc)
+    assert url.path.endswith("/realms/school/protocol/openid-connect/registrations")
+    qs = parse_qs(url.query)
+    assert qs.get("login_hint") == ["new@example.com"]

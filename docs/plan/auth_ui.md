@@ -214,7 +214,7 @@ Kontrakt‑Entscheidungen Phase 1:
 - Session‑Cookie: `gustav_session` (`HttpOnly`, `Secure` in PROD, `SameSite=Lax`).
 - CSRF‑Cookie: `gustav_csrf` (nur für Double‑Submit, kein Server‑Store).
 
-Finalisierung erfolgt vor Implementation in `api/openapi.yml`; genaue Response‑Formate und Header werden dort verbindlich definiert.
+Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten und POST‑Routen sind implementiert und getestet.
 
 ## Migrationen (Phase 1)
 
@@ -248,7 +248,7 @@ Finalisierung erfolgt vor Implementation in `api/openapi.yml`; genaue Response�
    - Phase 2: Umstellung auf CSRFStore + One-Time-Token, Flash-System ausbauen, Browser-Flow-Adapter integrieren.
 
 3. **UI-Komponenten**
-   - Phase 1: Ergänze `TextInputField`, `PasswordInputField`, einfache Hidden-Field-Helfer. Layout und CSS bleiben minimal (Fehlermeldung, Fokus).
+   - Phase 1: `TextInputField` ergänzt, SSR‑Seiten verwenden Layout + Form‑Komponenten. CSS bleibt bewusst minimal (KISS).
    - Phase 2: Ausbau (FormContainer, differenzierte Success-Messages, bessere Responsivität).
    - CSS (`backend/web/static/css/gustav.css`):
      - Phase 1: Fokus auf Lesbarkeit & Fehlermeldungen.
@@ -292,23 +292,23 @@ Finalisierung erfolgt vor Implementation in `api/openapi.yml`; genaue Response�
 
 0. Research: Ticket `AUTH-UI-KEYCLOAK-BROWSER-FLOW` (Browser-Flow SPI) evaluieren & Ergebnis dokumentieren
 1. Plan finalisieren (dieses Dokument) ✅
-2. **Contract First**
+2. **Contract First** ✅
    - `api/openapi.yml` aktualisieren (inkl. Beschreibung des Feature-Flags in den Annotations/Doku-Hinweisen).
    - Review mit Felix.
-3. **TDD Iteration Login (Phase 1)**
+3. **TDD Iteration Login (Phase 1)** ✅
    - Tests schreiben (Contract + Behavior + CSRF) für MVP (Direct Grant aktiv, Redirect-Pfad separat getestet).
    - Implementieren (Use Case + FastAPI, einfache Double-Submit-CSRF, Redirect in Prod).
    - Refactor, Docstrings ergänzen.
-4. **TDD Iteration Registrierung (Phase 1)**
+4. **TDD Iteration Registrierung (Phase 1)** ✅
    - Tests → Implementierung → Refactor (Rollenvergabe via Admin-API, keine Auto-Rollbacks).
-5. **TDD Iteration Passwort vergessen (Phase 1)**
+5. **TDD Iteration Passwort vergessen (Phase 1)** ✅
    - Tests → Implementierung → Refactor (CSRF, neutrale Response, Logging).
 6. **UI / Styling Feinschliff (Phase 1)**
    - Komponenten finalisieren (minimal), `gustav.css` für Fehlermeldung/Fokus anpassen.
 7. **E2E Test aktualisieren (Phase 1)**
    - Login/Logout neues Formular (CSRF-Token extrahieren) im Direct-Grant-Modus.
-8. **Dokumentation aktualisieren**
-   - `docs/ARCHITECTURE.md` (Auth-Flows), evtl. neue Grafik, Hinweise zum Feature-Flag.
+8. **Dokumentation aktualisieren** ✅
+   - `docs/ARCHITECTURE.md` (Auth-Flows) ergänzt; README Quickstart DEV‑Flag ergänzt.
 9. **Review & Feedback**
    - Code Review (Selbstkritisch + Felix).
    - Tests laufen lassen (`pytest -q`).
@@ -339,11 +339,10 @@ Finalisierung erfolgt vor Implementation in `api/openapi.yml`; genaue Response�
 
 ## Nächste Schritte
 
-- Feedback von Felix einholen.
-- Sobald Abnahme: Phase-1-Kontrakt (Double Submit, Direct Grant in DEV) in `api/openapi.yml` abbilden.
-- Keycloak-Client (Phase 1) vorbereiten, Secrets prüfen.
-- Nach Fertigstellung Phase 1: Researchresultate einsammeln und Phase-2-Plan ergänzen.
-- Dann TDD-Iterationsplan Phase 1 abarbeiten.
+- E2E für UI‑Flows ergänzen (DEV/CI, Feature‑Flag an): Formular laden → CSRF extrahieren → POST → `/api/me` 200.
+- UI-Feinschliff: FormContainer, Fehlermeldungen und Fokuszustände in CSS.
+- README erweitern (Troubleshooting, ENV‑Matrix dev/prod, Flag‑Verhalten).
+- Phase‑2 Research starten: Browser‑Flow Adapter (Keycloak Dokumentation sichten), CSRFStore entwerfen.
 
 ---
 

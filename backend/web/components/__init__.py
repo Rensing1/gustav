@@ -10,7 +10,7 @@ from .cards import (
     HistoryEntry,
     TaskMetaItem,
 )
-from .forms import FormField, TextAreaField, FileUploadField, SubmitButton
+from .forms import FormField, TextAreaField, FileUploadField, TextInputField, SubmitButton
 from .onpage_nav import OnPageNavigation, OnPageNavItem
 
 __all__ = [
@@ -24,6 +24,7 @@ __all__ = [
     "FormField",
     "TextAreaField",
     "FileUploadField",
+    "TextInputField",
     "SubmitButton",
     "OnPageNavigation",
     "OnPageNavItem",

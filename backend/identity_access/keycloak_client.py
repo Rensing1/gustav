@@ -29,7 +29,7 @@ class AuthClient:
         self.cfg = cfg
 
     def direct_grant(self, *, email: str, password: str) -> Dict[str, str]:
-        url = self.cfg.token_endpoint()
+        url = self.cfg.token_endpoint
         data = {
             "grant_type": "password",
             "client_id": self.cfg.client_id,
@@ -45,4 +45,3 @@ class AuthClient:
         if not isinstance(body, dict) or "id_token" not in body:
             raise ValueError("id_token_missing")
         return body  # type: ignore[return-value]
-

@@ -52,8 +52,11 @@ paths:
   /auth/login:
     get:
       tags: [Auth]
-      summary: Start login via Keycloak
-      description: Redirects the user to the Keycloak authorization endpoint.
+      summary: Render login form or redirect to IdP
+      description: |
+        Returns an HTML login form (feature-flagged in DEV/CI) or redirects to
+        the Keycloak authorization endpoint (default in PROD). Both behaviors
+        are valid depending on deployment configuration.
       operationId: startLogin
       parameters:
         - in: query
@@ -70,6 +73,17 @@ paths:
             pattern: '^/[A-Za-z0-9_\-/]*$'
           description: Optional in-app path to navigate to after login.
       responses:
+        '200':
+          description: HTML login form with CSRF
+          headers:
+            Set-Cookie:
+              description: CSRF cookie `gustav_csrf` for Double-Submit (DEV/CI)
+              schema:
+                type: string
+          content:
+            text/html:
+              schema:
+                type: string
         '302':
           description: Redirect to Keycloak authorization endpoint
           headers:
@@ -77,6 +91,36 @@ paths:
               description: Authorization URL at Keycloak
               schema:
                 type: string
+    post:
+      tags: [Auth]
+      summary: Submit credentials (feature-flagged in DEV/CI)
+      description: |
+        Accepts form credentials and, when enabled, exchanges them via IdP to
+        establish a session. In PROD, this route may be disabled in favor of
+        redirect-based login.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email, password, csrf_token]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                redirect: { type: string }
+                csrf_token: { type: string }
+      responses:
+        '303':
+          description: Login success, session cookie set
+          headers:
+            Location: { schema: { type: string } }
+            Set-Cookie:
+              description: httpOnly session cookie `gustav_session`
+              schema:
+                type: string
+        '400': { description: Invalid credentials or policy violation }
+        '403': { description: CSRF invalid or route disabled }
 
   /auth/callback:
     get:
@@ -140,8 +184,8 @@ paths:
   /auth/forgot:
     get:
       tags: [Auth]
-      summary: Redirect to Keycloak "Forgot Password" page
-      description: Convenience redirect endpoint to start the password reset flow in Keycloak.
+      summary: Render forgot form or redirect to IdP
+      description: HTML form (DEV/CI) or redirect to IdP reset page (PROD).
       operationId: forgotPassword
       parameters:
         - in: query
@@ -151,18 +195,52 @@ paths:
             format: email
           description: Optional email to prefill on the reset page.
       responses:
+        '200':
+          description: HTML forgot form with CSRF
+          headers:
+            Set-Cookie:
+              description: CSRF cookie `gustav_csrf` for Double-Submit (DEV/CI)
+              schema:
+                type: string
+          content:
+            text/html:
+              schema: { type: string }
         '302':
           description: Redirect to Keycloak password reset page
           headers:
             Location:
               schema:
                 type: string
+    post:
+      tags: [Auth]
+      summary: Trigger password reset (feature-flagged in DEV/CI)
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email, csrf_token]
+              properties:
+                email: { type: string, format: email }
+                csrf_token: { type: string }
+      responses:
+        '202':
+          description: Reset mail triggered (neutral)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { type: string }
+        '403': { description: CSRF invalid or route disabled }
 
   /auth/register:
     get:
       tags: [Auth]
-      summary: Redirect to Keycloak registration page
-      description: Convenience redirect to start the user self-registration in Keycloak.
+      summary: Render registration form or redirect to IdP
+      description: HTML form (DEV/CI) or redirect to IdP registration page (PROD).
       operationId: startRegistration
       parameters:
         - in: query
@@ -172,12 +250,46 @@ paths:
             format: email
           description: Optional email to prefill in the registration form.
       responses:
+        '200':
+          description: HTML registration form with CSRF
+          headers:
+            Set-Cookie:
+              description: CSRF cookie `gustav_csrf` for Double-Submit (DEV/CI)
+              schema:
+                type: string
+          content:
+            text/html:
+              schema:
+                type: string
         '302':
           description: Redirect to Keycloak registration page
           headers:
             Location:
               schema:
                 type: string
+    post:
+      tags: [Auth]
+      summary: Create user account (feature-flagged in DEV/CI)
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email, password, csrf_token]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                display_name: { type: string }
+                csrf_token: { type: string }
+      responses:
+        '303':
+          description: Account created; redirect to login (with login_hint)
+          headers:
+            Location: { schema: { type: string } }
+        '400': { description: Validation error or duplicate }
+        '403': { description: CSRF invalid or route disabled }
+        '500': { description: Role assignment failed }
 
   /api/me:
     get:

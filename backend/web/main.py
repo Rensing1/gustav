@@ -18,6 +18,7 @@ from components import (
     TaskMetaItem,
     TextAreaField,
     FileUploadField,
+    TextInputField,
     SubmitButton,
     OnPageNavigation,
     OnPageNavItem,
@@ -612,17 +613,31 @@ async def auth_login(state: str | None = None, redirect: str | None = None):
     """
     # Feature-flagged UI: return HTML form with CSRF in DEV/CI
     if AUTH_USE_DIRECT_GRANT:
-        html = [
-            "<h1>Login</h1>",
-            "<form method=\"post\" action=\"/auth/login\">",
-            "<input type=\"email\" name=\"email\" autocomplete=\"username\" required>",
-            "<input type=\"password\" name=\"password\" autocomplete=\"current-password\" required>",
-        ]
-        resp = HTMLResponse(content="\n".join(html))
+        # Create response first to issue CSRF cookie and obtain token
+        resp = HTMLResponse(content="")
         csrf = _issue_csrf_cookie(resp)
-        # hidden field appended after cookie issuance so token is in sync
-        resp.body = (resp.body or b"") + f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">".encode()
-        resp.body += b"<button type=\"submit\">Login</button></form>"
+
+        # Build structured form using components
+        email = TextInputField(
+            "email",
+            "E-Mail",
+            required=True,
+            help_text=None,
+        ).render(input_type="email", autocomplete="username")
+        password = TextInputField(
+            "password",
+            "Passwort",
+            required=True,
+        ).render(input_type="password", autocomplete="current-password")
+        submit = SubmitButton("Login").render()
+
+        hidden_csrf = f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">"
+        form_attrs = "method=\"post\" action=\"/auth/login\""
+        form_html = f"<form {form_attrs}>{email}{password}{hidden_csrf}{submit}</form>"
+
+        content = f"<h1>Login</h1>{form_html}"
+        page = Layout(title="Login", content=content, user=None, show_nav=False, show_header=False, current_path="/auth/login").render()
+        resp.body = page.encode()
         return resp
 
     # Default: Redirect to Keycloak auth endpoint
@@ -651,15 +666,22 @@ async def auth_forgot(login_hint: str | None = None):
     """
     # Feature-flagged UI: simple HTML form + CSRF cookie in DEV/CI
     if AUTH_USE_DIRECT_GRANT:
-        html = [
-            "<h1>Passwort vergessen</h1>",
-            "<form method=\"post\" action=\"/auth/forgot\">",
-            f"<input type=\"email\" name=\"email\" value=\"{login_hint or ''}\" required>",
-        ]
-        resp = HTMLResponse(content="\n".join(html))
+        resp = HTMLResponse(content="")
         csrf = _issue_csrf_cookie(resp)
-        resp.body = (resp.body or b"") + f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">".encode()
-        resp.body += b"<button type=\"submit\">Senden</button></form>"
+
+        email = TextInputField(
+            "email",
+            "E-Mail",
+            required=True,
+        ).render(input_type="email", value=login_hint or "")
+        submit = SubmitButton("Senden").render()
+        hidden_csrf = f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">"
+        form_attrs = "method=\"post\" action=\"/auth/forgot\""
+        form_html = f"<form {form_attrs}>{email}{hidden_csrf}{submit}</form>"
+
+        content = f"<h1>Passwort vergessen</h1>{form_html}"
+        page = Layout(title="Passwort vergessen", content=content, user=None, show_nav=False, show_header=False, current_path="/auth/forgot").render()
+        resp.body = page.encode()
         return resp
 
     from urllib.parse import urlencode
@@ -686,16 +708,32 @@ async def auth_register(login_hint: str | None = None):
         Public endpoint; no authentication required.
     """
     if AUTH_USE_DIRECT_GRANT:
-        html = [
-            "<h1>Registrieren</h1>",
-            "<form method=\"post\" action=\"/auth/register\">",
-            f"<input type=\"email\" name=\"email\" value=\"{login_hint or ''}\" required>",
-            "<input type=\"password\" name=\"password\" required>",
-        ]
-        resp = HTMLResponse(content="\n".join(html))
+        resp = HTMLResponse(content="")
         csrf = _issue_csrf_cookie(resp)
-        resp.body = (resp.body or b"") + f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">".encode()
-        resp.body += b"<button type=\"submit\">Konto anlegen</button></form>"
+
+        display_name = TextInputField(
+            "display_name",
+            "Anzeigename",
+            required=False,
+        ).render(placeholder="Optional")
+        email = TextInputField(
+            "email",
+            "E-Mail",
+            required=True,
+        ).render(input_type="email", value=login_hint or "")
+        password = TextInputField(
+            "password",
+            "Passwort",
+            required=True,
+        ).render(input_type="password")
+        submit = SubmitButton("Konto anlegen").render()
+        hidden_csrf = f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">"
+        form_attrs = "method=\"post\" action=\"/auth/register\""
+        form_html = f"<form {form_attrs}>{display_name}{email}{password}{hidden_csrf}{submit}</form>"
+
+        content = f"<h1>Registrieren</h1>{form_html}"
+        page = Layout(title="Registrieren", content=content, user=None, show_nav=False, show_header=False, current_path="/auth/register").render()
+        resp.body = page.encode()
         return resp
 
     from urllib.parse import urlencode

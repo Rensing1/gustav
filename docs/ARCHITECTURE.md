@@ -67,6 +67,14 @@ Geplante Ergänzungen (separat anlegen, wenn benötigt):
 
 Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Adapter/Repo -> Response DTO -> Presenter/View.
 
+### Auth UI (Phase 1 – DEV/CI)
+- Feature‑Flag `AUTH_USE_DIRECT_GRANT` aktiviert in DEV/CI eigene HTML‑Formulare für Login/Registrierung/Passwort‑Reset.
+- CSRF: Double‑Submit mittels Cookie `gustav_csrf` + Hidden‑Feld `csrf_token` (kein Server‑Store nötig).
+- Login (DEV/CI): `POST /auth/login` nutzt einen Direct‑Grant‑Adapter (`identity_access/keycloak_client.py`), verifiziert das ID‑Token und legt eine Serversession an (Cookie `gustav_session`).
+- Registrierung (DEV/CI): `POST /auth/register` legt Nutzer via Admin‑API an und weist die Realm‑Rolle `student` zu (`identity_access/admin_client.py`). Redirect zu `/auth/login?login_hint=…`, kein Auto‑Login.
+- Passwort‑Reset (DEV/CI): `POST /auth/forgot` antwortet neutral mit `202` (keine Enumeration).
+- Produktion (default): `/auth/login|register|forgot` leiten weiterhin zur Keycloak‑UI (Authorization‑Code‑Flow) – Browser‑Flow‑Umstellung folgt in Phase 2.
+
 ## API Contract‑First (Vorgehen)
 1) API‑Änderung zuerst im Vertrag: `api/openapi.yml:1`.
 2) BDD‑Szenarien formulieren (Given‑When‑Then).
@@ -108,4 +116,3 @@ Wenn UI‑Anforderungen wachsen (Offline, State‑heavy, App‑Store), kann ein 
 - Kontextzuschnitte aus `docs/bounded_contexts.md:1` beachten.
 - DB‑Änderungen synchron zu `docs/database_schema.md:1` dokumentieren (generiert aus Migrationen oder manuell als Übersicht).
 - Größere Änderungen vorab in `docs/plan/` skizzieren; Ergebnisse und Entscheidungen nachvollziehbar halten.
-

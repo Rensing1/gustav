@@ -63,10 +63,12 @@ paths:
           name: redirect
           schema:
             type: string
-            pattern: '^/[A-Za-z0-9_\-/]*$'
+            maxLength: 256
+            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
           description: >-
             Optional in-app absolute path to navigate to after login. External
-            URLs are rejected; invalid values are ignored.
+            URLs are rejected; invalid values are ignored. Disallows double-slash
+            and path traversal segments.
       responses:
         '302':
           description: Redirect to Keycloak authorization endpoint
@@ -136,12 +138,13 @@ paths:
           required: false
           schema:
             type: string
-            pattern: '^/[A-Za-z0-9_\-/]*$'
+            maxLength: 256
+            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
             default: "/auth/logout/success"
           description: >-
             App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.
-            External URLs are rejected and ignored. Defaults to "/auth/logout/success".
-            Server enforces the same regex pattern as documented here.
+            External URLs are rejected and ignored. Disallows double-slash and path traversal.
+            Defaults to "/auth/logout/success". Server enforces the same regex pattern.
       responses:
         '302':
           description: Redirect to IdP end-session endpoint (then back to the app)

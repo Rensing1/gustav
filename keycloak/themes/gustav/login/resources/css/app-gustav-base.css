@@ -1,0 +1,6 @@
+/* Placeholder file for DEV: This path is overlaid by a bind mount
+   from backend/web/static/css/gustav.css via docker-compose.
+   It must exist so Docker can bind-mount a file target inside the
+   read-only theme volume. */
+
+/* The real content comes from ../../../../../../backend/web/static/css/gustav.css */

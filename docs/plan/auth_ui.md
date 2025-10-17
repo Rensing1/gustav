@@ -304,12 +304,24 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
    - Tests → Implementierung → Refactor (Rollenvergabe via Admin-API, keine Auto-Rollbacks).
 5. **TDD Iteration Passwort vergessen (Phase 1)** ✅
    - Tests → Implementierung → Refactor (CSRF, neutrale Response, Logging).
-6. **UI / Styling Feinschliff (Phase 1)**
-   - Komponenten finalisieren (minimal), `gustav.css` für Fehlermeldung/Fokus anpassen.
-7. **E2E Test aktualisieren (Phase 1)**
+6. **UI / Styling Feinschliff (Phase 1)** ✅
+   - Kompakt‑Layout umgesetzt (Card/Abstände), Fokus‑Ring konsistent.
+   - Small‑Screen‑Tweaks ergänzt (`@media (max-width: 420px)`).
+   - Screenshot‑Hinweis: Login‑Seite unter `http://id.localhost:8100/realms/gustav/account/` → „Anmelden“.
+7. **E2E Test aktualisieren (Phase 1)** ✅
    - Hostbasiertes Routing (app/id.localhost) abbilden; optional DEV‑Formulare testen.
 8. **Dokumentation aktualisieren** ✅
    - `docs/ARCHITECTURE.md` (Auth-Flows) ergänzt; README Quickstart DEV‑Flag ergänzt.
+9. **Theme vereinheitlichen (Basis‑CSS teilen) ✅**
+   - Kanonisches App‑CSS `backend/web/static/css/gustav.css` als `app-gustav-base.css` in Keycloak‑Theme eingebunden (Compose‑Volume). 
+   - Vorteil: spätere Änderungen am App‑CSS greifen sofort auch in der Auth‑UI.
+10. **Registrierung & Validierung (E2E) ✅**
+    - Fehlerfälle: fehlende Felder, ungültige E‑Mail, schwaches Passwort, Passwort≠Bestätigung, Duplicate‑E‑Mail.
+    - Umsetzung: `backend/tests_e2e/test_identity_register_validation_e2e.py`
+11. **/auth/register Redirect modernisiert ✅**
+    - Statt `…/registrations` wird der Auth‑Endpoint mit `kc_action=register` verwendet. `login_hint` wird weitergereicht.
+12. **Passwort‑Policy (DEV) ✅**
+    - `length(8) and digits(1) and lowerCase(1) and upperCase(1)` (ohne `specialChars(1)`). Policy wird in E2E via Admin‑API gesetzt (deterministisch).
 9. **Review & Feedback**
    - Code Review (Selbstkritisch + Felix).
    - Tests laufen lassen (`pytest -q`).

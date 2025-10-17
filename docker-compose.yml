@@ -31,7 +31,7 @@ services:
       - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://id.localhost:8100}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
-      - REDIRECT_URI=${REDIRECT_URI:-http://localhost:8100/auth/callback}
+      - REDIRECT_URI=${REDIRECT_URI:-http://app.localhost:8100/auth/callback}
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
@@ -53,6 +53,8 @@ services:
       - ./keycloak/realm-gustav.json:/opt/keycloak/data/import/realm-gustav.json:ro
       # Mount custom GUSTAV login theme (CSS-only)
       - ./keycloak/themes/gustav:/opt/keycloak/themes/gustav:ro
+      # Share the canonical app CSS into the theme to unify styling
+      - ./backend/web/static/css/gustav.css:/opt/keycloak/themes/gustav/login/resources/css/app-gustav-base.css:ro
     # No host port mapping in local-only mode; reachable via caddy reverse proxy
     restart: unless-stopped
     networks:

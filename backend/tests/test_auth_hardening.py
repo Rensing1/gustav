@@ -50,11 +50,6 @@ async def test_login_rejects_external_redirects(monkeypatch: pytest.MonkeyPatch)
             return {"id_token": "fake-id-token"}
 
     monkeypatch.setattr(main, "OIDC", FakeOIDC())
-    monkeypatch.setattr(main, "verify_id_token", lambda id_token, cfg: {
-        "email": "user@example.com",
-        "realm_access": {"roles": ["student"]},
-        "email_verified": True,
-    })
 
     # Start login with external redirect attempt
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -63,6 +58,17 @@ async def test_login_rejects_external_redirects(monkeypatch: pytest.MonkeyPatch)
         qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
         state = qs.get("state", [None])[0]
         assert state, "state must be present in authorization URL"
+        # Phase 2: extract stored nonce to satisfy nonce check
+        rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+        expected_nonce = getattr(rec, "nonce", None)
+        def fake_verify(id_token: str, cfg: object):
+            return {
+                "email": "user@example.com",
+                "realm_access": {"roles": ["student"]},
+                "email_verified": True,
+                "nonce": expected_nonce,
+            }
+        monkeypatch.setattr(main, "verify_id_token", fake_verify)
 
         # Simulate IdP callback
         r_cb = await client.get(f"/auth/callback?code=valid&state={state}", follow_redirects=False)
@@ -124,3 +130,42 @@ async def test_logout_uses_id_token_hint_when_available(monkeypatch: pytest.Monk
     loc = r_lo.headers.get("location", "")
     assert "id_token_hint=" in loc
 
+
+@pytest.mark.anyio
+async def test_logout_rejects_external_redirect_uri():
+    """GET /auth/logout must not accept external post-logout redirects.
+
+    External redirect query params must be ignored. The resulting
+    `post_logout_redirect_uri` should point to the app base +
+    `/auth/logout/success`.
+    """
+    # No session required for this check; focus on redirect handling only
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get("/auth/logout?redirect=https://evil.com", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    loc = r.headers.get("location", "")
+    # Extract the post_logout_redirect_uri from the IdP end-session URL
+    from urllib.parse import urlparse, parse_qs, unquote
+    qs = parse_qs(urlparse(loc).query)
+    post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
+    # Compute expected app base from configured redirect URI
+    ru = main.OIDC_CFG.redirect_uri
+    app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
+    expected = f"{app_base}/auth/logout/success"
+    assert post_logout.rstrip("/") == expected.rstrip("/")
+
+
+@pytest.mark.anyio
+async def test_logout_allows_inapp_redirect_path():
+    """GET /auth/logout should accept app-internal absolute paths as redirect."""
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get("/auth/logout?redirect=/courses", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    loc = r.headers.get("location", "")
+    from urllib.parse import urlparse, parse_qs, unquote
+    qs = parse_qs(urlparse(loc).query)
+    post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
+    ru = main.OIDC_CFG.redirect_uri
+    app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
+    expected = f"{app_base}/courses"
+    assert post_logout.rstrip("/") == expected.rstrip("/")

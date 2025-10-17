@@ -103,6 +103,7 @@ paths:
                 httpOnly session cookie `gustav_session`.
                 Production: `HttpOnly; Secure; SameSite=strict`.
                 Development/Test: `HttpOnly; SameSite=lax`.
+                In production, `Max-Age` matches the server session TTL (default 3600 seconds).
               schema:
                 type: string
             Location:
@@ -135,8 +136,11 @@ paths:
           required: false
           schema:
             type: string
+            pattern: '^/[A-Za-z0-9_\-/]*$'
             default: "/"
-          description: App-relative path to redirect to after IdP logout (default: "/").
+          description: >-
+            App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.
+            External URLs are rejected and ignored. Defaults to "/auth/logout/success".
       responses:
         '302':
           description: Redirect to IdP end-session endpoint (then back to the app)
@@ -193,7 +197,10 @@ paths:
     get:
       tags: [Auth]
       summary: Redirect to IdP registration
-      description: Redirects to Keycloak with `kc_action=register`.
+      description: >-
+        Redirects to Keycloak with `kc_action=register`. The server generates and
+        includes a `nonce` parameter (replay protection) in the authorization request,
+        analogous to `/auth/login`.
       operationId: startRegistration
       parameters:
         - in: query

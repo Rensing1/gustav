@@ -430,6 +430,7 @@ async def test_api_me_returns_401_after_session_expired(monkeypatch: pytest.Monk
         client.cookies.set("gustav_session", session_id)
         resp_me = await client.get("/api/me")
     assert resp_me.status_code == 401
+    assert resp_me.headers.get("Cache-Control") == "no-store"
 
 
 @pytest.mark.anyio
@@ -489,6 +490,7 @@ async def test_me_unauthenticated_returns_401():
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/me")
     assert resp.status_code == 401
+    assert resp.headers.get("Cache-Control") == "no-store"
 
 
 @pytest.mark.anyio
@@ -524,6 +526,7 @@ async def test_me_authenticated_returns_200_and_shape():
         client.cookies.set("gustav_session", "fake-session")
         resp = await client.get("/api/me")
     assert resp.status_code == 200
+    assert resp.headers.get("Cache-Control") == "no-store"
     body = resp.json()
     assert isinstance(body, dict)
     assert "email" in body and isinstance(body["email"], str)

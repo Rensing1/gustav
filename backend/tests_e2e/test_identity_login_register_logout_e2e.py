@@ -18,6 +18,8 @@ import re
 from urllib.parse import urljoin, urlparse, parse_qs
 
 import pytest
+if os.getenv("RUN_E2E") != "1":
+    pytest.skip("E2E disabled (set RUN_E2E=1 to enable)", allow_module_level=True)
 import requests
 
 

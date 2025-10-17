@@ -9,6 +9,16 @@ _Stand: 2025-10-17_
 - **Ziel:** Einheitliches Erlebnis mit minimaler Komplexität: In PROD bleibt Keycloak die Login‑Oberfläche (gebrandet), in DEV können wir Formulare lokal testen. Kein Passworthandling in GUSTAV für PROD.
 - **Rollout-Strategie:** DEV nutzt Subdomains (`app.localhost`, `id.localhost`) und Caddy; PROD behält IdP‑UI (gebrandet). Keine Direct‑Grant‑Formulare mehr.
 
+## Aktualisierung (heute)
+
+- Security: `/api/me` setzt jetzt `Cache-Control: no-store` (Verhindert Caching von Auth‑Zuständen).
+- Wartbarkeit: Auth‑Routen in eigenes Modul ausgelagert (`backend/web/routes/auth.py`), Haupt‑App bindet den Router ein.
+- UX: Registrierungsseite zeigt einen Passwort‑Policy‑Hinweis (DE) an; E2E testet Sichtbarkeit.
+- Optional: IdP End‑Session‑Logout (`GET /auth/logout/idp`) ergänzt – loggt zusätzlich am IdP aus und kommt zurück zur App.
+- Contract‑First: OpenAPI aktualisiert – reine Redirect‑Endpunkte für Login/Registrierung/Forgot; keine POST‑Formulare/CSRF mehr.
+
+Hinweis: Ältere Abschnitte in diesem Plan, die CSRF/SSR‑Formulare und POST‑Routen beschreiben, sind obsolet. Maßgeblich ist der Vertrag in `api/openapi.yml`.
+
 ## Leitplanken
 
 - **Phasenweise Umsetzung:** Wir liefern zuerst eine einfache, funktionale Lösung (Phase 1) und härten sie in späteren Phasen.

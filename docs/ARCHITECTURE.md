@@ -131,6 +131,11 @@ E2E‑Tests (Identity):
   - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
   - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
 
+### Auth Router & Security (aktualisiert)
+- Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
+- `/api/me`: Antworten enthalten `Cache-Control: no-store` zur Verhinderung von Caching von Auth‑Zuständen.
+- Optionales IdP‑Logout: `GET /auth/logout/idp` leitet zur End‑Session beim IdP und anschließend zurück zur App‑Startseite.
+
 ## Deployment & Betrieb
 - Containerisiert über `Dockerfile` und `docker-compose.yml`.
 - Reverse‑Proxy: Caddy (hostbasiertes Routing). Nur `127.0.0.1:8100` ist gemappt (lokal).

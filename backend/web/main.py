@@ -6,7 +6,6 @@ import os
 import logging
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -149,9 +148,8 @@ app = FastAPI(
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# Auth router groups authentication-related routes to avoid duplication between
-# the full app and the slim test app.
-auth_router = APIRouter(tags=["auth"])  # no prefix, explicit paths for clarity
+# Import shared auth router and helpers from dedicated module
+from routes.auth import auth_router
 
 
 # --- OIDC minimal config & stores (dev) ---
@@ -562,105 +560,7 @@ async def health_check():
 
 # --- Minimal Auth Adapter (stub) to satisfy contract tests ---
 
-@auth_router.get("/auth/login")
-async def auth_login(state: str | None = None, redirect: str | None = None):
-    """
-    Start OIDC flow with PKCE and server-side state.
-
-    Why:
-        Initiate a secure Authorization Code Flow. We create and store a
-        `code_verifier` (for PKCE) and an opaque `state` (for CSRF/QR context),
-        then redirect the browser to Keycloak.
-
-    Parameters:
-        state: Optional externally supplied state (e.g., QR-context). If not
-            provided, a new opaque state is generated.
-        redirect: Optional in-app path to return to after successful login.
-
-    Behavior:
-        - Generates `code_verifier` and its S256 `code_challenge`.
-        - Persists state (with TTL) together with the verifier and redirect.
-        - Redirects to Keycloak’s realm auth endpoint with PKCE params.
-
-    Permissions:
-        Public endpoint. No authentication required.
-
-    Notes for contributors:
-        This handler is also registered on the slim test app (create_app_auth_only)
-        to prevent duplication. In tests, AUTH_USE_DIRECT_GRANT is disabled so
-        the SSR form branch is skipped, keeping this lightweight.
-    """
-    # Default: Redirect to Keycloak auth endpoint
-    code_verifier = OIDCClient.generate_code_verifier()
-    code_challenge = OIDCClient.code_challenge_s256(code_verifier)
-    rec = STATE_STORE.create(code_verifier=code_verifier, redirect=redirect)
-    final_state = state or rec.state
-    url = OIDC.build_authorization_url(state=final_state, code_challenge=code_challenge)
-    return RedirectResponse(url=url, status_code=302)
-
-
-@auth_router.get("/auth/forgot")
-async def auth_forgot(login_hint: str | None = None):
-    """
-    Convenience redirect to Keycloak's 'Forgot Password' page.
-
-    Why:
-        Offload password reset to Keycloak to keep credentials out of GUSTAV.
-    Parameters:
-        login_hint: Optional email to pre-fill on Keycloak's reset form.
-    Behavior:
-        - Builds the URL from configured base URL and realm.
-        - Forwards `login_hint` if provided, no cookies are set.
-    Permissions:
-        Public endpoint; no session required.
-
-    Notes for contributors:
-        This is reused by the slim test app to keep behavior in sync and avoid
-        drift between test and production code.
-    """
-    from urllib.parse import urlencode
-    base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/login-actions/reset-credentials"
-    query = {"login_hint": login_hint} if login_hint else None
-    target = f"{base}?{urlencode(query)}" if query else base
-    return RedirectResponse(url=target, status_code=302)
-
-
-@auth_router.get("/auth/register")
-async def auth_register(login_hint: str | None = None):
-    """
-    Convenience redirect to Keycloak's self-registration page.
-
-    Why:
-        Keep credentials entirely in Keycloak. This endpoint only redirects to
-        the IdP's registration flow and sets no cookies.
-    Parameters:
-        login_hint: Optional email to pre-fill on the registration form.
-    Behavior:
-        - Constructs the registration URL from configured base URL + realm.
-        - Forwards `login_hint` as query if provided.
-    Permissions:
-        Public endpoint; no authentication required.
-
-    Notes for contributors:
-        This is reused by the slim test app to keep behavior in sync and avoid
-        drift between test and production code.
-    """
-    # Default: Kick off OIDC flow like /auth/login, but hint the UI to show registration
-    code_verifier = OIDCClient.generate_code_verifier()
-    code_challenge = OIDCClient.code_challenge_s256(code_verifier)
-    rec = STATE_STORE.create(code_verifier=code_verifier, redirect=None)
-    final_state = rec.state
-    # Build URL from the current OIDC_CFG (not the global OIDC instance) so tests can monkeypatch config.
-    oidc = OIDCClient(OIDC_CFG)
-    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge)
-    # Forward login_hint and request register screen
-    sep = '&' if '?' in url else '?'
-    if login_hint:
-        url = f"{url}{sep}login_hint={login_hint}"
-        sep = '&'
-    url = f"{url}{sep}kc_action=register"
-    return RedirectResponse(url=url, status_code=302)
-
+# Auth callback remains defined in this module to keep test monkeypatching stable
 
 @app.get("/auth/callback")
 async def auth_callback(code: str | None = None, state: str | None = None):
@@ -733,36 +633,7 @@ async def auth_callback(code: str | None = None, state: str | None = None):
 # Note: POST endpoints for login/register/forgot were removed together with
 # the Direct-Grant UI flow. All interactive flows happen on Keycloak.
 
-@auth_router.post("/auth/logout")
-async def auth_logout(request: Request):
-    """
-    Invalidate the current session and clear the session cookie.
-
-    Why:
-        Ensure users can reliably sign out and browsers drop the cookie.
-
-    Behavior:
-        - Requires an existing session cookie, else 401.
-        - Deletes the server-side session (if present).
-        - Sends a `gustav_session` cookie with `Max-Age=0` and matching flags
-          so clients remove it (per contract).
-
-    Permissions:
-        Authenticated route (requires `gustav_session` cookie).
-
-    Notes for contributors:
-        This handler is reused by the slim test app so cookie flags and semantics
-        remain identical across both apps.
-    """
-    if SESSION_COOKIE_NAME not in request.cookies:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    sid = request.cookies.get(SESSION_COOKIE_NAME)
-    if sid:
-        SESSION_STORE.delete(sid)
-    resp = Response(status_code=204)
-    _clear_session_cookie(resp)
-    return resp
+ # Logout route is provided by the shared auth router
 
 
 @app.get("/api/me")
@@ -781,16 +652,17 @@ async def get_me(request: Request):
         Authenticated route (requires `gustav_session` cookie).
     """
     if SESSION_COOKIE_NAME not in request.cookies:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        # Security: prevent caching of auth state responses
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
     sid = request.cookies.get(SESSION_COOKIE_NAME)
     rec = SESSION_STORE.get(sid or "")
     if not rec:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
     return JSONResponse({
         "email": rec.email,
         "roles": rec.roles,
         "email_verified": rec.email_verified,
-    })
+    }, headers={"Cache-Control": "no-store"})
 
 # Register auth routes on the full application
 app.include_router(auth_router)
@@ -825,17 +697,18 @@ def create_app_auth_only() -> FastAPI:
         )
         return resp
 
-    # Reuse main logout handler to ensure cookie flags match environment policy
+    # Reuse main logout handler (from shared router) to ensure cookie flags match environment policy
+    from routes.auth import auth_logout  # local import to avoid unused import in main app
     slim.add_api_route("/auth/logout", auth_logout, methods=["POST"])  # type: ignore[arg-type]
 
     @slim.get("/api/me")
     async def slim_get_me(request: Request):
         if "gustav_session" not in request.cookies:
-            return JSONResponse({"error": "unauthenticated"}, status_code=401)
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         return JSONResponse({
             "email": "student@example.com",
             "roles": ["student"],
             "email_verified": True,
-        })
+        }, headers={"Cache-Control": "no-store"})
 
     return slim

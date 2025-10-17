@@ -28,6 +28,7 @@ from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.admin_client import AdminClient as KCAdminClient
 from identity_access.stores import StateStore, SessionStore
+from datetime import datetime, timezone
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
 
 # Load .env for local dev/test so environment variables are available outside Docker
@@ -102,7 +103,7 @@ def _primary_role(roles: list[str]) -> str:
     return "student"
 
 
-def _set_session_cookie(response: Response, value: str) -> None:
+def _set_session_cookie(response: Response, value: str, *, max_age: int | None = None) -> None:
     """Attach the gustav session cookie with hardened flags.
 
     Parameters:
@@ -116,14 +117,25 @@ def _set_session_cookie(response: Response, value: str) -> None:
           accidental subdomain leakage in multi-host setups.
     """
     opts = _session_cookie_options()
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=value,
-        httponly=True,
-        secure=opts["secure"],
-        samesite=opts["samesite"],
-        path="/",
-    )
+    if max_age is not None:
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=value,
+            httponly=True,
+            secure=opts["secure"],
+            samesite=opts["samesite"],
+            path="/",
+            max_age=max_age,
+        )
+    else:
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=value,
+            httponly=True,
+            secure=opts["secure"],
+            samesite=opts["samesite"],
+            path="/",
+        )
 
 
 def _clear_session_cookie(response: Response) -> None:
@@ -665,6 +677,13 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         logger.warning("ID token verification failed: %s", exc.code)
         return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
 
+    # Phase 2: Nonce check — reject if ID token nonce does not match the stored state nonce
+    # Why: `state` protects the authorization request (CSRF); `nonce` protects the
+    # ID token against replay by binding it to our stored login/register intent.
+    claim_nonce = claims.get("nonce")
+    if getattr(rec, "nonce", None) and claim_nonce != rec.nonce:
+        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "no-store"})
+
     email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"
     raw_roles: list[str] = []
     ra = claims.get("realm_access") or {}
@@ -686,8 +705,9 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified, id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
-    # Attach hardened session cookie (opaque ID only)
-    _set_session_cookie(resp, sess.session_id)
+    # Attach hardened session cookie (opaque ID only); in PROD, align Max-Age with server-side TTL
+    max_age = sess.ttl_seconds if SETTINGS.environment == "prod" else None
+    _set_session_cookie(resp, sess.session_id, max_age=max_age)
     return resp
 
 
@@ -719,10 +739,15 @@ async def get_me(request: Request):
     rec = SESSION_STORE.get(sid or "")
     if not rec:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+    # Serialize expires_at as UTC ISO-8601 if available
+    exp_iso = None
+    if rec.expires_at:
+        exp_iso = datetime.fromtimestamp(rec.expires_at, tz=timezone.utc).isoformat(timespec="seconds")
     return JSONResponse({
         "email": rec.email,
         "roles": rec.roles,
         "email_verified": rec.email_verified,
+        "expires_at": exp_iso,
     }, headers={"Cache-Control": "no-store"})
 
 # Register auth routes on the full application

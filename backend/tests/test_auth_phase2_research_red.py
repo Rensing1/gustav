@@ -27,7 +27,10 @@ sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+@pytest.fixture
+def anyio_backend():
+    # Force asyncio backend to avoid trio in restricted environments
+    return "asyncio"
 
 
 @pytest.mark.anyio
@@ -89,20 +92,24 @@ async def test_callback_sets_cookie_max_age_matches_session_ttl_prod(monkeypatch
 
     monkeypatch.setattr(main, "OIDC", FakeOIDC())
 
-    def fake_verify(id_token: str, cfg: object):
-        return {
-            "email": "user@example.com",
-            "realm_access": {"roles": ["student"]},
-            "email_verified": True,
-        }
-
-    monkeypatch.setattr(main, "verify_id_token", fake_verify)
-
     try:
         async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
             r_login = await client.get("/auth/login", follow_redirects=False)
             qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
             state = qs.get("state", [None])[0]
+            # Provide matching nonce in verification claims to satisfy nonce check
+            rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+            expected_nonce = getattr(rec, "nonce", None)
+
+            def fake_verify(id_token: str, cfg: object):
+                return {
+                    "email": "user@example.com",
+                    "realm_access": {"roles": ["student"]},
+                    "email_verified": True,
+                    "nonce": expected_nonce,
+                }
+
+            monkeypatch.setattr(main, "verify_id_token", fake_verify)
             r_cb = await client.get(f"/auth/callback?code=valid&state={state}", follow_redirects=False)
         assert r_cb.status_code in (302, 303)
         sc = r_cb.headers.get("set-cookie", "")
@@ -128,4 +135,3 @@ async def test_me_includes_expires_at_and_no_store():
     assert "expires_at" in body, "RED: endpoint should include expires_at"
     assert isinstance(body["expires_at"], str)
     assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", body["expires_at"]) or "+" in body["expires_at"], body["expires_at"]
-

@@ -64,12 +64,13 @@ class OIDCClient:
         digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
         return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
-    def build_authorization_url(self, *, state: str, code_challenge: str) -> str:
+    def build_authorization_url(self, *, state: str, code_challenge: str, nonce: Optional[str] = None) -> str:
         """Return the authorization URL for the configured realm/client.
 
         Parameters
         - state: Opaque anti-CSRF token (and QR context if needed)
         - code_challenge: The S256 code challenge derived from the verifier
+        - nonce: Optional OIDC replay protection value (recommended)
         """
         params = {
             "response_type": "code",
@@ -80,6 +81,8 @@ class OIDCClient:
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
         }
+        if nonce:
+            params["nonce"] = nonce
         return f"{self.cfg.auth_endpoint}?{urlencode(params)}"
 
     def exchange_code_for_tokens(self, *, code: str, code_verifier: str) -> Dict[str, str]:

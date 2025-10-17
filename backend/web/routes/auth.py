@@ -18,6 +18,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
 from urllib.parse import urlencode, quote
 import os
+import secrets
 
 from identity_access.oidc import OIDCClient
 
@@ -43,13 +44,14 @@ async def auth_login(redirect: str | None = None):
 
     code_verifier = OIDCClient.generate_code_verifier()
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
+    nonce = secrets.token_urlsafe(16)
     # Security: Accept only absolute in-app paths like "/courses". Reject external URLs.
     safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
-    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect)
+    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
     final_state = rec.state
     # Use a fresh client bound to current config (allows monkeypatch in tests)
     oidc = OIDCClient(main.OIDC_CFG)
-    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge)
+    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
     return RedirectResponse(url=url, status_code=302)
 
 
@@ -70,15 +72,24 @@ async def auth_forgot(login_hint: str | None = None):
 async def auth_register(login_hint: str | None = None):
     """
     Redirect to Keycloak registration by hinting kc_action=register on the auth endpoint.
+
+    Why:
+        Keep registration on the IdP while ensuring the authorization request
+        includes a fresh nonce (OIDC replay protection), same as the login flow.
+    Permissions:
+        Public.
     """
     import main  # late import
 
     code_verifier = OIDCClient.generate_code_verifier()
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
-    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=None)
+    # Phase 2: Generate nonce for replay protection and persist in state
+    nonce = secrets.token_urlsafe(16)
+    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=None, nonce=nonce)
     final_state = rec.state
     oidc = OIDCClient(main.OIDC_CFG)
-    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge)
+    # Include nonce in the authorization request similar to /auth/login
+    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
     sep = '&' if '?' in url else '?'
     if login_hint:
         # Security: encode parameter to avoid query injection and preserve special characters
@@ -98,7 +109,9 @@ async def auth_logout(request: Request, redirect: str | None = None):
         - Deletes server-side session if present.
         - Sends Set-Cookie to expire the app session cookie.
         - Redirects (302) to Keycloak `end_session_endpoint` with
-          `post_logout_redirect_uri` pointing back to the app start page `/` (or provided redirect).
+          `post_logout_redirect_uri` pointing back to the app (success page by default).
+        - Accepts only in-app absolute paths for `redirect` (e.g., "/courses").
+          External URLs are rejected/ignored to prevent open redirects.
     Permissions:
         Public; IdP end-session relies on IdP browser cookie.
     """
@@ -113,8 +126,10 @@ async def auth_logout(request: Request, redirect: str | None = None):
     # Compute IdP logout URL and app redirect target (show success banner)
     base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
     app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
+    # Accept only in-app absolute paths; ignore external values
+    safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
     # After logout, go to the app success page with a re-login link
-    dest = (redirect or f"{app_base}/auth/logout/success").rstrip("/")
+    dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
     # Build params: prefer id_token_hint (best compatibility), else include client_id
     end_session = f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?post_logout_redirect_uri={quote(dest, safe=':/?&=')}"
     if rec and getattr(rec, "id_token", None):

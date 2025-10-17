@@ -215,6 +215,10 @@ def _is_inapp_path(value: str) -> bool:
     Why:
         Prevent open redirect vulnerabilities by only allowing internal paths
         without scheme/host or query fragments. Mirrors the OpenAPI contract.
+    Examples (accepted):
+        "/", "/courses", "/courses/1", "/courses/list_all"
+    Examples (rejected):
+        "courses" (not absolute), "https://evil.com", "/a?b", "/a#b", "/.."
     """
     try:
         if not value or not isinstance(value, str):

@@ -137,7 +137,7 @@ paths:
           schema:
             type: string
             pattern: '^/[A-Za-z0-9_\-/]*$'
-            default: "/"
+            default: "/auth/logout/success"
           description: >-
             App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.
             External URLs are rejected and ignored. Defaults to "/auth/logout/success".

@@ -134,7 +134,7 @@ E2E‑Tests (Identity):
 ### Auth Router & Security (aktualisiert)
 - Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
 - `/api/me`: Antworten enthalten `Cache-Control: no-store` zur Verhinderung von Caching von Auth‑Zuständen.
-- Vereinheitlichter Logout: `GET /auth/logout` löscht die App‑Session (Cookie) und leitet zur End‑Session beim IdP; danach Rückkehr zur Startseite.
+- Vereinheitlichter Logout: `GET /auth/logout` löscht die App‑Session (Cookie) und leitet zur End‑Session beim IdP; danach Rückkehr zur Erfolgsseite (`/auth/logout/success`). Optional ist ein interner absoluter Redirect-Pfad erlaubt.
 
 #### Auth‑Erzwingung (Middleware)
 - Allowlist: `/auth/*`, `/health`, `/static/*`, `/favicon.ico` werden nie umgeleitet.

@@ -141,6 +141,7 @@ paths:
           description: >-
             App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.
             External URLs are rejected and ignored. Defaults to "/auth/logout/success".
+            Server enforces the same regex pattern as documented here.
       responses:
         '302':
           description: Redirect to IdP end-session endpoint (then back to the app)

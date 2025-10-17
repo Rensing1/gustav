@@ -2,6 +2,7 @@
   "realm": "gustav",
   "enabled": true,
   "displayName": "GUSTAV Realm",
+  "loginTheme": "gustav",
   "registrationAllowed": true,
   "loginWithEmailAllowed": true,
   "verifyEmail": false,
@@ -25,7 +26,8 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "http://localhost:8100/*"
+        "http://localhost:8100/*",
+        "http://app.localhost:8100/*"
       ],
       "webOrigins": ["*"],
       "attributes": {
@@ -34,4 +36,3 @@
     }
   ]
 }
-

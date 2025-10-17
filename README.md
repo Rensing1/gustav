@@ -50,9 +50,18 @@ Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 
 ## Auth (Keycloak) lokal
 
-- Dienste: Keycloak läuft im Compose auf `http://localhost:8080` (Realm‑Import via `keycloak/realm-gustav.json`).
-- Der Web‑Adapter (FastAPI) nutzt OIDC Authorization Code Flow mit PKCE. In PROD erfolgen `/auth/login|register|forgot` als Redirect zur Keycloak‑UI.
+- Dienste: Keycloak läuft im Compose (Realm‑Import via `keycloak/realm-gustav.json`).
+- Der Web‑Adapter (FastAPI) nutzt OIDC Authorization Code Flow mit PKCE. In PROD erfolgen `/auth/login|register|forgot` als Redirect zur Identity‑UI.
 - Optional (DEV/CI): Eigene HTML‑Formulare sind per Feature‑Flag aktivierbar (`AUTH_USE_DIRECT_GRANT=true`). Login per Password‑Grant, Registration via Admin‑API. Siehe `docs/ARCHITECTURE.md` → „Auth UI (Phase 1 – DEV/CI)“.
+- Keycloak‑Theme (GUSTAV‑Look): Ein schlankes CSS‑Theme ist unter `keycloak/themes/gustav` enthalten und wird per Compose in den Container gemountet. Der Realm ist so vorkonfiguriert, dass das Theme genutzt wird (`loginTheme: "gustav"`).
+
+Vorschau Keycloak‑Theme:
+- Starten: `docker compose up -d`
+- Hosts‑Eintrag (einmalig, lokal):
+  - `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`
+- App: `http://app.localhost:8100`
+- Login (Keycloak): `http://id.localhost:8100/realms/gustav/account/` → „Anmelden“
+- Die Loginseite sollte farblich/typografisch zu GUSTAV passen.
 - Konfiguration über Umgebungsvariablen (siehe `.env`):
   - `KC_BASE_URL` (default: `http://localhost:8080`)
   - `KC_PUBLIC_BASE_URL` (default: `http://localhost:8080`)

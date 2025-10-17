@@ -610,6 +610,11 @@ async def auth_login(state: str | None = None, redirect: str | None = None):
 
     Permissions:
         Public endpoint. No authentication required.
+
+    Notes for contributors:
+        This handler is also registered on the slim test app (create_app_auth_only)
+        to prevent duplication. In tests, AUTH_USE_DIRECT_GRANT is disabled so
+        the SSR form branch is skipped, keeping this lightweight.
     """
     # Feature-flagged UI: return HTML form with CSRF in DEV/CI
     if AUTH_USE_DIRECT_GRANT:
@@ -671,6 +676,10 @@ async def auth_forgot(login_hint: str | None = None):
         - Forwards `login_hint` if provided, no cookies are set.
     Permissions:
         Public endpoint; no session required.
+
+    Notes for contributors:
+        This is reused by the slim test app to keep behavior in sync and avoid
+        drift between test and production code.
     """
     # Feature-flagged UI: simple HTML form + CSRF cookie in DEV/CI
     if AUTH_USE_DIRECT_GRANT:
@@ -720,6 +729,10 @@ async def auth_register(login_hint: str | None = None):
         - Forwards `login_hint` as query if provided.
     Permissions:
         Public endpoint; no authentication required.
+
+    Notes for contributors:
+        This is reused by the slim test app to keep behavior in sync and avoid
+        drift between test and production code.
     """
     if AUTH_USE_DIRECT_GRANT:
         resp = HTMLResponse(content="")
@@ -944,6 +957,10 @@ async def auth_logout(request: Request):
 
     Permissions:
         Authenticated route (requires `gustav_session` cookie).
+
+    Notes for contributors:
+        This handler is reused by the slim test app so cookie flags and semantics
+        remain identical across both apps.
     """
     if SESSION_COOKIE_NAME not in request.cookies:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -993,31 +1010,12 @@ def create_app_auth_only() -> FastAPI:
     """
     slim = FastAPI(title="GUSTAV auth-only", version="0.0.2")
 
-    @slim.get("/auth/login")
-    async def slim_auth_login(state: str | None = None, redirect: str | None = None):
-        target = "https://keycloak.local/realms/gustav/protocol/openid-connect/auth"
-        if state:
-            target += f"?state={state}"
-        return RedirectResponse(url=target, status_code=302)
-
-    @slim.get("/auth/forgot")
-    async def slim_auth_forgot(login_hint: str | None = None):
-        """Slim forgot endpoint mirrors config-driven redirect in tests."""
-        from urllib.parse import urlencode
-        base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/login-actions/reset-credentials"
-        query = {"login_hint": login_hint} if login_hint else None
-        target = f"{base}?{urlencode(query)}" if query else base
-        return RedirectResponse(url=target, status_code=302)
-
-    @slim.get("/auth/register")
-    async def slim_auth_register(login_hint: str | None = None):
-        """Slim register endpoint mirrors config-driven redirect in tests."""
-        from urllib.parse import urlencode
-        browser_base = OIDC_CFG.public_base_url or OIDC_CFG.base_url
-        base = f"{browser_base}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
-        query = {"login_hint": login_hint} if login_hint else None
-        target = f"{base}?{urlencode(query)}" if query else base
-        return RedirectResponse(url=target, status_code=302)
+    # Reuse the main app's handlers to avoid code drift. These handlers are
+    # fast-paths (no SSR) when AUTH_USE_DIRECT_GRANT is disabled (default in tests).
+    # This keeps contract behavior consistent between the full app and the slim app.
+    slim.add_api_route("/auth/login", auth_login, methods=["GET"])  # type: ignore[arg-type]
+    slim.add_api_route("/auth/forgot", auth_forgot, methods=["GET"])  # type: ignore[arg-type]
+    slim.add_api_route("/auth/register", auth_register, methods=["GET"])  # type: ignore[arg-type]
 
     @slim.get("/auth/callback")
     async def slim_auth_callback(code: str | None = None, state: str | None = None):
@@ -1035,13 +1033,8 @@ def create_app_auth_only() -> FastAPI:
         )
         return resp
 
-    @slim.post("/auth/logout")
-    async def slim_auth_logout(request: Request):
-        if "gustav_session" not in request.cookies:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        resp = Response(status_code=204)
-        resp.delete_cookie(key="gustav_session", path="/")
-        return resp
+    # Reuse main logout handler to ensure cookie flags match environment policy
+    slim.add_api_route("/auth/logout", auth_logout, methods=["POST"])  # type: ignore[arg-type]
 
     @slim.get("/api/me")
     async def slim_get_me(request: Request):

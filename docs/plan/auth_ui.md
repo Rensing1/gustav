@@ -317,6 +317,29 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
    - Research-Ergebnisse einarbeiten, Aufgabenliste für Browser-Flow/CSRFStore/Flag-Coverage ergänzen.
 11. Commit & PR.
 
+## Theme‑Spezifikation (Phase 1)
+
+- Card
+  - Breite: 420–480 px (max-width: 480px), margin: 48px auto
+  - Padding: 24 px innen; Border: 1 px `var(--color-border)`; Radius: 8 px
+  - Hintergrund: `var(--color-bg-surface)`, Text: `var(--color-text)`
+- Typografie
+  - Basis: `var(--font-base)`; Titel `.kc-title`: 24 px/1.3, Gewicht 600, Farbe `var(--color-text-heading)`
+  - Labels `.kc-label`: 14 px/1.4, Farbe `var(--color-text)`
+- Formularlayout
+  - `.kc-form` nutzt Grid mit `gap: 12px`; Inputs `.kc-input` Höhe 40 px
+  - Fokus: 2 px Outline `var(--color-border-focus)`; Hover leicht (`var(--color-bg-hover)`)
+  - Submit `.kc-submit` Höhe 44 px; Primärfarbe `var(--color-primary)`
+- Links/Meta
+  - `.kc-links` Abstand oben 8 px, Textgröße 14 px; Linkfarbe `var(--color-primary)`
+  - Fehlermeldung `.kc-message.kc-error`: Border‑Left 3 px `var(--color-error)`; Hintergrund `var(--color-bg-overlay)`
+- Barrierefreiheit
+  - Fokus‑Sichtbarkeit immer an; Mindestkontrast WCAG‑AA; Touch‑Ziele ≥ 40 px
+- Internationalisierung
+  - Default‑Locale: `de`; Keys über `messages_de.properties` überschreiben: `doLogIn`, `doRegister`, `doForgotPassword`, `usernameOrEmail`, `password`
+
+Hinweis: Alle Farben/Typo‑Variablen folgen `backend/web/static/css/gustav.css` und `docs/UI-UX-Leitfaden.md`.
+
 ## Risiken & Gegenmaßnahmen
 
 | Risiko | Bewertung | Gegenmaßnahme |

@@ -73,13 +73,23 @@ Vorschau Keycloak‑Theme:
 - Cookies: httpOnly Session‑Cookie `gustav_session` (opaque ID). In Prod zusätzlich `Secure` und `SameSite=strict`; in Dev `SameSite=lax`.
 - Sicherheit: ID‑Token wird gegen JWKS verifiziert (Issuer/Audience/Expiry), Rollen werden restriktiv gemappt (`student|teacher|admin`).
 
+### Theme anpassen (lokal)
+- Dateien:
+  - Templates: `keycloak/themes/gustav/login/templates/{login.ftl,register.ftl,login-reset-password.ftl}`
+  - Styles: `keycloak/themes/gustav/login/resources/css/gustav.css`
+  - DE‑Texte: `keycloak/themes/gustav/login/messages/messages_de.properties`
+- Realm‑Konfiguration (Default DE): `keycloak/realm-gustav.json:1`
+  - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`
+- Änderungen wirken nach `docker compose up -d --build caddy web keycloak` (Keycloak lädt Theme beim Start).
+
 ## Tests
 
 - Unit/Contract‑Tests laufen mit `pytest` gegen die ASGI‑App (`httpx` + `ASGITransport`).
-- E2E‑Test (Keycloak ↔ GUSTAV) unter `backend/tests_e2e/test_identity_login_register_logout_e2e.py` (setzt laufendes `docker compose up -d keycloak web` voraus).
+- E2E (Keycloak ↔ GUSTAV) ist Teil der Suite: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`.
+- Voraussetzungen für E2E: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
 - Ausführen:
-  - Alle Tests: `.venv/bin/pytest -q`
-  - E2E fokussiert: `.venv/bin/pytest -q backend/tests_e2e/test_identity_login_register_logout_e2e.py`
+  - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
+  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
   
 
 ## Entwicklungs-Workflow

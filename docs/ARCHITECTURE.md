@@ -79,6 +79,14 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
   - `/auth/login|register|forgot` leiten zur gebrandeten Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
   - GUSTAV verarbeitet keine Passwörter; Sessions sind serverseitig und über `gustav_session` gesichert.
 
+#### Keycloak Theme (GUSTAV)
+- Pfad: `keycloak/themes/gustav/login`
+  - Templates: `templates/login.ftl`, `templates/register.ftl`, `templates/login-reset-password.ftl`
+  - Styles: `resources/css/gustav.css` (kompaktes Layout über .kc‑* Klassen)
+  - i18n: `messages/messages_de.properties` (DE‑Texte)
+- Realm‑Konfiguration: `keycloak/realm-gustav.json:1`
+  - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`, `supportedLocales: ["de","en"]`
+
 #### DEV‑Flag (optional)
 - `AUTH_USE_DIRECT_GRANT=true` aktiviert SSR‑Formulare in DEV/CI (TDD & UI‑Prototyping).
 - CSRF: Double‑Submit via Cookie `gustav_csrf` + hidden `csrf_token`.
@@ -115,6 +123,13 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 - Speicherort Tests: `backend/tests/` (API‑Tests, Use‑Case‑Tests, Adapter‑Tests)
 - Philosophie: Spezifikationsnahe Tests, klein anfangen, dann breiter testen.
 - Tools: pytest, httpx TestClient, Factory‑Fixtures; Lint/Format analog Repo‑Standards (später).
+
+E2E‑Tests (Identity):
+- Testdatei: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`
+- Voraussetzung: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
+- Ausführung:
+  - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
+  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
 
 ## Deployment & Betrieb
 - Containerisiert über `Dockerfile` und `docker-compose.yml`.

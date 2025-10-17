@@ -14,10 +14,149 @@ _Stand: 2025-10-17_
 - Security: `/api/me` setzt jetzt `Cache-Control: no-store` (Verhindert Caching von Auth‑Zuständen).
 - Wartbarkeit: Auth‑Routen in eigenes Modul ausgelagert (`backend/web/routes/auth.py`), Haupt‑App bindet den Router ein.
 - UX: Registrierungsseite zeigt einen Passwort‑Policy‑Hinweis (DE) an; E2E testet Sichtbarkeit.
-- Optional: IdP End‑Session‑Logout (`GET /auth/logout/idp`) ergänzt – loggt zusätzlich am IdP aus und kommt zurück zur App.
+- Logout vereinheitlicht: `GET /auth/logout` löscht App‑Session und meldet zusätzlich am IdP ab (End‑Session), anschließend zurück zur App.
 - Contract‑First: OpenAPI aktualisiert – reine Redirect‑Endpunkte für Login/Registrierung/Forgot; keine POST‑Formulare/CSRF mehr.
 
 Hinweis: Ältere Abschnitte in diesem Plan, die CSRF/SSR‑Formulare und POST‑Routen beschreiben, sind obsolet. Maßgeblich ist der Vertrag in `api/openapi.yml`.
+
+## Neue Phase: Plattformintegration (Login erzwingen, Sidebar, Logout App+IdP)
+
+Ziel dieser Phase ist die tiefere Integration der Authentifizierung in die Plattformoberfläche, ohne die Sicherheitsgrenzen (Passworteingabe beim IdP) zu durchbrechen. Wir erzwingen Login serverseitig, reichern die Sidebar mit Identitätsdaten an und vereinheitlichen den Logout so, dass sowohl die App‑Session als auch die Keycloak‑SSO‑Sitzung beendet werden.
+
+### User Story
+
+> Als nicht angemeldete Person werde ich grundsätzlich zur Anmeldung umgeleitet. Nach Anmeldung gelange ich zur Startseite. Als angemeldete Person sehe ich in der Sidebar meine E‑Mail und meine Rolle und kann mich vollständig abmelden (App + IdP).
+
+### BDD‑Szenarien (Given‑When‑Then)
+
+Login‑Erzwingung (Middleware)
+- Given ich bin nicht angemeldet und fordere eine HTML‑Seite an (z. B. `/dashboard`)
+  When ich `GET /dashboard` aufrufe
+  Then erhalte ich `302` mit `Location: /auth/login` (ohne „next“)
+
+- Given ich bin nicht angemeldet und fordere eine JSON‑API an (z. B. `/api/courses`)
+  When ich `GET /api/courses` aufrufe
+  Then erhalte ich `401` mit Problem‑JSON und ohne Redirect
+
+- Given ich bin nicht angemeldet und ein HTMX‑Request geht ein
+  When ich `GET /courses` mit Header `HX-Request: true` aufrufe
+  Then erhalte ich `401` und `HX-Redirect: /auth/login`
+
+Whitelist (keine Erzwingung)
+- Given eine Anfrage auf `/auth/*`, `/health`, `/_static/*`
+  Then greift die Middleware nicht (keine Redirect‑Schleife)
+
+Sidebar (angemeldet)
+- Given ich bin angemeldet
+  When eine Seite mit Sidebar gerendert wird
+  Then sehe ich meine `email` und meine feste `role` und einen Button „Abmelden“
+
+Vereinheitlichter Logout (App + IdP)
+- Given ich bin angemeldet
+  When ich `GET /auth/logout` aufrufe
+  Then wird das App‑Session‑Cookie sicher gelöscht
+  And der Browser wird mit `302` zum Keycloak `end_session_endpoint` umgeleitet
+  And nach Rückkehr lande ich auf `/`
+  And ein anschließendes `GET /api/me` liefert `401`
+
+Rückkehrziel
+- Given ich melde mich neu an
+  When der Login‑Callback erfolgreich war
+  Then werde ich auf die Startseite `/` geleitet (kein „next“)
+
+### API‑Contract (Draft‑Ergänzung)
+
+Nur die Logout‑Route ändert ihr Verhalten: sie löst nun explizit IdP‑Logout aus (App + IdP). Keine weiteren öffentlichen Endpunkte kommen hinzu.
+
+```yaml
+paths:
+  /auth/logout:
+    get:
+      summary: Logout (App-Session löschen und am IdP abmelden)
+      description: |
+        Löscht das GUSTAV-Session-Cookie und leitet zum OIDC `end_session_endpoint` (Keycloak) weiter.
+        Nach der Abmeldung am IdP wird zur App-Startseite (`/`) zurückgeleitet.
+      parameters:
+        - in: query
+          name: redirect
+          required: false
+          schema:
+            type: string
+            default: "/"
+          description: Ziel innerhalb der App nach erfolgreicher IdP-Abmeldung.
+      responses:
+        "302":
+          description: Redirect zum IdP end_session_endpoint (und anschließend zurück zur App)
+          headers:
+            Location:
+              schema: { type: string }
+```
+
+Hinweis: Für geschützte HTML‑Seiten wird 302 zu `/auth/login` erwartet; für JSON/HTMX 401. Das wird im Vertrag der jeweiligen Endpunkte unter `401` dokumentiert (keine zusätzlichen Routen nötig).
+
+### Tests (Rot)
+
+- Middleware (Unit/Integration)
+  - HTML‑Anfrage: 302 → `/auth/login`
+  - JSON‑Anfrage: 401 ohne Redirect
+  - HTMX‑Anfrage: 401 mit `HX-Redirect: /auth/login`
+  - Whitelist: keine Erzwingung auf `/auth/*`, `/health`, `/_static/*`
+
+- Sidebar (SSR)
+  - Angemeldet: Sidebar rendert `email`, `role`, „Abmelden“
+  - Nicht angemeldet: kein Zugriff (durch Middleware abgesichert)
+
+- Logout (App + IdP)
+  - Aufruf `GET /auth/logout` setzt Lösch‑Cookie (passende Flags) und liefert `302` zum `end_session_endpoint`
+  - E2E: Nach Rückkehr auf `/` ist `/api/me` → `401`
+
+Dateien (Tests)
+- `backend/tests/test_auth_middleware.py` (neu)
+- `backend/tests/test_navigation_sidebar.py` (neu)
+- `backend/tests_e2e/test_identity_login_register_logout_e2e.py` (ergänzen: „IdP‑End‑Session“‑Assertion)
+
+### Implementierung (Grün)
+
+- Middleware hinzufügen (`backend/web/main.py`):
+  - Allowlist: `/auth/`, `/health`, `/_static/`
+  - Erkennung HTML vs. JSON vs. HTMX (Accept/Headers)
+  - HTML → 302 `/auth/login`; JSON/HTMX → 401 (+ `HX-Redirect`)
+
+- Sidebar anreichern (`backend/web/components/navigation.py`):
+  - Claims aus Session/ID‑Token extrahieren (mind. `email`, feste `role`)
+  - Anzeige im Seitenmenü; Abmelde‑Button verlinkt auf `GET /auth/logout`
+
+- Logout vereinheitlichen (`backend/web/routes/auth.py`):
+  - Route `/auth/logout`: Session‑Cookie sicher löschen (HttpOnly, Secure in PROD, `SameSite=strict`) und Redirect zum IdP `end_session_endpoint` mit `post_logout_redirect_uri=/`
+  - Optional `id_token_hint`, falls vorhanden; ansonsten Fallback ohne Hint (DEV)
+
+- OpenAPI aktualisieren (`api/openapi.yml`):
+  - `/auth/logout` Beschreibung/Response auf „App + IdP“ ausrichten
+  - Geschützte Routen mit `401` dokumentieren (keine Redirects für JSON)
+
+### Sicherheit & Datenschutz
+
+- Session‑Cookie sicher löschen (gleiche Attribute wie beim Setzen; `Max-Age=0`, `Expires` in Vergangenheit)
+- Keine PII in Redirect‑URLs oder Logs
+- `/api/me` weiterhin mit `Cache-Control: no-store`
+
+### Abgrenzung (Out‑of‑Scope für diese Phase)
+
+- „next“-Parameter (zielgerichtete Rückleitung)
+- Öffentliche Seiten (Landing, Impressum) – kann per Allowlist später ergänzt werden
+- Kurs‑/domänenspezifische Rollenauflösung (nur eine feste IdP‑Rolle wird angezeigt)
+
+### Akzeptanzkriterien
+
+- Nicht angemeldete HTML‑Zugriffe werden zuverlässig auf `/auth/login` umgeleitet; JSON/HTMX erhalten 401
+- Sidebar zeigt für angemeldete Nutzer E‑Mail und Rolle, inkl. funktionsfähigem Abmelden‑Button
+- `GET /auth/logout` beendet App‑Session und IdP‑SSO, anschließend ist ein erneuter Besuch der App login‑pflichtig
+- Tests (Unit, Integration, E2E) laufen grün
+
+### Nacharbeiten / Doku
+
+- `docs/ARCHITECTURE.md`: Abschnitt „Identity & Auth“ um Middleware‑Erzwingung, Sidebar‑Claims und vereinten Logout ergänzen
+- README: kurzer Hinweis zum Verhalten von `/auth/logout`
 
 ## Leitplanken
 

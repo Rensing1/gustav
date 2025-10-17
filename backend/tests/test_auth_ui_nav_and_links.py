@@ -26,16 +26,22 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 @pytest.mark.anyio
-async def test_sidebar_logout_posts_to_auth_logout():
-    """GET / should render navigation with a logout control posting to /auth/logout."""
+async def test_sidebar_logout_link_to_auth_logout():
+    """Authenticated GET / renders sidebar with logout control linking to /auth/logout."""
+    # Create a fake authenticated session in the server store
+    sess = main.SESSION_STORE.create(email="user@example.com", roles=["student"], email_verified=True)
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/", follow_redirects=False)
 
     assert r.status_code == 200
     html = r.text
     assert "sidebar-logout" in html, "Logout control missing in sidebar"
-    assert 'hx-post="/auth/logout"' in html, "Logout should post to /auth/logout"
-    assert 'hx-redirect="/"' in html, "Logout should redirect to / after success"
+    assert 'href="/auth/logout"' in html, "Logout should link to /auth/logout"
+    assert 'hx-' not in html or 'hx-post="/auth/logout"' not in html, "Logout should be a normal link (no HTMX)"
+    # Sidebar should show email and German role
+    assert "user@example.com" in html
+    assert "Schüler" in html
 
 
 # Direct-Grant SSR pages were removed; the remaining GET endpoints redirect to Keycloak.

@@ -15,7 +15,7 @@ Notes:
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, HTMLResponse
 from urllib.parse import urlencode, quote
 import os
 
@@ -83,19 +83,40 @@ async def auth_register(login_hint: str | None = None):
     return RedirectResponse(url=url, status_code=302)
 
 
-@auth_router.post("/auth/logout")
-async def auth_logout(request: Request):
+@auth_router.get("/auth/logout")
+async def auth_logout(request: Request, redirect: str | None = None):
     """
-    Invalidate server-side session and clear session cookie.
+    Unified logout: clear app session cookie and redirect to IdP end-session.
+
+    Behavior:
+        - Deletes server-side session if present.
+        - Sends Set-Cookie to expire the app session cookie.
+        - Redirects (302) to Keycloak `end_session_endpoint` with
+          `post_logout_redirect_uri` pointing back to the app start page `/` (or provided redirect).
+    Permissions:
+        Public; IdP end-session relies on IdP browser cookie.
     """
     import main  # late import for stores and cookie policy
 
-    if main.SESSION_COOKIE_NAME not in request.cookies:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    # Remove server-side session if present
     sid = request.cookies.get(main.SESSION_COOKIE_NAME)
+    rec = main.SESSION_STORE.get(sid or "") if sid else None
     if sid:
         main.SESSION_STORE.delete(sid)
-    resp = Response(status_code=204)
+
+    # Compute IdP logout URL and app redirect target (show success banner)
+    base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
+    app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
+    # After logout, go to the app success page with a re-login link
+    dest = (redirect or f"{app_base}/auth/logout/success").rstrip("/")
+    # Build params: prefer id_token_hint (best compatibility), else include client_id
+    end_session = f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?post_logout_redirect_uri={quote(dest, safe=':/?&=')}"
+    if rec and getattr(rec, "id_token", None):
+        end_session += f"&id_token_hint={quote(rec.id_token)}"
+    else:
+        end_session += f"&client_id={quote(main.OIDC_CFG.client_id)}"
+
+    resp = RedirectResponse(url=end_session, status_code=302)
     # Clear cookie consistent with environment flags
     opts = _cookie_opts()
     resp.set_cookie(
@@ -111,25 +132,36 @@ async def auth_logout(request: Request):
     return resp
 
 
-@auth_router.get("/auth/logout/idp")
-async def auth_logout_idp(redirect: str | None = None):
-    """
-    Optional: Redirect to IdP end-session endpoint to log out at Keycloak.
+@auth_router.get("/auth/logout/success", response_class=HTMLResponse)
+async def auth_logout_success():
+    """Render a minimal success page after logout with a link to /auth/login.
 
-    Behavior:
-        - Computes `post_logout_redirect_uri` (defaults to app base URL).
-        - Redirects to `/protocol/openid-connect/logout` on the realm.
-    Permissions:
-        Public; relies on IdP session cookie in the browser.
+    Public page (allowlisted by middleware). No user data is displayed.
     """
-    import main  # late import
+    html = """
+    <!DOCTYPE html>
+    <html lang="de">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Abgemeldet - GUSTAV</title>
+      <link rel="stylesheet" href="/static/css/gustav.css" />
+    </head>
+    <body class="auth-info">
+      <main class="container" style="max-width: 640px; margin: 10vh auto; background: var(--color-bg-surface); padding: 24px; border: 1px solid var(--color-border); border-radius: 8px;">
+        <h1>Erfolgreich abgemeldet</h1>
+        <p>Du wurdest von GUSTAV und dem Anmeldedienst abgemeldet.</p>
+        <p>
+          <a class="button button--primary" href="/auth/login">Erneut anmelden</a>
+        </p>
+      </main>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
-    base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
-    # Derive app base from redirect_uri if not provided
-    app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
-    dest = redirect or app_base
-    end_session = f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?post_logout_redirect_uri={quote(dest, safe=':/?&=')}"
-    return RedirectResponse(url=end_session, status_code=302)
+
+# Removed separate /auth/logout/idp — unified into GET /auth/logout
 
 
 def _cookie_opts() -> dict:
@@ -154,4 +186,3 @@ def _default_app_base(redirect_uri: str) -> str:
         return f"{p.scheme}://{p.netloc}"
     except Exception:
         return "/"
-

@@ -176,6 +176,60 @@ SESSION_STORE = SessionStore()
 KEYCLOAK_ADMIN = KCAdminClient(OIDC_CFG)
 
 
+# --- Auth Enforcement Middleware -------------------------------------------------
+
+def _is_public_path(path: str) -> bool:
+    """Paths that must remain accessible without a session (no redirect loop)."""
+    return (
+        path.startswith("/auth/")
+        or path.startswith("/static/")
+        or path == "/health"
+        or path == "/favicon.ico"
+    )
+
+
+@app.middleware("http")
+async def auth_enforcement(request: Request, call_next):
+    """Enforce login for non-public routes with content-type aware responses.
+
+    Rules:
+    - Public: /auth/*, /health, /static/*, /favicon.ico
+    - API (paths starting with /api/): 401 JSON when unauthenticated
+    - HTMX requests: 401 with HX-Redirect header to /auth/login
+    - HTML (default): 302 redirect to /auth/login when unauthenticated
+
+    When authenticated, attaches `request.state.user` dict for SSR consumption.
+    """
+    path = request.url.path
+    if _is_public_path(path):
+        return await call_next(request)
+
+    # API responses should be JSON 401 when not authenticated
+    if path.startswith("/api/"):
+        sid = request.cookies.get(SESSION_COOKIE_NAME)
+        rec = SESSION_STORE.get(sid or "")
+        if not rec:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+        # Attach user info and proceed
+        request.state.user = {"email": rec.email, "roles": rec.roles}
+        return await call_next(request)
+
+    # Non-API routes
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
+    rec = SESSION_STORE.get(sid or "")
+    if not rec:
+        # HTMX partial request? Use HX-Redirect
+        if "HX-Request" in request.headers:
+            return Response(status_code=401, headers={"HX-Redirect": "/auth/login"})
+        # Default: redirect HTML to login
+        return RedirectResponse(url="/auth/login", status_code=302)
+
+    # Attach principal for SSR (use first known role for display)
+    role = next((r for r in rec.roles if r in ALLOWED_ROLES), "student")
+    request.state.user = {"email": rec.email, "role": role, "roles": rec.roles}
+    return await call_next(request)
+
+
 def build_home_content() -> str:
     navigation_html = OnPageNavigation(
         items=[
@@ -494,18 +548,16 @@ async def home(request: Request):
 
     # If this is an HTMX request, return content + sidebar (OOB) for consistent active state
     if "HX-Request" in request.headers:
-        demo_user = {
-            "name": "Felix",
-            "role": "teacher"
-        }
-        sidebar_oob = Navigation(demo_user, request.url.path).render_aside(oob=True)
+        user = getattr(request.state, "user", None)
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
         return HTMLResponse(content=content + sidebar_oob)
 
     # Use Layout component to render the full page on normal requests
+    user = getattr(request.state, "user", None)
     layout = Layout(
         title="Startseite",
         content=content,
-        user=demo_user,
+        user=user,
         show_nav=True,
         show_header=True,
         current_path=request.url.path  # Dynamically get current path from request
@@ -527,23 +579,15 @@ async def wissenschaft(request: Request):
     # Check if this is an HTMX request (partial page update)
     if "HX-Request" in request.headers:
         # Return content + sidebar OOB update for consistent active highlighting
-        demo_user = {
-            "name": "Felix",
-            "role": "teacher"
-        }
-        sidebar_oob = Navigation(demo_user, request.url.path).render_aside(oob=True)
+        user = getattr(request.state, "user", None)
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
         return HTMLResponse(content=content + sidebar_oob)
 
     # For normal requests, return the full page with layout
-    demo_user = {
-        "name": "Felix",
-        "role": "teacher"  # This page is accessible to both roles
-    }
-
     layout = Layout(
         title="Wissenschaft - GUSTAV",
         content=content,
-        user=demo_user,
+        user=getattr(request.state, "user", None),
         show_nav=True,
         show_header=True,
         current_path=request.url.path  # Dynamically get current path from request
@@ -622,7 +666,8 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         roles = ["student"]
     email_verified = bool(claims.get("email_verified", False))
 
-    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified)
+    # Create server-side session and retain id_token for end-session logout
+    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified, id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     # Attach hardened session cookie (opaque ID only)
@@ -697,9 +742,7 @@ def create_app_auth_only() -> FastAPI:
         )
         return resp
 
-    # Reuse main logout handler (from shared router) to ensure cookie flags match environment policy
-    from routes.auth import auth_logout  # local import to avoid unused import in main app
-    slim.add_api_route("/auth/logout", auth_logout, methods=["POST"])  # type: ignore[arg-type]
+    # Logout via shared router (GET /auth/logout) already included above
 
     @slim.get("/api/me")
     async def slim_get_me(request: Request):

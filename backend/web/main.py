@@ -94,6 +94,11 @@ def _primary_role(roles: list[str]) -> str:
     Why:
         Token role order is not guaranteed. To keep UI deterministic, choose
         by priority: admin > teacher > student. Defaults to 'student'.
+
+    Examples:
+        ["student", "teacher"] -> "teacher"
+        ["admin"] -> "admin"
+        [] -> "student"
     """
     priority = ["admin", "teacher", "student"]
     lowered = [r.lower() for r in roles if isinstance(r, str)]

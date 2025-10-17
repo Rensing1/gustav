@@ -169,3 +169,98 @@ async def test_logout_allows_inapp_redirect_path():
     app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
     expected = f"{app_base}/courses"
     assert post_logout.rstrip("/") == expected.rstrip("/")
+
+
+@pytest.mark.anyio
+async def test_state_expiry_leads_to_400_no_store():
+    """Expired state must be rejected with 400 and no-store header."""
+    # Create an already-expired state
+    rec = main.STATE_STORE.create(code_verifier="v", ttl_seconds=-1)
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/callback?code=any&state={rec.state}")
+    assert r.status_code == 400
+    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.json().get("error") == "invalid_code_or_state"
+
+
+@pytest.mark.anyio
+async def test_callback_no_store_on_token_exchange_failure(monkeypatch: pytest.MonkeyPatch):
+    """Token exchange failure must return 400 with no-store header."""
+    class FailingOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(main, "OIDC", FailingOIDC())
+    rec = main.STATE_STORE.create(code_verifier="v")
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/callback?code=any&state={rec.state}")
+    assert r.status_code == 400
+    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.json().get("error") == "token_exchange_failed"
+
+
+@pytest.mark.anyio
+async def test_callback_no_store_on_invalid_id_token(monkeypatch: pytest.MonkeyPatch):
+    """Missing/invalid id_token must return 400 with no-store header."""
+    class FakeOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            return {"id_token": ""}  # invalid: empty
+
+    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    rec = main.STATE_STORE.create(code_verifier="v")
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/callback?code=any&state={rec.state}")
+    assert r.status_code == 400
+    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.json().get("error") == "invalid_id_token"
+
+
+@pytest.mark.anyio
+async def test_logout_double_slash_redirect_is_internal():
+    """Providing redirect=// should resolve to the app base (internal), not an external URL."""
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get("/auth/logout?redirect=//", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    from urllib.parse import urlparse, parse_qs, unquote
+    qs = parse_qs(urlparse(r.headers.get("location", "")).query)
+    post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
+    ru = main.OIDC_CFG.redirect_uri
+    app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
+    assert post_logout.rstrip("/") == app_base.rstrip("/")
+
+
+@pytest.mark.anyio
+async def test_callback_rejects_when_id_token_nonce_missing(monkeypatch: pytest.MonkeyPatch):
+    """If a nonce was stored for the state, missing `nonce` in ID token must be rejected."""
+    class FakeOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            return {"id_token": "fake-valid-id-token"}
+
+    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+
+    def claims_without_nonce(id_token: str, cfg: object):
+        return {
+            "email": "user@example.com",
+            "realm_access": {"roles": ["student"]},
+            "email_verified": True,
+            # deliberately no 'nonce'
+        }
+
+    monkeypatch.setattr(main, "verify_id_token", claims_without_nonce)
+
+    # Create state with a stored nonce
+    rec = main.STATE_STORE.create(code_verifier="v", nonce="expected-nonce")
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/callback?code=valid&state={rec.state}")
+    assert r.status_code == 400
+    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.json().get("error") in {"invalid_id_token", "invalid_nonce"}

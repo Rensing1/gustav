@@ -25,7 +25,7 @@ Ziel dieser Phase ist die tiefere Integration der Authentifizierung in die Platt
 
 ### User Story
 
-> Als nicht angemeldete Person werde ich grundsätzlich zur Anmeldung umgeleitet. Nach Anmeldung gelange ich zur Startseite. Als angemeldete Person sehe ich in der Sidebar meine E‑Mail und meine Rolle und kann mich vollständig abmelden (App + IdP).
+> Als nicht angemeldete Person werde ich grundsätzlich zur Anmeldung umgeleitet. Nach Anmeldung gelange ich zur Startseite. Als angemeldete Person sehe ich in der Sidebar meine E‑Mail und meine Rolle und kann mich vollständig abmelden (App + IdP) – die Rückkehr erfolgt standardmäßig zur Logout‑Erfolgsseite.
 
 ### BDD‑Szenarien (Given‑When‑Then)
 
@@ -62,7 +62,7 @@ Vereinheitlichter Logout (App + IdP)
 Rückkehrziel
 - Given ich melde mich neu an
   When der Login‑Callback erfolgreich war
-  Then werde ich auf die Startseite `/` geleitet (kein „next“)
+  Then werde ich standardmäßig auf die Logout‑Erfolgsseite `/auth/logout/success` geleitet (kein „next“)
 
 ### API‑Contract (Draft‑Ergänzung)
 
@@ -75,7 +75,7 @@ paths:
       summary: Logout (App-Session löschen und am IdP abmelden)
       description: |
         Löscht das GUSTAV-Session-Cookie und leitet zum OIDC `end_session_endpoint` (Keycloak) weiter.
-        Nach der Abmeldung am IdP wird zur App-Startseite (`/`) zurückgeleitet.
+        Nach der Abmeldung am IdP wird standardmäßig zur Logout‑Erfolgsseite der App (`/auth/logout/success`) zurückgeleitet.
       parameters:
         - in: query
           name: redirect

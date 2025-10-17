@@ -64,7 +64,7 @@ Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 - Callback‑Fehler (`/auth/callback`) setzen immer `Cache-Control: no-store`.
 - `/auth/login` akzeptiert keinen client‑seitigen `state`; dieser wird serverseitig erzeugt.
 - Redirect‑Parameter sind nur als interne absolute Pfade erlaubt (kein externer Redirect).
-- Unified Logout: `GET /auth/logout` löscht das App‑Session‑Cookie und leitet zum IdP End‑Session Endpoint; nach Rückkehr geht es zur Startseite (`/`). Falls vorhanden, wird `id_token_hint` übergeben.
+- Unified Logout: `GET /auth/logout` löscht das App‑Session‑Cookie und leitet zum IdP End‑Session Endpoint; nach Rückkehr geht es standardmäßig zur Erfolgsseite (`/auth/logout/success`). Optional kann ein interner absoluter Pfad per `redirect` angegeben werden (z. B. `/courses`). Falls vorhanden, wird `id_token_hint` übergeben.
 
 Vorschau Keycloak‑Theme:
 - Starten: `docker compose up -d`

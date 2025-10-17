@@ -223,7 +223,7 @@ async def test_callback_no_store_on_invalid_id_token(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.anyio
 async def test_logout_double_slash_redirect_is_internal():
-    """Providing redirect=// should resolve to the app base (internal), not an external URL."""
+    """redirect=// is unsafe and must be ignored; default to logout success page."""
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get("/auth/logout?redirect=//", follow_redirects=False)
     assert r.status_code in (302, 303)
@@ -232,7 +232,117 @@ async def test_logout_double_slash_redirect_is_internal():
     post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
     ru = main.OIDC_CFG.redirect_uri
     app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
-    assert post_logout.rstrip("/") == app_base.rstrip("/")
+    expected = f"{app_base}/auth/logout/success"
+    assert post_logout.rstrip("/") == expected.rstrip("/")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("bad_redirect", [
+    "/a//b",
+    "/../x",
+    "/..",
+])
+async def test_login_rejects_unsafe_internal_paths(monkeypatch: pytest.MonkeyPatch, bad_redirect: str):
+    """Unsafe internal redirect paths (double-slash, traversal) must be ignored in login flow."""
+    class FakeOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            return {"id_token": "fake-id-token"}
+
+    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r_login = await client.get(f"/auth/login?redirect={bad_redirect}", follow_redirects=False)
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
+        state = qs.get("state", [None])[0]
+        assert state, "state must be present in authorization URL"
+        # Satisfy nonce check by returning the stored nonce
+        rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+        expected_nonce = getattr(rec, "nonce", None)
+        def ok_verify(id_token: str, cfg: object):
+            return {
+                "email": "user@example.com",
+                "realm_access": {"roles": ["student"]},
+                "email_verified": True,
+                "nonce": expected_nonce,
+            }
+        monkeypatch.setattr(main, "verify_id_token", ok_verify)
+        r_cb = await client.get(f"/auth/callback?code=valid&state={state}", follow_redirects=False)
+    assert r_cb.status_code in (302, 303)
+    # Fallback to in-app root when redirect is unsafe
+    assert r_cb.headers.get("location") == "/"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("bad_redirect", [
+    "/a//b",
+    "/../x",
+    "/..",
+])
+async def test_logout_rejects_unsafe_internal_paths(bad_redirect: str):
+    """Unsafe internal logout redirects must be ignored in favor of success page."""
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/logout?redirect={bad_redirect}", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    from urllib.parse import urlparse, parse_qs, unquote
+    qs = parse_qs(urlparse(r.headers.get("location", "")).query)
+    post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
+    ru = main.OIDC_CFG.redirect_uri
+    app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
+    expected = f"{app_base}/auth/logout/success"
+    assert post_logout.rstrip("/") == expected.rstrip("/")
+
+
+@pytest.mark.anyio
+async def test_redirect_max_length_enforced(monkeypatch: pytest.MonkeyPatch):
+    """Overly long redirect values must be ignored in login and logout flows."""
+    # Build a 300-char path
+    long_path = "/" + ("a" * 299)
+
+    class FakeOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            return {"id_token": "fake-id-token"}
+
+    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+
+    # Login flow should ignore long redirect and send user to '/'
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r_login = await client.get(f"/auth/login?redirect={long_path}", follow_redirects=False)
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
+        state = qs.get("state", [None])[0]
+        assert state
+        rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+        expected_nonce = getattr(rec, "nonce", None)
+        def ok_verify(id_token: str, cfg: object):
+            return {
+                "email": "user@example.com",
+                "realm_access": {"roles": ["student"]},
+                "email_verified": True,
+                "nonce": expected_nonce,
+            }
+        monkeypatch.setattr(main, "verify_id_token", ok_verify)
+        r_cb = await client.get(f"/auth/callback?code=valid&state={state}", follow_redirects=False)
+    assert r_cb.status_code in (302, 303)
+    assert r_cb.headers.get("location") == "/"
+
+    # Logout flow should ignore long redirect and use success page
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/logout?redirect={long_path}", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    from urllib.parse import urlparse, parse_qs, unquote
+    qs = parse_qs(urlparse(r.headers.get("location", "")).query)
+    post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
+    ru = main.OIDC_CFG.redirect_uri
+    app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
+    expected = f"{app_base}/auth/logout/success"
+    assert post_logout.rstrip("/") == expected.rstrip("/")
 
 
 @pytest.mark.anyio

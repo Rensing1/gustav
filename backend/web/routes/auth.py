@@ -27,7 +27,9 @@ import re
 auth_router = APIRouter(tags=["auth"])  # explicit paths, no prefix
 
 # Single source of truth for allowed in-app redirect paths
-INAPP_PATH_PATTERN = r"^/[A-Za-z0-9_\-/]*$"
+# Disallow double slashes and path traversal (".."), allow dots in names
+INAPP_PATH_PATTERN = r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$"
+MAX_INAPP_REDIRECT_LEN = 256
 
 
 @auth_router.get("/auth/login")
@@ -135,11 +137,14 @@ async def auth_logout(request: Request, redirect: str | None = None):
     # After logout, go to the app success page with a re-login link
     dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
     # Build params: prefer id_token_hint (best compatibility), else include client_id
-    end_session = f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?post_logout_redirect_uri={quote(dest, safe=':/?&=')}"
+    params = {"post_logout_redirect_uri": dest}
     if rec and getattr(rec, "id_token", None):
-        end_session += f"&id_token_hint={quote(rec.id_token)}"
+        params["id_token_hint"] = rec.id_token
     else:
-        end_session += f"&client_id={quote(main.OIDC_CFG.client_id)}"
+        params["client_id"] = main.OIDC_CFG.client_id
+    end_session = (
+        f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?" + urlencode(params)
+    )
 
     resp = RedirectResponse(url=end_session, status_code=302)
     # Clear cookie consistent with environment flags
@@ -227,6 +232,8 @@ def _is_inapp_path(value: str) -> bool:
     """
     try:
         if not value or not isinstance(value, str):
+            return False
+        if len(value) > MAX_INAPP_REDIRECT_LEN:
             return False
         return bool(re.match(INAPP_PATH_PATTERN, value))
     except Exception:

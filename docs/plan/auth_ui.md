@@ -4,10 +4,10 @@ _Stand: 2025-10-17_
 
 ## Ausgangslage & Zielbild
 
-- **Was existiert (aktualisiert):** Host-basiertes Routing in DEV über Caddy: `app.localhost:8100` (GUSTAV) und `id.localhost:8100` (Keycloak). `/auth/login|register|forgot` leiten in PROD/DEV standardmäßig zur Keycloak‑UI, die per leichtem CSS‑Theme an GUSTAV angepasst ist. Optional (nur DEV/CI) können eigene SSR‑Formulare per Feature‑Flag verwendet werden (`AUTH_USE_DIRECT_GRANT=true`).
+- **Was existiert (aktualisiert):** Host-basiertes Routing in DEV über Caddy: `app.localhost:8100` (GUSTAV) und `id.localhost:8100` (Keycloak). `/auth/login|register|forgot` leiten in DEV/PROD zur Keycloak‑UI, die per leichtem CSS‑Theme an GUSTAV angepasst ist. Eigene SSR‑Formulare (Direct‑Grant) wurden entfernt.
 - **Was fehlt:** UI‑Feinschliff des Keycloak‑Themes (kompakter, deutschsprachige Labels, Logo optional) und klare Trennung der Zuständigkeiten (IdP verarbeitet Passwörter; GUSTAV verwaltet Sessions).
 - **Ziel:** Einheitliches Erlebnis mit minimaler Komplexität: In PROD bleibt Keycloak die Login‑Oberfläche (gebrandet), in DEV können wir Formulare lokal testen. Kein Passworthandling in GUSTAV für PROD.
-- **Rollout-Strategie:** DEV nutzt Subdomains (`app.localhost`, `id.localhost`) und Caddy; PROD behält IdP‑UI (gebrandet). Research für „Browser‑Flow‑Adapter ohne Direct Grant“ bleibt Phase 2, aber ist für PROD nicht zwingend.
+- **Rollout-Strategie:** DEV nutzt Subdomains (`app.localhost`, `id.localhost`) und Caddy; PROD behält IdP‑UI (gebrandet). Keine Direct‑Grant‑Formulare mehr.
 
 ## Leitplanken
 
@@ -40,7 +40,7 @@ _Stand: 2025-10-17_
    - Realm `gustav`; Authorization‑Code‑Flow mit PKCE.
    - DEV: Hostbasiert via Caddy (`app.localhost` → Web, `id.localhost` → Keycloak). Keine Pfadpräfixe mehr nötig.
    - PROD: Redirect zur Keycloak‑UI (gebrandet). Direct‑Grant bleibt auf DEV/CI beschränkt (Flag), nicht für PROD.
-   - **Phase 2 (optional):** Research‑Ticket `AUTH-UI-KEYCLOAK-BROWSER-FLOW` bleibt offen, um perspektivisch IdP‑UI noch enger zu integrieren – ohne Passworthandling in GUSTAV.
+   - **Phase 2 (optional):** Verbesserungen am IdP‑Theme (UX, i18n) – Passwörter bleiben ausschließlich beim IdP.
    - Service-Client (z. B. `gustav-admin`) mit Client-Credentials und Rollen `manage-users`, `view-users`, `manage-accounts` bleibt notwendig für Registrierung/Reset.
    - Keycloak-Brute-Force-Detection und MFA-Policies bleiben aktiv; Tests stellen sicher, dass der MVP-Flow keine gesperrten Accounts o. Ä. ignoriert.
 2. **Secrets & Env-Handling**
@@ -227,7 +227,7 @@ Kontrakt‑Entscheidungen Phase 1:
 - GET liefert HTML (`text/html; charset=utf-8`).
 - POST antwortet mit 303 (Redirect) bzw. 202/400/403; Fehlerseiten sind HTML, Reset‑Erfolg ist JSON.
 - Session‑Cookie: `gustav_session` (`HttpOnly`, `Secure` in PROD, `SameSite=Lax`).
-- CSRF‑Cookie: `gustav_csrf` (nur für Double‑Submit, kein Server‑Store).
+- CSRF‑Cookie für eigene SSR‑Formulare entfällt (Direct‑Grant entfernt).
 
 Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten und POST‑Routen sind implementiert und getestet.
 
@@ -247,8 +247,7 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
 
 1. **Domänenelemente / Use Cases (identity_access)**
    - Neues Modul `keycloak_client.py` kapselt Interaktion mit Keycloak:
-     - Phase 1: `authenticate_direct_grant` (nur DEV/CI/Tests) + Weiterleitung auf Keycloak-UI in Prod.
-     - Phase 2: `authenticate_via_browser_flow` ersetzt Direct Grant, sobald Research abgeschlossen.
+     - Browser‑Flow bleibt alleinige Implementierung (kein Direct‑Grant mehr).
      - `create_user`/`trigger_password_reset` bleiben Admin-REST-Aufrufe mit klaren Exceptions.
    - Modul bleibt Framework-unabhängig, Fehler werden in klar typisierte Exceptions übersetzt (Clean Architecture).
    - CSRF-Schutz phasenweise:
@@ -257,8 +256,8 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
 
 2. **Web-Adapter (FastAPI)**
    - Phase 1 (MVP):
-     - GET-Routen rendern SSR-Formulare (`forms.InputField`, `forms.PasswordField`, `SubmitButton`), erzeugen Double-Submit-CSRF (zufälliger Token im Hidden Field + Cookie z. B. `gustav_csrf`).
-     - POST-Routen validieren Formularfelder & CSRF, rufen `keycloak_client` (in Prod → Redirect, in DEV → Direct Grant), setzen Session-Cookie.
+   - GET‑Routen leiten direkt zur IdP‑UI; keine SSR‑Formulare.
+   - POST‑Routen entfallen; Session entsteht ausschließlich via Callback nach IdP‑Login.
      - Flash-Messages optional via Query-Parameter.
    - Phase 2: Umstellung auf CSRFStore + One-Time-Token, Flash-System ausbauen, Browser-Flow-Adapter integrieren.
 
@@ -279,7 +278,7 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
    - Phase 1: Double-Submit-CSRF, Tests stellen 403 sicher.
    - Phase 2: Ausbau (CSRFStore + One-Time-Token, serverseitiges Throttling).
    - Rate Limiting: vorerst Keycloak-Brute-Force nutzen, Ticket für app-seitiges Throttling vormerken.
-   - Feature-Flag `AUTH_USE_DIRECT_GRANT` (default False) kapselt den Direct-Grant-Adapter; PROD bleibt auf Redirect, DEV/CI aktiviert den UI-Flow explizit.
+   - Kein Feature‑Flag mehr für Direct‑Grant; Flows sind ausschließlich Redirect‑basiert.
 
 ## Teststrategie (Red → Green)
 
@@ -289,7 +288,7 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
    - POST `/auth/register` → 303 + Redirect; Duplicate → 400; fehlendes Token → 403; Rollback → 500.
    - POST `/auth/forgot` → 202; fehlendes Token → 403.
 2. **Neue Unit-/Integrationstests**
-   - `backend/tests/test_keycloak_client.py`: Mock Keycloak (`responses`/`requests_mock`), testen Browser-Flow und optional Direct Grant Fallback.
+   - `backend/tests/test_keycloak_client.py`: entfällt (Direct‑Grant entfernt).
    - `backend/tests/test_auth_ui.py`: Form-Verarbeitung, CSRF, Flash-Messages, Already-logged-in Redirect.
    - `backend/tests/test_csrf_store.py` (optional) für Token-Generierung/Härtung.
 3. **E2E (aktualisiert)** (`backend/tests_e2e/test_identity_login_register_logout_e2e.py`)
@@ -301,7 +300,7 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
    - Registrierung Duplicate + Rollenprüfung.
    - Passwort Reset (nur Statuscode, Rate-Limit-Simulation per Mock).
 5. **Feature-Flag Coverage (Phase 2)**
-   - Sobald Browser-Flow implementiert ist, ergänzen wir Tests/E2E, die `AUTH_USE_DIRECT_GRANT` toggeln. In Phase 1 reicht ein Testpfad (Direct Grant in DEV, Redirect in Prod).
+   - Tests/E2E prüfen ausschließlich Redirect‑Flows (kein Flag mehr).
 
 ## Aufgaben & Reihenfolge
 
@@ -370,7 +369,7 @@ Hinweis: Alle Farben/Typo‑Variablen folgen `backend/web/static/css/gustav.css`
 
 | Risiko | Bewertung | Gegenmaßnahme |
 | --- | --- | --- |
-| **Credential-Forwarding schwächt Keycloak-Schutzmechanismen** | Hoch | Phase 1: Prod bleibt auf Keycloak-UI, nur DEV/CI nutzen Direct Grant (Flag). Phase 2: Browser-Flow implementieren, Flag entfernen |
+| **Credential-Forwarding schwächt Keycloak-Schutzmechanismen** | Hoch | Gelöst durch Entfernung des Direct‑Grant: Passwörter werden ausschließlich beim IdP verarbeitet |
 | **Secrets versehentlich eingecheckt** | Hoch | Secrets ausschließlich aus Secret-Store laden, `.env` nur Platzhalter, Pre-commit-Hooks/CI-Prüfung |
 | **Credential Logging / PII-Leak** | Hoch | Logging-Middleware härten (Masking), Review von `logger`-Aufrufen |
 | **Account Enumeration** | Mittel | Neutrale Fehlermeldungen, Reset immer 202, Monitoring intern |

@@ -38,27 +38,11 @@ async def test_sidebar_logout_posts_to_auth_logout():
     assert 'hx-redirect="/"' in html, "Logout should redirect to / after success"
 
 
+# Direct-Grant SSR pages were removed; the remaining GET endpoints redirect to Keycloak.
 @pytest.mark.anyio
-async def test_login_page_has_links_to_register_and_forgot(monkeypatch: pytest.MonkeyPatch):
-    """GET /auth/login should show helpful links to /auth/register and /auth/forgot when UI flag is on."""
-    monkeypatch.setattr(main, "AUTH_USE_DIRECT_GRANT", True, raising=False)
+async def test_auth_endpoints_redirect_to_idp():
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        r = await client.get("/auth/login", follow_redirects=False)
-
-    assert r.status_code == 200
-    html = r.text
-    assert "/auth/register" in html, "Expected link to registration"
-    assert "/auth/forgot" in html, "Expected link to forgot password"
-
-
-@pytest.mark.anyio
-async def test_register_page_links_back_to_login(monkeypatch: pytest.MonkeyPatch):
-    """GET /auth/register should include a link back to /auth/login for convenience."""
-    monkeypatch.setattr(main, "AUTH_USE_DIRECT_GRANT", True, raising=False)
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        r = await client.get("/auth/register", follow_redirects=False)
-
-    assert r.status_code == 200
-    html = r.text
-    assert "/auth/login" in html, "Expected link back to login"
-
+        for path in ["/auth/login", "/auth/register", "/auth/forgot"]:
+            r = await client.get(path, follow_redirects=False)
+            assert r.status_code in (302, 303)
+            assert "location" in r.headers

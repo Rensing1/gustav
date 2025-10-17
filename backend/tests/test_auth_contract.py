@@ -580,7 +580,9 @@ async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
 
     assert resp.status_code == 302
     loc = resp.headers.get("location", "")
-    assert loc.startswith("http://kc.example:8080/realms/school/protocol/openid-connect/registrations")
+    # We now use the standard auth endpoint with OIDC PKCE and hint register screen
+    assert loc.startswith("http://kc.example:8080/realms/school/protocol/openid-connect/auth")
+    assert "kc_action=register" in loc
 
 
 @pytest.mark.anyio
@@ -607,6 +609,7 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
     assert resp.status_code == 302
     loc = resp.headers.get("location", "")
     url = urlparse(loc)
-    assert url.path.endswith("/realms/school/protocol/openid-connect/registrations")
+    assert url.path.endswith("/realms/school/protocol/openid-connect/auth")
     qs = parse_qs(url.query)
     assert qs.get("login_hint") == ["new@example.com"]
+    assert qs.get("kc_action") == ["register"]

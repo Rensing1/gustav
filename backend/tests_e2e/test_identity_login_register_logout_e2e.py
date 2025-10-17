@@ -164,6 +164,14 @@ def test_register_login_logout_flow():
     r = sess.get(f"{WEB_BASE}/auth/login", allow_redirects=True, timeout=20)
     assert r.status_code == 200
     assert "kc-form-login" in r.text
+    # Ensure our Keycloak theme is applied (stylesheet reference must be present)
+    assert "/resources/" in r.text and "gustav/css/gustav.css" in r.text, (
+        "Expected themed Keycloak login page to include gustav.css stylesheet"
+    )
+    # Ensure our custom template is used (layout wrapper/classes)
+    assert "kc-gustav" in r.text and "kc-card" in r.text, (
+        "Expected custom template structure (.kc-gustav/.kc-card) not found"
+    )
 
     # 4) Submit Keycloak login form with credentials
     action_url, fields = _parse_login_form(r.text, r.url)
@@ -207,6 +215,10 @@ def test_register_login_logout_flow():
     # 6) Logout and ensure cookie cleared and /api/me requires auth
     r_lo = sess.post(f"{WEB_BASE}/auth/logout", timeout=10)
     assert r_lo.status_code == 204
+    # After login, the root page should render a logout control in navigation
+    r_home = sess.get(f"{WEB_BASE}/", timeout=10)
+    assert r_home.status_code == 200
+    assert ("sidebar-logout" in r_home.text) or ("hx-post=\"/auth/logout\"" in r_home.text)
     # requests should apply the Set-Cookie deletion; be tolerant and also clear manually if present
     if any(c.name == "gustav_session" for c in sess.cookies):
         # Remove cookie to simulate browser honoring deletion

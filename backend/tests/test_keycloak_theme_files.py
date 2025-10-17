@@ -19,11 +19,23 @@ THEME_ROOT = Path("keycloak/themes/gustav/login")
 
 
 def test_theme_templates_present():
-    templates = THEME_ROOT / "templates"
-    assert (templates / "login.ftl").exists(), "login.ftl missing"
-    # New templates we are about to add in GREEN phase
-    assert (templates / "register.ftl").exists(), "register.ftl missing"
-    assert (templates / "login-reset-password.ftl").exists(), "login-reset-password.ftl missing"
+    """Templates may be stored at theme root or under a templates/ subdir.
+
+    Accept either layout to avoid coupling tests to folder structure.
+    """
+    root_files = {
+        "login.ftl": (THEME_ROOT / "login.ftl").exists(),
+        "register.ftl": (THEME_ROOT / "register.ftl").exists(),
+        "login-reset-password.ftl": (THEME_ROOT / "login-reset-password.ftl").exists(),
+    }
+    tmpl_dir = THEME_ROOT / "templates"
+    dir_files = {
+        "login.ftl": (tmpl_dir / "login.ftl").exists(),
+        "register.ftl": (tmpl_dir / "register.ftl").exists(),
+        "login-reset-password.ftl": (tmpl_dir / "login-reset-password.ftl").exists(),
+    }
+    for name in ["login.ftl", "register.ftl", "login-reset-password.ftl"]:
+        assert root_files[name] or dir_files[name], f"{name} missing"
 
 
 def test_theme_messages_de_present_and_has_keys():
@@ -57,4 +69,3 @@ def test_theme_css_contains_component_hooks():
         ".kc-links",
     ]:
         assert cls in text, f"Missing CSS hook: {cls}"
-

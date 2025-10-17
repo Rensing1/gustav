@@ -756,11 +756,21 @@ async def auth_register(login_hint: str | None = None):
         resp.body = page.encode()
         return resp
 
-    from urllib.parse import urlencode
-    base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
-    query = {"login_hint": login_hint} if login_hint else None
-    target = f"{base}?{urlencode(query)}" if query else base
-    return RedirectResponse(url=target, status_code=302)
+    # Default: Kick off OIDC flow like /auth/login, but hint the UI to show registration
+    code_verifier = OIDCClient.generate_code_verifier()
+    code_challenge = OIDCClient.code_challenge_s256(code_verifier)
+    rec = STATE_STORE.create(code_verifier=code_verifier, redirect=None)
+    final_state = rec.state
+    # Build URL from the current OIDC_CFG (not the global OIDC instance) so tests can monkeypatch config.
+    oidc = OIDCClient(OIDC_CFG)
+    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge)
+    # Forward login_hint and request register screen
+    sep = '&' if '?' in url else '?'
+    if login_hint:
+        url = f"{url}{sep}login_hint={login_hint}"
+        sep = '&'
+    url = f"{url}{sep}kc_action=register"
+    return RedirectResponse(url=url, status_code=302)
 
 
 @app.get("/auth/callback")
@@ -1003,7 +1013,8 @@ def create_app_auth_only() -> FastAPI:
     async def slim_auth_register(login_hint: str | None = None):
         """Slim register endpoint mirrors config-driven redirect in tests."""
         from urllib.parse import urlencode
-        base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
+        browser_base = OIDC_CFG.public_base_url or OIDC_CFG.base_url
+        base = f"{browser_base}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
         query = {"login_hint": login_hint} if login_hint else None
         target = f"{base}?{urlencode(query)}" if query else base
         return RedirectResponse(url=target, status_code=302)

@@ -83,6 +83,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 - Pfad: `keycloak/themes/gustav/login`
   - Templates: `templates/login.ftl`, `templates/register.ftl`, `templates/login-reset-password.ftl`
   - Styles: `resources/css/gustav.css` (kompaktes Layout über .kc‑* Klassen)
+  - Gemeinsames Basis‑CSS: Das kanonische App‑CSS `backend/web/static/css/gustav.css` wird in DEV per Volume in den Keycloak‑Container gemountet und als `resources/css/app-gustav-base.css` eingebunden. So greifen Theme‑Seiten und App auf dieselben Variablen/Komponenten zu.
   - i18n: `messages/messages_de.properties` (DE‑Texte)
 - Realm‑Konfiguration: `keycloak/realm-gustav.json:1`
   - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`, `supportedLocales: ["de","en"]`
@@ -94,7 +95,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 
 #### Ablauf Authorization‑Code‑Flow
 1) Browser: `GET /auth/login` (GUSTAV) → 302 zu IdP `…/protocol/openid-connect/auth` (Host: `id.localhost`).
-2) Login auf IdP‑UI (gebrandet). Registrierung führt in Keycloak zu einer aktiven Session (Auto‑Login), sofern keine Verifizierung verlangt wird.
+2) Login auf IdP‑UI (gebrandet). `GET /auth/register` nutzt ebenfalls den Auth‑Endpoint und setzt `kc_action=register` (statt altem `…/registrations`‑Pfad), optional mit `login_hint`.
 3) IdP → Redirect zu `REDIRECT_URI` (z. B. `http://app.localhost:8100/auth/callback`).
 4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
 5) Web legt Serversession an und setzt `gustav_session` (httpOnly; in DEV SameSite=lax, in PROD strict + Secure).
@@ -126,6 +127,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 
 E2E‑Tests (Identity):
 - Testdatei: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`
+- Registrierung – Validierungen/Fehlerfälle: `backend/tests_e2e/test_identity_register_validation_e2e.py`
 - Voraussetzung: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
 - Ausführung:
   - Alle Tests inkl. E2E: `.venv/bin/pytest -q`

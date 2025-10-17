@@ -63,11 +63,11 @@ Vorschau Keycloak‑Theme:
 - Login (Keycloak): `http://id.localhost:8100/realms/gustav/account/` → „Anmelden“
 - Die Loginseite sollte farblich/typografisch zu GUSTAV passen.
 - Konfiguration über Umgebungsvariablen (siehe `.env`):
-  - `KC_BASE_URL` (default: `http://localhost:8080`)
-  - `KC_PUBLIC_BASE_URL` (default: `http://localhost:8080`)
+  - `KC_BASE_URL` (default: `http://keycloak:8080` im Compose)
+  - `KC_PUBLIC_BASE_URL` (default: `http://id.localhost:8100`)
   - `KC_REALM` (default: `gustav`)
   - `KC_CLIENT_ID` (default: `gustav-web`)
-  - `REDIRECT_URI` (default: `http://localhost:8100/auth/callback`)
+  - `REDIRECT_URI` (default: `http://app.localhost:8100/auth/callback`)
   - `AUTH_USE_DIRECT_GRANT` (DEV/CI: `true` um SSR‑Formulare zu nutzen)
   - (DEV/CI Registrierung) `KC_ADMIN_USERNAME`, `KC_ADMIN_PASSWORD`
 - Cookies: httpOnly Session‑Cookie `gustav_session` (opaque ID). In Prod zusätzlich `Secure` und `SameSite=strict`; in Dev `SameSite=lax`.
@@ -75,8 +75,9 @@ Vorschau Keycloak‑Theme:
 
 ### Theme anpassen (lokal)
 - Dateien:
-  - Templates: `keycloak/themes/gustav/login/templates/{login.ftl,register.ftl,login-reset-password.ftl}`
+  - Templates: `keycloak/themes/gustav/login/{login.ftl,register.ftl,login-reset-password.ftl}`
   - Styles: `keycloak/themes/gustav/login/resources/css/gustav.css`
+  - Gemeinsames Basis‑CSS: `backend/web/static/css/gustav.css` wird in DEV als `keycloak/themes/gustav/login/resources/css/app-gustav-base.css` eingebunden (Compose‑Mount)
   - DE‑Texte: `keycloak/themes/gustav/login/messages/messages_de.properties`
 - Realm‑Konfiguration (Default DE): `keycloak/realm-gustav.json:1`
   - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`
@@ -85,7 +86,9 @@ Vorschau Keycloak‑Theme:
 ## Tests
 
 - Unit/Contract‑Tests laufen mit `pytest` gegen die ASGI‑App (`httpx` + `ASGITransport`).
-- E2E (Keycloak ↔ GUSTAV) ist Teil der Suite: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`.
+- E2E (Keycloak ↔ GUSTAV) ist Teil der Suite: Login/Logout sowie Registrierungs‑Validierungen.
+  - Login/Logout: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`
+  - Registrierung (Fehlerfälle: fehlende Felder, ungültige E‑Mail, schwaches Passwort, Passwort‑Bestätigung ungleich, Duplicate‑E‑Mail): `backend/tests_e2e/test_identity_register_validation_e2e.py`
 - Voraussetzungen für E2E: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
 - Ausführen:
   - Alle Tests inkl. E2E: `.venv/bin/pytest -q`

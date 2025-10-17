@@ -18,6 +18,7 @@ from components import (
     TaskMetaItem,
     TextAreaField,
     FileUploadField,
+    TextInputField,
     SubmitButton,
     OnPageNavigation,
     OnPageNavItem,
@@ -25,7 +26,6 @@ from components import (
 from components.navigation import Navigation
 from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
-from identity_access.keycloak_client import AuthClient as KCAuthClient
 from identity_access.admin_client import AdminClient as KCAdminClient
 from identity_access.stores import StateStore, SessionStore
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
@@ -69,10 +69,8 @@ SETTINGS = AuthSettings()
 
 SESSION_COOKIE_NAME = "gustav_session"
 ALLOWED_ROLES = {"student", "teacher", "admin"}
-CSRF_COOKIE_NAME = "gustav_csrf"
 
-# Feature flag: enable DEV/CI HTML auth UI with Direct Grant adapter
-AUTH_USE_DIRECT_GRANT = os.getenv("AUTH_USE_DIRECT_GRANT", "").lower() in {"1", "true", "yes"}
+# Direct-Grant has been removed: all flows use browser-based redirects to Keycloak.
 
 
 def _session_cookie_options() -> dict:
@@ -134,35 +132,7 @@ def _clear_session_cookie(response: Response) -> None:
     )
 
 
-def _issue_csrf_cookie(response: Response) -> str:
-    """Create a CSRF token and set it as cookie for Double-Submit CSRF.
-
-    Why:
-        Phase-1 CSRF protection without server-side store. Token is echoed into
-        a hidden form field and compared against the cookie value on POST.
-
-    Returns:
-        The generated CSRF token (URL-safe base64 string).
-    """
-    import secrets
-
-    token = secrets.token_urlsafe(32)
-    opts = _session_cookie_options()
-    response.set_cookie(
-        key=CSRF_COOKIE_NAME,
-        value=token,
-        httponly=False,  # must be readable by the browser to submit in form
-        secure=opts["secure"],
-        samesite=opts["samesite"],
-        path="/",
-    )
-    return token
-
-
-def _validate_csrf(request: Request, form_csrf: str | None) -> bool:
-    """Validate Double-Submit CSRF by comparing cookie and form field."""
-    cookie_val = request.cookies.get(CSRF_COOKIE_NAME)
-    return bool(cookie_val and form_csrf and cookie_val == form_csrf)
+# Note: CSRF utilities removed with Direct-Grant UI removal.
 
 # FastAPI App erstellen
 # Default app (full web). For tests, an app factory may build a slimmer app.
@@ -177,6 +147,9 @@ app = FastAPI(
 # Resolve static directory relative to this file, independent of CWD
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# Import shared auth router and helpers from dedicated module
+from routes.auth import auth_router
 
 
 # --- OIDC minimal config & stores (dev) ---
@@ -199,8 +172,62 @@ OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
 SESSION_STORE = SessionStore()
-KEYCLOAK_CLIENT = KCAuthClient(OIDC_CFG)
+# Admin client remains available for future server-side admin tasks
 KEYCLOAK_ADMIN = KCAdminClient(OIDC_CFG)
+
+
+# --- Auth Enforcement Middleware -------------------------------------------------
+
+def _is_public_path(path: str) -> bool:
+    """Paths that must remain accessible without a session (no redirect loop)."""
+    return (
+        path.startswith("/auth/")
+        or path.startswith("/static/")
+        or path == "/health"
+        or path == "/favicon.ico"
+    )
+
+
+@app.middleware("http")
+async def auth_enforcement(request: Request, call_next):
+    """Enforce login for non-public routes with content-type aware responses.
+
+    Rules:
+    - Public: /auth/*, /health, /static/*, /favicon.ico
+    - API (paths starting with /api/): 401 JSON when unauthenticated
+    - HTMX requests: 401 with HX-Redirect header to /auth/login
+    - HTML (default): 302 redirect to /auth/login when unauthenticated
+
+    When authenticated, attaches `request.state.user` dict for SSR consumption.
+    """
+    path = request.url.path
+    if _is_public_path(path):
+        return await call_next(request)
+
+    # API responses should be JSON 401 when not authenticated
+    if path.startswith("/api/"):
+        sid = request.cookies.get(SESSION_COOKIE_NAME)
+        rec = SESSION_STORE.get(sid or "")
+        if not rec:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+        # Attach user info and proceed
+        request.state.user = {"email": rec.email, "roles": rec.roles}
+        return await call_next(request)
+
+    # Non-API routes
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
+    rec = SESSION_STORE.get(sid or "")
+    if not rec:
+        # HTMX partial request? Use HX-Redirect
+        if "HX-Request" in request.headers:
+            return Response(status_code=401, headers={"HX-Redirect": "/auth/login"})
+        # Default: redirect HTML to login
+        return RedirectResponse(url="/auth/login", status_code=302)
+
+    # Attach principal for SSR (use first known role for display)
+    role = next((r for r in rec.roles if r in ALLOWED_ROLES), "student")
+    request.state.user = {"email": rec.email, "role": role, "roles": rec.roles}
+    return await call_next(request)
 
 
 def build_home_content() -> str:
@@ -521,18 +548,16 @@ async def home(request: Request):
 
     # If this is an HTMX request, return content + sidebar (OOB) for consistent active state
     if "HX-Request" in request.headers:
-        demo_user = {
-            "name": "Felix",
-            "role": "teacher"
-        }
-        sidebar_oob = Navigation(demo_user, request.url.path).render_aside(oob=True)
+        user = getattr(request.state, "user", None)
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
         return HTMLResponse(content=content + sidebar_oob)
 
     # Use Layout component to render the full page on normal requests
+    user = getattr(request.state, "user", None)
     layout = Layout(
         title="Startseite",
         content=content,
-        user=demo_user,
+        user=user,
         show_nav=True,
         show_header=True,
         current_path=request.url.path  # Dynamically get current path from request
@@ -554,23 +579,15 @@ async def wissenschaft(request: Request):
     # Check if this is an HTMX request (partial page update)
     if "HX-Request" in request.headers:
         # Return content + sidebar OOB update for consistent active highlighting
-        demo_user = {
-            "name": "Felix",
-            "role": "teacher"
-        }
-        sidebar_oob = Navigation(demo_user, request.url.path).render_aside(oob=True)
+        user = getattr(request.state, "user", None)
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
         return HTMLResponse(content=content + sidebar_oob)
 
     # For normal requests, return the full page with layout
-    demo_user = {
-        "name": "Felix",
-        "role": "teacher"  # This page is accessible to both roles
-    }
-
     layout = Layout(
         title="Wissenschaft - GUSTAV",
         content=content,
-        user=demo_user,
+        user=getattr(request.state, "user", None),
         show_nav=True,
         show_header=True,
         current_path=request.url.path  # Dynamically get current path from request
@@ -587,123 +604,7 @@ async def health_check():
 
 # --- Minimal Auth Adapter (stub) to satisfy contract tests ---
 
-@app.get("/auth/login")
-async def auth_login(state: str | None = None, redirect: str | None = None):
-    """
-    Start OIDC flow with PKCE and server-side state.
-
-    Why:
-        Initiate a secure Authorization Code Flow. We create and store a
-        `code_verifier` (for PKCE) and an opaque `state` (for CSRF/QR context),
-        then redirect the browser to Keycloak.
-
-    Parameters:
-        state: Optional externally supplied state (e.g., QR-context). If not
-            provided, a new opaque state is generated.
-        redirect: Optional in-app path to return to after successful login.
-
-    Behavior:
-        - Generates `code_verifier` and its S256 `code_challenge`.
-        - Persists state (with TTL) together with the verifier and redirect.
-        - Redirects to Keycloak’s realm auth endpoint with PKCE params.
-
-    Permissions:
-        Public endpoint. No authentication required.
-    """
-    # Feature-flagged UI: return HTML form with CSRF in DEV/CI
-    if AUTH_USE_DIRECT_GRANT:
-        html = [
-            "<h1>Login</h1>",
-            "<form method=\"post\" action=\"/auth/login\">",
-            "<input type=\"email\" name=\"email\" autocomplete=\"username\" required>",
-            "<input type=\"password\" name=\"password\" autocomplete=\"current-password\" required>",
-        ]
-        resp = HTMLResponse(content="\n".join(html))
-        csrf = _issue_csrf_cookie(resp)
-        # hidden field appended after cookie issuance so token is in sync
-        resp.body = (resp.body or b"") + f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">".encode()
-        resp.body += b"<button type=\"submit\">Login</button></form>"
-        return resp
-
-    # Default: Redirect to Keycloak auth endpoint
-    code_verifier = OIDCClient.generate_code_verifier()
-    code_challenge = OIDCClient.code_challenge_s256(code_verifier)
-    rec = STATE_STORE.create(code_verifier=code_verifier, redirect=redirect)
-    final_state = state or rec.state
-    url = OIDC.build_authorization_url(state=final_state, code_challenge=code_challenge)
-    return RedirectResponse(url=url, status_code=302)
-
-
-@app.get("/auth/forgot")
-async def auth_forgot(login_hint: str | None = None):
-    """
-    Convenience redirect to Keycloak's 'Forgot Password' page.
-
-    Why:
-        Offload password reset to Keycloak to keep credentials out of GUSTAV.
-    Parameters:
-        login_hint: Optional email to pre-fill on Keycloak's reset form.
-    Behavior:
-        - Builds the URL from configured base URL and realm.
-        - Forwards `login_hint` if provided, no cookies are set.
-    Permissions:
-        Public endpoint; no session required.
-    """
-    # Feature-flagged UI: simple HTML form + CSRF cookie in DEV/CI
-    if AUTH_USE_DIRECT_GRANT:
-        html = [
-            "<h1>Passwort vergessen</h1>",
-            "<form method=\"post\" action=\"/auth/forgot\">",
-            f"<input type=\"email\" name=\"email\" value=\"{login_hint or ''}\" required>",
-        ]
-        resp = HTMLResponse(content="\n".join(html))
-        csrf = _issue_csrf_cookie(resp)
-        resp.body = (resp.body or b"") + f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">".encode()
-        resp.body += b"<button type=\"submit\">Senden</button></form>"
-        return resp
-
-    from urllib.parse import urlencode
-    base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/login-actions/reset-credentials"
-    query = {"login_hint": login_hint} if login_hint else None
-    target = f"{base}?{urlencode(query)}" if query else base
-    return RedirectResponse(url=target, status_code=302)
-
-
-@app.get("/auth/register")
-async def auth_register(login_hint: str | None = None):
-    """
-    Convenience redirect to Keycloak's self-registration page.
-
-    Why:
-        Keep credentials entirely in Keycloak. This endpoint only redirects to
-        the IdP's registration flow and sets no cookies.
-    Parameters:
-        login_hint: Optional email to pre-fill on the registration form.
-    Behavior:
-        - Constructs the registration URL from configured base URL + realm.
-        - Forwards `login_hint` as query if provided.
-    Permissions:
-        Public endpoint; no authentication required.
-    """
-    if AUTH_USE_DIRECT_GRANT:
-        html = [
-            "<h1>Registrieren</h1>",
-            "<form method=\"post\" action=\"/auth/register\">",
-            f"<input type=\"email\" name=\"email\" value=\"{login_hint or ''}\" required>",
-            "<input type=\"password\" name=\"password\" required>",
-        ]
-        resp = HTMLResponse(content="\n".join(html))
-        csrf = _issue_csrf_cookie(resp)
-        resp.body = (resp.body or b"") + f"<input type=\"hidden\" name=\"csrf_token\" value=\"{csrf}\">".encode()
-        resp.body += b"<button type=\"submit\">Konto anlegen</button></form>"
-        return resp
-
-    from urllib.parse import urlencode
-    base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
-    query = {"login_hint": login_hint} if login_hint else None
-    target = f"{base}?{urlencode(query)}" if query else base
-    return RedirectResponse(url=target, status_code=302)
-
+# Auth callback remains defined in this module to keep test monkeypatching stable
 
 @app.get("/auth/callback")
 async def auth_callback(code: str | None = None, state: str | None = None):
@@ -765,7 +666,8 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         roles = ["student"]
     email_verified = bool(claims.get("email_verified", False))
 
-    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified)
+    # Create server-side session and retain id_token for end-session logout
+    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified, id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     # Attach hardened session cookie (opaque ID only)
@@ -773,119 +675,10 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     return resp
 
 
-@app.post("/auth/login")
-async def auth_login_post(request: Request):
-    """Handle login form submissions (DEV/CI feature-flag)."""
-    if not AUTH_USE_DIRECT_GRANT:
-        # Contract: route may be disabled in PROD
-        raise HTTPException(status_code=403, detail="disabled")
-    form = await request.form()
-    if not _validate_csrf(request, form.get("csrf_token")):
-        raise HTTPException(status_code=403, detail="csrf_invalid")
-    email = (form.get("email") or "").strip()
-    password = form.get("password") or ""
-    redirect = form.get("redirect") or "/"
-    # Allow only same-origin, relative paths
-    if not isinstance(redirect, str) or not redirect.startswith("/"):
-        redirect = "/"
-    try:
-        tokens = KEYCLOAK_CLIENT.direct_grant(email=email, password=password)
-        id_token = tokens.get("id_token") if isinstance(tokens, dict) else None
-        if not id_token:
-            raise ValueError("id_token_missing")
-        claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
-    except Exception:
-        # Neutral 400 to avoid credential enumeration
-        raise HTTPException(status_code=400, detail="invalid_credentials")
+# Note: POST endpoints for login/register/forgot were removed together with
+# the Direct-Grant UI flow. All interactive flows happen on Keycloak.
 
-    # Extract principal and roles
-    email_claim = (
-        claims.get("email")
-        or claims.get("preferred_username")
-        or email
-    )
-    ra = claims.get("realm_access") or {}
-    raw_roles: list[str] = []
-    if isinstance(ra, dict):
-        r = ra.get("roles")
-        if isinstance(r, list):
-            raw_roles = [str(x) for x in r]
-    roles = [role for role in raw_roles if role in ALLOWED_ROLES] or ["student"]
-    email_verified = bool(claims.get("email_verified", False))
-
-    sess = SESSION_STORE.create(email=email_claim, roles=roles, email_verified=email_verified)
-    resp = RedirectResponse(url=redirect, status_code=303)
-    _set_session_cookie(resp, sess.session_id)
-    return resp
-
-
-@app.post("/auth/register")
-async def auth_register_post(request: Request):
-    """Handle registration form (DEV/CI feature-flag)."""
-    if not AUTH_USE_DIRECT_GRANT:
-        raise HTTPException(status_code=403, detail="disabled")
-    form = await request.form()
-    if not _validate_csrf(request, form.get("csrf_token")):
-        raise HTTPException(status_code=403, detail="csrf_invalid")
-    email = (form.get("email") or "").strip()
-    password = form.get("password") or ""
-    display_name = (form.get("display_name") or None)
-    # Minimal shape validation: rely on IdP policies for deep checks
-    try:
-        user_id = KEYCLOAK_ADMIN.create_user(email=email, password=password, display_name=display_name)
-    except Exception:
-        # Duplicate / policy errors → 400
-        raise HTTPException(status_code=400, detail="registration_failed")
-    try:
-        KEYCLOAK_ADMIN.assign_realm_role(user_id=user_id, role_name="student")
-    except Exception:
-        # Surface as 500 for manual follow-up; avoid auto-deletion to not lose trace
-        raise HTTPException(status_code=500, detail="role_assignment_failed")
-
-    # Redirect to login with hint; no auto-login
-    from urllib.parse import urlencode
-    params = urlencode({"login_hint": email}) if email else ""
-    dest = f"/auth/login?{params}" if params else "/auth/login"
-    return RedirectResponse(url=dest, status_code=303)
-
-
-@app.post("/auth/forgot")
-async def auth_forgot_post(request: Request):
-    """Trigger password reset via IdP (DEV/CI feature-flag)."""
-    if not AUTH_USE_DIRECT_GRANT:
-        raise HTTPException(status_code=403, detail="disabled")
-    form = await request.form()
-    if not _validate_csrf(request, form.get("csrf_token")):
-        raise HTTPException(status_code=403, detail="csrf_invalid")
-    # Neutral 202 per contract
-    return JSONResponse({"message": "If the address exists, we sent an email"}, status_code=202)
-
-@app.post("/auth/logout")
-async def auth_logout(request: Request):
-    """
-    Invalidate the current session and clear the session cookie.
-
-    Why:
-        Ensure users can reliably sign out and browsers drop the cookie.
-
-    Behavior:
-        - Requires an existing session cookie, else 401.
-        - Deletes the server-side session (if present).
-        - Sends a `gustav_session` cookie with `Max-Age=0` and matching flags
-          so clients remove it (per contract).
-
-    Permissions:
-        Authenticated route (requires `gustav_session` cookie).
-    """
-    if SESSION_COOKIE_NAME not in request.cookies:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    sid = request.cookies.get(SESSION_COOKIE_NAME)
-    if sid:
-        SESSION_STORE.delete(sid)
-    resp = Response(status_code=204)
-    _clear_session_cookie(resp)
-    return resp
+ # Logout route is provided by the shared auth router
 
 
 @app.get("/api/me")
@@ -904,16 +697,20 @@ async def get_me(request: Request):
         Authenticated route (requires `gustav_session` cookie).
     """
     if SESSION_COOKIE_NAME not in request.cookies:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        # Security: prevent caching of auth state responses
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
     sid = request.cookies.get(SESSION_COOKIE_NAME)
     rec = SESSION_STORE.get(sid or "")
     if not rec:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
     return JSONResponse({
         "email": rec.email,
         "roles": rec.roles,
         "email_verified": rec.email_verified,
-    })
+    }, headers={"Cache-Control": "no-store"})
+
+# Register auth routes on the full application
+app.include_router(auth_router)
 
 
 # --- App factory for tests: auth-only slim app ---
@@ -925,30 +722,9 @@ def create_app_auth_only() -> FastAPI:
     """
     slim = FastAPI(title="GUSTAV auth-only", version="0.0.2")
 
-    @slim.get("/auth/login")
-    async def slim_auth_login(state: str | None = None, redirect: str | None = None):
-        target = "https://keycloak.local/realms/gustav/protocol/openid-connect/auth"
-        if state:
-            target += f"?state={state}"
-        return RedirectResponse(url=target, status_code=302)
-
-    @slim.get("/auth/forgot")
-    async def slim_auth_forgot(login_hint: str | None = None):
-        """Slim forgot endpoint mirrors config-driven redirect in tests."""
-        from urllib.parse import urlencode
-        base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/login-actions/reset-credentials"
-        query = {"login_hint": login_hint} if login_hint else None
-        target = f"{base}?{urlencode(query)}" if query else base
-        return RedirectResponse(url=target, status_code=302)
-
-    @slim.get("/auth/register")
-    async def slim_auth_register(login_hint: str | None = None):
-        """Slim register endpoint mirrors config-driven redirect in tests."""
-        from urllib.parse import urlencode
-        base = f"{OIDC_CFG.base_url}/realms/{OIDC_CFG.realm}/protocol/openid-connect/registrations"
-        query = {"login_hint": login_hint} if login_hint else None
-        target = f"{base}?{urlencode(query)}" if query else base
-        return RedirectResponse(url=target, status_code=302)
+    # Reuse the main app's auth router to avoid drift.
+    # Note: Slim app still overrides /auth/callback and /api/me below for test stubs.
+    slim.include_router(auth_router)
 
     @slim.get("/auth/callback")
     async def slim_auth_callback(code: str | None = None, state: str | None = None):
@@ -966,22 +742,16 @@ def create_app_auth_only() -> FastAPI:
         )
         return resp
 
-    @slim.post("/auth/logout")
-    async def slim_auth_logout(request: Request):
-        if "gustav_session" not in request.cookies:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        resp = Response(status_code=204)
-        resp.delete_cookie(key="gustav_session", path="/")
-        return resp
+    # Logout via shared router (GET /auth/logout) already included above
 
     @slim.get("/api/me")
     async def slim_get_me(request: Request):
         if "gustav_session" not in request.cookies:
-            return JSONResponse({"error": "unauthenticated"}, status_code=401)
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         return JSONResponse({
             "email": "student@example.com",
             "roles": ["student"],
             "email_verified": True,
-        })
+        }, headers={"Cache-Control": "no-store"})
 
     return slim

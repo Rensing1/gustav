@@ -96,3 +96,43 @@ class FileUploadField(FormField):
         )
         input_html = f"<input {input_attrs}>"
         return super().render(input_html)
+
+
+class TextInputField(FormField):
+    """Single-line text input field with consistent wrapper and labeling.
+
+    Parameters:
+        field_id: Name/id attribute for the input.
+        label: Visible label text.
+        input_type: One of 'text', 'email', 'password'. Defaults to 'text'.
+        required: Whether the field is required.
+        help_text: Optional help text shown below the field.
+        error_text: Optional error message shown below the field.
+
+    Behavior:
+        - Renders <input> with appropriate ARIA attributes.
+        - Wraps input using FormField to provide consistent structure.
+    """
+
+    def render(
+        self,
+        *,
+        value: str = "",
+        input_type: str = "text",
+        autocomplete: Optional[str] = None,
+        placeholder: Optional[str] = None,
+        **attrs: str,
+    ) -> str:
+        input_attrs = self.attributes(
+            id=self.field_id,
+            name=self.field_id,
+            type=input_type,
+            value=value,
+            autocomplete=autocomplete,
+            placeholder=placeholder,
+            aria_describedby=f"{self.field_id}-help" if self.help_text else None,
+            aria_invalid="true" if self.error_text else "false",
+            **attrs,
+        )
+        input_html = f"<input {input_attrs}>"
+        return super().render(input_html)

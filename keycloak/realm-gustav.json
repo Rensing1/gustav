@@ -2,10 +2,15 @@
   "realm": "gustav",
   "enabled": true,
   "displayName": "GUSTAV Realm",
+  "loginTheme": "gustav",
+  "internationalizationEnabled": true,
+  "defaultLocale": "de",
+  "supportedLocales": ["de", "en"],
   "registrationAllowed": true,
   "loginWithEmailAllowed": true,
   "verifyEmail": false,
   "resetPasswordAllowed": true,
+  "passwordPolicy": "length(8) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1)",
   "duplicateEmailsAllowed": false,
   "roles": {
     "realm": [
@@ -25,7 +30,8 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "http://localhost:8100/*"
+        "http://localhost:8100/*",
+        "http://app.localhost:8100/*"
       ],
       "webOrigins": ["*"],
       "attributes": {
@@ -34,4 +40,3 @@
     }
   ]
 }
-

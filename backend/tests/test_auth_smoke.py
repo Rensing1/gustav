@@ -19,7 +19,6 @@ from main import create_app_auth_only  # type: ignore
 def test_auth_login_redirects():
     app = create_app_auth_only()
     client = TestClient(app)
-    resp = client.get("/auth/login", allow_redirects=False)
+    resp = client.get("/auth/login", follow_redirects=False)
     assert resp.status_code == 302
     assert "location" in resp.headers
-

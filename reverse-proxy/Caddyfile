@@ -1,0 +1,12 @@
+# Host-based routing for local development
+# Access via:
+#   - http://app.localhost:8100 → GUSTAV web
+#   - http://id.localhost:8100  → Keycloak
+
+app.localhost:80 {
+  reverse_proxy web:8000
+}
+
+id.localhost:80 {
+  reverse_proxy keycloak:8080
+}

@@ -88,10 +88,8 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 - Realm‑Konfiguration: `keycloak/realm-gustav.json:1`
   - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`, `supportedLocales: ["de","en"]`
 
-#### DEV‑Flag (optional)
-- `AUTH_USE_DIRECT_GRANT=true` aktiviert SSR‑Formulare in DEV/CI (TDD & UI‑Prototyping).
-- CSRF: Double‑Submit via Cookie `gustav_csrf` + hidden `csrf_token`.
-- Nicht für PROD gedacht.
+#### Vereinheitlichter Flow
+- Direct‑Grant und SSR‑Formulare wurden entfernt. Sowohl in DEV als auch PROD leiten `/auth/login|register|forgot` zur Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
 
 #### Ablauf Authorization‑Code‑Flow
 1) Browser: `GET /auth/login` (GUSTAV) → 302 zu IdP `…/protocol/openid-connect/auth` (Host: `id.localhost`).

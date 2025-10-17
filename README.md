@@ -52,7 +52,7 @@ Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 
 - Dienste: Keycloak läuft im Compose (Realm‑Import via `keycloak/realm-gustav.json`).
 - Der Web‑Adapter (FastAPI) nutzt OIDC Authorization Code Flow mit PKCE. In PROD erfolgen `/auth/login|register|forgot` als Redirect zur Identity‑UI.
-- Optional (DEV/CI): Eigene HTML‑Formulare sind per Feature‑Flag aktivierbar (`AUTH_USE_DIRECT_GRANT=true`). Login per Password‑Grant, Registration via Admin‑API. Siehe `docs/ARCHITECTURE.md` → „Auth UI (Phase 1 – DEV/CI)“.
+- Hinweis: Eigene HTML‑Formulare (Direct‑Grant) wurden entfernt. Alle Flows laufen über die Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
 - Keycloak‑Theme (GUSTAV‑Look): Ein schlankes CSS‑Theme liegt unter `keycloak/themes/gustav` und wird beim Image‑Build in den Keycloak‑Container kopiert. Der Realm ist so vorkonfiguriert, dass das Theme genutzt wird (`loginTheme: "gustav"`).
 
 Vorschau Keycloak‑Theme:
@@ -68,8 +68,7 @@ Vorschau Keycloak‑Theme:
   - `KC_REALM` (default: `gustav`)
   - `KC_CLIENT_ID` (default: `gustav-web`)
   - `REDIRECT_URI` (default: `http://app.localhost:8100/auth/callback`)
-  - `AUTH_USE_DIRECT_GRANT` (DEV/CI: `true` um SSR‑Formulare zu nutzen)
-  - (DEV/CI Registrierung) `KC_ADMIN_USERNAME`, `KC_ADMIN_PASSWORD`
+  - (optional) Admin‑Zugangsdaten für Keycloak nur für manuelle Administration
 - Cookies: httpOnly Session‑Cookie `gustav_session` (opaque ID). In Prod zusätzlich `Secure` und `SameSite=strict`; in Dev `SameSite=lax`.
 - Sicherheit: ID‑Token wird gegen JWKS verifiziert (Issuer/Audience/Expiry), Rollen werden restriktiv gemappt (`student|teacher|admin`).
 

@@ -21,9 +21,13 @@ import os
 import secrets
 
 from identity_access.oidc import OIDCClient
+import re
 
 
 auth_router = APIRouter(tags=["auth"])  # explicit paths, no prefix
+
+# Single source of truth for allowed in-app redirect paths
+INAPP_PATH_PATTERN = r"^/[A-Za-z0-9_\-/]*$"
 
 
 @auth_router.get("/auth/login")
@@ -215,6 +219,7 @@ def _is_inapp_path(value: str) -> bool:
     Why:
         Prevent open redirect vulnerabilities by only allowing internal paths
         without scheme/host or query fragments. Mirrors the OpenAPI contract.
+        Pattern is defined in `INAPP_PATH_PATTERN` and kept in sync with OpenAPI.
     Examples (accepted):
         "/", "/courses", "/courses/1", "/courses/list_all"
     Examples (rejected):
@@ -223,7 +228,6 @@ def _is_inapp_path(value: str) -> bool:
     try:
         if not value or not isinstance(value, str):
             return False
-        import re
-        return bool(re.match(r"^/[A-Za-z0-9_\-/]*$", value))
+        return bool(re.match(INAPP_PATH_PATTERN, value))
     except Exception:
         return False

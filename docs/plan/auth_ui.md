@@ -647,7 +647,54 @@ Akzeptanzkriterien (DoD) – Status: erfüllt
 - Primärrolle UI‑deterministisch; Logout setzt `id_token_hint` wenn möglich.
 - Vertrag, Implementierung und Tests konsistent; 88/88 Tests grün.
 
-Phase 2 (Ausblick / Research)
-- OIDC `nonce` im Authorization‑Flow ergänzen und im Callback prüfen (Replay‑Schutz).
-- CSRFStore (One‑Time‑Token) evaluieren als Grundlage für zukünftige eigene Formpost‑Flows (nur DEV/CI).
-- Optional: serverseitiges Rate‑Limiting für Auth‑Routen (ergänzend zu Keycloak‑Brute‑Force).
+## Phase 2: Nonce, Session‑TTL, expires_at (Research → TDD)
+
+### User Story
+> Als Admin möchte ich zusätzlichen Replay‑Schutz (OIDC nonce), eine konsistente Session‑Lebensdauer (Cookie Max‑Age = Server‑TTL) und klare Verträge für Clients (expires_at in /api/me), damit Sicherheit und UX deterministisch sind.
+
+### BDD‑Szenarien (Given‑When‑Then)
+
+Nonce (Replay‑Schutz)
+- Given /auth/login startet den OIDC‑Flow
+  When die Authorization‑URL generiert wird
+  Then enthält sie einen `nonce`‑Parameter
+
+- Given /auth/callback wird mit gültigem Code aufgerufen
+  When das ID‑Token keinen passenden `nonce` zur Login‑Anfrage enthält
+  Then antwortet der Server mit `400` und `Cache-Control: no-store`
+
+Cookie‑Lebensdauer (Prod)
+- Given Session‑TTL ist 3600s (Standard)
+  When /auth/callback erfolgreich ist (in PROD)
+  Then enthält `Set-Cookie` `Max-Age=3600` und `SameSite=strict; HttpOnly; Secure`
+
+/api/me liefert expires_at
+- Given eine gültige Session
+  When GET /api/me
+  Then enthält die Antwort `expires_at` als UTC‑ISO‑8601 und `Cache-Control: no-store`
+
+### API‑Contract (Draft‑Ergänzung)
+
+- /auth/login
+  - description: Hinweis, dass `nonce` serverseitig erzeugt und geprüft wird (kein Client‑Param)
+- /auth/callback
+  - description: Nonce‑Prüfung erwähnt; 400 bei Mismatch (bereits no‑store dokumentiert)
+- /api/me
+  - Schema `Me` behält `expires_at`; Endpoint liefert es verbindlich (Option B)
+
+### Tests (RED)
+- test_login_includes_nonce_param
+- test_callback_rejects_when_id_token_nonce_mismatch
+- test_callback_sets_cookie_max_age_matches_session_ttl_prod
+- test_me_includes_expires_at_and_no_store
+
+### Minimal‑Implementierung (GREEN)
+- identity_access.oidc: `build_authorization_url(..., nonce)`
+- identity_access.stores.StateStore: Nonce in StateRecord speichern
+- /auth/callback: Nonce aus Claims gegen gespeicherten State prüfen (400 bei Mismatch, no‑store)
+- Cookie: `_set_session_cookie` optional mit `max_age=ttl` (nur PROD)
+- /api/me: `expires_at` aus Session serialisieren (UTC‑ISO‑8601)
+
+### Dokumentation
+- docs/ARCHITECTURE.md: Abschnitt „Nonce & Session‑TTL“ ergänzen
+- README: Kurznotiz zu Nonce/TTL verhalten

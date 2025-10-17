@@ -53,7 +53,7 @@ Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 - Dienste: Keycloak läuft im Compose (Realm‑Import via `keycloak/realm-gustav.json`).
 - Der Web‑Adapter (FastAPI) nutzt OIDC Authorization Code Flow mit PKCE. In PROD erfolgen `/auth/login|register|forgot` als Redirect zur Identity‑UI.
 - Optional (DEV/CI): Eigene HTML‑Formulare sind per Feature‑Flag aktivierbar (`AUTH_USE_DIRECT_GRANT=true`). Login per Password‑Grant, Registration via Admin‑API. Siehe `docs/ARCHITECTURE.md` → „Auth UI (Phase 1 – DEV/CI)“.
-- Keycloak‑Theme (GUSTAV‑Look): Ein schlankes CSS‑Theme ist unter `keycloak/themes/gustav` enthalten und wird per Compose in den Container gemountet. Der Realm ist so vorkonfiguriert, dass das Theme genutzt wird (`loginTheme: "gustav"`).
+- Keycloak‑Theme (GUSTAV‑Look): Ein schlankes CSS‑Theme liegt unter `keycloak/themes/gustav` und wird beim Image‑Build in den Keycloak‑Container kopiert. Der Realm ist so vorkonfiguriert, dass das Theme genutzt wird (`loginTheme: "gustav"`).
 
 Vorschau Keycloak‑Theme:
 - Starten: `docker compose up -d`
@@ -77,7 +77,7 @@ Vorschau Keycloak‑Theme:
 - Dateien:
   - Templates: `keycloak/themes/gustav/login/{login.ftl,register.ftl,login-reset-password.ftl}`
   - Styles: `keycloak/themes/gustav/login/resources/css/gustav.css`
-  - Gemeinsames Basis‑CSS: `backend/web/static/css/gustav.css` wird in DEV als `keycloak/themes/gustav/login/resources/css/app-gustav-base.css` eingebunden (Compose‑Mount)
+  - Gemeinsames Basis‑CSS: Das kanonische App‑CSS `backend/web/static/css/gustav.css` wird beim Keycloak‑Image‑Build als `keycloak/themes/gustav/login/resources/css/app-gustav-base.css` mitkopiert. So greifen IdP‑Seiten und App auf dieselben Variablen/Komponenten zu – ohne Volumes.
   - DE‑Texte: `keycloak/themes/gustav/login/messages/messages_de.properties`
 - Realm‑Konfiguration (Default DE): `keycloak/realm-gustav.json:1`
   - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`

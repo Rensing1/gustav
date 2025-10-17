@@ -83,7 +83,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 - Pfad: `keycloak/themes/gustav/login`
   - Templates: `templates/login.ftl`, `templates/register.ftl`, `templates/login-reset-password.ftl`
   - Styles: `resources/css/gustav.css` (kompaktes Layout über .kc‑* Klassen)
-  - Gemeinsames Basis‑CSS: Das kanonische App‑CSS `backend/web/static/css/gustav.css` wird in DEV per Volume in den Keycloak‑Container gemountet und als `resources/css/app-gustav-base.css` eingebunden. So greifen Theme‑Seiten und App auf dieselben Variablen/Komponenten zu.
+  - Gemeinsames Basis‑CSS: Das kanonische App‑CSS `backend/web/static/css/gustav.css` wird beim Keycloak‑Image‑Build als `resources/css/app-gustav-base.css` in das Theme kopiert. So teilen sich IdP‑UI und App dieselbe Styles‑Quelle – ohne Runtime‑Volumes.
   - i18n: `messages/messages_de.properties` (DE‑Texte)
 - Realm‑Konfiguration: `keycloak/realm-gustav.json:1`
   - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`, `supportedLocales: ["de","en"]`

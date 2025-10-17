@@ -52,15 +52,16 @@ class SessionRecord:
     roles: list[str]
     email_verified: bool
     expires_at: Optional[int] = None
+    id_token: Optional[str] = None
 
 
 class SessionStore:
     def __init__(self):
         self._data: Dict[str, SessionRecord] = {}
 
-    def create(self, *, email: str, roles: list[str], email_verified: bool, ttl_seconds: int = 3600) -> SessionRecord:
+    def create(self, *, email: str, roles: list[str], email_verified: bool, ttl_seconds: int = 3600, id_token: Optional[str] = None) -> SessionRecord:
         sid = secrets.token_urlsafe(24)
-        rec = SessionRecord(session_id=sid, email=email, roles=roles, email_verified=email_verified, expires_at=_now() + ttl_seconds)
+        rec = SessionRecord(session_id=sid, email=email, roles=roles, email_verified=email_verified, expires_at=_now() + ttl_seconds, id_token=id_token)
         self._data[sid] = rec
         return rec
 
@@ -75,4 +76,3 @@ class SessionStore:
 
     def delete(self, session_id: str) -> None:
         self._data.pop(session_id, None)
-

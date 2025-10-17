@@ -475,8 +475,10 @@ async def test_logout_uses_secure_cookie_flags_in_prod(monkeypatch: pytest.Monke
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", session_id)
-        resp_logout = await client.post("/auth/logout")
+        resp_logout = await client.get("/auth/logout", follow_redirects=False)
 
+    # Unified logout: 302 redirect to IdP end-session and clear cookie
+    assert resp_logout.status_code in (301, 302, 303)
     set_cookie = resp_logout.headers.get("set-cookie", "")
     assert "gustav_session=" in set_cookie
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
@@ -495,11 +497,11 @@ async def test_me_unauthenticated_returns_401():
 
 @pytest.mark.anyio
 async def test_logout_requires_authentication():
+    # Unified logout: even without app session cookie, GET /auth/logout redirects to IdP end-session
     app = create_app_auth_only()
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # Without cookie, the security scheme should require auth
-        resp = await client.post("/auth/logout")
-    assert resp.status_code in (401, 403)
+        resp = await client.get("/auth/logout", follow_redirects=False)
+    assert resp.status_code in (301, 302, 303)
 
 
 @pytest.mark.anyio
@@ -509,9 +511,9 @@ async def test_logout_clears_cookie():
     app = create_app_auth_only()
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         client.cookies.set("gustav_session", "fake-session")
-        resp = await client.post("/auth/logout", follow_redirects=False)
-    assert resp.status_code == 204
-    # Contract: server clears the session cookie
+        resp = await client.get("/auth/logout", follow_redirects=False)
+    # Unified logout: redirect to IdP + clear cookie
+    assert resp.status_code in (301, 302, 303)
     set_cookie = resp.headers.get("set-cookie", "")
     assert "gustav_session=" in set_cookie
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
@@ -543,6 +545,7 @@ def test_openapi_contains_auth_paths():
         "/auth/login",
         "/auth/callback",
         "/auth/logout",
+        "/auth/logout/success",
         "/auth/forgot",
         "/auth/register",
         "/api/me",

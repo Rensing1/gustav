@@ -119,44 +119,42 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /auth/logout:
-    post:
+    get:
       tags: [Auth]
-      summary: Logout and clear session cookie
-      description: Invalidates the current session and clears the cookie.
-      operationId: logout
-      security:
-        - cookieAuth: []
+      summary: Logout (App session + IdP end-session)
+      description: >-
+        Clears the application session cookie and redirects to the Identity Provider's
+        end-session endpoint. After IdP logout, the browser returns to the app start page.
+      operationId: logoutUnified
       responses:
-        '204':
-          description: Session terminated, cookie cleared
+        '302':
+          description: Redirect to IdP end-session endpoint (then back to the app)
           headers:
             Set-Cookie:
               description: >-
-                Expires the httpOnly session cookie `gustav_session`.
+                Clears the httpOnly session cookie `gustav_session` (expires it).
                 Production: `HttpOnly; Secure; SameSite=strict; Max-Age=0`.
                 Development/Test: `HttpOnly; SameSite=lax; Max-Age=0`.
               schema:
                 type: string
-
-  /auth/logout/idp:
-    get:
-      tags: [Auth]
-      summary: Redirect to IdP end-session (optional)
-      description: Redirects to the Keycloak end-session endpoint and back to the app.
-      operationId: idpEndSession
-      parameters:
-        - in: query
-          name: redirect
-          schema:
-            type: string
-          description: Optional post-logout redirect URI (defaults to app base URL).
-      responses:
-        '302':
-          description: Redirect to IdP end-session endpoint
-          headers:
             Location:
+              description: IdP end-session endpoint URL
               schema:
                 type: string
+
+  /auth/logout/success:
+    get:
+      tags: [Auth]
+      summary: Logout success page
+      description: Shows a confirmation that the user has been logged out and links to /auth/login.
+      responses:
+        '200':
+          description: HTML page confirming logout
+          content:
+            text/html:
+              schema:
+                type: string
+
 
   /auth/forgot:
     get:

@@ -53,22 +53,20 @@ paths:
     get:
       tags: [Auth]
       summary: Redirect to IdP login (Authorization Code Flow with PKCE)
-      description: Redirects to the Keycloak authorization endpoint with PKCE.
+      description: >-
+        Redirects to the Keycloak authorization endpoint with PKCE. The server
+        generates and manages the opaque `state` for CSRF protection; clients
+        MUST NOT provide a `state` value.
       operationId: startLogin
       parameters:
-        - in: query
-          name: state
-          schema:
-            type: string
-          description: >-
-            Optional opaque state token used for CSRF protection and QR-context.
-            Created and validated server-side.
         - in: query
           name: redirect
           schema:
             type: string
             pattern: '^/[A-Za-z0-9_\-/]*$'
-          description: Optional in-app path to navigate to after login.
+          description: >-
+            Optional in-app absolute path to navigate to after login. External
+            URLs are rejected; invalid values are ignored.
       responses:
         '302':
           description: Redirect to Keycloak authorization endpoint
@@ -113,6 +111,11 @@ paths:
                 type: string
         '400':
           description: Invalid or expired code/state
+          headers:
+            Cache-Control:
+              description: Security hardening — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -126,6 +129,14 @@ paths:
         Clears the application session cookie and redirects to the Identity Provider's
         end-session endpoint. After IdP logout, the browser returns to the app start page.
       operationId: logoutUnified
+      parameters:
+        - in: query
+          name: redirect
+          required: false
+          schema:
+            type: string
+            default: "/"
+          description: App-relative path to redirect to after IdP logout (default: "/").
       responses:
         '302':
           description: Redirect to IdP end-session endpoint (then back to the app)

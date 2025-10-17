@@ -545,3 +545,109 @@ Hinweis: Alle Farben/Typo‑Variablen folgen `backend/web/static/css/gustav.css`
 ---
 
 _Prepared by: Codex (Felix’ Tutor & Dev)_
+
+## Code‑Review (dev → master) – Ergänzung 2025‑10‑17
+
+Befunde (kritisch)
+- State-Erzeugung/Verwendung inkonsistent: Vertrag beschreibt serverseitig erzeugtes `state`, Implementierung akzeptiert client‑übergebenes `state` und verwendet es (CSRF‑Risiko).
+- Offener Redirect: `redirect` wird ohne serverseitige Validierung übernommen und später als Ziel genutzt (potenziell extern). Es existiert nur eine Regex im Vertrag, keine Durchsetzung im Code.
+- Query‑Injection bei `login_hint`: In `/auth/register` wird `login_hint` per Stringkonkatenation eingefügt, ohne URL‑Encoding.
+- Cookie‑Optionen dupliziert: Sicherheitsflags werden in zwei Modulen berechnet (Drift‑Risiko).
+- `expires_at` inkonsistent: Schema `Me` sieht `expires_at` vor, Endpoint liefert es nicht.
+- Rollenpriorität unklar: „erste bekannte Rolle“ ist abhängig von Token‑Reihenfolge; Anzeige kann variieren.
+- Fehlende `Cache-Control: no-store` auf 400‑Antworten im Callback (nur 401 ist abgedeckt).
+- OIDC `nonce` wird nicht verwendet (Replay‑Schutz für ID‑Tokens fehlt; mittel‑kritisch im Code‑Flow, aber empfehlenswert).
+- Cookie‑Lifetime vs. Server‑Session: Session hat TTL, Cookie bleibt Session‑Cookie ohne `Max‑Age` (UX‑Inkonsistenz).
+
+Contract‑First Änderungen (Entwurf)
+- /auth/login: `state` Query‑Parameter entfernen (serverseitig erzeugt; keine Client‑Übergabe). Beschreibung anpassen.
+- /auth/login: `redirect` klarer fassen („nur absolute In‑App‑Pfade; kein Schema/Host; Whitelist“).
+- /auth/callback: Für Fehlerfälle `400` Response im Vertrag mit `Cache-Control: no-store` dokumentieren.
+- /api/me: Entweder `expires_at` aus dem Schema entfernen (Option A) oder es im Endpoint tatsächlich mitliefern (Option B, UTC‑ISO‑8601).
+- /auth/logout/success: optionale `operationId` ergänzen (Konsistenz).
+
+BDD‑Szenarien (Given‑When‑Then) – Ergänzung
+- Open‑Redirect verhindert
+  - Given ich rufe `GET /auth/login?redirect=https://evil.com` auf
+    When ich später über `/auth/callback` erfolgreich zurückkomme
+    Then werde ich auf `/` umgeleitet (nicht auf eine externe Domain)
+- Client‑State wird ignoriert
+  - Given ich übergebe `state=attacker` an `GET /auth/login`
+    When `/auth/callback` mit diesem `state` aufgerufen wird
+    Then erhalte ich `400 invalid_code_or_state`
+- Login‑Hint korrekt kodiert
+  - Given ich rufe `GET /auth/register?login_hint=a%2Bteacher@example.com` auf
+    Then enthält `Location` genau einen Parameter `login_hint=a+teacher@example.com` und keinen injizierten Zusatzparam
+- Callback‑Fehler nicht cachebar
+  - Given `GET /auth/callback` schlägt fehl
+    Then enthält die Antwort `Cache-Control: no-store`
+- Rollenanzeige deterministisch
+  - Given Token mit `roles=["student","teacher"]`
+    Then ist die SSR‑Primärrolle „Lehrer“ (fixe Priorität admin > teacher > student)
+- Logout nutzt id_token_hint
+  - Given Session enthält `id_token`
+    Then `GET /auth/logout` setzt `id_token_hint` im IdP‑Endpunkt
+
+Tests (RED)
+- `test_login_rejects_external_redirects` (Contract/Integration)
+- `test_login_ignores_client_state` (Contract)
+- `test_register_encodes_login_hint` (Contract)
+- `test_callback_errors_set_no_store_header` (Contract)
+- `test_role_priority_for_ssr_display` (SSR/Middleware)
+- `test_logout_uses_id_token_hint_when_available` (Contract)
+
+Minimaler Code‑Fix (GREEN)
+- `backend/web/routes/auth.py`
+  - `/auth/login`: entferne Verwendung des Query‑Params `state`; nutze immer `rec.state`.
+  - Validiere `redirect`: nur In‑App‑Pfad (`^/[A-Za-z0-9_\-/]*$`); bei Verstoß `redirect=None`.
+  - `/auth/register`: baue Ziel‑URL mit `urllib.parse` und `urlencode`, nicht via String‑Konkatenation.
+- `backend/web/main.py`
+  - `/auth/callback`: in allen `400`‑Zweigen `Cache-Control: no-store` ergänzen.
+  - SSR‑Rollenanzeige: primäre Rolle per fester Priorität bestimmen (admin > teacher > student).
+  - Optional: Cookie‑`Max-Age` an Server‑Session‑TTL angleichen (nur PROD). 
+- Utilities
+  - Cookie‑Flags: zentrale Helper (bereits vorhanden) nutzen und Duplikat in `routes/auth.py` entfernen.
+
+Refactor & Doku
+- `api/openapi.yml` gemäß „Contract‑First Änderungen“ aktualisieren.
+- Kurzkommentare an sicherheitskritischen Stellen (Warum Redirect‑Validierung? Warum `no-store`?).
+- README/DOCS: Entscheidung „State stets serverseitig“ und „nur In‑App‑Redirects“ dokumentieren.
+- Optional: `nonce` in `OIDCClient.build_authorization_url` ergänzen und im Callback prüfen (Folgeticket, da Test/Implementierung umfangreicher).
+
+Akzeptanzkriterien (DoD)
+- Alle neuen RED‑Tests grün, bestehende Suite weiterhin grün.
+- Kein externer Redirect mehr möglich; `state` kann nicht vom Client injiziert werden.
+- `login_hint` ist korrekt url‑kodiert; keine Param‑Injection.
+- `Cache-Control: no-store` auf allen Auth‑Fehlern vorhanden.
+- Primärrolle für Anzeige deterministisch.
+- Vertrag und Implementierung sind konsistent; Doku aktualisiert.
+
+Migrationen / Datenbank
+- Keine Schemaänderungen erforderlich (reine Auth‑Adapter‑/Contract‑Härte).
+
+Priorisierte Nächste Schritte (1–2 PRs)
+1) Contract‑First & Tests (RED) – ✅ erledigt
+   - OpenAPI angepasst (Client‑`state` entfernt; `redirect` klar definiert).
+   - Tests ergänzt: Redirect‑Validierung, State‑Ignorierung, Hint‑Encoding, No‑Store, Rollen‑Priorität, Logout‑Hint.
+2) Minimal Fix (GREEN) & Refactor – ✅ erledigt
+   - Implementierung wie oben; Fehler‑Header ergänzt; Login‑Hint encoding.
+   - Dokumentation aktualisiert (ARCHITECTURE, README).
+
+Ergebnisse (Umsetzung 2025‑10‑17)
+- Vertrag: `api/openapi.yml` aktualisiert (Login ohne Client‑State; Callback‑Fehler mit `Cache-Control: no-store`; Logout‑`redirect` beschrieben).
+- Tests: `backend/tests/test_auth_hardening.py` hinzugefügt (State‑Ignorierung, Open‑Redirect verhindert, No‑Store, Rollen‑Priorität, Logout‑Hint). Gesamtsuite: 88 Tests grün.
+- Codehärtung:
+  - `backend/web/routes/auth.py`: State nur serverseitig; `redirect` strikt validiert (In‑App‑Pfad‑Regex); `login_hint` sicher mit `urlencode` gesetzt; Logout nutzt `id_token_hint`, falls vorhanden.
+  - `backend/web/main.py`: `Cache-Control: no-store` für alle 400er im Callback; deterministische Primärrolle (admin > teacher > student) für SSR; Middleware setzt identitätsbezogene Sidebar‑Infos.
+- Doku: `docs/ARCHITECTURE.md` und `README.md` um Middleware‑Erzwingung, Sicherheitsregeln und unified Logout ergänzt.
+
+Akzeptanzkriterien (DoD) – Status: erfüllt
+- Kein externer Redirect mehr möglich; Client‑`state` wird ignoriert.
+- `login_hint` korrekt URL‑kodiert; Fehler‑Antworten nicht cachebar.
+- Primärrolle UI‑deterministisch; Logout setzt `id_token_hint` wenn möglich.
+- Vertrag, Implementierung und Tests konsistent; 88/88 Tests grün.
+
+Phase 2 (Ausblick / Research)
+- OIDC `nonce` im Authorization‑Flow ergänzen und im Callback prüfen (Replay‑Schutz).
+- CSRFStore (One‑Time‑Token) evaluieren als Grundlage für zukünftige eigene Formpost‑Flows (nur DEV/CI).
+- Optional: serverseitiges Rate‑Limiting für Auth‑Routen (ergänzend zu Keycloak‑Brute‑Force).

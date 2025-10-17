@@ -87,6 +87,21 @@ def _session_cookie_options() -> dict:
     return {"secure": secure, "samesite": samesite}
 
 
+def _primary_role(roles: list[str]) -> str:
+    """Return the primary role for SSR display using fixed priority.
+
+    Why:
+        Token role order is not guaranteed. To keep UI deterministic, choose
+        by priority: admin > teacher > student. Defaults to 'student'.
+    """
+    priority = ["admin", "teacher", "student"]
+    lowered = [r.lower() for r in roles if isinstance(r, str)]
+    for r in priority:
+        if r in lowered:
+            return r
+    return "student"
+
+
 def _set_session_cookie(response: Response, value: str) -> None:
     """Attach the gustav session cookie with hardened flags.
 
@@ -224,8 +239,8 @@ async def auth_enforcement(request: Request, call_next):
         # Default: redirect HTML to login
         return RedirectResponse(url="/auth/login", status_code=302)
 
-    # Attach principal for SSR (use first known role for display)
-    role = next((r for r in rec.roles if r in ALLOWED_ROLES), "student")
+    # Attach principal for SSR (deterministic primary role)
+    role = _primary_role(rec.roles)
     request.state.user = {"email": rec.email, "role": role, "roles": rec.roles}
     return await call_next(request)
 
@@ -628,26 +643,27 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         the public login flow.
     """
     if not code or not state:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
+        # Security: do not cache auth failure responses
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
     # State must have been issued by /auth/login and still be valid
     rec = STATE_STORE.pop_valid(state)
     if not rec:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
 
     try:
         tokens = OIDC.exchange_code_for_tokens(code=code, code_verifier=rec.code_verifier)
     except Exception as exc:
         logger.warning("Token exchange failed: %s", exc.__class__.__name__)
-        return JSONResponse({"error": "token_exchange_failed"}, status_code=400)
+        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers={"Cache-Control": "no-store"})
 
     id_token = tokens.get("id_token")
     if not id_token or not isinstance(id_token, str):
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400)
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
     try:
         claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
     except IDTokenVerificationError as exc:
         logger.warning("ID token verification failed: %s", exc.code)
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400)
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
 
     email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"
     raw_roles: list[str] = []

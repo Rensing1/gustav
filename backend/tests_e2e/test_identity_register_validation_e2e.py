@@ -14,6 +14,8 @@ import time
 from urllib.parse import urljoin
 
 import pytest
+if os.getenv("RUN_E2E") != "1":
+    pytest.skip("E2E disabled (set RUN_E2E=1 to enable)", allow_module_level=True)
 import requests
 
 # Reuse environment for admin access
@@ -104,6 +106,9 @@ def test_register_invalid_shows_error():
         r = sess.get(reg_url, allow_redirects=True, timeout=20)
         assert r.status_code == 200
         assert "kc-register-form" in r.text
+
+    # Ensure password policy hint is visible on the register page
+    assert "Mindestens 8 Zeichen" in r.text or "gustavPasswordPolicyHint" in r.text
 
     # Submit incomplete data (missing email/password)
     action, fields = _parse_register_form(r.text, r.url)

@@ -94,6 +94,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 .kc-message { margin: 8px 0 12px; padding: 10px 12px; border-left: 3px solid var(--color-primary); background: rgba(31,41,55,0.06); }
 .kc-message.kc-error { border-left-color: #b4637a; }
 .kc-links { margin-top: 16px; font-size: 0.9rem; text-align: center; color: var(--color-text-muted); }
+.kc-hint { margin: 6px 0 14px; font-size: 0.9rem; color: var(--color-text-muted); }
 
 /* ---- 4) Inputs ---- */
 input[type="text"],

@@ -26,13 +26,15 @@ auth_router = APIRouter(tags=["auth"])  # explicit paths, no prefix
 
 
 @auth_router.get("/auth/login")
-async def auth_login(state: str | None = None, redirect: str | None = None):
+async def auth_login(redirect: str | None = None):
     """
     Start OIDC flow with PKCE and server-side state; redirect to IdP.
 
     Behavior:
         - Generates code_verifier + S256 code_challenge.
-        - Persists state with redirect in server-side store.
+        - Validates optional `redirect` to be an absolute in-app path; external
+          URLs are rejected. Persists the validated redirect together with the
+          server-generated state in a server-side store.
         - Redirects to Keycloak authorization endpoint.
     Permissions:
         Public.
@@ -41,8 +43,10 @@ async def auth_login(state: str | None = None, redirect: str | None = None):
 
     code_verifier = OIDCClient.generate_code_verifier()
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
-    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=redirect)
-    final_state = state or rec.state
+    # Security: Accept only absolute in-app paths like "/courses". Reject external URLs.
+    safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
+    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect)
+    final_state = rec.state
     # Use a fresh client bound to current config (allows monkeypatch in tests)
     oidc = OIDCClient(main.OIDC_CFG)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge)
@@ -77,7 +81,9 @@ async def auth_register(login_hint: str | None = None):
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge)
     sep = '&' if '?' in url else '?'
     if login_hint:
-        url = f"{url}{sep}login_hint={login_hint}"
+        # Security: encode parameter to avoid query injection and preserve special characters
+        from urllib.parse import urlencode
+        url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
         sep = '&'
     url = f"{url}{sep}kc_action=register"
     return RedirectResponse(url=url, status_code=302)
@@ -186,3 +192,19 @@ def _default_app_base(redirect_uri: str) -> str:
         return f"{p.scheme}://{p.netloc}"
     except Exception:
         return "/"
+
+
+def _is_inapp_path(value: str) -> bool:
+    """Return True if value is an absolute in-app path, e.g., "/", "/courses/1".
+
+    Why:
+        Prevent open redirect vulnerabilities by only allowing internal paths
+        without scheme/host or query fragments. Mirrors the OpenAPI contract.
+    """
+    try:
+        if not value or not isinstance(value, str):
+            return False
+        import re
+        return bool(re.match(r"^/[A-Za-z0-9_\-/]*$", value))
+    except Exception:
+        return False

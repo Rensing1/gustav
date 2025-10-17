@@ -136,6 +136,19 @@ E2E‑Tests (Identity):
 - `/api/me`: Antworten enthalten `Cache-Control: no-store` zur Verhinderung von Caching von Auth‑Zuständen.
 - Vereinheitlichter Logout: `GET /auth/logout` löscht die App‑Session (Cookie) und leitet zur End‑Session beim IdP; danach Rückkehr zur Startseite.
 
+#### Auth‑Erzwingung (Middleware)
+- Allowlist: `/auth/*`, `/health`, `/static/*`, `/favicon.ico` werden nie umgeleitet.
+- HTML‑Anfragen ohne Session: `302` Redirect zu `/auth/login`.
+- JSON‑/API‑Anfragen ohne Session (Pfad beginnt mit `/api/`): `401` JSON mit `Cache-Control: no-store`.
+- HTMX‑Requests ohne Session: `401` mit Header `HX-Redirect: /auth/login`.
+- Bei erfolgreicher Authentifizierung setzt die Middleware `request.state.user = { email, role, roles }` für SSR; die primäre Rolle wird deterministisch nach Priorität gewählt (admin > teacher > student).
+
+#### Sicherheits‑Härtung (Auth)
+- `/auth/callback` liefert bei allen Fehlern `400` mit `Cache-Control: no-store` (nicht cachebar).
+- `/auth/login` ignoriert einen client‑übergebenen `state` vollständig; `state` wird ausschließlich serverseitig erzeugt und validiert (CSRF‑Schutz).
+- Redirect‑Parameter sind nur als interne absolute Pfade erlaubt (Regex `^/[A-Za-z0-9_\-/]*$`); externe Ziele werden verworfen (kein Open Redirect).
+- `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
+
 ## Deployment & Betrieb
 - Containerisiert über `Dockerfile` und `docker-compose.yml`.
 - Reverse‑Proxy: Caddy (hostbasiertes Routing). Nur `127.0.0.1:8100` ist gemappt (lokal).

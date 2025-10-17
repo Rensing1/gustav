@@ -55,6 +55,17 @@ Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 - Hinweis: Eigene HTML‑Formulare (Direct‑Grant) wurden entfernt. Alle Flows laufen über die Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
 - Keycloak‑Theme (GUSTAV‑Look): Ein schlankes CSS‑Theme liegt unter `keycloak/themes/gustav` und wird beim Image‑Build in den Keycloak‑Container kopiert. Der Realm ist so vorkonfiguriert, dass das Theme genutzt wird (`loginTheme: "gustav"`).
 
+### Verhalten & Sicherheit
+- Login‑Erzwingung (Middleware):
+  - HTML ohne Session → `302` nach `/auth/login`
+  - API/JSON ohne Session → `401` JSON + `Cache-Control: no-store`
+  - HTMX ohne Session → `401` + `HX-Redirect: /auth/login`
+  - Allowlist: `/auth/*`, `/health`, `/static/*`, `/favicon.ico`
+- Callback‑Fehler (`/auth/callback`) setzen immer `Cache-Control: no-store`.
+- `/auth/login` akzeptiert keinen client‑seitigen `state`; dieser wird serverseitig erzeugt.
+- Redirect‑Parameter sind nur als interne absolute Pfade erlaubt (kein externer Redirect).
+- Unified Logout: `GET /auth/logout` löscht das App‑Session‑Cookie und leitet zum IdP End‑Session Endpoint; nach Rückkehr geht es zur Startseite (`/`). Falls vorhanden, wird `id_token_hint` übergeben.
+
 Vorschau Keycloak‑Theme:
 - Starten: `docker compose up -d`
 - Hosts‑Eintrag (einmalig, lokal):

@@ -128,6 +128,8 @@ class Navigation(Component):
         self._active_href = self._determine_active_href_from_tree(nav_tree)
         self._active_parents = self._determine_active_parents(nav_tree, self._active_href)
         links = [self._render_nav_item(item) for item in nav_tree]
+        # Ensure logout control is also present in OOB sidebar updates
+        links.append(self._render_logout())
 
         oob_attr = ' hx-swap-oob="true"' if oob else ''
         role_de = self._role_de(self.user.get("role")) if self.user else ""

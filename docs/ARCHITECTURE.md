@@ -67,13 +67,36 @@ Geplante Ergänzungen (separat anlegen, wenn benötigt):
 
 Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Adapter/Repo -> Response DTO -> Presenter/View.
 
-### Auth UI (Phase 1 – DEV/CI)
-- Feature‑Flag `AUTH_USE_DIRECT_GRANT` aktiviert in DEV/CI eigene HTML‑Formulare für Login/Registrierung/Passwort‑Reset.
-- CSRF: Double‑Submit mittels Cookie `gustav_csrf` + Hidden‑Feld `csrf_token` (kein Server‑Store nötig).
-- Login (DEV/CI): `POST /auth/login` nutzt einen Direct‑Grant‑Adapter (`identity_access/keycloak_client.py`), verifiziert das ID‑Token und legt eine Serversession an (Cookie `gustav_session`).
-- Registrierung (DEV/CI): `POST /auth/register` legt Nutzer via Admin‑API an und weist die Realm‑Rolle `student` zu (`identity_access/admin_client.py`). Redirect zu `/auth/login?login_hint=…`, kein Auto‑Login.
-- Passwort‑Reset (DEV/CI): `POST /auth/forgot` antwortet neutral mit `202` (keine Enumeration).
-- Produktion (default): `/auth/login|register|forgot` leiten weiterhin zur Keycloak‑UI (Authorization‑Code‑Flow) – Browser‑Flow‑Umstellung folgt in Phase 2.
+### Identity & Auth – vereinfachte Integration (DEV/PROD)
+
+- DEV (hostbasiert, einfach & robust):
+  - Caddy routet hostbasiert:
+    - `http://app.localhost:8100` → Web (GUSTAV)
+    - `http://id.localhost:8100` → Keycloak (IdP)
+  - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
+  - Setup: `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`.
+- PROD (Security‑first, geringe App‑Komplexität):
+  - `/auth/login|register|forgot` leiten zur gebrandeten Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
+  - GUSTAV verarbeitet keine Passwörter; Sessions sind serverseitig und über `gustav_session` gesichert.
+
+#### Keycloak Theme (GUSTAV)
+- Pfad: `keycloak/themes/gustav/login`
+  - Templates: `templates/login.ftl`, `templates/register.ftl`, `templates/login-reset-password.ftl`
+  - Styles: `resources/css/gustav.css` (kompaktes Layout über .kc‑* Klassen)
+  - Gemeinsames Basis‑CSS: Das kanonische App‑CSS `backend/web/static/css/gustav.css` wird beim Keycloak‑Image‑Build als `resources/css/app-gustav-base.css` in das Theme kopiert. So teilen sich IdP‑UI und App dieselbe Styles‑Quelle – ohne Runtime‑Volumes.
+  - i18n: `messages/messages_de.properties` (DE‑Texte)
+- Realm‑Konfiguration: `keycloak/realm-gustav.json:1`
+  - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`, `supportedLocales: ["de","en"]`
+
+#### Vereinheitlichter Flow
+- Direct‑Grant und SSR‑Formulare wurden entfernt. Sowohl in DEV als auch PROD leiten `/auth/login|register|forgot` zur Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
+
+#### Ablauf Authorization‑Code‑Flow
+1) Browser: `GET /auth/login` (GUSTAV) → 302 zu IdP `…/protocol/openid-connect/auth` (Host: `id.localhost`).
+2) Login auf IdP‑UI (gebrandet). `GET /auth/register` nutzt ebenfalls den Auth‑Endpoint und setzt `kc_action=register` (statt altem `…/registrations`‑Pfad), optional mit `login_hint`.
+3) IdP → Redirect zu `REDIRECT_URI` (z. B. `http://app.localhost:8100/auth/callback`).
+4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
+5) Web legt Serversession an und setzt `gustav_session` (httpOnly; in DEV SameSite=lax, in PROD strict + Secure).
 
 ## API Contract‑First (Vorgehen)
 1) API‑Änderung zuerst im Vertrag: `api/openapi.yml:1`.
@@ -100,10 +123,28 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 - Philosophie: Spezifikationsnahe Tests, klein anfangen, dann breiter testen.
 - Tools: pytest, httpx TestClient, Factory‑Fixtures; Lint/Format analog Repo‑Standards (später).
 
+E2E‑Tests (Identity):
+- Testdatei: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`
+- Registrierung – Validierungen/Fehlerfälle: `backend/tests_e2e/test_identity_register_validation_e2e.py`
+- Voraussetzung: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
+- Ausführung:
+  - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
+  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
+
+### Auth Router & Security (aktualisiert)
+- Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
+- `/api/me`: Antworten enthalten `Cache-Control: no-store` zur Verhinderung von Caching von Auth‑Zuständen.
+- Vereinheitlichter Logout: `GET /auth/logout` löscht die App‑Session (Cookie) und leitet zur End‑Session beim IdP; danach Rückkehr zur Startseite.
+
 ## Deployment & Betrieb
 - Containerisiert über `Dockerfile` und `docker-compose.yml`.
-- Entwicklungsstart: `docker compose up --build` (Hot‑reload aktiv).
+- Reverse‑Proxy: Caddy (hostbasiertes Routing). Nur `127.0.0.1:8100` ist gemappt (lokal).
+- Entwicklungsstart: `docker compose up --build` (Hot‑reload aktiv). Zugriff: `app.localhost:8100` und `id.localhost:8100`.
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung.
+
+### Lokaler Betrieb & UFW
+- Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.
+- Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:8100`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 8100 proto tcp`.
 
 ## Migrationspfad zu einer getrennten SPA (optional)
 Wenn UI‑Anforderungen wachsen (Offline, State‑heavy, App‑Store), kann ein separates `frontend/` entstehen. Schritte:

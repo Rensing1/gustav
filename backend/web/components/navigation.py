@@ -74,6 +74,8 @@ class Navigation(Component):
         # Add logout link at the end
         links.append(self._render_logout())
 
+        role_de = self._role_de(self.user.get("role")) if self.user else ""
+        email = self.user.get("email", "") if self.user else ""
         return f"""
     <!-- Sidebar Toggle Button -->
     <button class="sidebar-toggle" data-action="sidebar-toggle" aria-label="Navigation umschalten">
@@ -95,7 +97,10 @@ class Navigation(Component):
             <div class="sidebar-footer">
                 <div class="user-info-compact">
                     <span class="nav-icon">👤</span>
-                    <span class="nav-text">{self.escape(self.user.get("name", "Nutzer"))}</span>
+                    <div class="nav-text">
+                        <div class="user-email">{self.escape(email)}</div>
+                        <div class="user-role">{self.escape(role_de)}</div>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -123,8 +128,12 @@ class Navigation(Component):
         self._active_href = self._determine_active_href_from_tree(nav_tree)
         self._active_parents = self._determine_active_parents(nav_tree, self._active_href)
         links = [self._render_nav_item(item) for item in nav_tree]
+        # Ensure logout control is also present in OOB sidebar updates
+        links.append(self._render_logout())
 
         oob_attr = ' hx-swap-oob="true"' if oob else ''
+        role_de = self._role_de(self.user.get("role")) if self.user else ""
+        email = self.user.get("email", "") if self.user else ""
         return f"""
     <aside class="sidebar" id="sidebar" aria-label="Seitenleiste"{oob_attr}>
         <nav class="sidebar-nav" role="navigation" aria-label="Hauptnavigation">
@@ -140,7 +149,10 @@ class Navigation(Component):
             <div class="sidebar-footer">
                 <div class="user-info-compact">
                     <span class="nav-icon">👤</span>
-                    <span class="nav-text">{self.escape(self.user.get("name", "Nutzer"))}</span>
+                    <div class="nav-text">
+                        <div class="user-email">{self.escape(email)}</div>
+                        <div class="user-role">{self.escape(role_de)}</div>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -344,14 +356,25 @@ class Navigation(Component):
         </a>"""
 
     def _render_logout(self) -> str:
-        """Render logout link with POST request"""
+        """Render logout link as normal navigation to unified GET /auth/logout.
+
+        Rationale: logout triggers IdP end-session which is cross-origin; use full
+        page navigation instead of HTMX XHR.
+        """
         return """
-        <a href="#"
-           hx-post="/logout"
-           hx-redirect="/"
+        <a href="/auth/logout"
            class="sidebar-link sidebar-logout"
            aria-label="Abmelden"
            data-tooltip="Abmelden">
             <span class="nav-icon">🚪</span>
             <span class="nav-text">Abmelden</span>
         </a>"""
+
+    @staticmethod
+    def _role_de(role: Optional[str]) -> str:
+        mapping = {
+            "teacher": "Lehrer",
+            "student": "Schüler",
+            "admin": "Administrator",
+        }
+        return mapping.get((role or "").lower(), "Nutzer")

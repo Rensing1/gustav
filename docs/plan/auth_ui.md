@@ -1,13 +1,13 @@
 # Plan: Authentifizierungs-UI (Login, Registrierung, Passwort vergessen)
 
-_Stand: 2025-10-16_
+_Stand: 2025-10-17_
 
 ## Ausgangslage & Zielbild
 
-- **Was existiert:** GUSTAV nutzt aktuell serverseitig gerenderte Seiten (FastAPI + HTMX) und leitet Auth-Events direkt an Keycloak weiter (`/auth/login`, `/auth/register`, `/auth/forgot`). Die E2E-Tests prüfen den OIDC-Flow über die Keycloak-UI.
-- **Was fehlt:** Eine eigene GUSTAV-Oberfläche für Anmeldung, Registrierung und Passwort-Zurücksetzen inklusive Fehlermeldungen, Erfolgsfeedback und Valider UX. Die Serverlogik muss Credentials entgegennehmen, Keycloak per API/Password Grant ansprechen und Sessions setzen.
-- **Ziel:** Lernende und Lehrkräfte interagieren (perspektivisch) ausschließlich mit der GUSTAV-Oberfläche. Keycloak bleibt Identity Provider, aber seine UI wird vollständig durch GUSTAV ersetzt.
-- **Rollout-Strategie:** Neue UI wird in DEV/CI per Feature-Flag aktiviert; Produktionsausrollung folgt erst nach erfolgreichem Browser-Flow-Research und Security-Abnahme.
+- **Was existiert (aktualisiert):** Host-basiertes Routing in DEV über Caddy: `app.localhost:8100` (GUSTAV) und `id.localhost:8100` (Keycloak). `/auth/login|register|forgot` leiten in PROD/DEV standardmäßig zur Keycloak‑UI, die per leichtem CSS‑Theme an GUSTAV angepasst ist. Optional (nur DEV/CI) können eigene SSR‑Formulare per Feature‑Flag verwendet werden (`AUTH_USE_DIRECT_GRANT=true`).
+- **Was fehlt:** UI‑Feinschliff des Keycloak‑Themes (kompakter, deutschsprachige Labels, Logo optional) und klare Trennung der Zuständigkeiten (IdP verarbeitet Passwörter; GUSTAV verwaltet Sessions).
+- **Ziel:** Einheitliches Erlebnis mit minimaler Komplexität: In PROD bleibt Keycloak die Login‑Oberfläche (gebrandet), in DEV können wir Formulare lokal testen. Kein Passworthandling in GUSTAV für PROD.
+- **Rollout-Strategie:** DEV nutzt Subdomains (`app.localhost`, `id.localhost`) und Caddy; PROD behält IdP‑UI (gebrandet). Research für „Browser‑Flow‑Adapter ohne Direct Grant“ bleibt Phase 2, aber ist für PROD nicht zwingend.
 
 ## Leitplanken
 
@@ -22,10 +22,11 @@ _Stand: 2025-10-16_
 
 ## Annahmen & Vorarbeiten
 
-1. **Keycloak-Konfiguration & Betrieb (Phase 1 vs. Phase 2)**
-   - Realm `gustav` bleibt maßgeblich; Authorization-Code-Flow mit PKCE ist der Referenzpfad.
-   - **Phase 1 (MVP):** Produktion behält den bestehenden Redirect zur Keycloak-UI. In DEV/CI können wir optional den Direct-Grant-Adapter aktivieren (`AUTH_USE_DIRECT_GRANT=true`), um die neue UI zu testen.
-   - **Phase 2 (Research & Umstellung):** Ticket `AUTH-UI-KEYCLOAK-BROWSER-FLOW` untersucht den Browser-Flow mit `session_code`, `execution`, `tab_id`. Erst nach erfolgreicher Research und Security-Abnahme wird der Browser-Flow-Adapter implementiert und PROD umgestellt; Direct Grant wird dann deaktiviert.
+1. **Keycloak-Konfiguration & Betrieb (aktuell)**
+   - Realm `gustav`; Authorization‑Code‑Flow mit PKCE.
+   - DEV: Hostbasiert via Caddy (`app.localhost` → Web, `id.localhost` → Keycloak). Keine Pfadpräfixe mehr nötig.
+   - PROD: Redirect zur Keycloak‑UI (gebrandet). Direct‑Grant bleibt auf DEV/CI beschränkt (Flag), nicht für PROD.
+   - **Phase 2 (optional):** Research‑Ticket `AUTH-UI-KEYCLOAK-BROWSER-FLOW` bleibt offen, um perspektivisch IdP‑UI noch enger zu integrieren – ohne Passworthandling in GUSTAV.
    - Service-Client (z. B. `gustav-admin`) mit Client-Credentials und Rollen `manage-users`, `view-users`, `manage-accounts` bleibt notwendig für Registrierung/Reset.
    - Keycloak-Brute-Force-Detection und MFA-Policies bleiben aktiv; Tests stellen sicher, dass der MVP-Flow keine gesperrten Accounts o. Ä. ignoriert.
 2. **Secrets & Env-Handling**
@@ -277,10 +278,10 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
    - `backend/tests/test_keycloak_client.py`: Mock Keycloak (`responses`/`requests_mock`), testen Browser-Flow und optional Direct Grant Fallback.
    - `backend/tests/test_auth_ui.py`: Form-Verarbeitung, CSRF, Flash-Messages, Already-logged-in Redirect.
    - `backend/tests/test_csrf_store.py` (optional) für Token-Generierung/Härtung.
-3. **E2E-Anpassung** (`backend/tests_e2e/test_identity_login_register_logout_e2e.py`)
-   - UI Formular laden → CSRF aus DOM extrahieren → POST an unsere Endpoints → OIDC Callback / Session prüfen.
-   - Registrierung: via UI oder Admin-API, inkl. Rollenprüfung über `/api/me`.
-   - Zusätzliches Szenario mit Feature-Flag = false: sicherstellen, dass Redirect zur Keycloak-UI weiterhin funktioniert.
+3. **E2E (aktualisiert)** (`backend/tests_e2e/test_identity_login_register_logout_e2e.py`)
+   - Flow über `app.localhost` → Redirect zu `id.localhost` → Callback → Session prüfen.
+   - Registrierung: via IdP‑UI oder Admin‑API, Rollenprüfung über `/api/me`.
+   - Szenario mit Feature‑Flag = false bleibt bestehen (IdP‑Redirect).
 4. **Abdeckung Offene Fälle**
    - Login mit Redirect + CSRF.
    - Registrierung Duplicate + Rollenprüfung.
@@ -306,7 +307,7 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
 6. **UI / Styling Feinschliff (Phase 1)**
    - Komponenten finalisieren (minimal), `gustav.css` für Fehlermeldung/Fokus anpassen.
 7. **E2E Test aktualisieren (Phase 1)**
-   - Login/Logout neues Formular (CSRF-Token extrahieren) im Direct-Grant-Modus.
+   - Hostbasiertes Routing (app/id.localhost) abbilden; optional DEV‑Formulare testen.
 8. **Dokumentation aktualisieren** ✅
    - `docs/ARCHITECTURE.md` (Auth-Flows) ergänzt; README Quickstart DEV‑Flag ergänzt.
 9. **Review & Feedback**
@@ -329,20 +330,20 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
 | **UI-Inkonsistenzen / Accessibility** | Niedrig | Zentrale Form-Komponenten, manuelle QA mit Screenreader |
 | **Testflakiness E2E** | Mittel | Stabilisierung: Wartehilfen, dedizierte Test-Profile, Mock-Option für CI |
 
-## Offene Fragen
+## Offene Fragen (aktualisiert)
 
-1. Sollen wir sofort Mehrsprachigkeit unterstützen (DE/EN)? Aktuell DE-only → später Feature.
-2. Sollen registrierte Nutzer:innen direkt eingeloggt werden? Vorläufig nein; nach Registrierung → Login-Formular mit `login_hint`.
-3. Wird ein AGB-/Datenschutz-Consent im Registrierungsformular benötigt? (DSGVO).
-4. Sollen Lehrer:innen andere Felder befüllen (z. B. Schulnummer)? Separate Story.
-5. Wie konkretisieren wir Zeitplan & Deliverables der Browser-Flow-Research (Abschlusskriterien, Ablösung des Direct-Grant-Fallbacks)?
+1. Mehrsprachigkeit (DE/EN) jetzt oder später? (aktuell: DE)
+2. Direktes Einloggen nach Registrierung beibehalten? (Keycloak‑Standard) Oder E‑Mail‑Verifizierung erzwingen (empfohlen für PROD)?
+3. AGB-/Datenschutz‑Consent im Registrierungsformular? (DSGVO)
+4. Lehrkräfte: zusätzliche Felder (z. B. Schulnummer)? Separate Story.
+5. Phase‑2‑Research konkretisieren: Kriterien, Aufwand, Nutzen gegenüber gebrandeter IdP‑UI.
 
 ## Nächste Schritte
 
-- E2E für UI‑Flows ergänzen (DEV/CI, Feature‑Flag an): Formular laden → CSRF extrahieren → POST → `/api/me` 200.
-- UI-Feinschliff: FormContainer, Fehlermeldungen und Fokuszustände in CSS.
-- README erweitern (Troubleshooting, ENV‑Matrix dev/prod, Flag‑Verhalten).
-- Phase‑2 Research starten: Browser‑Flow Adapter (Keycloak Dokumentation sichten), CSRFStore entwerfen.
+- Theme‑Feinschliff für IdP‑UI (kompakte Card, DE‑Labels, optional Logo).
+- Optional: E‑Mail‑Verifizierung aktivieren; MailHog im Compose ergänzen; Web blockt Zugriffe bis `email_verified=true`.
+- E2E auf hostbasiertes Routing (`app.localhost`/`id.localhost`) stabilisieren.
+- README/Docs konsolidieren (Proxy‑Setup, /etc/hosts, lokaler Betrieb).
 
 ---
 

@@ -23,7 +23,7 @@ components:
       enum: [student, teacher, admin]
     Me:
       type: object
-      required: [email, roles]
+      required: [email, roles, expires_at]
       properties:
         email:
           type: string
@@ -38,7 +38,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: Session expiration timestamp (optional).
+          description: Session expiration timestamp (UTC ISO-8601).
     Error:
       type: object
       required: [error]
@@ -55,8 +55,8 @@ paths:
       summary: Redirect to IdP login (Authorization Code Flow with PKCE)
       description: >-
         Redirects to the Keycloak authorization endpoint with PKCE. The server
-        generates and manages the opaque `state` for CSRF protection; clients
-        MUST NOT provide a `state` value.
+        generates and manages the opaque `state` (CSRF) and a `nonce` (replay
+        protection) for the OIDC flow; clients MUST NOT provide these values.
       operationId: startLogin
       parameters:
         - in: query

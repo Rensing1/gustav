@@ -347,7 +347,7 @@ class Navigation(Component):
         """Render logout link with POST request"""
         return """
         <a href="#"
-           hx-post="/logout"
+           hx-post="/auth/logout"
            hx-redirect="/"
            class="sidebar-link sidebar-logout"
            aria-label="Abmelden"

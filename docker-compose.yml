@@ -1,9 +1,22 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: gustav-caddy
+    ports:
+      - "127.0.0.1:8100:80"
+    volumes:
+      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
+      - keycloak
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
+
   web:
     build: .
     container_name: gustav-alpha2
-    ports:
-      - "8100:8000"
+    # behind proxy; no direct host port mapping
     volumes:
       # Live-Reload: Web-Code (SSR) wird eingebunden
       - ./backend/web:/app:z
@@ -15,7 +28,7 @@ services:
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       - KC_BASE_URL=${KC_BASE_URL:-http://keycloak:8080}
-      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://localhost:8080}
+      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://id.localhost:8100}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
       - REDIRECT_URI=${REDIRECT_URI:-http://localhost:8100/auth/callback}
@@ -32,11 +45,15 @@ services:
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_PROXY: edge
+      KC_HOSTNAME_URL: http://id.localhost:8100
+      KC_HOSTNAME_ADMIN_URL: http://id.localhost:8100
       # In dev we rely on the embedded DB; for prod, configure KC_DB=postgres and friends.
     volumes:
       - ./keycloak/realm-gustav.json:/opt/keycloak/data/import/realm-gustav.json:ro
-    ports:
-      - "8080:8080"
+      # Mount custom GUSTAV login theme (CSS-only)
+      - ./keycloak/themes/gustav:/opt/keycloak/themes/gustav:ro
+    # No host port mapping in local-only mode; reachable via caddy reverse proxy
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

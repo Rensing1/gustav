@@ -635,7 +635,15 @@ async def auth_login(state: str | None = None, redirect: str | None = None):
         form_attrs = "method=\"post\" action=\"/auth/login\""
         form_html = f"<form {form_attrs}>{email}{password}{hidden_csrf}{submit}</form>"
 
-        content = f"<h1>Login</h1>{form_html}"
+        # Convenience links for better UX
+        help_links = (
+            '<div class="form-help-links">'
+            '<a href="/auth/register" hx-get="/auth/register" hx-target="#main-content">Konto anlegen</a>'
+            ' · '
+            '<a href="/auth/forgot" hx-get="/auth/forgot" hx-target="#main-content">Passwort vergessen?</a>'
+            "</div>"
+        )
+        content = f"<h1>Login</h1>{form_html}{help_links}"
         page = Layout(title="Login", content=content, user=None, show_nav=False, show_header=False, current_path="/auth/login").render()
         resp.body = page.encode()
         return resp
@@ -679,7 +687,13 @@ async def auth_forgot(login_hint: str | None = None):
         form_attrs = "method=\"post\" action=\"/auth/forgot\""
         form_html = f"<form {form_attrs}>{email}{hidden_csrf}{submit}</form>"
 
-        content = f"<h1>Passwort vergessen</h1>{form_html}"
+        # Link back to login for convenience
+        back_link = (
+            '<div class="form-help-links">'
+            '<a href="/auth/login" hx-get="/auth/login" hx-target="#main-content">Zurück zum Login</a>'
+            "</div>"
+        )
+        content = f"<h1>Passwort vergessen</h1>{form_html}{back_link}"
         page = Layout(title="Passwort vergessen", content=content, user=None, show_nav=False, show_header=False, current_path="/auth/forgot").render()
         resp.body = page.encode()
         return resp
@@ -731,7 +745,13 @@ async def auth_register(login_hint: str | None = None):
         form_attrs = "method=\"post\" action=\"/auth/register\""
         form_html = f"<form {form_attrs}>{display_name}{email}{password}{hidden_csrf}{submit}</form>"
 
-        content = f"<h1>Registrieren</h1>{form_html}"
+        # Link back to login for convenience
+        back_link = (
+            '<div class="form-help-links">'
+            '<a href="/auth/login" hx-get="/auth/login" hx-target="#main-content">Schon ein Konto? Anmelden</a>'
+            "</div>"
+        )
+        content = f"<h1>Registrieren</h1>{form_html}{back_link}"
         page = Layout(title="Registrieren", content=content, user=None, show_nav=False, show_header=False, current_path="/auth/register").render()
         resp.body = page.encode()
         return resp

@@ -1,0 +1,140 @@
+/*
+ GUSTAV Keycloak Login Theme (CSS-only)
+
+ Goal: Make Keycloak's login/register/forgot pages visually consistent with
+ GUSTAV without changing templates or handling passwords in our app.
+ Minimal overrides focus on typography, colors, buttons, inputs, spacing.
+
+ This CSS borrows the core palette and scale from backend/web/static/css/gustav.css
+ but remains self-contained to avoid cross-container dependencies.
+*/
+
+/* ---- 1) Base tokens (light default) ---- */
+:root {
+  /* Typography */
+  --font-base: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 8px rgba(0,0,0,0.08);
+
+  /* Rosé Pine Dawn inspired (light) */
+  --color-bg-base:      #FAF4ED;
+  --color-bg-surface:   #FFFAF3;
+  --color-text:         #575279;
+  --color-text-muted:   #9893A5;
+  --color-primary:      #286983; /* pine */
+  --color-border:       #F2E9E1;
+  --color-border-focus: #286983;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Everforest Dark Hard inspired (dark) */
+    --color-bg-base:      #272E33;
+    --color-bg-surface:   #2E383C;
+    --color-text:         #D3C6AA;
+    --color-text-muted:   #859289;
+    --color-primary:      #A7C080;
+    --color-border:       #414B50;
+    --color-border-focus: #A7C080;
+  }
+}
+
+/* ---- 2) Page scaffolding ---- */
+html, body {
+  background: var(--color-bg-base);
+  color: var(--color-text);
+  font-family: var(--font-base);
+  font-size: var(--text-base);
+}
+
+/* Remove default Keycloak background/logo layers */
+body.login-pf,
+.login-pf body,
+body, html {
+  background-image: none !important;
+}
+
+#kc-header, #kc-header-wrapper {
+  background: transparent !important;
+  color: var(--color-text);
+}
+
+#kc-content, #kc-content-wrapper, #kc-page-title {
+  color: var(--color-text);
+}
+
+/* Center card and make it match our surfaces */
+.card-pf, .login-pf-page .card-pf, .pf-c-card {
+  background: var(--color-bg-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+#kc-header, #kc-header-wrapper, .login-pf-page .login-pf-brand {
+  display: none !important; /* Hide Keycloak brand strip/logo */
+}
+
+/* ---- 3) Headings & links ---- */
+h1, h2, h3, h4 { color: var(--color-text); }
+a { color: var(--color-primary); }
+a:hover { filter: brightness(1.1); }
+
+/* ---- 4) Inputs ---- */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+textarea, select {
+  background: var(--color-bg-base) !important;
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-border-focus) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 25%, transparent) !important;
+}
+
+/* ---- 5) Buttons ---- */
+.btn, .pf-c-button {
+  border-radius: 6px !important;
+}
+
+.btn-primary, .pf-m-primary {
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+.btn-primary:hover, .pf-m-primary:hover {
+  filter: brightness(1.05) !important;
+}
+
+.btn-default, .pf-m-secondary {
+  background: var(--color-bg-surface) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+.btn-default:hover, .pf-m-secondary:hover {
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent) !important;
+}
+
+/* ---- 6) Form help / errors ---- */
+.pf-c-form__helper-text, .instruction, .alert, .alert-warning, .alert-error {
+  color: var(--color-text-muted) !important;
+}
+.alert-error, .pf-m-danger { color: #b00020 !important; }
+
+/* ---- 7) Footer/links spacing ---- */
+#kc-form-buttons, #kc-form-options {
+  margin-top: 0.75rem !important;
+}

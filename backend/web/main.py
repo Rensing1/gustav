@@ -6,6 +6,7 @@ import os
 import logging
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -178,6 +179,10 @@ app = FastAPI(
 # Resolve static directory relative to this file, independent of CWD
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# Auth router groups authentication-related routes to avoid duplication between
+# the full app and the slim test app.
+auth_router = APIRouter(tags=["auth"])  # no prefix, explicit paths for clarity
 
 
 # --- OIDC minimal config & stores (dev) ---
@@ -588,7 +593,7 @@ async def health_check():
 
 # --- Minimal Auth Adapter (stub) to satisfy contract tests ---
 
-@app.get("/auth/login")
+@auth_router.get("/auth/login")
 async def auth_login(state: str | None = None, redirect: str | None = None):
     """
     Start OIDC flow with PKCE and server-side state.
@@ -662,7 +667,7 @@ async def auth_login(state: str | None = None, redirect: str | None = None):
     return RedirectResponse(url=url, status_code=302)
 
 
-@app.get("/auth/forgot")
+@auth_router.get("/auth/forgot")
 async def auth_forgot(login_hint: str | None = None):
     """
     Convenience redirect to Keycloak's 'Forgot Password' page.
@@ -714,7 +719,7 @@ async def auth_forgot(login_hint: str | None = None):
     return RedirectResponse(url=target, status_code=302)
 
 
-@app.get("/auth/register")
+@auth_router.get("/auth/register")
 async def auth_register(login_hint: str | None = None):
     """
     Convenience redirect to Keycloak's self-registration page.
@@ -854,7 +859,7 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     return resp
 
 
-@app.post("/auth/login")
+@auth_router.post("/auth/login")
 async def auth_login_post(request: Request):
     """Handle login form submissions (DEV/CI feature-flag)."""
     if not AUTH_USE_DIRECT_GRANT:
@@ -900,7 +905,7 @@ async def auth_login_post(request: Request):
     return resp
 
 
-@app.post("/auth/register")
+@auth_router.post("/auth/register")
 async def auth_register_post(request: Request):
     """Handle registration form (DEV/CI feature-flag)."""
     if not AUTH_USE_DIRECT_GRANT:
@@ -930,7 +935,7 @@ async def auth_register_post(request: Request):
     return RedirectResponse(url=dest, status_code=303)
 
 
-@app.post("/auth/forgot")
+@auth_router.post("/auth/forgot")
 async def auth_forgot_post(request: Request):
     """Trigger password reset via IdP (DEV/CI feature-flag)."""
     if not AUTH_USE_DIRECT_GRANT:
@@ -941,7 +946,7 @@ async def auth_forgot_post(request: Request):
     # Neutral 202 per contract
     return JSONResponse({"message": "If the address exists, we sent an email"}, status_code=202)
 
-@app.post("/auth/logout")
+@auth_router.post("/auth/logout")
 async def auth_logout(request: Request):
     """
     Invalidate the current session and clear the session cookie.
@@ -1000,6 +1005,9 @@ async def get_me(request: Request):
         "email_verified": rec.email_verified,
     })
 
+# Register auth routes on the full application
+app.include_router(auth_router)
+
 
 # --- App factory for tests: auth-only slim app ---
 def create_app_auth_only() -> FastAPI:
@@ -1010,12 +1018,9 @@ def create_app_auth_only() -> FastAPI:
     """
     slim = FastAPI(title="GUSTAV auth-only", version="0.0.2")
 
-    # Reuse the main app's handlers to avoid code drift. These handlers are
-    # fast-paths (no SSR) when AUTH_USE_DIRECT_GRANT is disabled (default in tests).
-    # This keeps contract behavior consistent between the full app and the slim app.
-    slim.add_api_route("/auth/login", auth_login, methods=["GET"])  # type: ignore[arg-type]
-    slim.add_api_route("/auth/forgot", auth_forgot, methods=["GET"])  # type: ignore[arg-type]
-    slim.add_api_route("/auth/register", auth_register, methods=["GET"])  # type: ignore[arg-type]
+    # Reuse the main app's auth router to avoid drift.
+    # Note: Slim app still overrides /auth/callback and /api/me below for test stubs.
+    slim.include_router(auth_router)
 
     @slim.get("/auth/callback")
     async def slim_auth_callback(code: str | None = None, state: str | None = None):

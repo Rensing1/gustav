@@ -20,6 +20,20 @@ _Stand: 2025-10-17_
 - **Glossary:** Konsistente Begriffe („Lernende“, „Lehrkräfte“, „Service Account“, „Session“).
 - **Dokumentation:** Docstrings und Inline-Kommentare in Englisch, Markdown-Dokumentation hier gepflegt.
 
+## Umsetzungsschritt: Prod‑Build‑Härtung (Theme/CSS) – ✅ erledigt
+
+- Ziel: Reproduzierbares Deployment ohne Volumes. Das App‑CSS wird beim Image‑Build in das Keycloak‑Theme kopiert.
+- Änderungen:
+  - Neues Image für Keycloak: `keycloak/Dockerfile` kopiert
+    - `keycloak/themes/gustav` → `/opt/keycloak/themes/gustav`
+    - `backend/web/static/css/gustav.css` → `/opt/keycloak/themes/gustav/login/resources/css/app-gustav-base.css`
+    - `keycloak/realm-gustav.json` → `/opt/keycloak/data/import/realm-gustav.json`
+  - `docker-compose.yml`: Keycloak verwendet `build:` statt Upstream‑Image; Volumes für Theme/CSS/Realm entfallen.
+- Start (lokal):
+  - `docker compose up -d --build caddy web keycloak`
+  - Erststart von Keycloak dauert 10–20 s; danach ist die gebrandete Login‑Seite verfügbar.
+
+
 ## Annahmen & Vorarbeiten
 
 1. **Keycloak-Konfiguration & Betrieb (aktuell)**

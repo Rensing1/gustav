@@ -37,7 +37,9 @@ services:
       - gustav-alpha2-network
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    build:
+      context: .
+      dockerfile: keycloak/Dockerfile
     container_name: gustav-keycloak
     command: ["start-dev", "--import-realm"]
     env_file:
@@ -49,12 +51,7 @@ services:
       KC_HOSTNAME_URL: http://id.localhost:8100
       KC_HOSTNAME_ADMIN_URL: http://id.localhost:8100
       # In dev we rely on the embedded DB; for prod, configure KC_DB=postgres and friends.
-    volumes:
-      - ./keycloak/realm-gustav.json:/opt/keycloak/data/import/realm-gustav.json:ro
-      # Mount custom GUSTAV login theme (CSS-only)
-      - ./keycloak/themes/gustav:/opt/keycloak/themes/gustav:ro
-      # Share the canonical app CSS into the theme to unify styling
-      - ./backend/web/static/css/gustav.css:/opt/keycloak/themes/gustav/login/resources/css/app-gustav-base.css:ro
+    # No volumes: theme and app CSS are baked into the image for reproducible deployments
     # No host port mapping in local-only mode; reachable via caddy reverse proxy
     restart: unless-stopped
     networks:

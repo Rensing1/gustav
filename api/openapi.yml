@@ -23,7 +23,7 @@ components:
       enum: [student, teacher, admin]
     Me:
       type: object
-      required: [email, roles]
+      required: [email, roles, expires_at]
       properties:
         email:
           type: string
@@ -38,7 +38,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: Session expiration timestamp (optional).
+          description: Session expiration timestamp (UTC ISO-8601).
     Error:
       type: object
       required: [error]
@@ -52,23 +52,23 @@ paths:
   /auth/login:
     get:
       tags: [Auth]
-      summary: Start login via Keycloak
-      description: Redirects the user to the Keycloak authorization endpoint.
+      summary: Redirect to IdP login (Authorization Code Flow with PKCE)
+      description: >-
+        Redirects to the Keycloak authorization endpoint with PKCE. The server
+        generates and manages the opaque `state` (CSRF) and a `nonce` (replay
+        protection) for the OIDC flow; clients MUST NOT provide these values.
       operationId: startLogin
       parameters:
-        - in: query
-          name: state
-          schema:
-            type: string
-          description: >-
-            Optional opaque state token used for CSRF protection and QR-context.
-            Created and validated server-side.
         - in: query
           name: redirect
           schema:
             type: string
-            pattern: '^/[A-Za-z0-9_\-/]*$'
-          description: Optional in-app path to navigate to after login.
+            maxLength: 256
+            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
+          description: >-
+            Optional in-app absolute path to navigate to after login. External
+            URLs are rejected; invalid values are ignored. Disallows double-slash
+            and path traversal segments.
       responses:
         '302':
           description: Redirect to Keycloak authorization endpoint
@@ -77,6 +77,7 @@ paths:
               description: Authorization URL at Keycloak
               schema:
                 type: string
+
 
   /auth/callback:
     get:
@@ -104,6 +105,7 @@ paths:
                 httpOnly session cookie `gustav_session`.
                 Production: `HttpOnly; Secure; SameSite=strict`.
                 Development/Test: `HttpOnly; SameSite=lax`.
+                In production, `Max-Age` matches the server session TTL (default 3600 seconds).
               schema:
                 type: string
             Location:
@@ -112,28 +114,72 @@ paths:
                 type: string
         '400':
           description: Invalid or expired code/state
+          headers:
+            Cache-Control:
+              description: Security hardening — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
   /auth/logout:
-    post:
+    get:
       tags: [Auth]
-      summary: Logout and clear session cookie
-      description: Invalidates the current session and clears the cookie.
-      operationId: logout
-      security:
-        - cookieAuth: []
+      summary: Logout (App session + IdP end-session)
+      description: >-
+        Clears the application session cookie and redirects to the Identity Provider's
+        end-session endpoint. After IdP logout, the browser returns to the app start page.
+      operationId: logoutUnified
+      parameters:
+        - in: query
+          name: redirect
+          required: false
+          schema:
+            type: string
+            maxLength: 256
+            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
+            default: "/auth/logout/success"
+          description: >-
+            App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.
+            External URLs are rejected and ignored. Disallows double-slash and path traversal.
+            Defaults to "/auth/logout/success". Server enforces the same regex pattern.
       responses:
-        '204':
-          description: Session terminated, cookie cleared
+        '302':
+          description: Redirect to IdP end-session endpoint (then back to the app)
+          headers:
+            Set-Cookie:
+              description: >-
+                Clears the httpOnly session cookie `gustav_session` (expires it).
+                Production: `HttpOnly; Secure; SameSite=strict; Max-Age=0`.
+                Development/Test: `HttpOnly; SameSite=lax; Max-Age=0`.
+              schema:
+                type: string
+            Location:
+              description: IdP end-session endpoint URL
+              schema:
+                type: string
+
+  /auth/logout/success:
+    get:
+      tags: [Auth]
+      summary: Logout success page
+      description: Shows a confirmation that the user has been logged out and links to /auth/login.
+      responses:
+        '200':
+          description: HTML page confirming logout
+          content:
+            text/html:
+              schema:
+                type: string
+
 
   /auth/forgot:
     get:
       tags: [Auth]
-      summary: Redirect to Keycloak "Forgot Password" page
-      description: Convenience redirect endpoint to start the password reset flow in Keycloak.
+      summary: Redirect to IdP forgot password page
+      description: Redirect to Keycloak password reset page.
       operationId: forgotPassword
       parameters:
         - in: query
@@ -150,6 +196,32 @@ paths:
               schema:
                 type: string
 
+
+  /auth/register:
+    get:
+      tags: [Auth]
+      summary: Redirect to IdP registration
+      description: >-
+        Redirects to Keycloak with `kc_action=register`. The server generates and
+        includes a `nonce` parameter (replay protection) in the authorization request,
+        analogous to `/auth/login`.
+      operationId: startRegistration
+      parameters:
+        - in: query
+          name: login_hint
+          schema:
+            type: string
+            format: email
+          description: Optional email to prefill in the registration form.
+      responses:
+        '302':
+          description: Redirect to Keycloak registration page
+          headers:
+            Location:
+              schema:
+                type: string
+
+
   /api/me:
     get:
       tags: [Auth]
@@ -161,12 +233,22 @@ paths:
       responses:
         '200':
           description: Session info
+          headers:
+            Cache-Control:
+              description: Security hardening — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Me'
         '401':
           description: Not authenticated
+          headers:
+            Cache-Control:
+              description: Security hardening — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:

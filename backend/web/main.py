@@ -18,6 +18,7 @@ from components import (
     TaskMetaItem,
     TextAreaField,
     FileUploadField,
+    TextInputField,
     SubmitButton,
     OnPageNavigation,
     OnPageNavItem,
@@ -25,12 +26,31 @@ from components import (
 from components.navigation import Navigation
 from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
+from identity_access.admin_client import AdminClient as KCAdminClient
 from identity_access.stores import StateStore, SessionStore
+from datetime import datetime, timezone
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
+
+# Load .env for local dev/test so environment variables are available outside Docker
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    # dotenv is optional; ignore if not available
+    pass
 
 
 class AuthSettings:
-    """Central settings helper to derive runtime flags with optional overrides."""
+    """Central settings helper to derive runtime flags with optional overrides.
+
+    Why:
+        Keep environment handling (dev/prod/e2e) in one place so cookie
+        hardening and other auth-related behavior can switch predictably.
+
+    Behavior:
+        - `environment` reads `GUSTAV_ENV` (default `dev`), unless overridden for tests.
+        - Accepted values: `dev`, `prod` (and `e2e` treated like `dev`).
+    """
 
     def __init__(self) -> None:
         self._env_override: str | None = None
@@ -51,30 +71,86 @@ SETTINGS = AuthSettings()
 SESSION_COOKIE_NAME = "gustav_session"
 ALLOWED_ROLES = {"student", "teacher", "admin"}
 
+# Direct-Grant has been removed: all flows use browser-based redirects to Keycloak.
+
 
 def _session_cookie_options() -> dict:
-    """Return cookie policy depending on environment (dev vs prod)."""
+    """Return cookie policy depending on environment (dev vs prod).
+
+    Returns:
+        Dictionary with `secure` and `samesite` flags. In `prod` we set
+        `secure=True` and `SameSite=strict`; in `dev`/tests we keep
+        `secure=False` and `SameSite=lax` to allow localhost flows.
+    """
     env = SETTINGS.environment
     secure = env == "prod"
     samesite = "strict" if secure else "lax"
     return {"secure": secure, "samesite": samesite}
 
 
-def _set_session_cookie(response: Response, value: str) -> None:
-    """Attach the gustav session cookie with hardened flags."""
+def _primary_role(roles: list[str]) -> str:
+    """Return the primary role for SSR display using fixed priority.
+
+    Why:
+        Token role order is not guaranteed. To keep UI deterministic, choose
+        by priority: admin > teacher > student. Defaults to 'student'.
+
+    Examples:
+        ["student", "teacher"] -> "teacher"
+        ["admin"] -> "admin"
+        [] -> "student"
+    """
+    priority = ["admin", "teacher", "student"]
+    lowered = [r.lower() for r in roles if isinstance(r, str)]
+    for r in priority:
+        if r in lowered:
+            return r
+    return "student"
+
+
+def _set_session_cookie(response: Response, value: str, *, max_age: int | None = None) -> None:
+    """Attach the gustav session cookie with hardened flags.
+
+    Parameters:
+        response: The outgoing response to attach the cookie to.
+        value: Opaque session ID; never store PII in the cookie.
+
+    Behavior:
+        - Always sets `HttpOnly` to prevent JS access.
+        - Uses environment-driven `Secure` and `SameSite` flags.
+        - Path is `/` to cover the entire app; no Domain is set to avoid
+          accidental subdomain leakage in multi-host setups.
+    """
     opts = _session_cookie_options()
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=value,
-        httponly=True,
-        secure=opts["secure"],
-        samesite=opts["samesite"],
-        path="/",
-    )
+    if max_age is not None:
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=value,
+            httponly=True,
+            secure=opts["secure"],
+            samesite=opts["samesite"],
+            path="/",
+            max_age=max_age,
+        )
+    else:
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=value,
+            httponly=True,
+            secure=opts["secure"],
+            samesite=opts["samesite"],
+            path="/",
+        )
 
 
 def _clear_session_cookie(response: Response) -> None:
-    """Fully expire the gustav session cookie with matching flags."""
+    """Fully expire the gustav session cookie with matching flags.
+
+    Behavior:
+        - Sends an empty cookie with `Max-Age=0` so browsers delete it.
+        - Uses the same `Secure`/`SameSite` profile as `_set_session_cookie`
+          to ensure consistent deletion across environments.
+    """
     opts = _session_cookie_options()
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -86,6 +162,9 @@ def _clear_session_cookie(response: Response) -> None:
         expires=0,
         max_age=0,
     )
+
+
+# Note: CSRF utilities removed with Direct-Grant UI removal.
 
 # FastAPI App erstellen
 # Default app (full web). For tests, an app factory may build a slimmer app.
@@ -101,6 +180,9 @@ app = FastAPI(
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# Import shared auth router and helpers from dedicated module
+from routes.auth import auth_router
+
 
 # --- OIDC minimal config & stores (dev) ---
 def load_oidc_config() -> OIDCConfig:
@@ -108,13 +190,76 @@ def load_oidc_config() -> OIDCConfig:
     realm = os.getenv("KC_REALM", "gustav")
     client_id = os.getenv("KC_CLIENT_ID", "gustav-web")
     redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8100/auth/callback")
-    return OIDCConfig(base_url=base_url, realm=realm, client_id=client_id, redirect_uri=redirect_uri)
+    public_base = os.getenv("KC_PUBLIC_BASE_URL", base_url)
+    return OIDCConfig(
+        base_url=base_url,
+        realm=realm,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        public_base_url=public_base,
+    )
 
 
 OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
 SESSION_STORE = SessionStore()
+# Admin client remains available for future server-side admin tasks
+KEYCLOAK_ADMIN = KCAdminClient(OIDC_CFG)
+
+
+# --- Auth Enforcement Middleware -------------------------------------------------
+
+def _is_public_path(path: str) -> bool:
+    """Paths that must remain accessible without a session (no redirect loop)."""
+    return (
+        path.startswith("/auth/")
+        or path.startswith("/static/")
+        or path == "/health"
+        or path == "/favicon.ico"
+    )
+
+
+@app.middleware("http")
+async def auth_enforcement(request: Request, call_next):
+    """Enforce login for non-public routes with content-type aware responses.
+
+    Rules:
+    - Public: /auth/*, /health, /static/*, /favicon.ico
+    - API (paths starting with /api/): 401 JSON when unauthenticated
+    - HTMX requests: 401 with HX-Redirect header to /auth/login
+    - HTML (default): 302 redirect to /auth/login when unauthenticated
+
+    When authenticated, attaches `request.state.user` dict for SSR consumption.
+    """
+    path = request.url.path
+    if _is_public_path(path):
+        return await call_next(request)
+
+    # API responses should be JSON 401 when not authenticated
+    if path.startswith("/api/"):
+        sid = request.cookies.get(SESSION_COOKIE_NAME)
+        rec = SESSION_STORE.get(sid or "")
+        if not rec:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+        # Attach user info and proceed
+        request.state.user = {"email": rec.email, "roles": rec.roles}
+        return await call_next(request)
+
+    # Non-API routes
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
+    rec = SESSION_STORE.get(sid or "")
+    if not rec:
+        # HTMX partial request? Use HX-Redirect
+        if "HX-Request" in request.headers:
+            return Response(status_code=401, headers={"HX-Redirect": "/auth/login"})
+        # Default: redirect HTML to login
+        return RedirectResponse(url="/auth/login", status_code=302)
+
+    # Attach principal for SSR (deterministic primary role)
+    role = _primary_role(rec.roles)
+    request.state.user = {"email": rec.email, "role": role, "roles": rec.roles}
+    return await call_next(request)
 
 
 def build_home_content() -> str:
@@ -435,18 +580,16 @@ async def home(request: Request):
 
     # If this is an HTMX request, return content + sidebar (OOB) for consistent active state
     if "HX-Request" in request.headers:
-        demo_user = {
-            "name": "Felix",
-            "role": "teacher"
-        }
-        sidebar_oob = Navigation(demo_user, request.url.path).render_aside(oob=True)
+        user = getattr(request.state, "user", None)
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
         return HTMLResponse(content=content + sidebar_oob)
 
     # Use Layout component to render the full page on normal requests
+    user = getattr(request.state, "user", None)
     layout = Layout(
         title="Startseite",
         content=content,
-        user=demo_user,
+        user=user,
         show_nav=True,
         show_header=True,
         current_path=request.url.path  # Dynamically get current path from request
@@ -468,23 +611,15 @@ async def wissenschaft(request: Request):
     # Check if this is an HTMX request (partial page update)
     if "HX-Request" in request.headers:
         # Return content + sidebar OOB update for consistent active highlighting
-        demo_user = {
-            "name": "Felix",
-            "role": "teacher"
-        }
-        sidebar_oob = Navigation(demo_user, request.url.path).render_aside(oob=True)
+        user = getattr(request.state, "user", None)
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
         return HTMLResponse(content=content + sidebar_oob)
 
     # For normal requests, return the full page with layout
-    demo_user = {
-        "name": "Felix",
-        "role": "teacher"  # This page is accessible to both roles
-    }
-
     layout = Layout(
         title="Wissenschaft - GUSTAV",
         content=content,
-        user=demo_user,
+        user=getattr(request.state, "user", None),
         show_nav=True,
         show_header=True,
         current_path=request.url.path  # Dynamically get current path from request
@@ -501,31 +636,7 @@ async def health_check():
 
 # --- Minimal Auth Adapter (stub) to satisfy contract tests ---
 
-@app.get("/auth/login")
-async def auth_login(state: str | None = None, redirect: str | None = None):
-    """
-    Start OIDC flow with PKCE.
-    Creates server-side state with code_verifier and optional redirect, then
-    redirects to Keycloak auth endpoint.
-    """
-    code_verifier = OIDCClient.generate_code_verifier()
-    code_challenge = OIDCClient.code_challenge_s256(code_verifier)
-    rec = STATE_STORE.create(code_verifier=code_verifier, redirect=redirect)
-    final_state = state or rec.state
-    url = OIDC.build_authorization_url(state=final_state, code_challenge=code_challenge)
-    return RedirectResponse(url=url, status_code=302)
-
-
-@app.get("/auth/forgot")
-async def auth_forgot(login_hint: str | None = None):
-    """
-    Convenience redirect to Keycloak's 'Forgot Password' page.
-    """
-    target = "https://keycloak.local/realms/gustav/login-actions/reset-credentials"
-    if login_hint:
-        target += f"?login_hint={login_hint}"
-    return RedirectResponse(url=target, status_code=302)
-
+# Auth callback remains defined in this module to keep test monkeypatching stable
 
 @app.get("/auth/callback")
 async def auth_callback(code: str | None = None, state: str | None = None):
@@ -549,25 +660,34 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         the public login flow.
     """
     if not code or not state:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
+        # Security: do not cache auth failure responses
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
+    # State must have been issued by /auth/login and still be valid
     rec = STATE_STORE.pop_valid(state)
     if not rec:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400)
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
 
     try:
         tokens = OIDC.exchange_code_for_tokens(code=code, code_verifier=rec.code_verifier)
     except Exception as exc:
         logger.warning("Token exchange failed: %s", exc.__class__.__name__)
-        return JSONResponse({"error": "token_exchange_failed"}, status_code=400)
+        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers={"Cache-Control": "no-store"})
 
     id_token = tokens.get("id_token")
     if not id_token or not isinstance(id_token, str):
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400)
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
     try:
         claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
     except IDTokenVerificationError as exc:
         logger.warning("ID token verification failed: %s", exc.code)
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400)
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
+
+    # Phase 2: Nonce check — reject if ID token nonce does not match the stored state nonce
+    # Why: `state` protects the authorization request (CSRF); `nonce` protects the
+    # ID token against replay by binding it to our stored login/register intent.
+    claim_nonce = claims.get("nonce")
+    if getattr(rec, "nonce", None) and claim_nonce != rec.nonce:
+        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "no-store"})
 
     email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"
     raw_roles: list[str] = []
@@ -586,46 +706,57 @@ async def auth_callback(code: str | None = None, state: str | None = None):
         roles = ["student"]
     email_verified = bool(claims.get("email_verified", False))
 
-    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified)
+    # Create server-side session and retain id_token for end-session logout
+    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified, id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
-    _set_session_cookie(resp, sess.session_id)
+    # Attach hardened session cookie (opaque ID only); in PROD, align Max-Age with server-side TTL
+    max_age = sess.ttl_seconds if SETTINGS.environment == "prod" else None
+    _set_session_cookie(resp, sess.session_id, max_age=max_age)
     return resp
 
 
-@app.post("/auth/logout")
-async def auth_logout(request: Request):
-    """
-    Invalidate the current session and clear the session cookie.
-    Requires an existing session cookie; otherwise 401.
-    """
-    if SESSION_COOKIE_NAME not in request.cookies:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+# Note: POST endpoints for login/register/forgot were removed together with
+# the Direct-Grant UI flow. All interactive flows happen on Keycloak.
 
-    sid = request.cookies.get(SESSION_COOKIE_NAME)
-    if sid:
-        SESSION_STORE.delete(sid)
-    resp = Response(status_code=204)
-    _clear_session_cookie(resp)
-    return resp
+ # Logout route is provided by the shared auth router
 
 
 @app.get("/api/me")
 async def get_me(request: Request):
     """
     Return minimal session info if authenticated; else 401.
+
+    Why:
+        Allow frontend to check login state and show principal info.
+
+    Behavior:
+        - Reads `gustav_session` from cookies, looks up server-side session.
+        - Returns `{ email, roles, email_verified }` when found; else 401.
+
+    Permissions:
+        Authenticated route (requires `gustav_session` cookie).
     """
     if SESSION_COOKIE_NAME not in request.cookies:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        # Security: prevent caching of auth state responses
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
     sid = request.cookies.get(SESSION_COOKIE_NAME)
     rec = SESSION_STORE.get(sid or "")
     if not rec:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+    # Serialize expires_at as UTC ISO-8601 if available
+    exp_iso = None
+    if rec.expires_at:
+        exp_iso = datetime.fromtimestamp(rec.expires_at, tz=timezone.utc).isoformat(timespec="seconds")
     return JSONResponse({
         "email": rec.email,
         "roles": rec.roles,
         "email_verified": rec.email_verified,
-    })
+        "expires_at": exp_iso,
+    }, headers={"Cache-Control": "no-store"})
+
+# Register auth routes on the full application
+app.include_router(auth_router)
 
 
 # --- App factory for tests: auth-only slim app ---
@@ -637,19 +768,9 @@ def create_app_auth_only() -> FastAPI:
     """
     slim = FastAPI(title="GUSTAV auth-only", version="0.0.2")
 
-    @slim.get("/auth/login")
-    async def slim_auth_login(state: str | None = None, redirect: str | None = None):
-        target = "https://keycloak.local/realms/gustav/protocol/openid-connect/auth"
-        if state:
-            target += f"?state={state}"
-        return RedirectResponse(url=target, status_code=302)
-
-    @slim.get("/auth/forgot")
-    async def slim_auth_forgot(login_hint: str | None = None):
-        target = "https://keycloak.local/realms/gustav/login-actions/reset-credentials"
-        if login_hint:
-            target += f"?login_hint={login_hint}"
-        return RedirectResponse(url=target, status_code=302)
+    # Reuse the main app's auth router to avoid drift.
+    # Note: Slim app still overrides /auth/callback and /api/me below for test stubs.
+    slim.include_router(auth_router)
 
     @slim.get("/auth/callback")
     async def slim_auth_callback(code: str | None = None, state: str | None = None):
@@ -667,22 +788,16 @@ def create_app_auth_only() -> FastAPI:
         )
         return resp
 
-    @slim.post("/auth/logout")
-    async def slim_auth_logout(request: Request):
-        if "gustav_session" not in request.cookies:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        resp = Response(status_code=204)
-        resp.delete_cookie(key="gustav_session", path="/")
-        return resp
+    # Logout via shared router (GET /auth/logout) already included above
 
     @slim.get("/api/me")
     async def slim_get_me(request: Request):
         if "gustav_session" not in request.cookies:
-            return JSONResponse({"error": "unauthenticated"}, status_code=401)
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         return JSONResponse({
             "email": "student@example.com",
             "roles": ["student"],
             "email_verified": True,
-        })
+        }, headers={"Cache-Control": "no-store"})
 
     return slim

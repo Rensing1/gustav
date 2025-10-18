@@ -1,37 +1,58 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: gustav-caddy
+    ports:
+      - "127.0.0.1:8100:80"
+    volumes:
+      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
+      - keycloak
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
+
   web:
     build: .
     container_name: gustav-alpha2
-    ports:
-      - "8100:8000"
+    # behind proxy; no direct host port mapping
     volumes:
       # Live-Reload: Web-Code (SSR) wird eingebunden
       - ./backend/web:/app:z
       # Identity Access layer must be mounted as well for imports
       - ./backend/identity_access:/app/identity_access:z
+    env_file:
+      - .env
     environment:
-      - ENVIRONMENT=development
-      - LOG_LEVEL=debug
-      - KC_BASE_URL=http://keycloak:8080
-      - KC_REALM=gustav
-      - KC_CLIENT_ID=gustav-web
-      - REDIRECT_URI=http://localhost:8100/auth/callback
+      - GUSTAV_ENV=${GUSTAV_ENV:-dev}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - KC_BASE_URL=${KC_BASE_URL:-http://keycloak:8080}
+      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://id.localhost:8100}
+      - KC_REALM=${KC_REALM:-gustav}
+      - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
+      - REDIRECT_URI=${REDIRECT_URI:-http://app.localhost:8100/auth/callback}
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    build:
+      context: .
+      dockerfile: keycloak/Dockerfile
     container_name: gustav-keycloak
     command: ["start-dev", "--import-realm"]
+    env_file:
+      - .env
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_PROXY: edge
+      KC_HOSTNAME_URL: http://id.localhost:8100
+      KC_HOSTNAME_ADMIN_URL: http://id.localhost:8100
       # In dev we rely on the embedded DB; for prod, configure KC_DB=postgres and friends.
-    volumes:
-      - ./keycloak/realm-gustav.json:/opt/keycloak/data/import/realm-gustav.json:ro
-    ports:
-      - "8080:8080"
+    # No volumes: theme and app CSS are baked into the image for reproducible deployments
+    # No host port mapping in local-only mode; reachable via caddy reverse proxy
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

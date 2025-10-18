@@ -29,17 +29,20 @@ def http_post(url: str, data: Dict[str, str], headers: Dict[str, str]):
 
 @dataclass(frozen=True)
 class OIDCConfig:
-    base_url: str  # e.g., http://localhost:8080
+    base_url: str  # internal base URL (server-to-server), e.g., http://keycloak:8080
     realm: str  # e.g., gustav
     client_id: str  # e.g., gustav-web
     redirect_uri: str  # e.g., http://localhost:8100/auth/callback
+    public_base_url: str | None = None  # browser-facing URL, e.g., http://localhost:8080
 
     @property
     def auth_endpoint(self) -> str:
-        return f"{self.base_url}/realms/{self.realm}/protocol/openid-connect/auth"
+        base = self.public_base_url or self.base_url
+        return f"{base}/realms/{self.realm}/protocol/openid-connect/auth"
 
     @property
     def token_endpoint(self) -> str:
+        # Token exchange happens server-side; use internal base URL
         return f"{self.base_url}/realms/{self.realm}/protocol/openid-connect/token"
 
 
@@ -61,12 +64,13 @@ class OIDCClient:
         digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
         return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
-    def build_authorization_url(self, *, state: str, code_challenge: str) -> str:
+    def build_authorization_url(self, *, state: str, code_challenge: str, nonce: Optional[str] = None) -> str:
         """Return the authorization URL for the configured realm/client.
 
         Parameters
         - state: Opaque anti-CSRF token (and QR context if needed)
         - code_challenge: The S256 code challenge derived from the verifier
+        - nonce: Optional OIDC replay protection value (recommended)
         """
         params = {
             "response_type": "code",
@@ -77,6 +81,8 @@ class OIDCClient:
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
         }
+        if nonce:
+            params["nonce"] = nonce
         return f"{self.cfg.auth_endpoint}?{urlencode(params)}"
 
     def exchange_code_for_tokens(self, *, code: str, code_verifier: str) -> Dict[str, str]:
@@ -96,4 +102,3 @@ class OIDCClient:
         if resp.status_code != 200:
             raise ValueError("token_exchange_failed")
         return resp.json()
-

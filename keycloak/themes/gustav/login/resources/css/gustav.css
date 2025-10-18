@@ -1,0 +1,158 @@
+/*
+ GUSTAV Keycloak Login Theme (CSS-only)
+
+ Goal: Make Keycloak's login/register/forgot pages visually consistent with
+ GUSTAV without changing templates or handling passwords in our app.
+ Minimal overrides focus on typography, colors, buttons, inputs, spacing.
+
+ This CSS borrows the core palette and scale from backend/web/static/css/gustav.css
+ but remains self-contained to avoid cross-container dependencies.
+*/
+
+/* ---- 1) Base tokens (GUSTAV legacy style) ---- */
+:root {
+  /* Typography */
+  --font-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.5rem;
+  --radius-md: 12px;   /* 0.75rem */
+  --radius-sm: 8px;    /* 0.5rem */
+  --shadow-sm: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+
+  /* Colors aligned with legacy login.css */
+  --color-bg-base:      #f9fafb;  /* background */
+  --color-bg-surface:   #ffffff;  /* card */
+  --color-text:         #111827;  /* primary text */
+  --color-text-muted:   #6b7280;  /* secondary text */
+  --color-primary:      #1f2937;  /* primary button */
+  --color-link:         #0066cc;
+  --color-link-hover:   #0052a3;
+  --color-border:       #e5e7eb;
+  --color-border-focus: #1f2937;
+}
+
+/* ---- 2) Page scaffolding ---- */
+html, body { background: var(--color-bg-base); color: var(--color-text); font-family: var(--font-base); font-size: var(--text-base); }
+
+/* Remove default Keycloak background/logo layers */
+body.login-pf,
+.login-pf body,
+body, html {
+  background-image: none !important;
+}
+
+#kc-header, #kc-header-wrapper {
+  background: transparent !important;
+  color: var(--color-text);
+}
+
+#kc-content, #kc-content-wrapper, #kc-page-title {
+  color: var(--color-text);
+}
+
+/* Center card and make it match our surfaces */
+.card-pf, .login-pf-page .card-pf, .pf-c-card {
+  background: var(--color-bg-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+#kc-header, #kc-header-wrapper, .login-pf-page .login-pf-brand {
+  display: none !important; /* Hide Keycloak brand strip/logo */
+}
+
+/* ---- 3) Headings & links ---- */
+h1, h2, h3, h4 { color: var(--color-text); }
+a { color: var(--color-link); }
+a:hover { color: var(--color-link-hover); text-decoration: underline; }
+
+/* ---- 3b) Compact layout hooks used by our FTL templates ---- */
+.kc-gustav { display: flex; min-height: 100vh; align-items: flex-start; }
+.kc-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-width: 400px; width: 100%;
+  margin: 56px auto; padding: 40px;
+}
+.kc-title { font-size: var(--text-lg); font-weight: 600; line-height: 1.3; margin: 0 0 12px; text-align: center; }
+.kc-form { display: grid; gap: 12px; }
+.kc-label { font-size: 0.875rem; font-weight: 500; color: var(--color-text); }
+.kc-input {
+  background: #fff;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  height: 42px; padding: 10px 14px;
+}
+.kc-input:focus { outline: 2px solid var(--color-border-focus); outline-offset: 0; }
+.kc-submit { height: 46px; }
+.kc-message { margin: 8px 0 12px; padding: 10px 12px; border-left: 3px solid var(--color-primary); background: rgba(31,41,55,0.06); }
+.kc-message.kc-error { border-left-color: #b4637a; }
+.kc-links { margin-top: 16px; font-size: 0.9rem; text-align: center; color: var(--color-text-muted); }
+.kc-hint { margin: 6px 0 14px; font-size: 0.9rem; color: var(--color-text-muted); }
+
+/* ---- 4) Inputs ---- */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+textarea, select {
+  background: var(--color-bg-base) !important;
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-border-focus) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 25%, transparent) !important;
+}
+
+/* ---- 5) Buttons ---- */
+.btn, .pf-c-button {
+  border-radius: 6px !important;
+}
+
+.btn-primary, .pf-m-primary {
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+.btn-primary:hover, .pf-m-primary:hover {
+  background-color: #111827 !important;
+}
+
+.btn-default, .pf-m-secondary {
+  background: var(--color-bg-surface) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+.btn-default:hover, .pf-m-secondary:hover {
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent) !important;
+}
+
+/* ---- 6) Form help / errors ---- */
+.pf-c-form__helper-text, .instruction, .alert, .alert-warning, .alert-error {
+  color: var(--color-text-muted) !important;
+}
+.alert-error, .pf-m-danger { color: #b00020 !important; }
+
+/* ---- 7) Footer/links spacing ---- */
+#kc-form-buttons, #kc-form-options {
+  margin-top: 0.75rem !important;
+}
+
+/* ---- 8) Small-screen compact tweaks ---- */
+@media (max-width: 420px) {
+  .kc-card { margin: 40px 12px; padding: 24px; }
+  .kc-title { margin-bottom: 8px; }
+  .kc-form { gap: 10px; }
+  .kc-submit { height: 42px; }
+}

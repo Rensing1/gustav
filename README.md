@@ -50,22 +50,60 @@ Siehe auch: `docs/ARCHITECTURE.md:1` für Schichten, Flows und Migrationspfad.
 
 ## Auth (Keycloak) lokal
 
-- Dienste: Keycloak läuft im Compose auf `http://localhost:8080` (Realm‑Import via `keycloak/realm-gustav.json`).
-- Der Web‑Adapter (FastAPI) nutzt OIDC Authorization Code Flow mit PKCE.
-- Konfiguration über Umgebungsvariablen (dev‑Defaults im Code):
-  - `KC_BASE_URL` (default: `http://localhost:8080`)
+- Dienste: Keycloak läuft im Compose (Realm‑Import via `keycloak/realm-gustav.json`).
+- Der Web‑Adapter (FastAPI) nutzt OIDC Authorization Code Flow mit PKCE. In PROD erfolgen `/auth/login|register|forgot` als Redirect zur Identity‑UI.
+- Hinweis: Eigene HTML‑Formulare (Direct‑Grant) wurden entfernt. Alle Flows laufen über die Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
+- Keycloak‑Theme (GUSTAV‑Look): Ein schlankes CSS‑Theme liegt unter `keycloak/themes/gustav` und wird beim Image‑Build in den Keycloak‑Container kopiert. Der Realm ist so vorkonfiguriert, dass das Theme genutzt wird (`loginTheme: "gustav"`).
+
+### Verhalten & Sicherheit
+- Login‑Erzwingung (Middleware):
+  - HTML ohne Session → `302` nach `/auth/login`
+  - API/JSON ohne Session → `401` JSON + `Cache-Control: no-store`
+  - HTMX ohne Session → `401` + `HX-Redirect: /auth/login`
+  - Allowlist: `/auth/*`, `/health`, `/static/*`, `/favicon.ico`
+- Callback‑Fehler (`/auth/callback`) setzen immer `Cache-Control: no-store`.
+- `/auth/login` akzeptiert keinen client‑seitigen `state`; dieser wird serverseitig erzeugt.
+- Redirect‑Parameter sind nur als interne absolute Pfade erlaubt (kein externer Redirect).
+- Unified Logout: `GET /auth/logout` löscht das App‑Session‑Cookie und leitet zum IdP End‑Session Endpoint; nach Rückkehr geht es standardmäßig zur Erfolgsseite (`/auth/logout/success`). Optional kann ein interner absoluter Pfad per `redirect` angegeben werden (z. B. `/courses`). Falls vorhanden, wird `id_token_hint` übergeben.
+
+Vorschau Keycloak‑Theme:
+- Starten: `docker compose up -d`
+- Hosts‑Eintrag (einmalig, lokal):
+  - `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`
+- App: `http://app.localhost:8100`
+- Login (Keycloak): `http://id.localhost:8100/realms/gustav/account/` → „Anmelden“
+- Die Loginseite sollte farblich/typografisch zu GUSTAV passen.
+- Konfiguration über Umgebungsvariablen (siehe `.env`):
+  - `KC_BASE_URL` (default: `http://keycloak:8080` im Compose)
+  - `KC_PUBLIC_BASE_URL` (default: `http://id.localhost:8100`)
   - `KC_REALM` (default: `gustav`)
   - `KC_CLIENT_ID` (default: `gustav-web`)
-  - `REDIRECT_URI` (default: `http://localhost:8100/auth/callback`)
-- Cookies: httpOnly Session‑Cookie `gustav_session` (opaque ID). In Prod zusätzlich `Secure` und passendes `SameSite` setzen.
-- Sicherheit (MVP): ID‑Token wird derzeit nur minimal decodiert (ohne JWK‑Signaturprüfung). ToDo: Verifikation (iss, aud, exp).
+  - `REDIRECT_URI` (default: `http://app.localhost:8100/auth/callback`)
+  - (optional) Admin‑Zugangsdaten für Keycloak nur für manuelle Administration
+- Cookies: httpOnly Session‑Cookie `gustav_session` (opaque ID). In Prod zusätzlich `Secure` und `SameSite=strict`; in Dev `SameSite=lax`.
+- Sicherheit: ID‑Token wird gegen JWKS verifiziert (Issuer/Audience/Expiry), Rollen werden restriktiv gemappt (`student|teacher|admin`).
+
+### Theme anpassen (lokal)
+- Dateien:
+  - Templates: `keycloak/themes/gustav/login/{login.ftl,register.ftl,login-reset-password.ftl}`
+  - Styles: `keycloak/themes/gustav/login/resources/css/gustav.css`
+  - Gemeinsames Basis‑CSS: Das kanonische App‑CSS `backend/web/static/css/gustav.css` wird beim Keycloak‑Image‑Build als `keycloak/themes/gustav/login/resources/css/app-gustav-base.css` mitkopiert. So greifen IdP‑Seiten und App auf dieselben Variablen/Komponenten zu – ohne Volumes.
+  - DE‑Texte: `keycloak/themes/gustav/login/messages/messages_de.properties`
+- Realm‑Konfiguration (Default DE): `keycloak/realm-gustav.json:1`
+  - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`
+- Änderungen wirken nach `docker compose up -d --build caddy web keycloak` (Keycloak lädt Theme beim Start).
 
 ## Tests
 
-- Auth‑Contract‑Tests laufen asynchron mit `httpx` + `ASGITransport` direkt gegen die ASGI‑App.
+- Unit/Contract‑Tests laufen mit `pytest` gegen die ASGI‑App (`httpx` + `ASGITransport`).
+- E2E (Keycloak ↔ GUSTAV) ist Teil der Suite: Login/Logout sowie Registrierungs‑Validierungen.
+  - Login/Logout: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`
+  - Registrierung (Fehlerfälle: fehlende Felder, ungültige E‑Mail, schwaches Passwort, Passwort‑Bestätigung ungleich, Duplicate‑E‑Mail): `backend/tests_e2e/test_identity_register_validation_e2e.py`
+- Voraussetzungen für E2E: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
 - Ausführen:
-  - `.venv/bin/python -m pytest -q -k auth_contract`
-- Hinweis: AnyIO parametrisiert standardmäßig `asyncio` und `trio`. Installiere `trio` im venv (`pip install trio`), wenn [trio]‑Fälle aktiv sind.
+  - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
+  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
+  
 
 ## Entwicklungs-Workflow
 

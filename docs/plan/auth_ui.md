@@ -54,9 +54,9 @@ Sidebar (angemeldet)
 Vereinheitlichter Logout (App + IdP)
 - Given ich bin angemeldet
   When ich `GET /auth/logout` aufrufe
-  Then wird das App‑Session‑Cookie sicher gelöscht
-  And der Browser wird mit `302` zum Keycloak `end_session_endpoint` umgeleitet
-  And nach Rückkehr lande ich auf `/`
+ Then wird das App‑Session‑Cookie sicher gelöscht
+ And der Browser wird mit `302` zum Keycloak `end_session_endpoint` umgeleitet
+ And nach Rückkehr lande ich auf `/auth/logout/success`
   And ein anschließendes `GET /api/me` liefert `401`
 
 Rückkehrziel
@@ -127,7 +127,7 @@ Dateien (Tests)
   - Anzeige im Seitenmenü; Abmelde‑Button verlinkt auf `GET /auth/logout`
 
 - Logout vereinheitlichen (`backend/web/routes/auth.py`):
-  - Route `/auth/logout`: Session‑Cookie sicher löschen (HttpOnly, Secure in PROD, `SameSite=strict`) und Redirect zum IdP `end_session_endpoint` mit `post_logout_redirect_uri=/`
+  - Route `/auth/logout`: Session‑Cookie sicher löschen (HttpOnly, Secure in PROD, `SameSite=strict`) und Redirect zum IdP `end_session_endpoint` mit `post_logout_redirect_uri=/auth/logout/success`. Der optionale `redirect`‑Parameter erlaubt nur interne absolute Pfade und wird strikt validiert (Pattern `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`). Ungültige Werte werden ignoriert.
   - Optional `id_token_hint`, falls vorhanden; ansonsten Fallback ohne Hint (DEV)
 
 - OpenAPI aktualisieren (`api/openapi.yml`):

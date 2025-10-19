@@ -1,14 +1,16 @@
 """
-Tests for display name resolution precedence in /auth/callback.
+Display name precedence tests for /auth/callback.
 
 Precedence:
 - gustav_display_name > name > local part of email
+
+Note: We mock token verification to focus on mapping logic.
 """
 
 from __future__ import annotations
 
-import httpx
 import pytest
+import httpx
 from httpx import ASGITransport
 from pathlib import Path
 import sys
@@ -16,71 +18,97 @@ import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
+if str(WEB_DIR) not in sys.path:
+    sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-def _make_id_token(claim_overrides: dict | None = None) -> str:
-    """Reuse helper from test_auth_contract by importing there.
+def _install_fake_oidc(monkeypatch: pytest.MonkeyPatch):
+    class FakeOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
 
-    We duplicate a minimal wrapper to avoid tight coupling to test internals
-    when running this file standalone (the import below is safe in our suite).
-    """
-    from backend.tests.test_auth_contract import _make_id_token as _mk  # type: ignore
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            return {"id_token": "fake-id-token"}
 
-    return _mk(claim_overrides=claim_overrides)
-
-
-async def _call_with_token(monkeypatch: pytest.MonkeyPatch, id_token: str, expected_status: int = 302) -> httpx.Response:
-    from backend.tests.test_auth_contract import _call_auth_callback_with_token  # type: ignore
-
-    return await _call_auth_callback_with_token(monkeypatch, id_token, expected_status=expected_status)
+    monkeypatch.setattr(main, "OIDC", FakeOIDC())
 
 
 @pytest.mark.anyio
 async def test_display_name_prefers_custom_claim(monkeypatch: pytest.MonkeyPatch):
-    token = _make_id_token({
-        "email": "student@example.com",
-        "name": "Fallback Name",
-        "gustav_display_name": "Custom Claim Name",
-    })
-    resp = await _call_with_token(monkeypatch, token, expected_status=302)
-    # Extract session id and assert stored name
-    cookie = resp.headers.get("set-cookie", "")
-    assert "gustav_session=" in cookie
-    sid = cookie.split("gustav_session=")[1].split(";")[0]
-    rec = main.SESSION_STORE.get(sid)
-    assert rec is not None
-    assert getattr(rec, "name", None) == "Custom Claim Name"
+    _install_fake_oidc(monkeypatch)
+
+    def claims(_: str, __: object):
+        return {
+            "email": "student@example.com",
+            "name": "Fallback Name",
+            "gustav_display_name": "Custom Claim Name",
+            "realm_access": {"roles": ["student"]},
+            "email_verified": True,
+        }
+
+    monkeypatch.setattr(main, "verify_id_token", claims)
+
+    rec = main.STATE_STORE.create(code_verifier="v")
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    sc = r.headers.get("set-cookie", "")
+    sid = sc.split("gustav_session=")[1].split(";")[0]
+    session = main.SESSION_STORE.get(sid)
+    assert session is not None
+    assert session.name == "Custom Claim Name"
 
 
 @pytest.mark.anyio
 async def test_display_name_uses_standard_name_if_custom_missing(monkeypatch: pytest.MonkeyPatch):
-    token = _make_id_token({
-        "email": "student@example.com",
-        "name": "Standard Name",
-    })
-    resp = await _call_with_token(monkeypatch, token, expected_status=302)
-    cookie = resp.headers.get("set-cookie", "")
-    sid = cookie.split("gustav_session=")[1].split(";")[0]
-    rec = main.SESSION_STORE.get(sid)
-    assert rec is not None
-    assert getattr(rec, "name", None) == "Standard Name"
+    _install_fake_oidc(monkeypatch)
+
+    def claims(_: str, __: object):
+        return {
+            "email": "student@example.com",
+            "name": "Standard Name",
+            "realm_access": {"roles": ["student"]},
+            "email_verified": True,
+        }
+
+    monkeypatch.setattr(main, "verify_id_token", claims)
+
+    rec = main.STATE_STORE.create(code_verifier="v")
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    sc = r.headers.get("set-cookie", "")
+    sid = sc.split("gustav_session=")[1].split(";")[0]
+    session = main.SESSION_STORE.get(sid)
+    assert session is not None
+    assert session.name == "Standard Name"
 
 
 @pytest.mark.anyio
 async def test_display_name_falls_back_to_localpart(monkeypatch: pytest.MonkeyPatch):
-    token = _make_id_token({
-        "email": "localpart@example.com",
-        # no name, no gustav_display_name
-    })
-    resp = await _call_with_token(monkeypatch, token, expected_status=302)
-    cookie = resp.headers.get("set-cookie", "")
-    sid = cookie.split("gustav_session=")[1].split(";")[0]
-    rec = main.SESSION_STORE.get(sid)
-    assert rec is not None
-    assert getattr(rec, "name", None) == "localpart"
+    _install_fake_oidc(monkeypatch)
+
+    def claims(_: str, __: object):
+        return {
+            "email": "localpart@example.com",
+            # no name, no gustav_display_name
+            "realm_access": {"roles": ["student"]},
+            "email_verified": True,
+        }
+
+    monkeypatch.setattr(main, "verify_id_token", claims)
+
+    rec = main.STATE_STORE.create(code_verifier="v")
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    sc = r.headers.get("set-cookie", "")
+    sid = sc.split("gustav_session=")[1].split(";")[0]
+    session = main.SESSION_STORE.get(sid)
+    assert session is not None
+    assert session.name == "localpart"
 

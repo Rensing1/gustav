@@ -16,19 +16,22 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode
 import os
 import secrets
 
 from identity_access.oidc import OIDCClient
 import re
+import logging
 
 
-auth_router = APIRouter(tags=["auth"])  # explicit paths, no prefix
+auth_router = APIRouter(tags=["Auth"])  # explicit paths, no prefix (align with OpenAPI)
+logger = logging.getLogger("gustav.web.auth")
 
 # Single source of truth for allowed in-app redirect paths
 # Disallow double slashes and path traversal (".."), allow dots in names
-INAPP_PATH_PATTERN = r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$"
+# Keep pattern in sync with OpenAPI (api/openapi.yml)
+INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
 MAX_INAPP_REDIRECT_LEN = 256
 
 
@@ -68,7 +71,9 @@ async def auth_forgot(login_hint: str | None = None):
     """
     import main  # late import
 
-    base = f"{main.OIDC_CFG.base_url}/realms/{main.OIDC_CFG.realm}/login-actions/reset-credentials"
+    # Use browser-facing base URL if configured to avoid mixed host issues behind proxies
+    public_or_internal = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
+    base = f"{public_or_internal}/realms/{main.OIDC_CFG.realm}/login-actions/reset-credentials"
     query = {"login_hint": login_hint} if login_hint else None
     target = f"{base}?{urlencode(query)}" if query else base
     return RedirectResponse(url=target, status_code=302)
@@ -123,32 +128,48 @@ async def auth_logout(request: Request, redirect: str | None = None):
     """
     import main  # late import for stores and cookie policy
 
-    # Remove server-side session if present
+    # Remove server-side session if present (best-effort; never fail logout)
     sid = request.cookies.get(main.SESSION_COOKIE_NAME)
-    rec = main.SESSION_STORE.get(sid or "") if sid else None
+    rec = None
     if sid:
-        main.SESSION_STORE.delete(sid)
+        try:
+            rec = main.SESSION_STORE.get(sid or "")
+        except Exception as exc:
+            logger.warning("Session lookup failed during logout: %s", exc.__class__.__name__)
+        try:
+            main.SESSION_STORE.delete(sid)
+        except Exception as exc:
+            logger.warning("Session delete failed during logout: %s", exc.__class__.__name__)
 
     # Compute IdP logout URL and app redirect target (show success banner)
-    base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
-    app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
-    # Accept only in-app absolute paths; ignore external values
-    safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
-    # After logout, go to the app success page with a re-login link
-    dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
-    # Build params: prefer id_token_hint (best compatibility), else include client_id
-    params = {"post_logout_redirect_uri": dest}
-    if rec and getattr(rec, "id_token", None):
-        params["id_token_hint"] = rec.id_token
-    else:
-        params["client_id"] = main.OIDC_CFG.client_id
-    end_session = (
-        f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?" + urlencode(params)
-    )
+    end_session = "/auth/logout/success"  # conservative fallback
+    try:
+        base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
+        app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
+        # Accept only in-app absolute paths; ignore external values
+        safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
+        # After logout, go to the app success page with a re-login link
+        dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
+        # Build params: prefer id_token_hint (best compatibility), else include client_id
+        params = {"post_logout_redirect_uri": dest}
+        if rec and getattr(rec, "id_token", None):
+            params["id_token_hint"] = rec.id_token
+        else:
+            params["client_id"] = main.OIDC_CFG.client_id
+        end_session = (
+            f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?" + urlencode(params)
+        )
+    except Exception as exc:
+        logger.warning("Logout URL composition failed: %s", exc.__class__.__name__)
 
     resp = RedirectResponse(url=end_session, status_code=302)
     # Clear cookie consistent with environment flags
-    opts = _cookie_opts()
+    # Late import with fallback for both package and top-level import contexts
+    try:
+        from ..auth_utils import cookie_opts  # type: ignore
+    except Exception:  # pragma: no cover - runtime in alternative envs
+        from auth_utils import cookie_opts  # type: ignore
+    opts = cookie_opts(main.SETTINGS.environment)
     resp.set_cookie(
         key=main.SESSION_COOKIE_NAME,
         value="",
@@ -195,27 +216,70 @@ async def auth_logout_success():
 
 
 def _cookie_opts() -> dict:
-    """Return cookie flags based on main.SETTINGS (dev/prod)."""
-    import main  # late import
+    """Deprecated: use `cookie_opts(SETTINGS.environment)` from auth_utils.
 
-    env = main.SETTINGS.environment
-    secure = env == "prod"
-    samesite = "strict" if secure else "lax"
-    return {"secure": secure, "samesite": samesite}
+    Kept for backward compatibility in case external code imports it.
+    """
+    import main  # late import
+    try:
+        from ..auth_utils import cookie_opts  # type: ignore
+    except Exception:  # pragma: no cover
+        from auth_utils import cookie_opts  # type: ignore
+    return cookie_opts(main.SETTINGS.environment)
 
 
 def _default_app_base(redirect_uri: str) -> str:
-    """Compute app base (scheme+host+port) from configured redirect URI."""
+    """Compute the absolute application base URL from a redirect URI.
+
+    Why:
+        Keycloak's end-session flow requires an absolute `post_logout_redirect_uri`.
+        This helper extracts `scheme://host[:port]` from the configured
+        `REDIRECT_URI`. It is tolerant to malformed values and falls back to a
+        sensible local default.
+
+    Behavior:
+        - If `redirect_uri` ends with `/auth/callback`, return the prefix before it.
+        - Else, return `scheme://netloc` from parsing `redirect_uri`.
+        - On parsing issues, try environment fallbacks; finally use
+          `http://localhost:8100`.
+    """
+    from urllib.parse import urlparse
+    import os
+
+    # 1) Common case: strip /auth/callback suffix
+    if isinstance(redirect_uri, str) and "/auth/callback" in redirect_uri:
+        prefix = redirect_uri.split("/auth/callback")[0]
+        parsed = urlparse(prefix)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+
+    # 2) Generic parse
     try:
-        # Prefer removing trailing /auth/callback if present
-        if "/auth/callback" in redirect_uri:
-            return redirect_uri.split("/auth/callback")[0]
-        # Else, strip path
-        from urllib.parse import urlparse
-        p = urlparse(redirect_uri)
-        return f"{p.scheme}://{p.netloc}"
+        parsed = urlparse(redirect_uri)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
     except Exception:
-        return "/"
+        pass
+
+    # 3) Environment fallbacks
+    for var in ("APP_BASE", "WEB_BASE", "REDIRECT_URI"):
+        val = os.getenv(var)
+        if not val:
+            continue
+        try:
+            p = urlparse(val)
+            if "/auth/callback" in val:
+                base = val.split("/auth/callback")[0]
+                p2 = urlparse(base)
+                if p2.scheme and p2.netloc:
+                    return f"{p2.scheme}://{p2.netloc}"
+            if p.scheme and p.netloc:
+                return f"{p.scheme}://{p.netloc}"
+        except Exception:
+            continue
+
+    # 4) Last resort: safe local default for dev
+    return "http://localhost:8100"
 
 
 def _is_inapp_path(value: str) -> bool:
@@ -235,6 +299,6 @@ def _is_inapp_path(value: str) -> bool:
             return False
         if len(value) > MAX_INAPP_REDIRECT_LEN:
             return False
-        return bool(re.match(INAPP_PATH_PATTERN, value))
+        return bool(INAPP_PATH_PATTERN.match(value))
     except Exception:
         return False

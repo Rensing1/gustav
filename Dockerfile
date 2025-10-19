@@ -22,5 +22,5 @@ COPY backend/identity_access ./identity_access
 # Port freigeben
 EXPOSE 8000
 
-# Entwicklungs-Server starten mit Live-Reload
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Server starten (ohne Reload für stabile In-Memory-State während E2E)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

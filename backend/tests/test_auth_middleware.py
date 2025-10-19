@@ -59,3 +59,10 @@ async def test_allowlist_paths_not_redirected():
     assert r_health.status_code == 200
     assert r_static.status_code != 302 or r_static.headers.get("location") != "/auth/login"
 
+
+@pytest.mark.anyio
+async def test_favicon_is_allowlisted():
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r_favicon = await client.get("/favicon.ico", follow_redirects=False)
+    # It may 404, but must not redirect to login
+    assert r_favicon.status_code != 302 or r_favicon.headers.get("location") != "/auth/login"

@@ -24,7 +24,8 @@ import requests as http
 
 
 def http_post(url: str, data: Dict[str, str], headers: Dict[str, str]):
-    return http.post(url, data=data, headers=headers)
+    """HTTP POST with a conservative timeout for IdP calls (DoS hardening)."""
+    return http.post(url, data=data, headers=headers, timeout=5)
 
 
 @dataclass(frozen=True)

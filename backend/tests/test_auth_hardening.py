@@ -346,6 +346,21 @@ async def test_redirect_max_length_enforced(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.anyio
+async def test_sidebar_displays_name_not_email():
+    """SSR sidebar should render the user's display name (not email)."""
+    # Create a session with a specific display name
+    sess = main.SESSION_STORE.create(sub="user-xyz", name="Alice Example", roles=["student"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", sess.session_id)
+        r = await client.get("/", follow_redirects=False)
+    assert r.status_code == 200
+    html = r.text
+    assert "Alice Example" in html
+    # Ensure the updated CSS hook is present for teaching clarity
+    assert "user-name" in html
+
+
+@pytest.mark.anyio
 async def test_callback_rejects_when_id_token_nonce_missing(monkeypatch: pytest.MonkeyPatch):
     """If a nonce was stored for the state, missing `nonce` in ID token must be rejected."""
     class FakeOIDC:

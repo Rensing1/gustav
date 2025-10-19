@@ -98,7 +98,7 @@ class Navigation(Component):
                 <div class="user-info-compact">
                     <span class="nav-icon">👤</span>
                     <div class="nav-text">
-                        <div class="user-email">{self.escape(name)}</div>
+                        <div class="user-name">{self.escape(name)}</div>
                         <div class="user-role">{self.escape(role_de)}</div>
                     </div>
                 </div>
@@ -150,7 +150,7 @@ class Navigation(Component):
                 <div class="user-info-compact">
                     <span class="nav-icon">👤</span>
                     <div class="nav-text">
-                        <div class="user-email">{self.escape(name)}</div>
+                        <div class="user-name">{self.escape(name)}</div>
                         <div class="user-role">{self.escape(role_de)}</div>
                     </div>
                 </div>

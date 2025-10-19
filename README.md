@@ -43,3 +43,13 @@ gustav-alpha2/
 - UI/UX: `docs/UI-UX-Leitfaden.md`
 - Datenbank: `docs/database_schema.md`
 - Lizenz: `docs/LICENCE.md`
+
+## Identity & Sessions (Kurzüberblick)
+
+- IdP: Keycloak (OIDC Authorization Code Flow mit PKCE)
+- Session-Cookie: `gustav_session` (httpOnly)
+- Umgebungsvariablen:
+  - `GUSTAV_ENV`: `dev` (Default) oder `prod` → steuert Cookie-Flags (`Secure`, `SameSite`)
+  - `SESSIONS_BACKEND`: `memory` (Default) oder `db` (Postgres/Supabase)
+  - `DATABASE_URL` (oder `SUPABASE_DB_URL`): DSN für DB-gestützte Sessions
+  - `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen; wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)

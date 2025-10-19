@@ -33,7 +33,7 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 - PROD: Postgres/Supabase (Tabelle `public.app_sessions`)
   - Spalten: `session_id` (PK), `sub`, `roles` (JSONB), `name`, `id_token`, `expires_at`
   - RLS aktiviert; Zugriffe nur mit Service‑Rolle (Clients greifen nicht direkt zu)
-  - Migration: `supabase/migrations/20251019_create_app_sessions.sql`
+  - Migration: `supabase/migrations/20251019135804_persistent_app_sessions.sql`
 
 ## Sicherheit
 - Signaturprüfung ID‑Token über JWKS; Fehlerfälle mit 400 und `Cache-Control: no-store`.
@@ -49,4 +49,3 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 - Persistente Sessions aktivieren via `SESSIONS_BACKEND=db` und DSN (psycopg3).
 - IServ‑Anbindung (OIDC/SAML) und Account‑Linking über `sub`/E‑Mail.
 - Rollen‑Guards als wiederverwendbare Policies für „Unterrichten“.
-

@@ -66,8 +66,9 @@ Als verantwortliche Lehrkraft (Felix) möchte ich, dass sich Benutzer über Keyc
 - Anpassung vorgenommen: `Set-Cookie`-Header bei `/auth/callback` beschreibt die Flags (`HttpOnly; Secure; SameSite=strict` in Prod, `HttpOnly; SameSite=lax` in Dev/Test).
 
 ## Datenbank / Migration
-- Keine neuen Tabellen oder Spalten notwendig: Sessions in dev weiterhin In-Memory.
-- Eventuelle spätere Persistenz (Redis/Postgres) wird separat geplant.
+- DEV: Sessions weiterhin In‑Memory (einfach, schnell).
+- PROD/Vorbereitung: Persistente Sessions (Postgres/Supabase) über Tabelle `public.app_sessions` mit RLS. Migration liegt in `supabase/migrations/20251019135804_persistent_app_sessions.sql`.
+- Aufräumen: Abgelaufene Sessions regelmäßig löschen (DB‑Job oder Wartungsskript).
 
 ## Technische Notizen
 - Rollen-Mapping in `auth_callback`: explizit auf erlaubte Rollen filtern, Unbekanntes ignorieren (Debug-Log).

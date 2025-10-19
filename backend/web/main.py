@@ -741,17 +741,21 @@ async def auth_callback(code: str | None = None, state: str | None = None):
 @app.get("/api/me")
 async def get_me(request: Request):
     """
-    Return minimal session info if authenticated; else 401.
+    Return current UserContextDTO if authenticated; else 401.
 
     Why:
-        Allow frontend to check login state and show principal info.
+        Allow the frontend to determine login state and display principal info
+        without exposing PII such as email. Follows the contract in
+        `api/openapi.yml`.
 
     Behavior:
-        - Reads `gustav_session` from cookies, looks up server-side session.
-        - Returns `{ email, roles, email_verified }` when found; else 401.
+        - Reads `gustav_session` from cookies and looks up the server-side session.
+        - On success returns `{ sub, roles, name, expires_at }`.
+        - On failure returns `401 { error: "unauthenticated" }`.
+        - All responses are non-cacheable and include `Cache-Control: no-store`.
 
     Permissions:
-        Authenticated route (requires `gustav_session` cookie).
+        Authenticated route (requires valid `gustav_session` cookie).
     """
     if SESSION_COOKIE_NAME not in request.cookies:
         # Security: prevent caching of auth state responses

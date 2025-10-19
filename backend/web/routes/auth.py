@@ -24,7 +24,7 @@ from identity_access.oidc import OIDCClient
 import re
 
 
-auth_router = APIRouter(tags=["auth"])  # explicit paths, no prefix
+auth_router = APIRouter(tags=["Auth"])  # explicit paths, no prefix (align with OpenAPI)
 
 # Single source of truth for allowed in-app redirect paths
 # Disallow double slashes and path traversal (".."), allow dots in names
@@ -205,17 +205,57 @@ def _cookie_opts() -> dict:
 
 
 def _default_app_base(redirect_uri: str) -> str:
-    """Compute app base (scheme+host+port) from configured redirect URI."""
+    """Compute the absolute application base URL from a redirect URI.
+
+    Why:
+        Keycloak's end-session flow requires an absolute `post_logout_redirect_uri`.
+        This helper extracts `scheme://host[:port]` from the configured
+        `REDIRECT_URI`. It is tolerant to malformed values and falls back to a
+        sensible local default.
+
+    Behavior:
+        - If `redirect_uri` ends with `/auth/callback`, return the prefix before it.
+        - Else, return `scheme://netloc` from parsing `redirect_uri`.
+        - On parsing issues, try environment fallbacks; finally use
+          `http://localhost:8100`.
+    """
+    from urllib.parse import urlparse
+    import os
+
+    # 1) Common case: strip /auth/callback suffix
+    if isinstance(redirect_uri, str) and "/auth/callback" in redirect_uri:
+        prefix = redirect_uri.split("/auth/callback")[0]
+        parsed = urlparse(prefix)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+
+    # 2) Generic parse
     try:
-        # Prefer removing trailing /auth/callback if present
-        if "/auth/callback" in redirect_uri:
-            return redirect_uri.split("/auth/callback")[0]
-        # Else, strip path
-        from urllib.parse import urlparse
-        p = urlparse(redirect_uri)
-        return f"{p.scheme}://{p.netloc}"
+        parsed = urlparse(redirect_uri)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
     except Exception:
-        return "/"
+        pass
+
+    # 3) Environment fallbacks
+    for var in ("APP_BASE", "WEB_BASE", "REDIRECT_URI"):
+        val = os.getenv(var)
+        if not val:
+            continue
+        try:
+            p = urlparse(val)
+            if "/auth/callback" in val:
+                base = val.split("/auth/callback")[0]
+                p2 = urlparse(base)
+                if p2.scheme and p2.netloc:
+                    return f"{p2.scheme}://{p2.netloc}"
+            if p.scheme and p.netloc:
+                return f"{p.scheme}://{p.netloc}"
+        except Exception:
+            continue
+
+    # 4) Last resort: safe local default for dev
+    return "http://localhost:8100"
 
 
 def _is_inapp_path(value: str) -> bool:

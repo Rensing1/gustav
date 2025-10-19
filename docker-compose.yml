@@ -3,7 +3,7 @@ services:
     image: caddy:2-alpine
     container_name: gustav-caddy
     ports:
-      - "127.0.0.1:8100:80"
+      - "8100:80"
     volumes:
       - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:

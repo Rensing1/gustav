@@ -203,7 +203,16 @@ def load_oidc_config() -> OIDCConfig:
 OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
-SESSION_STORE = SessionStore()
+# Session store: default to in-memory, allow DB-backed when configured
+if os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
+    try:
+        from identity_access.stores_db import DBSessionStore  # optional dependency
+        SESSION_STORE = DBSessionStore()
+    except Exception:
+        # Fallback to in-memory if DB store is not available/misconfigured
+        SESSION_STORE = SessionStore()
+else:
+    SESSION_STORE = SessionStore()
 # Admin client remains available for future server-side admin tasks
 KEYCLOAK_ADMIN = KCAdminClient(OIDC_CFG)
 
@@ -243,7 +252,7 @@ async def auth_enforcement(request: Request, call_next):
         if not rec:
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         # Attach user info and proceed
-        request.state.user = {"email": rec.email, "roles": rec.roles}
+        request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "roles": rec.roles}
         return await call_next(request)
 
     # Non-API routes
@@ -258,7 +267,7 @@ async def auth_enforcement(request: Request, call_next):
 
     # Attach principal for SSR (deterministic primary role)
     role = _primary_role(rec.roles)
-    request.state.user = {"email": rec.email, "role": role, "roles": rec.roles}
+    request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": role, "roles": rec.roles}
     return await call_next(request)
 
 
@@ -689,7 +698,8 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     if getattr(rec, "nonce", None) and claim_nonce != rec.nonce:
         return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "no-store"})
 
-    email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"
+    sub = str(claims.get("sub") or "unknown-sub")
+    email = claims.get("email") or claims.get("preferred_username") or ""
     raw_roles: list[str] = []
     ra = claims.get("realm_access") or {}
     if isinstance(ra, dict):
@@ -704,10 +714,16 @@ async def auth_callback(code: str | None = None, state: str | None = None):
             logger.debug("Ignoring unknown Keycloak roles: %s", unknown)
     if not roles:
         roles = ["student"]
-    email_verified = bool(claims.get("email_verified", False))
+    # Resolve display name: prefer custom claim from Keycloak user attribute mapping,
+    # then standard `name`, else fallback to local part of email (privacy-friendly)
+    display_name = (
+        claims.get("gustav_display_name")
+        or claims.get("name")
+        or (email.split("@")[0] if email else "Benutzer")
+    )
 
     # Create server-side session and retain id_token for end-session logout
-    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified, id_token=id_token)
+    sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     # Attach hardened session cookie (opaque ID only); in PROD, align Max-Age with server-side TTL
@@ -749,9 +765,9 @@ async def get_me(request: Request):
     if rec.expires_at:
         exp_iso = datetime.fromtimestamp(rec.expires_at, tz=timezone.utc).isoformat(timespec="seconds")
     return JSONResponse({
-        "email": rec.email,
+        "sub": rec.sub,
         "roles": rec.roles,
-        "email_verified": rec.email_verified,
+        "name": getattr(rec, "name", ""),
         "expires_at": exp_iso,
     }, headers={"Cache-Control": "no-store"})
 
@@ -795,9 +811,10 @@ def create_app_auth_only() -> FastAPI:
         if "gustav_session" not in request.cookies:
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         return JSONResponse({
-            "email": "student@example.com",
+            "sub": "stub-user",
             "roles": ["student"],
-            "email_verified": True,
+            "name": "Max Musterschüler",
+            "expires_at": None,
         }, headers={"Cache-Control": "no-store"})
 
     return slim

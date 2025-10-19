@@ -520,9 +520,8 @@ async def test_logout_clears_cookie():
 
 
 @pytest.mark.anyio
-async def test_me_authenticated_returns_200_and_shape():
-    # With a (fake) session cookie, /api/me should return session shape
-    cookies = {"gustav_session": "fake-session"}
+async def test_me_authenticated_returns_200_and_new_shape():
+    # With a (fake) session cookie, /api/me should return new DTO shape
     app = create_app_auth_only()
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         client.cookies.set("gustav_session", "fake-session")
@@ -531,8 +530,13 @@ async def test_me_authenticated_returns_200_and_shape():
     assert resp.headers.get("Cache-Control") == "no-store"
     body = resp.json()
     assert isinstance(body, dict)
-    assert "email" in body and isinstance(body["email"], str)
+    # New contract: sub, roles, name, expires_at
+    assert "sub" in body and isinstance(body["sub"], str)
     assert "roles" in body and isinstance(body["roles"], list)
+    assert "name" in body and isinstance(body["name"], str)
+    assert "expires_at" in body and (body["expires_at"] is None or isinstance(body["expires_at"], str))
+    # No email anymore
+    assert "email" not in body
 
 
 def test_openapi_contains_auth_paths():

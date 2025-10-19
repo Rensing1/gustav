@@ -23,18 +23,18 @@ components:
       enum: [student, teacher, admin]
     Me:
       type: object
-      required: [email, roles, expires_at]
+      required: [sub, roles, name, expires_at]
       properties:
-        email:
+        sub:
           type: string
-          format: email
+          description: Stable subject identifier from the IdP (opaque, non-PII).
         roles:
           type: array
           items:
             $ref: '#/components/schemas/Role'
-        email_verified:
-          type: boolean
-          description: Whether the email address has been verified.
+        name:
+          type: string
+          description: Display name (prefer Keycloak user attribute `display_name`; fallback per server logic).
         expires_at:
           type: string
           format: date-time
@@ -225,14 +225,14 @@ paths:
   /api/me:
     get:
       tags: [Auth]
-      summary: Return current user session info
-      description: Returns email and roles if authenticated.
+      summary: Return current user context
+      description: Returns `sub`, `roles`, and display `name` if authenticated.
       operationId: getMe
       security:
         - cookieAuth: []
       responses:
         '200':
-          description: Session info
+          description: User context
           headers:
             Cache-Control:
               description: Security hardening — responses must not be cached

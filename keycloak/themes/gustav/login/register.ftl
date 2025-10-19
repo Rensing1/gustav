@@ -29,6 +29,11 @@
       </#if>
 
       <form id="kc-register-form" action="${url.registrationAction}" method="post" class="kc-form">
+        <div class="pf-c-form__group">
+          <label class="pf-c-form__label" for="display_name">Wie möchtest du genannt werden?</label>
+          <input type="text" id="display_name" name="user.attributes.display_name" autocomplete="nickname" class="pf-c-form-control" />
+          <p class="kc-hint">Optional. Dieser Anzeigename wird in GUSTAV angezeigt.</p>
+        </div>
         <label class="kc-label" for="firstName">${msg("firstName")}</label>
         <input class="kc-input" id="firstName" name="firstName" type="text" autocomplete="given-name">
 

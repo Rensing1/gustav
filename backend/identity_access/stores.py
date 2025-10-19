@@ -55,9 +55,9 @@ class StateStore:
 @dataclass
 class SessionRecord:
     session_id: str
-    email: str
+    sub: str
     roles: list[str]
-    email_verified: bool
+    name: str
     expires_at: Optional[int] = None
     id_token: Optional[str] = None
     ttl_seconds: int = 3600
@@ -67,13 +67,13 @@ class SessionStore:
     def __init__(self):
         self._data: Dict[str, SessionRecord] = {}
 
-    def create(self, *, email: str, roles: list[str], email_verified: bool, ttl_seconds: int = 3600, id_token: Optional[str] = None) -> SessionRecord:
+    def create(self, *, sub: str, roles: list[str], name: str, ttl_seconds: int = 3600, id_token: Optional[str] = None) -> SessionRecord:
         sid = secrets.token_urlsafe(24)
         rec = SessionRecord(
             session_id=sid,
-            email=email,
+            sub=sub,
             roles=roles,
-            email_verified=email_verified,
+            name=name,
             expires_at=_now() + ttl_seconds,
             id_token=id_token,
             ttl_seconds=ttl_seconds,

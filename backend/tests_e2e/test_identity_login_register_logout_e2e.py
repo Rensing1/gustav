@@ -205,8 +205,10 @@ def test_register_login_logout_flow():
     r_me = sess.get(f"{WEB_BASE}/api/me", timeout=10)
     assert r_me.status_code == 200, f"/api/me failed: {r_me.status_code} {r_me.text}"
     body = r_me.json()
-    assert body.get("email"), "/api/me missing email"
-    assert isinstance(body.get("roles", []), list)
+    # New contract: sub, roles, name
+    assert isinstance(body.get("sub"), str) and body.get("sub"), "/api/me missing sub"
+    assert isinstance(body.get("roles", []), list), "/api/me roles not a list"
+    assert isinstance(body.get("name"), str) and body.get("name"), "/api/me missing name"
 
     # 5) Verify session cookie and /api/me
     # The cookie jar should contain our app's session cookie

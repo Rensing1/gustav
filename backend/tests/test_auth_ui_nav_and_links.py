@@ -29,7 +29,7 @@ pytestmark = pytest.mark.anyio("asyncio")
 async def test_sidebar_logout_link_to_auth_logout():
     """Authenticated GET / renders sidebar with logout control linking to /auth/logout."""
     # Create a fake authenticated session in the server store
-    sess = main.SESSION_STORE.create(email="user@example.com", roles=["student"], email_verified=True)
+    sess = main.SESSION_STORE.create(sub="user-1", name="Max Musterschüler", roles=["student"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/", follow_redirects=False)
@@ -39,8 +39,8 @@ async def test_sidebar_logout_link_to_auth_logout():
     assert "sidebar-logout" in html, "Logout control missing in sidebar"
     assert 'href="/auth/logout"' in html, "Logout should link to /auth/logout"
     assert 'hx-' not in html or 'hx-post="/auth/logout"' not in html, "Logout should be a normal link (no HTMX)"
-    # Sidebar should show email and German role
-    assert "user@example.com" in html
+    # Sidebar should show display name and German role
+    assert "Max Musterschüler" in html
     assert "Schüler" in html
 
 

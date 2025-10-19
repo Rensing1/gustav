@@ -122,7 +122,7 @@ async def test_callback_sets_cookie_max_age_matches_session_ttl_prod(monkeypatch
 @pytest.mark.anyio
 async def test_me_includes_expires_at_and_no_store():
     # Create a fake session and call /api/me
-    sess = main.SESSION_STORE.create(email="u@example.com", roles=["student"], email_verified=True)
+    sess = main.SESSION_STORE.create(sub="user-123", name="Max Musterschüler", roles=["student"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/api/me")

@@ -90,7 +90,7 @@ async def test_callback_errors_set_no_store_header():
 async def test_role_priority_for_ssr_display(monkeypatch: pytest.MonkeyPatch):
     """SSR sidebar must display primary role by fixed priority (admin>teacher>student)."""
     # Create a session with roles in an order that would be ambiguous without priority
-    sess = main.SESSION_STORE.create(email="t@example.com", roles=["student", "teacher"], email_verified=True)
+    sess = main.SESSION_STORE.create(sub="teacher-1", name="Frau Lehrerin", roles=["student", "teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/", follow_redirects=False)

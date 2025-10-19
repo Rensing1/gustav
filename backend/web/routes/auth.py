@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode
 import os
 import secrets
 
@@ -28,7 +28,8 @@ auth_router = APIRouter(tags=["Auth"])  # explicit paths, no prefix (align with 
 
 # Single source of truth for allowed in-app redirect paths
 # Disallow double slashes and path traversal (".."), allow dots in names
-INAPP_PATH_PATTERN = r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$"
+# Keep pattern in sync with OpenAPI (api/openapi.yml)
+INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
 MAX_INAPP_REDIRECT_LEN = 256
 
 
@@ -275,6 +276,6 @@ def _is_inapp_path(value: str) -> bool:
             return False
         if len(value) > MAX_INAPP_REDIRECT_LEN:
             return False
-        return bool(re.match(INAPP_PATH_PATTERN, value))
+        return bool(INAPP_PATH_PATTERN.match(value))
     except Exception:
         return False

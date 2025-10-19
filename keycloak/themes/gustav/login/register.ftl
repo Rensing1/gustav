@@ -29,21 +29,11 @@
       </#if>
 
       <form id="kc-register-form" action="${url.registrationAction}" method="post" class="kc-form">
-        <div class="pf-c-form__group">
-          <label class="pf-c-form__label" for="display_name">Wie möchtest du genannt werden?</label>
-          <input type="text" id="display_name" name="user.attributes.display_name" autocomplete="nickname" class="pf-c-form-control" />
-          <p class="kc-hint">Optional. Dieser Anzeigename wird in GUSTAV angezeigt.</p>
-        </div>
-        <label class="kc-label" for="firstName">${msg("firstName")}</label>
-        <input class="kc-input" id="firstName" name="firstName" type="text" autocomplete="given-name">
+        <label class="kc-label" for="display_name">${msg("gustavDisplayName", "Wie möchtest du genannt werden?")}</label>
+        <input class="kc-input" id="display_name" name="user.attributes.display_name" type="text" autocomplete="nickname" required>
+        <!-- Simplified registration: use a single display name instead of separate first/last name fields -->
 
-        <label class="kc-label" for="lastName">${msg("lastName")}</label>
-        <input class="kc-input" id="lastName" name="lastName" type="text" autocomplete="family-name">
-
-        <#if !realm.registrationEmailAsUsername>
-          <label class="kc-label" for="username">${msg("username")}</label>
-          <input class="kc-input" id="username" name="username" type="text" autocomplete="username">
-        </#if>
+        <!-- Email is used as username; no separate username field -->
 
         <label class="kc-label" for="email">${msg("email")}</label>
         <input class="kc-input" id="email" name="email" type="email" autocomplete="email">

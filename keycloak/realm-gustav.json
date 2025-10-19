@@ -7,6 +7,7 @@
   "defaultLocale": "de",
   "supportedLocales": ["de", "en"],
   "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
   "loginWithEmailAllowed": true,
   "verifyEmail": false,
   "resetPasswordAllowed": true,

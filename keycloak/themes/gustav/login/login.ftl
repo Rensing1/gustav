@@ -29,7 +29,7 @@
 
       <form id="kc-form-login" action="${url.loginAction}" method="post" class="kc-form">
         <label class="kc-label" for="username">${msg("usernameOrEmail")}</label>
-        <input class="kc-input" id="username" name="username" type="text" autofocus autocomplete="username">
+        <input class="kc-input" id="username" name="username" type="email" autofocus autocomplete="email">
 
         <label class="kc-label" for="password">${msg("password")}</label>
         <input class="kc-input" id="password" name="password" type="password" autocomplete="current-password">

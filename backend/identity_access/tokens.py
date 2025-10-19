@@ -119,10 +119,11 @@ def verify_id_token(
     issuer_base = cfg.public_base_url or cfg.base_url
     expected_issuer = f"{issuer_base}/realms/{cfg.realm}"
     try:
+        # Security: enforce RS256 (as configured in Keycloak) regardless of JWKS 'alg'
         claims = jwt.decode(
             id_token,
             key_dict,
-            algorithms=[key_dict.get("alg", "RS256")],
+            algorithms=["RS256"],
             audience=cfg.client_id,
             issuer=expected_issuer,
             options={

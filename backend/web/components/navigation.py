@@ -75,7 +75,7 @@ class Navigation(Component):
         links.append(self._render_logout())
 
         role_de = self._role_de(self.user.get("role")) if self.user else ""
-        email = self.user.get("email", "") if self.user else ""
+        name = self.user.get("name", "") if self.user else ""
         return f"""
     <!-- Sidebar Toggle Button -->
     <button class="sidebar-toggle" data-action="sidebar-toggle" aria-label="Navigation umschalten">
@@ -98,7 +98,7 @@ class Navigation(Component):
                 <div class="user-info-compact">
                     <span class="nav-icon">👤</span>
                     <div class="nav-text">
-                        <div class="user-email">{self.escape(email)}</div>
+                        <div class="user-name">{self.escape(name)}</div>
                         <div class="user-role">{self.escape(role_de)}</div>
                     </div>
                 </div>
@@ -133,7 +133,7 @@ class Navigation(Component):
 
         oob_attr = ' hx-swap-oob="true"' if oob else ''
         role_de = self._role_de(self.user.get("role")) if self.user else ""
-        email = self.user.get("email", "") if self.user else ""
+        name = self.user.get("name", "") if self.user else ""
         return f"""
     <aside class="sidebar" id="sidebar" aria-label="Seitenleiste"{oob_attr}>
         <nav class="sidebar-nav" role="navigation" aria-label="Hauptnavigation">
@@ -150,7 +150,7 @@ class Navigation(Component):
                 <div class="user-info-compact">
                     <span class="nav-icon">👤</span>
                     <div class="nav-text">
-                        <div class="user-email">{self.escape(email)}</div>
+                        <div class="user-name">{self.escape(name)}</div>
                         <div class="user-role">{self.escape(role_de)}</div>
                     </div>
                 </div>
@@ -248,7 +248,6 @@ class Navigation(Component):
         where children is either None or a list of (href, text, icon).
         For now we do not include children yet; this prepares the structure.
         """
-        flat = self._get_nav_items()
         flat = self._get_nav_items()
         return [(href, text, icon, None) for href, text, icon in flat]
 

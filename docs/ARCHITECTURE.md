@@ -141,7 +141,7 @@ E2E‑Tests (Identity):
 - HTML‑Anfragen ohne Session: `302` Redirect zu `/auth/login`.
 - JSON‑/API‑Anfragen ohne Session (Pfad beginnt mit `/api/`): `401` JSON mit `Cache-Control: no-store`.
 - HTMX‑Requests ohne Session: `401` mit Header `HX-Redirect: /auth/login`.
-- Bei erfolgreicher Authentifizierung setzt die Middleware `request.state.user = { email, role, roles }` für SSR; die primäre Rolle wird deterministisch nach Priorität gewählt (admin > teacher > student).
+- Bei erfolgreicher Authentifizierung setzt die Middleware `request.state.user = { sub, name, role, roles }` für SSR; die primäre Rolle wird deterministisch nach Priorität gewählt (admin > teacher > student).
 
 #### Sicherheits‑Härtung (Auth)
 - `/auth/callback` liefert bei allen Fehlern `400` mit `Cache-Control: no-store` (nicht cachebar).

@@ -90,7 +90,7 @@ async def test_callback_errors_set_no_store_header():
 async def test_role_priority_for_ssr_display(monkeypatch: pytest.MonkeyPatch):
     """SSR sidebar must display primary role by fixed priority (admin>teacher>student)."""
     # Create a session with roles in an order that would be ambiguous without priority
-    sess = main.SESSION_STORE.create(email="t@example.com", roles=["student", "teacher"], email_verified=True)
+    sess = main.SESSION_STORE.create(sub="teacher-1", name="Frau Lehrerin", roles=["student", "teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/", follow_redirects=False)
@@ -343,6 +343,21 @@ async def test_redirect_max_length_enforced(monkeypatch: pytest.MonkeyPatch):
     app_base = ru.split("/auth/callback")[0] if "/auth/callback" in ru else ru.rsplit("/", 1)[0]
     expected = f"{app_base}/auth/logout/success"
     assert post_logout.rstrip("/") == expected.rstrip("/")
+
+
+@pytest.mark.anyio
+async def test_sidebar_displays_name_not_email():
+    """SSR sidebar should render the user's display name (not email)."""
+    # Create a session with a specific display name
+    sess = main.SESSION_STORE.create(sub="user-xyz", name="Alice Example", roles=["student"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", sess.session_id)
+        r = await client.get("/", follow_redirects=False)
+    assert r.status_code == 200
+    html = r.text
+    assert "Alice Example" in html
+    # Ensure the updated CSS hook is present for teaching clarity
+    assert "user-name" in html
 
 
 @pytest.mark.anyio

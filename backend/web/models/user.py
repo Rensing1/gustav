@@ -1,13 +1,15 @@
 """
-User Model for GUSTAV
+Legacy UI Model (not used by current Keycloak-based auth)
 
-This file defines the User model that will be used throughout the application.
-It integrates with Supabase Auth and provides type safety for all components.
+Why:
+    This file was used during early UI prototyping. The current identity flow
+    uses Keycloak (OIDC) and a server-side session DTO (sub, roles, name).
+    Keep this model as a teaching artifact for Pydantic patterns; do not wire it
+    into the new identity flow.
 
-TODO: Implement after UI is complete
-- Integrate with Supabase Auth
-- Add session management with Redis
-- Implement get_current_user dependency
+Future work:
+- Integrate domain models via Clean Architecture once teaching/learning use
+  cases are extracted.
 """
 
 from pydantic import BaseModel, Field

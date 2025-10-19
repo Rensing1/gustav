@@ -8,6 +8,12 @@ import pytest
 import sys
 from pathlib import Path
 
+# Load .env so E2E tests pick up credentials (KEYCLOAK_ADMIN, ...)
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except Exception:
+    pass
 
 # Ensure modules in backend/ and backend/web are importable across tests
 REPO_ROOT = Path(__file__).resolve().parents[2]

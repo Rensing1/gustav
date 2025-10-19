@@ -26,10 +26,16 @@ from components import (
 from components.navigation import Navigation
 from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
-from identity_access.admin_client import AdminClient as KCAdminClient
 from identity_access.stores import StateStore, SessionStore
 from datetime import datetime, timezone
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
+# Import cookie_opts with a dual strategy to work both when importing as a
+# package (backend.web.main) and when tests import this file as top-level
+# module ("import main").
+try:  # package-style import
+    from .auth_utils import cookie_opts  # type: ignore
+except Exception:  # pragma: no cover - test runner path
+    from auth_utils import cookie_opts  # type: ignore
 
 # Load .env for local dev/test so environment variables are available outside Docker
 try:
@@ -77,15 +83,12 @@ ALLOWED_ROLES = {"student", "teacher", "admin"}
 def _session_cookie_options() -> dict:
     """Return cookie policy depending on environment (dev vs prod).
 
-    Returns:
-        Dictionary with `secure` and `samesite` flags. In `prod` we set
-        `secure=True` and `SameSite=strict`; in `dev`/tests we keep
-        `secure=False` and `SameSite=lax` to allow localhost flows.
+    Delegates to the shared `cookie_opts` helper for consistency across
+    modules. In `prod` we set `secure=True` and `SameSite=strict`; in
+    `dev`/tests we keep `secure=False` and `SameSite=lax` to allow
+    localhost flows.
     """
-    env = SETTINGS.environment
-    secure = env == "prod"
-    samesite = "strict" if secure else "lax"
-    return {"secure": secure, "samesite": samesite}
+    return cookie_opts(SETTINGS.environment)
 
 
 def _primary_role(roles: list[str]) -> str:
@@ -203,9 +206,17 @@ def load_oidc_config() -> OIDCConfig:
 OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
-SESSION_STORE = SessionStore()
-# Admin client remains available for future server-side admin tasks
-KEYCLOAK_ADMIN = KCAdminClient(OIDC_CFG)
+# Session store: default to in-memory, allow DB-backed when configured
+if os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
+    try:
+        from identity_access.stores_db import DBSessionStore  # optional dependency
+        SESSION_STORE = DBSessionStore()
+    except Exception:
+        # Fallback to in-memory if DB store is not available/misconfigured
+        SESSION_STORE = SessionStore()
+else:
+    SESSION_STORE = SessionStore()
+# Note: Admin client removed; E2E tests use direct requests to Keycloak admin API
 
 
 # --- Auth Enforcement Middleware -------------------------------------------------
@@ -243,7 +254,7 @@ async def auth_enforcement(request: Request, call_next):
         if not rec:
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         # Attach user info and proceed
-        request.state.user = {"email": rec.email, "roles": rec.roles}
+        request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "roles": rec.roles}
         return await call_next(request)
 
     # Non-API routes
@@ -258,7 +269,7 @@ async def auth_enforcement(request: Request, call_next):
 
     # Attach principal for SSR (deterministic primary role)
     role = _primary_role(rec.roles)
-    request.state.user = {"email": rec.email, "role": role, "roles": rec.roles}
+    request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": role, "roles": rec.roles}
     return await call_next(request)
 
 
@@ -572,12 +583,6 @@ async def home(request: Request):
 
     content = build_home_content()
 
-    # Mock user for demo
-    demo_user = {
-        "name": "Felix",
-        "role": "teacher"
-    }
-
     # If this is an HTMX request, return content + sidebar (OOB) for consistent active state
     if "HX-Request" in request.headers:
         user = getattr(request.state, "user", None)
@@ -689,7 +694,8 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     if getattr(rec, "nonce", None) and claim_nonce != rec.nonce:
         return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "no-store"})
 
-    email = claims.get("email") or claims.get("preferred_username") or "unknown@example.com"
+    sub = str(claims.get("sub") or "unknown-sub")
+    email = claims.get("email") or claims.get("preferred_username") or ""
     raw_roles: list[str] = []
     ra = claims.get("realm_access") or {}
     if isinstance(ra, dict):
@@ -704,10 +710,16 @@ async def auth_callback(code: str | None = None, state: str | None = None):
             logger.debug("Ignoring unknown Keycloak roles: %s", unknown)
     if not roles:
         roles = ["student"]
-    email_verified = bool(claims.get("email_verified", False))
+    # Resolve display name: prefer custom claim from Keycloak user attribute mapping,
+    # then standard `name`, else fallback to local part of email (privacy-friendly)
+    display_name = (
+        claims.get("gustav_display_name")
+        or claims.get("name")
+        or (email.split("@")[0] if email else "Benutzer")
+    )
 
     # Create server-side session and retain id_token for end-session logout
-    sess = SESSION_STORE.create(email=email, roles=roles, email_verified=email_verified, id_token=id_token)
+    sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     # Attach hardened session cookie (opaque ID only); in PROD, align Max-Age with server-side TTL
@@ -725,17 +737,21 @@ async def auth_callback(code: str | None = None, state: str | None = None):
 @app.get("/api/me")
 async def get_me(request: Request):
     """
-    Return minimal session info if authenticated; else 401.
+    Return current UserContextDTO if authenticated; else 401.
 
     Why:
-        Allow frontend to check login state and show principal info.
+        Allow the frontend to determine login state and display principal info
+        without exposing PII such as email. Follows the contract in
+        `api/openapi.yml`.
 
     Behavior:
-        - Reads `gustav_session` from cookies, looks up server-side session.
-        - Returns `{ email, roles, email_verified }` when found; else 401.
+        - Reads `gustav_session` from cookies and looks up the server-side session.
+        - On success returns `{ sub, roles, name, expires_at }`.
+        - On failure returns `401 { error: "unauthenticated" }`.
+        - All responses are non-cacheable and include `Cache-Control: no-store`.
 
     Permissions:
-        Authenticated route (requires `gustav_session` cookie).
+        Authenticated route (requires valid `gustav_session` cookie).
     """
     if SESSION_COOKIE_NAME not in request.cookies:
         # Security: prevent caching of auth state responses
@@ -749,9 +765,9 @@ async def get_me(request: Request):
     if rec.expires_at:
         exp_iso = datetime.fromtimestamp(rec.expires_at, tz=timezone.utc).isoformat(timespec="seconds")
     return JSONResponse({
-        "email": rec.email,
+        "sub": rec.sub,
         "roles": rec.roles,
-        "email_verified": rec.email_verified,
+        "name": getattr(rec, "name", ""),
         "expires_at": exp_iso,
     }, headers={"Cache-Control": "no-store"})
 
@@ -795,9 +811,10 @@ def create_app_auth_only() -> FastAPI:
         if "gustav_session" not in request.cookies:
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         return JSONResponse({
-            "email": "student@example.com",
+            "sub": "stub-user",
             "roles": ["student"],
-            "email_verified": True,
+            "name": "Max Musterschüler",
+            "expires_at": None,
         }, headers={"Cache-Control": "no-store"})
 
     return slim

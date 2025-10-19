@@ -244,6 +244,33 @@ async def test_forgot_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.anyio
+async def test_forgot_redirect_prefers_public_base_url(monkeypatch: pytest.MonkeyPatch):
+    """Forgot redirect should use KC_PUBLIC_BASE_URL when provided."""
+    import sys as _sys
+    REPO_ROOT = Path(__file__).resolve().parents[2]
+    WEB_DIR = REPO_ROOT / "backend" / "web"
+    _sys.path.insert(0, str(WEB_DIR))
+    import main  # type: ignore
+    from identity_access.oidc import OIDCConfig
+
+    test_cfg = OIDCConfig(
+        base_url="http://kc.internal:8080",
+        public_base_url="http://kc.public:8080",
+        realm="gustav",
+        client_id="gustav-web",
+        redirect_uri="http://localhost:8100/auth/callback",
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.get("/auth/forgot", follow_redirects=False)
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("location", "")
+    assert loc.startswith("http://kc.public:8080/realms/gustav/login-actions/reset-credentials")
+
+
+@pytest.mark.anyio
 async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect forwards login_hint as query param."""
     import sys as _sys

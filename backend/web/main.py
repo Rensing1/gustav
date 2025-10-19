@@ -26,7 +26,6 @@ from components import (
 from components.navigation import Navigation
 from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
-from identity_access.admin_client import AdminClient as KCAdminClient
 from identity_access.stores import StateStore, SessionStore
 from datetime import datetime, timezone
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
@@ -213,8 +212,7 @@ if os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
         SESSION_STORE = SessionStore()
 else:
     SESSION_STORE = SessionStore()
-# Admin client remains available for future server-side admin tasks
-KEYCLOAK_ADMIN = KCAdminClient(OIDC_CFG)
+# Note: Admin client removed; E2E tests use direct requests to Keycloak admin API
 
 
 # --- Auth Enforcement Middleware -------------------------------------------------

@@ -249,7 +249,6 @@ class Navigation(Component):
         For now we do not include children yet; this prepares the structure.
         """
         flat = self._get_nav_items()
-        flat = self._get_nav_items()
         return [(href, text, icon, None) for href, text, icon in flat]
 
     def _determine_active_href_from_tree(self, nav_tree: List[Tuple[str, str, str, Optional[List[Tuple[str, str, str]]]]]) -> str:

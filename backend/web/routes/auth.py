@@ -69,7 +69,9 @@ async def auth_forgot(login_hint: str | None = None):
     """
     import main  # late import
 
-    base = f"{main.OIDC_CFG.base_url}/realms/{main.OIDC_CFG.realm}/login-actions/reset-credentials"
+    # Use browser-facing base URL if configured to avoid mixed host issues behind proxies
+    public_or_internal = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
+    base = f"{public_or_internal}/realms/{main.OIDC_CFG.realm}/login-actions/reset-credentials"
     query = {"login_hint": login_hint} if login_hint else None
     target = f"{base}?{urlencode(query)}" if query else base
     return RedirectResponse(url=target, status_code=302)

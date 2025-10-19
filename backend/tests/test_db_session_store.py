@@ -126,3 +126,15 @@ def test_get_filters_expired_sessions(monkeypatch: pytest.MonkeyPatch):
     rec = store.create(sub="u2", roles=["student"], name="Expired", ttl_seconds=-10)
     assert rec.session_id
     assert store.get(rec.session_id) is None
+
+
+def test_invalid_table_name_is_rejected(monkeypatch: pytest.MonkeyPatch):
+    from identity_access import stores_db as mod
+    _install_fake_psycopg(monkeypatch, mod)
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        mod.DBSessionStore(dsn="fake://dsn", table="bad;drop table")
+
+    # Valid fully-qualified name should pass
+    store = mod.DBSessionStore(dsn="fake://dsn", table="public.app_sessions")
+    assert store is not None

@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 import os
 import time
+import re
 
 try:
     import psycopg
@@ -61,20 +62,38 @@ class DBSessionStore:
         self._dsn = dsn or os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL", "")
         if not self._dsn:
             raise RuntimeError("No database DSN provided for DBSessionStore")
+        # Validate table identifier early (defense-in-depth)
+        if not re.match(r'^[A-Za-z_][A-Za-z0-9_]{0,62}(?:\.[A-Za-z_][A-Za-z0-9_]{0,62})?$', table or ''):
+            raise ValueError("Invalid table name")
         self._table = table
+
+    def _schema_and_name(self) -> tuple[str, str]:
+        if "." in self._table:
+            schema, name = self._table.split(".", 1)
+        else:
+            schema, name = "public", self._table
+        return schema, name
 
     def create(self, *, sub: str, roles: Sequence[str], name: str, ttl_seconds: int = 3600, id_token: Optional[str] = None) -> SessionRecord:
         expires_at = _now() + ttl_seconds
         with psycopg.connect(self._dsn, autocommit=True) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    insert into {self._table} (session_id, sub, roles, name, id_token, expires_at)
-                    values (gen_random_uuid()::text, %s, %s, %s, %s, to_timestamp(%s))
-                    returning session_id
-                    """,
-                    (sub, Json(list(roles)), name, id_token, expires_at),
-                )
+                # Prefer psycopg.sql for safe identifier composition if available
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+                    schema, name_tbl = self._schema_and_name()
+                    stmt = _sql.SQL(
+                        "insert into {}.{} (session_id, sub, roles, name, id_token, expires_at) "
+                        "values (gen_random_uuid()::text, %s, %s, %s, %s, to_timestamp(%s)) returning session_id"
+                    ).format(_sql.Identifier(schema), _sql.Identifier(name_tbl))
+                    cur.execute(stmt, (sub, Json(list(roles)), name, id_token, expires_at))
+                except Exception:
+                    # Fallback for environments without psycopg.sql (tests with fake psycopg)
+                    cur.execute(
+                        f"insert into {self._table} (session_id, sub, roles, name, id_token, expires_at) "
+                        f"values (gen_random_uuid()::text, %s, %s, %s, %s, to_timestamp(%s)) returning session_id",
+                        (sub, Json(list(roles)), name, id_token, expires_at),
+                    )
                 row = cur.fetchone()
         sid = str(row[0]) if row else ""
         return SessionRecord(session_id=sid, sub=sub, roles=list(roles), name=name, expires_at=expires_at, id_token=id_token, ttl_seconds=ttl_seconds)
@@ -82,14 +101,20 @@ class DBSessionStore:
     def get(self, session_id: str) -> Optional[SessionRecord]:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    select session_id, sub, roles, name, extract(epoch from expires_at)::bigint
-                    from {self._table}
-                    where session_id = %s and expires_at > now()
-                    """,
-                    (session_id,),
-                )
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+                    schema, name_tbl = self._schema_and_name()
+                    stmt = _sql.SQL(
+                        "select session_id, sub, roles, name, extract(epoch from expires_at)::bigint "
+                        "from {}.{} where session_id = %s and expires_at > now()"
+                    ).format(_sql.Identifier(schema), _sql.Identifier(name_tbl))
+                    cur.execute(stmt, (session_id,))
+                except Exception:
+                    cur.execute(
+                        f"select session_id, sub, roles, name, extract(epoch from expires_at)::bigint "
+                        f"from {self._table} where session_id = %s and expires_at > now()",
+                        (session_id,),
+                    )
                 row = cur.fetchone()
                 if not row:
                     return None
@@ -99,4 +124,12 @@ class DBSessionStore:
     def delete(self, session_id: str) -> None:
         with psycopg.connect(self._dsn, autocommit=True) as conn:
             with conn.cursor() as cur:
-                cur.execute(f"delete from {self._table} where session_id = %s", (session_id,))
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+                    schema, name_tbl = self._schema_and_name()
+                    stmt = _sql.SQL("delete from {}.{} where session_id = %s").format(
+                        _sql.Identifier(schema), _sql.Identifier(name_tbl)
+                    )
+                    cur.execute(stmt, (session_id,))
+                except Exception:
+                    cur.execute(f"delete from {self._table} where session_id = %s", (session_id,))

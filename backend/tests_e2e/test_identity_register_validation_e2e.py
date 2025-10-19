@@ -29,16 +29,20 @@ REALM = os.getenv("KC_REALM", "gustav")
 
 
 def _wait_for(url: str, expected: int = 200) -> None:
+    last_err = None
+    last_status = None
     for _ in range(60):
         try:
             r = requests.get(url, timeout=2)
+            last_status = r.status_code
             if r.status_code == expected or (
                 isinstance(expected, (tuple, list)) and r.status_code in expected
             ):
                 return
-        except requests.RequestException:
-            pass
-    pytest.skip(f"E2E dependency not ready: {url}")
+        except requests.RequestException as exc:
+            last_err = exc
+        time.sleep(1)
+    pytest.fail(f"E2E dependency not ready: GET {url} expected={expected} last_status={last_status} last_err={last_err}")
 
 
 def _parse_register_form(html: str, base_url: str) -> tuple[str, dict]:

@@ -22,9 +22,11 @@ import secrets
 
 from identity_access.oidc import OIDCClient
 import re
+import logging
 
 
 auth_router = APIRouter(tags=["Auth"])  # explicit paths, no prefix (align with OpenAPI)
+logger = logging.getLogger("gustav.web.auth")
 
 # Single source of truth for allowed in-app redirect paths
 # Disallow double slashes and path traversal (".."), allow dots in names
@@ -126,32 +128,48 @@ async def auth_logout(request: Request, redirect: str | None = None):
     """
     import main  # late import for stores and cookie policy
 
-    # Remove server-side session if present
+    # Remove server-side session if present (best-effort; never fail logout)
     sid = request.cookies.get(main.SESSION_COOKIE_NAME)
-    rec = main.SESSION_STORE.get(sid or "") if sid else None
+    rec = None
     if sid:
-        main.SESSION_STORE.delete(sid)
+        try:
+            rec = main.SESSION_STORE.get(sid or "")
+        except Exception as exc:
+            logger.warning("Session lookup failed during logout: %s", exc.__class__.__name__)
+        try:
+            main.SESSION_STORE.delete(sid)
+        except Exception as exc:
+            logger.warning("Session delete failed during logout: %s", exc.__class__.__name__)
 
     # Compute IdP logout URL and app redirect target (show success banner)
-    base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
-    app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
-    # Accept only in-app absolute paths; ignore external values
-    safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
-    # After logout, go to the app success page with a re-login link
-    dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
-    # Build params: prefer id_token_hint (best compatibility), else include client_id
-    params = {"post_logout_redirect_uri": dest}
-    if rec and getattr(rec, "id_token", None):
-        params["id_token_hint"] = rec.id_token
-    else:
-        params["client_id"] = main.OIDC_CFG.client_id
-    end_session = (
-        f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?" + urlencode(params)
-    )
+    end_session = "/auth/logout/success"  # conservative fallback
+    try:
+        base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
+        app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
+        # Accept only in-app absolute paths; ignore external values
+        safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
+        # After logout, go to the app success page with a re-login link
+        dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
+        # Build params: prefer id_token_hint (best compatibility), else include client_id
+        params = {"post_logout_redirect_uri": dest}
+        if rec and getattr(rec, "id_token", None):
+            params["id_token_hint"] = rec.id_token
+        else:
+            params["client_id"] = main.OIDC_CFG.client_id
+        end_session = (
+            f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?" + urlencode(params)
+        )
+    except Exception as exc:
+        logger.warning("Logout URL composition failed: %s", exc.__class__.__name__)
 
     resp = RedirectResponse(url=end_session, status_code=302)
     # Clear cookie consistent with environment flags
-    opts = _cookie_opts()
+    # Late import with fallback for both package and top-level import contexts
+    try:
+        from ..auth_utils import cookie_opts  # type: ignore
+    except Exception:  # pragma: no cover - runtime in alternative envs
+        from auth_utils import cookie_opts  # type: ignore
+    opts = cookie_opts(main.SETTINGS.environment)
     resp.set_cookie(
         key=main.SESSION_COOKIE_NAME,
         value="",
@@ -198,13 +216,16 @@ async def auth_logout_success():
 
 
 def _cookie_opts() -> dict:
-    """Return cookie flags based on main.SETTINGS (dev/prod)."""
-    import main  # late import
+    """Deprecated: use `cookie_opts(SETTINGS.environment)` from auth_utils.
 
-    env = main.SETTINGS.environment
-    secure = env == "prod"
-    samesite = "strict" if secure else "lax"
-    return {"secure": secure, "samesite": samesite}
+    Kept for backward compatibility in case external code imports it.
+    """
+    import main  # late import
+    try:
+        from ..auth_utils import cookie_opts  # type: ignore
+    except Exception:  # pragma: no cover
+        from auth_utils import cookie_opts  # type: ignore
+    return cookie_opts(main.SETTINGS.environment)
 
 
 def _default_app_base(redirect_uri: str) -> str:

@@ -133,3 +133,14 @@ async def test_me_includes_expires_at_and_no_store():
     assert "expires_at" in body, "RED: endpoint should include expires_at"
     assert isinstance(body["expires_at"], str)
     assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", body["expires_at"]) or "+" in body["expires_at"], body["expires_at"]
+
+
+@pytest.mark.anyio
+async def test_register_includes_nonce_param():
+    """Authorization URL for /auth/register must contain a nonce parameter."""
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get("/auth/register", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    loc = r.headers.get("location", "")
+    qs = parse_qs(urlparse(loc).query)
+    assert "nonce" in qs and qs["nonce"][0], "Expected nonce in /auth/register authorization URL"

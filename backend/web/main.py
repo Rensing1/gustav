@@ -29,6 +29,13 @@ from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
 from datetime import datetime, timezone
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
+# Import cookie_opts with a dual strategy to work both when importing as a
+# package (backend.web.main) and when tests import this file as top-level
+# module ("import main").
+try:  # package-style import
+    from .auth_utils import cookie_opts  # type: ignore
+except Exception:  # pragma: no cover - test runner path
+    from auth_utils import cookie_opts  # type: ignore
 
 # Load .env for local dev/test so environment variables are available outside Docker
 try:
@@ -76,15 +83,12 @@ ALLOWED_ROLES = {"student", "teacher", "admin"}
 def _session_cookie_options() -> dict:
     """Return cookie policy depending on environment (dev vs prod).
 
-    Returns:
-        Dictionary with `secure` and `samesite` flags. In `prod` we set
-        `secure=True` and `SameSite=strict`; in `dev`/tests we keep
-        `secure=False` and `SameSite=lax` to allow localhost flows.
+    Delegates to the shared `cookie_opts` helper for consistency across
+    modules. In `prod` we set `secure=True` and `SameSite=strict`; in
+    `dev`/tests we keep `secure=False` and `SameSite=lax` to allow
+    localhost flows.
     """
-    env = SETTINGS.environment
-    secure = env == "prod"
-    samesite = "strict" if secure else "lax"
-    return {"secure": secure, "samesite": samesite}
+    return cookie_opts(SETTINGS.environment)
 
 
 def _primary_role(roles: list[str]) -> str:
@@ -578,12 +582,6 @@ async def home(request: Request):
     """Startseite anzeigen mit Python Components"""
 
     content = build_home_content()
-
-    # Mock user for demo
-    demo_user = {
-        "name": "Felix",
-        "role": "teacher"
-    }
 
     # If this is an HTMX request, return content + sidebar (OOB) for consistent active state
     if "HX-Request" in request.headers:

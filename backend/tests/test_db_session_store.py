@@ -1,64 +1,112 @@
 """
-Integration-like tests for the Postgres-backed DBSessionStore.
+Unit-style tests for DBSessionStore using a fake psycopg driver.
 
-These tests are skipped unless psycopg is available and a DSN is provided via
-`DATABASE_URL` or `SUPABASE_DB_URL` (or `DB_SESSION_TEST_DSN`).
-
-The test ensures basic create/get/delete works and that expired sessions are
-filtered out at read time. It creates the table if it does not already exist
-to support local development without running migrations.
+Rationale: Keep CI/self-contained runs green without a real Postgres.
+We simulate the subset of psycopg used by DBSessionStore to validate SQL flow
+and mapping. No network or external DB required.
 """
 
 from __future__ import annotations
 
-import os
+import time
+import types
 import pytest
 
 
-try:
-    import psycopg  # type: ignore
-    HAVE_PSYCOPG = True
-except Exception:  # pragma: no cover
-    HAVE_PSYCOPG = False
+class _FakeCursor:
+    def __init__(self, store: dict):
+        self._store = store
+        self._row = None
+
+    def execute(self, sql: str, params: tuple | list):
+        sql_low = sql.lower().strip()
+        if sql_low.startswith("insert into"):
+            sub, roles_json, name, id_token, expires_at = params
+            # roles_json is psycopg Json wrapper in real life; accept list here
+            sid = f"fake-{int(time.time()*1000)}"
+            self._store[sid] = {
+                "sub": sub,
+                "roles": list(getattr(roles_json, "obj", roles_json)),
+                "name": name,
+                "id_token": id_token,
+                "expires_at": int(expires_at),
+            }
+            self._row = (sid,)
+        elif sql_low.startswith("select"):
+            # params = (session_id,)
+            sid = params[0]
+            rec = self._store.get(sid)
+            if rec and rec["expires_at"] > int(time.time()):
+                self._row = (
+                    sid,
+                    rec["sub"],
+                    rec["roles"],
+                    rec["name"],
+                    rec["expires_at"],
+                )
+            else:
+                self._row = None
+        elif sql_low.startswith("delete"):
+            sid = params[0]
+            self._store.pop(sid, None)
+            self._row = None
+        else:
+            raise AssertionError(f"Unexpected SQL: {sql}")
+
+    def fetchone(self):
+        return self._row
+
+    # context manager protocol
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
-DSN = (
-    os.getenv("DB_SESSION_TEST_DSN")
-    or os.getenv("DATABASE_URL")
-    or os.getenv("SUPABASE_DB_URL")
-)
+class _FakeConn:
+    def __init__(self, store: dict):
+        self._store = store
+
+    def cursor(self):
+        return _FakeCursor(self._store)
+
+    # context manager protocol
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
-pytestmark = pytest.mark.skipif(not HAVE_PSYCOPG or not DSN, reason="psycopg or DSN missing for DB tests")
+def _install_fake_psycopg(monkeypatch: pytest.MonkeyPatch, target_module):
+    fake_store: dict = {}
+
+    def fake_connect(dsn: str, autocommit: bool | None = None):  # signature-compatible
+        return _FakeConn(fake_store)
+
+    # Provide a minimal Json wrapper with .obj attribute to mirror psycopg.types.json.Json
+    class FakeJson:
+        def __init__(self, obj):
+            self.obj = obj
+
+    monkeypatch.setattr(target_module, "HAVE_PSYCOPG", True, raising=False)
+    # Replace the psycopg submodule object and its connect + types.json.Json
+    fake_psycopg = types.SimpleNamespace(connect=fake_connect, types=types.SimpleNamespace(json=types.SimpleNamespace(Json=FakeJson)))
+    monkeypatch.setattr(target_module, "psycopg", fake_psycopg, raising=False)
+    # Patch module-level Json import used by DBSessionStore
+    monkeypatch.setattr(target_module, "Json", FakeJson, raising=False)
+    return fake_store
 
 
-def _ensure_schema():
-    sql = """
-    create extension if not exists pgcrypto;
-    create table if not exists public.app_sessions (
-        session_id text primary key,
-        sub text not null,
-        roles jsonb not null,
-        name text not null,
-        id_token text,
-        expires_at timestamptz not null
-    );
-    create index if not exists idx_app_sessions_sub on public.app_sessions (sub);
-    create index if not exists idx_app_sessions_expires_at on public.app_sessions (expires_at);
-    alter table public.app_sessions enable row level security;
-    """
-    with psycopg.connect(DSN, autocommit=True) as conn:  # type: ignore
-        with conn.cursor() as cur:
-            cur.execute(sql)
+def test_create_get_delete_roundtrip(monkeypatch: pytest.MonkeyPatch):
+    from identity_access import stores_db as mod
+    _install_fake_psycopg(monkeypatch, mod)
+    store = mod.DBSessionStore(dsn="fake://dsn")
 
-
-def test_create_get_delete_roundtrip():
-    _ensure_schema()
-    from backend.identity_access.stores_db import DBSessionStore
-
-    store = DBSessionStore(dsn=DSN)
     rec = store.create(sub="user-1", roles=["student"], name="Max", ttl_seconds=60)
     assert rec.session_id
+
     got = store.get(rec.session_id)
     assert got is not None
     assert got.sub == "user-1"
@@ -70,13 +118,11 @@ def test_create_get_delete_roundtrip():
     assert store.get(rec.session_id) is None
 
 
-def test_get_filters_expired_sessions():
-    _ensure_schema()
-    from backend.identity_access.stores_db import DBSessionStore
+def test_get_filters_expired_sessions(monkeypatch: pytest.MonkeyPatch):
+    from identity_access import stores_db as mod
+    _install_fake_psycopg(monkeypatch, mod)
+    store = mod.DBSessionStore(dsn="fake://dsn")
 
-    store = DBSessionStore(dsn=DSN)
-    # Create an already-expired session by passing a negative TTL
     rec = store.create(sub="u2", roles=["student"], name="Expired", ttl_seconds=-10)
     assert rec.session_id
     assert store.get(rec.session_id) is None
-

@@ -41,7 +41,7 @@ def _install_fake_oidc(monkeypatch: pytest.MonkeyPatch):
 async def test_display_name_prefers_custom_claim(monkeypatch: pytest.MonkeyPatch):
     _install_fake_oidc(monkeypatch)
 
-    def claims(_: str, __: object):
+    def claims(id_token: str, cfg: object, cache=None):
         return {
             "email": "student@example.com",
             "name": "Fallback Name",
@@ -52,6 +52,10 @@ async def test_display_name_prefers_custom_claim(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(main, "verify_id_token", claims)
 
+    # Fresh stores for determinism
+    from identity_access.stores import StateStore, SessionStore
+    monkeypatch.setattr(main, "STATE_STORE", StateStore())
+    monkeypatch.setattr(main, "SESSION_STORE", SessionStore())
     rec = main.STATE_STORE.create(code_verifier="v")
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)
@@ -67,7 +71,7 @@ async def test_display_name_prefers_custom_claim(monkeypatch: pytest.MonkeyPatch
 async def test_display_name_uses_standard_name_if_custom_missing(monkeypatch: pytest.MonkeyPatch):
     _install_fake_oidc(monkeypatch)
 
-    def claims(_: str, __: object):
+    def claims(id_token: str, cfg: object, cache=None):
         return {
             "email": "student@example.com",
             "name": "Standard Name",
@@ -77,6 +81,9 @@ async def test_display_name_uses_standard_name_if_custom_missing(monkeypatch: py
 
     monkeypatch.setattr(main, "verify_id_token", claims)
 
+    from identity_access.stores import StateStore, SessionStore
+    monkeypatch.setattr(main, "STATE_STORE", StateStore())
+    monkeypatch.setattr(main, "SESSION_STORE", SessionStore())
     rec = main.STATE_STORE.create(code_verifier="v")
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)
@@ -92,7 +99,7 @@ async def test_display_name_uses_standard_name_if_custom_missing(monkeypatch: py
 async def test_display_name_falls_back_to_localpart(monkeypatch: pytest.MonkeyPatch):
     _install_fake_oidc(monkeypatch)
 
-    def claims(_: str, __: object):
+    def claims(id_token: str, cfg: object, cache=None):
         return {
             "email": "localpart@example.com",
             # no name, no gustav_display_name
@@ -102,6 +109,9 @@ async def test_display_name_falls_back_to_localpart(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(main, "verify_id_token", claims)
 
+    from identity_access.stores import StateStore, SessionStore
+    monkeypatch.setattr(main, "STATE_STORE", StateStore())
+    monkeypatch.setattr(main, "SESSION_STORE", SessionStore())
     rec = main.STATE_STORE.create(code_verifier="v")
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)
@@ -111,4 +121,3 @@ async def test_display_name_falls_back_to_localpart(monkeypatch: pytest.MonkeyPa
     session = main.SESSION_STORE.get(sid)
     assert session is not None
     assert session.name == "localpart"
-

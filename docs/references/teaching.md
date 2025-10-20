@@ -49,6 +49,16 @@ Migration: `supabase/migrations/20251020150101_teaching_courses.sql`
   - PK `(course_id, student_id)`, Index `idx_course_memberships_student(student_id)`
 - RLS: aktiviert, Zugriff über Service‑Role im Backend. Keine Grants an `anon`/`authenticated`.
 
+RLS Policies & DSN
+- Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`
+- App-Runtime: Eine DSN mit Limited‑Role (z. B. `gustav_limited`). RLS greift immer.
+- Backend setzt je Query `SET LOCAL app.current_sub = '<sub>'`, damit Policies wissen, „wer“ handelt.
+- Migrationen laufen getrennt über das Supabase‑CLI (Owner/Service), die App muss nie umschalten.
+
+Tests
+- API‑Tests erzeugen Daten über die API (RLS‑konform).
+- Optionaler RLS‑Test nutzt nur eine DSN (Limited) und seedet per `set_config('app.current_sub', ...)`.
+
 Anwenden lokal:
 - `supabase migration up`
 - Rückgängig: `supabase migration down 1`
@@ -74,4 +84,3 @@ DSN (Beispiel): `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/pos
 - Timestamps `created_at`/`updated_at` an Kursen; `created_at` als `joined_at` bei Mitgliedschaften.
 - Keine Mailadressen oder weiteren personenbezogenen Daten in API‑DTOs.
 - Mitgliederliste auf Owner beschränkt.
-

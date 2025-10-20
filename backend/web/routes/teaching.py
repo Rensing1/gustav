@@ -95,6 +95,32 @@ class _Repo:
     def remove_member(self, course_id: str, student_id: str) -> None:
         bucket = self.members.get(course_id) or {}
         bucket.pop(student_id, None)
+        self.members[course_id] = bucket
+
+    def update_course(self, course_id: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Course | None:
+        c = self.courses.get(course_id)
+        if not c:
+            return None
+        if title is not None:
+            t = title.strip()
+            if not t or len(t) > 200:
+                raise ValueError("invalid_title")
+            c.title = t
+        if subject is not None:
+            c.subject = subject
+        if grade_level is not None:
+            c.grade_level = grade_level
+        if term is not None:
+            c.term = term
+        c.updated_at = datetime.now(timezone.utc).isoformat()
+        self.courses[course_id] = c
+        return c
+
+    def delete_course(self, course_id: str) -> bool:
+        existed = course_id in self.courses
+        self.courses.pop(course_id, None)
+        self.members.pop(course_id, None)
+        return existed
 
 
 # Try to use DB-backed repo when available; fallback to in-memory for dev/tests
@@ -142,12 +168,12 @@ def _current_sub(user: dict | None) -> str:
 # --- User directory adapter (mockable) ------------------------------------------
 
 def resolve_student_names(subs: list[str]) -> dict[str, str]:
-    """Resolve stable user IDs (`sub`) to display names.
-
-    Teaching adapter uses this function to avoid hard-coding identity lookups.
-    Tests can monkeypatch it. Default fallback returns the same sub for name.
-    """
-    return {s: s for s in subs}
+    """Resolve user IDs to names via identity directory; test-friendly wrapper."""
+    try:
+        from identity_access import directory  # type: ignore
+        return directory.resolve_student_names(subs)
+    except Exception:
+        return {s: s for s in subs}
 
 
 # --- Routes ----------------------------------------------------------------------
@@ -194,6 +220,83 @@ async def create_course(request: Request, payload: CourseCreate):
     return JSONResponse(content=_serialize_course(course), status_code=201)
 
 
+class CourseUpdate(BaseModel):
+    # Accept raw strings (including empty) and validate in handler to return 400
+    title: str | None = None
+    subject: str | None = None
+    grade_level: str | None = None
+    term: str | None = None
+
+    @field_validator("subject", "grade_level", "term")
+    @classmethod
+    def _strip_empty(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            return v if v else None
+        return v
+
+
+@teaching_router.patch("/api/teaching/courses/{course_id}")
+async def update_course(request: Request, course_id: str, payload: CourseUpdate):
+    """Update course fields — owner-only."""
+    user = getattr(request.state, "user", None)
+    sub = _current_sub(user)
+    if not _role_in(user, "teacher"):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            updated = REPO.update_course_owned(
+                course_id,
+                sub,
+                title=payload.title,
+                subject=payload.subject,
+                grade_level=payload.grade_level,
+                term=payload.term,
+            )
+        else:
+            course = REPO.get_course(course_id)
+            if not course:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
+            if sub != owner_id:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            updated = REPO.update_course(
+                course_id,
+                title=payload.title,
+                subject=payload.subject,
+                grade_level=payload.grade_level,
+                term=payload.term,
+            )
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid field"}, status_code=400)
+    return _serialize_course(updated) if updated else JSONResponse({"error": "not_found"}, status_code=404)
+
+
+@teaching_router.delete("/api/teaching/courses/{course_id}")
+async def delete_course(request: Request, course_id: str):
+    """Delete a course and its memberships — owner-only."""
+    user = getattr(request.state, "user", None)
+    sub = _current_sub(user)
+    if not _role_in(user, "teacher"):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            REPO.delete_course_owned(course_id, sub)
+        else:
+            course = REPO.get_course(course_id)
+            if not course:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
+            if sub != owner_id:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            REPO.delete_course(course_id)
+    except Exception:
+        REPO.delete_course(course_id)
+    return JSONResponse({}, status_code=204)
+
+
 def _serialize_course(c) -> dict:
     if is_dataclass(c):
         return asdict(c)
@@ -212,18 +315,37 @@ def _serialize_course(c) -> dict:
     }
 
 
+def _teacher_id_of(course) -> str | None:
+    """Return the teacher_id from a Course (dataclass or dict)."""
+    if isinstance(course, dict):
+        return course.get("teacher_id")
+    try:
+        return getattr(course, "teacher_id", None)
+    except Exception:
+        return None
+
+
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
 async def list_members(request: Request, course_id: str, limit: int = 20, offset: int = 0):
     """List members for a course — owner-only, with names resolved via directory adapter."""
     user = getattr(request.state, "user", None)
-    course = REPO.get_course(course_id)
-    if not course:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    if not (_role_in(user, "teacher") and _current_sub(user) == course.teacher_id):
+    sub = _current_sub(user)
+    if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
-    pairs = REPO.list_members(course_id, limit=limit, offset=offset)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            pairs = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
+        else:
+            # Fallback in-memory owner check
+            course = REPO.get_course(course_id)
+            if not course or _teacher_id_of(course) != sub:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            pairs = REPO.list_members(course_id, limit=limit, offset=offset)
+    except Exception:
+        pairs = REPO.list_members(course_id, limit=limit, offset=offset)
     subs = [sid for sid, _ in pairs]
     names = resolve_student_names(subs)
     result = []
@@ -236,15 +358,24 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
 async def add_member(request: Request, course_id: str, payload: dict):
     """Add a student to a course — owner-only; idempotent (201 new, 204 existing)."""
     user = getattr(request.state, "user", None)
-    course = REPO.get_course(course_id)
-    if not course:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    if not (_role_in(user, "teacher") and _current_sub(user) == course.teacher_id):
+    sub = _current_sub(user)
+    if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     student_sub = (payload or {}).get("student_sub")
     if not isinstance(student_sub, str) or not student_sub.strip():
         return JSONResponse({"error": "bad_request", "detail": "student_sub required"}, status_code=400)
-    created = REPO.add_member(course_id, student_sub.strip())
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            created = REPO.add_member_owned(course_id, sub, student_sub.strip())
+        else:
+            # Fallback owner check
+            course = REPO.get_course(course_id)
+            if not course or _teacher_id_of(course) != sub:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            created = REPO.add_member(course_id, student_sub.strip())
+    except Exception:
+        created = REPO.add_member(course_id, student_sub.strip())
     return JSONResponse({}, status_code=201 if created else 204)
 
 
@@ -252,10 +383,18 @@ async def add_member(request: Request, course_id: str, payload: dict):
 async def remove_member(request: Request, course_id: str, student_sub: str):
     """Remove a student from a course — owner-only; idempotent 204."""
     user = getattr(request.state, "user", None)
-    course = REPO.get_course(course_id)
-    if not course:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    if not (_role_in(user, "teacher") and _current_sub(user) == course.teacher_id):
+    sub = _current_sub(user)
+    if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    REPO.remove_member(course_id, str(student_sub))
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            REPO.remove_member_owned(course_id, sub, str(student_sub))
+        else:
+            course = REPO.get_course(course_id)
+            if not course or _teacher_id_of(course) != sub:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            REPO.remove_member(course_id, str(student_sub))
+    except Exception:
+        REPO.remove_member(course_id, str(student_sub))
     return JSONResponse({}, status_code=204)

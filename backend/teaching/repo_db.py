@@ -168,6 +168,135 @@ class DBTeachingRepo:
             "updated_at": r[7],
         }
 
+    # --- Owner-scoped helpers (RLS-friendly) ------------------------------------
+    def get_course_for_owner(self, course_id: str, owner_sub: str) -> Optional[dict]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select id::text, title, subject, grade_level, term, teacher_id,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.courses where id = %s
+                    """,
+                    (course_id,),
+                )
+                r = cur.fetchone()
+                if not r:
+                    return None
+        return {
+            "id": r[0],
+            "title": r[1],
+            "subject": r[2],
+            "grade_level": r[3],
+            "term": r[4],
+            "teacher_id": r[5],
+            "created_at": r[6],
+            "updated_at": r[7],
+        }
+
+    def update_course_owned(self, course_id: str, owner_sub: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Optional[dict]:
+        sets = []
+        params: list = []
+        if title is not None:
+            t = (title or "").strip()
+            if not t or len(t) > 200:
+                raise ValueError("invalid_title")
+            sets.append("title = %s")
+            params.append(t)
+        if subject is not None:
+            sets.append("subject = %s")
+            params.append(subject)
+        if grade_level is not None:
+            sets.append("grade_level = %s")
+            params.append(grade_level)
+        if term is not None:
+            sets.append("term = %s")
+            params.append(term)
+        if not sets:
+            return self.get_course_for_owner(course_id, owner_sub)
+        params.append(course_id)
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    f"""
+                    update public.courses set {', '.join(sets)} where id = %s
+                    returning id::text, title, subject, grade_level, term, teacher_id,
+                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    """,
+                    params,
+                )
+                r = cur.fetchone()
+                if not r:
+                    return None
+                conn.commit()
+        return {
+            "id": r[0],
+            "title": r[1],
+            "subject": r[2],
+            "grade_level": r[3],
+            "term": r[4],
+            "teacher_id": r[5],
+            "created_at": r[6],
+            "updated_at": r[7],
+        }
+
+    def delete_course_owned(self, course_id: str, owner_sub: str) -> bool:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute("delete from public.courses where id = %s", (course_id,))
+                conn.commit()
+                return True
+
+    def list_members_for_owner(self, course_id: str, owner_sub: str, limit: int, offset: int) -> List[Tuple[str, str]]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select student_id,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.course_memberships
+                    where course_id = %s
+                    order by created_at asc, student_id
+                    limit %s offset %s
+                    """,
+                    (course_id, int(limit), int(offset)),
+                )
+                rows = cur.fetchall() or []
+        return [(r[0], r[1]) for r in rows]
+
+    def add_member_owned(self, course_id: str, owner_sub: str, student_id: str) -> bool:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    insert into public.course_memberships (course_id, student_id)
+                    values (%s, %s)
+                    on conflict do nothing
+                    returning created_at
+                    """,
+                    (course_id, student_id),
+                )
+                r = cur.fetchone()
+                conn.commit()
+        return bool(r)
+
+    def remove_member_owned(self, course_id: str, owner_sub: str, student_id: str) -> None:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    "delete from public.course_memberships where course_id = %s and student_id = %s",
+                    (course_id, student_id),
+                )
+                conn.commit()
+
     def update_course(self, course_id: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Optional[dict]:
         # Build dynamic update only for provided fields
         sets = []

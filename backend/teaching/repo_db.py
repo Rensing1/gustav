@@ -203,32 +203,50 @@ class DBTeachingRepo:
             t = (title or "").strip()
             if not t or len(t) > 200:
                 raise ValueError("invalid_title")
-            sets.append("title = %s")
-            params.append(t)
+            sets.append(("title", t))
         if subject is not None:
-            sets.append("subject = %s")
-            params.append(subject)
+            sets.append(("subject", subject))
         if grade_level is not None:
-            sets.append("grade_level = %s")
-            params.append(grade_level)
+            sets.append(("grade_level", grade_level))
         if term is not None:
-            sets.append("term = %s")
-            params.append(term)
+            sets.append(("term", term))
         if not sets:
             return self.get_course_for_owner(course_id, owner_sub)
-        params.append(course_id)
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                cur.execute(
-                    f"""
-                    update public.courses set {', '.join(sets)} where id = %s
-                    returning id::text, title, subject, grade_level, term, teacher_id,
-                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    """,
-                    params,
-                )
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+                    assignments = []
+                    params = []
+                    for col, val in sets:
+                        assignments.append(_sql.SQL("{} = %s").format(_sql.Identifier(col)))
+                        params.append(val)
+                    params.append(course_id)
+                    stmt = _sql.SQL(
+                        """
+                        update public.courses set {assign}
+                        where id = %s
+                        returning id::text, title, subject, grade_level, term, teacher_id,
+                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """
+                    ).format(assign=_sql.SQL(", ").join(assignments))
+                    cur.execute(stmt, params)
+                except Exception:
+                    # Fallback in environments without psycopg.sql
+                    params = [val for _, val in sets] + [course_id]
+                    cols = ", ".join([f"{col} = %s" for col, _ in sets])
+                    cur.execute(
+                        f"""
+                        update public.courses set {cols}
+                        where id = %s
+                        returning id::text, title, subject, grade_level, term, teacher_id,
+                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        params,
+                    )
                 r = cur.fetchone()
                 if not r:
                     return None
@@ -299,38 +317,54 @@ class DBTeachingRepo:
 
     def update_course(self, course_id: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Optional[dict]:
         # Build dynamic update only for provided fields
-        sets = []
-        params: list = []
+        sets: list[tuple[str, object | None]] = []
         if title is not None:
             t = (title or "").strip()
             if not t or len(t) > 200:
                 raise ValueError("invalid_title")
-            sets.append("title = %s")
-            params.append(t)
+            sets.append(("title", t))
         if subject is not None:
-            sets.append("subject = %s")
-            params.append(subject)
+            sets.append(("subject", subject))
         if grade_level is not None:
-            sets.append("grade_level = %s")
-            params.append(grade_level)
+            sets.append(("grade_level", grade_level))
         if term is not None:
-            sets.append("term = %s")
-            params.append(term)
+            sets.append(("term", term))
         if not sets:
             # nothing to update; return current row
             return self.get_course(course_id)
-        params.append(course_id)
         with psycopg.connect(self._dsn, autocommit=True) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    update public.courses set {', '.join(sets)} where id = %s
-                    returning id::text, title, subject, grade_level, term, teacher_id,
-                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    """,
-                    params,
-                )
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+                    assignments = []
+                    params = []
+                    for col, val in sets:
+                        assignments.append(_sql.SQL("{} = %s").format(_sql.Identifier(col)))
+                        params.append(val)
+                    params.append(course_id)
+                    stmt = _sql.SQL(
+                        """
+                        update public.courses set {assign}
+                        where id = %s
+                        returning id::text, title, subject, grade_level, term, teacher_id,
+                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """
+                    ).format(assign=_sql.SQL(", ").join(assignments))
+                    cur.execute(stmt, params)
+                except Exception:
+                    params = [val for _, val in sets] + [course_id]
+                    cols = ", ".join([f"{col} = %s" for col, _ in sets])
+                    cur.execute(
+                        f"""
+                        update public.courses set {cols}
+                        where id = %s
+                        returning id::text, title, subject, grade_level, term, teacher_id,
+                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        params,
+                    )
                 r = cur.fetchone()
                 if not r:
                     return None

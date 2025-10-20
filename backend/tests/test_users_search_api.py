@@ -56,3 +56,21 @@ async def test_search_requires_teacher_and_min_query(monkeypatch: pytest.MonkeyP
         assert arr and arr[0]["sub"] == "s-1"
         assert arr[0]["name"] == "Max Musterschüler"
 
+
+@pytest.mark.anyio
+async def test_search_invalid_role_returns_400(monkeypatch: pytest.MonkeyPatch):
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="teacher-S2", name="Teach", roles=["teacher"])
+
+    import routes.users as users
+
+    def fake_search(*, role: str, q: str, limit: int):
+        return []
+
+    monkeypatch.setattr(users, "search_users_by_name", fake_search, raising=False)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        r = await client.get("/api/users/search?q=ma&role=hacker&limit=5")
+        assert r.status_code == 400
+        assert r.json().get("error") == "bad_request"

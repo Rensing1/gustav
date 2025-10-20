@@ -24,6 +24,17 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
 from identity_access.stores import SessionStore  # type: ignore
+import os
+
+
+def _require_db_or_skip():
+    dsn = os.getenv("DATABASE_URL") or ""
+    try:
+        import psycopg  # type: ignore
+        with psycopg.connect(dsn, connect_timeout=1):
+            return
+    except Exception:
+        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
 
 
 async def _client():
@@ -34,11 +45,16 @@ async def _client():
 async def test_teacher_can_create_and_list_own_courses():
     # Ensure in-memory session store for this test run
     main.SESSION_STORE = SessionStore()
+    # Require DB-backed repo
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
     # Arrange: teacher session
     sess = main.SESSION_STORE.create(sub="teacher-1", name="Frau Lehrerin", roles=["teacher"])
-    # Use in-memory repo for these integration tests
-    import routes.teaching as teaching
-    teaching.REPO = teaching._Repo()
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", sess.session_id)
@@ -69,8 +85,6 @@ async def test_student_cannot_create_course_forbidden():
     main.SESSION_STORE = SessionStore()
     # Arrange: student session
     sess = main.SESSION_STORE.create(sub="student-1", name="Max Musterschüler", roles=["student"])
-    import routes.teaching as teaching
-    teaching.REPO = teaching._Repo()
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", sess.session_id)
@@ -83,11 +97,17 @@ async def test_student_cannot_create_course_forbidden():
 @pytest.mark.anyio
 async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pytest.MonkeyPatch):
     main.SESSION_STORE = SessionStore()
+    # Require DB-backed repo
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
     # Arrange: two teachers and one student
     t1 = main.SESSION_STORE.create(sub="teacher-A", name="Frau A", roles=["teacher"])
     t2 = main.SESSION_STORE.create(sub="teacher-B", name="Herr B", roles=["teacher"])
-    import routes.teaching as teaching
-    teaching.REPO = teaching._Repo()
 
     # Monkeypatch name resolver in teaching router to avoid external dependency
     import routes.teaching as teaching  # patch the module used by main
@@ -147,10 +167,16 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
 async def test_student_listing_includes_member_courses(monkeypatch: pytest.MonkeyPatch):
     main.SESSION_STORE = SessionStore()
     # Teacher creates course and adds student
+    # Require DB-backed repo
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
     t = main.SESSION_STORE.create(sub="teacher-X", name="Lehrkraft X", roles=["teacher"])
     s = main.SESSION_STORE.create(sub="student-X", name="Schüler X", roles=["student"])
-    import routes.teaching as teaching
-    teaching.REPO = teaching._Repo()
 
     # monkeypatch resolver for completeness (not used by listing)
     import routes.teaching as teaching

@@ -19,6 +19,17 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
 from identity_access.stores import SessionStore  # type: ignore
+import os
+
+
+def _require_db_or_skip():
+    dsn = os.getenv("DATABASE_URL") or ""
+    try:
+        import psycopg  # type: ignore
+        with psycopg.connect(dsn, connect_timeout=1):
+            return
+    except Exception:
+        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
 
 
 async def _client():
@@ -29,7 +40,12 @@ async def _client():
 async def test_owner_can_patch_title_and_non_owner_forbidden():
     main.SESSION_STORE = SessionStore()
     import routes.teaching as teaching
-    teaching.REPO = teaching._Repo()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
 
     t_owner = main.SESSION_STORE.create(sub="teacher-u-1", name="Owner", roles=["teacher"])
     t_other = main.SESSION_STORE.create(sub="teacher-u-2", name="Other", roles=["teacher"])
@@ -55,7 +71,12 @@ async def test_owner_can_patch_title_and_non_owner_forbidden():
 async def test_owner_can_delete_course_and_memberships():
     main.SESSION_STORE = SessionStore()
     import routes.teaching as teaching
-    teaching.REPO = teaching._Repo()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
 
     t_owner = main.SESSION_STORE.create(sub="teacher-d-1", name="Owner", roles=["teacher"])
 
@@ -80,7 +101,12 @@ async def test_owner_can_delete_course_and_memberships():
 async def test_patch_validation_errors():
     main.SESSION_STORE = SessionStore()
     import routes.teaching as teaching
-    teaching.REPO = teaching._Repo()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
 
     t_owner = main.SESSION_STORE.create(sub="teacher-v-1", name="Owner", roles=["teacher"])
 
@@ -96,4 +122,3 @@ async def test_patch_validation_errors():
         # Too long title
         p2 = await client.patch(f"/api/teaching/courses/{course_id}", json={"title": "x" * 201})
         assert p2.status_code == 400
-

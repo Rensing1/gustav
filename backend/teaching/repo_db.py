@@ -1,0 +1,205 @@
+"""
+Postgres-backed repository for Teaching (courses & memberships).
+
+Security:
+- Access with a service-role DSN (server-side). Client RLS is enabled on tables.
+
+Design:
+- Minimal psycopg3 usage; each call opens a short-lived connection.
+- Returns plain dicts to keep the web adapter independent of ORM.
+"""
+from __future__ import annotations
+
+from typing import List, Tuple, Optional
+import os
+import re
+
+try:
+    import psycopg
+    HAVE_PSYCOPG = True
+except Exception:  # pragma: no cover - optional in some dev envs
+    psycopg = None  # type: ignore
+    HAVE_PSYCOPG = False
+
+
+def _dsn() -> str:
+    dsn = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL") or ""
+    if not dsn:
+        raise RuntimeError("DATABASE_URL not set for DBTeachingRepo")
+    return dsn
+
+
+def _iso(ts) -> str:
+    # Expect timestamptz; convert to ISO string via SQL or fetch as text
+    # We fetch via to_char at query time for predictability across drivers.
+    return str(ts)
+
+
+class DBTeachingRepo:
+    def __init__(self, dsn: Optional[str] = None) -> None:
+        if not HAVE_PSYCOPG:
+            raise RuntimeError("psycopg3 is required for DBTeachingRepo")
+        self._dsn = dsn or _dsn()
+
+    # --- Courses ----------------------------------------------------------------
+    def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> dict:
+        title = title.strip()
+        if not title or len(title) > 200:
+            raise ValueError("invalid_title")
+        with psycopg.connect(self._dsn, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into public.courses (title, subject, grade_level, term, teacher_id)
+                    values (%s, %s, %s, %s, %s)
+                    returning id::text,
+                              title,
+                              subject,
+                              grade_level,
+                              term,
+                              teacher_id,
+                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"') as created_at,
+                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"') as updated_at
+                    """,
+                    (title, subject, grade_level, term, teacher_id),
+                )
+                row = cur.fetchone()
+        return {
+            "id": row[0],
+            "title": row[1],
+            "subject": row[2],
+            "grade_level": row[3],
+            "term": row[4],
+            "teacher_id": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
+        }
+
+    def list_courses_for_teacher(self, *, teacher_id: str, limit: int, offset: int) -> List[dict]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select id::text, title, subject, grade_level, term, teacher_id,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.courses
+                    where teacher_id = %s
+                    order by created_at desc, id
+                    limit %s offset %s
+                    """,
+                    (teacher_id, int(limit), int(offset)),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "title": r[1],
+                "subject": r[2],
+                "grade_level": r[3],
+                "term": r[4],
+                "teacher_id": r[5],
+                "created_at": r[6],
+                "updated_at": r[7],
+            }
+            for r in rows
+        ]
+
+    def list_courses_for_student(self, *, student_id: str, limit: int, offset: int) -> List[dict]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select c.id::text, c.title, c.subject, c.grade_level, c.term, c.teacher_id,
+                           to_char(c.created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(c.updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.courses c
+                    join public.course_memberships m on m.course_id = c.id
+                    where m.student_id = %s
+                    order by c.created_at desc, c.id
+                    limit %s offset %s
+                    """,
+                    (student_id, int(limit), int(offset)),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "title": r[1],
+                "subject": r[2],
+                "grade_level": r[3],
+                "term": r[4],
+                "teacher_id": r[5],
+                "created_at": r[6],
+                "updated_at": r[7],
+            }
+            for r in rows
+        ]
+
+    def get_course(self, course_id: str) -> Optional[dict]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select id::text, title, subject, grade_level, term, teacher_id,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.courses where id = %s
+                    """,
+                    (course_id,),
+                )
+                r = cur.fetchone()
+                if not r:
+                    return None
+        return {
+            "id": r[0],
+            "title": r[1],
+            "subject": r[2],
+            "grade_level": r[3],
+            "term": r[4],
+            "teacher_id": r[5],
+            "created_at": r[6],
+            "updated_at": r[7],
+        }
+
+    # --- Memberships -------------------------------------------------------------
+    def add_member(self, course_id: str, student_id: str) -> bool:
+        with psycopg.connect(self._dsn, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into public.course_memberships (course_id, student_id)
+                    values (%s, %s)
+                    on conflict do nothing
+                    returning created_at
+                    """,
+                    (course_id, student_id),
+                )
+                r = cur.fetchone()
+        return bool(r)
+
+    def list_members(self, course_id: str, limit: int, offset: int) -> List[Tuple[str, str]]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select student_id,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.course_memberships
+                    where course_id = %s
+                    order by created_at asc, student_id
+                    limit %s offset %s
+                    """,
+                    (course_id, int(limit), int(offset)),
+                )
+                rows = cur.fetchall() or []
+        return [(r[0], r[1]) for r in rows]
+
+    def remove_member(self, course_id: str, student_id: str) -> None:
+        with psycopg.connect(self._dsn, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "delete from public.course_memberships where course_id = %s and student_id = %s",
+                    (course_id, student_id),
+                )
+

@@ -23,6 +23,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
+from identity_access.stores import SessionStore  # type: ignore
 
 
 async def _client():
@@ -31,8 +32,13 @@ async def _client():
 
 @pytest.mark.anyio
 async def test_teacher_can_create_and_list_own_courses():
+    # Ensure in-memory session store for this test run
+    main.SESSION_STORE = SessionStore()
     # Arrange: teacher session
     sess = main.SESSION_STORE.create(sub="teacher-1", name="Frau Lehrerin", roles=["teacher"])
+    # Use in-memory repo for these integration tests
+    import routes.teaching as teaching
+    teaching.REPO = teaching._Repo()
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", sess.session_id)
@@ -60,8 +66,11 @@ async def test_teacher_can_create_and_list_own_courses():
 
 @pytest.mark.anyio
 async def test_student_cannot_create_course_forbidden():
+    main.SESSION_STORE = SessionStore()
     # Arrange: student session
     sess = main.SESSION_STORE.create(sub="student-1", name="Max Musterschüler", roles=["student"])
+    import routes.teaching as teaching
+    teaching.REPO = teaching._Repo()
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", sess.session_id)
@@ -70,3 +79,99 @@ async def test_student_cannot_create_course_forbidden():
         data = resp.json()
         assert data.get("error") == "forbidden"
 
+
+@pytest.mark.anyio
+async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pytest.MonkeyPatch):
+    main.SESSION_STORE = SessionStore()
+    # Arrange: two teachers and one student
+    t1 = main.SESSION_STORE.create(sub="teacher-A", name="Frau A", roles=["teacher"])
+    t2 = main.SESSION_STORE.create(sub="teacher-B", name="Herr B", roles=["teacher"])
+    import routes.teaching as teaching
+    teaching.REPO = teaching._Repo()
+
+    # Monkeypatch name resolver in teaching router to avoid external dependency
+    import routes.teaching as teaching  # patch the module used by main
+
+    def fake_resolver_bulk(ids: list[str]) -> dict[str, str]:
+        mapping = {"student-1": "Max Musterschüler", "student-2": "Mia Muster"}
+        return {i: mapping.get(i, f"Name:{i}") for i in ids}
+
+    monkeypatch.setattr(teaching, "resolve_student_names", fake_resolver_bulk, raising=False)
+
+    # Teacher A creates a course
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", t1.session_id)
+        c = await client.post("/api/teaching/courses", json={"title": "Mathe 10"})
+        assert c.status_code == 201
+        course_id = c.json()["id"]
+
+        # Initially: no members
+        r0 = await client.get(f"/api/teaching/courses/{course_id}/members")
+        assert r0.status_code == 200
+        assert r0.json() == []
+
+        # Add member
+        add1 = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": "student-1"})
+        assert add1.status_code == 201
+        # Idempotent add
+        add2 = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": "student-1"})
+        assert add2.status_code == 204
+
+        # List with names + joined_at
+        lst = await client.get(f"/api/teaching/courses/{course_id}/members")
+        assert lst.status_code == 200
+        arr = lst.json()
+        assert len(arr) == 1
+        assert arr[0]["sub"] == "student-1"
+        assert arr[0]["name"] == "Max Musterschüler"
+        assert "joined_at" in arr[0]
+
+        # Remove member idempotent
+        d1 = await client.delete(f"/api/teaching/courses/{course_id}/members/student-1")
+        assert d1.status_code == 204
+        d2 = await client.delete(f"/api/teaching/courses/{course_id}/members/student-1")
+        assert d2.status_code == 204
+
+    # Non-owner teacher must be forbidden to manage or view members
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", t2.session_id)
+        resp1 = await client.get(f"/api/teaching/courses/{course_id}/members")
+        assert resp1.status_code == 403
+        resp2 = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": "student-2"})
+        assert resp2.status_code == 403
+        resp3 = await client.delete(f"/api/teaching/courses/{course_id}/members/student-2")
+        assert resp3.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_student_listing_includes_member_courses(monkeypatch: pytest.MonkeyPatch):
+    main.SESSION_STORE = SessionStore()
+    # Teacher creates course and adds student
+    t = main.SESSION_STORE.create(sub="teacher-X", name="Lehrkraft X", roles=["teacher"])
+    s = main.SESSION_STORE.create(sub="student-X", name="Schüler X", roles=["student"])
+    import routes.teaching as teaching
+    teaching.REPO = teaching._Repo()
+
+    # monkeypatch resolver for completeness (not used by listing)
+    import routes.teaching as teaching
+
+    def fake_resolver_bulk(ids: list[str]) -> dict[str, str]:
+        return {i: f"Name:{i}" for i in ids}
+
+    monkeypatch.setattr(teaching, "resolve_student_names", fake_resolver_bulk, raising=False)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", t.session_id)
+        c = await client.post("/api/teaching/courses", json={"title": "Physik 9"})
+        assert c.status_code == 201
+        course_id = c.json()["id"]
+        a = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": "student-X"})
+        assert a.status_code in (201, 204)
+
+    # As student: should see the course in listing
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", s.session_id)
+        lst = await client.get("/api/teaching/courses?limit=10&offset=0")
+        assert lst.status_code == 200
+        ids = [c.get("id") for c in lst.json()]
+        assert course_id in ids

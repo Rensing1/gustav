@@ -63,7 +63,7 @@ _ensure_db_env_defaults()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = REPO_ROOT / "backend"
 WEB_DIR = BACKEND_DIR / "web"
-for p in (str(BACKEND_DIR), str(WEB_DIR)):
+for p in (str(REPO_ROOT), str(BACKEND_DIR), str(WEB_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 

@@ -39,6 +39,7 @@ components:
           type: string
           format: date-time
           description: Session expiration timestamp (UTC ISO-8601).
+          nullable: true
     Error:
       type: object
       required: [error]

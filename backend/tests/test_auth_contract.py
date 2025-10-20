@@ -20,6 +20,7 @@ from typing import Dict, Callable
 from jose import jwt
 import types
 import requests
+import yaml
 
 TEST_ISSUER = "http://keycloak:8080/realms/gustav"
 TEST_AUDIENCE = "gustav-web"
@@ -582,6 +583,17 @@ def test_openapi_contains_auth_paths():
         "/api/me",
     ]:
         assert p in yml
+
+
+def test_openapi_me_schema_allows_nullable_expires_at():
+    """Contract must document that expires_at may be null (session with no expiry)."""
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    yml = (root / "api" / "openapi.yml").read_text(encoding="utf-8")
+    spec = yaml.safe_load(yml)
+    expires_schema = spec["components"]["schemas"]["Me"]["properties"]["expires_at"]
+    assert expires_schema.get("nullable") is True
 
 
 @pytest.mark.anyio

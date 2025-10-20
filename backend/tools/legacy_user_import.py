@@ -64,7 +64,7 @@ def fetch_legacy_users(
     """
 
     sql = """
-        SELECT u.id, u.email, p.role, COALESCE(p.full_name, ''), u.encrypted_password
+        SELECT u.id, u.email, p.role, p.full_name, u.encrypted_password
         FROM auth.users u
         JOIN public.profiles p ON p.id = u.id
         {where}
@@ -83,13 +83,19 @@ def fetch_legacy_users(
 
     result = []
     for row in rows:
-        user_id, email, role, full_name, password_hash = row
+        user_id, email, role, full_name_raw, password_hash = row
+        normalized_name: str | None = None
+        if isinstance(full_name_raw, str):
+            trimmed = full_name_raw.strip()
+            normalized_name = trimmed or None
+        elif full_name_raw is not None:
+            normalized_name = str(full_name_raw) or None
         result.append(
             LegacyUserRow(
                 id=user_id,
                 email=email,
                 role=role,
-                full_name=full_name,
+                full_name=normalized_name,
                 password_hash=password_hash,
             )
         )
@@ -136,11 +142,14 @@ class KeycloakAdminClient:
         realm: str,
         token: str,
         host_header: str,
+        *,
         session: requests.Session | None = None,
+        timeout: float = 5.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.realm = realm
         self.session = session or requests.Session()
+        self.timeout = timeout
         self.session.headers.update({
             "Authorization": f"Bearer {token}",
             "Host": host_header,
@@ -154,6 +163,8 @@ class KeycloakAdminClient:
         realm: str,
         username: str,
         password: str,
+        *,
+        timeout: float = 5.0,
     ) -> "KeycloakAdminClient":
         session = requests.Session()
         session.headers.update({"Host": host_header})
@@ -165,10 +176,11 @@ class KeycloakAdminClient:
                 "username": username,
                 "password": password,
             },
+            timeout=timeout,
         )
         token_resp.raise_for_status()
         token = token_resp.json()["access_token"]
-        return cls(base_url, realm, token, host_header, session=session)
+        return cls(base_url, realm, token, host_header, session=session, timeout=timeout)
 
     # --- REST helpers -----------------------------------------------------
 
@@ -176,6 +188,7 @@ class KeycloakAdminClient:
         resp = self.session.get(
             f"{self.base_url}/admin/realms/{self.realm}/users",
             params={"email": email, "exact": "true"},
+            timeout=self.timeout,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -185,7 +198,8 @@ class KeycloakAdminClient:
 
     def delete_user(self, user_id: str) -> None:
         resp = self.session.delete(
-            f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}"
+            f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}",
+            timeout=self.timeout,
         )
         resp.raise_for_status()
 
@@ -193,6 +207,7 @@ class KeycloakAdminClient:
         resp = self.session.post(
             f"{self.base_url}/admin/realms/{self.realm}/users",
             json=payload,
+            timeout=self.timeout,
         )
         resp.raise_for_status()
         location = resp.headers.get("Location")
@@ -205,13 +220,15 @@ class KeycloakAdminClient:
 
     def assign_realm_role(self, user_id: str, role: str) -> None:
         resp = self.session.get(
-            f"{self.base_url}/admin/realms/{self.realm}/roles/{role}"
+            f"{self.base_url}/admin/realms/{self.realm}/roles/{role}",
+            timeout=self.timeout,
         )
         resp.raise_for_status()
         role_repr = resp.json()
         resp = self.session.post(
             f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}/role-mappings/realm",
             json=[role_repr],
+            timeout=self.timeout,
         )
         resp.raise_for_status()
 

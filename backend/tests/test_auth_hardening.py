@@ -361,6 +361,28 @@ async def test_sidebar_displays_name_not_email():
 
 
 @pytest.mark.anyio
+async def test_api_me_handles_session_store_failure(monkeypatch: pytest.MonkeyPatch):
+    """Session backend errors must result in a 401 response (fail closed)."""
+
+    class ExplodingStore:
+        def get(self, session_id: str):
+            raise RuntimeError("boom")
+
+        def delete(self, session_id: str):
+            return None
+
+    monkeypatch.setattr(main, "SESSION_STORE", ExplodingStore())
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", "any-session")
+        resp = await client.get("/api/me")
+
+    assert resp.status_code == 401
+    assert resp.headers.get("Cache-Control") == "no-store"
+    assert resp.json().get("error") == "unauthenticated"
+
+
+@pytest.mark.anyio
 async def test_callback_rejects_when_id_token_nonce_missing(monkeypatch: pytest.MonkeyPatch):
     """If a nonce was stored for the state, missing `nonce` in ID token must be rejected."""
     class FakeOIDC:

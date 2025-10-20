@@ -13,6 +13,24 @@
   "resetPasswordAllowed": true,
   "passwordPolicy": "length(8) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1)",
   "duplicateEmailsAllowed": false,
+  "attributes": {
+    "userProfileEnabled": "true"
+  },
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "name": "declarative-user-profile",
+        "providerId": "declarative-user-profile",
+        "subType": "realm",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"annotations\": {\"kc.hidden\": \"true\"}}, {\"name\": \"email\", \"displayName\": \"${email}\", \"permissions\": {\"view\": [\"user\", \"admin\"], \"edit\": [\"user\", \"admin\"]}, \"validations\": {\"email\": {\"ignoreEmptyValue\": false}}, \"required\": {\"roles\": [\"user\"]}}, {\"name\": \"display_name\", \"displayName\": \"Anzeigename\", \"permissions\": {\"view\": [\"user\", \"admin\"], \"edit\": [\"user\", \"admin\"]}, \"required\": {\"roles\": [\"user\"]}, \"validations\": {\"length\": {\"max\": 80}}}, {\"name\": \"firstName\", \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"annotations\": {\"kc.hidden\": \"true\"}}, {\"name\": \"lastName\", \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"annotations\": {\"kc.hidden\": \"true\"}}]}"
+          ]
+        }
+      }
+    ]
+  },
   "roles": {
     "realm": [
       { "name": "student", "description": "Student role" },
@@ -54,6 +72,17 @@
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }
+    }
+  ],
+  "requiredActions": [
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Update Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 50,
+      "config": {}
     }
   ]
 }

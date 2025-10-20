@@ -209,6 +209,45 @@ This section outlines the primary areas to address when replacing Supabase Auth 
   - Enforce password reset if hashed import isn’t feasible.
   - Dual‑run period: keep Supabase Auth disabled once Keycloak is authoritative; switch Auth Service verification logic behind a feature flag.
 
+### Aktueller Stand (Keycloak mit Bcrypt-Import)
+
+- Beim Keycloak-Image wird das Apache-2.0-Plugin [`keycloak-bcrypt`](../keycloak/Dockerfile) eingebunden. Damit können vorhandene Bcrypt-Hashes geprüft werden.
+- `keycloak/realm-gustav.json` aktiviert deklarative User Profiles: `display_name` ist Pflichtfeld, `firstName/lastName` sind ausgeblendet. Die Required Action `VERIFY_PROFILE` ist deaktiviert.
+- Script `backend/tools/legacy_user_import.py` importiert Nutzer aus der Legacy-Datenbank (`legacy_import`). Es legt den Benutzer mit seinem Bcrypt-Hash an, weist Realm-Rollen zu und setzt `display_name` / `legacy_user_id` Attribute. Der Importer maskiert E‑Mails in Logs (PII‑Minimierung) und akzeptiert nur valide Host‑Header (Hostname[:Port]) für Admin‑Requests.
+- Nach dem ersten Login rehashed Keycloak das Passwort automatisch gemäß der aktuellen Password Policy (`pbkdf2-sha512`).
+
+Importer ausführen:
+
+```bash
+python -m backend.tools.legacy_user_import \
+  --legacy-dsn postgresql://postgres:postgres@127.0.0.1:54322/legacy_import \
+  --kc-base-url http://127.0.0.1:8100 \
+  --kc-host-header id.localhost \
+  --kc-admin-user gustav-admin \
+  --kc-admin-pass '<ADMIN-PASSWORT>'
+```
+
+Optional: `--emails` (Whitelist) oder `--dry-run` (nur Ausgabe). Tests: `pytest -k legacy_user_importer`.
+
+**Ablauf in Stichpunkten**
+
+1. **Lesen**: Aus `legacy_import.auth.users` + `public.profiles` werden UUID, E-Mail, Rolle, optionaler Name und bcrypt-Hash geladen.
+2. **Mapping**: `display_name` = `full_name` oder (Fallback) lokaler Teil der E-Mail; Attribute `legacy_user_id` / `display_name` werden gesetzt; optional vorhandene Nutzer werden gelöscht.
+3. **Schreiben**: Keycloak-Admin-API (`admin-cli`) legt den Nutzer neu an, weist Realm-Rollen zu und speichert den bcrypt-Hash unverändert.
+4. **Rehash beim Login**: Beim ersten Login prüft Keycloak den Hash via Plugin, schreibt ihn dann gemäß Password Policy (`pbkdf2-sha512`) um.
+
+**Fehlerszenarien / Hinweise**
+
+- Anzeige-Name im Web (DTO): Die Web‑Schicht bevorzugt den OIDC‑Claim `gustav_display_name` (aus dem Keycloak‑Attribut `display_name`). Falls nicht vorhanden, wird `name` (Standard‑Claim) genutzt; finaler Fallback ist der lokale Teil der E‑Mail. Dies wird in `/api/me` als `name` ausgeliefert.
+- Mapper in `keycloak/realm-gustav.json`: Der Protocol‑Mapper „Display Name (gustav_display_name)“ exportiert das Attribut `display_name` als Claim `gustav_display_name` in ID‑, Access‑ und Userinfo‑Token. Der Importer setzt deshalb konsequent `display_name`.
+- Sicheres Verhalten des Importers: Standardmäßig werden bestehende Nutzer nicht gelöscht. Mit `--force-replace` kann das Überschreiben bewusst aktiviert werden. HTTP‑Requests an die Admin‑API nutzen ein konfigurierbares Timeout (`--timeout`, Standard 5s).
+- Host‑Header Sicherheit: `--kc-host-header` darf nur aus Zeichen `[A-Za-z0-9.-]` und optionaler Portangabe bestehen. Dies verhindert Header‑Injection.
+
+- Unbekannte Rollen ⇒ Nutzer wird übersprungen und im Log vermerkt.
+- Netz-/API-Fehler ⇒ Import stoppt mit Ausnahme (prozessuell über Retry oder Fortsetzung möglich).
+- `--dry-run` eignet sich für einen Preview-Lauf; per `--emails` kann ein kleiner E-Mail-Ausschnitt getestet werden.
+- Nach dem Import empfiehlt sich ein stichprobenartiger Login-Test sowie ein Blick auf `/admin/realms/gustav/users/<id>/credentials` (der Hash sollte nach dem Login `pbkdf2-sha512` sein).
+
 ## Quick References (Files)
 
 - Supabase Auth config: `supabase/config.toml`
@@ -221,4 +260,3 @@ This section outlines the primary areas to address when replacing Supabase Auth 
 ---
 
 For broader architecture, data flows, and security posture, see `ARCHITECTURE.md` and `SECURITY.md`.
-

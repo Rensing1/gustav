@@ -385,6 +385,10 @@ async def add_member(request: Request, course_id: str, payload: dict):
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
+            # Ensure caller owns the course; otherwise forbid
+            owned = REPO.get_course_for_owner(course_id, sub)
+            if not owned:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
             created = REPO.add_member_owned(course_id, sub, student_sub.strip())
         else:
             # Fallback owner check
@@ -407,6 +411,9 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
+            owned = REPO.get_course_for_owner(course_id, sub)
+            if not owned:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.remove_member_owned(course_id, sub, str(student_sub))
         else:
             course = REPO.get_course(course_id)

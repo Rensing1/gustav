@@ -63,7 +63,6 @@ class DBSessionStore:
         self._dsn = (
             dsn
             or os.getenv("SESSION_DATABASE_URL")
-            or os.getenv("SESSION_TEST_DSN")
             or os.getenv("DATABASE_URL")
             or os.getenv("SUPABASE_DB_URL", "")
         )

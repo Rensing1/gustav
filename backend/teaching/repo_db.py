@@ -162,6 +162,61 @@ class DBTeachingRepo:
             "updated_at": r[7],
         }
 
+    def update_course(self, course_id: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Optional[dict]:
+        # Build dynamic update only for provided fields
+        sets = []
+        params: list = []
+        if title is not None:
+            t = (title or "").strip()
+            if not t or len(t) > 200:
+                raise ValueError("invalid_title")
+            sets.append("title = %s")
+            params.append(t)
+        if subject is not None:
+            sets.append("subject = %s")
+            params.append(subject)
+        if grade_level is not None:
+            sets.append("grade_level = %s")
+            params.append(grade_level)
+        if term is not None:
+            sets.append("term = %s")
+            params.append(term)
+        if not sets:
+            # nothing to update; return current row
+            return self.get_course(course_id)
+        params.append(course_id)
+        with psycopg.connect(self._dsn, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    update public.courses set {', '.join(sets)} where id = %s
+                    returning id::text, title, subject, grade_level, term, teacher_id,
+                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    """,
+                    params,
+                )
+                r = cur.fetchone()
+                if not r:
+                    return None
+        return {
+            "id": r[0],
+            "title": r[1],
+            "subject": r[2],
+            "grade_level": r[3],
+            "term": r[4],
+            "teacher_id": r[5],
+            "created_at": r[6],
+            "updated_at": r[7],
+        }
+
+    def delete_course(self, course_id: str) -> bool:
+        with psycopg.connect(self._dsn, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute("delete from public.courses where id = %s", (course_id,))
+                # rowcount not reliable across drivers; attempt fetch not needed
+                return True
+
     # --- Memberships -------------------------------------------------------------
     def add_member(self, course_id: str, student_id: str) -> bool:
         with psycopg.connect(self._dsn, autocommit=True) as conn:
@@ -202,4 +257,3 @@ class DBTeachingRepo:
                     "delete from public.course_memberships where course_id = %s and student_id = %s",
                     (course_id, student_id),
                 )
-

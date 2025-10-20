@@ -50,9 +50,14 @@ Migration: `supabase/migrations/20251020150101_teaching_courses.sql`
 - RLS: aktiviert, Zugriff über Service‑Role im Backend. Keine Grants an `anon`/`authenticated`.
 
 RLS Policies & DSN
-- Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`
+- Migrationen:
+  - `supabase/migrations/20251020154107_teaching_rls_policies.sql` (Grundpolicies)
+  - `supabase/migrations/20251020155746_teaching_rls_fix_and_sessions.sql` (Rekursion fix, Sessions‑RLS)
+  - `supabase/migrations/20251020174347_memberships_select_self_only_and_fn.sql` (SELECT Self‑Only + Helper‑Funktion)
+  - `supabase/migrations/20251020174657_memberships_insert_any_policy_restore.sql` (INSERT‑Policy für App‑Rolle)
 - App-Runtime: Eine DSN mit Limited‑Role (z. B. `gustav_limited`). RLS greift immer.
 - Backend setzt je Query `SET LOCAL app.current_sub = '<sub>'`, damit Policies wissen, „wer“ handelt.
+- Owner‑Mitgliederliste erfolgt über `public.get_course_members(owner_sub, course_id, limit, offset)` (SECURITY DEFINER), um RLS‑Rekursionen zu vermeiden.
 - Migrationen laufen getrennt über das Supabase‑CLI (Owner/Service), die App muss nie umschalten.
 
 Tests
@@ -62,6 +67,7 @@ Tests
 Anwenden lokal:
 - `supabase migration up`
 - Rückgängig: `supabase migration down 1`
+- Alternativ mit psql: `psql "$DATABASE_URL" -f supabase/migrations/<timestamp>_*.sql`
 
 DSN (Beispiel): `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 

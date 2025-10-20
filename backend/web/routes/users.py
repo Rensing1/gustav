@@ -32,12 +32,18 @@ def _is_teacher_or_admin(user: dict | None) -> bool:
 
 @users_router.get("/api/users/search")
 async def users_search(request: Request, q: str, role: str, limit: int = 20):
-    """Search users by display name. Only for teachers/admins.
+    """Search users by display name — teachers/admins only.
+
+    Why:
+        Owner teachers need to look up students by display name to add to courses.
 
     Validation:
-        - q min length 2
-        - role must be one of the allowed roles (student, teacher, admin)
-        - limit 1..50
+        - `q` min length 2
+        - `role` in ALLOWED_ROLES (student, teacher, admin)
+        - `limit` in 1..50
+
+    Permissions:
+        Caller must have role `teacher` or `admin`.
     """
     user = getattr(request.state, "user", None)
     if not _is_teacher_or_admin(user):

@@ -273,17 +273,14 @@ class DBTeachingRepo:
     def list_members_for_owner(self, course_id: str, owner_sub: str, limit: int, offset: int) -> List[Tuple[str, str]]:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                # Use SECURITY DEFINER function to avoid RLS recursion and allow owner listing
                 cur.execute(
                     """
                     select student_id,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    from public.course_memberships
-                    where course_id = %s
-                    order by created_at asc, student_id
-                    limit %s offset %s
+                    from public.get_course_members(%s, %s, %s, %s)
                     """,
-                    (course_id, int(limit), int(offset)),
+                    (owner_sub, course_id, int(limit), int(offset)),
                 )
                 rows = cur.fetchall() or []
         return [(r[0], r[1]) for r in rows]

@@ -200,11 +200,19 @@ async def list_courses(request: Request, limit: int = 20, offset: int = 0):
 
 @teaching_router.post("/api/teaching/courses")
 async def create_course(request: Request, payload: CourseCreate):
-    """
-    Create a new course. Only allowed for users with the teacher role.
+    """Create a new course (teacher only).
+
+    Why:
+        Teachers own courses they create; the owner is derived from the authenticated
+        subject (`sub`).
+
+    Behavior:
+        - 201 with `Course` on success
+        - 400 on invalid `title` length
+        - 403 when caller is not a teacher
 
     Permissions:
-        Caller must have role `teacher`. Uses the OIDC `sub` as `teacher_id`.
+        Caller must have role `teacher` (owner becomes `teacher_id=sub`).
     """
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
@@ -238,7 +246,19 @@ class CourseUpdate(BaseModel):
 
 @teaching_router.patch("/api/teaching/courses/{course_id}")
 async def update_course(request: Request, course_id: str, payload: CourseUpdate):
-    """Update course fields — owner-only."""
+    """Update course fields — owner-only.
+
+    Why:
+        Allow owners to adjust metadata without changing ownership.
+
+    Behavior:
+        - 200 with updated `Course`
+        - 400 on invalid fields (e.g., empty/too long title)
+        - 403 when caller is not owner; 404 when course unknown (in-memory path)
+
+    Permissions:
+        Caller must be a teacher AND owner of the course.
+    """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -278,7 +298,19 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
 
 @teaching_router.delete("/api/teaching/courses/{course_id}")
 async def delete_course(request: Request, course_id: str):
-    """Delete a course and its memberships — owner-only."""
+    """Delete a course and its memberships — owner-only.
+
+    Why:
+        Owners can remove their courses entirely; memberships are deleted via FK cascade.
+
+    Behavior:
+        - 204 on success (owner)
+        - 404 when course does not exist (for owner)
+        - 403 for non-owner
+
+    Permissions:
+        Caller must be a teacher AND owner of the course.
+    """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -353,7 +385,20 @@ _RECENTLY_DELETED_BY: dict[str, set[str]] = {}
 
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
 async def list_members(request: Request, course_id: str, limit: int = 20, offset: int = 0):
-    """List members for a course — owner-only, with names resolved via directory adapter."""
+    """List members for a course — owner-only, with names resolved via directory adapter.
+
+    Why:
+        Owners need to view roster with minimal PII. Names are resolved on-the-fly
+        from identity directory using stable `sub` identifiers.
+
+    Behavior:
+        - 200 with [{ sub, name, joined_at }]
+        - 403 when caller is not owner; 404 directly after owner deleted course
+        - Pagination via limit (1..50) and offset (>=0)
+
+    Permissions:
+        Caller must be a teacher AND owner of the course.
+    """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -391,7 +436,19 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
 
 @teaching_router.post("/api/teaching/courses/{course_id}/members")
 async def add_member(request: Request, course_id: str, payload: dict):
-    """Add a student to a course — owner-only; idempotent (201 new, 204 existing)."""
+    """Add a student to a course — owner-only; idempotent (201 new, 204 existing).
+
+    Why:
+        Allow owners to enroll students using stable `student_sub` identifiers.
+
+    Behavior:
+        - 201 when a new membership is created
+        - 204 when the student is already a member
+        - 400 when `student_sub` is missing/invalid; 403 when not owner
+
+    Permissions:
+        Caller must be a teacher AND owner of the course.
+    """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -420,7 +477,15 @@ async def add_member(request: Request, course_id: str, payload: dict):
 
 @teaching_router.delete("/api/teaching/courses/{course_id}/members/{student_sub}")
 async def remove_member(request: Request, course_id: str, student_sub: str):
-    """Remove a student from a course — owner-only; idempotent 204."""
+    """Remove a student from a course — owner-only; idempotent 204.
+
+    Behavior:
+        - 204 even if the student is not currently a member
+        - 403 when caller is not owner
+
+    Permissions:
+        Caller must be a teacher AND owner of the course.
+    """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):

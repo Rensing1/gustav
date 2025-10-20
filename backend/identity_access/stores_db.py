@@ -105,13 +105,13 @@ class DBSessionStore:
                     from psycopg import sql as _sql  # type: ignore
                     schema, name_tbl = self._schema_and_name()
                     stmt = _sql.SQL(
-                        "select session_id, sub, roles, name, extract(epoch from expires_at)::bigint "
+                        "select session_id, sub, roles, name, id_token, extract(epoch from expires_at)::bigint "
                         "from {}.{} where session_id = %s and expires_at > now()"
                     ).format(_sql.Identifier(schema), _sql.Identifier(name_tbl))
                     cur.execute(stmt, (session_id,))
                 except Exception:
                     cur.execute(
-                        f"select session_id, sub, roles, name, extract(epoch from expires_at)::bigint "
+                        f"select session_id, sub, roles, name, id_token, extract(epoch from expires_at)::bigint "
                         f"from {self._table} where session_id = %s and expires_at > now()",
                         (session_id,),
                     )
@@ -119,7 +119,14 @@ class DBSessionStore:
                 if not row:
                     return None
                 roles = row[2] if isinstance(row[2], list) else []
-                return SessionRecord(session_id=row[0], sub=row[1], roles=roles, name=row[3], expires_at=int(row[4]))
+                return SessionRecord(
+                    session_id=row[0],
+                    sub=row[1],
+                    roles=roles,
+                    name=row[3],
+                    id_token=row[4],
+                    expires_at=int(row[5]) if row[5] is not None else None,
+                )
 
     def delete(self, session_id: str) -> None:
         with psycopg.connect(self._dsn, autocommit=True) as conn:

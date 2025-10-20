@@ -111,7 +111,7 @@ def _primary_role(roles: list[str]) -> str:
     return "student"
 
 
-def _set_session_cookie(response: Response, value: str, *, max_age: int | None = None) -> None:
+def _set_session_cookie(response: Response, value: str, *, max_age: int | None = None, request: Request | None = None) -> None:
     """Attach the gustav session cookie with hardened flags.
 
     Parameters:
@@ -125,13 +125,25 @@ def _set_session_cookie(response: Response, value: str, *, max_age: int | None =
           accidental subdomain leakage in multi-host setups.
     """
     opts = _session_cookie_options()
+    secure_flag = opts["secure"]
+    samesite_flag = opts["samesite"]
+    # In production, degrade only for localhost-style hosts over plain HTTP (E2E/local reverse proxy)
+    try:
+        if SETTINGS.environment == "prod" and request is not None:
+            host = request.headers.get("host") or request.url.hostname or ""
+            xf_proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").lower()
+            if ("localhost" in host or host.startswith("127.")) and xf_proto != "https":
+                secure_flag = False
+                samesite_flag = "lax"
+    except Exception:
+        pass
     if max_age is not None:
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=value,
             httponly=True,
-            secure=opts["secure"],
-            samesite=opts["samesite"],
+            secure=secure_flag,
+            samesite=samesite_flag,
             path="/",
             max_age=max_age,
         )
@@ -140,8 +152,8 @@ def _set_session_cookie(response: Response, value: str, *, max_age: int | None =
             key=SESSION_COOKIE_NAME,
             value=value,
             httponly=True,
-            secure=opts["secure"],
-            samesite=opts["samesite"],
+            secure=secure_flag,
+            samesite=samesite_flag,
             path="/",
         )
 
@@ -186,6 +198,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 # Import shared auth router and helpers from dedicated module
 from routes.auth import auth_router
 from routes.teaching import teaching_router
+from routes.users import users_router
 
 
 # --- OIDC minimal config & stores (dev) ---
@@ -646,8 +659,74 @@ async def wissenschaft(request: Request):
 
 @app.get("/health")
 async def health_check():
-    """Health-Check Endpoint für Docker"""
-    return {"status": "healthy", "service": "gustav-v2"}
+    """Lightweight health and runtime diagnostics.
+
+    Returns:
+        JSON with service status and selected runtime diagnostics to help
+        local and CI environments validate configuration quickly. Avoids
+        leaking secrets; DB checks report only current_user when possible.
+    """
+    # Base status
+    info: dict[str, object] = {
+        "status": "healthy",
+        "service": "gustav-v2",
+        "environment": SETTINGS.environment,
+    }
+
+    # Session backend details
+    backend = "memory"
+    store_type = type(SESSION_STORE).__name__
+    try:
+        from identity_access.stores_db import DBSessionStore  # type: ignore
+        if isinstance(SESSION_STORE, DBSessionStore):
+            backend = "db"
+    except Exception:
+        pass
+    info["sessions_backend"] = backend
+    info["session_store"] = store_type
+
+    # Config snapshots (non-sensitive)
+    try:
+        public_base = OIDC_CFG.public_base_url or OIDC_CFG.base_url
+        info["oidc"] = {"base": public_base, "realm": OIDC_CFG.realm}
+        info["redirect_uri"] = OIDC_CFG.redirect_uri
+    except Exception:
+        pass
+
+    # Optional DB checks: report current_user for app and sessions DSNs
+    def _whoami(dsn_env: str) -> str:
+        import os as _os
+        dsn = _os.getenv(dsn_env)
+        if not dsn:
+            return "unset"
+        try:
+            import psycopg as _pg  # type: ignore
+            with _pg.connect(dsn, connect_timeout=1) as conn:  # type: ignore[arg-type]
+                with conn.cursor() as cur:
+                    cur.execute("select current_user")
+                    row = cur.fetchone()
+                    return str(row[0]) if row else "unknown"
+        except Exception:
+            return "unavailable"
+
+    info["db_current_user"] = _whoami("DATABASE_URL")
+    info["session_db_current_user"] = _whoami("SESSION_DATABASE_URL")
+
+    # Expose parsed DSN hosts (non-sensitive) to help diagnose connectivity
+    try:
+        import os as _os
+        from urllib.parse import urlparse as _u
+        for key in ("DATABASE_URL", "SESSION_DATABASE_URL"):
+            d = _os.getenv(key)
+            if d:
+                p = _u(d)
+                info[f"{key.lower()}_host"] = f"{p.hostname}:{p.port or ''}"
+            else:
+                info[f"{key.lower()}_host"] = "unset"
+    except Exception:
+        pass
+
+    return info
 
 
 # --- Minimal Auth Adapter (stub) to satisfy contract tests ---
@@ -655,7 +734,7 @@ async def health_check():
 # Auth callback remains defined in this module to keep test monkeypatching stable
 
 @app.get("/auth/callback")
-async def auth_callback(code: str | None = None, state: str | None = None):
+async def auth_callback(request: Request, code: str | None = None, state: str | None = None):
     """
     Complete the OIDC authorization code flow after Keycloak redirect.
 
@@ -735,7 +814,7 @@ async def auth_callback(code: str | None = None, state: str | None = None):
     resp = RedirectResponse(url=dest, status_code=302)
     # Attach hardened session cookie (opaque ID only); in PROD, align Max-Age with server-side TTL
     max_age = sess.ttl_seconds if SETTINGS.environment == "prod" else None
-    _set_session_cookie(resp, sess.session_id, max_age=max_age)
+    _set_session_cookie(resp, sess.session_id, max_age=max_age, request=request)
     return resp
 
 
@@ -790,6 +869,7 @@ async def get_me(request: Request):
 # Register auth routes on the full application
 app.include_router(auth_router)
 app.include_router(teaching_router)
+app.include_router(users_router)
 
 
 # --- App factory for tests: auth-only slim app ---

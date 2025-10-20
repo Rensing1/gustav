@@ -22,3 +22,23 @@ def test_realm_uses_email_as_username():
     # Also keep loginWithEmailAllowed true for consistency
     assert data.get("loginWithEmailAllowed", True) is True
 
+
+def test_gustav_web_client_exports_roles_in_id_token():
+    p = Path("keycloak/realm-gustav.json")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    clients = data.get("clients", [])
+    client = next((c for c in clients if c.get("clientId") == "gustav-web"), None)
+    assert client is not None, "gustav-web client definition missing"
+    mapper = next(
+        (
+            m
+            for m in client.get("protocolMappers", [])
+            if m.get("protocolMapper") == "oidc-usermodel-realm-role-mapper"
+        ),
+        None,
+    )
+    assert mapper is not None, "realm roles mapper missing for gustav-web client"
+    config = mapper.get("config", {})
+    assert config.get("claim.name") == "realm_access.roles"
+    assert config.get("id.token.claim") == "true", "realm roles must be present in ID tokens"
+    assert config.get("access.token.claim") == "true"

@@ -126,12 +126,125 @@ def test_import_users_recreates_existing_user(sample_row: importer.LegacyUserRow
     existing_id = "existing-id"
     fake_client = FakeKeycloakClient(existing={sample_row.email: existing_id})
 
-    importer.import_legacy_users([sample_row], client=fake_client)
+    importer.import_legacy_users([sample_row], client=fake_client, delete_existing=True)
 
     # Existing user should be deleted and replaced with a new one
     assert existing_id in fake_client.deleted
     assert len(fake_client.created) == 1
     assert fake_client.assigned  # role assigned to the new user
+
+
+def test_import_users_respects_no_delete(sample_row: importer.LegacyUserRow) -> None:
+    """By default, importer must not delete existing users unless forced."""
+    existing_id = "existing-id"
+    fake_client = FakeKeycloakClient(existing={sample_row.email: existing_id})
+
+    importer.import_legacy_users([sample_row], client=fake_client, delete_existing=False)
+
+    # Should create a new user without deleting the old one
+    assert existing_id not in fake_client.deleted
+    assert len(fake_client.created) == 1
+    assert fake_client.assigned
+
+
+def test_import_skips_unsupported_role(sample_row: importer.LegacyUserRow) -> None:
+    bad = sample_row.__class__(
+        id=sample_row.id,
+        email="x@example.com",
+        role="guest",
+        full_name="X",
+        password_hash=sample_row.password_hash,
+    )
+    fake_client = FakeKeycloakClient(existing={})
+
+    importer.import_legacy_users([bad], client=fake_client)
+
+    assert not fake_client.created and not fake_client.assigned
+
+
+def test_create_user_fallback_without_location_header(monkeypatch: pytest.MonkeyPatch, sample_row: importer.LegacyUserRow) -> None:
+    """Admin client should locate the created user when Location header is missing."""
+
+    class FakeResponse:
+        def __init__(self, payload: Any = None, headers: Dict[str, str] | None = None):
+            self._payload = payload
+            self.headers = headers or {}
+
+        def json(self):
+            return self._payload
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.headers: Dict[str, str] = {}
+
+        def post(self, url: str, *, data=None, json=None, timeout=None):
+            if "token" in url:
+                return FakeResponse({"access_token": "tok"})
+            if "users" in url and json is not None:
+                return FakeResponse(headers={})  # no Location header
+            if "role-mappings" in url:
+                return FakeResponse()
+            raise AssertionError(f"Unexpected POST {url}")
+
+        def get(self, url: str, *, params=None, timeout=None):
+            if "users" in url and params:
+                return FakeResponse([{"id": "created-user-id"}])
+            if "roles" in url:
+                return FakeResponse({"id": "role-id", "name": "student"})
+            return FakeResponse([])
+
+        def delete(self, url: str, *, timeout=None):
+            return FakeResponse()
+
+    fake_session = FakeSession()
+    monkeypatch.setattr(importer.requests, "Session", lambda: fake_session)
+
+    client = importer.KeycloakAdminClient.from_credentials(
+        base_url="http://kc.local",
+        host_header="id.localhost",
+        realm="gustav",
+        username="admin",
+        password="secret",
+    )
+    user_id = client.create_user(importer.build_user_payload(sample_row))
+    assert user_id == "created-user-id"
+
+
+def test_fetch_legacy_users_filters_by_emails(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, sql, params):  # accept any sql obj
+            captured["sql"] = str(sql)
+            captured["params"] = params
+
+        def fetchall(self):
+            return []
+
+    class FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return FakeCursor()
+
+    monkeypatch.setattr(importer.psycopg, "connect", lambda dsn: FakeConn())
+
+    _ = importer.fetch_legacy_users("postgres://fake", emails=["a@example.com", "b@example.com"])
+    assert "WHERE u.email = ANY" in captured["sql"], captured["sql"]
+    assert captured["params"] and list(captured["params"][0]) == ["a@example.com", "b@example.com"]
 
 
 def test_admin_client_requests_include_timeouts(monkeypatch: pytest.MonkeyPatch, sample_row: importer.LegacyUserRow) -> None:

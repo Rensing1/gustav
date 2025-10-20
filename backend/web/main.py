@@ -27,6 +27,7 @@ from components.navigation import Navigation
 from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
+from identity_access.domain import ALLOWED_ROLES
 from datetime import datetime, timezone
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
 # Import cookie_opts with a dual strategy to work both when importing as a
@@ -75,7 +76,6 @@ logger = logging.getLogger("gustav.identity_access")
 SETTINGS = AuthSettings()
 
 SESSION_COOKIE_NAME = "gustav_session"
-ALLOWED_ROLES = {"student", "teacher", "admin"}
 
 # Direct-Grant has been removed: all flows use browser-based redirects to Keycloak.
 

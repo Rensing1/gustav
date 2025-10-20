@@ -31,10 +31,14 @@ import psycopg
 import requests
 
 
-logger = logging.getLogger("legacy_user_import")
+logger = logging.getLogger("gustav.tools.legacy_import")
 
 
-VALID_ROLES = {"student", "teacher", "admin"}
+try:
+    # Prefer absolute import path used by the web layer during tests
+    from identity_access.domain import ALLOWED_ROLES
+except Exception:  # pragma: no cover - fallback when executed as a package module
+    from backend.identity_access.domain import ALLOWED_ROLES  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -63,7 +67,7 @@ def fetch_legacy_users(
         returned.
     """
 
-    sql = """
+    sql_template = """
         SELECT u.id, u.email, p.role, p.full_name, u.encrypted_password
         FROM auth.users u
         JOIN public.profiles p ON p.id = u.id
@@ -78,7 +82,16 @@ def fetch_legacy_users(
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql.format(where=where_clause), params)
+            # Prefer safe composition via psycopg.sql when available. Fallback
+            # to a controlled string substitution (only toggles a static WHERE
+            # clause, no user-provided identifiers).
+            try:  # pragma: no cover - exercised when psycopg.sql is present
+                from psycopg import sql as _sql  # type: ignore
+                where_sql = _sql.SQL("WHERE u.email = ANY(%s)") if emails else _sql.SQL("")
+                stmt = _sql.SQL(sql_template).format(where=where_sql)
+                cur.execute(stmt, params)
+            except Exception:
+                cur.execute(sql_template.format(where=where_clause), params)
             rows = cur.fetchall()
 
     result = []
@@ -237,24 +250,45 @@ def import_legacy_users(
     rows: Iterable[LegacyUserRow],
     *,
     client: KeycloakAdminClient,
-    delete_existing: bool = True,
+    delete_existing: bool = False,
 ) -> None:
     """Import users into Keycloak using the provided admin client."""
 
     for row in rows:
-        if row.role not in VALID_ROLES:
+        if row.role not in ALLOWED_ROLES:
             logger.warning("Skip %s – unsupported role %s", row.email, row.role)
             continue
 
         existing_id = client.find_user_id(row.email) if delete_existing else None
         if existing_id:
-            logger.info("Deleting existing user %s (%s)", row.email, existing_id)
+            logger.info("Deleting existing user %s (%s)", _mask_email(row.email), existing_id)
             client.delete_user(existing_id)
 
         payload = build_user_payload(row)
         user_id = client.create_user(payload)
-        logger.info("Created user %s -> %s", row.email, user_id)
+        logger.info("Created user %s -> %s", _mask_email(row.email), user_id)
         client.assign_realm_role(user_id, row.role)
+
+
+def _validate_host(h: str) -> str:
+    """Validate host header format (simple allowlist of characters).
+
+    Accept letters, digits, dashes, dots, and optional :port. Reject whitespace
+    or control characters to prevent header injection.
+    """
+    import re
+    if not re.match(r"^[A-Za-z0-9.-]+(?::[0-9]{1,5})?$", (h or "")):
+        raise SystemExit("Invalid --kc-host-header (expected hostname[:port])")
+    return h
+
+
+def _mask_email(email: str) -> str:
+    """Mask email for logs to reduce PII exposure in admin tool logs."""
+    try:
+        local, _, domain = email.partition("@")
+        return f"{local[:2]}***@{domain}"
+    except Exception:
+        return "***"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -267,6 +301,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--realm", default=os.getenv("KEYCLOAK_REALM", "gustav"))
     parser.add_argument("--emails", nargs="*", help="Limit import to the given email addresses")
     parser.add_argument("--dry-run", action="store_true", help="Fetch users but do not modify Keycloak")
+    parser.add_argument("--force-replace", action="store_true", help="Delete existing users before create")
+    parser.add_argument("--timeout", type=float, default=float(os.getenv("KEYCLOAK_TIMEOUT", "5")), help="HTTP timeout in seconds for admin calls")
     return parser.parse_args()
 
 
@@ -288,15 +324,19 @@ def main() -> None:
             logger.info("[dry-run] Would import %s (%s)", row.email, row.role)
         return
 
+    # Validate host header input for safety
+    args.kc_host_header = _validate_host(args.kc_host_header)
+
     client = KeycloakAdminClient.from_credentials(
         base_url=args.kc_base_url,
         host_header=args.kc_host_header,
         realm=args.realm,
         username=args.kc_admin_user,
         password=args.kc_admin_pass,
+        timeout=args.timeout,
     )
 
-    import_legacy_users(rows, client=client)
+    import_legacy_users(rows, client=client, delete_existing=args.force_replace)
     logger.info("Import completed")
 
 

@@ -46,8 +46,10 @@ class DBTeachingRepo:
         title = title.strip()
         if not title or len(title) > 200:
             raise ValueError("invalid_title")
-        with psycopg.connect(self._dsn, autocommit=True) as conn:
+        with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
+                # RLS: set local current_sub for this transaction
+                cur.execute("select set_config('app.current_sub', %s, true)", (teacher_id,))
                 cur.execute(
                     """
                     insert into public.courses (title, subject, grade_level, term, teacher_id)
@@ -64,6 +66,7 @@ class DBTeachingRepo:
                     (title, subject, grade_level, term, teacher_id),
                 )
                 row = cur.fetchone()
+                conn.commit()
         return {
             "id": row[0],
             "title": row[1],
@@ -78,6 +81,7 @@ class DBTeachingRepo:
     def list_courses_for_teacher(self, *, teacher_id: str, limit: int, offset: int) -> List[dict]:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (teacher_id,))
                 cur.execute(
                     """
                     select id::text, title, subject, grade_level, term, teacher_id,
@@ -108,6 +112,7 @@ class DBTeachingRepo:
     def list_courses_for_student(self, *, student_id: str, limit: int, offset: int) -> List[dict]:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (student_id,))
                 cur.execute(
                     """
                     select c.id::text, c.title, c.subject, c.grade_level, c.term, c.teacher_id,
@@ -139,6 +144,7 @@ class DBTeachingRepo:
     def get_course(self, course_id: str) -> Optional[dict]:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
+                # best-effort: owner id is required by policy; derive via sub param on callers
                 cur.execute(
                     """
                     select id::text, title, subject, grade_level, term, teacher_id,
@@ -219,7 +225,7 @@ class DBTeachingRepo:
 
     # --- Memberships -------------------------------------------------------------
     def add_member(self, course_id: str, student_id: str) -> bool:
-        with psycopg.connect(self._dsn, autocommit=True) as conn:
+        with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -231,6 +237,7 @@ class DBTeachingRepo:
                     (course_id, student_id),
                 )
                 r = cur.fetchone()
+                conn.commit()
         return bool(r)
 
     def list_members(self, course_id: str, limit: int, offset: int) -> List[Tuple[str, str]]:
@@ -251,9 +258,10 @@ class DBTeachingRepo:
         return [(r[0], r[1]) for r in rows]
 
     def remove_member(self, course_id: str, student_id: str) -> None:
-        with psycopg.connect(self._dsn, autocommit=True) as conn:
+        with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "delete from public.course_memberships where course_id = %s and student_id = %s",
                     (course_id, student_id),
                 )
+                conn.commit()

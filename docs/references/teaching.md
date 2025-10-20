@@ -52,6 +52,7 @@ Migration: `supabase/migrations/20251020150101_teaching_courses.sql`
 RLS Policies & DSN
 - Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`
 - Folgeanpassung: `supabase/migrations/20251020155746_teaching_rls_fix_and_sessions.sql` (Rekursion fix, Sessions‑RLS)
+- Restore der Select-Policy: `supabase/migrations/20251020181043_memberships_select_any_restore.sql` (Owner/Admin können Mitglieder wieder lesen)
 - App-Runtime: Eine DSN mit Limited‑Role (z. B. `gustav_limited`). RLS greift immer.
 - Backend setzt je Query `SET LOCAL app.current_sub = '<sub>'`, damit Policies wissen, „wer“ handelt.
 - Migrationen laufen getrennt über das Supabase‑CLI (Owner/Service), die App muss nie umschalten.

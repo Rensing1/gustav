@@ -16,11 +16,12 @@ users_router = APIRouter(tags=["Users"])  # explicit path below
 
 
 def search_users_by_name(*, role: str, q: str, limit: int) -> list[dict]:
-    """Directory lookup stub. Replace with Keycloak admin integration.
-
-    Tests are expected to monkeypatch this function.
-    """
-    return []
+    """Directory lookup wrapper for tests; delegates to identity_access.directory in prod."""
+    try:
+        from identity_access import directory  # type: ignore
+        return directory.search_users_by_name(role=role, q=q, limit=limit)
+    except Exception:
+        return []
 
 
 def _is_teacher_or_admin(user: dict | None) -> bool:
@@ -55,4 +56,3 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
         if sub and name:
             norm.append({"sub": sub, "name": name})
     return norm
-

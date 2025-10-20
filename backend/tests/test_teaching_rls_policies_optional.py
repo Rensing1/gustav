@@ -30,13 +30,24 @@ async def test_rls_limited_role_sees_only_own_rows():
 
     t1, t2 = "teacher-rls-1", "teacher-rls-2"
 
-    with psycopg.connect(dsn, autocommit=True) as conn:
+    # Cleanup any leftovers from previous runs for deterministic assertions
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (t1,))
+            cur.execute("delete from public.courses where teacher_id = current_setting('app.current_sub', true)")
+            cur.execute("select set_config('app.current_sub', %s, false)", (t2,))
+            cur.execute("delete from public.courses where teacher_id = current_setting('app.current_sub', true)")
+            conn.commit()
+
+    with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             # Seed rows as their respective owners (RLS-compliant)
-            cur.execute("select set_config('app.current_sub', %s, true)", (t1,))
+            # Use is_local=false so the setting persists across statements in this session
+            cur.execute("select set_config('app.current_sub', %s, false)", (t1,))
             cur.execute("insert into public.courses (title, teacher_id) values ('A', %s) returning id", (t1,))
-            cur.execute("select set_config('app.current_sub', %s, true)", (t2,))
+            cur.execute("select set_config('app.current_sub', %s, false)", (t2,))
             cur.execute("insert into public.courses (title, teacher_id) values ('B', %s) returning id", (t2,))
+            conn.commit()
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:

@@ -51,10 +51,17 @@ Migration: `supabase/migrations/20251020150101_teaching_courses.sql`
 
 RLS Policies & DSN
 - Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`
-- Folgeanpassung: `supabase/migrations/20251020155746_teaching_rls_fix_and_sessions.sql` (Rekursion fix, Sessions‑RLS)
-- Restore der Select-Policy: `supabase/migrations/20251020181043_memberships_select_any_restore.sql` (Owner/Admin können Mitglieder wieder lesen)
+- Folgeanpassungen:
+  - `supabase/migrations/20251020155746_teaching_rls_fix_and_sessions.sql` (Rekursion fix, Sessions‑RLS)
+  - `supabase/migrations/20251020174347_memberships_select_self_only_and_fn.sql` (SELECT Self‑Only + Helper‑Funktion)
+  - `supabase/migrations/20251020174657_memberships_insert_any_policy_restore.sql` (INSERT‑Policy für App‑Rolle)
+  - `supabase/migrations/20251020181043_memberships_select_any_restore.sql` (Zwischenstand – volle Leserechte; durch nächste Migration gehärtet)
+  - `supabase/migrations/20251020182801_memberships_owner_or_self_restore.sql` (Re-harden self-only SELECT + Helper reapply)
+  - `supabase/migrations/20251020183625_memberships_self_only_fix.sql` (Final self-only SELECT + helper bounds refresh; INSERT bleibt App-gesteuert)
+  - `supabase/migrations/20251020184810_app_sessions_rls_restrict.sql` (Entzieht `gustav_limited` den Zugriff auf Sessions)
 - App-Runtime: Eine DSN mit Limited‑Role (z. B. `gustav_limited`). RLS greift immer.
 - Backend setzt je Query `SET LOCAL app.current_sub = '<sub>'`, damit Policies wissen, „wer“ handelt.
+- Owner‑Mitgliederliste erfolgt über `public.get_course_members(owner_sub, course_id, limit, offset)` (SECURITY DEFINER), um RLS‑Rekursionen zu vermeiden.
 - Migrationen laufen getrennt über das Supabase‑CLI (Owner/Service), die App muss nie umschalten.
 
 Tests
@@ -65,7 +72,7 @@ Anwenden lokal:
 - `supabase migration up`
 - Rückgängig: `supabase migration down 1`
 
-DSN (Beispiel): `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+DSN (Beispiel): `DATABASE_URL=postgresql://gustav_limited:gustav-limited@127.0.0.1:54322/postgres`
 
 ## Sicherheit & Datenschutz
 - Owner‑Policy: Nur Kurs‑Autor (teacher_id == sub) verwaltet Kurs/Mitglieder und sieht Mitgliederliste.

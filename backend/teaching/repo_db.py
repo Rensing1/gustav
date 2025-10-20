@@ -2,7 +2,8 @@
 Postgres-backed repository for Teaching (courses & memberships).
 
 Security:
-- Access with a service-role DSN (server-side). Client RLS is enabled on tables.
+- Access with a limited-role DSN so Row Level Security (RLS) guards every query.
+- Service-role DSNs are reserved for migrations and session storage plumbing.
 
 Design:
 - Minimal psycopg3 usage; each call opens a short-lived connection.
@@ -22,11 +23,26 @@ except Exception:  # pragma: no cover - optional in some dev envs
     HAVE_PSYCOPG = False
 
 
+def _default_limited_dsn() -> str:
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    return f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+
+
 def _dsn() -> str:
-    dsn = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL") or ""
-    if not dsn:
-        raise RuntimeError("DATABASE_URL not set for DBTeachingRepo")
-    return dsn
+    """Resolve the DSN for DB access, always falling back to limited-role credentials."""
+    candidates = [
+        os.getenv("TEACHING_DATABASE_URL"),
+        os.getenv("TEACHING_DB_URL"),
+        os.getenv("RLS_TEST_DSN"),
+        os.getenv("DATABASE_URL"),
+        os.getenv("SUPABASE_DB_URL"),
+        _default_limited_dsn(),
+    ]
+    for dsn in candidates:
+        if dsn:
+            return dsn
+    raise RuntimeError("Database DSN unavailable for DBTeachingRepo")
 
 
 def _iso(ts) -> str:
@@ -271,19 +287,30 @@ class DBTeachingRepo:
                 return True
 
     def list_members_for_owner(self, course_id: str, owner_sub: str, limit: int, offset: int) -> List[Tuple[str, str]]:
+        """Return the roster for a course owned by `owner_sub` using the SECURITY DEFINER helper.
+
+        Why:
+            We rely on `public.get_course_members` so that the owner can read members without
+            triggering RLS recursion on `course_memberships`.
+
+        Behavior:
+            - Returns `(student_id, joined_at_iso)` tuples ordered by join time.
+            - Enforces pagination via helper-level clamping (max 50).
+
+        Permissions:
+            Caller must be a teacher who owns the course; helper enforces ownership.
+        """
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                # Helper runs with definer privileges and applies its own limit/offset guards.
                 cur.execute(
                     """
                     select student_id,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    from public.course_memberships
-                    where course_id = %s
-                    order by created_at asc, student_id
-                    limit %s offset %s
+                    from public.get_course_members(%s, %s, %s, %s)
                     """,
-                    (course_id, int(limit), int(offset)),
+                    (owner_sub, course_id, int(limit), int(offset)),
                 )
                 rows = cur.fetchall() or []
         return [(r[0], r[1]) for r in rows]
@@ -297,13 +324,12 @@ class DBTeachingRepo:
                     insert into public.course_memberships (course_id, student_id)
                     values (%s, %s)
                     on conflict do nothing
-                    returning created_at
                     """,
                     (course_id, student_id),
                 )
-                r = cur.fetchone()
+                inserted = cur.rowcount == 1
                 conn.commit()
-        return bool(r)
+        return inserted
 
     def remove_member_owned(self, course_id: str, owner_sub: str, student_id: str) -> None:
         with psycopg.connect(self._dsn) as conn:
@@ -395,13 +421,12 @@ class DBTeachingRepo:
                     insert into public.course_memberships (course_id, student_id)
                     values (%s, %s)
                     on conflict do nothing
-                    returning created_at
                     """,
                     (course_id, student_id),
                 )
-                r = cur.fetchone()
+                inserted = cur.rowcount == 1
                 conn.commit()
-        return bool(r)
+        return inserted
 
     def list_members(self, course_id: str, limit: int, offset: int) -> List[Tuple[str, str]]:
         with psycopg.connect(self._dsn) as conn:

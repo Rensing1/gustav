@@ -1,16 +1,16 @@
--- Restrict course_memberships SELECT to self-only and provide
--- a SECURITY DEFINER helper for owner member listing without RLS recursion.
+-- Restore secure SELECT policy for course_memberships and helper for owner roster
 
--- Replace permissive SELECT policy with self-only
+-- Remove insecure variants introduced by previous hotfix
 drop policy if exists memberships_select_any on public.course_memberships;
+drop policy if exists memberships_select_self_only on public.course_memberships;
 drop policy if exists memberships_select_owner_or_self on public.course_memberships;
+
+-- Reinstate self-only visibility to prevent recursive policies.
 create policy memberships_select_self_only on public.course_memberships
   for select to gustav_limited
   using (student_id = coalesce(current_setting('app.current_sub', true), ''));
 
--- SECURITY DEFINER helper to list members as the course owner.
--- Runs with definer privileges (created by migration user, typically table owner),
--- so it is not constrained by RLS on course_memberships. Ownership is verified inside.
+-- SECURITY DEFINER helper: allows owners to list their members without RLS recursion
 create or replace function public.get_course_members(
   p_owner text,
   p_course uuid,
@@ -30,8 +30,9 @@ as $$
       where c.id = p_course and c.teacher_id = p_owner
     )
   order by m.created_at asc, m.student_id
-  limit least(coalesce(p_limit, 50), 50)
+  limit least(greatest(coalesce(p_limit, 20), 1), 50)
   offset greatest(coalesce(p_offset, 0), 0)
 $$;
 
 grant execute on function public.get_course_members(text, uuid, integer, integer) to gustav_limited;
+-- Helper clamp tightened: ensure limit within 1..50, default 20.

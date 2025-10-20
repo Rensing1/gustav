@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import types
 import time
+import os
 import pytest
 import httpx
 from httpx import ASGITransport
@@ -24,6 +25,9 @@ import main  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
+
+
+SESSION_TEST_DSN = os.getenv("SESSION_TEST_DSN")
 
 
 class _FakeCursor:
@@ -49,7 +53,7 @@ class _FakeCursor:
             rec = self._store.get(sid)
             now = int(time.time())
             if rec and rec["expires_at"] > now:
-                self._row = (sid, rec["sub"], rec["roles"], rec["name"], rec["expires_at"])
+                self._row = (sid, rec["sub"], rec["roles"], rec["name"], rec["id_token"], rec["expires_at"])
             else:
                 self._row = None
         elif sql_low.startswith("delete"):
@@ -101,26 +105,84 @@ def _install_fake_psycopg(monkeypatch: pytest.MonkeyPatch, target_module):
     return fake_store
 
 
+def _prepare_store(monkeypatch: pytest.MonkeyPatch):
+    from identity_access import stores_db as mod
+    if SESSION_TEST_DSN:
+        # Real database path (requires psycopg and migration applied)
+        store = mod.DBSessionStore(dsn=SESSION_TEST_DSN)
+        fake_store = None
+    else:
+        fake_store = _install_fake_psycopg(monkeypatch, mod)
+        store = mod.DBSessionStore(dsn="fake://dsn")
+    return store, fake_store
+
+
+def _cleanup_store(store, rec):
+    try:
+        store.delete(rec.session_id)
+    except Exception:
+        pass
+
+
 @pytest.mark.anyio
 async def test_api_me_with_db_session_store(monkeypatch: pytest.MonkeyPatch):
-    # Wire DBSessionStore with fake psycopg
-    from identity_access import stores_db as mod
-    _install_fake_psycopg(monkeypatch, mod)
-    store = mod.DBSessionStore(dsn="fake://dsn")
+    store, _ = _prepare_store(monkeypatch)
 
-    # Swap the session store used by the web app
     monkeypatch.setattr(main, "SESSION_STORE", store)
 
-    # Create a DB-backed session and call /api/me with the cookie
     rec = store.create(sub="user-42", roles=["student"], name="Max Musterschüler", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", rec.session_id)
         resp = await client.get("/api/me")
 
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body.get("sub") == "user-42"
-    assert body.get("roles") == ["student"]
-    assert body.get("name") == "Max Musterschüler"
+    try:
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("sub") == "user-42"
+        assert body.get("roles") == ["student"]
+        assert body.get("name") == "Max Musterschüler"
+    finally:
+        _cleanup_store(store, rec)
 
+
+@pytest.mark.anyio
+async def test_api_me_with_db_store_expired_session_returns_401(monkeypatch: pytest.MonkeyPatch):
+    """If the DB-backed session is expired, /api/me must return 401 with no-store."""
+    store, _ = _prepare_store(monkeypatch)
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+
+    rec = store.create(sub="user-expired", roles=["student"], name="Expired", ttl_seconds=-5)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", rec.session_id)
+        resp = await client.get("/api/me")
+
+    try:
+        assert resp.status_code == 401
+        assert resp.headers.get("Cache-Control") == "no-store"
+        assert resp.json().get("error") == "unauthenticated"
+    finally:
+        _cleanup_store(store, rec)
+
+
+@pytest.mark.anyio
+async def test_logout_deletes_session_and_clears_cookie_with_db_store(monkeypatch: pytest.MonkeyPatch):
+    """/auth/logout should delete the DB session and clear the cookie."""
+    store, _ = _prepare_store(monkeypatch)
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+
+    rec = store.create(sub="user-logout", roles=["student"], name="Max", ttl_seconds=60, id_token="idtok")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", rec.session_id)
+        resp = await client.get("/auth/logout", follow_redirects=False)
+
+    try:
+        assert resp.status_code in (301, 302, 303)
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert "gustav_session=" in set_cookie
+        assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
+        assert store.get(rec.session_id) is None
+    finally:
+        _cleanup_store(store, rec)

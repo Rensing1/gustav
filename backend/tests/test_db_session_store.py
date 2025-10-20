@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 import types
+import os
 import pytest
 
 
@@ -42,6 +43,7 @@ class _FakeCursor:
                     rec["sub"],
                     rec["roles"],
                     rec["name"],
+                    rec["id_token"],
                     rec["expires_at"],
                 )
             else:
@@ -79,6 +81,9 @@ class _FakeConn:
         return False
 
 
+SESSION_TEST_DSN = os.getenv("SESSION_TEST_DSN")
+
+
 def _install_fake_psycopg(monkeypatch: pytest.MonkeyPatch, target_module):
     fake_store: dict = {}
 
@@ -101,8 +106,11 @@ def _install_fake_psycopg(monkeypatch: pytest.MonkeyPatch, target_module):
 
 def test_create_get_delete_roundtrip(monkeypatch: pytest.MonkeyPatch):
     from identity_access import stores_db as mod
-    _install_fake_psycopg(monkeypatch, mod)
-    store = mod.DBSessionStore(dsn="fake://dsn")
+    if SESSION_TEST_DSN:
+        store = mod.DBSessionStore(dsn=SESSION_TEST_DSN)
+    else:
+        _install_fake_psycopg(monkeypatch, mod)
+        store = mod.DBSessionStore(dsn="fake://dsn")
 
     rec = store.create(sub="user-1", roles=["student"], name="Max", ttl_seconds=60)
     assert rec.session_id
@@ -138,3 +146,15 @@ def test_invalid_table_name_is_rejected(monkeypatch: pytest.MonkeyPatch):
     # Valid fully-qualified name should pass
     store = mod.DBSessionStore(dsn="fake://dsn", table="public.app_sessions")
     assert store is not None
+
+
+def test_missing_dsn_raises_runtime_error(monkeypatch: pytest.MonkeyPatch):
+    """DBSessionStore should fail fast when no DSN is provided via arg or env."""
+    from identity_access import stores_db as mod
+    # Pretend psycopg is available, but do not set any DSN env var
+    _install_fake_psycopg(monkeypatch, mod)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError):
+        mod.DBSessionStore()  # type: ignore[arg-type]

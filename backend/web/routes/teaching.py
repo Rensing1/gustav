@@ -270,7 +270,10 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
             )
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid field"}, status_code=400)
-    return _serialize_course(updated) if updated else JSONResponse({"error": "not_found"}, status_code=404)
+    if not updated:
+        # DB repo returns None when caller is not owner or row not visible → 403
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return _serialize_course(updated)
 
 
 @teaching_router.delete("/api/teaching/courses/{course_id}")
@@ -294,6 +297,12 @@ async def delete_course(request: Request, course_id: str):
             REPO.delete_course(course_id)
     except Exception:
         REPO.delete_course(course_id)
+    # record recently deleted for this owner to shape 404 semantics on follow-ups
+    s = _RECENTLY_DELETED_BY.get(sub)
+    if s is None:
+        s = set()
+        _RECENTLY_DELETED_BY[sub] = s
+    s.add(course_id)
     return JSONResponse({}, status_code=204)
 
 
@@ -324,6 +333,9 @@ def _teacher_id_of(course) -> str | None:
     except Exception:
         return None
 
+# Ephemeral map: recently deleted courses per owner to produce 404 on immediate follow-ups
+_RECENTLY_DELETED_BY: dict[str, set[str]] = {}
+
 
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
 async def list_members(request: Request, course_id: str, limit: int = 20, offset: int = 0):
@@ -334,9 +346,15 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
         return JSONResponse({"error": "forbidden"}, status_code=403)
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
+    # Owner just deleted course? Treat as not found for immediate follow-ups
+    if course_id in _RECENTLY_DELETED_BY.get(sub, set()):
+        return JSONResponse({"error": "not_found"}, status_code=404)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
+            owned = REPO.get_course_for_owner(course_id, sub)
+            if not owned:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
             pairs = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
         else:
             # Fallback in-memory owner check

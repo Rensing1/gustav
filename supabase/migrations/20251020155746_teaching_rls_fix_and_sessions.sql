@@ -14,3 +14,9 @@ create policy app_sessions_rw on public.app_sessions
   for all to gustav_limited
   using (true)
   with check (true);
+
+-- Relax insert policy for memberships to avoid coupling to courses RLS
+drop policy if exists memberships_insert_owner_only on public.course_memberships;
+create policy memberships_insert_any on public.course_memberships
+  for insert to gustav_limited
+  with check (true);

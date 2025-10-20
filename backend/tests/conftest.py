@@ -44,8 +44,14 @@ def _ensure_db_env_defaults() -> None:
         if not current or "supabase_db_gustav-alpha2" in current:
             os.environ[var] = default
 
-    _assign_or_override("SESSION_TEST_DSN", service_dsn)
-    _assign_or_override("RLS_TEST_SERVICE_DSN", service_dsn)
+    # Assign DSNs only when the host database is reachable to avoid flaky tests
+    if _probe(service_dsn):
+        _assign_or_override("SESSION_TEST_DSN", service_dsn)
+        _assign_or_override("RLS_TEST_SERVICE_DSN", service_dsn)
+    else:
+        # Ensure these envs are absent when DB is not reachable
+        os.environ.pop("SESSION_TEST_DSN", None)
+        os.environ.pop("RLS_TEST_SERVICE_DSN", None)
 
     # Limited DSN is optional: only enable live RLS checks when the role exists.
     if "RLS_TEST_DSN" not in os.environ and _probe(limited_dsn):

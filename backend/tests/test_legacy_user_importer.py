@@ -308,3 +308,9 @@ def test_admin_client_requests_include_timeouts(monkeypatch: pytest.MonkeyPatch,
     timeouts = [entry[2] for entry in fake_session.calls]
     assert timeouts, "expected admin client to perform HTTP requests"
     assert all(t == 5 for t in timeouts), f"expected timeout=5 on all calls, got {timeouts}"
+
+
+def test_validate_host_rejects_header_injection() -> None:
+    """Host header must not allow control characters (header injection)."""
+    with pytest.raises(SystemExit):
+        importer._validate_host("id.localhost\r\nInjected: 1")

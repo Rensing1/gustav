@@ -249,6 +249,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
         '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security hardening — responses must not be cached
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
           description: Not authenticated
           headers:
             Cache-Control:

@@ -596,6 +596,16 @@ def test_openapi_me_schema_allows_nullable_expires_at():
     assert expires_schema.get("nullable") is True
 
 
+def test_openapi_me_includes_401_response():
+    """Contract should include 401 for unauthenticated /api/me calls."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[2]
+    yml = (root / "api" / "openapi.yml").read_text(encoding="utf-8")
+    spec = yaml.safe_load(yml)
+    responses = spec["paths"]["/api/me"]["get"]["responses"]
+    assert "401" in responses
+
+
 @pytest.mark.anyio
 async def test_register_redirect():
     # Slim app: ensure endpoint exists and redirects

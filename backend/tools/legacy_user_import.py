@@ -181,6 +181,9 @@ class KeycloakAdminClient:
     ) -> "KeycloakAdminClient":
         session = requests.Session()
         session.headers.update({"Host": host_header})
+        # Honor optional custom CA bundle for TLS verification; default to verify=True
+        ca_bundle = os.getenv("KEYCLOAK_CA_BUNDLE")
+        session.verify = ca_bundle if ca_bundle else True
         token_resp = session.post(
             f"{base_url.rstrip('/')}/realms/master/protocol/openid-connect/token",
             data={

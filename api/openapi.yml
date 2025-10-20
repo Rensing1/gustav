@@ -39,6 +39,12 @@ components:
           type: string
           format: date-time
           description: Session expiration timestamp (UTC ISO-8601).
+          nullable: true
+      example:
+        sub: "a1b2c3d4-ef01-2345-6789-abcdef012345"
+        roles: ["student"]
+        name: "Max Musterschüler"
+        expires_at: "2025-10-20T12:34:56Z"
     Error:
       type: object
       required: [error]
@@ -243,7 +249,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
         '401':
-          description: Not authenticated
+          description: Unauthenticated
           headers:
             Cache-Control:
               description: Security hardening — responses must not be cached

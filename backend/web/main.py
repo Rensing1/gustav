@@ -27,6 +27,7 @@ from components.navigation import Navigation
 from components.pages import SciencePage
 from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
+from identity_access.domain import ALLOWED_ROLES
 from datetime import datetime, timezone
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
 # Import cookie_opts with a dual strategy to work both when importing as a
@@ -75,7 +76,6 @@ logger = logging.getLogger("gustav.identity_access")
 SETTINGS = AuthSettings()
 
 SESSION_COOKIE_NAME = "gustav_session"
-ALLOWED_ROLES = {"student", "teacher", "admin"}
 
 # Direct-Grant has been removed: all flows use browser-based redirects to Keycloak.
 
@@ -250,7 +250,12 @@ async def auth_enforcement(request: Request, call_next):
     # API responses should be JSON 401 when not authenticated
     if path.startswith("/api/"):
         sid = request.cookies.get(SESSION_COOKIE_NAME)
-        rec = SESSION_STORE.get(sid or "")
+        try:
+            rec = SESSION_STORE.get(sid or "")
+        except Exception as exc:
+            # Defensive: treat backend/session DB errors as unauthenticated (fail closed)
+            logger.warning("Session store get failed (API): %s", exc.__class__.__name__)
+            rec = None
         if not rec:
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         # Attach user info and proceed
@@ -259,7 +264,12 @@ async def auth_enforcement(request: Request, call_next):
 
     # Non-API routes
     sid = request.cookies.get(SESSION_COOKIE_NAME)
-    rec = SESSION_STORE.get(sid or "")
+    try:
+        rec = SESSION_STORE.get(sid or "")
+    except Exception as exc:
+        # Defensive: do not blow up the page; redirect to login instead
+        logger.warning("Session store get failed (HTML): %s", exc.__class__.__name__)
+        rec = None
     if not rec:
         # HTMX partial request? Use HX-Redirect
         if "HX-Request" in request.headers:
@@ -757,7 +767,12 @@ async def get_me(request: Request):
         # Security: prevent caching of auth state responses
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
     sid = request.cookies.get(SESSION_COOKIE_NAME)
-    rec = SESSION_STORE.get(sid or "")
+    try:
+        rec = SESSION_STORE.get(sid or "")
+    except Exception as exc:
+        # Defensive: treat store failures like missing/expired session
+        logger.warning("Session store get failed (/api/me): %s", exc.__class__.__name__)
+        rec = None
     if not rec:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
     # Serialize expires_at as UTC ISO-8601 if available

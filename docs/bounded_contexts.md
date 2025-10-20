@@ -9,7 +9,6 @@
 - **`Kurs` (Aggregats-Stamm)**
     - Kurs-ID
     - Titel
-    - Klassen-ID (externe Referenz)
     - Lehrer-ID (Autor) (externe Referenz)
     - Kontextwissen (kurs-spezifisch)
     - **Liste von `Kursmodulen` (Entitäten innerhalb des Kurs-Aggregats)**
@@ -44,19 +43,19 @@ Die Benutzerverwaltung muss folgendes über jeden Nutzer wissen:
 - ID
 - E-Mail
 - Name
-- Klasse
+- Rolle
 - Account erstellt an:
 - Passwort-Hash
   
 Weitergeben muss die Benutzerverwaltung aber nur folgende Informationen:
 - Name
-- Klasse
 - ID
+- Rolle
+
 
 Der Unterrichten-Kontext weiß über einen Kurs:
 - ID
 - Name
-- Klassen-ID
 - Lehrer-ID
 - Kontextwissen
 - Liste von Lerneinheiten, inkl. Reihenfolge im Kurs und Abschnittsfreigaben

@@ -59,7 +59,14 @@ class DBSessionStore:
     def __init__(self, dsn: str | None = None, table: str = "public.app_sessions") -> None:
         if not HAVE_PSYCOPG:
             raise RuntimeError("psycopg3 is required for DBSessionStore")
-        self._dsn = dsn or os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL", "")
+        # Prefer a dedicated session DSN to avoid clashing with limited-role DATABASE_URL
+        self._dsn = (
+            dsn
+            or os.getenv("SESSION_DATABASE_URL")
+            or os.getenv("SESSION_TEST_DSN")
+            or os.getenv("DATABASE_URL")
+            or os.getenv("SUPABASE_DB_URL", "")
+        )
         if not self._dsn:
             raise RuntimeError("No database DSN provided for DBSessionStore")
         # Validate table identifier early (defense-in-depth)

@@ -471,6 +471,12 @@ paths:
       operationId: listCourseMembers
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      x-security-notes:
+        - "RLS: course_memberships select returns rows only for the logged-in student (self-only)"
+        - "Owner roster uses SECURITY DEFINER helper that verifies ownership server-side to avoid RLS recursion"
       parameters:
         - in: path
           name: course_id

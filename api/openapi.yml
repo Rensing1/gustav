@@ -53,6 +53,83 @@ components:
           type: string
         detail:
           type: string
+    Course:
+      type: object
+      required: [id, title, teacher_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        subject:
+          type: string
+          maxLength: 100
+          nullable: true
+        grade_level:
+          type: string
+          maxLength: 32
+          nullable: true
+        term:
+          type: string
+          maxLength: 32
+          nullable: true
+        teacher_id:
+          type: string
+          description: Teacher subject identifier (OIDC sub)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CourseCreate:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        subject:
+          type: string
+          maxLength: 100
+        grade_level:
+          type: string
+          maxLength: 32
+        term:
+          type: string
+          maxLength: 32
+    CourseUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        subject:
+          type: string
+          maxLength: 100
+        grade_level:
+          type: string
+          maxLength: 32
+        term:
+          type: string
+          maxLength: 32
+    CourseMember:
+      type: object
+      required: [sub, name, joined_at]
+      properties:
+        sub:
+          type: string
+          description: Student subject identifier (OIDC sub)
+        name:
+          type: string
+        joined_at:
+          type: string
+          format: date-time
 
 paths:
   /auth/login:
@@ -259,3 +336,270 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /api/teaching/courses:
+    get:
+      tags: [Teaching]
+      summary: List courses for the current user
+      description: >-
+        Teachers see courses where they are the owner (teacher_id == sub).
+        Students see courses where they are a member.
+      operationId: listCourses
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of courses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Course'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Teaching]
+      summary: Create a course (teacher only)
+      operationId: createCourse
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseCreate'
+      responses:
+        '201':
+          description: Course created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (not a teacher)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/courses/{course_id}:
+    patch:
+      tags: [Teaching]
+      summary: Update a course (owner only)
+      operationId: updateCourse
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseUpdate'
+      responses:
+        '200':
+          description: Updated course
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Teaching]
+      summary: Delete a course (owner only)
+      operationId: deleteCourse
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204': { description: Deleted }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/courses/{course_id}/members:
+    get:
+      tags: [Teaching]
+      summary: List course members (owner only)
+      operationId: listCourseMembers
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CourseMember'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      tags: [Teaching]
+      summary: Add member (owner only, idempotent)
+      operationId: addCourseMember
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [student_sub]
+              properties:
+                student_sub:
+                  type: string
+      responses:
+        '201': { description: Added }
+        '204': { description: Already a member }
+        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/courses/{course_id}/members/{student_sub}:
+    delete:
+      tags: [Teaching]
+      summary: Remove member (owner only, idempotent)
+      operationId: removeCourseMember
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: student_sub
+          required: true
+          schema:
+            type: string
+      responses:
+        '204': { description: Removed or not present }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/users/search:
+    get:
+      tags: [Users]
+      summary: Search users by name
+      description: Teachers/Admins search for students by display name; returns sub and name.
+      operationId: searchUsers
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+            minLength: 2
+        - in: query
+          name: role
+          required: true
+          schema:
+            $ref: '#/components/schemas/Role'
+          description: Filter by role (e.g., student)
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [sub, name]
+                  properties:
+                    sub: { type: string }
+                    name: { type: string }
+        '400': { description: Invalid query, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

@@ -185,6 +185,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Import shared auth router and helpers from dedicated module
 from routes.auth import auth_router
+from routes.teaching import teaching_router
 
 
 # --- OIDC minimal config & stores (dev) ---
@@ -788,6 +789,7 @@ async def get_me(request: Request):
 
 # Register auth routes on the full application
 app.include_router(auth_router)
+app.include_router(teaching_router)
 
 
 # --- App factory for tests: auth-only slim app ---

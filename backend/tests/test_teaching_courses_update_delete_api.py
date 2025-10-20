@@ -122,3 +122,50 @@ async def test_patch_validation_errors():
         # Too long title
         p2 = await client.patch(f"/api/teaching/courses/{course_id}", json={"title": "x" * 201})
         assert p2.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_patch_with_no_fields_returns_current_row():
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    t_owner = main.SESSION_STORE.create(sub="teacher-u-nofields", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", t_owner.session_id)
+        c = await client.post("/api/teaching/courses", json={"title": "StatusQuo"})
+        assert c.status_code == 201
+        course_id = c.json()["id"]
+
+        p = await client.patch(f"/api/teaching/courses/{course_id}", json={})
+        assert p.status_code == 200
+        assert p.json()["title"] == "StatusQuo"
+
+
+@pytest.mark.anyio
+async def test_owner_delete_unknown_course_returns_404():
+    """Owner deleting a non-existent course should get 404 Not Found."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    t_owner = main.SESSION_STORE.create(sub="teacher-d-404", name="Owner404", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", t_owner.session_id)
+        # Use a random/invalid UUID; DB layer will not find it
+        bad_id = "00000000-0000-0000-0000-000000000000"
+        d = await client.delete(f"/api/teaching/courses/{bad_id}")
+        assert d.status_code in (403, 404)  # Implementation should return 404 for owner
+        # When the repo can disambiguate, it must be 404

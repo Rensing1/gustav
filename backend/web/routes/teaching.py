@@ -286,7 +286,21 @@ async def delete_course(request: Request, course_id: str):
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
+            # Owner check with ability to disambiguate 404 vs 403
+            owned = REPO.get_course_for_owner(course_id, sub)
+            if not owned:
+                exists = REPO.get_course(course_id)
+                if not exists:
+                    return JSONResponse({"error": "not_found"}, status_code=404)
+                return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course_owned(course_id, sub)
+            # Record deletion for follow-up 404 semantics on this owner
+            s = _RECENTLY_DELETED_BY.get(sub)
+            if s is None:
+                s = set()
+                _RECENTLY_DELETED_BY[sub] = s
+            s.add(course_id)
+            return JSONResponse({}, status_code=204)
         else:
             course = REPO.get_course(course_id)
             if not course:
@@ -295,15 +309,15 @@ async def delete_course(request: Request, course_id: str):
             if sub != owner_id:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course(course_id)
+            s = _RECENTLY_DELETED_BY.get(sub)
+            if s is None:
+                s = set()
+                _RECENTLY_DELETED_BY[sub] = s
+            s.add(course_id)
+            return JSONResponse({}, status_code=204)
     except Exception:
-        REPO.delete_course(course_id)
-    # record recently deleted for this owner to shape 404 semantics on follow-ups
-    s = _RECENTLY_DELETED_BY.get(sub)
-    if s is None:
-        s = set()
-        _RECENTLY_DELETED_BY[sub] = s
-    s.add(course_id)
-    return JSONResponse({}, status_code=204)
+        # Conservative default: do not claim deletion if ownership/existence cannot be determined
+        return JSONResponse({"error": "forbidden"}, status_code=403)
 
 
 def _serialize_course(c) -> dict:
@@ -346,20 +360,23 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
         return JSONResponse({"error": "forbidden"}, status_code=403)
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
-    # Owner just deleted course? Treat as not found for immediate follow-ups
-    if course_id in _RECENTLY_DELETED_BY.get(sub, set()):
-        return JSONResponse({"error": "not_found"}, status_code=404)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
             owned = REPO.get_course_for_owner(course_id, sub)
             if not owned:
+                # If the same owner just deleted the course, treat as 404 for immediate follow-ups
+                if course_id in _RECENTLY_DELETED_BY.get(sub, set()):
+                    return JSONResponse({"error": "not_found"}, status_code=404)
+                # With limited RLS role we cannot disambiguate existence reliably → default to 403
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             pairs = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
         else:
             # Fallback in-memory owner check
             course = REPO.get_course(course_id)
-            if not course or _teacher_id_of(course) != sub:
+            if not course:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             pairs = REPO.list_members(course_id, limit=limit, offset=offset)
     except Exception:

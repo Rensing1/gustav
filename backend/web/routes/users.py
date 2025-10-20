@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from identity_access.domain import ALLOWED_ROLES
 
 
 users_router = APIRouter(tags=["Users"])  # explicit path below
@@ -44,7 +45,7 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
     q = (q or "").strip()
     if len(q) < 2:
         return JSONResponse({"error": "bad_request", "detail": "q too short"}, status_code=400)
-    if role not in ("student", "teacher", "admin"):
+    if role not in ALLOWED_ROLES:
         return JSONResponse({"error": "bad_request", "detail": "invalid role"}, status_code=400)
     limit = max(1, min(50, int(limit or 20)))
     results = search_users_by_name(role=role, q=q, limit=limit)

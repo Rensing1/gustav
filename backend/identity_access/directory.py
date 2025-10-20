@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import List, Dict
 import os
 import requests
+from identity_access.domain import ALLOWED_ROLES
 
 
 class _KC:
@@ -38,7 +39,10 @@ class _KC:
             "username": self.admin_username,
             "password": self.admin_password,
         }
-        r = requests.post(url, data=data, timeout=10)
+        # Honor CA bundle in production environments; default to system CAs
+        ca = os.getenv("KEYCLOAK_CA_BUNDLE")
+        verify_opt = ca if ca else True
+        r = requests.post(url, data=data, timeout=10, verify=verify_opt)
         r.raise_for_status()
         tok = (r.json() or {}).get("access_token")
         if not tok:
@@ -65,10 +69,14 @@ def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
     """
     kc = _KC()
     token = kc.token()
+    if role not in ALLOWED_ROLES:
+        raise ValueError("invalid role")
     # Role-based listing (avoids mapping calls per user)
     url = f"{kc.base_url}/admin/realms/{kc.realm}/roles/{role}/users"
     params = {"first": 0, "max": max(1, min(200, int(limit) * 2))}
-    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10)
+    ca = os.getenv("KEYCLOAK_CA_BUNDLE")
+    verify_opt = ca if ca else True
+    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt)
     r.raise_for_status()
     arr = r.json() or []
     ql = (q or "").lower()
@@ -92,10 +100,12 @@ def resolve_student_names(subs: List[str]) -> Dict[str, str]:
     kc = _KC()
     token = kc.token()
     out: Dict[str, str] = {}
+    ca = os.getenv("KEYCLOAK_CA_BUNDLE")
+    verify_opt = ca if ca else True
     for sid in subs:
         try:
             url = f"{kc.base_url}/admin/realms/{kc.realm}/users/{sid}"
-            r = requests.get(url, headers=kc.hdr(token), timeout=10)
+            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt)
             if r.status_code == 404:
                 out[sid] = sid
                 continue
@@ -105,4 +115,3 @@ def resolve_student_names(subs: List[str]) -> Dict[str, str]:
         except Exception:
             out[sid] = sid
     return out
-

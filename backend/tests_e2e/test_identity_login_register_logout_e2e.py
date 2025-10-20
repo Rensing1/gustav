@@ -13,6 +13,7 @@ How to run locally:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import time
 import re
 from urllib.parse import urljoin, urlparse, parse_qs
@@ -22,8 +23,59 @@ import os
 import requests
 
 
-WEB_BASE = os.getenv("WEB_BASE", "http://localhost:8100")
-KC_BASE = os.getenv("KC_BASE", "http://localhost:8080")
+# Load .env for local developer runs if available (optional dependency)
+try:
+    from dotenv import load_dotenv  # type: ignore
+    # Load .env from repo root if not already loaded
+    load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
+except Exception:
+    pass
+
+
+def _derive_app_base() -> str:
+    """Derive the application base URL from environment.
+
+    Preference order:
+      1) WEB_BASE env if provided
+      2) Base extracted from REDIRECT_URI (strip /auth/callback)
+      3) Fallback to http://app.localhost:8100 (matches reverse proxy)
+    """
+    wb = os.getenv("WEB_BASE")
+    if wb:
+        return wb.rstrip("/")
+    ru = os.getenv("REDIRECT_URI", "")
+    if isinstance(ru, str) and ru:
+        if "/auth/callback" in ru:
+            return ru.split("/auth/callback")[0].rstrip("/")
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(ru)
+            if p.scheme and p.netloc:
+                return f"{p.scheme}://{p.netloc}"
+        except Exception:
+            pass
+    return "http://app.localhost:8100"
+
+
+def _derive_kc_base() -> str:
+    """Derive the Keycloak base URL from environment.
+
+    Preference order:
+      1) KC_BASE env if provided
+      2) KC_PUBLIC_BASE_URL (browser-facing) if provided
+      3) Fallback to http://id.localhost:8100 (matches reverse proxy)
+    """
+    kb = os.getenv("KC_BASE")
+    if kb:
+        return kb.rstrip("/")
+    pub = os.getenv("KC_PUBLIC_BASE_URL")
+    if pub:
+        return pub.rstrip("/")
+    return "http://id.localhost:8100"
+
+
+WEB_BASE = _derive_app_base()
+KC_BASE = _derive_kc_base()
 REALM = os.getenv("KC_REALM", "gustav")
 ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")

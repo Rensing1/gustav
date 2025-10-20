@@ -53,3 +53,14 @@ gustav-alpha2/
   - `SESSIONS_BACKEND`: `memory` (Default) oder `db` (Postgres/Supabase)
   - `DATABASE_URL` (oder `SUPABASE_DB_URL`): DSN für DB-gestützte Sessions
   - `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen; wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
+
+### E2E-Hosts und Cookies
+
+- Cookies sind hostgebunden. Für eine stabile E2E-Anmeldung müssen Web‑Host und Cookie‑Host übereinstimmen.
+- Standard-Setup (Reverse‑Proxy `Caddyfile`):
+  - App: `http://app.localhost:8100`
+  - Keycloak: `http://id.localhost:8100`
+- E2E-Tests leiten `WEB_BASE` automatisch aus `REDIRECT_URI` ab (wenn `WEB_BASE` nicht gesetzt ist) und nutzen `KC_BASE` bzw. `KC_PUBLIC_BASE_URL`.
+- Empfehlung: Setze vor E2E-Läufen explizit
+  - `export WEB_BASE=http://app.localhost:8100`
+  - `export KC_BASE=http://id.localhost:8100`

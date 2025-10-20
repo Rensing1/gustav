@@ -31,10 +31,14 @@ services:
       - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://id.localhost:8100}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
-      - REDIRECT_URI=${REDIRECT_URI:-http://app.localhost:8100/auth/callback}
+      # Align redirect with WEB_BASE used by tests and reverse proxy
+      - REDIRECT_URI=http://localhost:8100/auth/callback
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
       - SESSIONS_BACKEND=db
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres}
+      # App runtime DSN (limited role; RLS enforced). Prefer direct Docker network DNS to Supabase DB.
+      - DATABASE_URL=postgresql://gustav_limited:gustav-limited@supabase_db_gustav-alpha2:5432/postgres
+      # Sessions DSN (service role; app_sessions policies allow server-side access)
+      - SESSION_DATABASE_URL=postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

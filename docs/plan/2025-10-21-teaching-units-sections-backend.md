@@ -55,6 +55,7 @@ Als Lehrkraft möchte ich Abschnitte in einer Lerneinheit strukturieren und dere
 Design-Entscheidung (position)
 - Position ist ein Attribut der Section (Kind des Aggregats „Lerneinheit“).
 - Gründe: KISS, identisches Modell zu `course_modules`, einfache RLS/Constraints, keine Mehrfachverwendung vorgesehen.
+- Konsequenz: `unique(unit_id, position)` erzwingt eindeutige Positionen je Lerneinheit; Reorder aktualisiert Positionen atomar.
 
 BDD Scenarios
 - Given Autor, When GET sections, Then 200 `[Section]` sortiert nach `position`.
@@ -72,14 +73,16 @@ API Contract Updates (Contract‑First)
   - `Section { id: uuid, unit_id: uuid, title: string[1..200], position: int>=1, created_at, updated_at }`
   - `SectionCreate { title: string[1..200] }`
   - `SectionUpdate { title?: string[1..200] }`
-  - `SectionsReorder { section_ids: uuid[] unique, minItems: 1 }`
-- Endpunkte (Author‑only):
+  - `SectionReorder { section_ids: uuid[] uniqueItems: true, minItems: 1 }`
+- Endpunkte (Author‑only, `security: cookieAuth`):
   - `GET /api/teaching/units/{unit_id}/sections`
   - `POST /api/teaching/units/{unit_id}/sections`
   - `PATCH /api/teaching/units/{unit_id}/sections/{section_id}`
   - `DELETE /api/teaching/units/{unit_id}/sections/{section_id}`
   - `POST /api/teaching/units/{unit_id}/sections/reorder`
-- Semantik: 404 (unknown unit/section), 403 (nicht Autor), 400 (Validierung), Reorder 200 (Liste in neuer Reihenfolge).
+- Responses (alle Endpunkte konsistent): 401 (unauthenticated), 403 (nicht Autor), 404 (unknown unit/section), 400 (Validierung). Reorder 200 liefert Liste in neuer Reihenfolge.
+- Permissions-Metadaten: `x-permissions: { requiredRole: teacher, authorOnly: true }` (analog `ownerOnly` bei Modulen).
+- Security-Hinweis: Reorder als atomare Transaktion; Sperre der betroffenen Rows via `SELECT ... FOR UPDATE` (x-security-notes).
 
 Database & Migration Draft (Supabase/PostgreSQL)
 - Tabelle `public.unit_sections`:
@@ -88,20 +91,31 @@ Database & Migration Draft (Supabase/PostgreSQL)
   - `title text not null check (length(title) between 1 and 200)`
   - `position integer not null check (position > 0)`
   - `created_at/updated_at timestamptz` + Trigger `set_updated_at()`
-  - Unique `(unit_id, position) deferrable initially immediate`
-- RLS aktiviert; Grants für `gustav_limited` (select/insert/update/delete)
-- Policies (author‑scoped): SELECT/INSERT/UPDATE/DELETE nur, wenn `learning_units.author_id = app.current_sub`
-- Optionaler SECURITY DEFINER Helper: nicht nötig (Ownership via Join ausreichend; Existenzprüfung über vorhandene `unit_exists_for_author`/`unit_exists`).
+  - Unique `(unit_id, position) DEFERRABLE INITIALLY IMMEDIATE`
+- Rechte & RLS
+  - `REVOKE ALL ON TABLE public.unit_sections FROM PUBLIC;`
+  - `GRANT SELECT, INSERT, UPDATE, DELETE ON public.unit_sections TO gustav_limited;`
+  - RLS aktiviert; vier Policies (SELECT/INSERT/UPDATE/DELETE) mit `USING`/`WITH CHECK` via Join: `exists (select 1 from public.learning_units u where u.id = unit_sections.unit_id and u.author_id = app.current_sub)`
+  - Reorder: innerhalb einer Transaktion `SET LOCAL app.current_sub = ...; SET CONSTRAINTS ALL DEFERRED;` betroffene Zeilen per `SELECT ... FOR UPDATE` sperren.
+  - Keine SECURITY DEFINER-Funktion nötig (Ownership via Join + vorhandene `unit_exists_for_author`).
 
 Tests (TDD)
-- Datei `backend/tests/test_teaching_sections_api.py`
-- Fälle: list/create/update/delete, reorder (happy + error/edge), 403/404 Pfade, Validierung `title`, UUID‑Validierung für `section_ids`.
+- Dateien
+  - `backend/tests/test_teaching_sections_api.py`
+  - `backend/tests/test_teaching_sections_reorder_api.py`
+- Fälle
+  - Titel-Grenzen: Länge 1 und 200 okay; 0/201 → 400
+  - UUID-Validierung: ungültige `unit_id`/`section_id`/`section_ids[]` → 400
+  - AuthZ: Nicht‑Autor → 403; unbekannte Unit/Section → 404; Unauth → 401
+  - Delete resequencing: Positionen werden zu 1..n verdichtet
+  - Reorder Happy Path; Single‑Item Reorder 200; fehlende/zusätzliche/duplizierte IDs → 400; leere Liste → 400
+  - Optional: RLS mit limited DSN (403/404) gegen Test‑DB
 
 Implementierung (Minimal)
-- OpenAPI ergänzen.
-- In‑Memory‑Repo (Map `unit_sections` mit `unit_id -> [Section]`), Reorder+Resequence wie `course_modules`.
+- OpenAPI ergänzen (contract-first, vor Tests anpassen).
 - Routen in `backend/web/routes/teaching.py` analog `units`/`modules` (Guards via `_guard_unit_author`).
-- DB‑Repo in `backend/teaching/repo_db.py`: CRUD + `reorder_unit_sections_owned` mit deferrable Unique, `SET LOCAL app.current_sub` pro Transaktion.
+- DB‑Repo in `backend/teaching/repo_db.py`: CRUD + `reorder_unit_sections_owned` mit DEFERRABLE Unique, `SET LOCAL app.current_sub` pro Transaktion; Rows der Unit via `FOR UPDATE` sperren.
+- Hinweis: Kein In‑Memory‑Repo (vermeidet Drift/duplizierte Pfade); Tests laufen gegen echte Test‑DB (Supabase/Postgres) mit Migrationsstand.
 
 ## Iteration 3 (Medium): Abschnittsfreigaben pro Kurs
 
@@ -119,7 +133,7 @@ API Contract Updates
 - Optional `released_at`, `released_by` im Response.
 
 Database & Migration Draft
-- Tabelle `module_section_releases`: `course_module_id uuid fk course_modules(id) on delete cascade`, `section_id uuid fk learning_sections(id)`, `is_released boolean not null`, `released_at timestamptz`, `released_by text`.
+- Tabelle `module_section_releases`: `course_module_id uuid fk course_modules(id) on delete cascade`, `section_id uuid fk unit_sections(id)`, `is_released boolean not null`, `released_at timestamptz`, `released_by text`.
 - PK `(course_module_id, section_id)`.
 - RLS: Owner-only über Join `course_modules.course_id`.
 

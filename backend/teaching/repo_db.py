@@ -15,6 +15,7 @@ from typing import List, Tuple, Optional, Dict
 import os
 import re
 from urllib.parse import urlparse
+from uuid import UUID
 
 try:
     import psycopg
@@ -501,6 +502,10 @@ class DBTeachingRepo:
             - Notes trimmed to None when blank; length limited to 2000 characters.
             - Unique constraint violations bubble up as ValueError("duplicate_module").
         """
+        try:
+            unit_uuid = str(UUID(str(unit_id)))
+        except (ValueError, TypeError) as exc:
+            raise ValueError("invalid_unit_id") from exc
         notes = None
         if context_notes is not None:
             notes = context_notes.strip()
@@ -530,7 +535,7 @@ class DBTeachingRepo:
                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                   to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                         """,
-                        (course_id, course_id, unit_id, notes),
+                        (course_id, course_id, unit_uuid, notes),
                     )
                 except Exception as exc:
                     sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
@@ -566,6 +571,11 @@ class DBTeachingRepo:
         """
         if not module_ids:
             raise ValueError("empty_reorder")
+        try:
+            normalized_ids = [str(UUID(str(mid))) for mid in module_ids]
+        except (ValueError, TypeError) as exc:
+            raise ValueError("invalid_module_id") from exc
+        module_ids = normalized_ids
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))

@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, asdict, is_dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Set
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
@@ -396,8 +396,19 @@ def _require_teacher(request: Request):
     return user, None
 
 
+def _is_uuid_like(value: str) -> bool:
+    """Best-effort UUID format check without coercing FastAPI to return 422."""
+    try:
+        UUID(str(value))
+    except (ValueError, TypeError):
+        return False
+    return True
+
+
 def _guard_unit_author(unit_id: str, author_sub: str):
     """Validate unit ownership, returning an error response when access is denied."""
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid unit_id"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -873,6 +884,8 @@ async def create_course_module(request: Request, course_id: str, payload: Course
         return error
     sub = _current_sub(user)
     unit_id = payload.unit_id
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid unit_id"}, status_code=400)
     try:
         guard_course = _guard_course_owner(course_id, sub)
         if guard_course:
@@ -924,6 +937,8 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     if len(set(module_ids)) != len(module_ids):
         # Guard early so duplicates short-circuit with a clear validation error.
         return JSONResponse({"error": "bad_request", "detail": "duplicate module ids"}, status_code=400)
+    if any(not _is_uuid_like(mid) for mid in module_ids):
+        return JSONResponse({"error": "bad_request", "detail": "invalid module_ids"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_course_owner(course_id, sub)
     if guard:

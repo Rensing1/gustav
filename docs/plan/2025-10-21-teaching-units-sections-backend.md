@@ -50,28 +50,58 @@ Tests (TDD)
 ## Iteration 2 (Small): Abschnitte innerhalb Lerneinheit
 
 User Story  
-Als Lehrkraft möchte ich Abschnitte in einer Lerneinheit strukturieren und deren Reihenfolge steuern, damit Inhalte logisch aufgebaut sind.
+Als Lehrkraft möchte ich Abschnitte in einer Lerneinheit strukturieren und deren Reihenfolge steuern, damit Inhalte logisch aufgebaut sind. Ein Abschnitt hat einen `title` und eine `position` innerhalb der Lerneinheit.
+
+Design-Entscheidung (position)
+- Position ist ein Attribut der Section (Kind des Aggregats „Lerneinheit“).
+- Gründe: KISS, identisches Modell zu `course_modules`, einfache RLS/Constraints, keine Mehrfachverwendung vorgesehen.
 
 BDD Scenarios
-- Create Abschnitt (position am Ende).
-- Reorder Abschnitte mit zusammenhängenden Positionen.
-- Update/Delete Abschnitt (Autor-Check via Unit).
-- 404/403 bei Zugriff auf fremde Unit.
+- Given Autor, When GET sections, Then 200 `[Section]` sortiert nach `position`.
+- Given Autor, When POST valid `title`, Then 201 `Section` mit `position = next`.
+- Given Autor, When POST invalid `title` (leer/zu lang), Then 400.
+- Given Nicht‑Autor, When POST/PATCH/DELETE, Then 403.
+- Given Autor, When PATCH valid `title`, Then 200 Section aktualisiert.
+- Given Autor, When DELETE section, Then 204 und resequencing auf 1..n.
+- Given Autor, When POST reorder mit exakt derselben ID‑Menge, Then 200 neue Reihenfolge.
+- Given Reorder mit Duplikaten/fehlenden/invaliden UUIDs, Then 400.
+- Given unbekannte `unit_id`, When irgendeine Operation, Then 404.
 
-API Contract Updates
-- `POST /api/teaching/units/{unit_id}/sections`, `GET` list sections.
-- `PATCH /api/teaching/sections/{section_id}`, `DELETE /api/teaching/sections/{section_id}`.
-- `POST /api/teaching/units/{unit_id}/sections/reorder`.
-- Felder: `title`, `content_text` (einfacher Platzhalter, KISS), optional `resources` später.
+API Contract Updates (Contract‑First)
+- Schemas
+  - `Section { id: uuid, unit_id: uuid, title: string[1..200], position: int>=1, created_at, updated_at }`
+  - `SectionCreate { title: string[1..200] }`
+  - `SectionUpdate { title?: string[1..200] }`
+  - `SectionsReorder { section_ids: uuid[] unique, minItems: 1 }`
+- Endpunkte (Author‑only):
+  - `GET /api/teaching/units/{unit_id}/sections`
+  - `POST /api/teaching/units/{unit_id}/sections`
+  - `PATCH /api/teaching/units/{unit_id}/sections/{section_id}`
+  - `DELETE /api/teaching/units/{unit_id}/sections/{section_id}`
+  - `POST /api/teaching/units/{unit_id}/sections/reorder`
+- Semantik: 404 (unknown unit/section), 403 (nicht Autor), 400 (Validierung), Reorder 200 (Liste in neuer Reihenfolge).
 
-Database & Migration Draft
-- Tabelle `learning_sections`: `id uuid pk`, `unit_id uuid fk learning_units(id) on delete cascade`, `position int not null`, `title text not null`, `content_text text null`, Audit timestamps.
-- Unique Constraint: `unique(unit_id, position)`.
-- RLS: Sicht & Mutation nur für Unit-Autor (Policy join auf `learning_units.author_id`).
+Database & Migration Draft (Supabase/PostgreSQL)
+- Tabelle `public.unit_sections`:
+  - `id uuid pk default gen_random_uuid()`
+  - `unit_id uuid not null references public.learning_units(id) on delete cascade`
+  - `title text not null check (length(title) between 1 and 200)`
+  - `position integer not null check (position > 0)`
+  - `created_at/updated_at timestamptz` + Trigger `set_updated_at()`
+  - Unique `(unit_id, position) deferrable initially immediate`
+- RLS aktiviert; Grants für `gustav_limited` (select/insert/update/delete)
+- Policies (author‑scoped): SELECT/INSERT/UPDATE/DELETE nur, wenn `learning_units.author_id = app.current_sub`
+- Optionaler SECURITY DEFINER Helper: nicht nötig (Ownership via Join ausreichend; Existenzprüfung über vorhandene `unit_exists_for_author`/`unit_exists`).
 
-Tests
-- Neues Modul `backend/tests/test_teaching_sections_api.py`.
-- Szenarien: create/list/reorder/update/delete, Non-owner 403, Invalid IDs 404.
+Tests (TDD)
+- Datei `backend/tests/test_teaching_sections_api.py`
+- Fälle: list/create/update/delete, reorder (happy + error/edge), 403/404 Pfade, Validierung `title`, UUID‑Validierung für `section_ids`.
+
+Implementierung (Minimal)
+- OpenAPI ergänzen.
+- In‑Memory‑Repo (Map `unit_sections` mit `unit_id -> [Section]`), Reorder+Resequence wie `course_modules`.
+- Routen in `backend/web/routes/teaching.py` analog `units`/`modules` (Guards via `_guard_unit_author`).
+- DB‑Repo in `backend/teaching/repo_db.py`: CRUD + `reorder_unit_sections_owned` mit deferrable Unique, `SET LOCAL app.current_sub` pro Transaktion.
 
 ## Iteration 3 (Medium): Abschnittsfreigaben pro Kurs
 

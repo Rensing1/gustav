@@ -726,7 +726,8 @@ async def health_check():
     except Exception:
         pass
 
-    return info
+    # Security: avoid caching diagnostics in intermediaries/browsers
+    return JSONResponse(info, headers={"Cache-Control": "no-store"})
 
 
 # --- Minimal Auth Adapter (stub) to satisfy contract tests ---

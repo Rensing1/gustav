@@ -215,17 +215,7 @@ async def auth_logout_success():
 # Removed separate /auth/logout/idp — unified into GET /auth/logout
 
 
-def _cookie_opts() -> dict:
-    """Deprecated: use `cookie_opts(SETTINGS.environment)` from auth_utils.
-
-    Kept for backward compatibility in case external code imports it.
-    """
-    import main  # late import
-    try:
-        from ..auth_utils import cookie_opts  # type: ignore
-    except Exception:  # pragma: no cover
-        from auth_utils import cookie_opts  # type: ignore
-    return cookie_opts(main.SETTINGS.environment)
+# Deprecated cookie helper removed; use `auth_utils.cookie_opts` directly
 
 
 def _default_app_base(redirect_uri: str) -> str:

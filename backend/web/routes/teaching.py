@@ -294,7 +294,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     Behavior:
         - 200 with updated `Course`
         - 400 on invalid fields (e.g., empty/too long title)
-        - 403 when caller is not owner; 404 when course unknown (in-memory path)
+        - 403 when caller is not owner; 404 when course unknown (DB path disambiguates; in-memory returns 404 for unknown)
 
     Permissions:
         Caller must be a teacher AND owner of the course.
@@ -410,7 +410,7 @@ def _teacher_id_of(course) -> str | None:
     except Exception:
         return None
 
-_RECENTLY_DELETED_TTL_SECONDS = 60.0
+_RECENTLY_DELETED_TTL_SECONDS = 15.0
 _RECENTLY_DELETED_BY: dict[str, dict[str, float]] = {}
 
 
@@ -453,6 +453,36 @@ def _was_recently_deleted(owner_id: str, course_id: str) -> bool:
     return course_id in bucket
 
 
+def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
+    """Return 404 when course does not exist, else 403 (non-owner).
+
+    Why:
+        Centralizes 404 vs 403 semantics to avoid duplication and subtle
+        inconsistencies across endpoints. Uses a short "recently deleted"
+        window to make immediate follow-ups deterministic for owners.
+
+    Behavior:
+        - If the same owner recently deleted the course: 404.
+        - If `REPO.course_exists` deterministically returns False: 404.
+        - Otherwise: 403 to avoid leaking information.
+    """
+    # Owner just deleted? Prefer 404 for immediate follow-ups
+    if _was_recently_deleted(owner_sub, course_id):
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        ex = REPO.course_exists(course_id)
+    except Exception:
+        ex = None
+    if ex is False:
+        seen = course_id in (_SEEN_COURSE_IDS_BY.get(owner_sub) or set())
+        # If owner has previously seen/owned the ID, prefer 403 to avoid
+        # confirming deletion beyond the short grace window.
+        if seen:
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return JSONResponse({"error": "forbidden"}, status_code=403)
+
+
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
 async def list_members(request: Request, course_id: str, limit: int = 20, offset: int = 0):
     """List members for a course — owner-only, with names resolved via directory adapter.
@@ -479,16 +509,7 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
             if not REPO.course_exists_for_owner(course_id, sub):
-                # If the same owner just deleted the course, treat as 404 for immediate follow-ups
-                if _was_recently_deleted(sub, course_id):
-                    return JSONResponse({"error": "not_found"}, status_code=404)
-                # If we can determine that the course does not exist at all, choose 404 vs 403
-                ex = REPO.course_exists(course_id)
-                if ex is False:
-                    seen = course_id in (_SEEN_COURSE_IDS_BY.get(sub) or set())
-                    return JSONResponse({"error": "forbidden" if seen else "not_found"}, status_code=403 if seen else 404)
-                # Otherwise do not disambiguate to avoid information leakage
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _resp_non_owner_or_unknown(course_id, sub)
             pairs = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
         else:
             # Fallback in-memory owner check
@@ -498,8 +519,10 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
             if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             pairs = REPO.list_members(course_id, limit=limit, offset=offset)
-    except Exception:
-        # Defensive default: if DB helper path fails, do not risk information leakage
+    except Exception as exc:
+        # Defensive default: if DB helper path fails, do not risk information leakage.
+        # Log for observability without leaking details to clients.
+        logger.warning("list_members failed: course_id=%s owner_sub=%s err=%s", course_id, sub, exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
     subs = [sid for sid, _ in pairs]
     # Avoid blocking the event loop on synchronous network I/O
@@ -535,13 +558,9 @@ async def add_member(request: Request, course_id: str, payload: dict):
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
-            # Ensure caller owns the course; otherwise decide 404/403 via existence
+            # Ensure caller owns the course; otherwise decide 404/403 via helper
             if not REPO.course_exists_for_owner(course_id, sub):
-                ex = REPO.course_exists(course_id)
-                if ex is False:
-                    seen = course_id in (_SEEN_COURSE_IDS_BY.get(sub) or set())
-                    return JSONResponse({"error": "forbidden" if seen else "not_found"}, status_code=403 if seen else 404)
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _resp_non_owner_or_unknown(course_id, sub)
             created = REPO.add_member_owned(course_id, sub, student_sub.strip())
         else:
             # Fallback owner check
@@ -573,11 +592,7 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
             if not REPO.course_exists_for_owner(course_id, sub):
-                ex = REPO.course_exists(course_id)
-                if ex is False:
-                    seen = course_id in (_SEEN_COURSE_IDS_BY.get(sub) or set())
-                    return JSONResponse({"error": "forbidden" if seen else "not_found"}, status_code=403 if seen else 404)
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _resp_non_owner_or_unknown(course_id, sub)
             REPO.remove_member_owned(course_id, sub, str(student_sub))
         else:
             course = REPO.get_course(course_id)

@@ -454,6 +454,10 @@ paths:
     delete:
       tags: [Teaching]
       summary: Delete a course (owner only)
+      description: |-
+        Deletes a course when owned by the caller. Returns 404 when the course
+        does not exist and 403 when the caller is not the owner. Response 204
+        contains no content.
       operationId: deleteCourse
       security:
         - cookieAuth: []
@@ -465,7 +469,7 @@ paths:
             type: string
             format: uuid
       responses:
-        '204': { description: Deleted }
+        '204': { description: Deleted (no content) }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -474,6 +478,10 @@ paths:
     get:
       tags: [Teaching]
       summary: List course members (owner only)
+      description: |-
+        Returns the roster only when the caller owns the course. Responds 404
+        when the course does not exist and 403 when the caller is not the
+        owner.
       operationId: listCourseMembers
       security:
         - cookieAuth: []
@@ -518,6 +526,10 @@ paths:
     post:
       tags: [Teaching]
       summary: Add member (owner only, idempotent)
+      description: |-
+        Adds a student to the course. Responds 201 when created and 204 (no
+        content) if the membership already exists. Responds 404 when the course
+        does not exist and 403 when the caller is not the owner.
       operationId: addCourseMember
       security:
         - cookieAuth: []
@@ -540,7 +552,7 @@ paths:
                   type: string
       responses:
         '201': { description: Added }
-        '204': { description: Already a member }
+        '204': { description: Already a member (no content) }
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -550,6 +562,9 @@ paths:
     delete:
       tags: [Teaching]
       summary: Remove member (owner only, idempotent)
+      description: |-
+        Removes a student from the course; idempotent 204 (no content). 404
+        when the course does not exist; 403 when the caller is not the owner.
       operationId: removeCourseMember
       security:
         - cookieAuth: []
@@ -566,7 +581,7 @@ paths:
           schema:
             type: string
       responses:
-        '204': { description: Removed or not present }
+        '204': { description: Removed or not present (no content) }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

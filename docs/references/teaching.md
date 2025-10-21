@@ -63,6 +63,9 @@ RLS Policies & DSN
 - Backend setzt je Query `SET LOCAL app.current_sub = '<sub>'`, damit Policies wissen, „wer“ handelt.
 - Owner‑Mitgliederliste erfolgt über `public.get_course_members(owner_sub, course_id, limit, offset)` (SECURITY DEFINER), um RLS‑Rekursionen zu vermeiden.
 - Migrationen laufen getrennt über das Supabase‑CLI (Owner/Service), die App muss nie umschalten.
+ - Existence/Ownership‑Helper (SECURITY DEFINER): `supabase/migrations/20251021081254_teaching_course_existence_helpers.sql`
+   - `public.course_exists_for_owner(owner_sub text, course_id uuid) returns boolean`
+   - `public.course_exists(course_id uuid) returns boolean`
 
 Tests
 - API‑Tests erzeugen Daten über die API (RLS‑konform).

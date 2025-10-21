@@ -387,3 +387,60 @@ async def test_deleting_unit_cascades_course_modules():
         modules_after = await client.get(f"/api/teaching/courses/{course_id}/modules")
         assert modules_after.status_code == 200
         assert modules_after.json() == []
+
+
+@pytest.mark.anyio
+async def test_course_modules_reorder_with_invalid_uuid_returns_400():
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-invalid-reorder", name="Invalid", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(client, title="Biologie 8")
+        unit_a = await _create_unit(client, title="Zellen")
+        unit_b = await _create_unit(client, title="Genetik")
+
+        mod_a = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_a["id"]})).json()
+        mod_b = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_b["id"]})).json()
+
+        payload = {"module_ids": [mod_a["id"], "not-a-uuid", mod_b["id"]]}
+        resp = await client.post(f"/api/teaching/courses/{course_id}/modules/reorder", json=payload)
+        assert resp.status_code == 400
+        assert resp.json().get("error") == "bad_request"
+
+
+@pytest.mark.anyio
+async def test_course_module_create_with_invalid_unit_uuid_returns_400():
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-invalid-create", name="InvalidUnit", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(client, title="Musik 7")
+
+        resp = await client.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": "definitely-not-a-uuid"},
+        )
+        assert resp.status_code == 400
+        assert resp.json().get("error") == "bad_request"

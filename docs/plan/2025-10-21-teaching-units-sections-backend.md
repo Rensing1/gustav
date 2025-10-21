@@ -14,6 +14,16 @@ BDD Scenarios
 - Given ich kein Besitzer bin, When ich versuche ein Modul zu ändern, Then kommt 403.
 - Given eine Lerneinheit in mehreren Kursen genutzt wird, When ich sie lösche, Then nur meine Zuordnungen fallen weg (falls keine andere Referenz, cascade via module).
 
+### Follow-up XS (Bugfix): Robuste Eingabevalidierung
+
+User Story  
+Als Lehrkraft möchte ich bei Tippfehlern in Modul- oder Lerneinheit-IDs eine verständliche Fehlermeldung erhalten, damit ich den Fehler korrigieren kann, ohne dass die Plattform abstürzt.
+
+BDD Scenarios
+- Given ich sende `module_ids` mit einem ungültigen UUID-String, When ich die Reorder-API aufrufe, Then erhalte ich 400 `bad_request`.
+- Given ich sende `unit_id="foo"` beim Anlegen eines Moduls, When die API das verarbeitet, Then erhalte ich 400 `bad_request`.
+- Given ich sende eine fremde aber gültige Modul-ID, When ich reorder aufrufe, Then erhalte ich 404 statt 500.
+
 API Contract (contract-first)
 - `POST /api/teaching/units` (create), `GET /api/teaching/units` (list own, optional filters).
 - `PATCH /api/teaching/units/{unit_id}`, `DELETE /api/teaching/units/{unit_id}` (Autor-only).
@@ -34,6 +44,7 @@ Tests (TDD)
 - Szenarien für Units: Auth-Guards (401/403), happy-path CRUD für Autor, Validierung (`title` fehlt/zu lang), Pagination, Fremdzugriff 404, Löschen cascaded Module des Autors.
 - Szenarien für Module: Owner-only Zugriff, Unit muss Autor gehören, Duplicate (`unique(course_id, unit_id)` → 409), Positionsvergabe am Ende, Kontext-Notizen Validierung, Liste wird positionssortiert geliefert.
 - Szenarien für Reorder: Permutation aller Module → neue Reihenfolge (200), fehlende/zusätzliche IDs → 400, Fremdmodule → 404, Duplicates → 400, Kurs ohne Module → 400.
+- Regression XS: ungültige UUID-Strings → 400 (statt psycopg DataError/500), DataError wird gezielt abgefangen.
 - Fokus: DB-backed Repo, Policies via `app.current_sub`, 404 für fremde IDs, 403 für Nicht-Owner, Constraints überprüft.
 
 ## Iteration 2 (Small): Abschnitte innerhalb Lerneinheit

@@ -50,8 +50,7 @@ async def test_two_concurrent_creates_on_empty_unit_assign_contiguous_positions(
         r1, r2 = await asyncio.gather(create_section("A"), create_section("B"))
         assert r1.status_code == 201 and r2.status_code == 201
 
-        # Positions should be contiguous and unique
+        # Positions should be the contiguous set {1, 2} — no gaps or duplicates
         lst = await client.get(f"/api/teaching/units/{unit['id']}/sections")
         pos = [s["position"] for s in lst.json()]
-        assert pos == [1, 2] or pos == [2, 1] or pos == sorted(pos)
-        assert len(pos) == len(set(pos))
+        assert sorted(pos) == [1, 2]

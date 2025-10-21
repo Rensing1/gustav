@@ -46,3 +46,32 @@ def test_sections_reorder_includes_section_mismatch_detail():
     errs = spec["paths"][path]["post"]["responses"]["400"]["description"]
     # Expect the section_mismatch detail to be listed among error codes
     assert "section_mismatch" in errs
+
+
+def test_reorder_examples_present_in_openapi():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+
+    # Sections reorder examples
+    sec_path = "/api/teaching/units/{unit_id}/sections/reorder"
+    sec_examples = spec["paths"][sec_path]["post"]["responses"]["400"]["content"]["application/json"]["examples"]
+    for key in [
+        "section_mismatch",
+        "duplicate_section_ids",
+        "invalid_section_ids",
+        "empty_section_ids",
+        "section_ids_must_be_array",
+    ]:
+        assert key in sec_examples
+
+    # Course modules reorder examples
+    mod_path = "/api/teaching/courses/{course_id}/modules/reorder"
+    mod_examples = spec["paths"][mod_path]["post"]["responses"]["400"]["content"]["application/json"]["examples"]
+    for key in [
+        "duplicate_module_ids",
+        "module_mismatch",
+        "empty_reorder",
+        "invalid_module_ids",
+        "no_modules",
+    ]:
+        assert key in mod_examples

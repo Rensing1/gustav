@@ -1007,6 +1007,11 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
         return error
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    # Security-first: verify authorship before deep payload validation to avoid error oracle
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
     ids = payload.section_ids
     if not isinstance(ids, list):
         return JSONResponse({"error": "bad_request", "detail": "section_ids_must_be_array"}, status_code=400)
@@ -1016,10 +1021,6 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
         return JSONResponse({"error": "bad_request", "detail": "duplicate_section_ids"}, status_code=400)
     if any(not _is_uuid_like(sid) for sid in ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_ids"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
     try:
         ordered = REPO.reorder_unit_sections_owned(unit_id, sub, ids)
     except ValueError as exc:

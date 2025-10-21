@@ -63,6 +63,16 @@ class Unit:
 
 
 @dataclass
+class SectionData:
+    id: str
+    unit_id: str
+    title: str
+    position: int
+    created_at: str
+    updated_at: str
+
+
+@dataclass
 class CourseModuleData:
     id: str
     course_id: str
@@ -79,6 +89,8 @@ class _Repo:
         # members[course_id] = { student_id: joined_at_iso }
         self.members: Dict[str, Dict[str, str]] = {}
         self.units: Dict[str, Unit] = {}
+        self.sections: Dict[str, SectionData] = {}
+        self.section_ids_by_unit: Dict[str, List[str]] = {}
         self.course_modules: Dict[str, CourseModuleData] = {}
         self.modules_by_course: Dict[str, List[str]] = {}
 
@@ -240,6 +252,86 @@ class _Repo:
 
     def unit_exists(self, unit_id: str) -> bool:
         return unit_id in self.units
+
+    # --- Unit sections (in-memory) --------------------------------------------
+    def list_sections_for_author(self, unit_id: str, author_id: str) -> List[SectionData]:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            return []
+        ids = list(self.section_ids_by_unit.get(unit_id, []))
+        items = [self.sections[sid] for sid in ids if sid in self.sections]
+        items.sort(key=lambda s: (s.position, s.id))
+        return items
+
+    def create_section(self, unit_id: str, title: str, author_id: str) -> SectionData:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            raise PermissionError("unit_forbidden")
+        t = (title or "").strip()
+        if not t or len(t) > 200:
+            raise ValueError("invalid_title")
+        now = datetime.now(timezone.utc).isoformat()
+        sid = str(uuid4())
+        pos = len(self.section_ids_by_unit.get(unit_id, [])) + 1
+        sec = SectionData(id=sid, unit_id=unit_id, title=t, position=pos, created_at=now, updated_at=now)
+        self.sections[sid] = sec
+        self.section_ids_by_unit.setdefault(unit_id, []).append(sid)
+        return sec
+
+    def update_section_title(self, unit_id: str, section_id: str, title: str, author_id: str) -> SectionData | None:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            return None
+        sec = self.sections.get(section_id)
+        if not sec or sec.unit_id != unit_id:
+            return None
+        if title is None:
+            raise ValueError("invalid_title")
+        t = (title or "").strip()
+        if not t or len(t) > 200:
+            raise ValueError("invalid_title")
+        sec.title = t
+        sec.updated_at = datetime.now(timezone.utc).isoformat()
+        self.sections[section_id] = sec
+        return sec
+
+    def delete_section(self, unit_id: str, section_id: str, author_id: str) -> bool:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            return False
+        ids = self.section_ids_by_unit.get(unit_id, [])
+        if section_id not in ids:
+            return False
+        # Remove and resequence
+        self.sections.pop(section_id, None)
+        ids = [sid for sid in ids if sid != section_id]
+        self.section_ids_by_unit[unit_id] = ids
+        self._resequence_unit_sections(unit_id)
+        return True
+
+    def reorder_unit_sections_owned(self, unit_id: str, author_id: str, section_ids: List[str]) -> List[SectionData]:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            raise PermissionError("unit_forbidden")
+        existing = list(self.section_ids_by_unit.get(unit_id, []))
+        if not existing:
+            raise ValueError("section_mismatch")
+        if set(existing) != set(section_ids) or len(existing) != len(section_ids):
+            # Cross-unit or unknown IDs → treat as mismatch in memory fallback
+            raise ValueError("section_mismatch")
+        # Apply new order and resequence positions
+        self.section_ids_by_unit[unit_id] = list(section_ids)
+        self._resequence_unit_sections(unit_id)
+        return self.list_sections_for_author(unit_id, author_id)
+
+    def _resequence_unit_sections(self, unit_id: str) -> None:
+        ids = self.section_ids_by_unit.get(unit_id, [])
+        for idx, sid in enumerate(ids, start=1):
+            if sid in self.sections:
+                sec = self.sections[sid]
+                sec.position = idx
+                sec.updated_at = datetime.now(timezone.utc).isoformat()
+                self.sections[sid] = sec
 
     # --- Course modules (in-memory) --------------------------------------------
     def list_course_modules_for_owner(self, course_id: str, owner_id: str) -> List[CourseModuleData]:
@@ -822,13 +914,13 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     user, error = _require_teacher(request)
     if error:
         return error
-    updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not updates:
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     try:
         updated = REPO.update_unit_owned(unit_id, sub, **updates)
     except ValueError as exc:
@@ -836,7 +928,7 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
     if not updated:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return _serialize_unit(updated)
+    return JSONResponse(content=_serialize_unit(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}")
@@ -945,20 +1037,20 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
         return error
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
-    updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not updates:
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     try:
         updated = REPO.update_section_title(unit_id, section_id, updates.get("title"), sub)
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
     if not updated:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return _serialize_section(updated)
+    return JSONResponse(content=_serialize_section(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}")

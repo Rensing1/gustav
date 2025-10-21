@@ -552,7 +552,7 @@ paths:
         '400':
           description: |
             Invalid input. detail codes:
-              - invalid_input
+              - invalid_input (e.g., blank title or exceeds length limits)
           content:
             application/json:
               schema:
@@ -1130,6 +1130,7 @@ paths:
         authorOnly: true
       x-security-notes:
         - "Transactional update with row locks ensures contiguous positions without duplicates."
+        - "Check author ownership before validating payload to avoid error-oracle leakage."
       parameters:
         - in: path
           name: unit_id

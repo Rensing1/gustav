@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- consistency(api/teaching): Align error detail strings — use `invalid_module_ids` (plural) and map no-sections case to `section_mismatch` in DB repo.
+- security(api/teaching): Move author/owner guards before payload validation in Unit/Section PATCH to avoid error‑oracle leakage (403/404 precede 400 empty_payload).
+- fix(teaching): Implement sections CRUD/reorder in in‑memory repo to avoid 500s in dev/tests without Postgres; add smoke test.
 - fix(api/teaching): Return explicit JSONResponse (200) from sections/modules reorder for consistent API shape.
 - security(api/teaching): Check course ownership before deep payload validation in modules reorder to reduce error‑oracle leakage (403/404 precede 400 list errors).
 - security(api/teaching): Mirror early authorship guard for sections reorder to reduce error‑oracle leakage.

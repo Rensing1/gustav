@@ -553,7 +553,7 @@ class DBTeachingRepo:
                     (unit_id,),
                 )
                 next_pos = int(cur.fetchone()[0])
-                insert_cursor = cur
+                row = None
                 try:
                     cur.execute(
                         """
@@ -568,6 +568,7 @@ class DBTeachingRepo:
                         """,
                         (unit_id, title, next_pos),
                     )
+                    row = cur.fetchone()
                 except Exception as exc:  # rare race: recompute once on unique violation
                     sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
                     if UniqueViolation and isinstance(exc, UniqueViolation) or sqlstate == "23505":
@@ -592,10 +593,11 @@ class DBTeachingRepo:
                                 """,
                                 (unit_id, title, next_pos),
                             )
-                            insert_cursor = cur2
+                            row = cur2.fetchone()
                     else:
                         raise
-                row = insert_cursor.fetchone()
+                if row is None:
+                    raise RuntimeError("unit_sections insert returned no row")
                 conn.commit()
         return {
             "id": row[0],

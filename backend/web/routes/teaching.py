@@ -63,6 +63,16 @@ class Unit:
 
 
 @dataclass
+class SectionData:
+    id: str
+    unit_id: str
+    title: str
+    position: int
+    created_at: str
+    updated_at: str
+
+
+@dataclass
 class CourseModuleData:
     id: str
     course_id: str
@@ -79,6 +89,8 @@ class _Repo:
         # members[course_id] = { student_id: joined_at_iso }
         self.members: Dict[str, Dict[str, str]] = {}
         self.units: Dict[str, Unit] = {}
+        self.sections: Dict[str, SectionData] = {}
+        self.section_ids_by_unit: Dict[str, List[str]] = {}
         self.course_modules: Dict[str, CourseModuleData] = {}
         self.modules_by_course: Dict[str, List[str]] = {}
 
@@ -240,6 +252,86 @@ class _Repo:
 
     def unit_exists(self, unit_id: str) -> bool:
         return unit_id in self.units
+
+    # --- Unit sections (in-memory) --------------------------------------------
+    def list_sections_for_author(self, unit_id: str, author_id: str) -> List[SectionData]:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            return []
+        ids = list(self.section_ids_by_unit.get(unit_id, []))
+        items = [self.sections[sid] for sid in ids if sid in self.sections]
+        items.sort(key=lambda s: (s.position, s.id))
+        return items
+
+    def create_section(self, unit_id: str, title: str, author_id: str) -> SectionData:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            raise PermissionError("unit_forbidden")
+        t = (title or "").strip()
+        if not t or len(t) > 200:
+            raise ValueError("invalid_title")
+        now = datetime.now(timezone.utc).isoformat()
+        sid = str(uuid4())
+        pos = len(self.section_ids_by_unit.get(unit_id, [])) + 1
+        sec = SectionData(id=sid, unit_id=unit_id, title=t, position=pos, created_at=now, updated_at=now)
+        self.sections[sid] = sec
+        self.section_ids_by_unit.setdefault(unit_id, []).append(sid)
+        return sec
+
+    def update_section_title(self, unit_id: str, section_id: str, title: str, author_id: str) -> SectionData | None:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            return None
+        sec = self.sections.get(section_id)
+        if not sec or sec.unit_id != unit_id:
+            return None
+        if title is None:
+            raise ValueError("invalid_title")
+        t = (title or "").strip()
+        if not t or len(t) > 200:
+            raise ValueError("invalid_title")
+        sec.title = t
+        sec.updated_at = datetime.now(timezone.utc).isoformat()
+        self.sections[section_id] = sec
+        return sec
+
+    def delete_section(self, unit_id: str, section_id: str, author_id: str) -> bool:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            return False
+        ids = self.section_ids_by_unit.get(unit_id, [])
+        if section_id not in ids:
+            return False
+        # Remove and resequence
+        self.sections.pop(section_id, None)
+        ids = [sid for sid in ids if sid != section_id]
+        self.section_ids_by_unit[unit_id] = ids
+        self._resequence_unit_sections(unit_id)
+        return True
+
+    def reorder_unit_sections_owned(self, unit_id: str, author_id: str, section_ids: List[str]) -> List[SectionData]:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            raise PermissionError("unit_forbidden")
+        existing = list(self.section_ids_by_unit.get(unit_id, []))
+        if not existing:
+            raise ValueError("section_mismatch")
+        if set(existing) != set(section_ids) or len(existing) != len(section_ids):
+            # Cross-unit or unknown IDs → treat as mismatch in memory fallback
+            raise ValueError("section_mismatch")
+        # Apply new order and resequence positions
+        self.section_ids_by_unit[unit_id] = list(section_ids)
+        self._resequence_unit_sections(unit_id)
+        return self.list_sections_for_author(unit_id, author_id)
+
+    def _resequence_unit_sections(self, unit_id: str) -> None:
+        ids = self.section_ids_by_unit.get(unit_id, [])
+        for idx, sid in enumerate(ids, start=1):
+            if sid in self.sections:
+                sec = self.sections[sid]
+                sec.position = idx
+                sec.updated_at = datetime.now(timezone.utc).isoformat()
+                self.sections[sid] = sec
 
     # --- Course modules (in-memory) --------------------------------------------
     def list_course_modules_for_owner(self, course_id: str, owner_id: str) -> List[CourseModuleData]:
@@ -408,7 +500,7 @@ def _is_uuid_like(value: str) -> bool:
 def _guard_unit_author(unit_id: str, author_sub: str):
     """Validate unit ownership, returning an error response when access is denied."""
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid unit_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -509,7 +601,7 @@ async def create_course(request: Request, payload: CourseCreate):
         )
     except ValueError:
         # Map repo validation to contract 400
-        return JSONResponse({"error": "bad_request", "detail": "invalid input"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     return JSONResponse(content=_serialize_course(course), status_code=201)
 
 
@@ -593,7 +685,47 @@ class CourseModuleCreatePayload(BaseModel):
 
 
 class CourseModuleReorderPayload(BaseModel):
-    module_ids: List[str] = Field(..., min_length=1)
+    # Accept loose typing to avoid FastAPI 422 and map contract errors to 400
+    module_ids: object | None = None
+
+
+# --- Sections (per Unit) --------------------------------------------------------
+
+class SectionCreatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+
+    @field_validator("title")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+
+class SectionUpdatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            return s
+        return v
+
+
+class SectionReorderPayload(BaseModel):
+    # Use loose typing to avoid FastAPI 422, then validate type manually
+    section_ids: object | None = None
 
 
 @teaching_router.patch("/api/teaching/courses/{course_id}")
@@ -642,7 +774,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
                 **updates,
             )
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid field"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_field"}, status_code=400)
     if not updated:
         # Should not normally happen after existence/ownership checks; keep conservative 403
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -782,13 +914,13 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     user, error = _require_teacher(request)
     if error:
         return error
-    updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty payload"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not updates:
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     try:
         updated = REPO.update_unit_owned(unit_id, sub, **updates)
     except ValueError as exc:
@@ -796,7 +928,7 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
     if not updated:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return _serialize_unit(updated)
+    return JSONResponse(content=_serialize_unit(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}")
@@ -826,6 +958,171 @@ async def delete_unit(request: Request, unit_id: str):
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return Response(status_code=204)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/sections")
+async def list_sections(request: Request, unit_id: str):
+    """List sections of a learning unit (author only).
+
+    Why:
+        UI needs the ordered section list for authoring and release workflows.
+
+    Behavior:
+        - 200 with sections sorted by ascending position when unit is owned by caller.
+        - 400 when `unit_id` is not a UUID.
+        - 403 when caller lacks teacher role or is not the author (may be 404).
+        - 404 when the unit does not exist.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        # Unauthenticated/role → 403 (middleware may map unauth to 401 earlier)
+        return error
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        items = REPO.list_sections_for_author(unit_id, sub)
+    except Exception:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return [_serialize_section(s) for s in items]
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections")
+async def create_section(request: Request, unit_id: str, payload: SectionCreatePayload):
+    """Create a section in a unit (author only); appends at the next position.
+
+    Why:
+        Authors add new content blocks to a unit; default append keeps mental
+        model simple. Reordering is available separately.
+
+    Behavior:
+        - 201 with created section.
+        - 400 on invalid input (missing/empty/too long title or bad UUID).
+        - 403 when caller is not the author (may be 404).
+        - 404 when the unit does not exist.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    title = payload.title or ""
+    try:
+        sec = REPO.create_section(unit_id, title, sub)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=_serialize_section(sec), status_code=201)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}")
+async def update_section(request: Request, unit_id: str, section_id: str, payload: SectionUpdatePayload):
+    """Update a section (author only). Only `title` is updatable in this slice.
+
+    Why:
+        Allow small edits without affecting order; more fields can be added later
+        without breaking the contract.
+
+    Behavior:
+        - 200 with updated section.
+        - 400 when payload is empty or identifiers invalid.
+        - 403/404 on ownership/unknown semantics based on unit guard and visibility.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not updates:
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+    try:
+        updated = REPO.update_section_title(unit_id, section_id, updates.get("title"), sub)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+    if not updated:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return JSONResponse(content=_serialize_section(updated), status_code=200)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}")
+async def delete_section(request: Request, unit_id: str, section_id: str):
+    """Delete a section in a unit (author only); resequences remaining positions.
+
+    Why:
+        Keep positions contiguous (1..n) for a predictable UI and simpler bulk
+        operations later (e.g., release toggles).
+
+    Behavior:
+        - 204 on success.
+        - 400 when identifiers are invalid UUIDs.
+        - 403/404 based on ownership and existence.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    deleted = REPO.delete_section(unit_id, section_id, sub)
+    if not deleted:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return Response(status_code=204)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/reorder")
+async def reorder_sections(request: Request, unit_id: str, payload: SectionReorderPayload):
+    """Reorder sections (author only) transactionally to positions 1..n as provided.
+
+    Why:
+        Authoring needs precise control of order; transactional update prevents
+        duplicates/gaps under concurrency.
+
+    Behavior:
+        - 200 on success with updated ordered list.
+        - 400 on invalid payload (empty, non-array, duplicates, invalid UUIDs, mismatch).
+        - 403/404 based on ownership and existence semantics.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    # Security-first: verify authorship before deep payload validation to avoid error oracle
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    ids = payload.section_ids
+    if not isinstance(ids, list):
+        return JSONResponse({"error": "bad_request", "detail": "section_ids_must_be_array"}, status_code=400)
+    if len(ids) == 0:
+        return JSONResponse({"error": "bad_request", "detail": "empty_section_ids"}, status_code=400)
+    if len(ids) != len(set(ids)):
+        return JSONResponse({"error": "bad_request", "detail": "duplicate_section_ids"}, status_code=400)
+    if any(not _is_uuid_like(sid) for sid in ids):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_ids"}, status_code=400)
+    try:
+        ordered = REPO.reorder_unit_sections_owned(unit_id, sub, ids)
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    # Uniform API shape: explicit JSONResponse with status 200
+    return JSONResponse(content=[_serialize_section(s) for s in ordered], status_code=200)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/modules")
@@ -886,7 +1183,7 @@ async def create_course_module(request: Request, course_id: str, payload: Course
     sub = _current_sub(user)
     unit_id = payload.unit_id
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid unit_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
         guard_course = _guard_course_owner(course_id, sub)
         if guard_course:
@@ -934,16 +1231,23 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     user, error = _require_teacher(request)
     if error:
         return error
-    module_ids = payload.module_ids
-    if len(set(module_ids)) != len(module_ids):
-        # Guard early so duplicates short-circuit with a clear validation error.
-        return JSONResponse({"error": "bad_request", "detail": "duplicate module ids"}, status_code=400)
-    if any(not _is_uuid_like(mid) for mid in module_ids):
-        return JSONResponse({"error": "bad_request", "detail": "invalid module_ids"}, status_code=400)
+    if not _is_uuid_like(course_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     sub = _current_sub(user)
+    # Security-first: check ownership before deep payload validation to avoid error oracle
     guard = _guard_course_owner(course_id, sub)
     if guard:
         return guard
+    module_ids = payload.module_ids
+    # Validate JSON structure and constraints explicitly (400s, not FastAPI 422)
+    if not isinstance(module_ids, list):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    if len(module_ids) == 0:
+        return JSONResponse({"error": "bad_request", "detail": "empty_reorder"}, status_code=400)
+    if len(set(module_ids)) != len(module_ids):
+        return JSONResponse({"error": "bad_request", "detail": "duplicate_module_ids"}, status_code=400)
+    if any(not _is_uuid_like(mid) for mid in module_ids):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
     try:
         modules = REPO.reorder_course_modules_owned(course_id, sub, module_ids)
     except ValueError as exc:
@@ -953,7 +1257,8 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return [_serialize_module(m) for m in modules]
+    # Uniform API shape: explicit JSONResponse with status 200
+    return JSONResponse(content=[_serialize_module(m) for m in modules], status_code=200)
 
 
 def _serialize_course(c) -> dict:
@@ -1002,6 +1307,21 @@ def _serialize_module(m) -> dict:
         "context_notes": getattr(m, "context_notes", None),
         "created_at": getattr(m, "created_at", None),
         "updated_at": getattr(m, "updated_at", None),
+    }
+
+
+def _serialize_section(s) -> dict:
+    if is_dataclass(s):
+        return asdict(s)
+    if isinstance(s, dict):
+        return s
+    return {
+        "id": getattr(s, "id", None),
+        "unit_id": getattr(s, "unit_id", None),
+        "title": getattr(s, "title", None),
+        "position": getattr(s, "position", None),
+        "created_at": getattr(s, "created_at", None),
+        "updated_at": getattr(s, "updated_at", None),
     }
 
 
@@ -1148,7 +1468,7 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     student_sub = getattr(payload, "student_sub", None)
     if not isinstance(student_sub, str) or not student_sub.strip():
-        return JSONResponse({"error": "bad_request", "detail": "student_sub required"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):

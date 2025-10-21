@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+- consistency(api/teaching): Align error detail strings — use `invalid_module_ids` (plural) and map no-sections case to `section_mismatch` in DB repo.
+- security(api/teaching): Move author/owner guards before payload validation in Unit/Section PATCH to avoid error‑oracle leakage (403/404 precede 400 empty_payload).
+- fix(teaching): Implement sections CRUD/reorder in in‑memory repo to avoid 500s in dev/tests without Postgres; add smoke test.
+- fix(api/teaching): Return explicit JSONResponse (200) from sections/modules reorder for consistent API shape.
+- security(api/teaching): Check course ownership before deep payload validation in modules reorder to reduce error‑oracle leakage (403/404 precede 400 list errors).
+- security(api/teaching): Mirror early authorship guard for sections reorder to reduce error‑oracle leakage.
+- docs(openapi): Add 400 examples for modules reorder (empty_reorder, invalid_module_ids, no_modules) and sections reorder (section_mismatch).
+  Also add sections: empty_section_ids, section_ids_must_be_array examples.
+- fix(api/openapi): Correct DELETE /api/teaching/units/{unit_id} path placement (remove stray delete under sections/reorder); units PATCH uses authorOnly permissions.
+- fix(api/teaching): Validate course_id UUID in POST /api/teaching/courses/{course_id}/modules/reorder (400 bad_request on invalid path param).
+- fix(db/sections): Serialize concurrent section creation by locking parent learning_unit; add one-shot retry on unique violation; regression tests added.
+- fix(db/sections): Ensure unique-violation retry fetches the inserted row before the cursor closes; regression test guards against cursor-already-closed errors.
 - security(teaching): Enforce limited-role DSN (gustav_limited) for TeachingRepo to guarantee RLS coverage; add override flag `ALLOW_SERVICE_DSN_FOR_TESTING` for dev only.
 - fix(teaching): Correct HTTP semantics — 204 responses without body; align 404 vs 403 for members and delete endpoints with contract.
 - feat(db): Add SECURITY DEFINER helpers `public.course_exists_for_owner` and `public.course_exists` via Supabase migration to disambiguate 404 (not found) from 403 (forbidden) safely.

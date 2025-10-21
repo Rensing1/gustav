@@ -73,3 +73,18 @@ for p in (str(REPO_ROOT), str(BACKEND_DIR), str(WEB_DIR)):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _reset_teaching_repo_between_tests():
+    """Reset Teaching repo to default (DB if available) before each test.
+
+    Prevents cross-test pollution when a test switches to the in-memory
+    repo; DB-backed tests remain deterministic.
+    """
+    try:
+        import routes.teaching as teaching  # type: ignore
+        teaching.set_repo(teaching._build_default_repo())
+    except Exception:
+        pass
+    yield

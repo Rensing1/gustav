@@ -10,7 +10,6 @@ import httpx
 from httpx import ASGITransport
 from pathlib import Path
 import sys
-import os
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -24,14 +23,7 @@ import main  # type: ignore
 from identity_access.stores import SessionStore  # type: ignore
 
 
-def _require_db_or_skip():
-    dsn = os.getenv("DATABASE_URL") or ""
-    try:
-        import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=1):
-            return
-    except Exception:
-        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client():

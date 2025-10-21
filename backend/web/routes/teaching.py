@@ -593,7 +593,8 @@ class CourseModuleCreatePayload(BaseModel):
 
 
 class CourseModuleReorderPayload(BaseModel):
-    module_ids: List[str] = Field(..., min_length=1)
+    # Accept loose typing to avoid FastAPI 422 and map contract errors to 400
+    module_ids: object | None = None
 
 
 # --- Sections (per Unit) --------------------------------------------------------
@@ -1139,8 +1140,12 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     module_ids = payload.module_ids
+    # Validate JSON structure and constraints explicitly (400s, not FastAPI 422)
+    if not isinstance(module_ids, list):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    if len(module_ids) == 0:
+        return JSONResponse({"error": "bad_request", "detail": "empty_reorder"}, status_code=400)
     if len(set(module_ids)) != len(module_ids):
-        # Guard early so duplicates short-circuit with a clear validation error.
         return JSONResponse({"error": "bad_request", "detail": "duplicate_module_ids"}, status_code=400)
     if any(not _is_uuid_like(mid) for mid in module_ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)

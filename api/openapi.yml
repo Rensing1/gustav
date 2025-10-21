@@ -1160,6 +1160,7 @@ paths:
               - empty_section_ids
               - duplicate_section_ids
               - invalid_section_ids
+              - section_mismatch
           content:
             application/json:
               schema:
@@ -1289,7 +1290,6 @@ paths:
               - duplicate_module_ids
               - invalid_module_ids
               - empty_reorder
-              - invalid_module_id
               - module_mismatch
               - no_modules
           content:

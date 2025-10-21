@@ -539,7 +539,10 @@ class DBTeachingRepo:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
-                # Ensure the unit is owned/visible; lock current rows for order safety
+                # Serialize concurrent inserts by locking the parent unit row.
+                # RLS ensures only the author's units are lockable/visible.
+                cur.execute("select id from public.learning_units where id = %s for update", (unit_id,))
+                # Lock current sections for additional safety (no-ops if none exist).
                 cur.execute(
                     "select id from public.unit_sections where unit_id = %s for update",
                     (unit_id,),
@@ -550,19 +553,46 @@ class DBTeachingRepo:
                     (unit_id,),
                 )
                 next_pos = int(cur.fetchone()[0])
-                cur.execute(
-                    """
-                    insert into public.unit_sections (unit_id, title, position)
-                    values (%s, %s, %s)
-                    returning id::text,
-                              unit_id::text,
-                              title,
-                              position,
-                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    """,
-                    (unit_id, title, next_pos),
-                )
+                try:
+                    cur.execute(
+                        """
+                        insert into public.unit_sections (unit_id, title, position)
+                        values (%s, %s, %s)
+                        returning id::text,
+                                  unit_id::text,
+                                  title,
+                                  position,
+                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        (unit_id, title, next_pos),
+                    )
+                except Exception as exc:  # rare race: recompute once on unique violation
+                    sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+                    if UniqueViolation and isinstance(exc, UniqueViolation) or sqlstate == "23505":
+                        conn.rollback()
+                        with conn.cursor() as cur2:
+                            cur2.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                            cur2.execute(
+                                "select coalesce(max(position), 0) + 1 from public.unit_sections where unit_id = %s",
+                                (unit_id,),
+                            )
+                            next_pos = int(cur2.fetchone()[0])
+                            cur2.execute(
+                                """
+                                insert into public.unit_sections (unit_id, title, position)
+                                values (%s, %s, %s)
+                                returning id::text,
+                                          unit_id::text,
+                                          title,
+                                          position,
+                                          to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                          to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                                """,
+                                (unit_id, title, next_pos),
+                            )
+                    else:
+                        raise
                 row = cur.fetchone()
                 conn.commit()
         return {

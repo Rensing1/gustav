@@ -307,6 +307,12 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
+            # Contract-aligned semantics: disambiguate 404 vs 403 prior to mutation
+            if not REPO.course_exists_for_owner(course_id, sub):
+                ex = REPO.course_exists(course_id)
+                if ex is False:
+                    return JSONResponse({"error": "not_found"}, status_code=404)
+                return JSONResponse({"error": "forbidden"}, status_code=403)
             updated = REPO.update_course_owned(
                 course_id,
                 sub,
@@ -326,7 +332,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid field"}, status_code=400)
     if not updated:
-        # DB repo returns None when caller is not owner or row not visible → 403
+        # Should not normally happen after existence/ownership checks; keep conservative 403
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return _serialize_course(updated)
 
@@ -493,7 +499,8 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             pairs = REPO.list_members(course_id, limit=limit, offset=offset)
     except Exception:
-        pairs = REPO.list_members(course_id, limit=limit, offset=offset)
+        # Defensive default: if DB helper path fails, do not risk information leakage
+        return JSONResponse({"error": "forbidden"}, status_code=403)
     subs = [sid for sid, _ in pairs]
     # Avoid blocking the event loop on synchronous network I/O
     names = await asyncio.to_thread(resolve_student_names, subs)

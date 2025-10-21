@@ -96,12 +96,15 @@ components:
         subject:
           type: string
           maxLength: 100
+          nullable: true
         grade_level:
           type: string
           maxLength: 32
+          nullable: true
         term:
           type: string
           maxLength: 32
+          nullable: true
     CourseUpdate:
       type: object
       properties:
@@ -112,12 +115,15 @@ components:
         subject:
           type: string
           maxLength: 100
+          nullable: true
         grade_level:
           type: string
           maxLength: 32
+          nullable: true
         term:
           type: string
           maxLength: 32
+          nullable: true
     CourseMember:
       type: object
       required: [sub, name, joined_at]

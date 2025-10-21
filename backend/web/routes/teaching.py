@@ -1,20 +1,24 @@
 """
-Teaching (Unterrichten) API routes for course management (MVP).
+Teaching (Unterrichten) API routes for course management.
 
 Why:
-    Provide minimal endpoints to create and list courses contract-first.
-    This adapter enforces authentication (middleware) and authorization (role checks),
-    and delegates persistence to an in-memory repository for the TDD slice.
+    Provide minimal endpoints to create and list courses contract-first. The
+    adapter enforces authentication (middleware) and authorization (role checks)
+    and delegates persistence to an injected repository.
 
 Notes:
     - Clean Architecture: Keep business rules simple and independent of FastAPI.
     - Security: Only teachers may create/update/delete courses. Students can list
       courses they belong to (not covered in the initial test slice).
-    - Persistence: In-memory, to be replaced by a DB adapter in a follow-up.
+    - Persistence: Prefers the Postgres-backed repo when psycopg and DSN are
+      available; falls back to an in-memory repo for tests/local offline work.
+      Tests can call `set_repo` to override the implementation for isolation.
 """
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, asdict, is_dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Set
@@ -27,9 +31,13 @@ from pydantic.functional_validators import field_validator
 
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
+logger = logging.getLogger("gustav.web.teaching")
 
 
 # --- In-memory persistence (MVP) -------------------------------------------------
+
+_UNSET = object()
+
 
 @dataclass
 class Course:
@@ -97,20 +105,22 @@ class _Repo:
         bucket.pop(student_id, None)
         self.members[course_id] = bucket
 
-    def update_course(self, course_id: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Course | None:
+    def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Course | None:
         c = self.courses.get(course_id)
         if not c:
             return None
-        if title is not None:
+        if title is not _UNSET:
+            if title is None:
+                raise ValueError("invalid_title")
             t = title.strip()
             if not t or len(t) > 200:
                 raise ValueError("invalid_title")
             c.title = t
-        if subject is not None:
+        if subject is not _UNSET:
             c.subject = subject
-        if grade_level is not None:
+        if grade_level is not _UNSET:
             c.grade_level = grade_level
-        if term is not None:
+        if term is not _UNSET:
             c.term = term
         c.updated_at = datetime.now(timezone.utc).isoformat()
         self.courses[course_id] = c
@@ -126,10 +136,32 @@ class _Repo:
 # Try to use DB-backed repo when available; fallback to in-memory for dev/tests
 try:  # late import to avoid hard dependency during unit tests
     from teaching.repo_db import DBTeachingRepo  # type: ignore
+except Exception as exc:  # pragma: no cover - import failures in dev/test envs
+    DBTeachingRepo = None  # type: ignore
+    _DB_REPO_IMPORT_ERROR = exc
+else:
+    _DB_REPO_IMPORT_ERROR = None
 
-    REPO = DBTeachingRepo()
-except Exception:  # pragma: no cover - fallback for local unit tests
-    REPO = _Repo()
+
+def _build_default_repo():
+    if DBTeachingRepo is None:
+        if _DB_REPO_IMPORT_ERROR:
+            logger.warning("Teaching repo import failed: %s", _DB_REPO_IMPORT_ERROR)
+        return _Repo()
+    try:
+        return DBTeachingRepo()
+    except Exception as exc:  # pragma: no cover - exercised when DSN missing
+        logger.warning("Teaching repo unavailable (%s); using in-memory fallback", exc)
+        return _Repo()
+
+
+REPO = _build_default_repo()
+
+
+def set_repo(repo) -> None:
+    """Allow tests to swap the teaching repository implementation."""
+    global REPO
+    REPO = repo
 
 
 # --- Request/Response models -----------------------------------------------------
@@ -263,16 +295,14 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    updates = payload.model_dump(mode="python", exclude_unset=True)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
             updated = REPO.update_course_owned(
                 course_id,
                 sub,
-                title=payload.title,
-                subject=payload.subject,
-                grade_level=payload.grade_level,
-                term=payload.term,
+                **updates,
             )
         else:
             course = REPO.get_course(course_id)
@@ -283,10 +313,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             updated = REPO.update_course(
                 course_id,
-                title=payload.title,
-                subject=payload.subject,
-                grade_level=payload.grade_level,
-                term=payload.term,
+                **updates,
             )
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid field"}, status_code=400)
@@ -326,12 +353,7 @@ async def delete_course(request: Request, course_id: str):
                     return JSONResponse({"error": "not_found"}, status_code=404)
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course_owned(course_id, sub)
-            # Record deletion for follow-up 404 semantics on this owner
-            s = _RECENTLY_DELETED_BY.get(sub)
-            if s is None:
-                s = set()
-                _RECENTLY_DELETED_BY[sub] = s
-            s.add(course_id)
+            _mark_recently_deleted(sub, course_id)
             return JSONResponse({}, status_code=204)
         else:
             course = REPO.get_course(course_id)
@@ -341,11 +363,7 @@ async def delete_course(request: Request, course_id: str):
             if sub != owner_id:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course(course_id)
-            s = _RECENTLY_DELETED_BY.get(sub)
-            if s is None:
-                s = set()
-                _RECENTLY_DELETED_BY[sub] = s
-            s.add(course_id)
+            _mark_recently_deleted(sub, course_id)
             return JSONResponse({}, status_code=204)
     except Exception:
         # Conservative default: do not claim deletion if ownership/existence cannot be determined
@@ -379,8 +397,35 @@ def _teacher_id_of(course) -> str | None:
     except Exception:
         return None
 
-# Ephemeral map: recently deleted courses per owner to produce 404 on immediate follow-ups
-_RECENTLY_DELETED_BY: dict[str, set[str]] = {}
+_RECENTLY_DELETED_TTL_SECONDS = 60.0
+_RECENTLY_DELETED_BY: dict[str, dict[str, float]] = {}
+
+
+def _prune_recently_deleted(owner_id: str, *, now: float | None = None) -> None:
+    bucket = _RECENTLY_DELETED_BY.get(owner_id)
+    if not bucket:
+        return
+    current = now if now is not None else time.time()
+    expired = [cid for cid, ts in bucket.items() if current - ts > _RECENTLY_DELETED_TTL_SECONDS]
+    for cid in expired:
+        bucket.pop(cid, None)
+    if not bucket:
+        _RECENTLY_DELETED_BY.pop(owner_id, None)
+
+
+def _mark_recently_deleted(owner_id: str, course_id: str) -> None:
+    now = time.time()
+    bucket = _RECENTLY_DELETED_BY.setdefault(owner_id, {})
+    bucket[course_id] = now
+    _prune_recently_deleted(owner_id, now=now)
+
+
+def _was_recently_deleted(owner_id: str, course_id: str) -> bool:
+    _prune_recently_deleted(owner_id)
+    bucket = _RECENTLY_DELETED_BY.get(owner_id)
+    if not bucket:
+        return False
+    return course_id in bucket
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
@@ -411,7 +456,7 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
             owned = REPO.get_course_for_owner(course_id, sub)
             if not owned:
                 # If the same owner just deleted the course, treat as 404 for immediate follow-ups
-                if course_id in _RECENTLY_DELETED_BY.get(sub, set()):
+                if _was_recently_deleted(sub, course_id):
                     return JSONResponse({"error": "not_found"}, status_code=404)
                 # With limited RLS role we cannot disambiguate existence reliably → default to 403
                 return JSONResponse({"error": "forbidden"}, status_code=403)

@@ -149,6 +149,34 @@ async def test_patch_with_no_fields_returns_current_row():
 
 
 @pytest.mark.anyio
+async def test_patch_can_clear_optional_fields():
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    t_owner = main.SESSION_STORE.create(sub="teacher-clear-1", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", t_owner.session_id)
+        c = await client.post(
+            "/api/teaching/courses",
+            json={"title": "Chemie", "subject": "Chemie", "grade_level": "EF", "term": "2025-1"},
+        )
+        assert c.status_code == 201
+        course_id = c.json()["id"]
+
+        p = await client.patch(f"/api/teaching/courses/{course_id}", json={"subject": None, "grade_level": None, "term": None})
+        assert p.status_code == 200
+        body = p.json()
+        assert body["subject"] is None
+        assert body["grade_level"] is None
+        assert body["term"] is None
+@pytest.mark.anyio
 async def test_owner_delete_unknown_course_returns_404():
     """Owner deleting a non-existent course should get 404 Not Found."""
     main.SESSION_STORE = SessionStore()
@@ -169,3 +197,46 @@ async def test_owner_delete_unknown_course_returns_404():
         d = await client.delete(f"/api/teaching/courses/{bad_id}")
         assert d.status_code in (403, 404)  # Implementation should return 404 for owner
         # When the repo can disambiguate, it must be 404
+
+
+@pytest.mark.anyio
+async def test_recently_deleted_marker_expires(monkeypatch: pytest.MonkeyPatch):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    class FakeTime:
+        def __init__(self, start: float):
+            self.current = start
+
+        def time(self) -> float:
+            return self.current
+
+    fake_time = FakeTime(1_000_000.0)
+    monkeypatch.setattr(teaching, "time", fake_time, raising=False)
+
+    t_owner = main.SESSION_STORE.create(sub="teacher-time", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", t_owner.session_id)
+        created = await client.post("/api/teaching/courses", json={"title": "Physik", "subject": "Physik"})
+        assert created.status_code == 201
+        course_id = created.json()["id"]
+
+        deleted = await client.delete(f"/api/teaching/courses/{course_id}")
+        assert deleted.status_code == 204
+
+        # Immediately after deletion: should respond 404
+        lst = await client.get(f"/api/teaching/courses/{course_id}/members")
+        assert lst.status_code == 404
+
+        # Advance the fake clock beyond TTL and ensure the marker expires
+        fake_time.current += teaching._RECENTLY_DELETED_TTL_SECONDS + 5
+
+        lst2 = await client.get(f"/api/teaching/courses/{course_id}/members")
+        assert lst2.status_code == 403

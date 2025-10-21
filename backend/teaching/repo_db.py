@@ -50,6 +50,8 @@ def _iso(ts) -> str:
     # We fetch via to_char at query time for predictability across drivers.
     return str(ts)
 
+_UNSET = object()
+
 
 class DBTeachingRepo:
     def __init__(self, dsn: Optional[str] = None) -> None:
@@ -212,19 +214,21 @@ class DBTeachingRepo:
             "updated_at": r[7],
         }
 
-    def update_course_owned(self, course_id: str, owner_sub: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Optional[dict]:
+    def update_course_owned(self, course_id: str, owner_sub: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Optional[dict]:
         sets = []
         params: list = []
-        if title is not None:
+        if title is not _UNSET:
+            if title is None:
+                raise ValueError("invalid_title")
             t = (title or "").strip()
             if not t or len(t) > 200:
                 raise ValueError("invalid_title")
             sets.append(("title", t))
-        if subject is not None:
+        if subject is not _UNSET:
             sets.append(("subject", subject))
-        if grade_level is not None:
+        if grade_level is not _UNSET:
             sets.append(("grade_level", grade_level))
-        if term is not None:
+        if term is not _UNSET:
             sets.append(("term", term))
         if not sets:
             return self.get_course_for_owner(course_id, owner_sub)
@@ -341,19 +345,21 @@ class DBTeachingRepo:
                 )
                 conn.commit()
 
-    def update_course(self, course_id: str, *, title: str | None, subject: str | None, grade_level: str | None, term: str | None) -> Optional[dict]:
+    def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Optional[dict]:
         # Build dynamic update only for provided fields
         sets: list[tuple[str, object | None]] = []
-        if title is not None:
+        if title is not _UNSET:
+            if title is None:
+                raise ValueError("invalid_title")
             t = (title or "").strip()
             if not t or len(t) > 200:
                 raise ValueError("invalid_title")
             sets.append(("title", t))
-        if subject is not None:
+        if subject is not _UNSET:
             sets.append(("subject", subject))
-        if grade_level is not None:
+        if grade_level is not _UNSET:
             sets.append(("grade_level", grade_level))
-        if term is not None:
+        if term is not _UNSET:
             sets.append(("term", term))
         if not sets:
             # nothing to update; return current row

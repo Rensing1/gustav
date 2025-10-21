@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import List, Tuple, Optional
 import os
 import re
+from urllib.parse import urlparse
 
 try:
     import psycopg
@@ -55,9 +56,45 @@ _UNSET = object()
 
 class DBTeachingRepo:
     def __init__(self, dsn: Optional[str] = None) -> None:
+        """Initialize a Postgres-backed repository with RLS-first safety.
+
+        Why:
+            Teaching endpoints must never bypass Row Level Security. We enforce
+            that the configured DSN uses the limited application role by
+            default. This prevents accidental usage of a service-role DSN which
+            would silently disable RLS and undermine owner checks.
+
+        Parameters:
+            dsn: Optional explicit DSN. When omitted, resolves from env with a
+                 safe fallback to the limited test DSN.
+
+        Behavior:
+            - Rejects DSNs whose username is not 'gustav_limited' unless
+              ALLOW_SERVICE_DSN_FOR_TESTING=true is set (dev/testing only).
+            - Does not open a connection eagerly; connections are per-call.
+        """
         if not HAVE_PSYCOPG:
             raise RuntimeError("psycopg3 is required for DBTeachingRepo")
         self._dsn = dsn or _dsn()
+        # Enforce limited-role DSN by default. Allow override explicitly for dev/tests.
+        user = self._dsn_username(self._dsn)
+        allow_override = str(os.getenv("ALLOW_SERVICE_DSN_FOR_TESTING", "")).lower() == "true"
+        if user != "gustav_limited" and not allow_override:
+            raise RuntimeError(
+                "TeachingRepo requires limited-role DSN (gustav_limited). Set TEACHING_DATABASE_URL "
+                "to a limited DSN or export ALLOW_SERVICE_DSN_FOR_TESTING=true to override in dev."
+            )
+
+    @staticmethod
+    def _dsn_username(dsn: str) -> str:
+        try:
+            p = urlparse(dsn)
+            if p.username:
+                return p.username
+        except Exception:
+            pass
+        m = re.match(r"^[a-z]+:\/\/(?P<u>[^:]+):?[^@]*@", dsn or "")
+        return m.group("u") if m else ""
 
     # --- Courses ----------------------------------------------------------------
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> dict:
@@ -215,6 +252,25 @@ class DBTeachingRepo:
         }
 
     def update_course_owned(self, course_id: str, owner_sub: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Optional[dict]:
+        """Update fields for a course owned by `owner_sub`.
+
+        Why:
+            Owner-only mutation must respect RLS and also defend-in-depth at the
+            SQL layer to avoid privilege escalation if RLS is misconfigured.
+
+        Parameters:
+            course_id: Course identifier (uuid string)
+            owner_sub: Subject id (teacher) expected to own the course
+            title/subject/grade_level/term: Optional fields to update; omitted
+                fields are left unchanged.
+
+        Returns:
+            Updated row as dict or None when not visible/updated.
+
+        Security:
+            - Sets `app.current_sub` to the owner.
+            - Adds explicit `teacher_id = owner_sub` in the WHERE clause.
+        """
         sets = []
         params: list = []
         if title is not _UNSET:
@@ -242,11 +298,11 @@ class DBTeachingRepo:
                     for col, val in sets:
                         assignments.append(_sql.SQL("{} = %s").format(_sql.Identifier(col)))
                         params.append(val)
-                    params.append(course_id)
+                    params.extend([course_id, owner_sub])
                     stmt = _sql.SQL(
                         """
                         update public.courses set {assign}
-                        where id = %s
+                        where id = %s and teacher_id = %s
                         returning id::text, title, subject, grade_level, term, teacher_id,
                             to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                             to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
@@ -255,12 +311,12 @@ class DBTeachingRepo:
                     cur.execute(stmt, params)
                 except Exception:
                     # Fallback in environments without psycopg.sql
-                    params = [val for _, val in sets] + [course_id]
+                    params = [val for _, val in sets] + [course_id, owner_sub]
                     cols = ", ".join([f"{col} = %s" for col, _ in sets])
                     cur.execute(
                         f"""
                         update public.courses set {cols}
-                        where id = %s
+                        where id = %s and teacher_id = %s
                         returning id::text, title, subject, grade_level, term, teacher_id,
                             to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                             to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
@@ -283,12 +339,60 @@ class DBTeachingRepo:
         }
 
     def delete_course_owned(self, course_id: str, owner_sub: str) -> bool:
+        """Delete a course if and only if `owner_sub` owns it.
+
+        Security:
+            - Sets `app.current_sub` for RLS.
+            - Enforces `teacher_id = owner_sub` in SQL WHERE clause.
+        """
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                cur.execute("delete from public.courses where id = %s", (course_id,))
+                cur.execute(
+                    "delete from public.courses where id = %s and teacher_id = %s",
+                    (course_id, owner_sub),
+                )
                 conn.commit()
                 return True
+
+    # --- Existence checks (prefer SECURITY DEFINER helpers) ---------------------
+    def course_exists_for_owner(self, course_id: str, owner_sub: str) -> bool:
+        """Check existence+ownership in one step.
+
+        Behavior:
+            - Uses SECURITY DEFINER helper `public.course_exists_for_owner` when
+              present, which verifies ownership without relying on RLS.
+            - Falls back to `get_course_for_owner` under RLS constraints.
+        """
+        try:
+            with psycopg.connect(self._dsn) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("select public.course_exists_for_owner(%s, %s)", (owner_sub, course_id))
+                    r = cur.fetchone()
+                    if r is not None:
+                        return bool(r[0])
+        except Exception:
+            pass
+        return self.get_course_for_owner(course_id, owner_sub) is not None
+
+    def course_exists(self, course_id: str) -> Optional[bool]:
+        """Return True/False when determinable, else None to avoid RLS-misclassification.
+
+        Why:
+            Under a limited-role DSN, RLS might hide rows owned by others.
+            Existence must therefore use a SECURITY DEFINER helper that is
+            independent of caller identity.
+        """
+        try:
+            with psycopg.connect(self._dsn) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("select public.course_exists(%s)", (course_id,))
+                    r = cur.fetchone()
+                    if r is not None:
+                        return bool(r[0])
+        except Exception:
+            return None
+        return None
 
     def list_members_for_owner(self, course_id: str, owner_sub: str, limit: int, offset: int) -> List[Tuple[str, str]]:
         """Return the roster for a course owned by `owner_sub` using the SECURITY DEFINER helper.

@@ -149,8 +149,10 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
         # Remove member idempotent
         d1 = await client.delete(f"/api/teaching/courses/{course_id}/members/student-1")
         assert d1.status_code == 204
+        assert (d1.text or "") == ""
         d2 = await client.delete(f"/api/teaching/courses/{course_id}/members/student-1")
         assert d2.status_code == 204
+        assert (d2.text or "") == ""
 
     # Non-owner teacher must be forbidden to manage or view members
     async with (await _client()) as client:

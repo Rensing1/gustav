@@ -92,6 +92,7 @@ async def test_owner_can_delete_course_and_memberships():
         # Delete
         d = await client.delete(f"/api/teaching/courses/{course_id}")
         assert d.status_code == 204
+        assert (d.text or "") == ""
         # List members should now 404 (course not found)
         r = await client.get(f"/api/teaching/courses/{course_id}/members")
         assert r.status_code == 404

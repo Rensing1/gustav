@@ -25,7 +25,8 @@ from typing import Dict, List, Set
 from uuid import uuid4
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+import asyncio
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
@@ -257,6 +258,13 @@ async def create_course(request: Request, payload: CourseCreate):
         term=payload.term,
         teacher_id=sub,
     )
+    # Mark this course id as seen by the owner to improve later 404 vs 403 semantics
+    try:
+        cid = course["id"] if isinstance(course, dict) else getattr(course, "id", None)
+        if cid:
+            _mark_seen_course(sub, str(cid))
+    except Exception:
+        pass
     return JSONResponse(content=_serialize_course(course), status_code=201)
 
 
@@ -346,15 +354,14 @@ async def delete_course(request: Request, course_id: str):
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
             # Owner check with ability to disambiguate 404 vs 403
-            owned = REPO.get_course_for_owner(course_id, sub)
-            if not owned:
-                exists = REPO.get_course(course_id)
-                if not exists:
+            if not REPO.course_exists_for_owner(course_id, sub):
+                ex = REPO.course_exists(course_id)
+                if ex is False:
                     return JSONResponse({"error": "not_found"}, status_code=404)
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course_owned(course_id, sub)
             _mark_recently_deleted(sub, course_id)
-            return JSONResponse({}, status_code=204)
+            return Response(status_code=204)
         else:
             course = REPO.get_course(course_id)
             if not course:
@@ -364,7 +371,7 @@ async def delete_course(request: Request, course_id: str):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course(course_id)
             _mark_recently_deleted(sub, course_id)
-            return JSONResponse({}, status_code=204)
+            return Response(status_code=204)
     except Exception:
         # Conservative default: do not claim deletion if ownership/existence cannot be determined
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -420,6 +427,18 @@ def _mark_recently_deleted(owner_id: str, course_id: str) -> None:
     _prune_recently_deleted(owner_id, now=now)
 
 
+_SEEN_COURSE_IDS_BY: dict[str, set[str]] = {}
+
+
+def _mark_seen_course(owner_id: str, course_id: str) -> None:
+    """Record that an owner has seen/owned this course id.
+
+    Used to refine 404 vs 403 semantics after deletion time windows.
+    """
+    bucket = _SEEN_COURSE_IDS_BY.setdefault(owner_id, set())
+    bucket.add(str(course_id))
+
+
 def _was_recently_deleted(owner_id: str, course_id: str) -> bool:
     _prune_recently_deleted(owner_id)
     bucket = _RECENTLY_DELETED_BY.get(owner_id)
@@ -453,12 +472,16 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
-            owned = REPO.get_course_for_owner(course_id, sub)
-            if not owned:
+            if not REPO.course_exists_for_owner(course_id, sub):
                 # If the same owner just deleted the course, treat as 404 for immediate follow-ups
                 if _was_recently_deleted(sub, course_id):
                     return JSONResponse({"error": "not_found"}, status_code=404)
-                # With limited RLS role we cannot disambiguate existence reliably → default to 403
+                # If we can determine that the course does not exist at all, choose 404 vs 403
+                ex = REPO.course_exists(course_id)
+                if ex is False:
+                    seen = course_id in (_SEEN_COURSE_IDS_BY.get(sub) or set())
+                    return JSONResponse({"error": "forbidden" if seen else "not_found"}, status_code=403 if seen else 404)
+                # Otherwise do not disambiguate to avoid information leakage
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             pairs = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
         else:
@@ -472,7 +495,8 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
     except Exception:
         pairs = REPO.list_members(course_id, limit=limit, offset=offset)
     subs = [sid for sid, _ in pairs]
-    names = resolve_student_names(subs)
+    # Avoid blocking the event loop on synchronous network I/O
+    names = await asyncio.to_thread(resolve_student_names, subs)
     result = []
     for sid, joined_at in pairs:
         result.append({"sub": sid, "name": names.get(sid, sid), "joined_at": joined_at})
@@ -504,9 +528,12 @@ async def add_member(request: Request, course_id: str, payload: dict):
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
-            # Ensure caller owns the course; otherwise forbid
-            owned = REPO.get_course_for_owner(course_id, sub)
-            if not owned:
+            # Ensure caller owns the course; otherwise decide 404/403 via existence
+            if not REPO.course_exists_for_owner(course_id, sub):
+                ex = REPO.course_exists(course_id)
+                if ex is False:
+                    seen = course_id in (_SEEN_COURSE_IDS_BY.get(sub) or set())
+                    return JSONResponse({"error": "forbidden" if seen else "not_found"}, status_code=403 if seen else 404)
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             created = REPO.add_member_owned(course_id, sub, student_sub.strip())
         else:
@@ -517,7 +544,7 @@ async def add_member(request: Request, course_id: str, payload: dict):
             created = REPO.add_member(course_id, student_sub.strip())
     except Exception:
         created = REPO.add_member(course_id, student_sub.strip())
-    return JSONResponse({}, status_code=201 if created else 204)
+    return JSONResponse({}, status_code=201) if created else Response(status_code=204)
 
 
 @teaching_router.delete("/api/teaching/courses/{course_id}/members/{student_sub}")
@@ -538,8 +565,11 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
-            owned = REPO.get_course_for_owner(course_id, sub)
-            if not owned:
+            if not REPO.course_exists_for_owner(course_id, sub):
+                ex = REPO.course_exists(course_id)
+                if ex is False:
+                    seen = course_id in (_SEEN_COURSE_IDS_BY.get(sub) or set())
+                    return JSONResponse({"error": "forbidden" if seen else "not_found"}, status_code=403 if seen else 404)
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.remove_member_owned(course_id, sub, str(student_sub))
         else:
@@ -549,4 +579,4 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
             REPO.remove_member(course_id, str(student_sub))
     except Exception:
         REPO.remove_member(course_id, str(student_sub))
-    return JSONResponse({}, status_code=204)
+    return Response(status_code=204)

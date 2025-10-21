@@ -131,3 +131,148 @@ async def test_list_members_after_delete_returns_404_for_owner():
         assert resp.status_code == 404
         assert resp.json().get("error") == "not_found"
 
+
+@pytest.mark.anyio
+async def test_non_owner_list_members_returns_403():
+    """A different teacher (non-owner) must receive 403 when listing members."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    owner = main.SESSION_STORE.create(sub="teacher-owner-members-403", name="Owner", roles=["teacher"])
+    intruder = main.SESSION_STORE.create(sub="teacher-intruder-members-403", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        # Create course as owner
+        client.cookies.set("gustav_session", owner.session_id)
+        cid = await _create_course(client)
+        # Switch to non-owner and try to list
+        client.cookies.set("gustav_session", intruder.session_id)
+        resp = await client.get(f"/api/teaching/courses/{cid}/members")
+        assert resp.status_code == 403
+        assert resp.json().get("error") == "forbidden"
+
+
+@pytest.mark.anyio
+async def test_non_owner_add_member_returns_403():
+    """A different teacher (non-owner) must receive 403 when adding a member."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    owner = main.SESSION_STORE.create(sub="teacher-owner-add-403", name="Owner", roles=["teacher"])
+    intruder = main.SESSION_STORE.create(sub="teacher-intruder-add-403", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        cid = await _create_course(client)
+        client.cookies.set("gustav_session", intruder.session_id)
+        resp = await client.post(f"/api/teaching/courses/{cid}/members", json={"student_sub": "student-z"})
+        assert resp.status_code == 403
+        assert resp.json().get("error") == "forbidden"
+
+
+@pytest.mark.anyio
+async def test_non_owner_remove_member_returns_403():
+    """A different teacher (non-owner) must receive 403 when removing a member."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    owner = main.SESSION_STORE.create(sub="teacher-owner-rem-403", name="Owner", roles=["teacher"])
+    intruder = main.SESSION_STORE.create(sub="teacher-intruder-rem-403", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        cid = await _create_course(client)
+        client.cookies.set("gustav_session", intruder.session_id)
+        resp = await client.delete(f"/api/teaching/courses/{cid}/members/student-z")
+        assert resp.status_code == 403
+        assert resp.json().get("error") == "forbidden"
+
+
+@pytest.mark.anyio
+async def test_student_cannot_list_members_returns_403():
+    """A student must not access the roster (403)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    teacher = main.SESSION_STORE.create(sub="teacher-owner-student-403", name="Owner", roles=["teacher"])
+    student = main.SESSION_STORE.create(sub="student-x-role", name="Student", roles=["student"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        cid = await _create_course(client)
+        client.cookies.set("gustav_session", student.session_id)
+        resp = await client.get(f"/api/teaching/courses/{cid}/members")
+        assert resp.status_code == 403
+        assert resp.json().get("error") == "forbidden"
+
+
+@pytest.mark.anyio
+async def test_student_cannot_add_member_returns_403():
+    """A student must not add members (403)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    teacher = main.SESSION_STORE.create(sub="teacher-owner-student-add-403", name="Owner", roles=["teacher"])
+    student = main.SESSION_STORE.create(sub="student-y-role", name="Student", roles=["student"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        cid = await _create_course(client)
+        client.cookies.set("gustav_session", student.session_id)
+        resp = await client.post(f"/api/teaching/courses/{cid}/members", json={"student_sub": "student-z"})
+        assert resp.status_code == 403
+        assert resp.json().get("error") == "forbidden"
+
+
+@pytest.mark.anyio
+async def test_student_cannot_remove_member_returns_403():
+    """A student must not remove members (403)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    teacher = main.SESSION_STORE.create(sub="teacher-owner-student-rem-403", name="Owner", roles=["teacher"])
+    student = main.SESSION_STORE.create(sub="student-z-role", name="Student", roles=["student"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        cid = await _create_course(client)
+        client.cookies.set("gustav_session", student.session_id)
+        resp = await client.delete(f"/api/teaching/courses/{cid}/members/s123")
+        assert resp.status_code == 403
+        assert resp.json().get("error") == "forbidden"

@@ -427,6 +427,9 @@ paths:
       operationId: updateCourse
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
       parameters:
         - in: path
           name: course_id
@@ -461,6 +464,9 @@ paths:
       operationId: deleteCourse
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
       parameters:
         - in: path
           name: course_id
@@ -533,6 +539,9 @@ paths:
       operationId: addCourseMember
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
       parameters:
         - in: path
           name: course_id
@@ -568,6 +577,9 @@ paths:
       operationId: removeCourseMember
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
       parameters:
         - in: path
           name: course_id

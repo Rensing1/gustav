@@ -25,18 +25,26 @@ from identity_access.stores import SessionStore  # type: ignore
 
 
 def _probe_db_and_helpers() -> bool:
-    dsn = os.getenv("DATABASE_URL") or ""
-    if not dsn:
-        return False
+    # Try DATABASE_URL, then default limited DSN (127.0.0.1:54322)
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    candidates = [os.getenv("DATABASE_URL"), f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"]
     try:
         import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=1) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select public.course_exists(%s)", (uuid.uuid4(),))
-                _ = cur.fetchone()
-                cur.execute("select public.course_exists_for_owner(%s, %s)", ("owner", uuid.uuid4()))
-                _ = cur.fetchone()
-        return True
+        for dsn in candidates:
+            if not dsn:
+                continue
+            try:
+                with psycopg.connect(dsn, connect_timeout=1) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("select public.course_exists(%s)", (uuid.uuid4(),))
+                        _ = cur.fetchone()
+                        cur.execute("select public.course_exists_for_owner(%s, %s)", ("owner", uuid.uuid4()))
+                        _ = cur.fetchone()
+                return True
+            except Exception:
+                continue
+        return False
     except Exception:
         return False
 

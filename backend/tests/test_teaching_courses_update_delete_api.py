@@ -19,17 +19,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
 from identity_access.stores import SessionStore  # type: ignore
-import os
-
-
-def _require_db_or_skip():
-    dsn = os.getenv("DATABASE_URL") or ""
-    try:
-        import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=1):
-            return
-    except Exception:
-        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client():

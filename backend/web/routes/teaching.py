@@ -1028,7 +1028,8 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return [_serialize_section(s) for s in ordered]
+    # Uniform API shape: explicit JSONResponse with status 200
+    return JSONResponse(content=[_serialize_section(s) for s in ordered], status_code=200)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/modules")
@@ -1139,6 +1140,11 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
         return error
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+    sub = _current_sub(user)
+    # Security-first: check ownership before deep payload validation to avoid error oracle
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        return guard
     module_ids = payload.module_ids
     # Validate JSON structure and constraints explicitly (400s, not FastAPI 422)
     if not isinstance(module_ids, list):
@@ -1149,10 +1155,6 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
         return JSONResponse({"error": "bad_request", "detail": "duplicate_module_ids"}, status_code=400)
     if any(not _is_uuid_like(mid) for mid in module_ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_course_owner(course_id, sub)
-    if guard:
-        return guard
     try:
         modules = REPO.reorder_course_modules_owned(course_id, sub, module_ids)
     except ValueError as exc:
@@ -1162,7 +1164,8 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return [_serialize_module(m) for m in modules]
+    # Uniform API shape: explicit JSONResponse with status 200
+    return JSONResponse(content=[_serialize_module(m) for m in modules], status_code=200)
 
 
 def _serialize_course(c) -> dict:

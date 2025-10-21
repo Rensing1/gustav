@@ -1176,6 +1176,11 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_section_ids
+                section_mismatch:
+                  summary: Payload ids do not match current unit sections
+                  value:
+                    error: bad_request
+                    detail: section_mismatch
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1307,6 +1312,21 @@ paths:
                   value:
                     error: bad_request
                     detail: module_mismatch
+                empty_reorder:
+                  summary: Submitted array is empty
+                  value:
+                    error: bad_request
+                    detail: empty_reorder
+                invalid_module_ids:
+                  summary: Submitted ids include a non-UUID value
+                  value:
+                    error: bad_request
+                    detail: invalid_module_ids
+                no_modules:
+                  summary: Course has no modules to reorder
+                  value:
+                    error: bad_request
+                    detail: no_modules
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- fix(api/teaching): Return explicit JSONResponse (200) from sections/modules reorder for consistent API shape.
+- security(api/teaching): Check course ownership before deep payload validation in modules reorder to reduce error‑oracle leakage (403/404 precede 400 list errors).
+- docs(openapi): Add 400 examples for modules reorder (empty_reorder, invalid_module_ids, no_modules) and sections reorder (section_mismatch).
 - fix(api/openapi): Correct DELETE /api/teaching/units/{unit_id} path placement (remove stray delete under sections/reorder); units PATCH uses authorOnly permissions.
 - fix(api/teaching): Validate course_id UUID in POST /api/teaching/courses/{course_id}/modules/reorder (400 bad_request on invalid path param).
 - fix(db/sections): Serialize concurrent section creation by locking parent learning_unit; add one-shot retry on unique violation; regression tests added.

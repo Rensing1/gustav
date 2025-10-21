@@ -487,3 +487,65 @@ async def test_course_modules_reorder_empty_list_returns_400():
         )
         assert resp.status_code == 400
         assert resp.json().get("detail") == "empty_reorder"
+
+
+@pytest.mark.anyio
+async def test_course_modules_reorder_invalid_course_id_returns_400():
+    """Invalid course_id (not UUID) must map to 400 invalid_course_id per contract."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-bad-course", name="BadCourse", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        # The payload shape is otherwise fine; only path param is invalid
+        resp = await client.post(
+            "/api/teaching/courses/not-a-uuid/modules/reorder",
+            json={"module_ids": [str(uuid4())]},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_course_id"
+
+
+@pytest.mark.anyio
+async def test_course_modules_reorder_non_owner_invalid_payload_is_403():
+    """Non-owner should get 403 even with invalid payload (security-first, avoid error oracle)."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    owner = main.SESSION_STORE.create(sub="owner-guard", name="Owner", roles=["teacher"])
+    other = main.SESSION_STORE.create(sub="other-guard", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        # Owner creates a course
+        client.cookies.set("gustav_session", owner.session_id)
+        course_id = await _create_course(client, title="Security")
+
+        # Non-owner attempts reorder with invalid payload (empty list)
+        client.cookies.set("gustav_session", other.session_id)
+        resp = await client.post(
+            f"/api/teaching/courses/{course_id}/modules/reorder",
+            json={"module_ids": []},
+        )
+        assert resp.status_code in (403, 404)
+        # We accept 403 or 404 based on helper semantics, but not 400
+        assert resp.status_code != 400

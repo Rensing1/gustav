@@ -133,11 +133,13 @@ def test_create_section_retry_fetches_row_after_unique_violation(monkeypatch: py
         def __init__(self, shared_state):
             self._state = shared_state
             self._last = None
+            self._closed = False
 
         def __enter__(self):
             return self
 
         def __exit__(self, exc_type, exc, tb):
+            self._closed = True
             return False
 
         def execute(self, query, params=None):
@@ -165,6 +167,8 @@ def test_create_section_retry_fetches_row_after_unique_violation(monkeypatch: py
             raise AssertionError(f"Unexpected query: {query}")
 
         def fetchone(self):
+            if self._closed:
+                raise repo_db.psycopg.InterfaceError("cursor already closed")  # type: ignore[attr-defined]
             if self._last == "select_next":
                 return (1,)
             if self._last == "insert_returning":

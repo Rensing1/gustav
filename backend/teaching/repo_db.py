@@ -553,6 +553,7 @@ class DBTeachingRepo:
                     (unit_id,),
                 )
                 next_pos = int(cur.fetchone()[0])
+                insert_cursor = cur
                 try:
                     cur.execute(
                         """
@@ -591,9 +592,10 @@ class DBTeachingRepo:
                                 """,
                                 (unit_id, title, next_pos),
                             )
+                            insert_cursor = cur2
                     else:
                         raise
-                row = cur.fetchone()
+                row = insert_cursor.fetchone()
                 conn.commit()
         return {
             "id": row[0],

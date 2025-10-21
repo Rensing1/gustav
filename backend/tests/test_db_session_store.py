@@ -67,6 +67,7 @@ def test_missing_dsn_raises_runtime_error(monkeypatch: pytest.MonkeyPatch):
     # Pretend psycopg is available, but do not set any DSN env var
     install_fake_psycopg(monkeypatch, mod)
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SESSION_DATABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
     import pytest as _pytest
     with _pytest.raises(RuntimeError):

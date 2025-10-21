@@ -13,14 +13,14 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Body `CourseUpdate` (alle Felder optional)
   - 200 `Course` oder 400/403/404
 - `DELETE /api/teaching/courses/{course_id}` (Owner only)
-  - 204, entfernt auch Mitgliedschaften
+  - 204, entfernt auch Mitgliedschaften; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
 - `GET /api/teaching/courses/{course_id}/members?limit&offset` (Owner only)
-  - 200 `[CourseMember { sub, name, joined_at }]`
+  - 200 `[CourseMember { sub, name, joined_at }]`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
 - `POST /api/teaching/courses/{course_id}/members` (Owner only, idempotent)
   - Body `{ student_sub }`
   - 201 neu, 204 existierend, 400/403/404
 - `DELETE /api/teaching/courses/{course_id}/members/{student_sub}` (Owner only, idempotent)
-  - 204
+  - 204; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
 - `GET /api/users/search?q=&role=student&limit` (Users‑Namespace)
   - Nur Teacher/Admin. Mindestlänge `q ≥ 2`, Limit-Cap `≤ 50`
   - 200 `[{ sub, name }]`, 400/403
@@ -82,6 +82,7 @@ DSN (Beispiel): `DATABASE_URL=postgresql://gustav_limited:gustav-limited@127.0.0
 - Kein PII in DTOs: Identität über `sub`; `name` wird für Mitglieder über Directory-Adapter aufgelöst.
 - Pagination mit Limit‑Cap (DoS‑Schutz). Suche: Mindestlänge `q`.
 - Responses der Auth‑abhängigen Endpunkte sind nicht cachebar (Middleware regelt 401 JSON).
+ - Semantik: Nicht‑existenter Kurs → 404 (Not Found); Nicht‑Owner → 403 (Forbidden). Gilt konsistent für Members‑Endpunkte und Delete.
 
 ## Architektur & Adapter
 - Web‑Adapter: `backend/web/routes/teaching.py`, `backend/web/routes/users.py`

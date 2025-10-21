@@ -408,7 +408,7 @@ def _is_uuid_like(value: str) -> bool:
 def _guard_unit_author(unit_id: str, author_sub: str):
     """Validate unit ownership, returning an error response when access is denied."""
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid unit_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -509,7 +509,7 @@ async def create_course(request: Request, payload: CourseCreate):
         )
     except ValueError:
         # Map repo validation to contract 400
-        return JSONResponse({"error": "bad_request", "detail": "invalid input"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     return JSONResponse(content=_serialize_course(course), status_code=201)
 
 
@@ -681,7 +681,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
                 **updates,
             )
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid field"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_field"}, status_code=400)
     if not updated:
         # Should not normally happen after existence/ownership checks; keep conservative 403
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -823,7 +823,7 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
         return error
     updates = payload.model_dump(mode="python", exclude_unset=True)
     if not updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty payload"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -920,7 +920,7 @@ async def create_section(request: Request, unit_id: str, payload: SectionCreateP
     try:
         sec = REPO.create_section(unit_id, title, sub)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid title"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return JSONResponse(content=_serialize_section(sec), status_code=201)
@@ -943,10 +943,10 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
     if error:
         return error
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid path params"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     updates = payload.model_dump(mode="python", exclude_unset=True)
     if not updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty payload"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -954,7 +954,7 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
     try:
         updated = REPO.update_section_title(unit_id, section_id, updates.get("title"), sub)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid title"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
     if not updated:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return _serialize_section(updated)
@@ -977,7 +977,7 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     if error:
         return error
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid path params"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1005,16 +1005,16 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     if error:
         return error
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid unit_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     ids = payload.section_ids
     if not isinstance(ids, list):
-        return JSONResponse({"error": "bad_request", "detail": "section_ids must be array"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "section_ids_must_be_array"}, status_code=400)
     if len(ids) == 0:
-        return JSONResponse({"error": "bad_request", "detail": "empty section_ids"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "empty_section_ids"}, status_code=400)
     if len(ids) != len(set(ids)):
         return JSONResponse({"error": "bad_request", "detail": "duplicate_section_ids"}, status_code=400)
     if any(not _is_uuid_like(sid) for sid in ids):
-        return JSONResponse({"error": "bad_request", "detail": "invalid section_ids"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_ids"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1088,7 +1088,7 @@ async def create_course_module(request: Request, course_id: str, payload: Course
     sub = _current_sub(user)
     unit_id = payload.unit_id
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid unit_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
         guard_course = _guard_course_owner(course_id, sub)
         if guard_course:
@@ -1137,13 +1137,13 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     if error:
         return error
     if not _is_uuid_like(course_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid course_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     module_ids = payload.module_ids
     if len(set(module_ids)) != len(module_ids):
         # Guard early so duplicates short-circuit with a clear validation error.
         return JSONResponse({"error": "bad_request", "detail": "duplicate_module_ids"}, status_code=400)
     if any(not _is_uuid_like(mid) for mid in module_ids):
-        return JSONResponse({"error": "bad_request", "detail": "invalid module_ids"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_course_owner(course_id, sub)
     if guard:
@@ -1367,7 +1367,7 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     student_sub = getattr(payload, "student_sub", None)
     if not isinstance(student_sub, str) or not student_sub.strip():
-        return JSONResponse({"error": "bad_request", "detail": "student_sub required"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):

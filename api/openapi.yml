@@ -550,11 +550,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/Course'
         '400':
-          description: Invalid input
+          description: |
+            Invalid input. detail codes:
+              - invalid_input
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              examples:
+                invalid_input:
+                  summary: Invalid payload (e.g., blank title)
+                  value:
+                    error: bad_request
+                    detail: invalid_input
         '401':
           description: Unauthenticated
           content:
@@ -598,7 +606,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Course'
-        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_field (e.g., blank title)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_field:
+                  summary: Invalid field update
+                  value:
+                    error: bad_request
+                    detail: invalid_field
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -710,7 +731,20 @@ paths:
       responses:
         '201': { description: Added }
         '204': { description: Already a member (no content) }
-        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - student_sub_required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                student_sub_required:
+                  summary: student_sub missing or blank
+                  value:
+                    error: bad_request
+                    detail: student_sub_required
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -802,7 +836,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Unit'
-        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_title
+              - invalid_summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_title:
+                  summary: Title missing or exceeds limits
+                  value:
+                    error: bad_request
+                    detail: invalid_title
+                invalid_summary:
+                  summary: Summary exceeds maximum length
+                  value:
+                    error: bad_request
+                    detail: invalid_summary
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not a teacher), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -836,7 +889,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Unit'
-        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - empty_payload
+              - invalid_title
+              - invalid_summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                empty_payload:
+                  summary: No fields supplied
+                  value:
+                    error: bad_request
+                    detail: empty_payload
+                invalid_title:
+                  summary: Title violates validation
+                  value:
+                    error: bad_request
+                    detail: invalid_title
+                invalid_summary:
+                  summary: Summary exceeds maximum length
+                  value:
+                    error: bad_request
+                    detail: invalid_summary
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -859,6 +938,20 @@ paths:
             format: uuid
       responses:
         '204': { description: Deleted (no content) }
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_unit_id:
+                  summary: Unit id not a UUID
+                  value:
+                    error: bad_request
+                    detail: invalid_unit_id
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -889,6 +982,20 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Section'
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_unit_id:
+                  summary: Unit id not a UUID
+                  value:
+                    error: bad_request
+                    detail: invalid_unit_id
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -991,6 +1098,21 @@ paths:
             format: uuid
       responses:
         '204': { description: Deleted (no content) }
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_path_params
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_path_params:
+                  summary: Section id not a UUID
+                  value:
+                    error: bad_request
+                    detail: invalid_path_params
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1030,7 +1152,29 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Section'
-        '400': { description: Invalid section list, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: |
+            Invalid section list. detail codes:
+              - invalid_unit_id
+              - section_ids_must_be_array
+              - empty_section_ids
+              - duplicate_section_ids
+              - invalid_section_ids
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                duplicate_section_ids:
+                  summary: Section ids contain duplicates
+                  value:
+                    error: bad_request
+                    detail: duplicate_section_ids
+                invalid_section_ids:
+                  summary: Section ids include a non-UUID value
+                  value:
+                    error: bad_request
+                    detail: invalid_section_ids
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1138,7 +1282,31 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CourseModule'
-        '400': { description: Invalid module list, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: |
+            Invalid module list. detail codes:
+              - invalid_course_id
+              - duplicate_module_ids
+              - invalid_module_ids
+              - empty_reorder
+              - invalid_module_id
+              - module_mismatch
+              - no_modules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                duplicate_module_ids:
+                  summary: Duplicate ids submitted
+                  value:
+                    error: bad_request
+                    detail: duplicate_module_ids
+                module_mismatch:
+                  summary: Payload ids do not match current modules
+                  value:
+                    error: bad_request
+                    detail: module_mismatch
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1184,6 +1352,25 @@ paths:
                   properties:
                     sub: { type: string }
                     name: { type: string }
-        '400': { description: Invalid query, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: |
+            Invalid query. detail codes:
+              - q_too_short
+              - invalid_role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                q_too_short:
+                  summary: Query shorter than 2 characters
+                  value:
+                    error: bad_request
+                    detail: q_too_short
+                invalid_role:
+                  summary: Unsupported role filter
+                  value:
+                    error: bad_request
+                    detail: invalid_role
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

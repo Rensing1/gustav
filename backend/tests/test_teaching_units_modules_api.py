@@ -154,15 +154,18 @@ async def test_unit_validation_errors():
         # Missing title → 400
         resp_missing = await client.post("/api/teaching/units", json={})
         assert resp_missing.status_code == 400
+        assert resp_missing.json().get("detail") == "invalid_title"
 
         # Too long title → 400
         resp_long = await client.post("/api/teaching/units", json={"title": "x" * 201})
         assert resp_long.status_code == 400
+        assert resp_long.json().get("detail") == "invalid_title"
 
         # Patch without fields → 400
         created = await _create_unit(client, title="Valid Unit")
         resp_empty_patch = await client.patch(f"/api/teaching/units/{created['id']}", json={})
         assert resp_empty_patch.status_code == 400
+        assert resp_empty_patch.json().get("detail") == "empty_payload"
 
 
 @pytest.mark.anyio
@@ -327,6 +330,7 @@ async def test_course_modules_reorder_validation_rules():
             json={"module_ids": [mod_a["id"], mod_a["id"]]},
         )
         assert dup.status_code == 400
+        assert dup.json().get("detail") == "duplicate_module_ids"
 
         # Missing ID → 400
         missing = await client.post(
@@ -334,6 +338,7 @@ async def test_course_modules_reorder_validation_rules():
             json={"module_ids": [mod_a["id"]]},
         )
         assert missing.status_code == 400
+        assert missing.json().get("detail") == "module_mismatch"
 
         # Extraneous ID → 400
         extra = await client.post(
@@ -341,6 +346,7 @@ async def test_course_modules_reorder_validation_rules():
             json={"module_ids": [mod_a["id"], str(uuid4()), mod_b["id"]]},
         )
         assert extra.status_code == 400
+        assert extra.json().get("detail") == "module_mismatch"
 
         # Module from another course → 404
         other_course = await _create_course(client, title="Geschichte Parallel")
@@ -416,7 +422,9 @@ async def test_course_modules_reorder_with_invalid_uuid_returns_400():
         payload = {"module_ids": [mod_a["id"], "not-a-uuid", mod_b["id"]]}
         resp = await client.post(f"/api/teaching/courses/{course_id}/modules/reorder", json=payload)
         assert resp.status_code == 400
-        assert resp.json().get("error") == "bad_request"
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_module_ids"
 
 
 @pytest.mark.anyio
@@ -443,4 +451,6 @@ async def test_course_module_create_with_invalid_unit_uuid_returns_400():
             json={"unit_id": "definitely-not-a-uuid"},
         )
         assert resp.status_code == 400
-        assert resp.json().get("error") == "bad_request"
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_unit_id"

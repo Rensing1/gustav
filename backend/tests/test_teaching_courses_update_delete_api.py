@@ -120,9 +120,11 @@ async def test_patch_validation_errors():
         # Empty title
         p1 = await client.patch(f"/api/teaching/courses/{course_id}", json={"title": ""})
         assert p1.status_code == 400
+        assert p1.json().get("detail") == "invalid_field"
         # Too long title
         p2 = await client.patch(f"/api/teaching/courses/{course_id}", json={"title": "x" * 201})
         assert p2.status_code == 400
+        assert p2.json().get("detail") == "invalid_field"
 
 
 @pytest.mark.anyio

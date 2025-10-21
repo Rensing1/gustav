@@ -646,7 +646,8 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     if not updated:
         # Should not normally happen after existence/ownership checks; keep conservative 403
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return _serialize_course(updated)
+    # Consistent API response shape: explicit JSONResponse with status 200
+    return JSONResponse(content=_serialize_course(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/courses/{course_id}")

@@ -24,15 +24,7 @@ import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 
 
-def _require_db_or_skip() -> None:
-    dsn = os.getenv("DATABASE_URL") or ""
-    try:
-        import psycopg  # type: ignore
-
-        with psycopg.connect(dsn, connect_timeout=1):
-            return
-    except Exception:
-        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -63,4 +55,3 @@ async def test_two_concurrent_creates_on_empty_unit_assign_contiguous_positions(
         pos = [s["position"] for s in lst.json()]
         assert pos == [1, 2] or pos == [2, 1] or pos == sorted(pos)
         assert len(pos) == len(set(pos))
-

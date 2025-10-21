@@ -29,15 +29,7 @@ import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 
 
-def _require_db_or_skip() -> None:
-    dsn = os.getenv("DATABASE_URL") or ""
-    try:
-        import psycopg  # type: ignore
-
-        with psycopg.connect(dsn, connect_timeout=1):
-            return
-    except Exception:
-        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -109,4 +101,3 @@ async def test_non_author_section_patch_empty_body_returns_403_or_404():
             f"/api/teaching/units/{unit['id']}/sections/{sec['id']}", json={}
         )
         assert resp.status_code in (403, 404), resp.text
-

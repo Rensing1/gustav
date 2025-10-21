@@ -21,9 +21,11 @@ def _probe_dsn(dsn: str) -> bool:
 
 @pytest.mark.anyio
 async def test_db_repo_create_and_list_courses_when_db_available():
-    dsn = os.getenv("DATABASE_URL") or ""
-    if not dsn or not _probe_dsn(dsn):
-        pytest.skip("Database not reachable; apply migrations and set DATABASE_URL to run this test")
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    dsn = os.getenv("DATABASE_URL") or f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    if not _probe_dsn(dsn):
+        pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 
     from teaching.repo_db import DBTeachingRepo  # type: ignore
 
@@ -39,9 +41,11 @@ async def test_db_repo_create_and_list_courses_when_db_available():
 
 
 def test_db_repo_memberships_enforce_owner_rls():
-    dsn = os.getenv("DATABASE_URL") or ""
-    if not dsn or not _probe_dsn(dsn):
-        pytest.skip("Database not reachable; apply migrations and set DATABASE_URL to run this test")
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    dsn = os.getenv("DATABASE_URL") or f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    if not _probe_dsn(dsn):
+        pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 
     from teaching.repo_db import DBTeachingRepo  # type: ignore
 
@@ -68,9 +72,11 @@ def test_db_repo_memberships_enforce_owner_rls():
 
 
 def test_course_memberships_insert_blocked_for_non_owner():
-    dsn = os.getenv("DATABASE_URL") or ""
-    if not dsn or not _probe_dsn(dsn):
-        pytest.skip("Database not reachable; apply migrations and set DATABASE_URL to run this test")
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    dsn = os.getenv("DATABASE_URL") or f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    if not _probe_dsn(dsn):
+        pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 
     import psycopg  # type: ignore
     from psycopg import errors  # type: ignore

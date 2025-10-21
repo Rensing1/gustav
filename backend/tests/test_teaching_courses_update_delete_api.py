@@ -240,4 +240,5 @@ async def test_recently_deleted_marker_expires(monkeypatch: pytest.MonkeyPatch):
         fake_time.current += teaching._RECENTLY_DELETED_TTL_SECONDS + 5
 
         lst2 = await client.get(f"/api/teaching/courses/{course_id}/members")
-        assert lst2.status_code == 403
+        # After TTL expiry, course remains non-existent -> 404 (contract)
+        assert lst2.status_code == 404

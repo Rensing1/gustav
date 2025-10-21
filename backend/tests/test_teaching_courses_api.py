@@ -81,6 +81,34 @@ async def test_teacher_can_create_and_list_own_courses():
 
 
 @pytest.mark.anyio
+async def test_create_course_invalid_title_returns_400():
+    """Contract: invalid title yields 400 (bad_request), not 500.
+
+    Uses DB-backed repo to exercise ValueError from repo and verifies the web
+    adapter maps it to a 400 response as specified in openapi.yml.
+    """
+    # Ensure in-memory session store
+    main.SESSION_STORE = SessionStore()
+    # Require DB-backed repo
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    teacher = main.SESSION_STORE.create(sub="teacher-bad-title", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        # Empty title should trigger invalid_title -> 400 bad_request
+        resp = await client.post("/api/teaching/courses", json={"title": "   "})
+        assert resp.status_code == 400
+        assert resp.json().get("error") == "bad_request"
+
+
+@pytest.mark.anyio
 async def test_student_cannot_create_course_forbidden():
     main.SESSION_STORE = SessionStore()
     # Arrange: student session

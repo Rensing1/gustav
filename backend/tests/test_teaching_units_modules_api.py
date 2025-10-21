@@ -26,15 +26,7 @@ import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 
 
-def _require_db_or_skip() -> None:
-    dsn = os.getenv("DATABASE_URL") or ""
-    try:
-        import psycopg  # type: ignore
-
-        with psycopg.connect(dsn, connect_timeout=1):
-            return
-    except Exception:
-        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -154,15 +146,18 @@ async def test_unit_validation_errors():
         # Missing title → 400
         resp_missing = await client.post("/api/teaching/units", json={})
         assert resp_missing.status_code == 400
+        assert resp_missing.json().get("detail") == "invalid_title"
 
         # Too long title → 400
         resp_long = await client.post("/api/teaching/units", json={"title": "x" * 201})
         assert resp_long.status_code == 400
+        assert resp_long.json().get("detail") == "invalid_title"
 
         # Patch without fields → 400
         created = await _create_unit(client, title="Valid Unit")
         resp_empty_patch = await client.patch(f"/api/teaching/units/{created['id']}", json={})
         assert resp_empty_patch.status_code == 400
+        assert resp_empty_patch.json().get("detail") == "empty_payload"
 
 
 @pytest.mark.anyio
@@ -327,6 +322,7 @@ async def test_course_modules_reorder_validation_rules():
             json={"module_ids": [mod_a["id"], mod_a["id"]]},
         )
         assert dup.status_code == 400
+        assert dup.json().get("detail") == "duplicate_module_ids"
 
         # Missing ID → 400
         missing = await client.post(
@@ -334,6 +330,7 @@ async def test_course_modules_reorder_validation_rules():
             json={"module_ids": [mod_a["id"]]},
         )
         assert missing.status_code == 400
+        assert missing.json().get("detail") == "module_mismatch"
 
         # Extraneous ID → 400
         extra = await client.post(
@@ -341,6 +338,7 @@ async def test_course_modules_reorder_validation_rules():
             json={"module_ids": [mod_a["id"], str(uuid4()), mod_b["id"]]},
         )
         assert extra.status_code == 400
+        assert extra.json().get("detail") == "module_mismatch"
 
         # Module from another course → 404
         other_course = await _create_course(client, title="Geschichte Parallel")
@@ -416,7 +414,9 @@ async def test_course_modules_reorder_with_invalid_uuid_returns_400():
         payload = {"module_ids": [mod_a["id"], "not-a-uuid", mod_b["id"]]}
         resp = await client.post(f"/api/teaching/courses/{course_id}/modules/reorder", json=payload)
         assert resp.status_code == 400
-        assert resp.json().get("error") == "bad_request"
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_module_ids"
 
 
 @pytest.mark.anyio
@@ -443,4 +443,133 @@ async def test_course_module_create_with_invalid_unit_uuid_returns_400():
             json={"unit_id": "definitely-not-a-uuid"},
         )
         assert resp.status_code == 400
-        assert resp.json().get("error") == "bad_request"
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_unit_id"
+
+
+@pytest.mark.anyio
+async def test_course_modules_reorder_empty_list_returns_400():
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-empty-reorder", name="Empty", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(client, title="Informatik 9")
+        unit_a = await _create_unit(client, title="Programmierung I")
+        unit_b = await _create_unit(client, title="Programmierung II")
+
+        _ = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_a["id"]})).json()
+        _ = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_b["id"]})).json()
+
+        # Empty array should be a 400 (not FastAPI 422)
+        resp = await client.post(
+            f"/api/teaching/courses/{course_id}/modules/reorder",
+            json={"module_ids": []},
+        )
+        assert resp.status_code == 400
+        assert resp.json().get("detail") == "empty_reorder"
+
+
+@pytest.mark.anyio
+async def test_course_modules_reorder_invalid_course_id_returns_400():
+    """Invalid course_id (not UUID) must map to 400 invalid_course_id per contract."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-bad-course", name="BadCourse", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        # The payload shape is otherwise fine; only path param is invalid
+        resp = await client.post(
+            "/api/teaching/courses/not-a-uuid/modules/reorder",
+            json={"module_ids": [str(uuid4())]},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_course_id"
+
+
+@pytest.mark.anyio
+async def test_course_modules_reorder_non_owner_invalid_payload_is_403():
+    """Non-owner should get 403 even with invalid payload (security-first, avoid error oracle)."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    owner = main.SESSION_STORE.create(sub="owner-guard", name="Owner", roles=["teacher"])
+    other = main.SESSION_STORE.create(sub="other-guard", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        # Owner creates a course
+        client.cookies.set("gustav_session", owner.session_id)
+        course_id = await _create_course(client, title="Security")
+
+        # Non-owner attempts reorder with invalid payload (empty list)
+        client.cookies.set("gustav_session", other.session_id)
+        resp = await client.post(
+            f"/api/teaching/courses/{course_id}/modules/reorder",
+            json={"module_ids": []},
+        )
+        assert resp.status_code in (403, 404)
+        # We accept 403 or 404 based on helper semantics, but not 400
+        assert resp.status_code != 400
+
+
+@pytest.mark.anyio
+async def test_sections_reorder_non_author_invalid_payload_is_403():
+    """Non-author should get 403/404 even with invalid payload (avoid error oracle for sections)."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    author = main.SESSION_STORE.create(sub="author-sec", name="Author", roles=["teacher"])
+    other = main.SESSION_STORE.create(sub="other-sec", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        # Author creates a unit
+        client.cookies.set("gustav_session", author.session_id)
+        unit = await _create_unit(client, title="Sicherheit")
+
+        # Non-author attempts reorder with invalid payload (empty list)
+        client.cookies.set("gustav_session", other.session_id)
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/reorder",
+            json={"section_ids": []},
+        )
+        assert resp.status_code in (403, 404)
+        assert resp.status_code != 400

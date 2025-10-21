@@ -41,6 +41,19 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 - `POST /api/teaching/courses/{course_id}/modules/reorder` (Owner only)
   - Body `{ module_ids: [uuid,…] }` repräsentiert die Zielreihenfolge; 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen; 404/403 wie oben
 
+#### Abschnitte (Sections) je Lerneinheit
+- `GET /api/teaching/units/{unit_id}/sections` (Author only)
+  - 200 `[{ id, unit_id, title, position, created_at, updated_at }]`; 403/404 gemäß Ownership‑Guard; 400 bei ungültiger UUID
+- `POST /api/teaching/units/{unit_id}/sections` (Author only)
+  - Body `{ title[1..200] }`, 201 `Section` am Ende (nächste `position`); 400/403/404
+- `PATCH /api/teaching/units/{unit_id}/sections/{section_id}` (Author only)
+  - Body `{ title[1..200] }` (optional, aber nicht leer), 200 `Section`; 400/404/403
+- `DELETE /api/teaching/units/{unit_id}/sections/{section_id}` (Author only)
+  - 204; verbleibende Abschnitte werden auf `position = 1..n` resequenziert; 400/404/403
+- `POST /api/teaching/units/{unit_id}/sections/reorder` (Author only)
+  - Body `{ section_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
+  - 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen/Invalid‑UUID; 404 bei fachfremden IDs; 403 bei Ownership
+
 Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
 
 ## Schemas
@@ -74,6 +87,14 @@ Einheiten & Module: `supabase/migrations/20251021104017_teaching_units_modules.s
   - Uniques: `(course_id, position)` und `(course_id, unit_id)`; Trigger + Indizes
 - RLS: Policies für Select/Insert/Update/Delete (Owner/Author‑gebunden); `SET LOCAL app.current_sub` steuert Identität
 - Deferrable Constraint für Reorder: `supabase/migrations/20251021105921_teaching_course_modules_deferrable.sql`
+
+Abschnitte (Sections): `supabase/migrations/20251021121841_teaching_unit_sections.sql`
+- `public.unit_sections` (author‑scoped über Join auf `learning_units`)
+  - `id uuid pk`, `unit_id uuid fk`, `title text not null`, `position int > 0`
+  - `created_at/updated_at` + Trigger; Index `idx_unit_sections_unit(unit_id)`
+- RLS: Select/Insert/Update/Delete nur, wenn `learning_units.author_id = app.current_sub`
+- Ordering: Unique `(unit_id, position) DEFERRABLE INITIALLY IMMEDIATE` für atomare Reorders
+- Reorder‑Semantik: Mengen‑Gleichheit, keine Duplikate, nur UUIDs; Cross‑Unit‑IDs → 404
 
 RLS Policies & DSN
 - Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`
@@ -109,6 +130,7 @@ DSN (Beispiel): `DATABASE_URL=postgresql://gustav_limited:gustav-limited@127.0.0
 - Pagination mit Limit‑Cap (DoS‑Schutz). Suche: Mindestlänge `q`.
 - Responses der Auth‑abhängigen Endpunkte sind nicht cachebar (Middleware regelt 401 JSON).
  - Semantik: Nicht‑existenter Kurs → 404 (Not Found); Nicht‑Owner → 403 (Forbidden). Gilt konsistent für Members‑Endpunkte und Delete.
+ - Sections/Units: Nicht‑existente Unit → 404; Nicht‑Author → 403 (über Guard mit Existenz‑Helpern). UUID‑Fehler → 400 (kein 422).
 
 ## Architektur & Adapter
 - Web‑Adapter: `backend/web/routes/teaching.py`, `backend/web/routes/users.py`

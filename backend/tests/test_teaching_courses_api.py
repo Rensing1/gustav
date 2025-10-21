@@ -24,17 +24,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
 from identity_access.stores import SessionStore  # type: ignore
-import os
-
-
-def _require_db_or_skip():
-    dsn = os.getenv("DATABASE_URL") or ""
-    try:
-        import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=1):
-            return
-    except Exception:
-        pytest.skip("Database not reachable; ensure migrations applied and DATABASE_URL set")
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client():
@@ -105,7 +95,9 @@ async def test_create_course_invalid_title_returns_400():
         # Empty title should trigger invalid_title -> 400 bad_request
         resp = await client.post("/api/teaching/courses", json={"title": "   "})
         assert resp.status_code == 400
-        assert resp.json().get("error") == "bad_request"
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_input"
 
 
 @pytest.mark.anyio
@@ -191,6 +183,37 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
         assert resp2.status_code == 403
         resp3 = await client.delete(f"/api/teaching/courses/{course_id}/members/student-2")
         assert resp3.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_add_member_missing_student_sub_returns_400(monkeypatch: pytest.MonkeyPatch):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    owner = main.SESSION_STORE.create(sub="teacher-member-missing", name="Owner", roles=["teacher"])
+
+    def fake_resolver(ids: list[str]) -> dict[str, str]:
+        return {sid: f"Name:{sid}" for sid in ids}
+
+    monkeypatch.setattr(teaching, "resolve_student_names", fake_resolver, raising=False)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        created = await client.post("/api/teaching/courses", json={"title": "Physik 10"})
+        assert created.status_code == 201
+        course_id = created.json()["id"]
+
+        resp = await client.post(f"/api/teaching/courses/{course_id}/members", json={})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "student_sub_required"
 
 
 @pytest.mark.anyio

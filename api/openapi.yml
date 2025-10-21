@@ -1181,6 +1181,16 @@ paths:
                   value:
                     error: bad_request
                     detail: section_mismatch
+                empty_section_ids:
+                  summary: Submitted section id array is empty
+                  value:
+                    error: bad_request
+                    detail: empty_section_ids
+                section_ids_must_be_array:
+                  summary: Submitted section_ids is not an array
+                  value:
+                    error: bad_request
+                    detail: section_ids_must_be_array
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

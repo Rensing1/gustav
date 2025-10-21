@@ -114,6 +114,7 @@ async def test_sections_reorder_validation_rules():
             json={"section_ids": [a["id"], a["id"]]},
         )
         assert dup.status_code == 400
+        assert dup.json().get("detail") == "duplicate_section_ids"
 
         # Missing ID → 400
         missing = await client.post(
@@ -121,6 +122,7 @@ async def test_sections_reorder_validation_rules():
             json={"section_ids": [a["id"]]},
         )
         assert missing.status_code == 400
+        assert missing.json().get("detail") == "section_mismatch"
 
         # Extraneous ID → 400
         extra = await client.post(
@@ -128,6 +130,7 @@ async def test_sections_reorder_validation_rules():
             json={"section_ids": [a["id"], str(uuid4()), b["id"]]},
         )
         assert extra.status_code == 400
+        assert extra.json().get("detail") == "section_mismatch"
 
         # Invalid UUID → 400
         invalid = await client.post(
@@ -135,6 +138,7 @@ async def test_sections_reorder_validation_rules():
             json={"section_ids": [a["id"], "not-a-uuid", b["id"]]},
         )
         assert invalid.status_code == 400
+        assert invalid.json().get("detail") == "invalid_section_ids"
 
 
 @pytest.mark.anyio
@@ -171,6 +175,7 @@ async def test_sections_reorder_single_item_and_empty_list():
             json={"section_ids": []},
         )
         assert empty.status_code == 400
+        assert empty.json().get("detail") == "empty_section_ids"
 
 
 @pytest.mark.anyio
@@ -268,7 +273,9 @@ async def test_reorder_invalid_json_type_returns_400():
             f"/api/teaching/units/{unit['id']}/sections/reorder", json={"section_ids": None}
         )
         assert bad_type1.status_code == 400
+        assert bad_type1.json().get("detail") == "section_ids_must_be_array"
         bad_type2 = await client.post(
             f"/api/teaching/units/{unit['id']}/sections/reorder", json={"section_ids": a["id"]}
         )
         assert bad_type2.status_code == 400
+        assert bad_type2.json().get("detail") == "section_ids_must_be_array"

@@ -50,9 +50,9 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     q = (q or "").strip()
     if len(q) < 2:
-        return JSONResponse({"error": "bad_request", "detail": "q too short"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "q_too_short"}, status_code=400)
     if role not in ALLOWED_ROLES:
-        return JSONResponse({"error": "bad_request", "detail": "invalid role"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_role"}, status_code=400)
     limit = max(1, min(50, int(limit or 20)))
     results = search_users_by_name(role=role, q=q, limit=limit)
     # Defensive: normalize shape

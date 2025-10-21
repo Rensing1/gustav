@@ -162,10 +162,12 @@ async def test_section_validation_and_unknown_ids():
             f"/api/teaching/units/{unit['id']}/sections", json={"title": ""}
         )
         assert too_short.status_code == 400
+        assert too_short.json().get("detail") == "invalid_title"
         too_long = await client.post(
             f"/api/teaching/units/{unit['id']}/sections", json={"title": "x" * 201}
         )
         assert too_long.status_code == 400
+        assert too_long.json().get("detail") == "invalid_title"
 
         # Unknown unit → 404
         unknown_list = await client.get(
@@ -232,10 +234,12 @@ async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_
         # invalid unit_id in path → 400
         bad_unit_get = await client.get("/api/teaching/units/not-a-uuid/sections")
         assert bad_unit_get.status_code == 400
+        assert bad_unit_get.json().get("detail") == "invalid_unit_id"
         bad_unit_post = await client.post(
             "/api/teaching/units/not-a-uuid/sections", json={"title": "X"}
         )
         assert bad_unit_post.status_code == 400
+        assert bad_unit_post.json().get("detail") == "invalid_unit_id"
 
         # create a valid section
         sec = (await client.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "A"})).json()
@@ -245,16 +249,19 @@ async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_
             f"/api/teaching/units/{unit['id']}/sections/not-a-uuid", json={"title": "Y"}
         )
         assert bad_sec_patch.status_code == 400
+        assert bad_sec_patch.json().get("detail") == "invalid_path_params"
         bad_sec_delete = await client.delete(
             f"/api/teaching/units/{unit['id']}/sections/not-a-uuid"
         )
         assert bad_sec_delete.status_code == 400
+        assert bad_sec_delete.json().get("detail") == "invalid_path_params"
 
         # patch without fields → 400
         empty_patch = await client.patch(
             f"/api/teaching/units/{unit['id']}/sections/{sec['id']}", json={}
         )
         assert empty_patch.status_code == 400
+        assert empty_patch.json().get("detail") == "empty_payload"
 
 
 @pytest.mark.anyio

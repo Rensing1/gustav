@@ -48,6 +48,7 @@ async def test_search_requires_teacher_and_min_query(monkeypatch: pytest.MonkeyP
         client.cookies.set("gustav_session", teacher.session_id)
         r1 = await client.get("/api/users/search?q=m&role=student&limit=5")
         assert r1.status_code == 400
+        assert r1.json().get("detail") == "q_too_short"
 
         # Teacher: ok
         r2 = await client.get("/api/users/search?q=ma&role=student&limit=5")
@@ -74,3 +75,4 @@ async def test_search_invalid_role_returns_400(monkeypatch: pytest.MonkeyPatch):
         r = await client.get("/api/users/search?q=ma&role=hacker&limit=5")
         assert r.status_code == 400
         assert r.json().get("error") == "bad_request"
+        assert r.json().get("detail") == "invalid_role"

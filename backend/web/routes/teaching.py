@@ -1012,7 +1012,7 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     if len(ids) == 0:
         return JSONResponse({"error": "bad_request", "detail": "empty section_ids"}, status_code=400)
     if len(ids) != len(set(ids)):
-        return JSONResponse({"error": "bad_request", "detail": "duplicate section ids"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "duplicate_section_ids"}, status_code=400)
     if any(not _is_uuid_like(sid) for sid in ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid section_ids"}, status_code=400)
     sub = _current_sub(user)
@@ -1136,10 +1136,12 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     user, error = _require_teacher(request)
     if error:
         return error
+    if not _is_uuid_like(course_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid course_id"}, status_code=400)
     module_ids = payload.module_ids
     if len(set(module_ids)) != len(module_ids):
         # Guard early so duplicates short-circuit with a clear validation error.
-        return JSONResponse({"error": "bad_request", "detail": "duplicate module ids"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "duplicate_module_ids"}, status_code=400)
     if any(not _is_uuid_like(mid) for mid in module_ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid module_ids"}, status_code=400)
     sub = _current_sub(user)

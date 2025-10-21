@@ -815,7 +815,7 @@ paths:
         - cookieAuth: []
       x-permissions:
         requiredRole: teacher
-        ownerOnly: true
+        authorOnly: true
       parameters:
         - in: path
           name: unit_id
@@ -837,6 +837,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/Unit'
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Teaching]
+      summary: Delete a learning unit (author only)
+      description: Removes the unit and cascades linked course modules owned by the author.
+      operationId: deleteUnit
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204': { description: Deleted (no content) }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1012,28 +1034,6 @@ paths:
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    delete:
-      tags: [Teaching]
-      summary: Delete a learning unit (author only)
-      description: Removes the unit and cascades linked course modules owned by the author.
-      operationId: deleteUnit
-      security:
-        - cookieAuth: []
-      x-permissions:
-        requiredRole: teacher
-        ownerOnly: true
-      parameters:
-        - in: path
-          name: unit_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204': { description: Deleted (no content) }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/modules:
     get:

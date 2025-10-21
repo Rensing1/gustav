@@ -162,6 +162,13 @@ E2E‑Tests (Identity):
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
+### RLS & Ordering (Teaching/Sections)
+- RLS‑Identität: Jede DB‑Operation setzt `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen.
+- Limited‑Role‑DSN: Runtime verwendet ausschließlich die `gustav_limited`‑Rolle. Service‑/Owner‑Rollen sind Migrationen vorbehalten.
+- Author‑Scope: `unit_sections` ist über `learning_units.author_id = app.current_sub` abgesichert (SELECT/INSERT/UPDATE/DELETE).
+- Atomare Reorder: Unique `(unit_id, position)` ist DEFERRABLE; Reorder setzt `SET CONSTRAINTS … DEFERRED` und updated alle Positionen in einer Transaktion.
+- Concurrency: Neue `position` wird mit Row‑Lock auf die Unit‑Sections ermittelt, um doppelte Positionen zu vermeiden.
+
 ### Lokaler Betrieb & UFW
 - Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.
 - Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:8100`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 8100 proto tcp`.

@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 import os
 import pytest
+import requests
 
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -26,17 +27,54 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
+def _derive_app_base() -> str:
+    wb = os.getenv("WEB_BASE")
+    if wb:
+        return wb.rstrip("/")
+    ru = os.getenv("REDIRECT_URI", "")
+    if isinstance(ru, str) and ru:
+        if "/auth/callback" in ru:
+            return ru.split("/auth/callback")[0].rstrip("/")
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(ru)
+            if p.scheme and p.netloc:
+                return f"{p.scheme}://{p.netloc}"
+        except Exception:
+            pass
+    return "http://app.localhost:8100"
+
+
+def _derive_kc_base() -> str:
+    kb = os.getenv("KC_BASE")
+    if kb:
+        return kb.rstrip("/")
+    pub = os.getenv("KC_PUBLIC_BASE_URL")
+    if pub:
+        return pub.rstrip("/")
+    return "http://id.localhost:8100"
+
+
 def pytest_collection_modifyitems(config, items):
-    """Skip E2E tests in this package unless RUN_E2E=1 is set."""
+    """Skip E2E tests unless services are reachable or RUN_E2E=1 is set."""
+    pkg_dir = Path(__file__).parent.resolve()
     if os.getenv("RUN_E2E", "0") == "1":
         return
-    pkg_dir = Path(__file__).parent.resolve()
-    skip = pytest.mark.skip(reason="E2E tests disabled; set RUN_E2E=1 to enable")
+    # Probe minimal health of services; if both healthy, run E2E without env flag
+    web_base = _derive_app_base()
+    kc_base = _derive_kc_base()
+    try:
+        r1 = requests.get(f"{web_base}/health", timeout=1)
+        r2 = requests.get(f"{kc_base}/realms/{os.getenv('KC_REALM','gustav')}/.well-known/openid-configuration", timeout=1)
+        if r1.status_code == 200 and r2.status_code == 200:
+            return
+    except Exception:
+        pass
+    skip = pytest.mark.skip(reason="E2E tests disabled; set RUN_E2E=1 or start services (web+keycloak)")
     for item in items:
         try:
             if Path(str(item.fspath)).resolve().is_relative_to(pkg_dir):
                 item.add_marker(skip)
         except Exception:
-            # Fallback for Python <3.9 or non-path items
             if str(item.fspath).startswith(str(pkg_dir)):
                 item.add_marker(skip)

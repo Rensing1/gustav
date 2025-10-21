@@ -474,9 +474,9 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
     except Exception:
         ex = None
     if ex is False:
+        # If owner previously saw/owned this ID and the recent delete window expired,
+        # prefer 403 to avoid confirming deletion; otherwise 404.
         seen = course_id in (_SEEN_COURSE_IDS_BY.get(owner_sub) or set())
-        # If owner has previously seen/owned the ID, prefer 403 to avoid
-        # confirming deletion beyond the short grace window.
         if seen:
             return JSONResponse({"error": "forbidden"}, status_code=403)
         return JSONResponse({"error": "not_found"}, status_code=404)
@@ -521,8 +521,9 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
             pairs = REPO.list_members(course_id, limit=limit, offset=offset)
     except Exception as exc:
         # Defensive default: if DB helper path fails, do not risk information leakage.
-        # Log for observability without leaking details to clients.
-        logger.warning("list_members failed: course_id=%s owner_sub=%s err=%s", course_id, sub, exc.__class__.__name__)
+        # Log for observability, avoid logging full identifiers to minimize PII exposure.
+        cid_tail = (course_id or "").replace("-", "")[-6:]
+        logger.warning("list_members failed: cid_tail=%s err=%s", cid_tail, exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
     subs = [sid for sid, _ in pairs]
     # Avoid blocking the event loop on synchronous network I/O
@@ -533,8 +534,13 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
     return result
 
 
+class AddMember(BaseModel):
+    # Keep optional to return 400 (not FastAPI 422) when missing/empty
+    student_sub: str | None = None
+
+
 @teaching_router.post("/api/teaching/courses/{course_id}/members")
-async def add_member(request: Request, course_id: str, payload: dict):
+async def add_member(request: Request, course_id: str, payload: AddMember):
     """Add a student to a course — owner-only; idempotent (201 new, 204 existing).
 
     Why:
@@ -552,7 +558,7 @@ async def add_member(request: Request, course_id: str, payload: dict):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    student_sub = (payload or {}).get("student_sub")
+    student_sub = getattr(payload, "student_sub", None)
     if not isinstance(student_sub, str) or not student_sub.strip():
         return JSONResponse({"error": "bad_request", "detail": "student_sub required"}, status_code=400)
     try:
@@ -569,7 +575,8 @@ async def add_member(request: Request, course_id: str, payload: dict):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             created = REPO.add_member(course_id, student_sub.strip())
     except Exception:
-        created = REPO.add_member(course_id, student_sub.strip())
+        # Fail closed: do not attempt mutation without clear ownership/existence semantics
+        return _resp_non_owner_or_unknown(course_id, sub)
     return JSONResponse({}, status_code=201) if created else Response(status_code=204)
 
 
@@ -600,5 +607,6 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.remove_member(course_id, str(student_sub))
     except Exception:
-        REPO.remove_member(course_id, str(student_sub))
+        # Fail closed: do not attempt mutation without clear ownership/existence semantics
+        return _resp_non_owner_or_unknown(course_id, sub)
     return Response(status_code=204)

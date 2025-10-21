@@ -11,10 +11,11 @@ Design:
 """
 from __future__ import annotations
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 import os
 import re
 from urllib.parse import urlparse
+from uuid import UUID
 
 try:
     import psycopg
@@ -22,6 +23,11 @@ try:
 except Exception:  # pragma: no cover - optional in some dev envs
     psycopg = None  # type: ignore
     HAVE_PSYCOPG = False
+else:  # pragma: no cover - import errors handled above
+    try:
+        from psycopg.errors import UniqueViolation  # type: ignore
+    except Exception:  # pragma: no cover - fallback when errors module unavailable
+        UniqueViolation = None  # type: ignore
 
 
 def _default_limited_dsn() -> str:
@@ -222,6 +228,432 @@ class DBTeachingRepo:
             "created_at": r[6],
             "updated_at": r[7],
         }
+
+    # --- Units -----------------------------------------------------------------
+    def list_units_for_author(self, *, author_id: str, limit: int, offset: int) -> List[dict]:
+        """Return units authored by `author_id` with pagination (teacher scope)."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text,
+                           title,
+                           summary,
+                           author_id,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.learning_units
+                    where author_id = %s
+                    order by created_at desc, id
+                    limit %s offset %s
+                    """,
+                    (author_id, int(limit), int(offset)),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "title": r[1],
+                "summary": r[2],
+                "author_id": r[3],
+                "created_at": r[4],
+                "updated_at": r[5],
+            }
+            for r in rows
+        ]
+
+    def create_unit(self, *, title: str, summary: Optional[str], author_id: str) -> dict:
+        """
+        Persist a unit for the given author.
+
+        Behavior:
+            - Enforces simple validation (non-empty title, summary length).
+            - Sets RLS context so only the author can mutate the row.
+        """
+        title = (title or "").strip()
+        if not title or len(title) > 200:
+            raise ValueError("invalid_title")
+        if summary is not None:
+            summary = summary.strip()
+            if summary and len(summary) > 2000:
+                raise ValueError("invalid_summary")
+            if summary == "":
+                summary = None
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    insert into public.learning_units (title, summary, author_id)
+                    values (%s, %s, %s)
+                    returning id::text,
+                              title,
+                              summary,
+                              author_id,
+                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    """,
+                    (title, summary, author_id),
+                )
+                row = cur.fetchone()
+                conn.commit()
+        return {
+            "id": row[0],
+            "title": row[1],
+            "summary": row[2],
+            "author_id": row[3],
+            "created_at": row[4],
+            "updated_at": row[5],
+        }
+
+    def update_unit_owned(self, unit_id: str, author_id: str, *, title=_UNSET, summary=_UNSET) -> Optional[dict]:
+        """
+        Update fields of a unit when the caller is the author.
+
+        Parameters:
+            unit_id: Target unit identifier.
+            author_id: Expected author (used for RLS + WHERE clause).
+            title/summary: Optional updates; omitted values remain unchanged.
+        """
+        sets = []
+        params: list = []
+        if title is not _UNSET:
+            if title is None:
+                raise ValueError("invalid_title")
+            t = (title or "").strip()
+            if not t or len(t) > 200:
+                raise ValueError("invalid_title")
+            sets.append(("title", t))
+        if summary is not _UNSET:
+            if summary is None:
+                sets.append(("summary", None))
+            else:
+                s = summary.strip()
+                if s and len(s) > 2000:
+                    raise ValueError("invalid_summary")
+                sets.append(("summary", s or None))
+        if not sets:
+            return self.get_unit_for_author(unit_id, author_id)
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+
+                    assignments = []
+                    params = []
+                    for col, val in sets:
+                        assignments.append(_sql.SQL("{} = %s").format(_sql.Identifier(col)))
+                        params.append(val)
+                    params.extend([unit_id, author_id])
+                    stmt = _sql.SQL(
+                        """
+                        update public.learning_units
+                        set {assign}
+                        where id = %s and author_id = %s
+                        returning id::text,
+                                 title,
+                                 summary,
+                                 author_id,
+                                 to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                 to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """
+                    ).format(assign=_sql.SQL(", ").join(assignments))
+                    cur.execute(stmt, params)
+                except Exception:
+                    params = [val for _, val in sets] + [unit_id, author_id]
+                    cols = ", ".join([f"{col} = %s" for col, _ in sets])
+                    cur.execute(
+                        f"""
+                        update public.learning_units
+                        set {cols}
+                        where id = %s and author_id = %s
+                        returning id::text,
+                                 title,
+                                 summary,
+                                 author_id,
+                                 to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                 to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        params,
+                    )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                conn.commit()
+        return {
+            "id": row[0],
+            "title": row[1],
+            "summary": row[2],
+            "author_id": row[3],
+            "created_at": row[4],
+            "updated_at": row[5],
+        }
+
+    def get_unit_for_author(self, unit_id: str, author_id: str) -> Optional[dict]:
+        """Fetch a unit enforcing author ownership through RLS."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text,
+                           title,
+                           summary,
+                           author_id,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.learning_units
+                    where id = %s
+                    """,
+                    (unit_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+        return {
+            "id": row[0],
+            "title": row[1],
+            "summary": row[2],
+            "author_id": row[3],
+            "created_at": row[4],
+            "updated_at": row[5],
+        }
+
+    def delete_unit_owned(self, unit_id: str, author_id: str) -> bool:
+        """Delete a unit owned by `author_id` (RLS + explicit ownership guard)."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    "delete from public.learning_units where id = %s and author_id = %s",
+                    (unit_id, author_id),
+                )
+                conn.commit()
+                return cur.rowcount > 0
+
+    def unit_exists_for_author(self, unit_id: str, author_id: str) -> bool:
+        """Check whether the unit exists and is owned by `author_id` via SECURITY DEFINER helper."""
+        try:
+            with psycopg.connect(self._dsn) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("select public.unit_exists_for_author(%s, %s)", (author_id, unit_id))
+                    r = cur.fetchone()
+                    if r is not None:
+                        return bool(r[0])
+        except Exception:
+            pass
+        return self.get_unit_for_author(unit_id, author_id) is not None
+
+    def unit_exists(self, unit_id: str) -> Optional[bool]:
+        """Check existence (ignoring ownership) using SECURITY DEFINER helper."""
+        try:
+            with psycopg.connect(self._dsn) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("select public.unit_exists(%s)", (unit_id,))
+                    r = cur.fetchone()
+                    if r is not None:
+                        return bool(r[0])
+        except Exception:
+            return None
+        return None
+
+    # --- Course modules ---------------------------------------------------------
+    def list_course_modules_for_owner(self, course_id: str, owner_sub: str) -> List[dict]:
+        """Return modules for a course owned by `owner_sub`, ordered by position."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select id::text,
+                           course_id::text,
+                           unit_id::text,
+                           position,
+                           context_notes,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.course_modules
+                    where course_id = %s
+                    order by position asc, id
+                    """,
+                    (course_id,),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "course_id": r[1],
+                "unit_id": r[2],
+                "position": r[3],
+                "context_notes": r[4],
+                "created_at": r[5],
+                "updated_at": r[6],
+            }
+            for r in rows
+        ]
+
+    def create_course_module_owned(self, course_id: str, owner_sub: str, *, unit_id: str, context_notes: Optional[str]) -> dict:
+        """
+        Attach a unit as a module within an owned course.
+
+        Validation:
+            - Notes trimmed to None when blank; length limited to 2000 characters.
+            - Unique constraint violations bubble up as ValueError("duplicate_module").
+        """
+        try:
+            unit_uuid = str(UUID(str(unit_id)))
+        except (ValueError, TypeError) as exc:
+            raise ValueError("invalid_unit_id") from exc
+        notes = None
+        if context_notes is not None:
+            notes = context_notes.strip()
+            if notes == "":
+                notes = None
+            if notes and len(notes) > 2000:
+                raise ValueError("invalid_context_notes")
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                try:
+                    cur.execute(
+                        """
+                        with next_pos as (
+                          select coalesce(max(position), 0) + 1 as pos
+                          from public.course_modules
+                          where course_id = %s
+                        )
+                        insert into public.course_modules (course_id, unit_id, position, context_notes)
+                        select %s, %s, next_pos.pos, %s
+                        from next_pos
+                        returning id::text,
+                                  course_id::text,
+                                  unit_id::text,
+                                  position,
+                                  context_notes,
+                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        (course_id, course_id, unit_uuid, notes),
+                    )
+                except Exception as exc:
+                    sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+                    if UniqueViolation and isinstance(exc, UniqueViolation):
+                        conn.rollback()
+                        raise ValueError("duplicate_module") from exc
+                    if sqlstate == "23505":
+                        conn.rollback()
+                        raise ValueError("duplicate_module") from exc
+                    raise
+                row = cur.fetchone()
+                if not row:
+                    conn.rollback()
+                    raise PermissionError("module_insert_forbidden")
+                conn.commit()
+        return {
+            "id": row[0],
+            "course_id": row[1],
+            "unit_id": row[2],
+            "position": row[3],
+            "context_notes": row[4],
+            "created_at": row[5],
+            "updated_at": row[6],
+        }
+
+    def reorder_course_modules_owned(self, course_id: str, owner_sub: str, module_ids: List[str]) -> List[dict]:
+        """
+        Reorder modules for a course owned by `owner_sub`.
+
+        Behavior:
+            - Validates the requested set matches the course modules exactly.
+            - Uses a two-phase update (offset then final order) to avoid unique(position) conflicts.
+        """
+        if not module_ids:
+            raise ValueError("empty_reorder")
+        try:
+            normalized_ids = [str(UUID(str(mid))) for mid in module_ids]
+        except (ValueError, TypeError) as exc:
+            raise ValueError("invalid_module_id") from exc
+        module_ids = normalized_ids
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select id::text
+                    from public.course_modules
+                    where course_id = %s
+                    order by position asc, id
+                    """,
+                    (course_id,),
+                )
+                existing = [row[0] for row in (cur.fetchall() or [])]
+                if not existing:
+                    raise ValueError("no_modules")
+                existing_set = set(existing)
+                submitted_set = set(module_ids)
+                # Distinguish between missing/extra IDs before mutating the DB.
+                if submitted_set != existing_set or len(module_ids) != len(existing):
+                    extra = submitted_set - existing_set
+                    if extra:
+                        cur.execute(
+                            """
+                            select count(*) from public.course_modules
+                            where id = any(%s)
+                            """,
+                            (list(extra),),
+                        )
+                        row = cur.fetchone()
+                        count = row[0] if row else 0
+                        if count:
+                            raise LookupError("module_not_found")
+                    raise ValueError("module_mismatch")
+                cur.execute("set constraints course_modules_course_id_position_key deferred")
+                orderings = list(range(1, len(module_ids) + 1))
+                cur.execute(
+                    """
+                    with new_order as (
+                      select module_id, ord
+                      from unnest(%s::uuid[], %s::int[]) as t(module_id, ord)
+                    )
+                    update public.course_modules m
+                    set position = new_order.ord
+                    from new_order
+                    where m.id = new_order.module_id
+                      and m.course_id = %s
+                    """,
+                    (module_ids, orderings, course_id),
+                )
+                cur.execute(
+                    """
+                    select id::text,
+                           course_id::text,
+                           unit_id::text,
+                           position,
+                           context_notes,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.course_modules
+                    where course_id = %s
+                    order by position asc, id
+                    """,
+                    (course_id,),
+                )
+                rows = cur.fetchall() or []
+                conn.commit()
+        return [
+            {
+                "id": r[0],
+                "course_id": r[1],
+                "unit_id": r[2],
+                "position": r[3],
+                "context_notes": r[4],
+                "created_at": r[5],
+                "updated_at": r[6],
+            }
+            for r in rows
+        ]
 
     # --- Owner-scoped helpers (RLS-friendly) ------------------------------------
     def get_course_for_owner(self, course_id: str, owner_sub: str) -> Optional[dict]:

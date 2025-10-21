@@ -25,6 +25,22 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Nur Teacher/Admin. Mindestlänge `q ≥ 2`, Limit-Cap `≤ 50`
   - 200 `[{ sub, name }]`, 400/403
 
+### Lerneinheiten & Kursmodule
+- `GET /api/teaching/units?limit&offset` (Teacher only)
+  - 200 `[{ id, title, summary?, author_id, created_at, updated_at }]`
+- `POST /api/teaching/units` (Teacher only)
+  - Body `{ title, summary? }`, 201 `Unit` oder 400/403
+- `PATCH /api/teaching/units/{unit_id}` (Author only)
+  - 200 `Unit` oder 400/403/404
+- `DELETE /api/teaching/units/{unit_id}` (Author only)
+  - 204 oder 403/404
+- `GET /api/teaching/courses/{course_id}/modules` (Owner only)
+  - 200 `[{ id, course_id, unit_id, position, context_notes?, created_at, updated_at }]`
+- `POST /api/teaching/courses/{course_id}/modules` (Owner only)
+  - Body `{ unit_id, context_notes? }`, 201 `CourseModule`; 403 wenn nicht Owner/Autor; 404 wenn Kurs/Unit fehlt; 409 bei Duplicate
+- `POST /api/teaching/courses/{course_id}/modules/reorder` (Owner only)
+  - Body `{ module_ids: [uuid,…] }` repräsentiert die Zielreihenfolge; 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen; 404/403 wie oben
+
 Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
 
 ## Schemas
@@ -47,7 +63,17 @@ Migration: `supabase/migrations/20251020150101_teaching_courses.sql`
   - `course_id uuid` fk → `courses(id)` on delete cascade
   - `student_id text not null`, `created_at timestamptz default now()`
   - PK `(course_id, student_id)`, Index `idx_course_memberships_student(student_id)`
-- RLS: aktiviert, Zugriff über Service‑Role im Backend. Keine Grants an `anon`/`authenticated`.
+- RLS: aktiviert, Zugriff mit Limited‑Role‑DSN im Backend (keine Service‑Role zur Laufzeit). Keine Grants an `anon`/`authenticated`.
+
+Einheiten & Module: `supabase/migrations/20251021104017_teaching_units_modules.sql`
+- `public.learning_units` (author‑scoped)
+  - `id uuid pk`, `title text not null`, `summary text null`, `author_id text not null`
+  - `created_at/updated_at` + Trigger, Index `idx_learning_units_author(author_id)`
+- `public.course_modules` (per‑course order)
+  - `id uuid pk`, `course_id uuid fk`, `unit_id uuid fk`, `position int > 0`, `context_notes text`
+  - Uniques: `(course_id, position)` und `(course_id, unit_id)`; Trigger + Indizes
+- RLS: Policies für Select/Insert/Update/Delete (Owner/Author‑gebunden); `SET LOCAL app.current_sub` steuert Identität
+- Deferrable Constraint für Reorder: `supabase/migrations/20251021105921_teaching_course_modules_deferrable.sql`
 
 RLS Policies & DSN
 - Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`

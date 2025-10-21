@@ -6,6 +6,10 @@
 - feat(db): Add SECURITY DEFINER helpers `public.course_exists_for_owner` and `public.course_exists` via Supabase migration to disambiguate 404 (not found) from 403 (forbidden) safely.
 - perf(teaching): Avoid blocking event loop during name resolution by offloading sync directory requests to a thread; foundation for future async/batch lookup.
 - tests: Add DSN enforcement tests and optional existence-helper tests; strengthen assertions for 204 no-content responses.
+- fix(api/teaching): PATCH /api/teaching/courses/{id} returns explicit JSONResponse (200) for consistent response shape.
+- security(ops): /health responses include `Cache-Control: no-store` to prevent caching of diagnostics.
+- test(auth): Add smoke test for `/auth/logout/success` (200 + back-to-login link).
+- chore(auth): Remove deprecated `_cookie_opts` wrapper in auth routes; use shared `auth_utils.cookie_opts`.
 
 ## 2025-10-20
 - Teaching (Unterrichten) — Kursmanagement (MVP)

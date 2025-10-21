@@ -276,3 +276,66 @@ async def test_student_cannot_remove_member_returns_403():
         resp = await client.delete(f"/api/teaching/courses/{cid}/members/s123")
         assert resp.status_code == 403
         assert resp.json().get("error") == "forbidden"
+
+
+@pytest.mark.anyio
+async def test_owner_unknown_course_list_returns_404():
+    """Owner querying a non-existent course must receive 404 (not_found)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    owner = main.SESSION_STORE.create(sub="teacher-owner-unknown-list", name="Owner", roles=["teacher"])
+    unknown = "00000000-0000-0000-0000-000000000009"
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        resp = await client.get(f"/api/teaching/courses/{unknown}/members")
+        assert resp.status_code == 404
+        assert resp.json().get("error") == "not_found"
+
+
+@pytest.mark.anyio
+async def test_owner_unknown_course_add_returns_404():
+    """Owner adding to a non-existent course must receive 404 (not_found)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    owner = main.SESSION_STORE.create(sub="teacher-owner-unknown-add", name="Owner", roles=["teacher"])
+    unknown = "00000000-0000-0000-0000-00000000000a"
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        resp = await client.post(f"/api/teaching/courses/{unknown}/members", json={"student_sub": "student-unknown"})
+        assert resp.status_code == 404
+        assert resp.json().get("error") == "not_found"
+
+
+@pytest.mark.anyio
+async def test_owner_unknown_course_remove_returns_404():
+    """Owner removing from a non-existent course must receive 404 (not_found)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+    _require_db_or_skip()
+
+    owner = main.SESSION_STORE.create(sub="teacher-owner-unknown-rem", name="Owner", roles=["teacher"])
+    unknown = "00000000-0000-0000-0000-00000000000b"
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        resp = await client.delete(f"/api/teaching/courses/{unknown}/members/student-unknown")
+        assert resp.status_code == 404
+        assert resp.json().get("error") == "not_found"

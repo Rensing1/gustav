@@ -251,20 +251,17 @@ async def create_course(request: Request, payload: CourseCreate):
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     sub = _current_sub(user)
-    course = REPO.create_course(
-        title=payload.title.strip(),
-        subject=payload.subject,
-        grade_level=payload.grade_level,
-        term=payload.term,
-        teacher_id=sub,
-    )
-    # Mark this course id as seen by the owner to improve later 404 vs 403 semantics
     try:
-        cid = course["id"] if isinstance(course, dict) else getattr(course, "id", None)
-        if cid:
-            _mark_seen_course(sub, str(cid))
-    except Exception:
-        pass
+        course = REPO.create_course(
+            title=payload.title.strip(),
+            subject=payload.subject,
+            grade_level=payload.grade_level,
+            term=payload.term,
+            teacher_id=sub,
+        )
+    except ValueError:
+        # Map repo validation to contract 400
+        return JSONResponse({"error": "bad_request", "detail": "invalid input"}, status_code=400)
     return JSONResponse(content=_serialize_course(course), status_code=201)
 
 
@@ -433,18 +430,6 @@ def _mark_recently_deleted(owner_id: str, course_id: str) -> None:
     _prune_recently_deleted(owner_id, now=now)
 
 
-_SEEN_COURSE_IDS_BY: dict[str, set[str]] = {}
-
-
-def _mark_seen_course(owner_id: str, course_id: str) -> None:
-    """Record that an owner has seen/owned this course id.
-
-    Used to refine 404 vs 403 semantics after deletion time windows.
-    """
-    bucket = _SEEN_COURSE_IDS_BY.setdefault(owner_id, set())
-    bucket.add(str(course_id))
-
-
 def _was_recently_deleted(owner_id: str, course_id: str) -> bool:
     _prune_recently_deleted(owner_id)
     bucket = _RECENTLY_DELETED_BY.get(owner_id)
@@ -474,11 +459,7 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
     except Exception:
         ex = None
     if ex is False:
-        # If owner previously saw/owned this ID and the recent delete window expired,
-        # prefer 403 to avoid confirming deletion; otherwise 404.
-        seen = course_id in (_SEEN_COURSE_IDS_BY.get(owner_sub) or set())
-        if seen:
-            return JSONResponse({"error": "forbidden"}, status_code=403)
+        # Deterministic contract: non-existent course -> 404
         return JSONResponse({"error": "not_found"}, status_code=404)
     return JSONResponse({"error": "forbidden"}, status_code=403)
 
@@ -493,7 +474,7 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
 
     Behavior:
         - 200 with [{ sub, name, joined_at }]
-        - 403 when caller is not owner; 404 directly after owner deleted course
+        - 403 when caller is not owner; 404 when the course does not exist
         - Pagination via limit (1..50) and offset (>=0)
 
     Permissions:
@@ -571,7 +552,9 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
         else:
             # Fallback owner check
             course = REPO.get_course(course_id)
-            if not course or _teacher_id_of(course) != sub:
+            if not course:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             created = REPO.add_member(course_id, student_sub.strip())
     except Exception:
@@ -603,7 +586,9 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
             REPO.remove_member_owned(course_id, sub, str(student_sub))
         else:
             course = REPO.get_course(course_id)
-            if not course or _teacher_id_of(course) != sub:
+            if not course:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.remove_member(course_id, str(student_sub))
     except Exception:

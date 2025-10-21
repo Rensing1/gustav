@@ -549,3 +549,35 @@ async def test_course_modules_reorder_non_owner_invalid_payload_is_403():
         assert resp.status_code in (403, 404)
         # We accept 403 or 404 based on helper semantics, but not 400
         assert resp.status_code != 400
+
+
+@pytest.mark.anyio
+async def test_sections_reorder_non_author_invalid_payload_is_403():
+    """Non-author should get 403/404 even with invalid payload (avoid error oracle for sections)."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    author = main.SESSION_STORE.create(sub="author-sec", name="Author", roles=["teacher"])
+    other = main.SESSION_STORE.create(sub="other-sec", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        # Author creates a unit
+        client.cookies.set("gustav_session", author.session_id)
+        unit = await _create_unit(client, title="Sicherheit")
+
+        # Non-author attempts reorder with invalid payload (empty list)
+        client.cookies.set("gustav_session", other.session_id)
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/reorder",
+            json={"section_ids": []},
+        )
+        assert resp.status_code in (403, 404)
+        assert resp.status_code != 400

@@ -65,3 +65,35 @@ def test_db_repo_memberships_enforce_owner_rls():
     visible = repo.list_members_for_owner(course_id=course["id"], owner_sub="teacher-owner", limit=10, offset=0)
     subs = [sid for sid, _joined in visible]
     assert "student-secret" in subs
+
+
+def test_course_memberships_insert_blocked_for_non_owner():
+    dsn = os.getenv("DATABASE_URL") or ""
+    if not dsn or not _probe_dsn(dsn):
+        pytest.skip("Database not reachable; apply migrations and set DATABASE_URL to run this test")
+
+    import psycopg  # type: ignore
+    from psycopg import errors  # type: ignore
+
+    owner = "teacher-owner-insert"
+    intruder = "teacher-intruder"
+
+    from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+    repo = DBTeachingRepo(dsn=dsn)
+    course = repo.create_course(
+        title="Politik EF",
+        subject=None,
+        grade_level=None,
+        term=None,
+        teacher_id=owner,
+    )
+
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (intruder,))
+            with pytest.raises(errors.InsufficientPrivilege):
+                cur.execute(
+                    "insert into public.course_memberships (course_id, student_id) values (%s, %s)",
+                    (course["id"], "student-hijack"),
+                )

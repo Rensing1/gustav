@@ -727,7 +727,8 @@ class DBTeachingRepo:
                 )
                 existing = [row[0] for row in (cur.fetchall() or [])]
                 if not existing:
-                    raise ValueError("no_sections")
+                    # Align with API contract: treat as mismatch when no sections are present
+                    raise ValueError("section_mismatch")
                 existing_set = set(existing)
                 submitted_set = set(section_ids)
                 if submitted_set != existing_set or len(section_ids) != len(existing):
@@ -900,7 +901,8 @@ class DBTeachingRepo:
         try:
             normalized_ids = [str(UUID(str(mid))) for mid in module_ids]
         except (ValueError, TypeError) as exc:
-            raise ValueError("invalid_module_id") from exc
+            # Contract uses plural form
+            raise ValueError("invalid_module_ids") from exc
         module_ids = normalized_ids
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:

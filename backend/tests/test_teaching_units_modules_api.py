@@ -454,3 +454,36 @@ async def test_course_module_create_with_invalid_unit_uuid_returns_400():
         body = resp.json()
         assert body.get("error") == "bad_request"
         assert body.get("detail") == "invalid_unit_id"
+
+
+@pytest.mark.anyio
+async def test_course_modules_reorder_empty_list_returns_400():
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-empty-reorder", name="Empty", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(client, title="Informatik 9")
+        unit_a = await _create_unit(client, title="Programmierung I")
+        unit_b = await _create_unit(client, title="Programmierung II")
+
+        _ = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_a["id"]})).json()
+        _ = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_b["id"]})).json()
+
+        # Empty array should be a 400 (not FastAPI 422)
+        resp = await client.post(
+            f"/api/teaching/courses/{course_id}/modules/reorder",
+            json={"module_ids": []},
+        )
+        assert resp.status_code == 400
+        assert resp.json().get("detail") == "empty_reorder"

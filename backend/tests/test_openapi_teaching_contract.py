@@ -38,3 +38,11 @@ def test_units_patch_uses_author_permission_semantics():
     assert perms.get("authorOnly") is True
     assert "ownerOnly" not in perms
 
+
+def test_sections_reorder_includes_section_mismatch_detail():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    path = "/api/teaching/units/{unit_id}/sections/reorder"
+    errs = spec["paths"][path]["post"]["responses"]["400"]["description"]
+    # Expect the section_mismatch detail to be listed among error codes
+    assert "section_mismatch" in errs

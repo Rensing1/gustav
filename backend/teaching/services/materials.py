@@ -7,7 +7,7 @@ thin while respecting Clean Architecture boundaries.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, List, Dict, Any
+from typing import Protocol, List, Any
 
 
 class MaterialsRepoProtocol(Protocol):

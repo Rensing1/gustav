@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- fix(api/teaching): PATCH materials treats provided empty title as `invalid_title` (was `empty_payload`).
+- consistency(api/teaching): GET materials returns explicit JSONResponse (200) for uniform response shape.
+- docs(openapi): Add `empty_payload` example to materials PATCH 400 section.
 - consistency(api/teaching): Align error detail strings — use `invalid_module_ids` (plural) and map no-sections case to `section_mismatch` in DB repo.
 - security(api/teaching): Move author/owner guards before payload validation in Unit/Section PATCH to avoid error‑oracle leakage (403/404 precede 400 empty_payload).
 - fix(teaching): Implement sections CRUD/reorder in in‑memory repo to avoid 500s in dev/tests without Postgres; add smoke test.

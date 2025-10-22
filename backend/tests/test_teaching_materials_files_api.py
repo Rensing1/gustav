@@ -264,6 +264,7 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
             params={"disposition": "invalid"},
         )
         assert invalid_disp.status_code == 400
+        assert invalid_disp.json()["detail"] == "invalid_disposition"
 
         # Delete should remove storage object.
         delete_resp = await client.delete(

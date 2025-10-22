@@ -30,6 +30,7 @@ import asyncio
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
+from teaching.services.materials import MaterialsService
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -83,6 +84,18 @@ class CourseModuleData:
     updated_at: str
 
 
+@dataclass
+class MaterialData:
+    id: str
+    unit_id: str
+    section_id: str
+    title: str
+    body_md: str
+    position: int
+    created_at: str
+    updated_at: str
+
+
 class _Repo:
     def __init__(self) -> None:
         self.courses: Dict[str, Course] = {}
@@ -93,6 +106,8 @@ class _Repo:
         self.section_ids_by_unit: Dict[str, List[str]] = {}
         self.course_modules: Dict[str, CourseModuleData] = {}
         self.modules_by_course: Dict[str, List[str]] = {}
+        self.materials: Dict[str, MaterialData] = {}
+        self.material_ids_by_section: Dict[str, List[str]] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
         now = datetime.now(timezone.utc).isoformat()
@@ -253,6 +268,13 @@ class _Repo:
     def unit_exists(self, unit_id: str) -> bool:
         return unit_id in self.units
 
+    def section_exists_for_author(self, unit_id: str, section_id: str, author_id: str) -> bool:
+        unit = self.units.get(unit_id)
+        if not unit or unit.author_id != author_id:
+            return False
+        sec = self.sections.get(section_id)
+        return bool(sec and sec.unit_id == unit_id)
+
     # --- Unit sections (in-memory) --------------------------------------------
     def list_sections_for_author(self, unit_id: str, author_id: str) -> List[SectionData]:
         unit = self.units.get(unit_id)
@@ -276,6 +298,7 @@ class _Repo:
         sec = SectionData(id=sid, unit_id=unit_id, title=t, position=pos, created_at=now, updated_at=now)
         self.sections[sid] = sec
         self.section_ids_by_unit.setdefault(unit_id, []).append(sid)
+        self.material_ids_by_section.setdefault(sid, [])
         return sec
 
     def update_section_title(self, unit_id: str, section_id: str, title: str, author_id: str) -> SectionData | None:
@@ -304,6 +327,9 @@ class _Repo:
             return False
         # Remove and resequence
         self.sections.pop(section_id, None)
+        material_ids = self.material_ids_by_section.pop(section_id, [])
+        for mid in material_ids:
+            self.materials.pop(mid, None)
         ids = [sid for sid in ids if sid != section_id]
         self.section_ids_by_unit[unit_id] = ids
         self._resequence_unit_sections(unit_id)
@@ -332,6 +358,119 @@ class _Repo:
                 sec.position = idx
                 sec.updated_at = datetime.now(timezone.utc).isoformat()
                 self.sections[sid] = sec
+
+    # --- Section materials (in-memory) ----------------------------------------
+    def list_materials_for_section_owned(self, unit_id: str, section_id: str, author_id: str) -> List[MaterialData]:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            return []
+        ids = list(self.material_ids_by_section.get(section_id, []))
+        items = [self.materials[mid] for mid in ids if mid in self.materials]
+        items.sort(key=lambda m: (m.position, m.id))
+        return items
+
+    def create_markdown_material(
+        self, unit_id: str, section_id: str, author_id: str, *, title: str, body_md: str
+    ) -> MaterialData:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise LookupError("section_not_found")
+        t = (title or "").strip()
+        if not t or len(t) > 200:
+            raise ValueError("invalid_title")
+        if body_md is None or not isinstance(body_md, str):
+            raise ValueError("invalid_body_md")
+        now = datetime.now(timezone.utc).isoformat()
+        mid = str(uuid4())
+        pos = len(self.material_ids_by_section.get(section_id, [])) + 1
+        material = MaterialData(
+            id=mid,
+            unit_id=unit_id,
+            section_id=section_id,
+            title=t,
+            body_md=body_md,
+            position=pos,
+            created_at=now,
+            updated_at=now,
+        )
+        self.materials[mid] = material
+        self.material_ids_by_section.setdefault(section_id, []).append(mid)
+        return material
+
+    def get_material_owned(
+        self, unit_id: str, section_id: str, material_id: str, author_id: str
+    ) -> MaterialData | None:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            return None
+        mat = self.materials.get(material_id)
+        if mat and mat.unit_id == unit_id and mat.section_id == section_id:
+            return mat
+        return None
+
+    def update_markdown_material(
+        self,
+        unit_id: str,
+        section_id: str,
+        material_id: str,
+        author_id: str,
+        *,
+        title=_UNSET,
+        body_md=_UNSET,
+    ) -> MaterialData | None:
+        mat = self.get_material_owned(unit_id, section_id, material_id, author_id)
+        if not mat:
+            return None
+        if title is not _UNSET:
+            if title is None:
+                raise ValueError("invalid_title")
+            t = (title or "").strip()
+            if not t or len(t) > 200:
+                raise ValueError("invalid_title")
+            mat.title = t
+        if body_md is not _UNSET:
+            if body_md is None or not isinstance(body_md, str):
+                raise ValueError("invalid_body_md")
+            mat.body_md = body_md
+        mat.updated_at = datetime.now(timezone.utc).isoformat()
+        self.materials[material_id] = mat
+        return mat
+
+    def delete_material(self, unit_id: str, section_id: str, material_id: str, author_id: str) -> bool:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            return False
+        ids = self.material_ids_by_section.get(section_id, [])
+        if material_id not in ids:
+            return False
+        self.materials.pop(material_id, None)
+        ids = [mid for mid in ids if mid != material_id]
+        self.material_ids_by_section[section_id] = ids
+        self._resequence_materials(section_id)
+        return True
+
+    def reorder_section_materials(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        material_ids: List[str],
+    ) -> List[MaterialData]:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise PermissionError("section_forbidden")
+        existing = list(self.material_ids_by_section.get(section_id, []))
+        if not existing:
+            raise ValueError("material_mismatch")
+        if set(existing) != set(material_ids) or len(existing) != len(material_ids):
+            raise ValueError("material_mismatch")
+        self.material_ids_by_section[section_id] = list(material_ids)
+        self._resequence_materials(section_id)
+        return self.list_materials_for_section_owned(unit_id, section_id, author_id)
+
+    def _resequence_materials(self, section_id: str) -> None:
+        ids = self.material_ids_by_section.get(section_id, [])
+        for idx, mid in enumerate(ids, start=1):
+            if mid in self.materials:
+                mat = self.materials[mid]
+                mat.position = idx
+                mat.updated_at = datetime.now(timezone.utc).isoformat()
+                self.materials[mid] = mat
 
     # --- Course modules (in-memory) --------------------------------------------
     def list_course_modules_for_owner(self, course_id: str, owner_id: str) -> List[CourseModuleData]:
@@ -439,12 +578,14 @@ def _build_default_repo():
 
 
 REPO = _build_default_repo()
+MATERIALS_SERVICE = MaterialsService(REPO)
 
 
 def set_repo(repo) -> None:
     """Allow tests to swap the teaching repository implementation."""
-    global REPO
+    global REPO, MATERIALS_SERVICE
     REPO = repo
+    MATERIALS_SERVICE = MaterialsService(repo)
 
 
 # --- Request/Response models -----------------------------------------------------
@@ -726,6 +867,42 @@ class SectionUpdatePayload(BaseModel):
 class SectionReorderPayload(BaseModel):
     # Use loose typing to avoid FastAPI 422, then validate type manually
     section_ids: object | None = None
+
+
+class MaterialCreatePayload(BaseModel):
+    title: str | None = Field(default=None)
+    body_md: object | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
+
+
+class MaterialUpdatePayload(BaseModel):
+    title: str | None = Field(default=None)
+    body_md: object | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                return None
+            return stripped
+        return v
+
+
+class MaterialReorderPayload(BaseModel):
+    material_ids: object | None = None
 
 
 @teaching_router.patch("/api/teaching/courses/{course_id}")
@@ -1125,6 +1302,303 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     return JSONResponse(content=[_serialize_section(s) for s in ordered], status_code=200)
 
 
+@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/materials")
+async def list_section_materials(request: Request, unit_id: str, section_id: str):
+    """
+    List markdown materials of a section for its author.
+
+    Why:
+        The authoring UI needs an ordered list of materials per Abschnitt.
+
+    Parameters:
+        request: FastAPI request carrying the authenticated teacher session.
+        unit_id: UUID of the learning unit (path parameter).
+        section_id: UUID of the section within the unit (path parameter).
+
+    Expected behavior:
+        - 200 with ordered materials (position asc) when the section exists for the author.
+        - 400 when `unit_id` or `section_id` are not UUID-like.
+        - 403 via `_guard_unit_author` if caller is not the unit author.
+        - 404 when the section is unknown to the author.
+
+    Permissions:
+        Caller must be a teacher and the author of the unit.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        items = MATERIALS_SERVICE.list_markdown_materials(unit_id, section_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return [_serialize_material(m) for m in items]
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials")
+async def create_section_material(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    payload: MaterialCreatePayload,
+):
+    """
+    Create a markdown material in a section (author only).
+
+    Why:
+        Teachers add textual resources to each Abschnitt; default behavior appends to the end.
+
+    Parameters:
+        request: FastAPI request with authenticated teacher.
+        unit_id: UUID of the learning unit.
+        section_id: UUID of the section where the material will live.
+        payload: JSON body containing `title` and `body_md`.
+
+    Expected behavior:
+        - 201 with the created material when validation passes.
+        - 400 for invalid titles/bodies or malformed UUIDs.
+        - 403 when caller is not the author (guard catches earlier).
+        - 404 when the section is not owned/found.
+
+    Permissions:
+        Caller must be a teacher and author of the unit/section.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    title = payload.title or ""
+    if not title or len(title) > 200:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+    body = payload.body_md
+    if body is None or not isinstance(body, str):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
+    try:
+        material = MATERIALS_SERVICE.create_markdown_material(
+            unit_id,
+            section_id,
+            sub,
+            title=title,
+            body_md=body,
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=_serialize_material(material), status_code=201)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
+async def update_section_material(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    material_id: str,
+    payload: MaterialUpdatePayload,
+):
+    """
+    Update mutable fields of a markdown material (author only).
+
+    Why:
+        Enables fine-grained edits to titles or Markdown content without reordering.
+
+    Parameters:
+        request: FastAPI request with teacher session.
+        unit_id: UUID of the learning unit (path).
+        section_id: UUID of the section (path).
+        material_id: UUID of the material (path).
+        payload: Partial JSON body with optional `title` and/or `body_md`.
+
+    Expected behavior:
+        - 200 with updated material when at least one field is valid.
+        - 400 for invalid payloads (empty, out-of-range title, non-string body).
+        - 404 when the material (or section) is not owned/found.
+
+    Permissions:
+        Caller must be a teacher and author of the unit/section.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(material_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    if MATERIALS_SERVICE.get_material_owned(unit_id, section_id, material_id, sub) is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    updates = payload.model_dump(mode="python", exclude_unset=True, exclude_none=True)
+    if not updates:
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+    # Manual validation keeps responses aligned with our 400-contract (FastAPI would emit 422 otherwise).
+    kwargs = {}
+    if "title" in updates:
+        title_val = updates["title"] or ""
+        if not title_val or len(title_val) > 200:
+            return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+        kwargs["title"] = title_val
+    if "body_md" in updates:
+        body_val = updates["body_md"]
+        if body_val is None or not isinstance(body_val, str):
+            return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
+        kwargs["body_md"] = body_val
+    try:
+        updated = MATERIALS_SERVICE.update_markdown_material(
+            unit_id,
+            section_id,
+            material_id,
+            sub,
+            **kwargs,
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=_serialize_material(updated), status_code=200)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
+async def delete_section_material(request: Request, unit_id: str, section_id: str, material_id: str):
+    """
+    Delete a markdown material (author only) and resequence positions.
+
+    Why:
+        Keeps material ordering contiguous (1..n) after removals.
+
+    Parameters:
+        request: FastAPI request with teacher session.
+        unit_id: UUID of the learning unit.
+        section_id: UUID of the section.
+        material_id: UUID of the material to delete.
+
+    Expected behavior:
+        - 204 on success.
+        - 400 for malformed UUIDs.
+        - 404 when the material is unknown to the author.
+
+    Permissions:
+        Caller must be a teacher and the author of the unit/section.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(material_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        MATERIALS_SERVICE.delete_material(unit_id, section_id, material_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return Response(status_code=204)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder")
+async def reorder_section_materials(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    payload: MaterialReorderPayload,
+):
+    """
+    Reorder markdown materials within a section (author only).
+
+    Why:
+        Allows teachers to define the pedagogical flow; uses deferrable constraints for atomic swaps.
+
+    Parameters:
+        request: FastAPI request with teacher session.
+        unit_id: Learning unit UUID (path).
+        section_id: Section UUID (path).
+        payload: JSON body containing `material_ids` as the desired order.
+
+    Expected behavior:
+        - 200 with the reordered materials list.
+        - 400 for invalid payload shapes (non-array, empty, duplicates, non-UUIDs, mismatch).
+        - 404 when submitted IDs refer to unknown materials in the unit.
+
+    Permissions:
+        Caller must be a teacher and author of the unit/section.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    ids = payload.material_ids
+    # Validate payload shape before delegating to the service to avoid leaking database semantics.
+    if not isinstance(ids, list):
+        return JSONResponse({"error": "bad_request", "detail": "material_ids_must_be_array"}, status_code=400)
+    if len(ids) == 0:
+        return JSONResponse({"error": "bad_request", "detail": "empty_material_ids"}, status_code=400)
+    if len(ids) != len(set(ids)):
+        return JSONResponse({"error": "bad_request", "detail": "duplicate_material_ids"}, status_code=400)
+    if any(not _is_uuid_like(mid) for mid in ids):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_material_ids"}, status_code=400)
+    try:
+        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        ordered = MATERIALS_SERVICE.reorder_markdown_materials(unit_id, section_id, sub, ids)
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=[_serialize_material(m) for m in ordered], status_code=200)
+
+
 @teaching_router.get("/api/teaching/courses/{course_id}/modules")
 async def list_course_modules(request: Request, course_id: str):
     """
@@ -1322,6 +1796,23 @@ def _serialize_section(s) -> dict:
         "position": getattr(s, "position", None),
         "created_at": getattr(s, "created_at", None),
         "updated_at": getattr(s, "updated_at", None),
+    }
+
+
+def _serialize_material(m) -> dict:
+    if is_dataclass(m):
+        return asdict(m)
+    if isinstance(m, dict):
+        return m
+    return {
+        "id": getattr(m, "id", None),
+        "unit_id": getattr(m, "unit_id", None),
+        "section_id": getattr(m, "section_id", None),
+        "title": getattr(m, "title", None),
+        "body_md": getattr(m, "body_md", None),
+        "position": getattr(m, "position", None),
+        "created_at": getattr(m, "created_at", None),
+        "updated_at": getattr(m, "updated_at", None),
     }
 
 

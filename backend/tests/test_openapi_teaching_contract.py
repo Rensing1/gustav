@@ -128,3 +128,22 @@ def test_material_reorder_includes_error_examples():
         "material_mismatch",
     ]:
         assert key in examples
+
+
+def test_material_patch_includes_error_examples():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+
+    path = "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}"
+    assert path in spec["paths"], "Materials PATCH path missing"
+    patch_op = spec["paths"][path]["patch"]
+    perms = patch_op.get("x-permissions", {})
+    assert perms.get("requiredRole") == "teacher"
+    assert perms.get("authorOnly") is True
+
+    examples = patch_op["responses"]["400"]["content"]["application/json"]["examples"]
+    for key in [
+        "empty_payload",
+        "invalid_title",
+    ]:
+        assert key in examples

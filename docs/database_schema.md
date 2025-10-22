@@ -101,7 +101,7 @@ This document summarizes the production session table introduced for persistent 
   - `section_id uuid not null` → `unit_sections(id)` (on delete cascade).
   - `visible boolean not null` — `TRUE` wenn Abschnitt freigeschaltet ist, sonst `FALSE`.
   - `released_at timestamptz null` — Zeitpunkt der letzten Freischaltung (`NULL`, wenn aktuell verborgen).
-  - `released_by text null` — OIDC `sub` der Lehrkraft, die zuletzt den Status geändert hat.
+  - `released_by text not null` — OIDC `sub` der Lehrkraft, die zuletzt den Status geändert hat.
 - Constraints & Indizes
   - Primary Key `(course_module_id, section_id)` stellt Idempotenz sicher.
   - Indizes `idx_module_section_releases_module`, `idx_module_section_releases_section` unterstützen Lookups in beide Richtungen.

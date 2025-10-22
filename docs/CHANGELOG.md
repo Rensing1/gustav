@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- db(teaching): Make `module_section_releases.released_by` NOT NULL with backfill to 'system'.
 - feat(api/teaching): Add PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility to toggle section releases (owner-only), with explicit 400 detail codes.
 - db(teaching): Add `public.module_section_releases` table with RLS (owner-only via course_modules ↔ courses join); upsert semantics for visibility.
 - db(teaching): Add CHECK constraint ensuring `released_at` matches `visible` (NOT NULL when true, NULL when false).

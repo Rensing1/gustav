@@ -177,6 +177,7 @@ async def test_section_visibility_toggle_and_error_conditions():
             json={"visible": True},
         )
         assert mismatch.status_code == 404
+        assert mismatch.json().get("detail") in {"section_not_in_module", "not_found"}
 
         # Invalid UUID in path → 400
         bad_uuid = await client.patch(
@@ -185,3 +186,56 @@ async def test_section_visibility_toggle_and_error_conditions():
         )
         assert bad_uuid.status_code == 400
         assert bad_uuid.json().get("detail") == "invalid_section_id"
+
+
+@pytest.mark.anyio
+async def test_section_visibility_invalid_ids_and_not_found_details():
+    """Validate 400 for invalid UUIDs and 404 detail codes for missing module."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    owner = main.SESSION_STORE.create(sub="teacher-section-release-ids", name="Ids", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        # Invalid course_id → 400
+        resp1 = await client.patch(
+            "/api/teaching/courses/not-a-uuid/modules/00000000-0000-0000-0000-000000000000/sections/00000000-0000-0000-0000-000000000000/visibility",
+            json={"visible": True},
+        )
+        assert resp1.status_code == 400
+        assert resp1.json().get("detail") == "invalid_course_id"
+
+        # Valid course/module setup
+        course_id = await _create_course(client)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])  # noqa: F841 - used later
+        module = await _attach_unit_to_course(client, course_id, unit["id"])  # noqa: F841 - used later
+
+        # Invalid module_id UUID → 400
+        resp2 = await client.patch(
+            f"/api/teaching/courses/{course_id}/modules/not-a-uuid/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert resp2.status_code == 400
+        assert resp2.json().get("detail") == "invalid_module_id"
+
+        # Unknown module UUID (well-formed) → 404 with detail
+        unknown_module = "00000000-0000-0000-0000-000000000001"
+        resp3 = await client.patch(
+            f"/api/teaching/courses/{course_id}/modules/{unknown_module}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert resp3.status_code == 404
+        # Should include a specific detail when available
+        assert resp3.json().get("error") == "not_found"
+        # Accept either specific DB code or generic fallback depending on backend
+        assert resp3.json().get("detail") in {"module_not_found", None}

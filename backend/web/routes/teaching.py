@@ -20,8 +20,9 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, asdict, is_dataclass
+import re
 from datetime import datetime, timezone
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Request
@@ -30,7 +31,8 @@ import asyncio
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
-from teaching.services.materials import MaterialsService
+from teaching.services.materials import MaterialFileSettings, MaterialsService
+from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -94,6 +96,13 @@ class MaterialData:
     position: int
     created_at: str
     updated_at: str
+    kind: str = "markdown"
+    storage_key: Optional[str] | None = None
+    filename_original: Optional[str] | None = None
+    mime_type: Optional[str] | None = None
+    size_bytes: Optional[int] | None = None
+    sha256: Optional[str] | None = None
+    alt_text: Optional[str] | None = None
 
 
 class _Repo:
@@ -108,6 +117,7 @@ class _Repo:
         self.modules_by_course: Dict[str, List[str]] = {}
         self.materials: Dict[str, MaterialData] = {}
         self.material_ids_by_section: Dict[str, List[str]] = {}
+        self.upload_intents: Dict[str, Dict[str, Any]] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
         now = datetime.now(timezone.utc).isoformat()
@@ -395,6 +405,128 @@ class _Repo:
         self.material_ids_by_section.setdefault(section_id, []).append(mid)
         return material
 
+    def create_file_upload_intent(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        intent_id: str,
+        material_id: str,
+        storage_key: str,
+        filename: str,
+        mime_type: str,
+        size_bytes: int,
+        expires_at: datetime,
+    ) -> Dict[str, Any]:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise LookupError("section_not_found")
+        record = {
+            "intent_id": intent_id,
+            "material_id": material_id,
+            "unit_id": unit_id,
+            "section_id": section_id,
+            "author_id": author_id,
+            "storage_key": storage_key,
+            "filename": filename,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "expires_at": expires_at,
+            "consumed_at": None,
+        }
+        self.upload_intents[intent_id] = record
+        return {
+            "intent_id": intent_id,
+            "material_id": material_id,
+            "storage_key": storage_key,
+            "filename": filename,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "expires_at": expires_at,
+            "consumed_at": None,
+        }
+
+    def get_upload_intent_owned(
+        self,
+        intent_id: str,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        record = self.upload_intents.get(intent_id)
+        if not record:
+            return None
+        if (
+            record["unit_id"] != unit_id
+            or record["section_id"] != section_id
+            or record["author_id"] != author_id
+        ):
+            return None
+        return {
+            "intent_id": record["intent_id"],
+            "material_id": record["material_id"],
+            "storage_key": record["storage_key"],
+            "filename": record["filename"],
+            "mime_type": record["mime_type"],
+            "size_bytes": record["size_bytes"],
+            "expires_at": record["expires_at"],
+            "consumed_at": record["consumed_at"],
+        }
+
+    def finalize_upload_intent_create_material(
+        self,
+        intent_id: str,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        title: str,
+        alt_text: Optional[str],
+        sha256: str,
+    ) -> Tuple[Dict[str, Any], bool]:
+        intent = self.upload_intents.get(intent_id)
+        if not intent:
+            raise LookupError("intent_not_found")
+        if (
+            intent["unit_id"] != unit_id
+            or intent["section_id"] != section_id
+            or intent["author_id"] != author_id
+        ):
+            raise LookupError("intent_not_found")
+        now = datetime.now(timezone.utc)
+        if intent["consumed_at"] is not None:
+            material = self.materials.get(intent["material_id"])
+            if material is None:
+                raise LookupError("material_not_found")
+            return asdict(material), False
+        if intent["expires_at"] <= now:
+            raise ValueError("intent_expired")
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise LookupError("section_not_found")
+        pos = len(self.material_ids_by_section.get(section_id, [])) + 1
+        material = MaterialData(
+            id=intent["material_id"],
+            unit_id=unit_id,
+            section_id=section_id,
+            title=title,
+            body_md="",
+            position=pos,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
+            kind="file",
+            storage_key=intent["storage_key"],
+            filename_original=intent["filename"],
+            mime_type=intent["mime_type"],
+            size_bytes=intent["size_bytes"],
+            sha256=sha256,
+            alt_text=alt_text,
+        )
+        self.materials[material.id] = material
+        bucket = self.material_ids_by_section.setdefault(section_id, [])
+        bucket.append(material.id)
+        self.upload_intents[intent_id]["consumed_at"] = now
+        return asdict(material), True
+
     def get_material_owned(
         self, unit_id: str, section_id: str, material_id: str, author_id: str
     ) -> MaterialData | None:
@@ -405,7 +537,7 @@ class _Repo:
             return mat
         return None
 
-    def update_markdown_material(
+    def update_material(
         self,
         unit_id: str,
         section_id: str,
@@ -414,6 +546,7 @@ class _Repo:
         *,
         title=_UNSET,
         body_md=_UNSET,
+        alt_text=_UNSET,
     ) -> MaterialData | None:
         mat = self.get_material_owned(unit_id, section_id, material_id, author_id)
         if not mat:
@@ -426,9 +559,21 @@ class _Repo:
                 raise ValueError("invalid_title")
             mat.title = t
         if body_md is not _UNSET:
+            if mat.kind != "markdown":
+                raise ValueError("invalid_body_md")
             if body_md is None or not isinstance(body_md, str):
                 raise ValueError("invalid_body_md")
             mat.body_md = body_md
+        if alt_text is not _UNSET:
+            if alt_text is None:
+                mat.alt_text = None
+            elif not isinstance(alt_text, str):
+                raise ValueError("invalid_alt_text")
+            else:
+                normalized_alt = alt_text.strip()
+                if len(normalized_alt) > 500:
+                    raise ValueError("invalid_alt_text")
+                mat.alt_text = normalized_alt or None
         mat.updated_at = datetime.now(timezone.utc).isoformat()
         self.materials[material_id] = mat
         return mat
@@ -578,14 +723,22 @@ def _build_default_repo():
 
 
 REPO = _build_default_repo()
-MATERIALS_SERVICE = MaterialsService(REPO)
+MATERIAL_FILE_SETTINGS = MaterialFileSettings()
+STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
+MATERIALS_SERVICE = MaterialsService(REPO, settings=MATERIAL_FILE_SETTINGS)
 
 
 def set_repo(repo) -> None:
     """Allow tests to swap the teaching repository implementation."""
     global REPO, MATERIALS_SERVICE
     REPO = repo
-    MATERIALS_SERVICE = MaterialsService(repo)
+    MATERIALS_SERVICE = MaterialsService(repo, settings=MATERIAL_FILE_SETTINGS)
+
+
+def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
+    """Allow tests to provide a storage adapter (e.g., fake or stub)."""
+    global STORAGE_ADAPTER
+    STORAGE_ADAPTER = adapter
 
 
 # --- Request/Response models -----------------------------------------------------
@@ -884,9 +1037,44 @@ class MaterialCreatePayload(BaseModel):
         return v
 
 
+class MaterialUploadIntentPayload(BaseModel):
+    filename: str = Field(..., min_length=1, max_length=255)
+    mime_type: str = Field(..., min_length=1, max_length=128)
+    size_bytes: int = Field(..., ge=1)
+
+    @field_validator("filename")
+    @classmethod
+    def _normalize_filename(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("mime_type")
+    @classmethod
+    def _normalize_mime(cls, value: str) -> str:
+        return value.strip()
+
+
+class MaterialFinalizePayload(BaseModel):
+    intent_id: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1, max_length=200)
+    # Keep len constraints loose to allow server-side 400 mapping instead of FastAPI 422.
+    sha256: str = Field(..., min_length=1, max_length=128)
+    # Do not enforce max_length here to avoid FastAPI 422; service maps to 400 invalid_alt_text
+    alt_text: str | None = Field(default=None)
+
+    @field_validator("intent_id", "title", "sha256", "alt_text")
+    @classmethod
+    def _strip_strings(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
 class MaterialUpdatePayload(BaseModel):
     title: str | None = Field(default=None)
     body_md: object | None = None
+    alt_text: str | None = Field(default=None, max_length=500)
 
     @field_validator("title", mode="before")
     @classmethod
@@ -898,6 +1086,16 @@ class MaterialUpdatePayload(BaseModel):
             if not stripped:
                 return None
             return stripped
+        return v
+
+    @field_validator("alt_text", mode="before")
+    @classmethod
+    def _normalize_alt_text(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
         return v
 
 
@@ -1458,25 +1656,32 @@ async def update_section_material(
         return JSONResponse({"error": "not_found"}, status_code=404)
     # Include None for provided fields to detect intentionally empty values (e.g., title="")
     raw_updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not raw_updates:
+    fields_set = payload.model_fields_set
+    if not fields_set:
         return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     # Manual validation keeps responses aligned with our 400-contract (FastAPI would emit 422 otherwise).
     kwargs = {}
-    if "title" in raw_updates:
+    if "title" in fields_set:
         # Normalizer maps empty/blank strings to None; treat as invalid_title when provided
-        if raw_updates["title"] is None:
+        if raw_updates.get("title") is None:
             return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
-        title_val = raw_updates["title"] or ""
+        title_val = raw_updates.get("title") or ""
         if not title_val or len(title_val) > 200:
             return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
         kwargs["title"] = title_val
-    if "body_md" in raw_updates:
-        body_val = raw_updates["body_md"]
+    if "body_md" in fields_set:
+        body_val = raw_updates.get("body_md")
         if body_val is None or not isinstance(body_val, str):
             return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
         kwargs["body_md"] = body_val
+    if "alt_text" in fields_set:
+        alt_val = raw_updates.get("alt_text")
+        if alt_val is not None and not isinstance(alt_val, str):
+            return JSONResponse({"error": "bad_request", "detail": "invalid_alt_text"}, status_code=400)
+        normalized_alt = (alt_val or "").strip() if isinstance(alt_val, str) else None
+        kwargs["alt_text"] = normalized_alt or None
     try:
-        updated = MATERIALS_SERVICE.update_markdown_material(
+        updated = MATERIALS_SERVICE.update_material(
             unit_id,
             section_id,
             material_id,
@@ -1484,7 +1689,10 @@ async def update_section_material(
             **kwargs,
         )
     except ValueError as exc:
-        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_title", "invalid_body_md", "invalid_alt_text"}:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
@@ -1531,6 +1739,36 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
         MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
+    material_obj = MATERIALS_SERVICE.get_material_owned(unit_id, section_id, material_id, sub)
+    if material_obj is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    material_snapshot = _serialize_material(material_obj)
+    storage_key = material_snapshot.get("storage_key")
+    material_kind = material_snapshot.get("kind")
+    # Delete storage object first to avoid orphaning when storage fails after DB deletion.
+    if material_kind == "file" and storage_key:
+        try:
+            STORAGE_ADAPTER.delete_object(
+                bucket=MATERIAL_FILE_SETTINGS.storage_bucket,
+                key=storage_key,
+            )
+        except RuntimeError as exc:  # pragma: no cover - defensive log path
+            if str(exc) == "storage_adapter_not_configured":
+                logger.error(
+                    "Storage adapter unavailable during delete for material %s", material_id
+                )
+                return JSONResponse(
+                    {"error": "bad_gateway", "detail": "storage_delete_failed"},
+                    status_code=502,
+                )
+            raise
+        except Exception:  # pragma: no cover - log unexpected storage failures
+            logger.exception("Failed deleting storage object for material %s", material_id)
+            return JSONResponse(
+                {"error": "bad_gateway", "detail": "storage_delete_failed"},
+                status_code=502,
+            )
+    # After storage deletion succeeded (or not required), remove DB record and resequence.
     try:
         MATERIALS_SERVICE.delete_material(unit_id, section_id, material_id, sub)
     except LookupError:
@@ -1538,6 +1776,160 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return Response(status_code=204)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents")
+async def create_section_material_upload_intent(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    payload: MaterialUploadIntentPayload,
+):
+    """Create a presigned upload intent for a file material (author only)."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        intent = MATERIALS_SERVICE.create_file_upload_intent(
+            unit_id,
+            section_id,
+            sub,
+            filename=payload.filename,
+            mime_type=payload.mime_type,
+            size_bytes=int(payload.size_bytes),
+            storage=STORAGE_ADAPTER,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {"mime_not_allowed", "size_exceeded", "invalid_filename"}:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except RuntimeError as exc:
+        if str(exc) == "storage_adapter_not_configured":
+            return JSONResponse({"error": "service_unavailable"}, status_code=503)
+        raise
+    return JSONResponse(content=intent, status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize")
+async def finalize_section_material_upload(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    payload: MaterialFinalizePayload,
+):
+    """Finalize an upload intent and persist the file material."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(payload.intent_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_intent_id"}, status_code=400)
+    # Server-side sha256 pattern validation to align with OpenAPI and avoid 422 from Pydantic.
+    normalized_sha = (payload.sha256 or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized_sha):
+        return JSONResponse({"error": "bad_request", "detail": "checksum_mismatch"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        material, created = MATERIALS_SERVICE.finalize_file_material(
+            unit_id,
+            section_id,
+            sub,
+            intent_id=payload.intent_id,
+            title=payload.title,
+            sha256=payload.sha256,
+            alt_text=payload.alt_text,
+            storage=STORAGE_ADAPTER,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {
+            "intent_expired",
+            "checksum_mismatch",
+            "invalid_title",
+            "mime_not_allowed",
+            "invalid_alt_text",
+        }:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except RuntimeError as exc:
+        if str(exc) == "storage_adapter_not_configured":
+            return JSONResponse({"error": "service_unavailable"}, status_code=503)
+        raise
+    status_code = 201 if created else 200
+    return JSONResponse(content=_serialize_material(material), status_code=status_code)
+
+
+@teaching_router.get(
+    "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url"
+)
+async def get_section_material_download_url(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    material_id: str,
+    disposition: Optional[str] = None,
+):
+    """Generate a short-lived download URL for a file material."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(material_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    # Normalize and validate disposition at the route layer to return 400 (not FastAPI 422).
+    normalized_disposition = (disposition or "attachment").strip().lower()
+    if normalized_disposition not in {"inline", "attachment"}:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400)
+    try:
+        payload = MATERIALS_SERVICE.generate_file_download_url(
+            unit_id,
+            section_id,
+            material_id,
+            sub,
+            disposition=normalized_disposition,
+            storage=STORAGE_ADAPTER,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_disposition"}:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except RuntimeError as exc:
+        if str(exc) == "storage_adapter_not_configured":
+            return JSONResponse({"error": "service_unavailable"}, status_code=503)
+        raise
+    return JSONResponse(content=payload, status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder")

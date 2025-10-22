@@ -11,9 +11,10 @@ Design:
 """
 from __future__ import annotations
 
-from typing import List, Tuple, Optional, Dict
+from typing import Any, List, Tuple, Optional, Dict
 import os
 import re
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -58,6 +59,44 @@ def _iso(ts) -> str:
     return str(ts)
 
 _UNSET = object()
+
+_MATERIAL_COLUMNS_SQL = """
+    id::text,
+    unit_id::text,
+    section_id::text,
+    title,
+    body_md,
+    position,
+    kind,
+    storage_key,
+    filename_original,
+    mime_type,
+    size_bytes,
+    sha256,
+    alt_text,
+    to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+    to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+"""
+
+
+def _material_row_to_dict(row: Tuple) -> Dict[str, Any]:
+    return {
+        "id": row[0],
+        "unit_id": row[1],
+        "section_id": row[2],
+        "title": row[3],
+        "body_md": row[4],
+        "position": int(row[5]) if row[5] is not None else None,
+        "kind": row[6],
+        "storage_key": row[7],
+        "filename_original": row[8],
+        "mime_type": row[9],
+        "size_bytes": int(row[10]) if row[10] is not None else None,
+        "sha256": row[11],
+        "alt_text": row[12],
+        "created_at": row[13],
+        "updated_at": row[14],
+    }
 
 
 class DBTeachingRepo:
@@ -813,15 +852,8 @@ class DBTeachingRepo:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
                 cur.execute(
-                    """
-                    select id::text,
-                           unit_id::text,
-                           section_id::text,
-                           title,
-                           body_md,
-                           position,
-                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    f"""
+                    select {_MATERIAL_COLUMNS_SQL}
                     from public.unit_materials
                     where unit_id = %s
                       and section_id = %s
@@ -830,19 +862,7 @@ class DBTeachingRepo:
                     (unit_id, section_id),
                 )
                 rows = cur.fetchall() or []
-        return [
-            {
-                "id": r[0],
-                "unit_id": r[1],
-                "section_id": r[2],
-                "title": r[3],
-                "body_md": r[4],
-                "position": r[5],
-                "created_at": r[6],
-                "updated_at": r[7],
-            }
-            for r in rows
-        ]
+        return [_material_row_to_dict(r) for r in rows]
 
     def create_markdown_material(self, unit_id: str, section_id: str, author_id: str, *, title: str, body_md: str) -> dict:
         """Create a markdown material at the next position within a section."""
@@ -873,17 +893,10 @@ class DBTeachingRepo:
                 row = None
                 try:
                     cur.execute(
-                        """
+                        f"""
                         insert into public.unit_materials (unit_id, section_id, title, body_md, position)
                         values (%s, %s, %s, %s, %s)
-                        returning id::text,
-                                  unit_id::text,
-                                  section_id::text,
-                                  title,
-                                  body_md,
-                                  position,
-                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        returning {_MATERIAL_COLUMNS_SQL}
                         """,
                         (unit_id, section_id, title, body_md, next_pos),
                     )
@@ -900,17 +913,10 @@ class DBTeachingRepo:
                             )
                             next_pos = int(cur2.fetchone()[0])
                             cur2.execute(
-                                """
+                                f"""
                                 insert into public.unit_materials (unit_id, section_id, title, body_md, position)
                                 values (%s, %s, %s, %s, %s)
-                                returning id::text,
-                                          unit_id::text,
-                                          section_id::text,
-                                          title,
-                                          body_md,
-                                          position,
-                                          to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                          to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                                returning {_MATERIAL_COLUMNS_SQL}
                                 """,
                                 (unit_id, section_id, title, body_md, next_pos),
                             )
@@ -920,16 +926,7 @@ class DBTeachingRepo:
                 if row is None:
                     raise RuntimeError("unit_materials insert returned no row")
                 conn.commit()
-        return {
-            "id": row[0],
-            "unit_id": row[1],
-            "section_id": row[2],
-            "title": row[3],
-            "body_md": row[4],
-            "position": row[5],
-            "created_at": row[6],
-            "updated_at": row[7],
-        }
+        return _material_row_to_dict(row)
 
     def get_material_owned(self, unit_id: str, section_id: str, material_id: str, author_id: str) -> Optional[dict]:
         """Fetch a single material enforcing author ownership via RLS."""
@@ -937,15 +934,8 @@ class DBTeachingRepo:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
                 cur.execute(
-                    """
-                    select id::text,
-                           unit_id::text,
-                           section_id::text,
-                           title,
-                           body_md,
-                           position,
-                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    f"""
+                    select {_MATERIAL_COLUMNS_SQL}
                     from public.unit_materials
                     where id = %s
                       and unit_id = %s
@@ -956,18 +946,9 @@ class DBTeachingRepo:
                 row = cur.fetchone()
         if not row:
             return None
-        return {
-            "id": row[0],
-            "unit_id": row[1],
-            "section_id": row[2],
-            "title": row[3],
-            "body_md": row[4],
-            "position": row[5],
-            "created_at": row[6],
-            "updated_at": row[7],
-        }
+        return _material_row_to_dict(row)
 
-    def update_markdown_material(
+    def update_material(
         self,
         unit_id: str,
         section_id: str,
@@ -976,25 +957,69 @@ class DBTeachingRepo:
         *,
         title=_UNSET,
         body_md=_UNSET,
+        alt_text=_UNSET,
     ) -> Optional[dict]:
-        """Update mutable fields of a markdown material (title/body)."""
-        updates: List[tuple[str, object]] = []
-        if title is not _UNSET:
-            if title is None:
-                raise ValueError("invalid_title")
-            t = (str(title) or "").strip()
-            if not t or len(t) > 200:
-                raise ValueError("invalid_title")
-            updates.append(("title", t))
-        if body_md is not _UNSET:
-            if body_md is None or not isinstance(body_md, str):
-                raise ValueError("invalid_body_md")
-            updates.append(("body_md", body_md))
-        if not updates:
+        """Update mutable fields (title, body_md, alt_text) for a material owned by the caller."""
+        if title is _UNSET and body_md is _UNSET and alt_text is _UNSET:
             return self.get_material_owned(unit_id, section_id, material_id, author_id)
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select kind
+                    from public.unit_materials
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                    for update
+                    """,
+                    (material_id, unit_id, section_id),
+                )
+                kind_row = cur.fetchone()
+                if not kind_row:
+                    return None
+                material_kind = kind_row[0]
+                updates: List[tuple[str, object]] = []
+                if title is not _UNSET:
+                    if title is None:
+                        raise ValueError("invalid_title")
+                    t = (str(title) or "").strip()
+                    if not t or len(t) > 200:
+                        raise ValueError("invalid_title")
+                    updates.append(("title", t))
+                if body_md is not _UNSET:
+                    if material_kind != "markdown":
+                        raise ValueError("invalid_body_md")
+                    if body_md is None or not isinstance(body_md, str):
+                        raise ValueError("invalid_body_md")
+                    updates.append(("body_md", body_md))
+                if alt_text is not _UNSET:
+                    if alt_text is None:
+                        updates.append(("alt_text", None))
+                    elif not isinstance(alt_text, str):
+                        raise ValueError("invalid_alt_text")
+                    else:
+                        normalized_alt = alt_text.strip()
+                        if len(normalized_alt) > 500:
+                            raise ValueError("invalid_alt_text")
+                        updates.append(("alt_text", normalized_alt or None))
+                if not updates:
+                    cur.execute(
+                        f"""
+                        select {_MATERIAL_COLUMNS_SQL}
+                        from public.unit_materials
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        """,
+                        (material_id, unit_id, section_id),
+                    )
+                    row = cur.fetchone()
+                    conn.rollback()
+                    if not row:
+                        return None
+                    return _material_row_to_dict(row)
                 try:
                     from psycopg import sql as _sql  # type: ignore
 
@@ -1005,20 +1030,13 @@ class DBTeachingRepo:
                         params.append(val)
                     params.extend([material_id, unit_id, section_id])
                     stmt = _sql.SQL(
-                        """
+                        f"""
                         update public.unit_materials
-                        set {assign}
+                        set {{assign}}
                         where id = %s
                           and unit_id = %s
                           and section_id = %s
-                        returning id::text,
-                                  unit_id::text,
-                                  section_id::text,
-                                  title,
-                                  body_md,
-                                  position,
-                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        returning {_MATERIAL_COLUMNS_SQL}
                         """
                     ).format(assign=_sql.SQL(", ").join(assignments))
                     cur.execute(stmt, params)
@@ -1032,31 +1050,16 @@ class DBTeachingRepo:
                         where id = %s
                           and unit_id = %s
                           and section_id = %s
-                        returning id::text,
-                                  unit_id::text,
-                                  section_id::text,
-                                  title,
-                                  body_md,
-                                  position,
-                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        returning {_MATERIAL_COLUMNS_SQL}
                         """,
                         params,
                     )
                 row = cur.fetchone()
                 if not row:
+                    conn.rollback()
                     return None
                 conn.commit()
-        return {
-            "id": row[0],
-            "unit_id": row[1],
-            "section_id": row[2],
-            "title": row[3],
-            "body_md": row[4],
-            "position": row[5],
-            "created_at": row[6],
-            "updated_at": row[7],
-        }
+        return _material_row_to_dict(row)
 
     def delete_material(self, unit_id: str, section_id: str, material_id: str, author_id: str) -> bool:
         """Delete a material and resequence remaining positions."""
@@ -1097,6 +1100,219 @@ class DBTeachingRepo:
                 )
                 conn.commit()
                 return True
+
+    def create_file_upload_intent(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        intent_id: str,
+        material_id: str,
+        storage_key: str,
+        filename: str,
+        mime_type: str,
+        size_bytes: int,
+        expires_at: datetime,
+    ) -> Dict[str, Any]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    "select id from public.unit_sections where id = %s and unit_id = %s for update",
+                    (section_id, unit_id),
+                )
+                if not cur.fetchone():
+                    raise LookupError("section_not_found")
+                cur.execute(
+                    """
+                    insert into public.upload_intents (
+                        id, material_id, unit_id, section_id, author_id,
+                        storage_key, filename, mime_type, size_bytes, expires_at
+                    )
+                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    returning id::text,
+                              material_id::text,
+                              storage_key,
+                              filename,
+                              mime_type,
+                              size_bytes,
+                              expires_at,
+                              consumed_at
+                    """,
+                    (
+                        intent_id,
+                        material_id,
+                        unit_id,
+                        section_id,
+                        author_id,
+                        storage_key,
+                        filename,
+                        mime_type,
+                        size_bytes,
+                        expires_at,
+                    ),
+                )
+                row = cur.fetchone()
+                conn.commit()
+        return {
+            "intent_id": row[0],
+            "material_id": row[1],
+            "storage_key": row[2],
+            "filename": row[3],
+            "mime_type": row[4],
+            "size_bytes": int(row[5]),
+            "expires_at": row[6],
+            "consumed_at": row[7],
+        }
+
+    def get_upload_intent_owned(
+        self,
+        intent_id: str,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text,
+                           material_id::text,
+                           storage_key,
+                           filename,
+                           mime_type,
+                           size_bytes,
+                           expires_at,
+                           consumed_at
+                    from public.upload_intents
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                      and author_id = %s
+                    """,
+                    (intent_id, unit_id, section_id, author_id),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "intent_id": row[0],
+            "material_id": row[1],
+            "storage_key": row[2],
+            "filename": row[3],
+            "mime_type": row[4],
+            "size_bytes": int(row[5]),
+            "expires_at": row[6],
+            "consumed_at": row[7],
+        }
+
+    def finalize_upload_intent_create_material(
+        self,
+        intent_id: str,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        title: str,
+        alt_text: Optional[str],
+        sha256: str,
+    ) -> Tuple[Dict[str, Any], bool]:
+        now = datetime.now(timezone.utc)
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text,
+                           material_id::text,
+                           storage_key,
+                           filename,
+                           mime_type,
+                           size_bytes,
+                           expires_at,
+                           consumed_at
+                    from public.upload_intents
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                      and author_id = %s
+                    for update
+                    """,
+                    (intent_id, unit_id, section_id, author_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise LookupError("intent_not_found")
+                (
+                    _intent_id,
+                    material_id,
+                    storage_key,
+                    filename,
+                    mime_type,
+                    size_bytes,
+                    expires_at,
+                    consumed_at,
+                ) = row
+                if consumed_at is not None:
+                    cur.execute(
+                        f"""
+                        select {_MATERIAL_COLUMNS_SQL}
+                        from public.unit_materials
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        """,
+                        (material_id, unit_id, section_id),
+                    )
+                    material_row = cur.fetchone()
+                    if not material_row:
+                        raise LookupError("material_not_found")
+                    conn.rollback()
+                    return _material_row_to_dict(material_row), False
+                if expires_at <= now:
+                    raise ValueError("intent_expired")
+                cur.execute(
+                    "select id from public.unit_sections where id = %s and unit_id = %s for update",
+                    (section_id, unit_id),
+                )
+                cur.execute(
+                    "select coalesce(max(position), 0) + 1 from public.unit_materials where section_id = %s",
+                    (section_id,),
+                )
+                next_pos = int(cur.fetchone()[0])
+                cur.execute(
+                    f"""
+                    insert into public.unit_materials (
+                        id, unit_id, section_id, title, body_md, position, kind,
+                        storage_key, filename_original, mime_type, size_bytes, sha256, alt_text
+                    )
+                    values (%s, %s, %s, %s, %s, %s, 'file', %s, %s, %s, %s, %s, %s)
+                    returning {_MATERIAL_COLUMNS_SQL}
+                    """,
+                    (
+                        material_id,
+                        unit_id,
+                        section_id,
+                        title,
+                        "",
+                        next_pos,
+                        storage_key,
+                        filename,
+                        mime_type,
+                        size_bytes,
+                        sha256,
+                        alt_text,
+                    ),
+                )
+                material_row = cur.fetchone()
+                cur.execute(
+                    "update public.upload_intents set consumed_at = %s where id = %s",
+                    (now, intent_id),
+                )
+                conn.commit()
+        return _material_row_to_dict(material_row), True
 
     def reorder_section_materials(
         self,

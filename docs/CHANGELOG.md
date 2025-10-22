@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+- fix(api/openapi): Move 502 storage_delete_failed example from PATCH to DELETE /materials; align with runtime behavior.
+- fix(api/teaching): Delete storage first, then DB, to avoid orphaned objects when storage deletion fails (returns 502).
+- db(materials): Strengthen SHA-256 CHECK (regex ^[0-9a-f]{64}$) via migration; improves data integrity.
+- fix(teaching): Finalize accepts parameterized Content-Type from storage HEAD (e.g., "application/pdf; charset=UTF-8").
+- docs(openapi): Add regex pattern for `sha256` (^[0-9a-f]{64}$) in `MaterialFileFinalizeRequest`.
+- tests(teaching): Add test ensuring finalize accepts Content-Type with parameters.
+- fix(api/teaching): Route-level sha256 validation returns 400 checksum_mismatch (avoid FastAPI 422); relaxed Pydantic length to defer to server checks.
+- tests(teaching): Add tests for invalid sha256 pattern and content-length mismatch (deletes object + 400 checksum_mismatch).
+- fix(api/teaching): Validate download `disposition` at route-level (400 invalid_disposition) and normalize before calling service.
+- docs(openapi): Add 400 example for `invalid_disposition` in download-url endpoint.
 - fix(api/teaching): PATCH materials treats provided empty title as `invalid_title` (was `empty_payload`).
 - consistency(api/teaching): GET materials returns explicit JSONResponse (200) for uniform response shape.
 - docs(openapi): Add `empty_payload` example to materials PATCH 400 section.
@@ -14,6 +24,10 @@
   Also add sections: empty_section_ids, section_ids_must_be_array examples.
 - fix(api/openapi): Correct DELETE /api/teaching/units/{unit_id} path placement (remove stray delete under sections/reorder); units PATCH uses authorOnly permissions.
 - fix(api/teaching): Validate course_id UUID in POST /api/teaching/courses/{course_id}/modules/reorder (400 bad_request on invalid path param).
+- fix(api/teaching): Allow PATCH /materials to update `alt_text`, returning `invalid_alt_text` on violations; keeps markdown/body guards intact.
+- security(teaching): Sanitize storage-key path segments (author/unit/section/material) before presign/finalize to avoid path traversal on S3-compatible backends; in-memory repo gained full file-material workflow.
+- docs(openapi/db): Document new error details (`invalid_filename`, `mime_not_allowed`, `invalid_alt_text`) and storage-key sanitizing; contract examples extended.
+- tests(teaching): Extend file-material contract tests for invalid filenames, uppercase MIME normalization, size limit, expired intents, alt-text updates and in-memory fallback coverage.
 - fix(db/sections): Serialize concurrent section creation by locking parent learning_unit; add one-shot retry on unique violation; regression tests added.
 - fix(db/sections): Ensure unique-violation retry fetches the inserted row before the cursor closes; regression test guards against cursor-already-closed errors.
 - security(teaching): Enforce limited-role DSN (gustav_limited) for TeachingRepo to guarantee RLS coverage; add override flag `ALLOW_SERVICE_DSN_FOR_TESTING` for dev only.

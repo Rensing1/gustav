@@ -56,6 +56,8 @@ async def test_search_requires_teacher_and_min_query(monkeypatch: pytest.MonkeyP
         arr = r2.json()
         assert arr and arr[0]["sub"] == "s-1"
         assert arr[0]["name"] == "Max Musterschüler"
+        # Responses must not be cached (privacy)
+        assert r2.headers.get("Cache-Control") == "no-store"
 
 
 @pytest.mark.anyio

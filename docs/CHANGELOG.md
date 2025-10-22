@@ -7,6 +7,9 @@
 - fix(teaching): Finalize accepts parameterized Content-Type from storage HEAD (e.g., "application/pdf; charset=UTF-8").
 - docs(openapi): Add regex pattern for `sha256` (^[0-9a-f]{64}$) in `MaterialFileFinalizeRequest`.
 - tests(teaching): Add test ensuring finalize accepts Content-Type with parameters.
+- fix(teaching): In-memory course repo now mirrors DB validation (reject blank titles) to keep fallback in contract.
+- security(api/users): User search responses send Cache-Control: no-store to prevent caching of roster data.
+- chore(git): Explicitly ignore backend web __pycache__ directories (root-owned artifacts from previous builds).
 - fix(api/teaching): Route-level sha256 validation returns 400 checksum_mismatch (avoid FastAPI 422); relaxed Pydantic length to defer to server checks.
 - tests(teaching): Add tests for invalid sha256 pattern and content-length mismatch (deletes object + 400 checksum_mismatch).
 - fix(api/teaching): Validate download `disposition` at route-level (400 invalid_disposition) and normalize before calling service.
@@ -27,6 +30,8 @@
 - fix(api/teaching): Allow PATCH /materials to update `alt_text`, returning `invalid_alt_text` on violations; keeps markdown/body guards intact.
 - security(teaching): Sanitize storage-key path segments (author/unit/section/material) before presign/finalize to avoid path traversal on S3-compatible backends; in-memory repo gained full file-material workflow.
 - docs(openapi/db): Document new error details (`invalid_filename`, `mime_not_allowed`, `invalid_alt_text`) and storage-key sanitizing; contract examples extended.
+ - feat(storage): Add SupabaseStorageAdapter with unit tests, service/route fallbacks, and optional app wiring via env vars (no API changes).
+ - docs(ops): Add storage and gateway reference with CLI steps and .env template; plan doc for storage integration; architecture updated with Storage section.
 - tests(teaching): Extend file-material contract tests for invalid filenames, uppercase MIME normalization, size limit, expired intents, alt-text updates and in-memory fallback coverage.
 - fix(db/sections): Serialize concurrent section creation by locking parent learning_unit; add one-shot retry on unique violation; regression tests added.
 - fix(db/sections): Ensure unique-violation retry fetches the inserted row before the cursor closes; regression test guards against cursor-already-closed errors.

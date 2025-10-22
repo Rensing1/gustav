@@ -101,6 +101,35 @@ async def test_create_course_invalid_title_returns_400():
 
 
 @pytest.mark.anyio
+async def test_create_course_invalid_title_in_memory_repo(monkeypatch: pytest.MonkeyPatch):
+    """Ensure fallback repo mirrors DB validation for blank titles."""
+    main.SESSION_STORE = SessionStore()
+
+    import routes.teaching as teaching
+
+    # Force fallback by swapping repo with fresh in-memory implementation.
+    repo = teaching._Repo()  # type: ignore[attr-defined]
+    monkeypatch.setattr(teaching, "REPO", repo, raising=False)
+    monkeypatch.setattr(
+        teaching,
+        "MATERIALS_SERVICE",
+        teaching.MaterialsService(repo, settings=teaching.MATERIAL_FILE_SETTINGS),
+        raising=False,
+    )
+
+    teacher = main.SESSION_STORE.create(sub="teacher-memory", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        resp = await client.post("/api/teaching/courses", json={"title": "   "})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_input"
+
+
+
+@pytest.mark.anyio
 async def test_student_cannot_create_course_forbidden():
     main.SESSION_STORE = SessionStore()
     # Arrange: student session

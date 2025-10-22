@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, asdict, is_dataclass
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -120,11 +121,14 @@ class _Repo:
         self.upload_intents: Dict[str, Dict[str, Any]] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
+        normalized = (title or "").strip()
+        if not normalized or len(normalized) > 200:
+            raise ValueError("invalid_title")
         now = datetime.now(timezone.utc).isoformat()
         cid = str(uuid4())
         course = Course(
             id=cid,
-            title=title,
+            title=normalized,
             subject=subject,
             grade_level=grade_level,
             term=term,
@@ -723,7 +727,9 @@ def _build_default_repo():
 
 
 REPO = _build_default_repo()
-MATERIAL_FILE_SETTINGS = MaterialFileSettings()
+# Allow overriding the storage bucket via environment for deployments
+_bucket = os.getenv("SUPABASE_STORAGE_BUCKET") or MaterialFileSettings().storage_bucket
+MATERIAL_FILE_SETTINGS = MaterialFileSettings(storage_bucket=_bucket)
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
 MATERIALS_SERVICE = MaterialsService(REPO, settings=MATERIAL_FILE_SETTINGS)
 
@@ -1757,10 +1763,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
                 logger.error(
                     "Storage adapter unavailable during delete for material %s", material_id
                 )
-                return JSONResponse(
-                    {"error": "bad_gateway", "detail": "storage_delete_failed"},
-                    status_code=502,
-                )
+                return JSONResponse({"error": "service_unavailable"}, status_code=503)
             raise
         except Exception:  # pragma: no cover - log unexpected storage failures
             logger.exception("Failed deleting storage object for material %s", material_id)
@@ -1929,7 +1932,7 @@ async def get_section_material_download_url(
         if str(exc) == "storage_adapter_not_configured":
             return JSONResponse({"error": "service_unavailable"}, status_code=503)
         raise
-    return JSONResponse(content=payload, status_code=200)
+    return JSONResponse(content=payload, status_code=200, headers={"Cache-Control": "no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder")
@@ -1940,7 +1943,7 @@ async def reorder_section_materials(
     payload: MaterialReorderPayload,
 ):
     """
-    Reorder markdown materials within a section (author only).
+    Reorder materials within a section (author only).
 
     Why:
         Allows teachers to define the pedagogical flow; uses deferrable constraints for atomic swaps.

@@ -62,4 +62,4 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
         name = str(it.get("name", ""))
         if sub and name:
             norm.append({"sub": sub, "name": name})
-    return norm
+    return JSONResponse(norm, headers={"Cache-Control": "no-store"})

@@ -333,6 +333,97 @@ async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage
 
 
 @pytest.mark.anyio
+async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter):
+    """Server-side validation rejects invalid sha256 (length/pattern) with 400 checksum_mismatch."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-bad-sha", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        intent = intent_resp.json()
+
+        bad = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Sicherheitsleitfaden",
+                "sha256": "f" * 63,  # invalid length
+            },
+        )
+        assert bad.status_code == 400
+        assert bad.json()["detail"] == "checksum_mismatch"
+
+
+@pytest.mark.anyio
+async def test_finalize_rejects_content_length_mismatch_and_deletes_object(_reset_storage_adapter):
+    """Finalize must reject when storage HEAD content_length differs and delete the object."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-len-mismatch", name="Frau Müller", roles=["teacher"])
+
+    # Override head_object to return a wrong content_length
+    def _head_with_wrong_length(**kwargs):
+        _reset_storage_adapter.head_calls.append(kwargs)
+        return {"content_type": "application/pdf", "content_length": 2048}
+
+    _reset_storage_adapter.head_object = _head_with_wrong_length  # type: ignore[assignment]
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        intent = intent_resp.json()
+
+        finalize_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Sicherheitsleitfaden",
+                "sha256": "f" * 64,
+            },
+        )
+        assert finalize_resp.status_code == 400
+        assert finalize_resp.json()["detail"] == "checksum_mismatch"
+        # Ensure the object was deleted due to mismatch
+        assert _reset_storage_adapter.delete_calls, "Expected delete_object on checksum mismatch"
+
+
+@pytest.mark.anyio
 async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter):
     main.SESSION_STORE = SessionStore()
     import routes.teaching as teaching  # noqa: E402

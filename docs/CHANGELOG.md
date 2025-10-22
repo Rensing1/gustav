@@ -4,6 +4,8 @@
 - fix(teaching): Finalize accepts parameterized Content-Type from storage HEAD (e.g., "application/pdf; charset=UTF-8").
 - docs(openapi): Add regex pattern for `sha256` (^[0-9a-f]{64}$) in `MaterialFileFinalizeRequest`.
 - tests(teaching): Add test ensuring finalize accepts Content-Type with parameters.
+- fix(api/teaching): Route-level sha256 validation returns 400 checksum_mismatch (avoid FastAPI 422); relaxed Pydantic length to defer to server checks.
+- tests(teaching): Add tests for invalid sha256 pattern and content-length mismatch (deletes object + 400 checksum_mismatch).
 - fix(api/teaching): PATCH materials treats provided empty title as `invalid_title` (was `empty_payload`).
 - consistency(api/teaching): GET materials returns explicit JSONResponse (200) for uniform response shape.
 - docs(openapi): Add `empty_payload` example to materials PATCH 400 section.

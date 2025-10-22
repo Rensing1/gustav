@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, asdict, is_dataclass
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import uuid4, UUID
@@ -1055,7 +1056,8 @@ class MaterialUploadIntentPayload(BaseModel):
 class MaterialFinalizePayload(BaseModel):
     intent_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1, max_length=200)
-    sha256: str = Field(..., min_length=64, max_length=64)
+    # Keep len constraints loose to allow server-side 400 mapping instead of FastAPI 422.
+    sha256: str = Field(..., min_length=1, max_length=128)
     alt_text: str | None = Field(default=None, max_length=500)
 
     @field_validator("intent_id", "title", "sha256", "alt_text")
@@ -1835,6 +1837,10 @@ async def finalize_section_material_upload(
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     if not _is_uuid_like(payload.intent_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_intent_id"}, status_code=400)
+    # Server-side sha256 pattern validation to align with OpenAPI and avoid 422 from Pydantic.
+    normalized_sha = (payload.sha256 or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized_sha):
+        return JSONResponse({"error": "bad_request", "detail": "checksum_mismatch"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:

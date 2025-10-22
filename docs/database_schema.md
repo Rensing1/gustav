@@ -92,3 +92,23 @@ This document summarizes the production session table introduced for persistent 
 - Lifecycle
   - Upload-Intent wird über Service-Layer erzeugt, validiert und nach Finalize (`consumed_at`) markiert.
   - Abgelaufene Intents können asynchron aufgeräumt werden (Follow-up).
+
+### `public.module_section_releases`
+
+- Purpose: Speichert den Freigabe-Status einzelner Abschnitte pro Kursmodul, damit Lehrkräfte Sichtbarkeit toggeln können.
+- Columns
+  - `course_module_id uuid not null` → `course_modules(id)` (on delete cascade).
+  - `section_id uuid not null` → `unit_sections(id)` (on delete cascade).
+  - `visible boolean not null` — `TRUE` wenn Abschnitt freigeschaltet ist, sonst `FALSE`.
+  - `released_at timestamptz null` — Zeitpunkt der letzten Freischaltung (`NULL`, wenn aktuell verborgen).
+  - `released_by text null` — OIDC `sub` der Lehrkraft, die zuletzt den Status geändert hat.
+- Constraints & Indizes
+  - Primary Key `(course_module_id, section_id)` stellt Idempotenz sicher.
+  - Indizes `idx_module_section_releases_module`, `idx_module_section_releases_section` unterstützen Lookups in beide Richtungen.
+- Security / RLS
+  - Tabelle ist RLS-aktiviert; Grants für `gustav_limited` (`SELECT/INSERT/UPDATE/DELETE`).
+  - Policies prüfen, dass nur Kurs-Owner (via Join `course_modules` ↔ `courses`) lesen/schreiben dürfen und dass Abschnitte zur Unit des Moduls gehören.
+  - `set_config('app.current_sub', ...)` wird vor jeder Operation gesetzt, damit RLS greift.
+- Behavior
+  - Upsert-Semantik: PATCH mit `visible=true/false` überschreibt vorhandene Zeile (Release-Historie wird intentionally nicht versioniert).
+  - Cascade: Löschen eines Kursmoduls entfernt automatisch alle Freigaben durch `on delete cascade`.

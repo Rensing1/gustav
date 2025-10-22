@@ -234,6 +234,35 @@ components:
             type: string
             format: uuid
           description: Desired order (1..n) of section IDs for the given unit
+    ModuleSectionVisibility:
+      type: object
+      required: [course_module_id, section_id, visible]
+      properties:
+        course_module_id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        visible:
+          type: boolean
+          description: Whether the section is released to students of the course.
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the section was last released (`null` when currently hidden).
+        released_by:
+          type: string
+          nullable: true
+          description: Subject identifier of the teacher who last changed visibility.
+    ModuleSectionVisibilityUpdate:
+      type: object
+      required: [visible]
+      properties:
+        visible:
+          type: boolean
+          description: Target visibility state for the section within the course module.
     Material:
       type: object
       required: [id, unit_id, section_id, title, body_md, position, kind, created_at, updated_at]
@@ -2037,6 +2066,61 @@ paths:
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility:
+    patch:
+      tags: [Teaching]
+      summary: Update section visibility within a course module (owner only)
+      description: Sets whether a section is released to students enrolled in the course.
+      operationId: updateModuleSectionVisibility
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      x-security-notes:
+        - "RLS: module_section_releases table joins course_modules to enforce owner checks."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleSectionVisibilityUpdate'
+      responses:
+        '200':
+          description: Visibility state updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleSectionVisibility'
+        '400':
+          description: "Invalid identifiers or payload (detail: invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the course owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Course, module, or section not found within the module, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/users/search:
     get:

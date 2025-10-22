@@ -236,9 +236,12 @@ components:
           description: Desired order (1..n) of section IDs for the given unit
     Material:
       type: object
-      required: [id, section_id, title, body_md, position, created_at, updated_at]
+      required: [id, unit_id, section_id, title, body_md, position, created_at, updated_at]
       properties:
         id:
+          type: string
+          format: uuid
+        unit_id:
           type: string
           format: uuid
         section_id:
@@ -1299,6 +1302,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
               examples:
+                invalid_unit_id:
+                  summary: Unit id not a UUID
+                  value:
+                    error: bad_request
+                    detail: invalid_unit_id
                 invalid_section_id:
                   summary: Section id not a UUID
                   value:

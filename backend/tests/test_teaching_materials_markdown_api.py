@@ -297,3 +297,63 @@ async def test_material_reorder_and_payload_guards():
             json={"material_ids": [m1["id"], m2["id"], m3["id"]]},
         )
         assert forbidden.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_patch_rejects_invalid_body_md_type():
+    """PATCH must return 400 when body_md is not a string."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    author = main.SESSION_STORE.create(sub="teacher-materials-patch-invalid", name="Autor", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", author.session_id)
+        unit = await _create_unit(client, title="Thermodynamik")
+        section = await _create_section(client, unit["id"], title="Temperatur")
+        mat = await _create_material(client, unit["id"], section["id"], title="Grundlagen", body="Text")
+
+        bad = await client.patch(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{mat['id']}",
+            json={"body_md": 123},
+        )
+        assert bad.status_code == 400
+        assert bad.json().get("detail") == "invalid_body_md"
+
+
+@pytest.mark.anyio
+async def test_reorder_rejects_invalid_uuid_in_payload():
+    """Reorder must return 400 invalid_material_ids when list contains a non-UUID."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    author = main.SESSION_STORE.create(sub="teacher-materials-reorder-invalid", name="Autor", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", author.session_id)
+        unit = await _create_unit(client, title="Elektrizität")
+        section = await _create_section(client, unit["id"], title="Strom")
+        m1 = await _create_material(client, unit["id"], section["id"], title="A", body="A")
+        m2 = await _create_material(client, unit["id"], section["id"], title="B", body="B")
+        m3 = await _create_material(client, unit["id"], section["id"], title="C", body="C")
+
+        invalid = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/reorder",
+            json={"material_ids": [m1["id"], "not-a-uuid", m3["id"]]},
+        )
+        assert invalid.status_code == 400
+        assert invalid.json().get("detail") == "invalid_material_ids"

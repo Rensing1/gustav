@@ -86,6 +86,8 @@ def test_material_schemas_and_paths_are_defined():
     required = materials_schema.get("required", [])
     for field in ["id", "section_id", "title", "body_md", "position", "created_at", "updated_at"]:
         assert field in required, f"{field} should be required on Material schema"
+    # Serializer includes unit_id; contract should model it explicitly
+    assert "unit_id" in required or "unit_id" in (materials_schema.get("properties", {}) or {}), "unit_id should be documented"
 
     path = "/api/teaching/units/{unit_id}/sections/{section_id}/materials"
     assert path in spec["paths"], "Materials path missing"

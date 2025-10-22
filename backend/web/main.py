@@ -233,6 +233,47 @@ else:
 # Note: Admin client removed; E2E tests use direct requests to Keycloak admin API
 
 
+# --- Optional: Supabase Storage adapter wiring ---------------------------------
+def _maybe_configure_supabase_storage() -> None:
+    """Configure Supabase Storage adapter if environment and dependency are present.
+
+    Why:
+        In dev/prod we want real file uploads via Supabase. In tests, the
+        dependency may not be installed and a fake adapter is injected.
+
+    Behavior:
+        - Reads SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from env.
+        - If both are set and supabase-py is importable, installs the adapter.
+        - Otherwise, leaves the default NullStorageAdapter in place.
+
+    Security:
+        Does not log secrets; only logs adapter activation status.
+    """
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        return
+    try:
+        from supabase import create_client  # type: ignore
+        from teaching.storage_supabase import SupabaseStorageAdapter  # type: ignore
+        from routes import teaching as teaching_routes  # lazy import
+
+        client = create_client(url, key)
+        adapter = SupabaseStorageAdapter(client)
+        teaching_routes.set_storage_adapter(adapter)
+        logging.getLogger("gustav.storage").info("Supabase Storage adapter configured (bucket=materials)")
+    except Exception as exc:  # pragma: no cover - best-effort wiring in non-test envs
+        logging.getLogger("gustav.storage").warning(
+            "Supabase adapter not configured (%s). Falling back to NullStorageAdapter.",
+            exc.__class__.__name__,
+        )
+
+
+# Try to auto-configure storage for non-test environments
+if os.getenv("GUSTAV_ENV", "dev").lower() in {"dev", "prod"}:
+    _maybe_configure_supabase_storage()
+
+
 # --- Auth Enforcement Middleware -------------------------------------------------
 
 def _is_public_path(path: str) -> bool:

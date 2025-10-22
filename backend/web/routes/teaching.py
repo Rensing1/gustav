@@ -1058,7 +1058,8 @@ class MaterialFinalizePayload(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     # Keep len constraints loose to allow server-side 400 mapping instead of FastAPI 422.
     sha256: str = Field(..., min_length=1, max_length=128)
-    alt_text: str | None = Field(default=None, max_length=500)
+    # Do not enforce max_length here to avoid FastAPI 422; service maps to 400 invalid_alt_text
+    alt_text: str | None = Field(default=None)
 
     @field_validator("intent_id", "title", "sha256", "alt_text")
     @classmethod
@@ -1744,12 +1745,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     material_snapshot = _serialize_material(material_obj)
     storage_key = material_snapshot.get("storage_key")
     material_kind = material_snapshot.get("kind")
-    try:
-        MATERIALS_SERVICE.delete_material(unit_id, section_id, material_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    # Delete storage object first to avoid orphaning when storage fails after DB deletion.
     if material_kind == "file" and storage_key:
         try:
             STORAGE_ADAPTER.delete_object(
@@ -1772,6 +1768,13 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
                 {"error": "bad_gateway", "detail": "storage_delete_failed"},
                 status_code=502,
             )
+    # After storage deletion succeeded (or not required), remove DB record and resequence.
+    try:
+        MATERIALS_SERVICE.delete_material(unit_id, section_id, material_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
     return Response(status_code=204)
 
 
@@ -1865,6 +1868,7 @@ async def finalize_section_material_upload(
             "checksum_mismatch",
             "invalid_title",
             "mime_not_allowed",
+            "invalid_alt_text",
         }:
             detail = "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)

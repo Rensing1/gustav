@@ -1546,18 +1546,6 @@ paths:
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '502':
-          description: Upstream storage deletion failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              examples:
-                storage_delete_failed:
-                  summary: Storage deletion failed and manual cleanup is required
-                  value:
-                    error: bad_gateway
-                    detail: storage_delete_failed
     delete:
       tags: [Teaching]
       summary: Delete a material (author only)
@@ -1602,6 +1590,18 @@ paths:
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '502':
+          description: Upstream storage deletion failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                storage_delete_failed:
+                  summary: Storage deletion failed and manual cleanup is required
+                  value:
+                    error: bad_gateway
+                    detail: storage_delete_failed
 
   /api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder:
     post:

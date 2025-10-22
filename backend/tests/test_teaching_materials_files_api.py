@@ -370,6 +370,48 @@ async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter):
                 "sha256": "f" * 63,  # invalid length
             },
         )
+    assert bad.status_code == 400
+    assert bad.json()["detail"] == "checksum_mismatch"
+
+
+@pytest.mark.anyio
+async def test_finalize_rejects_non_hex_sha256_with_length_64(_reset_storage_adapter):
+    """Finalize must reject sha256 with non-hex chars (length 64) with 400 checksum_mismatch."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-bad-sha-hex", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        intent = intent_resp.json()
+
+        non_hex = "f" * 63 + "z"  # 64 chars but includes non-hex
+        bad = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Sicherheitsleitfaden",
+                "sha256": non_hex,
+            },
+        )
         assert bad.status_code == 400
         assert bad.json()["detail"] == "checksum_mismatch"
 
@@ -673,3 +715,109 @@ async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter):
         teaching.set_repo(original_repo)
         if original_adapter is not None:
             teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_finalize_rejects_invalid_alt_text_too_long(_reset_storage_adapter):
+    """Finalize should reject alt_text > 500 with 400 invalid_alt_text."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-bad-alt", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        intent = intent_resp.json()
+
+        too_long = "a" * 501
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Sicherheitsleitfaden",
+                "sha256": "f" * 64,
+                "alt_text": too_long,
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "invalid_alt_text"
+
+
+@pytest.mark.anyio
+async def test_delete_file_material_storage_failure_returns_502_and_preserves_db(_reset_storage_adapter):
+    """Deleting a file material should fail with 502 if storage delete fails and keep DB row intact."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-del-fail", name="Frau Müller", roles=["teacher"])
+
+    # Configure storage delete to raise an error
+    def _delete_fail(**kwargs):
+        _reset_storage_adapter.delete_calls.append(kwargs)
+        raise Exception("boom")
+
+    _reset_storage_adapter.delete_object = _delete_fail  # type: ignore[assignment]
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        intent = intent_resp.json()
+
+        finalize_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Sicherheitsleitfaden",
+                "sha256": "f" * 64,
+            },
+        )
+        assert finalize_resp.status_code == 201
+        material = finalize_resp.json()
+
+        # Attempt delete — should fail with 502 and keep material
+        delete_resp = await client.delete(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}"
+        )
+        assert delete_resp.status_code == 502
+        assert delete_resp.json()["detail"] == "storage_delete_failed"
+
+        # List still contains the material
+        lst = await client.get(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials",
+        )
+        assert lst.status_code == 200
+        ids = [m["id"] for m in lst.json()]
+        assert material["id"] in ids

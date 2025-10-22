@@ -162,6 +162,13 @@ E2E‑Tests (Identity):
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
+### Storage (Supabase)
+- Self‑hosted via Supabase CLI. Storage ist privat; Zugriff ausschließlich über kurzlebige signierte URLs.
+- Bucket: `materials` (lokal in `supabase/config.toml` konfiguriert; 20 MiB; PDF/PNG/JPEG).
+- Adapter: `backend/teaching/storage_supabase.py` implementiert Zugriff (presign upload/download, head, delete).
+- Wiring: In `backend/web/main.py` wird der Adapter automatisch aktiviert, wenn `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` gesetzt sind.
+- ENV: siehe `.env.example` und `docs/references/storage_and_gateway.md`.
+
 ### RLS & Ordering (Teaching/Sections)
 - RLS‑Identität: Jede DB‑Operation setzt `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen.
 - Limited‑Role‑DSN: Runtime verwendet ausschließlich die `gustav_limited`‑Rolle. Service‑/Owner‑Rollen sind Migrationen vorbehalten.

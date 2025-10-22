@@ -41,7 +41,9 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 - `POST /api/teaching/courses/{course_id}/modules/reorder` (Owner only)
   - Body `{ module_ids: [uuid,…] }` repräsentiert die Zielreihenfolge; 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen; 404/403 wie oben
 - `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` (Owner only)
-  - Body `{ visible: bool }`, 200 `ModuleSectionVisibility`; 400 bei ungültigen UUIDs/Body; 403 wenn nicht Owner; 404 wenn Abschnitt nicht zum Modul gehört
+  - Body `{ visible: bool }`, 200 `ModuleSectionVisibility`
+  - 400 mit `detail`: `invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type`
+  - 403 wenn nicht Owner; 404 wenn Abschnitt nicht zum Modul gehört
 
 #### Abschnitte (Sections) je Lerneinheit
 - `GET /api/teaching/units/{unit_id}/sections` (Author only)

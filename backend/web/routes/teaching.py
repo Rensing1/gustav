@@ -2222,8 +2222,12 @@ async def update_module_section_visibility(
     try:
         # Repository applies transactional upsert with RLS enforcement.
         record = REPO.set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+    except LookupError as exc:
+        detail = str(exc) or None
+        body = {"error": "not_found"}
+        if detail:
+            body["detail"] = detail
+        return JSONResponse(body, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return JSONResponse(content=record, status_code=200)

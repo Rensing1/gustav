@@ -1657,30 +1657,38 @@ class DBTeachingRepo:
                 section_row = cur.fetchone()
                 if not section_row:
                     raise LookupError("section_not_in_module")
-                cur.execute(
-                    """
-                    insert into public.module_section_releases (
-                        course_module_id,
-                        section_id,
-                        visible,
-                        released_at,
-                        released_by
+                try:
+                    cur.execute(
+                        """
+                        insert into public.module_section_releases (
+                            course_module_id,
+                            section_id,
+                            visible,
+                            released_at,
+                            released_by
+                        )
+                        values (%s, %s, %s, %s, %s)
+                        on conflict (course_module_id, section_id)
+                        do update set
+                            visible = excluded.visible,
+                            released_at = excluded.released_at,
+                            released_by = excluded.released_by
+                        returning
+                            course_module_id::text,
+                            section_id::text,
+                            visible,
+                            to_char(released_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                            released_by
+                        """,
+                        (module_id, section_id, visible, released_at, owner_sub),
                     )
-                    values (%s, %s, %s, %s, %s)
-                    on conflict (course_module_id, section_id)
-                    do update set
-                        visible = excluded.visible,
-                        released_at = excluded.released_at,
-                        released_by = excluded.released_by
-                    returning
-                        course_module_id::text,
-                        section_id::text,
-                        visible,
-                        released_at,
-                        released_by
-                    """,
-                    (module_id, section_id, visible, released_at, owner_sub),
-                )
+                except Exception as exc:
+                    # Map typical RLS denials (e.g., policy violations) to PermissionError
+                    # to ensure the web layer returns 403 rather than 500.
+                    if getattr(exc, "sqlstate", None) in {"42501"}:  # insufficient_privilege
+                        raise PermissionError("rls_denied")
+                    # Fallback: re-raise for upstream handling
+                    raise
                 result = cur.fetchone()
                 conn.commit()
         if not result:

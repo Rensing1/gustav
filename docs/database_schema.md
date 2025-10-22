@@ -112,3 +112,4 @@ This document summarizes the production session table introduced for persistent 
 - Behavior
   - Upsert-Semantik: PATCH mit `visible=true/false` überschreibt vorhandene Zeile (Release-Historie wird intentionally nicht versioniert).
   - Cascade: Löschen eines Kursmoduls entfernt automatisch alle Freigaben durch `on delete cascade`.
+  - Datenkonsistenz: CHECK-Constraint erzwingt `released_at IS NOT NULL` wenn `visible=true` und `released_at IS NULL` wenn `visible=false`.

@@ -1420,6 +1420,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
               examples:
+                invalid_title:
+                  summary: Title provided but empty or too long
+                  value:
+                    error: bad_request
+                    detail: invalid_title
                 empty_payload:
                   summary: No fields were provided in the PATCH body
                   value:

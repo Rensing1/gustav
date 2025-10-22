@@ -709,7 +709,7 @@ async def list_courses(request: Request, limit: int = 20, offset: int = 0):
         items = REPO.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
     else:
         items = REPO.list_courses_for_student(student_id=sub, limit=limit, offset=offset)
-    return [_serialize_course(c) for c in items]
+    return JSONResponse(content=[_serialize_course(c) for c in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/courses")
@@ -1032,7 +1032,7 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     except Exception as exc:
         logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return [_serialize_unit(u) for u in units]
+    return JSONResponse(content=[_serialize_unit(u) for u in units], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units")
@@ -1162,7 +1162,7 @@ async def list_sections(request: Request, unit_id: str):
         items = REPO.list_sections_for_author(unit_id, sub)
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return [_serialize_section(s) for s in items]
+    return JSONResponse(content=[_serialize_section(s) for s in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections")
@@ -1632,7 +1632,7 @@ async def list_course_modules(request: Request, course_id: str):
     except Exception as exc:
         logger.warning("list_course_modules failed cid=%s err=%s", course_id[-6:], exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return [_serialize_module(m) for m in modules]
+    return JSONResponse(content=[_serialize_module(m) for m in modules], status_code=200)
 
 
 @teaching_router.post("/api/teaching/courses/{course_id}/modules")
@@ -1934,7 +1934,7 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
     result = []
     for sid, joined_at in pairs:
         result.append({"sub": sid, "name": names.get(sid, sid), "joined_at": joined_at})
-    return result
+    return JSONResponse(content=result, status_code=200)
 
 
 class AddMember(BaseModel):

@@ -280,3 +280,254 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
         )
         assert lst.status_code == 200
         assert lst.json() == []
+
+
+@pytest.mark.anyio
+async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-invalid-filename", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "   ", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "invalid_filename"
+
+
+@pytest.mark.anyio
+async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-uppercase-mime", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Schülerliste.PDF", "mime_type": "APPLICATION/PDF", "size_bytes": 1024},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["headers"]["content-type"] == "application/pdf"
+
+
+@pytest.mark.anyio
+async def test_upload_intent_rejects_size_exceeded(_reset_storage_adapter):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-size-exceeded", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "groß.pdf", "mime_type": "application/pdf", "size_bytes": 25 * 1024 * 1024},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "size_exceeded"
+
+
+@pytest.mark.anyio
+async def test_finalize_rejects_expired_intent(_reset_storage_adapter):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-expired-intent", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        intent = intent_resp.json()
+
+        import psycopg  # type: ignore
+
+        dsn = os.getenv("DATABASE_URL")
+        if not dsn:
+            host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+            port = os.getenv("TEST_DB_PORT", "54322")
+            dsn = f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (teacher.sub,))
+                cur.execute(
+                    "update public.upload_intents set expires_at = now() - interval '1 minute' where id = %s",
+                    (intent["intent_id"],),
+                )
+                conn.commit()
+
+        finalize_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Überfällig",
+                "sha256": "f" * 64,
+            },
+        )
+        assert finalize_resp.status_code == 400
+        assert finalize_resp.json()["detail"] == "intent_expired"
+
+
+@pytest.mark.anyio
+async def test_patch_file_material_allows_alt_text_update(_reset_storage_adapter):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-alt-text", name="Frau Müller", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        intent = intent_resp.json()
+
+        finalize_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Sicherheitsleitfaden",
+                "sha256": "f" * 64,
+                "alt_text": "PDF mit Sicherheitsregeln",
+            },
+        )
+        material = finalize_resp.json()
+        assert finalize_resp.status_code == 201
+
+        patch_resp = await client.patch(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}",
+            json={"alt_text": "Aktualisierte Beschreibung"},
+        )
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["alt_text"] == "Aktualisierte Beschreibung"
+
+
+@pytest.mark.anyio
+async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter):
+    """Ensure dev fallback repo implements complete file workflow."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    original_repo = teaching.REPO
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        fallback_repo = teaching._Repo()  # type: ignore[attr-defined]
+        teaching.set_repo(fallback_repo)
+        storage = FakeStorageAdapter()
+        teaching.set_storage_adapter(storage)
+
+        teacher = main.SESSION_STORE.create(sub="teacher-inmemory", name="Frau Müller", roles=["teacher"])
+
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client)
+            section = await _create_section(client, unit["id"])
+
+            intent_resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+                json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )
+            assert intent_resp.status_code == 200
+            intent = intent_resp.json()
+
+            finalize_resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+                json={
+                    "intent_id": intent["intent_id"],
+                    "title": "Sicherheitsleitfaden",
+                    "sha256": "f" * 64,
+                    "alt_text": "PDF mit Sicherheitsregeln",
+                },
+            )
+            assert finalize_resp.status_code == 201
+            material = finalize_resp.json()
+            assert material["kind"] == "file"
+
+            download = await client.get(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}/download-url"
+            )
+            assert download.status_code == 200
+
+            delete_resp = await client.delete(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}"
+            )
+            assert delete_resp.status_code == 204
+    finally:
+        teaching.set_repo(original_repo)
+        if original_adapter is not None:
+            teaching.set_storage_adapter(original_adapter)

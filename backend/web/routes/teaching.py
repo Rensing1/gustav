@@ -21,7 +21,7 @@ import logging
 import time
 from dataclasses import dataclass, asdict, is_dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Request
@@ -95,6 +95,13 @@ class MaterialData:
     position: int
     created_at: str
     updated_at: str
+    kind: str = "markdown"
+    storage_key: Optional[str] | None = None
+    filename_original: Optional[str] | None = None
+    mime_type: Optional[str] | None = None
+    size_bytes: Optional[int] | None = None
+    sha256: Optional[str] | None = None
+    alt_text: Optional[str] | None = None
 
 
 class _Repo:
@@ -109,6 +116,7 @@ class _Repo:
         self.modules_by_course: Dict[str, List[str]] = {}
         self.materials: Dict[str, MaterialData] = {}
         self.material_ids_by_section: Dict[str, List[str]] = {}
+        self.upload_intents: Dict[str, Dict[str, Any]] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
         now = datetime.now(timezone.utc).isoformat()
@@ -396,6 +404,128 @@ class _Repo:
         self.material_ids_by_section.setdefault(section_id, []).append(mid)
         return material
 
+    def create_file_upload_intent(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        intent_id: str,
+        material_id: str,
+        storage_key: str,
+        filename: str,
+        mime_type: str,
+        size_bytes: int,
+        expires_at: datetime,
+    ) -> Dict[str, Any]:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise LookupError("section_not_found")
+        record = {
+            "intent_id": intent_id,
+            "material_id": material_id,
+            "unit_id": unit_id,
+            "section_id": section_id,
+            "author_id": author_id,
+            "storage_key": storage_key,
+            "filename": filename,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "expires_at": expires_at,
+            "consumed_at": None,
+        }
+        self.upload_intents[intent_id] = record
+        return {
+            "intent_id": intent_id,
+            "material_id": material_id,
+            "storage_key": storage_key,
+            "filename": filename,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "expires_at": expires_at,
+            "consumed_at": None,
+        }
+
+    def get_upload_intent_owned(
+        self,
+        intent_id: str,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        record = self.upload_intents.get(intent_id)
+        if not record:
+            return None
+        if (
+            record["unit_id"] != unit_id
+            or record["section_id"] != section_id
+            or record["author_id"] != author_id
+        ):
+            return None
+        return {
+            "intent_id": record["intent_id"],
+            "material_id": record["material_id"],
+            "storage_key": record["storage_key"],
+            "filename": record["filename"],
+            "mime_type": record["mime_type"],
+            "size_bytes": record["size_bytes"],
+            "expires_at": record["expires_at"],
+            "consumed_at": record["consumed_at"],
+        }
+
+    def finalize_upload_intent_create_material(
+        self,
+        intent_id: str,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        title: str,
+        alt_text: Optional[str],
+        sha256: str,
+    ) -> Tuple[Dict[str, Any], bool]:
+        intent = self.upload_intents.get(intent_id)
+        if not intent:
+            raise LookupError("intent_not_found")
+        if (
+            intent["unit_id"] != unit_id
+            or intent["section_id"] != section_id
+            or intent["author_id"] != author_id
+        ):
+            raise LookupError("intent_not_found")
+        now = datetime.now(timezone.utc)
+        if intent["consumed_at"] is not None:
+            material = self.materials.get(intent["material_id"])
+            if material is None:
+                raise LookupError("material_not_found")
+            return asdict(material), False
+        if intent["expires_at"] <= now:
+            raise ValueError("intent_expired")
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise LookupError("section_not_found")
+        pos = len(self.material_ids_by_section.get(section_id, [])) + 1
+        material = MaterialData(
+            id=intent["material_id"],
+            unit_id=unit_id,
+            section_id=section_id,
+            title=title,
+            body_md="",
+            position=pos,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
+            kind="file",
+            storage_key=intent["storage_key"],
+            filename_original=intent["filename"],
+            mime_type=intent["mime_type"],
+            size_bytes=intent["size_bytes"],
+            sha256=sha256,
+            alt_text=alt_text,
+        )
+        self.materials[material.id] = material
+        bucket = self.material_ids_by_section.setdefault(section_id, [])
+        bucket.append(material.id)
+        self.upload_intents[intent_id]["consumed_at"] = now
+        return asdict(material), True
+
     def get_material_owned(
         self, unit_id: str, section_id: str, material_id: str, author_id: str
     ) -> MaterialData | None:
@@ -406,7 +536,7 @@ class _Repo:
             return mat
         return None
 
-    def update_markdown_material(
+    def update_material(
         self,
         unit_id: str,
         section_id: str,
@@ -415,6 +545,7 @@ class _Repo:
         *,
         title=_UNSET,
         body_md=_UNSET,
+        alt_text=_UNSET,
     ) -> MaterialData | None:
         mat = self.get_material_owned(unit_id, section_id, material_id, author_id)
         if not mat:
@@ -427,9 +558,21 @@ class _Repo:
                 raise ValueError("invalid_title")
             mat.title = t
         if body_md is not _UNSET:
+            if mat.kind != "markdown":
+                raise ValueError("invalid_body_md")
             if body_md is None or not isinstance(body_md, str):
                 raise ValueError("invalid_body_md")
             mat.body_md = body_md
+        if alt_text is not _UNSET:
+            if alt_text is None:
+                mat.alt_text = None
+            elif not isinstance(alt_text, str):
+                raise ValueError("invalid_alt_text")
+            else:
+                normalized_alt = alt_text.strip()
+                if len(normalized_alt) > 500:
+                    raise ValueError("invalid_alt_text")
+                mat.alt_text = normalized_alt or None
         mat.updated_at = datetime.now(timezone.utc).isoformat()
         self.materials[material_id] = mat
         return mat
@@ -928,6 +1071,7 @@ class MaterialFinalizePayload(BaseModel):
 class MaterialUpdatePayload(BaseModel):
     title: str | None = Field(default=None)
     body_md: object | None = None
+    alt_text: str | None = Field(default=None, max_length=500)
 
     @field_validator("title", mode="before")
     @classmethod
@@ -939,6 +1083,16 @@ class MaterialUpdatePayload(BaseModel):
             if not stripped:
                 return None
             return stripped
+        return v
+
+    @field_validator("alt_text", mode="before")
+    @classmethod
+    def _normalize_alt_text(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
         return v
 
 
@@ -1499,25 +1653,32 @@ async def update_section_material(
         return JSONResponse({"error": "not_found"}, status_code=404)
     # Include None for provided fields to detect intentionally empty values (e.g., title="")
     raw_updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not raw_updates:
+    fields_set = payload.model_fields_set
+    if not fields_set:
         return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     # Manual validation keeps responses aligned with our 400-contract (FastAPI would emit 422 otherwise).
     kwargs = {}
-    if "title" in raw_updates:
+    if "title" in fields_set:
         # Normalizer maps empty/blank strings to None; treat as invalid_title when provided
-        if raw_updates["title"] is None:
+        if raw_updates.get("title") is None:
             return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
-        title_val = raw_updates["title"] or ""
+        title_val = raw_updates.get("title") or ""
         if not title_val or len(title_val) > 200:
             return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
         kwargs["title"] = title_val
-    if "body_md" in raw_updates:
-        body_val = raw_updates["body_md"]
+    if "body_md" in fields_set:
+        body_val = raw_updates.get("body_md")
         if body_val is None or not isinstance(body_val, str):
             return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
         kwargs["body_md"] = body_val
+    if "alt_text" in fields_set:
+        alt_val = raw_updates.get("alt_text")
+        if alt_val is not None and not isinstance(alt_val, str):
+            return JSONResponse({"error": "bad_request", "detail": "invalid_alt_text"}, status_code=400)
+        normalized_alt = (alt_val or "").strip() if isinstance(alt_val, str) else None
+        kwargs["alt_text"] = normalized_alt or None
     try:
-        updated = MATERIALS_SERVICE.update_markdown_material(
+        updated = MATERIALS_SERVICE.update_material(
             unit_id,
             section_id,
             material_id,
@@ -1525,7 +1686,10 @@ async def update_section_material(
             **kwargs,
         )
     except ValueError as exc:
-        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_title", "invalid_body_md", "invalid_alt_text"}:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:

@@ -59,11 +59,13 @@ This document summarizes the production session table introduced for persistent 
   - Indizes `idx_unit_materials_unit` und `idx_unit_materials_section` beschleunigen Owner-Scopes.
   - Trigger `trg_unit_materials_updated_at` nutzt `set_updated_at()` für automatische Timestamps.
   - Trigger `trg_unit_materials_section_match` (`unit_materials_section_unit_match()`) stellt sicher, dass `section_id` zu `unit_id` gehört und nicht nachträglich gewechselt wird.
+  - Storage-Key-Pfade werden beim Erzeugen/Finalisieren auf `[A-Za-z0-9._-]` normalisiert (Author/Unit/Section/Material) um Path-Traversal auf S3-kompatiblen Backends zu verhindern.
 - Security / RLS
   - Tabelle ist RLS-aktiviert; `gustav_limited` besitzt `SELECT/INSERT/UPDATE/DELETE`.
   - Policies (`unit_materials_select/insert/update/delete_author`) spiegeln die Ownership von `learning_units` wider (`app.current_sub`).
   - Inserts/Updates prüfen via Join auf `unit_sections`, dass nur eigene Abschnitte beschrieben werden.
   - Datei-Metadaten werden nur über Upload-Intents gesetzt (siehe unten).
+  - Optionaler Alternativtext (`alt_text`, ≤ 500 Zeichen) kann nachträglich via API-PATCH gepflegt werden, um Barrierefreiheit zu verbessern.
 
 ### `public.upload_intents`
 

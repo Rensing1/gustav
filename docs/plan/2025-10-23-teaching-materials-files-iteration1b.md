@@ -100,6 +100,13 @@ OpenAPI-Erweiterungen werden als separater Abschnitt in `api/openapi.yml` ergän
 - Tests früh mit realer DB durchspielen (Fixture `require_db_or_skip` nutzen).
 - Dateiname früh sanitizen (Slugify) und Presign-Responses minimal halten (nur benötigte Felder `url`, `headers`).
 
+## Review Follow-ups (Oktober 2025)
+- `Material`-Contract zeigt `alt_text` und Datei-Metadaten auch für Updates an. PATCH-Payload, Service und Repo müssen `alt_text` lesen/schreiben (inkl. Validierung und Tests).
+- Storage-Key benötigt robuste Sanitizing-Regel für _alle_ Pfadkomponenten (Autor, Unit, Section, Material, Dateiname), damit kein Filesystem-Backend Path Traversal zulässt.
+- In-Memory-Repo `_Repo` implementiert Dateiwege nicht komplett; ergänzende Methoden für Upload Intent/Finalize/Download/Delete werden benötigt, damit Dev-Server ohne DB weiter funktioniert.
+- OpenAPI-Beispiele müssen alle real möglichen Detailcodes (`invalid_filename`, `mime_not_allowed`, `size_exceeded`, `intent_expired`, `checksum_mismatch`, `invalid_disposition`, `storage_delete_failed`) aufführen.
+- Tests erweitern (Upload Intent Validation inkl. `invalid_filename`, Größe über Limit, MIME in Großschreibung, Intent-Ablauf) und Alt-Text-Update (Contract-Test + API-Test) hinzufügen.
+
 ## Next Steps
 - [x] OpenAPI-Snippet und Schema-Erweiterung (mit minimalem Presign-Response) ausarbeiten.
 - [x] SQL-Migration `20251022093725_teaching_materials_file_support.sql` entwerfen und ablegen.

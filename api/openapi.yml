@@ -1521,6 +1521,7 @@ paths:
               - invalid_material_id
               - invalid_title
               - invalid_body_md
+              - invalid_alt_text
           content:
             application/json:
               schema:
@@ -1536,6 +1537,11 @@ paths:
                   value:
                     error: bad_request
                     detail: empty_payload
+                invalid_alt_text:
+                  summary: Alt text provided but too long
+                  value:
+                    error: bad_request
+                    detail: invalid_alt_text
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1723,12 +1729,19 @@ paths:
             Invalid input. detail codes:
               - invalid_unit_id
               - invalid_section_id
+              - invalid_filename
               - mime_not_allowed
               - size_exceeded
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              examples:
+                invalid_filename:
+                  summary: Filename becomes empty after sanitizing
+                  value:
+                    error: bad_request
+                    detail: invalid_filename
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1784,10 +1797,28 @@ paths:
               - intent_expired
               - checksum_mismatch
               - invalid_title
+              - mime_not_allowed
+              - invalid_alt_text
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              examples:
+                intent_expired:
+                  summary: Upload intent is no longer valid
+                  value:
+                    error: bad_request
+                    detail: intent_expired
+                mime_not_allowed:
+                  summary: Uploaded object has a MIME type outside the whitelist
+                  value:
+                    error: bad_request
+                    detail: mime_not_allowed
+                invalid_alt_text:
+                  summary: Alt text exceeds the permitted length
+                  value:
+                    error: bad_request
+                    detail: invalid_alt_text
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (intent does not belong to caller), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or intent not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

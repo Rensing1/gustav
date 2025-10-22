@@ -1763,10 +1763,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
                 logger.error(
                     "Storage adapter unavailable during delete for material %s", material_id
                 )
-                return JSONResponse(
-                    {"error": "bad_gateway", "detail": "storage_delete_failed"},
-                    status_code=502,
-                )
+                return JSONResponse({"error": "service_unavailable"}, status_code=503)
             raise
         except Exception:  # pragma: no cover - log unexpected storage failures
             logger.exception("Failed deleting storage object for material %s", material_id)

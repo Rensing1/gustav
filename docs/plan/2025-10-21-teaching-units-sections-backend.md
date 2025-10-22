@@ -117,6 +117,8 @@ Implementierung (Minimal)
 - DB‑Repo in `backend/teaching/repo_db.py`: CRUD + `reorder_unit_sections_owned` mit DEFERRABLE Unique, `SET LOCAL app.current_sub` pro Transaktion; Rows der Unit via `FOR UPDATE` sperren.
 - Hinweis: Kein In‑Memory‑Repo (vermeidet Drift/duplizierte Pfade); Tests laufen gegen echte Test‑DB (Supabase/Postgres) mit Migrationsstand.
 
+> **Hinweis (2025-10-24):** Die Umsetzung dieser Iteration wird im neuen Plan `docs/plan/2025-10-24-teaching-section-release.md` verfolgt. Dieses Dokument bleibt als Ausgangsskizze bestehen.
+
 ## Iteration 3 (Medium): Abschnittsfreigaben pro Kurs
 
 User Story  

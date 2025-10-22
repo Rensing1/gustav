@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- feat(api/teaching): Add PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility to toggle section releases (owner-only), with explicit 400 detail codes.
+- db(teaching): Add `public.module_section_releases` table with RLS (owner-only via course_modules ↔ courses join); upsert semantics for visibility.
+- db(teaching): Add CHECK constraint ensuring `released_at` matches `visible` (NOT NULL when true, NULL when false).
+- docs(openapi/db): Document ModuleSectionVisibility schemas and endpoint in references; database schema updated accordingly.
 - docs(openapi): Add 503 `service_unavailable` to file-materials endpoints (upload-intents, finalize, download-url, delete) when storage is not configured.
 - security(api/teaching): Mark download-url responses `Cache-Control: no-store` (short-lived, non-cacheable URLs).
 - env(auth): Prefer `KC_BASE_URL` (accept legacy `KC_BASE`); `.env.example` and docs updated.

@@ -42,7 +42,7 @@
  - feat(storage): Add SupabaseStorageAdapter with unit tests, service/route fallbacks, and optional app wiring via env vars (no API changes).
  - docs(ops): Add storage and gateway reference with CLI steps and .env template; plan doc for storage integration; architecture updated with Storage section.
 - tests(teaching): Extend file-material contract tests for invalid filenames, uppercase MIME normalization, size limit, expired intents, alt-text updates and in-memory fallback coverage.
-- fix(db/sections): Serialize concurrent section creation by locking parent learning_unit; add one-shot retry on unique violation; regression tests added.
+- fix(db/sections): Serialize concurrent section creation by locking parent unit; add one-shot retry on unique violation; regression tests added.
 - fix(db/sections): Ensure unique-violation retry fetches the inserted row before the cursor closes; regression test guards against cursor-already-closed errors.
 - security(teaching): Enforce limited-role DSN (gustav_limited) for TeachingRepo to guarantee RLS coverage; add override flag `ALLOW_SERVICE_DSN_FOR_TESTING` for dev only.
 - fix(teaching): Correct HTTP semantics — 204 responses without body; align 404 vs 403 for members and delete endpoints with contract.

@@ -29,14 +29,14 @@ API Contract (contract-first)
 - `PATCH /api/teaching/units/{unit_id}`, `DELETE /api/teaching/units/{unit_id}` (Autor-only).
 - `POST /api/teaching/courses/{course_id}/modules` (payload: `unit_id`, optional `context_notes`), `GET` list modules (`position`).
 - `POST /api/teaching/courses/{course_id}/modules/reorder` (body: array von Kursmodul-IDs in Zielreihenfolge).
-- Response-Objekte: nutzen Glossarbegriffe (`learning_unit`, `course_module`), enthalten `position`, `title`, `author_id`, `created_at`.
+- Response-Objekte: nutzen Glossarbegriffe (`unit`, `course_module`), enthalten `position`, `title`, `author_id`, `created_at`.
 
 Database & Migration Draft
-- Tabelle `learning_units`: `id uuid pk`, `author_id text not null`, `title text not null`, `summary text null`, Audit timestamps. Kein `course_id`.
-- Tabelle `course_modules`: `id uuid pk`, `course_id uuid fk courses(id) on delete cascade`, `unit_id uuid fk learning_units(id)`, `position int not null`, `context_notes text null`, Audit timestamps.
+- Tabelle `units`: `id uuid pk`, `author_id text not null`, `title text not null`, `summary text null`, Audit timestamps. Kein `course_id`.
+- Tabelle `course_modules`: `id uuid pk`, `course_id uuid fk courses(id) on delete cascade`, `unit_id uuid fk units(id)`, `position int not null`, `context_notes text null`, Audit timestamps.
 - Index & Constraint: `unique(course_id, position)`, `unique(course_id, unit_id)` (damit Unit im Kurs nur einmal vorkommt).
 - RLS:
-  - `learning_units`: Autor darf lesen/schreiben, Admin optional.
+  - `units`: Autor darf lesen/schreiben, Admin optional.
   - `course_modules`: Nur Kursbesitzer darf lesen/schreiben (via `app.current_sub` + helper `course_exists_for_owner`).
 
 Tests (TDD)
@@ -87,7 +87,7 @@ API Contract Updates (Contract‑First)
 Database & Migration Draft (Supabase/PostgreSQL)
 - Tabelle `public.unit_sections`:
   - `id uuid pk default gen_random_uuid()`
-  - `unit_id uuid not null references public.learning_units(id) on delete cascade`
+  - `unit_id uuid not null references public.units(id) on delete cascade`
   - `title text not null check (length(title) between 1 and 200)`
   - `position integer not null check (position > 0)`
   - `created_at/updated_at timestamptz` + Trigger `set_updated_at()`
@@ -95,7 +95,7 @@ Database & Migration Draft (Supabase/PostgreSQL)
 - Rechte & RLS
   - `REVOKE ALL ON TABLE public.unit_sections FROM PUBLIC;`
   - `GRANT SELECT, INSERT, UPDATE, DELETE ON public.unit_sections TO gustav_limited;`
-  - RLS aktiviert; vier Policies (SELECT/INSERT/UPDATE/DELETE) mit `USING`/`WITH CHECK` via Join: `exists (select 1 from public.learning_units u where u.id = unit_sections.unit_id and u.author_id = app.current_sub)`
+  - RLS aktiviert; vier Policies (SELECT/INSERT/UPDATE/DELETE) mit `USING`/`WITH CHECK` via Join: `exists (select 1 from public.units u where u.id = unit_sections.unit_id and u.author_id = app.current_sub)`
   - Reorder: innerhalb einer Transaktion `SET LOCAL app.current_sub = ...; SET CONSTRAINTS ALL DEFERRED;` betroffene Zeilen per `SELECT ... FOR UPDATE` sperren.
   - Keine SECURITY DEFINER-Funktion nötig (Ownership via Join + vorhandene `unit_exists_for_author`).
 

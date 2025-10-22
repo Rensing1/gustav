@@ -3,7 +3,7 @@
 
 create table if not exists public.unit_materials (
   id uuid primary key default gen_random_uuid(),
-  unit_id uuid not null references public.learning_units(id) on delete cascade,
+  unit_id uuid not null references public.units(id) on delete cascade,
   section_id uuid not null references public.unit_sections(id) on delete cascade,
   title text not null,
   body_md text not null,
@@ -74,7 +74,7 @@ create policy unit_materials_select_author on public.unit_materials
   using (
     exists (
       select 1
-      from public.learning_units u
+      from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )
@@ -86,7 +86,7 @@ create policy unit_materials_insert_author on public.unit_materials
     exists (
       select 1
       from public.unit_sections s
-      join public.learning_units u on u.id = s.unit_id
+      join public.units u on u.id = s.unit_id
       where s.id = section_id
         and u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
@@ -98,7 +98,7 @@ create policy unit_materials_update_author on public.unit_materials
   using (
     exists (
       select 1
-      from public.learning_units u
+      from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )
@@ -107,7 +107,7 @@ create policy unit_materials_update_author on public.unit_materials
     exists (
       select 1
       from public.unit_sections s
-      join public.learning_units u on u.id = s.unit_id
+      join public.units u on u.id = s.unit_id
       where s.id = section_id
         and u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
@@ -119,7 +119,7 @@ create policy unit_materials_delete_author on public.unit_materials
   using (
     exists (
       select 1
-      from public.learning_units u
+      from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )

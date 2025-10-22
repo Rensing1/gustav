@@ -203,7 +203,8 @@ from routes.users import users_router
 
 # --- OIDC minimal config & stores (dev) ---
 def load_oidc_config() -> OIDCConfig:
-    base_url = os.getenv("KC_BASE_URL", "http://localhost:8080")
+    # Accept legacy KC_BASE for compatibility; prefer KC_BASE_URL
+    base_url = os.getenv("KC_BASE_URL") or os.getenv("KC_BASE") or "http://localhost:8080"
     realm = os.getenv("KC_REALM", "gustav")
     client_id = os.getenv("KC_CLIENT_ID", "gustav-web")
     redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8100/auth/callback")

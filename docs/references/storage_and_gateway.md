@@ -20,12 +20,13 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 - Env vars (server-side only):
   - `SUPABASE_URL` (e.g., `http://127.0.0.1:54321`)
   - `SUPABASE_SERVICE_ROLE_KEY` (from `supabase start` output)
-  - Optional: `SUPABASE_STORAGE_BUCKET=materials`
+  - `SUPABASE_STORAGE_BUCKET` (default: `materials`)
   - See `.env.example` for a ready-to-copy template; store real values in `.env` (gitignored).
 
 ## Security
 - Use Service Role key only in the backend. Never expose keys to the browser.
 - Buckets must be private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
+- Download URL responses include `Cache-Control: no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.
 
 ## Gateway
@@ -33,6 +34,9 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 - No extra Kong layer needed for the app traffic at this stage.
 - Supabase’s internal stack may use Kong for its own services; this is separate from the app.
 - Later (optional): add gateway policies (CORS/HSTS/rate limiting) if needed.
+
+## Tests / E2E
+- Optional E2E smoke test: set `RUN_SUPABASE_E2E=1` and provide `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`. See pytest marker `supabase_integration`.
 
 ## E2E checklist
 - `supabase start -x studio`

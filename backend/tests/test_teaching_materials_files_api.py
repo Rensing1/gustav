@@ -942,3 +942,81 @@ async def test_download_url_without_expires_at_returns_server_computed(_reset_st
     finally:
         teaching.set_repo(original_repo)
         teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage_adapter):
+    """When no storage adapter is configured, upload-intents must return 503."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    # Force NullStorageAdapter during this test and restore afterwards
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        from teaching.storage import NullStorageAdapter  # type: ignore
+
+        teaching.set_storage_adapter(NullStorageAdapter())
+        teacher = main.SESSION_STORE.create(sub="teacher-no-storage", name="Lehrkraft", roles=["teacher"])
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client)
+            section = await _create_section(client, unit["id"])
+
+            resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+                json={"filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )
+            assert resp.status_code == 503
+    finally:
+        teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_download_url_sets_no_store_header(_reset_storage_adapter):
+    """Download URL responses must not be cacheable (Cache-Control: no-store)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-dl-nostore", name="Frau Müller", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent = (await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )).json()
+
+        material = (await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={"intent_id": intent["intent_id"], "title": "Sicherheitsleitfaden", "sha256": "f" * 64},
+        )).json()
+
+        resp = await client.get(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}" \
+            "/download-url",
+            params={"disposition": "inline"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("Cache-Control") == "no-store"

@@ -1597,6 +1597,102 @@ class DBTeachingRepo:
             for r in rows
         ]
 
+    def set_module_section_visibility(
+        self,
+        course_id: str,
+        module_id: str,
+        section_id: str,
+        owner_sub: str,
+        visible: bool,
+    ) -> dict:
+        """Set the release state for a section inside a course module.
+
+        Parameters:
+            course_id: Identifier of the course that owns the module.
+            module_id: Identifier of the course module to mutate.
+            section_id: Identifier of the section whose visibility changes.
+            owner_sub: Subject identifier of the teacher invoking the toggle.
+            visible: Target visibility flag (`True` releases the section).
+
+        Behavior:
+            - Validates module ownership and section membership within the unit.
+            - Upserts a row in `module_section_releases`, recording `released_by`.
+
+        Permissions:
+            Caller must own the course; enforced via `set_config('app.current_sub', ...)`
+            and the RLS policies on `course_modules`, `unit_sections`, and
+            `module_section_releases`.
+
+        Raises:
+            LookupError: When the module or section does not exist for this course.
+            PermissionError: When RLS denies access (non-owner).
+        """
+        released_at = datetime.now(timezone.utc) if visible else None
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select unit_id::text
+                    from public.course_modules
+                    where id = %s
+                      and course_id = %s
+                    """,
+                    (module_id, course_id),
+                )
+                module_row = cur.fetchone()
+                if not module_row:
+                    raise LookupError("module_not_found")
+                unit_id = module_row[0]
+                # Restrict to sections that belong to the module's unit to avoid cross-unit leakage.
+                cur.execute(
+                    """
+                    select id::text
+                    from public.unit_sections
+                    where id = %s
+                      and unit_id = %s
+                    """,
+                    (section_id, unit_id),
+                )
+                section_row = cur.fetchone()
+                if not section_row:
+                    raise LookupError("section_not_in_module")
+                cur.execute(
+                    """
+                    insert into public.module_section_releases (
+                        course_module_id,
+                        section_id,
+                        visible,
+                        released_at,
+                        released_by
+                    )
+                    values (%s, %s, %s, %s, %s)
+                    on conflict (course_module_id, section_id)
+                    do update set
+                        visible = excluded.visible,
+                        released_at = excluded.released_at,
+                        released_by = excluded.released_by
+                    returning
+                        course_module_id::text,
+                        section_id::text,
+                        visible,
+                        released_at,
+                        released_by
+                    """,
+                    (module_id, section_id, visible, released_at, owner_sub),
+                )
+                result = cur.fetchone()
+                conn.commit()
+        if not result:
+            raise LookupError("visibility_update_failed")
+        return {
+            "course_module_id": result[0],
+            "section_id": result[1],
+            "visible": bool(result[2]),
+            "released_at": _iso(result[3]) if result[3] is not None else None,
+            "released_by": result[4],
+        }
+
     # --- Owner-scoped helpers (RLS-friendly) ------------------------------------
     def get_course_for_owner(self, course_id: str, owner_sub: str) -> Optional[dict]:
         with psycopg.connect(self._dsn) as conn:

@@ -120,11 +120,14 @@ class _Repo:
         self.upload_intents: Dict[str, Dict[str, Any]] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
+        normalized = (title or "").strip()
+        if not normalized or len(normalized) > 200:
+            raise ValueError("invalid_title")
         now = datetime.now(timezone.utc).isoformat()
         cid = str(uuid4())
         course = Course(
             id=cid,
-            title=title,
+            title=normalized,
             subject=subject,
             grade_level=grade_level,
             term=term,

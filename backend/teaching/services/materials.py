@@ -40,6 +40,10 @@ class MaterialsRepoProtocol(Protocol):
         self, unit_id: str, section_id: str, author_id: str, material_ids: List[str]
     ) -> List[Any]: ...
 
+    def get_material_owned(
+        self, unit_id: str, section_id: str, material_id: str, author_id: str
+    ) -> Any | None: ...
+
 
 _UNSET = object()
 

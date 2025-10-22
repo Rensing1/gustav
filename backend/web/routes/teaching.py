@@ -21,7 +21,7 @@ import logging
 import time
 from dataclasses import dataclass, asdict, is_dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Request
@@ -30,7 +30,8 @@ import asyncio
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
-from teaching.services.materials import MaterialsService
+from teaching.services.materials import MaterialFileSettings, MaterialsService
+from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -578,14 +579,22 @@ def _build_default_repo():
 
 
 REPO = _build_default_repo()
-MATERIALS_SERVICE = MaterialsService(REPO)
+MATERIAL_FILE_SETTINGS = MaterialFileSettings()
+STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
+MATERIALS_SERVICE = MaterialsService(REPO, settings=MATERIAL_FILE_SETTINGS)
 
 
 def set_repo(repo) -> None:
     """Allow tests to swap the teaching repository implementation."""
     global REPO, MATERIALS_SERVICE
     REPO = repo
-    MATERIALS_SERVICE = MaterialsService(repo)
+    MATERIALS_SERVICE = MaterialsService(repo, settings=MATERIAL_FILE_SETTINGS)
+
+
+def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
+    """Allow tests to provide a storage adapter (e.g., fake or stub)."""
+    global STORAGE_ADAPTER
+    STORAGE_ADAPTER = adapter
 
 
 # --- Request/Response models -----------------------------------------------------
@@ -882,6 +891,38 @@ class MaterialCreatePayload(BaseModel):
             stripped = v.strip()
             return stripped or None
         return v
+
+
+class MaterialUploadIntentPayload(BaseModel):
+    filename: str = Field(..., min_length=1, max_length=255)
+    mime_type: str = Field(..., min_length=1, max_length=128)
+    size_bytes: int = Field(..., ge=1)
+
+    @field_validator("filename")
+    @classmethod
+    def _normalize_filename(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("mime_type")
+    @classmethod
+    def _normalize_mime(cls, value: str) -> str:
+        return value.strip()
+
+
+class MaterialFinalizePayload(BaseModel):
+    intent_id: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1, max_length=200)
+    sha256: str = Field(..., min_length=64, max_length=64)
+    alt_text: str | None = Field(default=None, max_length=500)
+
+    @field_validator("intent_id", "title", "sha256", "alt_text")
+    @classmethod
+    def _strip_strings(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class MaterialUpdatePayload(BaseModel):
@@ -1531,13 +1572,186 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
         MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
+    material_obj = MATERIALS_SERVICE.get_material_owned(unit_id, section_id, material_id, sub)
+    if material_obj is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    material_snapshot = _serialize_material(material_obj)
+    storage_key = material_snapshot.get("storage_key")
+    material_kind = material_snapshot.get("kind")
     try:
         MATERIALS_SERVICE.delete_material(unit_id, section_id, material_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    if material_kind == "file" and storage_key:
+        try:
+            STORAGE_ADAPTER.delete_object(
+                bucket=MATERIAL_FILE_SETTINGS.storage_bucket,
+                key=storage_key,
+            )
+        except RuntimeError as exc:  # pragma: no cover - defensive log path
+            if str(exc) == "storage_adapter_not_configured":
+                logger.error(
+                    "Storage adapter unavailable during delete for material %s", material_id
+                )
+                return JSONResponse(
+                    {"error": "bad_gateway", "detail": "storage_delete_failed"},
+                    status_code=502,
+                )
+            raise
+        except Exception:  # pragma: no cover - log unexpected storage failures
+            logger.exception("Failed deleting storage object for material %s", material_id)
+            return JSONResponse(
+                {"error": "bad_gateway", "detail": "storage_delete_failed"},
+                status_code=502,
+            )
     return Response(status_code=204)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents")
+async def create_section_material_upload_intent(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    payload: MaterialUploadIntentPayload,
+):
+    """Create a presigned upload intent for a file material (author only)."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        intent = MATERIALS_SERVICE.create_file_upload_intent(
+            unit_id,
+            section_id,
+            sub,
+            filename=payload.filename,
+            mime_type=payload.mime_type,
+            size_bytes=int(payload.size_bytes),
+            storage=STORAGE_ADAPTER,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {"mime_not_allowed", "size_exceeded", "invalid_filename"}:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except RuntimeError as exc:
+        if str(exc) == "storage_adapter_not_configured":
+            return JSONResponse({"error": "service_unavailable"}, status_code=503)
+        raise
+    return JSONResponse(content=intent, status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize")
+async def finalize_section_material_upload(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    payload: MaterialFinalizePayload,
+):
+    """Finalize an upload intent and persist the file material."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(payload.intent_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_intent_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        material, created = MATERIALS_SERVICE.finalize_file_material(
+            unit_id,
+            section_id,
+            sub,
+            intent_id=payload.intent_id,
+            title=payload.title,
+            sha256=payload.sha256,
+            alt_text=payload.alt_text,
+            storage=STORAGE_ADAPTER,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {
+            "intent_expired",
+            "checksum_mismatch",
+            "invalid_title",
+            "mime_not_allowed",
+        }:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except RuntimeError as exc:
+        if str(exc) == "storage_adapter_not_configured":
+            return JSONResponse({"error": "service_unavailable"}, status_code=503)
+        raise
+    status_code = 201 if created else 200
+    return JSONResponse(content=_serialize_material(material), status_code=status_code)
+
+
+@teaching_router.get(
+    "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url"
+)
+async def get_section_material_download_url(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    material_id: str,
+    disposition: Optional[str] = None,
+):
+    """Generate a short-lived download URL for a file material."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(material_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        payload = MATERIALS_SERVICE.generate_file_download_url(
+            unit_id,
+            section_id,
+            material_id,
+            sub,
+            disposition=disposition or "attachment",
+            storage=STORAGE_ADAPTER,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_disposition"}:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except RuntimeError as exc:
+        if str(exc) == "storage_adapter_not_configured":
+            return JSONResponse({"error": "service_unavailable"}, status_code=503)
+        raise
+    return JSONResponse(content=payload, status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder")

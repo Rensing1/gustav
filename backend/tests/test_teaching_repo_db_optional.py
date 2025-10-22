@@ -146,7 +146,7 @@ def test_create_section_retry_fetches_row_after_unique_violation(monkeypatch: py
             normalized = " ".join(query.split()).lower()
             if "set_config" in normalized:
                 return
-            if "select id from public.learning_units" in normalized:
+            if "select id from public.units" in normalized:
                 return
             if "select id from public.unit_sections where unit_id" in normalized:
                 return

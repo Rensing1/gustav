@@ -3,7 +3,7 @@
 
 create table if not exists public.unit_sections (
   id uuid primary key default gen_random_uuid(),
-  unit_id uuid not null references public.learning_units(id) on delete cascade,
+  unit_id uuid not null references public.units(id) on delete cascade,
   title text not null,
   position integer not null check (position > 0),
   created_at timestamptz not null default now(),
@@ -35,7 +35,7 @@ create policy unit_sections_select_author on public.unit_sections
   for select to gustav_limited
   using (
     exists (
-      select 1 from public.learning_units u
+      select 1 from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )
@@ -45,7 +45,7 @@ create policy unit_sections_insert_author on public.unit_sections
   for insert to gustav_limited
   with check (
     exists (
-      select 1 from public.learning_units u
+      select 1 from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )
@@ -55,14 +55,14 @@ create policy unit_sections_update_author on public.unit_sections
   for update to gustav_limited
   using (
     exists (
-      select 1 from public.learning_units u
+      select 1 from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )
   )
   with check (
     exists (
-      select 1 from public.learning_units u
+      select 1 from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )
@@ -72,7 +72,7 @@ create policy unit_sections_delete_author on public.unit_sections
   for delete to gustav_limited
   using (
     exists (
-      select 1 from public.learning_units u
+      select 1 from public.units u
       where u.id = unit_id
         and u.author_id = coalesce(current_setting('app.current_sub', true), '')
     )

@@ -1901,13 +1901,17 @@ async def get_section_material_download_url(
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    # Normalize and validate disposition at the route layer to return 400 (not FastAPI 422).
+    normalized_disposition = (disposition or "attachment").strip().lower()
+    if normalized_disposition not in {"inline", "attachment"}:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400)
     try:
         payload = MATERIALS_SERVICE.generate_file_download_url(
             unit_id,
             section_id,
             material_id,
             sub,
-            disposition=disposition or "attachment",
+            disposition=normalized_disposition,
             storage=STORAGE_ADAPTER,
         )
     except LookupError:

@@ -75,3 +75,75 @@ def test_reorder_examples_present_in_openapi():
         "no_modules",
     ]:
         assert key in mod_examples
+
+
+def test_material_schemas_and_paths_are_defined():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+
+    materials_schema = spec["components"]["schemas"].get("Material")
+    assert materials_schema is not None, "Material schema missing"
+    required = materials_schema.get("required", [])
+    for field in ["id", "section_id", "title", "body_md", "position", "created_at", "updated_at"]:
+        assert field in required, f"{field} should be required on Material schema"
+    # Serializer includes unit_id; contract should model it explicitly
+    assert "unit_id" in required or "unit_id" in (materials_schema.get("properties", {}) or {}), "unit_id should be documented"
+
+    path = "/api/teaching/units/{unit_id}/sections/{section_id}/materials"
+    assert path in spec["paths"], "Materials path missing"
+    get_op = spec["paths"][path]["get"]
+    perms = get_op.get("x-permissions", {})
+    assert perms.get("requiredRole") == "teacher"
+    assert perms.get("authorOnly") is True
+
+    list_schema = get_op["responses"]["200"]["content"]["application/json"]["schema"]
+    assert list_schema["items"]["$ref"] == "#/components/schemas/Material"
+
+    post_op = spec["paths"][path]["post"]
+    create_schema = post_op["responses"]["201"]["content"]["application/json"]["schema"]
+    assert create_schema["$ref"] == "#/components/schemas/Material"
+
+
+def test_material_reorder_includes_error_examples():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+
+    reorder_path = "/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder"
+    assert reorder_path in spec["paths"], "Materials reorder path missing"
+
+    post_op = spec["paths"][reorder_path]["post"]
+    perms = post_op.get("x-permissions", {})
+    assert perms.get("requiredRole") == "teacher"
+    assert perms.get("authorOnly") is True
+
+    error_desc = post_op["responses"]["400"]["description"]
+    assert "material_mismatch" in error_desc
+
+    examples = post_op["responses"]["400"]["content"]["application/json"]["examples"]
+    for key in [
+        "material_ids_must_be_array",
+        "empty_material_ids",
+        "duplicate_material_ids",
+        "invalid_material_ids",
+        "material_mismatch",
+    ]:
+        assert key in examples
+
+
+def test_material_patch_includes_error_examples():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+
+    path = "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}"
+    assert path in spec["paths"], "Materials PATCH path missing"
+    patch_op = spec["paths"][path]["patch"]
+    perms = patch_op.get("x-permissions", {})
+    assert perms.get("requiredRole") == "teacher"
+    assert perms.get("authorOnly") is True
+
+    examples = patch_op["responses"]["400"]["content"]["application/json"]["examples"]
+    for key in [
+        "empty_payload",
+        "invalid_title",
+    ]:
+        assert key in examples

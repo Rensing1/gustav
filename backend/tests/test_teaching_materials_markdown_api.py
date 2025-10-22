@@ -357,3 +357,32 @@ async def test_reorder_rejects_invalid_uuid_in_payload():
         )
         assert invalid.status_code == 400
         assert invalid.json().get("detail") == "invalid_material_ids"
+
+
+@pytest.mark.anyio
+async def test_patch_rejects_empty_title_as_invalid():
+    """PATCH must return 400 invalid_title when title is an empty string."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    author = main.SESSION_STORE.create(sub="teacher-materials-patch-empty-title", name="Autor", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", author.session_id)
+        unit = await _create_unit(client, title="Felder")
+        section = await _create_section(client, unit["id"], title="Vektoren")
+        mat = await _create_material(client, unit["id"], section["id"], title="Grundlagen", body="Text")
+
+        bad = await client.patch(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{mat['id']}",
+            json={"title": ""},
+        )
+        assert bad.status_code == 400
+        assert bad.json().get("detail") == "invalid_title"

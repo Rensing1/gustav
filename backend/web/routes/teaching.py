@@ -1339,7 +1339,7 @@ async def list_section_materials(request: Request, unit_id: str, section_id: str
         items = MATERIALS_SERVICE.list_markdown_materials(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return [_serialize_material(m) for m in items]
+    return JSONResponse(content=[_serialize_material(m) for m in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials")
@@ -1456,18 +1456,22 @@ async def update_section_material(
         return JSONResponse({"error": "not_found"}, status_code=404)
     if MATERIALS_SERVICE.get_material_owned(unit_id, section_id, material_id, sub) is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    updates = payload.model_dump(mode="python", exclude_unset=True, exclude_none=True)
-    if not updates:
+    # Include None for provided fields to detect intentionally empty values (e.g., title="")
+    raw_updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not raw_updates:
         return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     # Manual validation keeps responses aligned with our 400-contract (FastAPI would emit 422 otherwise).
     kwargs = {}
-    if "title" in updates:
-        title_val = updates["title"] or ""
+    if "title" in raw_updates:
+        # Normalizer maps empty/blank strings to None; treat as invalid_title when provided
+        if raw_updates["title"] is None:
+            return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+        title_val = raw_updates["title"] or ""
         if not title_val or len(title_val) > 200:
             return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
         kwargs["title"] = title_val
-    if "body_md" in updates:
-        body_val = updates["body_md"]
+    if "body_md" in raw_updates:
+        body_val = raw_updates["body_md"]
         if body_val is None or not isinstance(body_val, str):
             return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
         kwargs["body_md"] = body_val

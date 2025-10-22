@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- docs(openapi): Add 503 `service_unavailable` to file-materials endpoints (upload-intents, finalize, download-url, delete) when storage is not configured.
+- security(api/teaching): Mark download-url responses `Cache-Control: no-store` (short-lived, non-cacheable URLs).
+- env(auth): Prefer `KC_BASE_URL` (accept legacy `KC_BASE`); `.env.example` and docs updated.
+- feat(storage): Respect `SUPABASE_STORAGE_BUCKET` env for MaterialFileSettings (default `materials`).
 - fix(api/openapi): Move 502 storage_delete_failed example from PATCH to DELETE /materials; align with runtime behavior.
 - fix(api/teaching): Delete storage first, then DB, to avoid orphaned objects when storage deletion fails (returns 502).
 - db(materials): Strengthen SHA-256 CHECK (regex ^[0-9a-f]{64}$) via migration; improves data integrity.

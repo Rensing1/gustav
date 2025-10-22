@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- fix(api/openapi): Move 502 storage_delete_failed example from PATCH to DELETE /materials; align with runtime behavior.
+- fix(api/teaching): Delete storage first, then DB, to avoid orphaned objects when storage deletion fails (returns 502).
+- db(materials): Strengthen SHA-256 CHECK (regex ^[0-9a-f]{64}$) via migration; improves data integrity.
 - fix(teaching): Finalize accepts parameterized Content-Type from storage HEAD (e.g., "application/pdf; charset=UTF-8").
 - docs(openapi): Add regex pattern for `sha256` (^[0-9a-f]{64}$) in `MaterialFileFinalizeRequest`.
 - tests(teaching): Add test ensuring finalize accepts Content-Type with parameters.

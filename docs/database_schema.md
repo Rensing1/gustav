@@ -44,12 +44,12 @@ This document summarizes the production session table introduced for persistent 
   - `body_md text` — Markdown-Inhalt (nur bei `kind='markdown'`, sonst `NULL`).
   - `position int not null` (`check position > 0`) — 1-basierte Reihenfolge innerhalb eines Abschnitts.
   - `kind text not null default 'markdown'` (`check kind in ('markdown','file')`).
-  - Datei-Metadaten (nur bei `kind='file'`):
+- Datei-Metadaten (nur bei `kind='file'`):
     - `storage_key text` — Pfad im Storage-Bucket.
     - `filename_original text` — ursprünglicher Dateiname.
     - `mime_type text` — Content-Type.
     - `size_bytes integer` (`> 0`).
-    - `sha256 text` — hex-codierter Hash (64 Zeichen).
+    - `sha256 text` — hex-codierter Hash (64 Zeichen, Regex `^[0-9a-f]{64}$`).
     - `alt_text text` — optionaler Alternativtext.
   - `created_at timestamptz default now()`, `updated_at timestamptz default now()`.
 - Constraints & Indizes

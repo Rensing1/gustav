@@ -35,17 +35,27 @@ This document summarizes the production session table introduced for persistent 
 
 ### `public.unit_materials`
 
-- Purpose: Markdown-Materialien je Abschnitt (Iteration 1a).
+- Purpose: Materialien je Abschnitt. Unterstützt Markdown (`kind = 'markdown'`) und Datei-Materialien (`kind = 'file'`).
 - Columns
   - `id uuid` primary key (`default gen_random_uuid()`).
   - `unit_id uuid not null` → `learning_units(id)` (`on delete cascade`) to keep author-level ownership in sync.
   - `section_id uuid not null` → `unit_sections(id)` (`on delete cascade`).
-  - `title text not null` — validated auf 1..200 Zeichen in der Application.
-  - `body_md text not null` — Markdown-Inhalt (Größe durch Request-Limit begrenzt, nicht durch DB).
+  - `title text not null` — validated 1..200 Zeichen in der Application.
+  - `body_md text` — Markdown-Inhalt (nur bei `kind='markdown'`, sonst `NULL`).
   - `position int not null` (`check position > 0`) — 1-basierte Reihenfolge innerhalb eines Abschnitts.
+  - `kind text not null default 'markdown'` (`check kind in ('markdown','file')`).
+  - Datei-Metadaten (nur bei `kind='file'`):
+    - `storage_key text` — Pfad im Storage-Bucket.
+    - `filename_original text` — ursprünglicher Dateiname.
+    - `mime_type text` — Content-Type.
+    - `size_bytes integer` (`> 0`).
+    - `sha256 text` — hex-codierter Hash (64 Zeichen).
+    - `alt_text text` — optionaler Alternativtext.
   - `created_at timestamptz default now()`, `updated_at timestamptz default now()`.
 - Constraints & Indizes
   - `unique(section_id, position) DEFERRABLE INITIALLY IMMEDIATE` für stabile Reorder-Transaktionen.
+  - Unique Index `unit_materials_storage_key_idx (storage_key) WHERE storage_key IS NOT NULL` verhindert doppelte Objektpfade.
+  - CHECK `unit_materials_file_fields_check` stellt sicher, dass nur passende Spalten pro `kind` gesetzt werden (Markdown ohne Storage-Felder, Dateien mit vollständigen Metadaten).
   - Indizes `idx_unit_materials_unit` und `idx_unit_materials_section` beschleunigen Owner-Scopes.
   - Trigger `trg_unit_materials_updated_at` nutzt `set_updated_at()` für automatische Timestamps.
   - Trigger `trg_unit_materials_section_match` (`unit_materials_section_unit_match()`) stellt sicher, dass `section_id` zu `unit_id` gehört und nicht nachträglich gewechselt wird.
@@ -53,3 +63,30 @@ This document summarizes the production session table introduced for persistent 
   - Tabelle ist RLS-aktiviert; `gustav_limited` besitzt `SELECT/INSERT/UPDATE/DELETE`.
   - Policies (`unit_materials_select/insert/update/delete_author`) spiegeln die Ownership von `learning_units` wider (`app.current_sub`).
   - Inserts/Updates prüfen via Join auf `unit_sections`, dass nur eigene Abschnitte beschrieben werden.
+  - Datei-Metadaten werden nur über Upload-Intents gesetzt (siehe unten).
+
+### `public.upload_intents`
+
+- Purpose: Kurzlebige Upload-Intents für Datei-Materialien. Kapselt Presign-Infos und Idempotenz.
+- Columns
+  - `id uuid` primary key (`default gen_random_uuid()`).
+  - `material_id uuid not null` — vorab reservierte Material-ID.
+  - `unit_id uuid not null` → `learning_units(id)` (`on delete cascade`).
+  - `section_id uuid not null` → `unit_sections(id)` (`on delete cascade`).
+  - `author_id text not null` — Lehrkraft (`app.current_sub`).
+  - `storage_key text not null` — erwarteter Objektpfad.
+  - `filename text not null` — Originalname.
+  - `mime_type text not null`.
+  - `size_bytes integer not null` (`check size_bytes > 0`).
+  - `expires_at timestamptz not null` — Ablauf der Intent-Validität.
+  - `consumed_at timestamptz null` — wird gesetzt, sobald Finalize erfolgreich ist.
+  - `created_at timestamptz default now()`.
+- Constraints & Indizes
+  - `unique(material_id)` und `unique(storage_key)` sichern Idempotenz und eindeutige Pfade.
+  - Indizes `upload_intents_author_idx (author_id)` und `upload_intents_section_idx (section_id, material_id)` unterstützen Lookups.
+- Security / RLS
+  - Tabelle ist RLS-aktiviert; `gustav_limited` besitzt `SELECT/INSERT/UPDATE/DELETE`.
+  - Policies (`upload_intents_select/insert/update/delete_author`) erlauben nur Zugriffe mit passendem `author_id = current_setting('app.current_sub')`.
+- Lifecycle
+  - Upload-Intent wird über Service-Layer erzeugt, validiert und nach Finalize (`consumed_at`) markiert.
+  - Abgelaufene Intents können asynchron aufgeräumt werden (Follow-up).

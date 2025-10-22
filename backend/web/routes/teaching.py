@@ -119,6 +119,7 @@ class _Repo:
         self.materials: Dict[str, MaterialData] = {}
         self.material_ids_by_section: Dict[str, List[str]] = {}
         self.upload_intents: Dict[str, Dict[str, Any]] = {}
+        self.module_section_releases: Dict[tuple[str, str], Dict[str, Any]] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
         normalized = (title or "").strip()
@@ -692,6 +693,37 @@ class _Repo:
         self.modules_by_course[course_id] = list(module_ids)
         return self.list_course_modules_for_owner(course_id, owner_id)
 
+    def set_module_section_visibility(
+        self,
+        course_id: str,
+        module_id: str,
+        section_id: str,
+        owner_id: str,
+        visible: bool,
+    ) -> Dict[str, Any]:
+        course = self.courses.get(course_id)
+        if not course or course.teacher_id != owner_id:
+            raise PermissionError("course_forbidden")
+        module = self.course_modules.get(module_id)
+        if not module or module.course_id != course_id:
+            raise LookupError("module_not_found")
+        unit = self.units.get(module.unit_id)
+        if not unit or unit.author_id != owner_id:
+            raise PermissionError("unit_forbidden")
+        section = self.sections.get(section_id)
+        if not section or section.unit_id != module.unit_id:
+            raise LookupError("section_not_in_module")
+        released_at = datetime.now(timezone.utc).isoformat() if visible else None
+        record = {
+            "course_module_id": module_id,
+            "section_id": section_id,
+            "visible": bool(visible),
+            "released_at": released_at,
+            "released_by": owner_id,
+        }
+        self.module_section_releases[(module_id, section_id)] = record
+        return dict(record)
+
     def _resequence_course_modules(self, course_id: str) -> None:
         bucket = self.modules_by_course.get(course_id, [])
         bucket = [mid for mid in bucket if mid in self.course_modules]
@@ -987,6 +1019,11 @@ class CourseModuleCreatePayload(BaseModel):
 class CourseModuleReorderPayload(BaseModel):
     # Accept loose typing to avoid FastAPI 422 and map contract errors to 400
     module_ids: object | None = None
+
+
+class ModuleSectionVisibilityPayload(BaseModel):
+    # Accept loose typing to avoid FastAPI 422 and surface contract error codes.
+    visible: object | None = None
 
 
 # --- Sections (per Unit) --------------------------------------------------------
@@ -2132,6 +2169,68 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
         return JSONResponse({"error": "forbidden"}, status_code=403)
     # Uniform API shape: explicit JSONResponse with status 200
     return JSONResponse(content=[_serialize_module(m) for m in modules], status_code=200)
+
+
+@teaching_router.patch("/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility")
+async def update_module_section_visibility(
+    request: Request,
+    course_id: str,
+    module_id: str,
+    section_id: str,
+    payload: ModuleSectionVisibilityPayload,
+):
+    """
+    Toggle the visibility of a section within a course module.
+
+    Parameters:
+        request: FastAPI request containing the authenticated session.
+        course_id: Course identifier whose module will be updated.
+        module_id: Identifier of the course module referencing the unit.
+        section_id: Identifier of the section to release or hide.
+        payload: Body containing the `visible` flag.
+
+    Why:
+        Course owners decide when students can access individual sections.
+
+    Behavior:
+        - 200 with the persisted visibility record.
+        - 400 on invalid identifiers or payload (`missing_visible`, `invalid_visible_type`).
+        - 403 when caller is not the course owner.
+        - 404 when the module or section is unknown for the course.
+
+    Permissions:
+        Caller must be a teacher and owner of the course.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(course_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        return guard
+    visible_value = payload.visible
+    if visible_value is None:
+        return JSONResponse({"error": "bad_request", "detail": "missing_visible"}, status_code=400)
+    if not isinstance(visible_value, bool):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_visible_type"}, status_code=400)
+    try:
+        # Repository applies transactional upsert with RLS enforcement.
+        record = REPO.set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
+    except LookupError as exc:
+        detail = str(exc) or None
+        body = {"error": "not_found"}
+        if detail:
+            body["detail"] = detail
+        return JSONResponse(body, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=record, status_code=200)
 
 
 def _serialize_course(c) -> dict:

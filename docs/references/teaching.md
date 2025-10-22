@@ -40,6 +40,10 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Body `{ unit_id, context_notes? }`, 201 `CourseModule`; 403 wenn nicht Owner/Autor; 404 wenn Kurs/Unit fehlt; 409 bei Duplicate
 - `POST /api/teaching/courses/{course_id}/modules/reorder` (Owner only)
   - Body `{ module_ids: [uuid,…] }` repräsentiert die Zielreihenfolge; 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen; 404/403 wie oben
+- `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` (Owner only)
+  - Body `{ visible: bool }`, 200 `ModuleSectionVisibility`
+  - 400 mit `detail`: `invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type`
+  - 403 wenn nicht Owner; 404 wenn Abschnitt nicht zum Modul gehört
 
 #### Abschnitte (Sections) je Lerneinheit
 - `GET /api/teaching/units/{unit_id}/sections` (Author only)
@@ -95,6 +99,17 @@ Abschnitte (Sections): `supabase/migrations/20251021121841_teaching_unit_section
 - RLS: Select/Insert/Update/Delete nur, wenn `learning_units.author_id = app.current_sub`
 - Ordering: Unique `(unit_id, position) DEFERRABLE INITIALLY IMMEDIATE` für atomare Reorders
 - Reorder‑Semantik: Mengen‑Gleichheit, keine Duplikate, nur UUIDs; Cross‑Unit‑IDs → 404
+
+Abschnittsfreigaben: `supabase/migrations/20251022135746_teaching_module_section_releases.sql`
+- `public.module_section_releases`
+  - `course_module_id uuid fk` → `course_modules(id)` on delete cascade
+  - `section_id uuid fk` → `unit_sections(id)` on delete cascade
+  - `visible boolean not null`
+  - `released_at timestamptz null` (Zeitpunkt der letzten Freigabe)
+  - `released_by text not null` (OIDC `sub` der Lehrkraft)
+  - PK `(course_module_id, section_id)`, Indizes auf `course_module_id`, `section_id`
+- RLS: Owner-only via Join `course_modules` ↔ `courses` (`teacher_id = app.current_sub`)
+- Insert/Update erzwingen Zugehörigkeit des Abschnitts zur Unit des Moduls sowie `released_by = caller`
 
 RLS Policies & DSN
 - Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`

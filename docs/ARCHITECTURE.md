@@ -172,7 +172,7 @@ E2E‑Tests (Identity):
 ### RLS & Ordering (Teaching/Sections)
 - RLS‑Identität: Jede DB‑Operation setzt `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen.
 - Limited‑Role‑DSN: Runtime verwendet ausschließlich die `gustav_limited`‑Rolle. Service‑/Owner‑Rollen sind Migrationen vorbehalten.
-- Author‑Scope: `unit_sections` ist über `learning_units.author_id = app.current_sub` abgesichert (SELECT/INSERT/UPDATE/DELETE).
+- Author‑Scope: `unit_sections` ist über `units.author_id = app.current_sub` abgesichert (SELECT/INSERT/UPDATE/DELETE).
 - Atomare Reorder: Unique `(unit_id, position)` ist DEFERRABLE; Reorder setzt `SET CONSTRAINTS … DEFERRED` und updated alle Positionen in einer Transaktion.
 - Concurrency: Neue `position` wird mit Row‑Lock auf die Unit‑Sections ermittelt, um doppelte Positionen zu vermeiden.
 

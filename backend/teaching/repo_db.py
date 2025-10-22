@@ -282,7 +282,7 @@ class DBTeachingRepo:
                            author_id,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    from public.learning_units
+                    from public.units
                     where author_id = %s
                     order by created_at desc, id
                     limit %s offset %s
@@ -324,7 +324,7 @@ class DBTeachingRepo:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
                 cur.execute(
                     """
-                    insert into public.learning_units (title, summary, author_id)
+                    insert into public.units (title, summary, author_id)
                     values (%s, %s, %s)
                     returning id::text,
                               title,
@@ -388,7 +388,7 @@ class DBTeachingRepo:
                     params.extend([unit_id, author_id])
                     stmt = _sql.SQL(
                         """
-                        update public.learning_units
+                        update public.units
                         set {assign}
                         where id = %s and author_id = %s
                         returning id::text,
@@ -405,7 +405,7 @@ class DBTeachingRepo:
                     cols = ", ".join([f"{col} = %s" for col, _ in sets])
                     cur.execute(
                         f"""
-                        update public.learning_units
+                        update public.units
                         set {cols}
                         where id = %s and author_id = %s
                         returning id::text,
@@ -443,7 +443,7 @@ class DBTeachingRepo:
                            author_id,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    from public.learning_units
+                    from public.units
                     where id = %s
                     """,
                     (unit_id,),
@@ -466,7 +466,7 @@ class DBTeachingRepo:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
                 cur.execute(
-                    "delete from public.learning_units where id = %s and author_id = %s",
+                    "delete from public.units where id = %s and author_id = %s",
                     (unit_id, author_id),
                 )
                 conn.commit()
@@ -532,7 +532,7 @@ class DBTeachingRepo:
 
         Security:
             - Sets `app.current_sub = author_id` to activate RLS policies
-              (author-only access via join to `learning_units`).
+              (author-only access via join to `units`).
         """
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
@@ -596,7 +596,7 @@ class DBTeachingRepo:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
                 # Serialize concurrent inserts by locking the parent unit row.
                 # RLS ensures only the author's units are lockable/visible.
-                cur.execute("select id from public.learning_units where id = %s for update", (unit_id,))
+                cur.execute("select id from public.units where id = %s for update", (unit_id,))
                 # Lock current sections for additional safety (no-ops if none exist).
                 cur.execute(
                     "select id from public.unit_sections where unit_id = %s for update",

@@ -64,7 +64,7 @@ create unique index if not exists unit_materials_storage_key_idx
 create table if not exists public.upload_intents (
   id uuid primary key default gen_random_uuid(),
   material_id uuid not null,
-  unit_id uuid not null references public.learning_units(id) on delete cascade,
+  unit_id uuid not null references public.units(id) on delete cascade,
   section_id uuid not null references public.unit_sections(id) on delete cascade,
   author_id text not null,
   storage_key text not null,

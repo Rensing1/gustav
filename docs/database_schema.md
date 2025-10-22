@@ -38,7 +38,7 @@ This document summarizes the production session table introduced for persistent 
 - Purpose: Materialien je Abschnitt. Unterstützt Markdown (`kind = 'markdown'`) und Datei-Materialien (`kind = 'file'`).
 - Columns
   - `id uuid` primary key (`default gen_random_uuid()`).
-  - `unit_id uuid not null` → `learning_units(id)` (`on delete cascade`) to keep author-level ownership in sync.
+  - `unit_id uuid not null` → `units(id)` (`on delete cascade`) to keep author-level ownership in sync.
   - `section_id uuid not null` → `unit_sections(id)` (`on delete cascade`).
   - `title text not null` — validated 1..200 Zeichen in der Application.
   - `body_md text` — Markdown-Inhalt (nur bei `kind='markdown'`, sonst `NULL`).
@@ -62,7 +62,7 @@ This document summarizes the production session table introduced for persistent 
   - Storage-Key-Pfade werden beim Erzeugen/Finalisieren auf `[A-Za-z0-9._-]` normalisiert (Author/Unit/Section/Material) um Path-Traversal auf S3-kompatiblen Backends zu verhindern.
 - Security / RLS
   - Tabelle ist RLS-aktiviert; `gustav_limited` besitzt `SELECT/INSERT/UPDATE/DELETE`.
-  - Policies (`unit_materials_select/insert/update/delete_author`) spiegeln die Ownership von `learning_units` wider (`app.current_sub`).
+  - Policies (`unit_materials_select/insert/update/delete_author`) spiegeln die Ownership von `units` wider (`app.current_sub`).
   - Inserts/Updates prüfen via Join auf `unit_sections`, dass nur eigene Abschnitte beschrieben werden.
   - Datei-Metadaten werden nur über Upload-Intents gesetzt (siehe unten).
   - Optionaler Alternativtext (`alt_text`, ≤ 500 Zeichen) kann nachträglich via API-PATCH gepflegt werden, um Barrierefreiheit zu verbessern.
@@ -73,7 +73,7 @@ This document summarizes the production session table introduced for persistent 
 - Columns
   - `id uuid` primary key (`default gen_random_uuid()`).
   - `material_id uuid not null` — vorab reservierte Material-ID.
-  - `unit_id uuid not null` → `learning_units(id)` (`on delete cascade`).
+  - `unit_id uuid not null` → `units(id)` (`on delete cascade`).
   - `section_id uuid not null` → `unit_sections(id)` (`on delete cascade`).
   - `author_id text not null` — Lehrkraft (`app.current_sub`).
   - `storage_key text not null` — erwarteter Objektpfad.

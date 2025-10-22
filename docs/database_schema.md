@@ -32,3 +32,24 @@ This document summarizes the production session table introduced for persistent 
 - RLS policies
   - Policies are defined in `supabase/migrations/20251020154107_teaching_rls_policies.sql`.
   - They rely on `SET LOCAL app.current_sub = '<sub>'` per transaction to identify the acting user.
+
+### `public.unit_materials`
+
+- Purpose: Markdown-Materialien je Abschnitt (Iteration 1a).
+- Columns
+  - `id uuid` primary key (`default gen_random_uuid()`).
+  - `unit_id uuid not null` → `learning_units(id)` (`on delete cascade`) to keep author-level ownership in sync.
+  - `section_id uuid not null` → `unit_sections(id)` (`on delete cascade`).
+  - `title text not null` — validated auf 1..200 Zeichen in der Application.
+  - `body_md text not null` — Markdown-Inhalt (Größe durch Request-Limit begrenzt, nicht durch DB).
+  - `position int not null` (`check position > 0`) — 1-basierte Reihenfolge innerhalb eines Abschnitts.
+  - `created_at timestamptz default now()`, `updated_at timestamptz default now()`.
+- Constraints & Indizes
+  - `unique(section_id, position) DEFERRABLE INITIALLY IMMEDIATE` für stabile Reorder-Transaktionen.
+  - Indizes `idx_unit_materials_unit` und `idx_unit_materials_section` beschleunigen Owner-Scopes.
+  - Trigger `trg_unit_materials_updated_at` nutzt `set_updated_at()` für automatische Timestamps.
+  - Trigger `trg_unit_materials_section_match` (`unit_materials_section_unit_match()`) stellt sicher, dass `section_id` zu `unit_id` gehört und nicht nachträglich gewechselt wird.
+- Security / RLS
+  - Tabelle ist RLS-aktiviert; `gustav_limited` besitzt `SELECT/INSERT/UPDATE/DELETE`.
+  - Policies (`unit_materials_select/insert/update/delete_author`) spiegeln die Ownership von `learning_units` wider (`app.current_sub`).
+  - Inserts/Updates prüfen via Join auf `unit_sections`, dass nur eigene Abschnitte beschrieben werden.

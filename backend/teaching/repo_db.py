@@ -459,6 +459,22 @@ class DBTeachingRepo:
             return None
         return None
 
+    def section_exists_for_author(self, unit_id: str, section_id: str, author_id: str) -> bool:
+        """Check whether a section belongs to the unit and is visible to the author."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select 1
+                    from public.unit_sections
+                    where unit_id = %s
+                      and id = %s
+                    """,
+                    (unit_id, section_id),
+                )
+                return cur.fetchone() is not None
+
     # --- Unit sections ---------------------------------------------------------
     def list_sections_for_author(self, unit_id: str, author_id: str) -> List[dict]:
         """List sections of a unit authored by the caller.
@@ -786,6 +802,384 @@ class DBTeachingRepo:
                 "position": r[3],
                 "created_at": r[4],
                 "updated_at": r[5],
+            }
+            for r in rows
+        ]
+
+    # --- Section materials -----------------------------------------------------
+    def list_materials_for_section_owned(self, unit_id: str, section_id: str, author_id: str) -> List[dict]:
+        """Return ordered markdown materials for a section authored by the caller."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text,
+                           unit_id::text,
+                           section_id::text,
+                           title,
+                           body_md,
+                           position,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.unit_materials
+                    where unit_id = %s
+                      and section_id = %s
+                    order by position asc, id
+                    """,
+                    (unit_id, section_id),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "unit_id": r[1],
+                "section_id": r[2],
+                "title": r[3],
+                "body_md": r[4],
+                "position": r[5],
+                "created_at": r[6],
+                "updated_at": r[7],
+            }
+            for r in rows
+        ]
+
+    def create_markdown_material(self, unit_id: str, section_id: str, author_id: str, *, title: str, body_md: str) -> dict:
+        """Create a markdown material at the next position within a section."""
+        title = (title or "").strip()
+        if not title or len(title) > 200:
+            raise ValueError("invalid_title")
+        if body_md is None or not isinstance(body_md, str):
+            raise ValueError("invalid_body_md")
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    "select id from public.unit_sections where id = %s and unit_id = %s for update",
+                    (section_id, unit_id),
+                )
+                sec_row = cur.fetchone()
+                if not sec_row:
+                    raise LookupError("section_not_found")
+                cur.execute(
+                    "select id from public.unit_materials where section_id = %s for update",
+                    (section_id,),
+                )
+                cur.execute(
+                    "select coalesce(max(position), 0) + 1 from public.unit_materials where section_id = %s",
+                    (section_id,),
+                )
+                next_pos = int(cur.fetchone()[0])
+                row = None
+                try:
+                    cur.execute(
+                        """
+                        insert into public.unit_materials (unit_id, section_id, title, body_md, position)
+                        values (%s, %s, %s, %s, %s)
+                        returning id::text,
+                                  unit_id::text,
+                                  section_id::text,
+                                  title,
+                                  body_md,
+                                  position,
+                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        (unit_id, section_id, title, body_md, next_pos),
+                    )
+                    row = cur.fetchone()
+                except Exception as exc:
+                    sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+                    if UniqueViolation and isinstance(exc, UniqueViolation) or sqlstate == "23505":
+                        conn.rollback()
+                        with conn.cursor() as cur2:
+                            cur2.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                            cur2.execute(
+                                "select coalesce(max(position), 0) + 1 from public.unit_materials where section_id = %s",
+                                (section_id,),
+                            )
+                            next_pos = int(cur2.fetchone()[0])
+                            cur2.execute(
+                                """
+                                insert into public.unit_materials (unit_id, section_id, title, body_md, position)
+                                values (%s, %s, %s, %s, %s)
+                                returning id::text,
+                                          unit_id::text,
+                                          section_id::text,
+                                          title,
+                                          body_md,
+                                          position,
+                                          to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                          to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                                """,
+                                (unit_id, section_id, title, body_md, next_pos),
+                            )
+                            row = cur2.fetchone()
+                    else:
+                        raise
+                if row is None:
+                    raise RuntimeError("unit_materials insert returned no row")
+                conn.commit()
+        return {
+            "id": row[0],
+            "unit_id": row[1],
+            "section_id": row[2],
+            "title": row[3],
+            "body_md": row[4],
+            "position": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
+        }
+
+    def get_material_owned(self, unit_id: str, section_id: str, material_id: str, author_id: str) -> Optional[dict]:
+        """Fetch a single material enforcing author ownership via RLS."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text,
+                           unit_id::text,
+                           section_id::text,
+                           title,
+                           body_md,
+                           position,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.unit_materials
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                    """,
+                    (material_id, unit_id, section_id),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "unit_id": row[1],
+            "section_id": row[2],
+            "title": row[3],
+            "body_md": row[4],
+            "position": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
+        }
+
+    def update_markdown_material(
+        self,
+        unit_id: str,
+        section_id: str,
+        material_id: str,
+        author_id: str,
+        *,
+        title=_UNSET,
+        body_md=_UNSET,
+    ) -> Optional[dict]:
+        """Update mutable fields of a markdown material (title/body)."""
+        updates: List[tuple[str, object]] = []
+        if title is not _UNSET:
+            if title is None:
+                raise ValueError("invalid_title")
+            t = (str(title) or "").strip()
+            if not t or len(t) > 200:
+                raise ValueError("invalid_title")
+            updates.append(("title", t))
+        if body_md is not _UNSET:
+            if body_md is None or not isinstance(body_md, str):
+                raise ValueError("invalid_body_md")
+            updates.append(("body_md", body_md))
+        if not updates:
+            return self.get_material_owned(unit_id, section_id, material_id, author_id)
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+
+                    assignments = []
+                    params: List[object] = []
+                    for col, val in updates:
+                        assignments.append(_sql.SQL("{} = %s").format(_sql.Identifier(col)))
+                        params.append(val)
+                    params.extend([material_id, unit_id, section_id])
+                    stmt = _sql.SQL(
+                        """
+                        update public.unit_materials
+                        set {assign}
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        returning id::text,
+                                  unit_id::text,
+                                  section_id::text,
+                                  title,
+                                  body_md,
+                                  position,
+                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """
+                    ).format(assign=_sql.SQL(", ").join(assignments))
+                    cur.execute(stmt, params)
+                except Exception:
+                    params = [val for _, val in updates] + [material_id, unit_id, section_id]
+                    cols = ", ".join([f"{col} = %s" for col, _ in updates])
+                    cur.execute(
+                        f"""
+                        update public.unit_materials
+                        set {cols}
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        returning id::text,
+                                  unit_id::text,
+                                  section_id::text,
+                                  title,
+                                  body_md,
+                                  position,
+                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                  to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        params,
+                    )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                conn.commit()
+        return {
+            "id": row[0],
+            "unit_id": row[1],
+            "section_id": row[2],
+            "title": row[3],
+            "body_md": row[4],
+            "position": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
+        }
+
+    def delete_material(self, unit_id: str, section_id: str, material_id: str, author_id: str) -> bool:
+        """Delete a material and resequence remaining positions."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id
+                    from public.unit_materials
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                    for update
+                    """,
+                    (material_id, unit_id, section_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return False
+                cur.execute(
+                    "delete from public.unit_materials where id = %s and unit_id = %s and section_id = %s",
+                    (material_id, unit_id, section_id),
+                )
+                cur.execute(
+                    """
+                    with ordered as (
+                      select id, row_number() over (order by position asc, id) as rn
+                      from public.unit_materials
+                      where section_id = %s
+                    )
+                    update public.unit_materials m
+                    set position = o.rn
+                    from ordered o
+                    where m.id = o.id
+                    """,
+                    (section_id,),
+                )
+                conn.commit()
+                return True
+
+    def reorder_section_materials(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        material_ids: List[str],
+    ) -> List[dict]:
+        """Atomically reorder materials of a section owned by the caller."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text
+                    from public.unit_materials
+                    where unit_id = %s
+                      and section_id = %s
+                    order by position asc, id
+                    """,
+                    (unit_id, section_id),
+                )
+                existing = [row[0] for row in (cur.fetchall() or [])]
+                if not existing:
+                    raise ValueError("material_mismatch")
+                existing_set = set(existing)
+                submitted_set = set(material_ids)
+                if submitted_set != existing_set or len(material_ids) != len(existing):
+                    extra = submitted_set - existing_set
+                    if extra:
+                        cur.execute(
+                            "select count(*) from public.unit_materials where id = any(%s)",
+                            (list(extra),),
+                        )
+                        count = cur.fetchone()
+                        if count and int(count[0]) > 0:
+                            raise LookupError("material_not_in_section")
+                    raise ValueError("material_mismatch")
+                cur.execute("set constraints unit_materials_section_id_position_key deferred")
+                orderings = list(range(1, len(material_ids) + 1))
+                cur.execute(
+                    """
+                    with new_order as (
+                      select mid, ord from unnest(%s::uuid[], %s::int[]) as t(mid, ord)
+                    )
+                    update public.unit_materials m
+                    set position = n.ord
+                    from new_order n
+                    where m.id = n.mid
+                      and m.section_id = %s
+                      and m.unit_id = %s
+                    """,
+                    (material_ids, orderings, section_id, unit_id),
+                )
+                cur.execute(
+                    """
+                    select id::text,
+                           unit_id::text,
+                           section_id::text,
+                           title,
+                           body_md,
+                           position,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    from public.unit_materials
+                    where unit_id = %s
+                      and section_id = %s
+                    order by position asc, id
+                    """,
+                    (unit_id, section_id),
+                )
+                rows = cur.fetchall() or []
+                conn.commit()
+        return [
+            {
+                "id": r[0],
+                "unit_id": r[1],
+                "section_id": r[2],
+                "title": r[3],
+                "body_md": r[4],
+                "position": r[5],
+                "created_at": r[6],
+                "updated_at": r[7],
             }
             for r in rows
         ]

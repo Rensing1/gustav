@@ -234,6 +234,69 @@ components:
             type: string
             format: uuid
           description: Desired order (1..n) of section IDs for the given unit
+    Material:
+      type: object
+      required: [id, unit_id, section_id, title, body_md, position, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        unit_id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body_md:
+          type: string
+          description: Markdown content shown to students once the section is released
+        position:
+          type: integer
+          minimum: 1
+          description: 1-based ordering within the section
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MaterialCreate:
+      type: object
+      required: [title, body_md]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body_md:
+          type: string
+          description: Markdown body authored by the teacher
+    MaterialUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body_md:
+          type: string
+          description: Markdown body authored by the teacher
+    MaterialReorder:
+      type: object
+      required: [material_ids]
+      properties:
+        material_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Desired order (1..n) of material IDs for the given section
     CourseModule:
       type: object
       required: [id, course_id, unit_id, position, created_at, updated_at]
@@ -1195,6 +1258,311 @@ paths:
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/materials:
+    get:
+      tags: [Teaching]
+      summary: List materials of a section (author only)
+      description: Returns materials sorted by ascending position for the section's author.
+      operationId: listSectionMaterials
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of materials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Material'
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_unit_id:
+                  summary: Unit id not a UUID
+                  value:
+                    error: bad_request
+                    detail: invalid_unit_id
+                invalid_section_id:
+                  summary: Section id not a UUID
+                  value:
+                    error: bad_request
+                    detail: invalid_section_id
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      tags: [Teaching]
+      summary: Create material within a section (author only)
+      operationId: createSectionMaterial
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialCreate'
+      responses:
+        '201':
+          description: Material created at the next position
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Material'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_title
+              - invalid_body_md
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}:
+    patch:
+      tags: [Teaching]
+      summary: Update a material (author only)
+      operationId: updateSectionMaterial
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: material_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialUpdate'
+      responses:
+        '200':
+          description: Updated material
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Material'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_material_id
+              - invalid_title
+              - invalid_body_md
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_title:
+                  summary: Title provided but empty or too long
+                  value:
+                    error: bad_request
+                    detail: invalid_title
+                empty_payload:
+                  summary: No fields were provided in the PATCH body
+                  value:
+                    error: bad_request
+                    detail: empty_payload
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Teaching]
+      summary: Delete a material (author only)
+      description: Removes the material and resequences remaining positions to 1..n.
+      operationId: deleteSectionMaterial
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: material_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204': { description: Deleted (no content) }
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_material_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder:
+    post:
+      tags: [Teaching]
+      summary: Reorder materials of a section (author only)
+      description: Atomically updates positions based on the provided material order.
+      operationId: reorderSectionMaterials
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      x-security-notes:
+        - "Transactional update with row locks ensures contiguous positions without duplicates."
+        - "Check author ownership before validating payload to avoid error-oracle leakage."
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialReorder'
+      responses:
+        '200':
+          description: Materials reordered successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Material'
+        '400':
+          description: |
+            Invalid material list. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - material_ids_must_be_array
+              - empty_material_ids
+              - duplicate_material_ids
+              - invalid_material_ids
+              - material_mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                duplicate_material_ids:
+                  summary: Material ids contain duplicates
+                  value:
+                    error: bad_request
+                    detail: duplicate_material_ids
+                invalid_material_ids:
+                  summary: Material ids include a non-UUID value
+                  value:
+                    error: bad_request
+                    detail: invalid_material_ids
+                material_mismatch:
+                  summary: Payload ids do not match current section materials
+                  value:
+                    error: bad_request
+                    detail: material_mismatch
+                empty_material_ids:
+                  summary: Submitted material id array is empty
+                  value:
+                    error: bad_request
+                    detail: empty_material_ids
+                material_ids_must_be_array:
+                  summary: Submitted material_ids is not an array
+                  value:
+                    error: bad_request
+                    detail: material_ids_must_be_array
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/modules:
     get:

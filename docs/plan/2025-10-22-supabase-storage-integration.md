@@ -53,7 +53,8 @@ Akzeptanzkriterien (Auszug):
 - Unauthorisiert/IDs ungültig → 403/400/404 gemäß bestehendem Vertrag
 
 ## OpenAPI / Contract
-- Keine Änderungen. Bestehende Endpunkte bleiben unverändert (upload-intents, finalize, download-url, delete). 502 Beispiel ist bereits bei DELETE.
+- Ergänzung: Für `upload-intents`, `finalize` und `download-url` ist jetzt `503 service_unavailable` dokumentiert, wenn kein Storage-Adapter konfiguriert ist.
+  Das reflektiert die bestehende Laufzeitsemantik (`NullStorageAdapter`). 502 Beispiel bleibt bei DELETE.
 
 ## Datenbank / Migration
 - Keine SQL‑Schemaänderungen notwendig. Supabase Storage‑Bucket ist außerhalb von Postgres. DB‑Migrationen bleiben unberührt.
@@ -80,7 +81,7 @@ Akzeptanzkriterien (Auszug):
 3) Tests (TDD)
    - Neuer Test: `backend/tests/test_supabase_storage_adapter.py`
    - Mocks für HTTP‑Aufrufe; Validierung der Rückgabe‑Formate und TTLs.
-   - Integration: Vorhandene API‑Tests weiterverwenden (Fake Adapter bleibt für Fehlerpfade).
+   - Integration: Vorhandene API‑Tests weiterverwenden (Fake Adapter bleibt für Fehlerpfade). Zusätzliche Tests prüfen `503` bei nicht konfiguriertem Adapter und `Cache-Control: no-store` für Download-URL.
 4) Doku
    - `docs/references/storage_and_gateway.md`: Setup, ENV, TTLs, CORS‑Hinweise, Pfad‑Sanitizing.
    - `docs/ARCHITECTURE.md`: Abschnitt „Storage (Supabase) – Prod/Dev“ ergänzen.
@@ -88,7 +89,7 @@ Akzeptanzkriterien (Auszug):
 ## Sicherheit
 - Service‑Role‑Key nur im Backend (ENV); niemals im Client.
 - Signierte URLs kurzlebig; private Buckets.
-- Pfad‑Segmente sanitisiert (bereits im Service umgesetzt).
+- Pfad‑Segmente sanitisiert (bereits im Service umgesetzt). Bucket-Name kann über `SUPABASE_STORAGE_BUCKET` gesetzt werden (default: `materials`).
 - Finalize validiert Größe/MIME via HEAD; auf Fehler → Delete, 400.
 - Rate‑Limits und Logging auf App‑Ebene; Storage selber bleibt nicht öffentlich exponiert.
 
@@ -104,4 +105,3 @@ Akzeptanzkriterien (Auszug):
 ## Definition of Done
 - Storage lokal läuft (Bucket vorhanden), Adapter eingebunden, API‑Tests grün.
 - Ops‑Doku vorhanden; ENV‑Variablen dokumentiert; kein API‑Contract‑Change.
-

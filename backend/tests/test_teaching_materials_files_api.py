@@ -283,6 +283,56 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
 
 
 @pytest.mark.anyio
+async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage_adapter):
+    """Finalize should accept storage head content-type with parameters (e.g., charset)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-mime-param", name="Frau Müller", roles=["teacher"])
+
+    # Configure fake storage to report a parameterized content-type for head_object
+    def _head_with_params(**kwargs):
+        _reset_storage_adapter.head_calls.append(kwargs)
+        return {"content_type": "application/pdf; charset=UTF-8", "content_length": 1024}
+
+    _reset_storage_adapter.head_object = _head_with_params  # type: ignore[assignment]
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )
+        assert intent_resp.status_code == 200
+        intent = intent_resp.json()
+
+        finalize_resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Sicherheitsleitfaden",
+                "sha256": "f" * 64,
+            },
+        )
+        assert finalize_resp.status_code == 201
+        mat = finalize_resp.json()
+        assert mat["kind"] == "file"
+
+
+@pytest.mark.anyio
 async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter):
     main.SESSION_STORE = SessionStore()
     import routes.teaching as teaching  # noqa: E402

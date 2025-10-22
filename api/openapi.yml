@@ -388,6 +388,7 @@ components:
         sha256:
           type: string
           description: Hex-encoded SHA-256 checksum of the uploaded file
+          pattern: '^[0-9a-f]{64}$'
         alt_text:
           type: string
           description: Optional alternative text for accessibility

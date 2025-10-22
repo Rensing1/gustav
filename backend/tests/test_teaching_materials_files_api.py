@@ -1020,3 +1020,62 @@ async def test_download_url_sets_no_store_header(_reset_storage_adapter):
         )
         assert resp.status_code == 200
         assert resp.headers.get("Cache-Control") == "no-store"
+
+
+@pytest.mark.anyio
+async def test_delete_file_material_without_storage_adapter_returns_503(_reset_storage_adapter):
+    """DELETE should return 503 when storage adapter is not configured (NullStorageAdapter)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    # Use in-memory repo to avoid DB dependency for this edge case
+    original_repo = teaching.REPO
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        fallback_repo = teaching._Repo()  # type: ignore[attr-defined]
+        teaching.set_repo(fallback_repo)
+
+        # First, finalize with a working adapter so a file material exists
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "http://storage.local/download", "expires_at": "2099-01-01T00:00:00Z"}
+
+        teaching.set_storage_adapter(_Adapter())
+
+        teacher = main.SESSION_STORE.create(sub="teacher-del-503", name="Frau Müller", roles=["teacher"])
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client)
+            section = await _create_section(client, unit["id"])
+
+            intent = (await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+                json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )).json()
+
+            material = (await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+                json={"intent_id": intent["intent_id"], "title": "Sicherheitsleitfaden", "sha256": "f" * 64},
+            )).json()
+
+            # Now switch to NullStorageAdapter to simulate missing storage during delete
+            from teaching.storage import NullStorageAdapter  # type: ignore
+
+            teaching.set_storage_adapter(NullStorageAdapter())
+
+            resp = await client.delete(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}"
+            )
+            assert resp.status_code == 503
+    finally:
+        teaching.set_repo(original_repo)
+        teaching.set_storage_adapter(original_adapter)

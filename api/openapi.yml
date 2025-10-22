@@ -1602,6 +1602,7 @@ paths:
                   value:
                     error: bad_gateway
                     detail: storage_delete_failed
+        '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder:
     post:

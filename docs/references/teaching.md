@@ -106,7 +106,7 @@ Abschnittsfreigaben: `supabase/migrations/20251022135746_teaching_module_section
   - `section_id uuid fk` → `unit_sections(id)` on delete cascade
   - `visible boolean not null`
   - `released_at timestamptz null` (Zeitpunkt der letzten Freigabe)
-  - `released_by text null` (OIDC `sub` der Lehrkraft)
+  - `released_by text not null` (OIDC `sub` der Lehrkraft)
   - PK `(course_module_id, section_id)`, Indizes auf `course_module_id`, `section_id`
 - RLS: Owner-only via Join `course_modules` ↔ `courses` (`teacher_id = app.current_sub`)
 - Insert/Update erzwingen Zugehörigkeit des Abschnitts zur Unit des Moduls sowie `released_by = caller`

@@ -236,7 +236,7 @@ components:
           description: Desired order (1..n) of section IDs for the given unit
     Material:
       type: object
-      required: [id, unit_id, section_id, title, body_md, position, created_at, updated_at]
+      required: [id, unit_id, section_id, title, body_md, position, kind, created_at, updated_at]
       properties:
         id:
           type: string
@@ -251,13 +251,37 @@ components:
           type: string
           minLength: 1
           maxLength: 200
-        body_md:
-          type: string
-          description: Markdown content shown to students once the section is released
         position:
           type: integer
           minimum: 1
           description: 1-based ordering within the section
+        kind:
+          type: string
+          enum: [markdown, file]
+          description: Material content type.
+        body_md:
+          type: string
+          description: Markdown content shown to students once the section is released (only for `kind=markdown`).
+          nullable: true
+        filename_original:
+          type: string
+          description: Original filename provided by the teacher (only for `kind=file`).
+        storage_key:
+          type: string
+          description: Storage path used for the uploaded file (only for `kind=file`).
+        mime_type:
+          type: string
+          description: MIME type of the uploaded file (only for `kind=file`).
+        size_bytes:
+          type: integer
+          minimum: 1
+          description: Size of the uploaded file in bytes (only for `kind=file`).
+        sha256:
+          type: string
+          description: Hex-encoded SHA-256 checksum of the uploaded file (only for `kind=file`).
+        alt_text:
+          type: string
+          description: Optional alternative text for accessibility (only for `kind=file`).
         created_at:
           type: string
           format: date-time
@@ -285,6 +309,10 @@ components:
         body_md:
           type: string
           description: Markdown body authored by the teacher
+          nullable: true
+        alt_text:
+          type: string
+          description: Alternative text for file materials (ignored for markdown)
     MaterialReorder:
       type: object
       required: [material_ids]
@@ -297,6 +325,84 @@ components:
             type: string
             format: uuid
           description: Desired order (1..n) of material IDs for the given section
+    MaterialUploadIntentRequest:
+      type: object
+      required: [filename, mime_type, size_bytes]
+      properties:
+        filename:
+          type: string
+          description: Original filename supplied by the teacher
+        mime_type:
+          type: string
+          description: MIME type expected for the upload
+        size_bytes:
+          type: integer
+          minimum: 1
+          description: Declared file size in bytes
+    MaterialUploadIntentResponse:
+      type: object
+      required: [intent_id, material_id, storage_key, url, headers, accepted_mime_types, max_size_bytes, expires_at]
+      properties:
+        intent_id:
+          type: string
+          format: uuid
+        material_id:
+          type: string
+          format: uuid
+        storage_key:
+          type: string
+          description: Storage key that must be used during upload
+        url:
+          type: string
+          format: uri
+          description: Pre-signed upload URL
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: HTTP headers that must be included with the upload request
+        accepted_mime_types:
+          type: array
+          items:
+            type: string
+          description: MIME types allowed for uploads
+        max_size_bytes:
+          type: integer
+          minimum: 1
+          description: Maximum allowed file size in bytes
+        expires_at:
+          type: string
+          format: date-time
+          description: ISO timestamp when the upload intent expires
+    MaterialFileFinalizeRequest:
+      type: object
+      required: [intent_id, title, sha256]
+      properties:
+        intent_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        sha256:
+          type: string
+          description: Hex-encoded SHA-256 checksum of the uploaded file
+        alt_text:
+          type: string
+          description: Optional alternative text for accessibility
+    MaterialDownloadUrlResponse:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Short-lived download URL
+        expires_at:
+          type: string
+          format: date-time
+          description: ISO timestamp when the download URL expires
     CourseModule:
       type: object
       required: [id, course_id, unit_id, position, created_at, updated_at]
@@ -1433,6 +1539,18 @@ paths:
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '502':
+          description: Upstream storage deletion failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                storage_delete_failed:
+                  summary: Storage deletion failed and manual cleanup is required
+                  value:
+                    error: bad_gateway
+                    detail: storage_delete_failed
     delete:
       tags: [Teaching]
       summary: Delete a material (author only)
@@ -1563,6 +1681,174 @@ paths:
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents:
+    post:
+      tags: [Teaching]
+      summary: Create upload intent for file material (author only)
+      operationId: createSectionMaterialUploadIntent
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialUploadIntentRequest'
+      responses:
+        '200':
+          description: Upload intent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaterialUploadIntentResponse'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - mime_not_allowed
+              - size_exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize:
+    post:
+      tags: [Teaching]
+      summary: Finalize upload intent (author only)
+      operationId: finalizeSectionMaterialUpload
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialFileFinalizeRequest'
+      responses:
+        '201':
+          description: File material created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Material'
+        '200':
+          description: Upload intent already finalized (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Material'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_intent_id
+              - intent_expired
+              - checksum_mismatch
+              - invalid_title
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (intent does not belong to caller), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit, section, or intent not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url:
+    get:
+      tags: [Teaching]
+      summary: Generate download URL for file material (author only)
+      operationId: getSectionMaterialDownloadUrl
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: material_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: disposition
+          required: false
+          schema:
+            type: string
+            enum: [inline, attachment]
+          description: Desired `Content-Disposition`; defaults to `attachment`.
+      responses:
+        '200':
+          description: Short-lived download URL returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaterialDownloadUrlResponse'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_material_id
+              - invalid_disposition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/modules:
     get:

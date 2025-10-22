@@ -130,7 +130,7 @@ E2E‑Tests (Identity):
 - Voraussetzung: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
 - Ausführung:
   - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
-  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
+  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE_URL=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
 
 ### Auth Router & Security (aktualisiert)
 - Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
@@ -167,7 +167,7 @@ E2E‑Tests (Identity):
 - Bucket: `materials` (lokal in `supabase/config.toml` konfiguriert; 20 MiB; PDF/PNG/JPEG).
 - Adapter: `backend/teaching/storage_supabase.py` implementiert Zugriff (presign upload/download, head, delete).
 - Wiring: In `backend/web/main.py` wird der Adapter automatisch aktiviert, wenn `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` gesetzt sind.
-- ENV: siehe `.env.example` und `docs/references/storage_and_gateway.md`.
+- ENV: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SUPABASE_STORAGE_BUCKET` (default: `materials`). Siehe `.env.example` und `docs/references/storage_and_gateway.md`.
 
 ### RLS & Ordering (Teaching/Sections)
 - RLS‑Identität: Jede DB‑Operation setzt `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen.

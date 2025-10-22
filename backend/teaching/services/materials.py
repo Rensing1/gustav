@@ -25,7 +25,7 @@ class MaterialsRepoProtocol(Protocol):
         self, unit_id: str, section_id: str, author_id: str, *, title: str, body_md: str
     ) -> Any: ...
 
-    def update_markdown_material(
+    def update_material(
         self,
         unit_id: str,
         section_id: str,
@@ -34,6 +34,7 @@ class MaterialsRepoProtocol(Protocol):
         *,
         title: object = ...,
         body_md: object = ...,
+        alt_text: object = ...,
     ) -> Any | None: ...
 
     def delete_material(self, unit_id: str, section_id: str, material_id: str, author_id: str) -> bool: ...
@@ -98,6 +99,7 @@ class MaterialFileSettings:
 
 
 _SANITIZE_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
+_SEGMENT_SANITIZE_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def _sanitize_filename(filename: str) -> Optional[str]:
@@ -118,6 +120,13 @@ def _sanitize_filename(filename: str) -> Optional[str]:
         clean_ext = f".{clean_ext}"
     sanitized = f"{sanitized_root}{clean_ext}" if clean_ext else sanitized_root
     return sanitized or None
+
+
+def _sanitize_segment(value: str, *, fallback: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    sanitized = _SEGMENT_SANITIZE_PATTERN.sub("-", ascii_value).strip("-_.")
+    return sanitized or fallback
 
 
 _UNSET = object()
@@ -158,7 +167,7 @@ class MaterialsService:
             body_md=body_md,
         )
 
-    def update_markdown_material(
+    def update_material(
         self,
         unit_id: str,
         section_id: str,
@@ -167,14 +176,21 @@ class MaterialsService:
         *,
         title: object = _UNSET,
         body_md: object = _UNSET,
+        alt_text: object = _UNSET,
     ) -> Any:
-        result = self.repo.update_markdown_material(
+        repo_kwargs: Dict[str, object] = {}
+        if title is not _UNSET:
+            repo_kwargs["title"] = title
+        if body_md is not _UNSET:
+            repo_kwargs["body_md"] = body_md
+        if alt_text is not _UNSET:
+            repo_kwargs["alt_text"] = alt_text
+        result = self.repo.update_material(
             unit_id,
             section_id,
             material_id,
             author_id,
-            title=title,
-            body_md=body_md,
+            **repo_kwargs,
         )
         if result is None:
             raise LookupError("material_not_found")
@@ -221,7 +237,7 @@ class MaterialsService:
         sanitized = _sanitize_filename(filename)
         if not sanitized:
             raise ValueError("invalid_filename")
-        normalized_mime = (mime_type or "").strip()
+        normalized_mime = (mime_type or "").strip().lower()
         if normalized_mime not in self.settings.accepted_mime_types:
             raise ValueError("mime_not_allowed")
         if size_bytes <= 0 or size_bytes > self.settings.max_size_bytes:
@@ -230,8 +246,12 @@ class MaterialsService:
         expires_at = now + timedelta(seconds=self.settings.upload_intent_ttl_seconds)
         intent_id = str(uuid4())
         material_id = str(uuid4())
+        sanitized_author = _sanitize_segment(author_id, fallback="author")
+        sanitized_unit = _sanitize_segment(unit_id, fallback="unit")
+        sanitized_section = _sanitize_segment(section_id, fallback="section")
+        sanitized_material = _sanitize_segment(material_id, fallback="material")
         storage_key = (
-            f"{self.settings.storage_bucket}/{author_id}/{unit_id}/{section_id}/{material_id}/{sanitized}"
+            f"{self.settings.storage_bucket}/{sanitized_author}/{sanitized_unit}/{sanitized_section}/{sanitized_material}/{sanitized}"
         )
         original_name = filename.strip() or sanitized
         record = self.repo.create_file_upload_intent(
@@ -313,7 +333,11 @@ class MaterialsService:
         if content_type not in self.settings.accepted_mime_types:
             storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
             raise ValueError("mime_not_allowed")
+        if alt_text is not None and not isinstance(alt_text, str):
+            raise ValueError("invalid_alt_text")
         normalized_alt = (alt_text or "").strip() or None
+        if normalized_alt is not None and len(normalized_alt) > 500:
+            raise ValueError("invalid_alt_text")
         material, created = self.repo.finalize_upload_intent_create_material(
             intent_id,
             unit_id,
@@ -338,9 +362,15 @@ class MaterialsService:
         if storage is None:
             raise RuntimeError("storage_adapter_not_configured")
         material = self.repo.get_material_owned(unit_id, section_id, material_id, author_id)
-        if not material or material.get("kind") != "file":
+        if material is None:
             raise LookupError("material_not_found")
-        storage_key = material.get("storage_key")
+        kind = material.get("kind") if isinstance(material, dict) else getattr(material, "kind", None)
+        if kind != "file":
+            raise LookupError("material_not_found")
+        if isinstance(material, dict):
+            storage_key = material.get("storage_key")
+        else:
+            storage_key = getattr(material, "storage_key", None)
         if not storage_key:
             raise LookupError("material_not_found")
         requested_disposition = (disposition or "attachment").strip().lower()

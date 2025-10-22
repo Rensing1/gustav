@@ -948,7 +948,7 @@ class DBTeachingRepo:
             return None
         return _material_row_to_dict(row)
 
-    def update_markdown_material(
+    def update_material(
         self,
         unit_id: str,
         section_id: str,
@@ -957,25 +957,69 @@ class DBTeachingRepo:
         *,
         title=_UNSET,
         body_md=_UNSET,
+        alt_text=_UNSET,
     ) -> Optional[dict]:
-        """Update mutable fields of a markdown material (title/body)."""
-        updates: List[tuple[str, object]] = []
-        if title is not _UNSET:
-            if title is None:
-                raise ValueError("invalid_title")
-            t = (str(title) or "").strip()
-            if not t or len(t) > 200:
-                raise ValueError("invalid_title")
-            updates.append(("title", t))
-        if body_md is not _UNSET:
-            if body_md is None or not isinstance(body_md, str):
-                raise ValueError("invalid_body_md")
-            updates.append(("body_md", body_md))
-        if not updates:
+        """Update mutable fields (title, body_md, alt_text) for a material owned by the caller."""
+        if title is _UNSET and body_md is _UNSET and alt_text is _UNSET:
             return self.get_material_owned(unit_id, section_id, material_id, author_id)
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select kind
+                    from public.unit_materials
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                    for update
+                    """,
+                    (material_id, unit_id, section_id),
+                )
+                kind_row = cur.fetchone()
+                if not kind_row:
+                    return None
+                material_kind = kind_row[0]
+                updates: List[tuple[str, object]] = []
+                if title is not _UNSET:
+                    if title is None:
+                        raise ValueError("invalid_title")
+                    t = (str(title) or "").strip()
+                    if not t or len(t) > 200:
+                        raise ValueError("invalid_title")
+                    updates.append(("title", t))
+                if body_md is not _UNSET:
+                    if material_kind != "markdown":
+                        raise ValueError("invalid_body_md")
+                    if body_md is None or not isinstance(body_md, str):
+                        raise ValueError("invalid_body_md")
+                    updates.append(("body_md", body_md))
+                if alt_text is not _UNSET:
+                    if alt_text is None:
+                        updates.append(("alt_text", None))
+                    elif not isinstance(alt_text, str):
+                        raise ValueError("invalid_alt_text")
+                    else:
+                        normalized_alt = alt_text.strip()
+                        if len(normalized_alt) > 500:
+                            raise ValueError("invalid_alt_text")
+                        updates.append(("alt_text", normalized_alt or None))
+                if not updates:
+                    cur.execute(
+                        f"""
+                        select {_MATERIAL_COLUMNS_SQL}
+                        from public.unit_materials
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        """,
+                        (material_id, unit_id, section_id),
+                    )
+                    row = cur.fetchone()
+                    conn.rollback()
+                    if not row:
+                        return None
+                    return _material_row_to_dict(row)
                 try:
                     from psycopg import sql as _sql  # type: ignore
 
@@ -1012,6 +1056,7 @@ class DBTeachingRepo:
                     )
                 row = cur.fetchone()
                 if not row:
+                    conn.rollback()
                     return None
                 conn.commit()
         return _material_row_to_dict(row)

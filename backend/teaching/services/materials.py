@@ -330,7 +330,9 @@ class MaterialsService:
             storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
             raise ValueError("checksum_mismatch")
         content_type = head.get("content_type") or intent["mime_type"]
-        if content_type not in self.settings.accepted_mime_types:
+        # Accept content types with parameters (e.g., "application/pdf; charset=UTF-8").
+        base_content_type = (str(content_type or "").split(";", 1)[0]).strip().lower()
+        if base_content_type not in self.settings.accepted_mime_types:
             storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
             raise ValueError("mime_not_allowed")
         if alt_text is not None and not isinstance(alt_text, str):

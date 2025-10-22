@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- fix(teaching): Finalize accepts parameterized Content-Type from storage HEAD (e.g., "application/pdf; charset=UTF-8").
+- docs(openapi): Add regex pattern for `sha256` (^[0-9a-f]{64}$) in `MaterialFileFinalizeRequest`.
+- tests(teaching): Add test ensuring finalize accepts Content-Type with parameters.
 - fix(api/teaching): PATCH materials treats provided empty title as `invalid_title` (was `empty_payload`).
 - consistency(api/teaching): GET materials returns explicit JSONResponse (200) for uniform response shape.
 - docs(openapi): Add `empty_payload` example to materials PATCH 400 section.

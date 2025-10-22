@@ -264,7 +264,7 @@ Datei: `supabase/migrations/YYYYMMDDHHMMSS_teaching_unit_tasks.sql`
 
 - Tabelle `public.unit_tasks`
   - `id uuid primary key default gen_random_uuid()`
-  - `unit_id uuid not null references public.learning_units(id) on delete cascade`
+  - `unit_id uuid not null references public.units(id) on delete cascade`
   - `section_id uuid not null references public.unit_sections(id) on delete cascade`
   - `instruction_md text not null`
   - `criteria text[] not null default '{}'` (0..10)
@@ -284,7 +284,7 @@ Datei: `supabase/migrations/YYYYMMDDHHMMSS_teaching_unit_tasks.sql`
 - RLS
   - `alter table public.unit_tasks enable row level security;`
   - Grants für limited-role
-  - Policies `unit_tasks_select/insert/update/delete_author`: via Join auf `learning_units.author_id = current_setting('app.current_sub', true)` und `unit_sections.unit_id = unit_tasks.unit_id`
+  - Policies `unit_tasks_select/insert/update/delete_author`: via Join auf `units.author_id = current_setting('app.current_sub', true)` und `unit_sections.unit_id = unit_tasks.unit_id`
 
 ## Tests (pytest – failing zuerst)
 Datei: `backend/tests/test_teaching_tasks_api.py`
@@ -322,4 +322,3 @@ Datei: `backend/tests/test_teaching_tasks_api.py`
 3) DB‑Migration entwerfen und anwenden (`supabase migration new`, `supabase migration up`).  
 4) Minimalimplementation im Repo + Routes, sodass Tests grün werden (Red → Green → Refactor).  
 5) Review: Clean Code, RLS‑Robustheit, Performance; Docstrings/Inline‑Kommentare ergänzen.
-

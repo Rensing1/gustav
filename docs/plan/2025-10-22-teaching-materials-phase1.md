@@ -44,7 +44,7 @@ Antworten enthalten `id, section_id, title, body_md, position, created_at, updat
     - Index `idx_unit_materials_section(section_id)`
   - Trigger `trg_unit_materials_updated_at`
   - Constraint/Trigger `unit_materials_section_unit_match` validiert, dass `unit_sections.unit_id` zur angefragten Section passt (Guard gegen Cross-Unit-Inserts).
-- RLS: Select/Insert/Update/Delete nur, wenn die verknüpfte Unit dem aktuellen Autor gehört (`learning_units.author_id = app.current_sub`).
+- RLS: Select/Insert/Update/Delete nur, wenn die verknüpfte Unit dem aktuellen Autor gehört (`units.author_id = app.current_sub`).
 
 **Tests (pytest)**
 - Neues Modul `backend/tests/test_teaching_materials_markdown_api.py`

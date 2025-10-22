@@ -83,9 +83,9 @@ Migration: `supabase/migrations/20251020150101_teaching_courses.sql`
 - RLS: aktiviert, Zugriff mit Limited‑Role‑DSN im Backend (keine Service‑Role zur Laufzeit). Keine Grants an `anon`/`authenticated`.
 
 Einheiten & Module: `supabase/migrations/20251021104017_teaching_units_modules.sql`
-- `public.learning_units` (author‑scoped)
+- `public.units` (author‑scoped)
   - `id uuid pk`, `title text not null`, `summary text null`, `author_id text not null`
-  - `created_at/updated_at` + Trigger, Index `idx_learning_units_author(author_id)`
+  - `created_at/updated_at` + Trigger, Index `idx_units_author(author_id)`
 - `public.course_modules` (per‑course order)
   - `id uuid pk`, `course_id uuid fk`, `unit_id uuid fk`, `position int > 0`, `context_notes text`
   - Uniques: `(course_id, position)` und `(course_id, unit_id)`; Trigger + Indizes
@@ -93,10 +93,10 @@ Einheiten & Module: `supabase/migrations/20251021104017_teaching_units_modules.s
 - Deferrable Constraint für Reorder: `supabase/migrations/20251021105921_teaching_course_modules_deferrable.sql`
 
 Abschnitte (Sections): `supabase/migrations/20251021121841_teaching_unit_sections.sql`
-- `public.unit_sections` (author‑scoped über Join auf `learning_units`)
+- `public.unit_sections` (author‑scoped über Join auf `units`)
   - `id uuid pk`, `unit_id uuid fk`, `title text not null`, `position int > 0`
   - `created_at/updated_at` + Trigger; Index `idx_unit_sections_unit(unit_id)`
-- RLS: Select/Insert/Update/Delete nur, wenn `learning_units.author_id = app.current_sub`
+- RLS: Select/Insert/Update/Delete nur, wenn `units.author_id = app.current_sub`
 - Ordering: Unique `(unit_id, position) DEFERRABLE INITIALLY IMMEDIATE` für atomare Reorders
 - Reorder‑Semantik: Mengen‑Gleichheit, keine Duplikate, nur UUIDs; Cross‑Unit‑IDs → 404
 

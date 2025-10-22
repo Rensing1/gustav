@@ -821,3 +821,261 @@ async def test_delete_file_material_storage_failure_returns_502_and_preserves_db
         assert lst.status_code == 200
         ids = [m["id"] for m in lst.json()]
         assert material["id"] in ids
+
+
+@pytest.mark.anyio
+async def test_finalize_accepts_missing_head_content_type_uses_intent_mime(_reset_storage_adapter):
+    """Finalize should succeed when HEAD lacks content_type by falling back to intent mime_type."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    # Switch to in-memory repo to avoid DB requirements
+    original_repo = teaching.REPO
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        fallback_repo = teaching._Repo()  # type: ignore[attr-defined]
+        teaching.set_repo(fallback_repo)
+
+        # Adapter: HEAD returns size but no content_type; presign URL is arbitrary
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {"authorization": "sig"}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024}  # no content_type
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "http://storage.local/download", "expires_at": "2099-01-01T00:00:00Z"}
+
+        teaching.set_storage_adapter(_Adapter())
+
+        teacher = main.SESSION_STORE.create(sub="teacher-missing-ctype", name="Frau Müller", roles=["teacher"])
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client)
+            section = await _create_section(client, unit["id"])
+
+            intent_resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+                json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )
+            assert intent_resp.status_code == 200
+            intent = intent_resp.json()
+
+            finalize_resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+                json={
+                    "intent_id": intent["intent_id"],
+                    "title": "Sicherheitsleitfaden",
+                    "sha256": "f" * 64,
+                },
+            )
+            assert finalize_resp.status_code == 201
+            material = finalize_resp.json()
+            assert material["mime_type"] == "application/pdf"
+    finally:
+        teaching.set_repo(original_repo)
+        teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_download_url_without_expires_at_returns_server_computed(_reset_storage_adapter):
+    """Download URL should include a fallback expires_at if adapter omits it."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    original_repo = teaching.REPO
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "http://storage.local/download"}  # no expires_at
+
+        teaching.set_storage_adapter(_Adapter())
+
+        teacher = main.SESSION_STORE.create(sub="teacher-dl-expiry", name="Frau Müller", roles=["teacher"])
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client)
+            section = await _create_section(client, unit["id"])
+
+            intent_resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+                json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )
+            intent = intent_resp.json()
+
+            finalize_resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+                json={
+                    "intent_id": intent["intent_id"],
+                    "title": "Sicherheitsleitfaden",
+                    "sha256": "f" * 64,
+                },
+            )
+            material = finalize_resp.json()
+
+            download = await client.get(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}" \
+                "/download-url",
+                params={"disposition": "inline"},
+            )
+            assert download.status_code == 200
+            dl = download.json()
+            assert dl["url"].startswith("http://storage.local/download")
+            # Expires must be present even if adapter omitted it
+            assert dl.get("expires_at")
+    finally:
+        teaching.set_repo(original_repo)
+        teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage_adapter):
+    """When no storage adapter is configured, upload-intents must return 503."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    # Force NullStorageAdapter during this test and restore afterwards
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        from teaching.storage import NullStorageAdapter  # type: ignore
+
+        teaching.set_storage_adapter(NullStorageAdapter())
+        teacher = main.SESSION_STORE.create(sub="teacher-no-storage", name="Lehrkraft", roles=["teacher"])
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client)
+            section = await _create_section(client, unit["id"])
+
+            resp = await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+                json={"filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )
+            assert resp.status_code == 503
+    finally:
+        teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_download_url_sets_no_store_header(_reset_storage_adapter):
+    """Download URL responses must not be cacheable (Cache-Control: no-store)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    from utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-dl-nostore", name="Frau Müller", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+
+        intent = (await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+        )).json()
+
+        material = (await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={"intent_id": intent["intent_id"], "title": "Sicherheitsleitfaden", "sha256": "f" * 64},
+        )).json()
+
+        resp = await client.get(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}" \
+            "/download-url",
+            params={"disposition": "inline"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("Cache-Control") == "no-store"
+
+
+@pytest.mark.anyio
+async def test_delete_file_material_without_storage_adapter_returns_503(_reset_storage_adapter):
+    """DELETE should return 503 when storage adapter is not configured (NullStorageAdapter)."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    # Use in-memory repo to avoid DB dependency for this edge case
+    original_repo = teaching.REPO
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        fallback_repo = teaching._Repo()  # type: ignore[attr-defined]
+        teaching.set_repo(fallback_repo)
+
+        # First, finalize with a working adapter so a file material exists
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "http://storage.local/download", "expires_at": "2099-01-01T00:00:00Z"}
+
+        teaching.set_storage_adapter(_Adapter())
+
+        teacher = main.SESSION_STORE.create(sub="teacher-del-503", name="Frau Müller", roles=["teacher"])
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client)
+            section = await _create_section(client, unit["id"])
+
+            intent = (await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+                json={"filename": "Experimente.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )).json()
+
+            material = (await client.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+                json={"intent_id": intent["intent_id"], "title": "Sicherheitsleitfaden", "sha256": "f" * 64},
+            )).json()
+
+            # Now switch to NullStorageAdapter to simulate missing storage during delete
+            from teaching.storage import NullStorageAdapter  # type: ignore
+
+            teaching.set_storage_adapter(NullStorageAdapter())
+
+            resp = await client.delete(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}"
+            )
+            assert resp.status_code == 503
+    finally:
+        teaching.set_repo(original_repo)
+        teaching.set_storage_adapter(original_adapter)

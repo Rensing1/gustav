@@ -203,7 +203,8 @@ from routes.users import users_router
 
 # --- OIDC minimal config & stores (dev) ---
 def load_oidc_config() -> OIDCConfig:
-    base_url = os.getenv("KC_BASE_URL", "http://localhost:8080")
+    # Accept legacy KC_BASE for compatibility; prefer KC_BASE_URL
+    base_url = os.getenv("KC_BASE_URL") or os.getenv("KC_BASE") or "http://localhost:8080"
     realm = os.getenv("KC_REALM", "gustav")
     client_id = os.getenv("KC_CLIENT_ID", "gustav-web")
     redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8100/auth/callback")
@@ -231,6 +232,47 @@ if os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
 else:
     SESSION_STORE = SessionStore()
 # Note: Admin client removed; E2E tests use direct requests to Keycloak admin API
+
+
+# --- Optional: Supabase Storage adapter wiring ---------------------------------
+def _maybe_configure_supabase_storage() -> None:
+    """Configure Supabase Storage adapter if environment and dependency are present.
+
+    Why:
+        In dev/prod we want real file uploads via Supabase. In tests, the
+        dependency may not be installed and a fake adapter is injected.
+
+    Behavior:
+        - Reads SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from env.
+        - If both are set and supabase-py is importable, installs the adapter.
+        - Otherwise, leaves the default NullStorageAdapter in place.
+
+    Security:
+        Does not log secrets; only logs adapter activation status.
+    """
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        return
+    try:
+        from supabase import create_client  # type: ignore
+        from teaching.storage_supabase import SupabaseStorageAdapter  # type: ignore
+        from routes import teaching as teaching_routes  # lazy import
+
+        client = create_client(url, key)
+        adapter = SupabaseStorageAdapter(client)
+        teaching_routes.set_storage_adapter(adapter)
+        logging.getLogger("gustav.storage").info("Supabase Storage adapter configured (bucket=materials)")
+    except Exception as exc:  # pragma: no cover - best-effort wiring in non-test envs
+        logging.getLogger("gustav.storage").warning(
+            "Supabase adapter not configured (%s). Falling back to NullStorageAdapter.",
+            exc.__class__.__name__,
+        )
+
+
+# Try to auto-configure storage for non-test environments
+if os.getenv("GUSTAV_ENV", "dev").lower() in {"dev", "prod"}:
+    _maybe_configure_supabase_storage()
 
 
 # --- Auth Enforcement Middleware -------------------------------------------------

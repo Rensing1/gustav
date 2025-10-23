@@ -42,6 +42,8 @@ class LearningFixture:
     section_id: str
     material: dict
     task: dict
+    hidden_section_id: str | None = None
+    hidden_task: dict | None = None
 
 
 async def _client() -> httpx.AsyncClient:
@@ -141,6 +143,7 @@ async def _prepare_learning_fixture(
     visible: bool = True,
     add_member: bool = True,
     max_attempts: int = 2,
+    create_hidden_section: bool = False,
 ) -> LearningFixture:
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -172,6 +175,9 @@ async def _prepare_learning_fixture(
         roles=["student"],
     )
 
+    hidden_section: dict | None = None
+    hidden_task: dict | None = None
+
     async with (await _client()) as teacher_client:
         teacher_client.cookies.set("gustav_session", teacher.session_id)
         course_id = await _create_course(teacher_client, title="Mathe 10A")
@@ -202,6 +208,20 @@ async def _prepare_learning_fixture(
                 section_id=section["id"],
                 visible=True,
             )
+        if create_hidden_section:
+            hidden_section = await _create_section(
+                teacher_client,
+                unit["id"],
+                title="Geheime Aufgaben",
+            )
+            hidden_task = await _create_task(
+                teacher_client,
+                unit["id"],
+                hidden_section["id"],
+                instruction_md="### Versteckte Aufgabe",
+                criteria=["Nicht sichtbar"],
+                max_attempts=max_attempts,
+            )
         if add_member:
             await _add_member(teacher_client, course_id, student.sub)
 
@@ -215,6 +235,8 @@ async def _prepare_learning_fixture(
         section_id=section["id"],
         material=material,
         task=task,
+        hidden_section_id=hidden_section["id"] if hidden_section else None,
+        hidden_task=hidden_task,
     )
 
 
@@ -374,3 +396,55 @@ async def test_create_submission_requires_released_section():
         )
 
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_create_submission_image_requires_valid_sha256():
+    """Image submissions must validate hex-encoded SHA256 before touching the database."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={
+                "kind": "image",
+                "storage_key": "materials/abc.png",
+                "mime_type": "image/png",
+                "size_bytes": 1024,
+                "sha256": "g" * 64,  # invalid hex character triggers 400 pre-DB
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json().get("detail") == "invalid_image_payload"
+@pytest.mark.anyio
+async def test_get_released_tasks_excludes_hidden_section():
+    """RLS helpers must not leak tasks from unreleased sections."""
+
+    fixture = await _prepare_learning_fixture(create_hidden_section=True)
+
+    hidden_section_id = fixture.hidden_section_id
+    assert hidden_section_id is not None, "Hidden section required for test"
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover - safety
+        pytest.skip("psycopg not available")
+
+    dsn = (
+        os.getenv("DATABASE_URL")
+        or f"postgresql://gustav_limited:gustav-limited@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
+    )
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (fixture.student_sub,))
+            cur.execute(
+                "select count(*) from public.get_released_tasks_for_student(%s, %s, %s)",
+                (fixture.student_sub, fixture.course_id, hidden_section_id),
+            )
+            count = int(cur.fetchone()[0])
+
+    assert count == 0

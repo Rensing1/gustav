@@ -644,6 +644,32 @@ components:
           type: string
           nullable: true
           description: Original filename supplied by the author (files only)
+        storage_key:
+          type: string
+          nullable: true
+          description: Internal storage key used for download routing
+        sha256:
+          type: string
+          nullable: true
+          pattern: '^[0-9a-f]{64}$'
+          description: Hash provided during upload (files only)
+        alt_text:
+          type: string
+          nullable: true
+          description: Alternative text supplied by teachers for accessibility
+        position:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Ordering within the section
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
     LearningTask:
       type: object
       required: [id, instruction_md, criteria]
@@ -673,6 +699,10 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        kind:
+          type: string
+          nullable: true
+          description: Backend task type identifier (e.g., "native")
     LearningSection:
       type: object
       required: [section, materials, tasks]
@@ -689,7 +719,7 @@ components:
             $ref: '#/components/schemas/LearningTask'
     LearningSubmission:
       type: object
-      required: [id, attempt_nr, kind, created_at, analysis_status]
+      required: [id, attempt_nr, kind, analysis_status, created_at]
       properties:
         id:
           type: string
@@ -709,6 +739,9 @@ components:
         size_bytes:
           type: integer
           nullable: true
+        storage_key:
+          type: string
+          nullable: true
         sha256:
           type: string
           nullable: true
@@ -718,8 +751,8 @@ components:
           enum: [pending, completed, error]
         analysis_json:
           type: object
-          nullable: true
           additionalProperties: true
+          nullable: true
         feedback_md:
           type: string
           nullable: true
@@ -733,42 +766,6 @@ components:
           type: string
           format: date-time
           nullable: true
-    LearningUploadIntentResponse:
-      type: object
-      required: [intent_id, url, fields, allowed_mime_types, max_size_bytes, expires_at]
-      properties:
-        intent_id:
-          type: string
-          format: uuid
-        url:
-          type: string
-          format: uri
-        fields:
-          type: object
-          additionalProperties:
-            type: string
-        allowed_mime_types:
-          type: array
-          items:
-            type: string
-        max_size_bytes:
-          type: integer
-          minimum: 1
-        expires_at:
-          type: string
-          format: date-time
-    LearningFinalizeResponse:
-      type: object
-      required: [intent_id, storage_key, sha256]
-      properties:
-        intent_id:
-          type: string
-          format: uuid
-        storage_key:
-          type: string
-        sha256:
-          type: string
-          pattern: '^[0-9a-f]{64}$'
 
 paths:
   /api/learning/courses/{course_id}/sections:
@@ -849,115 +846,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /api/learning/materials/{material_id}/download-url:
-    get:
-      tags: [Learning]
-      summary: Create a presigned download URL for a released material
-      description: Returns a short-lived presigned URL for inline or attachment delivery, provided the material belongs to a released section of a course the student is enrolled in.
-      operationId: getLearningMaterialDownloadUrl
-      security:
-        - cookieAuth: []
-      x-permissions:
-        requiredRole: student
-      parameters:
-        - in: path
-          name: material_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - in: query
-          name: disposition
-          schema:
-            type: string
-            enum: [inline, attachment]
-            default: inline
-          description: Desired content disposition for the served file.
-      responses:
-        '200':
-          description: Presigned download information.
-          headers:
-            Cache-Control:
-              description: Security hardening — responses are private and short-lived.
-              schema:
-                type: string
-                example: private, max-age=0
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [url, expires_at]
-                properties:
-                  url:
-                    type: string
-                    format: uri
-                  expires_at:
-                    type: string
-                    format: date-time
-        '400':
-          description: Invalid input (e.g., malformed UUID or disposition)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions:
-    get:
-      tags: [Learning]
-      summary: List the student's submissions for a task within a course
-      operationId: listLearningSubmissions
-      security:
-        - cookieAuth: []
-      x-permissions:
-        requiredRole: student
-      parameters:
-        - in: path
-          name: course_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - in: path
-          name: task_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 50
-          description: Maximum number of submissions to return.
-        - in: query
-          name: offset
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-          description: Offset for pagination.
-      responses:
-        '200':
-          description: Submissions ordered from oldest to newest.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LearningSubmission'
-        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [Learning]
       summary: Create a new submission for a task within a course
-      description: Accepts text submissions directly or references a finalized upload intent for image submissions. Duplicate requests can be avoided using the optional Idempotency-Key header.
+      description: Accepts text submissions directly or stores metadata for an already uploaded image. Duplicate requests can be avoided using the optional Idempotency-Key header.
       operationId: createLearningSubmission
       security:
         - cookieAuth: []
@@ -999,14 +892,20 @@ paths:
                       type: string
                       minLength: 1
                 - type: object
-                  required: [kind, intent_id, sha256]
+                  required: [kind, storage_key, mime_type, size_bytes, sha256]
                   properties:
                     kind:
                       type: string
                       enum: [image]
-                    intent_id:
+                    storage_key:
                       type: string
-                      format: uuid
+                      minLength: 1
+                    mime_type:
+                      type: string
+                      enum: ['image/jpeg', 'image/png']
+                    size_bytes:
+                      type: integer
+                      minimum: 1
                     sha256:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
@@ -1023,148 +922,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
-        '202':
-          description: Submission accepted for asynchronous processing (feature flag `learning_async`).
-          headers:
-            Location:
-              description: Polling endpoint for submission status.
-              schema:
-                type: string
-            Retry-After:
-              description: Suggested backoff (seconds) before polling again.
-              schema:
-                type: integer
-                minimum: 0
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LearningSubmission'
-        '400': { description: Bad request (invalid_input | max_attempts_exceeded | invalid_uuid), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400': { description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
-  /api/learning/submissions/upload-intents:
-    post:
-      tags: [Learning]
-      summary: Create a presigned upload intent for image submissions
-      operationId: createLearningUploadIntent
-      security:
-        - cookieAuth: []
-      x-permissions:
-        requiredRole: student
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [filename, mime_type, size_bytes]
-              properties:
-                filename:
-                  type: string
-                  minLength: 1
-                  maxLength: 255
-                mime_type:
-                  type: string
-                  enum: ['image/jpeg', 'image/png']
-                size_bytes:
-                  type: integer
-                  minimum: 1
-                  maximum: 10485760
-      responses:
-        '201':
-          description: Upload intent created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LearningUploadIntentResponse'
-        '400': { description: Bad request (invalid_file_type | file_too_large | invalid_input), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-
-  /api/learning/submissions/finalize:
-    post:
-      tags: [Learning]
-      summary: Finalize an upload intent after the file was uploaded
-      operationId: finalizeLearningUpload
-      security:
-        - cookieAuth: []
-      x-permissions:
-        requiredRole: student
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [intent_id, sha256]
-              properties:
-                intent_id:
-                  type: string
-                  format: uuid
-                sha256:
-                  type: string
-                  pattern: '^[0-9a-f]{64}$'
-      responses:
-        '200':
-          description: Upload intent finalized successfully.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LearningFinalizeResponse'
-        '400': { description: Bad request (hash_mismatch | invalid_input | expired_intent), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-
-  /api/learning/submissions/{submission_id}:
-    get:
-      tags: [Learning]
-      summary: Retrieve submission status (polling endpoint for async mode)
-      description: Returns the submission including the current analysis status and feedback fields.
-      operationId: getLearningSubmission
-      security:
-        - cookieAuth: []
-      x-permissions:
-        requiredRole: student
-      parameters:
-        - in: path
-          name: submission_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200': { description: Submission state, content: { application/json: { schema: { $ref: '#/components/schemas/LearningSubmission' } } } }
-        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-
-  /api/learning/submissions/{submission_id}/feedback:
-    get:
-      tags: [Learning]
-      summary: Retrieve feedback for a submission
-      description: Provides the analysis status and feedback payload for a submission once available.
-      operationId: getLearningSubmissionFeedback
-      security:
-        - cookieAuth: []
-      x-permissions:
-        requiredRole: student
-      parameters:
-        - in: path
-          name: submission_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200': { description: Submission analysis payload, content: { application/json: { schema: { $ref: '#/components/schemas/LearningSubmission' } } } }
-        '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /auth/login:
     get:
       tags: [Auth]

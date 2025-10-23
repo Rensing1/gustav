@@ -1876,7 +1876,7 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")

@@ -18,6 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/web/ .
 # Identity Access domain layer is located outside web package; copy it explicitly
 COPY backend/identity_access ./identity_access
+COPY backend/teaching ./teaching
+COPY backend/learning ./backend/learning
+COPY backend/__init__.py ./backend/__init__.py
+
+ENV PYTHONPATH=/app:/app/backend
 
 # Port freigeben
 EXPOSE 8000

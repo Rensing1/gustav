@@ -113,3 +113,50 @@ This document summarizes the production session table introduced for persistent 
   - Upsert-Semantik: PATCH mit `visible=true/false` überschreibt vorhandene Zeile (Release-Historie wird intentionally nicht versioniert).
   - Cascade: Löschen eines Kursmoduls entfernt automatisch alle Freigaben durch `on delete cascade`.
   - Datenkonsistenz: CHECK-Constraint erzwingt `released_at IS NOT NULL` wenn `visible=true` und `released_at IS NULL` wenn `visible=false`.
+
+### `public.unit_tasks`
+
+- Purpose: Aufgaben (Tasks) je Abschnitt mit Positionslogik und RLS‑gestützter Ownership (Autor der Unit).
+- Columns
+  - `id uuid` primary key (`default gen_random_uuid()`).
+  - `unit_id uuid not null` → `units(id)` (`on delete cascade`).
+  - `section_id uuid not null` → `unit_sections(id)` (`on delete cascade`).
+  - `instruction_md text not null` — Aufgabenbeschreibung (Markdown), serverseitig auf Nicht‑Leer validiert.
+  - `criteria text[] not null default '{}'` — bis zu 10 Kriterien, keine leeren Einträge.
+  - `hints_md text null` — optionale Hinweise (Markdown).
+  - `due_at timestamptz null` — optionale Fälligkeit (UTC, ISO‑8601).
+  - `max_attempts integer null check (max_attempts > 0)` — optionale Versuchsbegrenzung (≥ 1).
+  - `position integer not null check (position > 0)` — 1‑basierte Reihenfolge im Abschnitt.
+  - `created_at timestamptz not null default now()`, `updated_at timestamptz not null default now()`.
+- Constraints & Indizes
+  - `unit_tasks_instruction_not_blank`: `length(btrim(instruction_md)) > 0`.
+  - `unit_tasks_criteria_length`: `array_length(criteria, 1) <= 10`.
+  - `unit_tasks_criteria_entries_not_blank`: keine leeren Strings in `criteria`.
+  - `unique(section_id, position) DEFERRABLE INITIALLY IMMEDIATE` — stabile, atomare Reorder‑Transaktionen.
+  - Trigger `trg_unit_tasks_updated_at` (setzt `updated_at`).
+  - Trigger `trg_unit_tasks_section_match` (Funktion `unit_tasks_section_unit_match()`):
+    - Erzwingt, dass `section_id` zur `unit_id` gehört.
+    - Verhindert Änderung von `section_id` bei Updates (immutabel).
+  - Indizes `idx_unit_tasks_section`, `idx_unit_tasks_unit` beschleunigen Owner‑Scopes.
+- Security / RLS
+  - Tabelle ist RLS‑aktiviert; `gustav_limited` besitzt `SELECT/INSERT/UPDATE/DELETE`.
+  - Policies spiegeln Ownership über Join zu `units` wider; Identität via `set_config('app.current_sub', ...)`:
+    - `unit_tasks_select_author`
+    - `unit_tasks_insert_author`
+    - `unit_tasks_update_author`
+    - `unit_tasks_delete_author`
+
+Hinweise
+- Reorder erfolgt ausschließlich über API (`POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder`) mit Mengen‑Gleichheit der IDs und ohne Duplikate.
+    - Validierungen auf der API‑Ebene: `instruction_md` nicht leer; `criteria` max. 10 nicht‑leere Strings; `due_at` mit Zeitzone (auch `…Z`); `max_attempts ≥ 1`.
+
+## Learning (Lernen) — Security Notes
+
+- SECURITY DEFINER Helper
+  - Alle in `public.*` definierten SECURITY‑DEFINER‑Funktionen nutzen einen gehärteten `search_path` (`pg_catalog, public`).
+  - Alle Tabellen/Views werden in SQL‑Bodies vollqualifiziert (`public.<tabelle>`), um Schema‑Hijacking zu verhindern.
+  - Grants: Ausführung ist für die App‑Rolle `gustav_limited` erlaubt; RLS bleibt aktiv, wenn Funktionen SELECTs auf RLS‑Tabellen vermeiden und stattdessen Ownership in der Funktion selbst prüfen.
+
+- DSN & RLS
+  - Runtime (app): ausschließlich Limited‑Role‑DSN (`gustav_limited`), siehe `backend/learning/repo_db.py` (DSN‑Auflösung priorisiert `LEARNING_DATABASE_URL`).
+  - Tests/Dev: Fallback‑DSNs greifen auf `127.0.0.1:54322` (Supabase CLI) zurück, damit RLS‑Pfad getestet wird.

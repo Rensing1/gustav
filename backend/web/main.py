@@ -197,6 +197,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Import shared auth router and helpers from dedicated module
 from routes.auth import auth_router
+from routes.learning import learning_router
 from routes.teaching import teaching_router
 from routes.users import users_router
 
@@ -313,7 +314,15 @@ async def auth_enforcement(request: Request, call_next):
             logger.warning("Session store get failed (API): %s", exc.__class__.__name__)
             rec = None
         if not rec:
-            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+            # Contract nuances:
+            # - Learning endpoints document `private, max-age=0` for error responses.
+            # - Other privacy‑sensitive APIs prefer `no-store` (e.g., /api/me).
+            cache_value = "private, max-age=0" if path.startswith("/api/learning/") else "no-store"
+            return JSONResponse(
+                {"error": "unauthenticated"},
+                status_code=401,
+                headers={"Cache-Control": cache_value},
+            )
         # Attach user info and proceed
         request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "roles": rec.roles}
         return await call_next(request)
@@ -911,6 +920,7 @@ async def get_me(request: Request):
 
 # Register auth routes on the full application
 app.include_router(auth_router)
+app.include_router(learning_router)
 app.include_router(teaching_router)
 app.include_router(users_router)
 

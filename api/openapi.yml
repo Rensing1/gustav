@@ -1584,6 +1584,7 @@ paths:
               - invalid_criteria
               - invalid_due_at
               - invalid_max_attempts
+              - invalid_hints_md
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1592,6 +1593,7 @@ paths:
                 invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
+                invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1646,6 +1648,7 @@ paths:
               - invalid_criteria
               - invalid_due_at
               - invalid_max_attempts
+              - invalid_hints_md
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1655,6 +1658,7 @@ paths:
                 invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
+                invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

@@ -201,11 +201,7 @@ class TasksService:
             section_id,
             task_id,
             author_id,
-            instruction_md=repo_kwargs.get("instruction_md", _UNSET),
-            criteria=repo_kwargs.get("criteria", _UNSET),
-            hints_md=repo_kwargs.get("hints_md", _UNSET),
-            due_at=repo_kwargs.get("due_at", _UNSET),
-            max_attempts=repo_kwargs.get("max_attempts", _UNSET),
+            **repo_kwargs,
         )
         if result is None:
             raise LookupError("task_not_found")

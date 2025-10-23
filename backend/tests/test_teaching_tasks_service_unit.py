@@ -80,11 +80,11 @@ class FakeTasksRepo(TasksRepoProtocol):
         task_id: str,
         author_id: str,
         *,
-        instruction_md: Any,
-        criteria: Any,
-        hints_md: Any,
-        due_at: Any,
-        max_attempts: Any,
+        instruction_md: Any = _UNSET,
+        criteria: Any = _UNSET,
+        hints_md: Any = _UNSET,
+        due_at: Any = _UNSET,
+        max_attempts: Any = _UNSET,
     ) -> Optional[dict]:
         if task_id not in self.tasks:
             return None

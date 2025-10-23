@@ -316,6 +316,41 @@ async def test_task_update_validation_errors_and_empty_payload():
 
 
 @pytest.mark.anyio
+async def test_task_partial_patch_updates_only_sent_fields():
+    """PATCH with subset of fields should succeed and keep other values."""
+
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+
+    author = main.SESSION_STORE.create(sub="teacher-tasks-partial", name="Autor", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", author.session_id)
+        unit = await _create_unit(client, title="Mathematik")
+        section = await _create_section(client, unit["id"], title="Quadratische Funktionen")
+        created = await _create_task(
+            client,
+            unit["id"],
+            section["id"],
+            instruction="**Beschreibe den Graphen**",
+            criteria=["Achsenabschnitt nennen"],
+            hints="Nutze Scheitelpunktform",
+            max_attempts=2,
+        )
+
+        patch_resp = await client.patch(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks/{created['id']}",
+            json={"criteria": ["Scheitelpunkt", "Nullstellen"]},
+        )
+        assert patch_resp.status_code == 200
+        payload = patch_resp.json()
+        assert payload["criteria"] == ["Scheitelpunkt", "Nullstellen"]
+        assert payload["instruction_md"] == created["instruction_md"]
+        assert payload["hints_md"] == created["hints_md"]
+        assert payload["max_attempts"] == created["max_attempts"]
+
+
+@pytest.mark.anyio
 async def test_task_reorder_happy_and_error_cases():
     """Permutation validation for reorder endpoint (200 + 400 detail codes)."""
 

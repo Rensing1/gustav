@@ -148,4 +148,15 @@ This document summarizes the production session table introduced for persistent 
 
 Hinweise
 - Reorder erfolgt ausschließlich über API (`POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder`) mit Mengen‑Gleichheit der IDs und ohne Duplikate.
-- Validierungen auf der API‑Ebene: `instruction_md` nicht leer; `criteria` max. 10 nicht‑leere Strings; `due_at` mit Zeitzone (auch `…Z`); `max_attempts ≥ 1`.
+    - Validierungen auf der API‑Ebene: `instruction_md` nicht leer; `criteria` max. 10 nicht‑leere Strings; `due_at` mit Zeitzone (auch `…Z`); `max_attempts ≥ 1`.
+
+## Learning (Lernen) — Security Notes
+
+- SECURITY DEFINER Helper
+  - Alle in `public.*` definierten SECURITY‑DEFINER‑Funktionen nutzen einen gehärteten `search_path` (`pg_catalog, public`).
+  - Alle Tabellen/Views werden in SQL‑Bodies vollqualifiziert (`public.<tabelle>`), um Schema‑Hijacking zu verhindern.
+  - Grants: Ausführung ist für die App‑Rolle `gustav_limited` erlaubt; RLS bleibt aktiv, wenn Funktionen SELECTs auf RLS‑Tabellen vermeiden und stattdessen Ownership in der Funktion selbst prüfen.
+
+- DSN & RLS
+  - Runtime (app): ausschließlich Limited‑Role‑DSN (`gustav_limited`), siehe `backend/learning/repo_db.py` (DSN‑Auflösung priorisiert `LEARNING_DATABASE_URL`).
+  - Tests/Dev: Fallback‑DSNs greifen auf `127.0.0.1:54322` (Supabase CLI) zurück, damit RLS‑Pfad getestet wird.

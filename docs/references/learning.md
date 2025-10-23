@@ -45,6 +45,7 @@ Bezüge zu Unterrichten (bestehende Tabellen):
   - Submissions SELECT: nur `student_sub = app.current_sub`.
   - Submissions INSERT: nur wenn `check_task_visible_to_student` true und `max_attempts` nicht überschritten.
   - Keine UPDATE/DELETE im MVP (Abgaben sind unveränderlich).
+- DSN‑Auflösung (Learning‑Repo): `LEARNING_DATABASE_URL` > `LEARNING_DB_URL` > `DATABASE_URL` > Fallback (dev/test): `postgresql://gustav_limited:…@127.0.0.1:54322/postgres`. In PROD ist ein expliziter DSN erforderlich.
 
 ## Sicherheit & Datenschutz
 - Minimierte DTOs: Identität über `sub`, kein PII in API‑Antworten.
@@ -54,8 +55,8 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Submissions: Storage-Metadaten werden nur entgegengenommen, nicht erneut ausgegeben; Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
 - Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
 - CSRF: Zusätzlicher Same‑Origin‑Check (nur wenn `Origin` gesetzt ist). Nicht‑Browser‑Clients bleiben unverändert (kein `Origin`).
-  Berücksichtigt `X-Forwarded-Proto`/`X-Forwarded-Host` (Reverse‑Proxy) sowie Ports (80/443 Default),
-  vergleicht also Schema/Host/Port robust gegen die Server‑Origin.
+  Reverse‑Proxy‑Header (`X‑Forwarded‑Proto`/`X‑Forwarded‑Host`) werden nur berücksichtigt, wenn `GUSTAV_TRUST_PROXY=true` gesetzt ist (z. B. hinter Caddy/Nginx). Ohne diese Variable werden Forwarded‑Header ignoriert, um Header‑Spoofing zu vermeiden.
+- DB‑Funktionen (SECURITY DEFINER): Alle Helfer (`get_released_*`, `check_task_visible_to_student`, `next_attempt_nr`) verwenden gehärtete `search_path`‑Einstellungen (`pg_catalog, public`) und vollqualifizierte Tabellennamen, um Hijacking über fremde Schemas zu verhindern.
 - Logging: Keine Payload-Inhalte für Submissions in Standard-Logs.
 
 ## Architektur & Adapter

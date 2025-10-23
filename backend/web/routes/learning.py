@@ -55,6 +55,7 @@ def _is_same_origin(request: Request) -> bool:
         return True
     try:
         from urllib.parse import urlparse
+        import os
 
         def parse_origin(url: str) -> tuple[str, str, int]:
             p = urlparse(url)
@@ -68,22 +69,43 @@ def _is_same_origin(request: Request) -> bool:
             return scheme, host, int(port)
 
         def parse_server(request: Request) -> tuple[str, str, int]:
-            xf_proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip()
-            xf_host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
-            scheme = (xf_proto or request.url.scheme or "http").lower()
-            # xf_host or host may include port
-            if ":" in xf_host:
-                host_only, port_str = xf_host.rsplit(":", 1)
+            """Resolve the server origin for CSRF checks.
+
+            Trust `X-Forwarded-*` only when explicitly enabled. Otherwise rely on
+            ASGI's URL/Host to avoid header spoofing when running without a proxy.
+            """
+            trust_proxy = (os.getenv("GUSTAV_TRUST_PROXY", "false") or "").lower() == "true"
+
+            if trust_proxy:
+                xf_proto_raw = request.headers.get("x-forwarded-proto") or request.url.scheme or ""
+                xf_host_raw = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+                xf_proto = xf_proto_raw.split(",")[0].strip()
+                xf_host = xf_host_raw.split(",")[0].strip()
+                scheme = (xf_proto or request.url.scheme or "http").lower()
+                # xf_host or host may include port
+                if ":" in xf_host:
+                    host_only, port_str = xf_host.rsplit(":", 1)
+                    try:
+                        port = int(port_str)
+                    except Exception:
+                        port = 443 if scheme == "https" else 80
+                    host = host_only.lower()
+                else:
+                    host = (xf_host or (request.url.hostname or "")).lower()
+                    port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
+                return scheme, host, port
+
+            # Not trusting proxy headers: use request URL/Host only
+            scheme = (request.url.scheme or "http").lower()
+            host = (request.url.hostname or (request.headers.get("host") or "")).lower()
+            port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
+            # If Host header includes a port, normalize it
+            if ":" in host:
+                host_only, port_str = host.rsplit(":", 1)
+                host = host_only
                 try:
                     port = int(port_str)
                 except Exception:
-                    port = 443 if scheme == "https" else 80
-                host = host_only.lower()
-            else:
-                host = (xf_host or (request.url.hostname or "")).lower()
-                if request.url.port:
-                    port = int(request.url.port)
-                else:
                     port = 443 if scheme == "https" else 80
             return scheme, host, port
 

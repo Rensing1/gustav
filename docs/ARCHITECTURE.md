@@ -47,6 +47,11 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
 - Use Case Layer: `teaching.services.tasks.TasksService` normalisiert Eingaben (Criteria, Hints, Due-Date, Max-Attempts) und delegiert an das Repo (`TasksRepoProtocol`).
 - Persistenz: Supabase-Migration legt `public.unit_tasks` mit RLS, Triggern für Positionsresequenzierung und DEFERRABLE Unique-Constraint an.
 - Tests: API-Integrationstests spiegeln die BDD-Szenarien (CRUD, Reorder, Fehlerfälle); dedizierte Unit-Tests prüfen den Service isoliert.
+ - Validierung & Semantik:
+   - Pfadparameter werden früh validiert; ungültige UUIDs führen zu `400 bad_request` mit `invalid_unit_id`, `invalid_section_id` oder `invalid_task_id`.
+   - `criteria`-Einträge müssen nicht-leere Strings sein (`minLength: 1`).
+   - `due_at` akzeptiert ISO-8601 mit Zeitzone, inkl. `Z` (UTC), und wird zu `+00:00` normalisiert.
+   - DELETE-Endpunkte liefern `204 No Content` ohne Body.
 
 ## Ordnerstruktur (aktuell)
 - `api/openapi.yml` – API‑Vertrag (Contract‑First)

@@ -273,6 +273,72 @@ async def test_task_creation_validation_errors():
 
 
 @pytest.mark.anyio
+async def test_tasks_invalid_uuid_path_params_return_400():
+    """Invalid UUIDs in path must return 400 with specific detail codes."""
+
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+
+    teacher = main.SESSION_STORE.create(sub="teacher-tasks-uuids", name="Autor", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+
+        # invalid unit_id for list
+        r1 = await client.get("/api/teaching/units/not-a-uuid/sections/00000000-0000-0000-0000-000000000000/tasks")
+        assert r1.status_code == 400 and r1.json()["detail"] == "invalid_unit_id"
+
+        # invalid section_id for list
+        r2 = await client.get("/api/teaching/units/00000000-0000-0000-0000-000000000000/sections/not-a-uuid/tasks")
+        assert r2.status_code == 400 and r2.json()["detail"] == "invalid_section_id"
+
+        # POST with invalid unit/section ids
+        r3 = await client.post(
+            "/api/teaching/units/not-a-uuid/sections/also-bad/tasks",
+            json={"instruction_md": "A"},
+        )
+        assert r3.status_code == 400
+
+        # PATCH/DELETE invalid task_id
+        base = "/api/teaching/units/00000000-0000-0000-0000-000000000000/sections/00000000-0000-0000-0000-000000000000/tasks"
+        p = await client.patch(f"{base}/not-a-uuid", json={"instruction_md": "X"})
+        assert p.status_code == 400 and p.json()["detail"] == "invalid_task_id"
+        d = await client.delete(f"{base}/not-a-uuid")
+        assert d.status_code == 400 and d.json()["detail"] == "invalid_task_id"
+
+        # Reorder invalid section id
+        ro = await client.post(
+            "/api/teaching/units/00000000-0000-0000-0000-000000000000/sections/not-a-uuid/tasks/reorder",
+            json={"task_ids": ["00000000-0000-0000-0000-000000000111"]},
+        )
+        assert ro.status_code == 400 and ro.json()["detail"] == "invalid_section_id"
+
+
+@pytest.mark.anyio
+async def test_task_due_at_accepts_zulu():
+    """Server accepts ISO timestamps with trailing 'Z' for UTC."""
+
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+
+    teacher = main.SESSION_STORE.create(sub="teacher-tasks-zulu", name="Autor", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, title="Informatik")
+        section = await _create_section(client, unit["id"], title="Algorithmen")
+        due_z = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        created = await _create_task(
+            client,
+            unit["id"],
+            section["id"],
+            instruction="Beschreibe den Sortieralgorithmus",
+            due_at=due_z,
+        )
+        assert created["due_at"] is not None
+
+
+@pytest.mark.anyio
 async def test_task_update_validation_errors_and_empty_payload():
     """PATCH validations for empty payload and invalid fields."""
 

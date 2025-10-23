@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- fix(api/openapi): Align `/api/me` example `expires_at` to `+00:00` offset to match runtime serialization.
+- chore(openapi): Set spec version to `0.0.2` to match app version in backend/web/main.py.
+- docs(api): Document `Cache-Control: no-store` on `GET /api/users/search` and `GET /api/teaching/.../materials/{id}/download-url` (privacy‑sensitive responses).
 - feat(api/teaching): Add Tasks endpoints (list/create/update/delete/reorder) with read-only `kind="native"` responses.
 - db(teaching): Introduce `public.unit_tasks` (RLS, deferrable ordering, ownership triggers) via new Supabase migration.
 - feat(teaching): Wire TasksService + FastAPI adapter, ensuring Clean Architecture separation and in-memory fallback parity.

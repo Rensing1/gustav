@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: GUSTAV API
-  version: 0.1.0
+  version: 0.0.2
   description: >-
     Contract-first API for minimal authentication/session integration with Keycloak.
     Endpoints cover login redirect, callback handling, logout, session info, and a
@@ -44,7 +44,7 @@ components:
         sub: "a1b2c3d4-ef01-2345-6789-abcdef012345"
         roles: ["student"]
         name: "Max Musterschüler"
-        expires_at: "2025-10-20T12:34:56Z"
+        expires_at: "2025-10-20T12:34:56+00:00"
     Error:
       type: object
       required: [error]
@@ -2304,6 +2304,11 @@ paths:
       responses:
         '200':
           description: Short-lived download URL returned
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -2588,6 +2593,11 @@ paths:
       responses:
         '200':
           description: Results
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:

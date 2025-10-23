@@ -850,7 +850,11 @@ paths:
     post:
       tags: [Learning]
       summary: Create a new submission for a task within a course
-      description: Accepts text submissions directly or stores metadata for an already uploaded image. Duplicate requests can be avoided using the optional Idempotency-Key header.
+      description: >-
+        Accepts text submissions directly or stores metadata for an already uploaded image.
+        Duplicate requests can be avoided using the optional Idempotency-Key header.
+        Security: Requests must be same-origin when sent from a browser; cross-site
+        requests with a foreign `Origin` are rejected with 403.
       operationId: createLearningSubmission
       security:
         - cookieAuth: []
@@ -924,7 +928,7 @@ paths:
                 $ref: '#/components/schemas/LearningSubmission'
         '400': { description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not enrolled or CSRF same-origin check failed), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /auth/login:

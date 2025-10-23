@@ -23,7 +23,7 @@ from dataclasses import dataclass, asdict, is_dataclass
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Request
@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
 from teaching.services.materials import MaterialFileSettings, MaterialsService
+from teaching.services.tasks import TasksService
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
@@ -106,6 +107,22 @@ class MaterialData:
     alt_text: Optional[str] | None = None
 
 
+@dataclass
+class TaskData:
+    id: str
+    unit_id: str
+    section_id: str
+    instruction_md: str
+    criteria: List[str]
+    hints_md: Optional[str] | None
+    due_at: Optional[str] | None
+    max_attempts: Optional[int] | None
+    position: int
+    created_at: str
+    updated_at: str
+    kind: str = "native"
+
+
 class _Repo:
     def __init__(self) -> None:
         self.courses: Dict[str, Course] = {}
@@ -118,6 +135,8 @@ class _Repo:
         self.modules_by_course: Dict[str, List[str]] = {}
         self.materials: Dict[str, MaterialData] = {}
         self.material_ids_by_section: Dict[str, List[str]] = {}
+        self.tasks: Dict[str, TaskData] = {}
+        self.task_ids_by_section: Dict[str, List[str]] = {}
         self.upload_intents: Dict[str, Dict[str, Any]] = {}
         self.module_section_releases: Dict[tuple[str, str], Dict[str, Any]] = {}
 
@@ -622,6 +641,146 @@ class _Repo:
                 mat.updated_at = datetime.now(timezone.utc).isoformat()
                 self.materials[mid] = mat
 
+    # --- Section tasks (in-memory) -------------------------------------------
+    def list_tasks_for_section_owned(self, unit_id: str, section_id: str, author_id: str) -> List[TaskData]:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            return []
+        ids = list(self.task_ids_by_section.get(section_id, []))
+        tasks = [self.tasks[tid] for tid in ids if tid in self.tasks]
+        tasks.sort(key=lambda t: (t.position, t.id))
+        return tasks
+
+    def create_task(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        instruction_md: str,
+        criteria: Sequence[str] | None = None,
+        hints_md: str | None = None,
+        due_at=None,
+        max_attempts: int | None = None,
+    ) -> TaskData:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise PermissionError("section_forbidden")
+        instruction = (instruction_md or "").strip()
+        if not instruction:
+            raise ValueError("invalid_instruction_md")
+        crit = list(criteria or [])
+        now = datetime.now(timezone.utc).isoformat()
+        tid = str(uuid4())
+        pos = len(self.task_ids_by_section.get(section_id, [])) + 1
+        due_iso = None
+        if due_at is not None:
+            if isinstance(due_at, datetime):
+                due_iso = due_at.astimezone(timezone.utc).isoformat()
+            elif isinstance(due_at, str):
+                due_iso = due_at
+        task = TaskData(
+            id=tid,
+            unit_id=unit_id,
+            section_id=section_id,
+            instruction_md=instruction,
+            criteria=crit,
+            hints_md=hints_md.strip() if isinstance(hints_md, str) and hints_md.strip() else None,
+            due_at=due_iso,
+            max_attempts=max_attempts,
+            position=pos,
+            created_at=now,
+            updated_at=now,
+        )
+        self.tasks[tid] = task
+        bucket = self.task_ids_by_section.setdefault(section_id, [])
+        bucket.append(tid)
+        return task
+
+    def update_task(
+        self,
+        unit_id: str,
+        section_id: str,
+        task_id: str,
+        author_id: str,
+        *,
+        instruction_md=_UNSET,
+        criteria=_UNSET,
+        hints_md=_UNSET,
+        due_at=_UNSET,
+        max_attempts=_UNSET,
+    ) -> TaskData | None:
+        task = self.tasks.get(task_id)
+        if not task or task.unit_id != unit_id or task.section_id != section_id:
+            return None
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            return None
+        if instruction_md is not _UNSET:
+            text = (instruction_md or "").strip()
+            if not text:
+                raise ValueError("invalid_instruction_md")
+            task.instruction_md = text
+        if criteria is not _UNSET:
+            if criteria is None:
+                task.criteria = []
+            else:
+                task.criteria = list(criteria)
+        if hints_md is not _UNSET:
+            if hints_md is None:
+                task.hints_md = None
+            elif isinstance(hints_md, str):
+                stripped = hints_md.strip()
+                task.hints_md = stripped or None
+        if due_at is not _UNSET:
+            if due_at is None:
+                task.due_at = None
+            elif isinstance(due_at, datetime):
+                task.due_at = due_at.astimezone(timezone.utc).isoformat()
+            elif isinstance(due_at, str):
+                task.due_at = due_at
+        if max_attempts is not _UNSET:
+            task.max_attempts = max_attempts
+        task.updated_at = datetime.now(timezone.utc).isoformat()
+        self.tasks[task_id] = task
+        return task
+
+    def delete_task(self, unit_id: str, section_id: str, task_id: str, author_id: str) -> bool:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            return False
+        ids = self.task_ids_by_section.get(section_id, [])
+        if task_id not in ids:
+            return False
+        self.tasks.pop(task_id, None)
+        ids = [tid for tid in ids if tid != task_id]
+        self.task_ids_by_section[section_id] = ids
+        self._resequence_tasks(section_id)
+        return True
+
+    def reorder_section_tasks(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        task_ids: List[str],
+    ) -> List[TaskData]:
+        if not self.section_exists_for_author(unit_id, section_id, author_id):
+            raise PermissionError("section_forbidden")
+        existing = list(self.task_ids_by_section.get(section_id, []))
+        if not existing:
+            raise ValueError("task_mismatch")
+        if set(existing) != set(task_ids) or len(existing) != len(task_ids):
+            raise ValueError("task_mismatch")
+        self.task_ids_by_section[section_id] = list(task_ids)
+        self._resequence_tasks(section_id)
+        return self.list_tasks_for_section_owned(unit_id, section_id, author_id)
+
+    def _resequence_tasks(self, section_id: str) -> None:
+        ids = self.task_ids_by_section.get(section_id, [])
+        for idx, tid in enumerate(ids, start=1):
+            if tid in self.tasks:
+                task = self.tasks[tid]
+                task.position = idx
+                task.updated_at = datetime.now(timezone.utc).isoformat()
+                self.tasks[tid] = task
+
     # --- Course modules (in-memory) --------------------------------------------
     def list_course_modules_for_owner(self, course_id: str, owner_id: str) -> List[CourseModuleData]:
         course = self.courses.get(course_id)
@@ -764,13 +923,15 @@ _bucket = os.getenv("SUPABASE_STORAGE_BUCKET") or MaterialFileSettings().storage
 MATERIAL_FILE_SETTINGS = MaterialFileSettings(storage_bucket=_bucket)
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
 MATERIALS_SERVICE = MaterialsService(REPO, settings=MATERIAL_FILE_SETTINGS)
+TASKS_SERVICE = TasksService(REPO)
 
 
 def set_repo(repo) -> None:
     """Allow tests to swap the teaching repository implementation."""
-    global REPO, MATERIALS_SERVICE
+    global REPO, MATERIALS_SERVICE, TASKS_SERVICE
     REPO = repo
     MATERIALS_SERVICE = MaterialsService(repo, settings=MATERIAL_FILE_SETTINGS)
+    TASKS_SERVICE = TasksService(repo)
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
@@ -1144,6 +1305,26 @@ class MaterialUpdatePayload(BaseModel):
 
 class MaterialReorderPayload(BaseModel):
     material_ids: object | None = None
+
+
+class TaskCreatePayload(BaseModel):
+    instruction_md: object | None = None
+    criteria: object | None = None
+    hints_md: object | None = None
+    due_at: object | None = None
+    max_attempts: object | None = None
+
+
+class TaskUpdatePayload(BaseModel):
+    instruction_md: object | None = None
+    criteria: object | None = None
+    hints_md: object | None = None
+    due_at: object | None = None
+    max_attempts: object | None = None
+
+
+class TaskReorderPayload(BaseModel):
+    task_ids: object | None = None
 
 
 @teaching_router.patch("/api/teaching/courses/{course_id}")
@@ -1541,6 +1722,206 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
         return JSONResponse({"error": "forbidden"}, status_code=403)
     # Uniform API shape: explicit JSONResponse with status 200
     return JSONResponse(content=[_serialize_section(s) for s in ordered], status_code=200)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
+async def list_section_tasks(request: Request, unit_id: str, section_id: str):
+    """List tasks of a section for the authoring teacher."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        items = TASKS_SERVICE.list_tasks(unit_id, section_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return JSONResponse(content=[_serialize_task(t) for t in items], status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
+async def create_section_task(request: Request, unit_id: str, section_id: str, payload: TaskCreatePayload):
+    """Create a task within a section (author only)."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        task = TASKS_SERVICE.create_task(
+            unit_id,
+            section_id,
+            sub,
+            instruction_md=payload.instruction_md,
+            criteria=payload.criteria,
+            hints_md=payload.hints_md,
+            due_at=payload.due_at,
+            max_attempts=payload.max_attempts,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {
+            "invalid_instruction_md",
+            "invalid_criteria",
+            "invalid_due_at",
+            "invalid_max_attempts",
+            "invalid_hints_md",
+        }:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=_serialize_task(task), status_code=201)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
+async def update_section_task(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    task_id: str,
+    payload: TaskUpdatePayload,
+):
+    """Update task fields for an author's section."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    raw_updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not raw_updates:
+        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+    kwargs: Dict[str, object] = {}
+    if "instruction_md" in raw_updates:
+        kwargs["instruction_md"] = raw_updates["instruction_md"]
+    if "criteria" in raw_updates:
+        kwargs["criteria"] = raw_updates["criteria"]
+    if "hints_md" in raw_updates:
+        kwargs["hints_md"] = raw_updates["hints_md"]
+    if "due_at" in raw_updates:
+        kwargs["due_at"] = raw_updates["due_at"]
+    if "max_attempts" in raw_updates:
+        kwargs["max_attempts"] = raw_updates["max_attempts"]
+    try:
+        updated = TASKS_SERVICE.update_task(
+            unit_id,
+            section_id,
+            task_id,
+            sub,
+            **kwargs,
+        )
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail not in {
+            "invalid_instruction_md",
+            "invalid_criteria",
+            "invalid_due_at",
+            "invalid_max_attempts",
+            "invalid_hints_md",
+        }:
+            detail = "invalid_input"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=_serialize_task(updated), status_code=200)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
+async def delete_section_task(request: Request, unit_id: str, section_id: str, task_id: str):
+    """Delete a task and resequence positions."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        TASKS_SERVICE.delete_task(unit_id, section_id, task_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return Response(status_code=204)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")
+async def reorder_section_tasks(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    payload: TaskReorderPayload,
+):
+    """Reorder tasks (author only)."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    ids = payload.task_ids
+    if not isinstance(ids, list):
+        return JSONResponse({"error": "bad_request", "detail": "task_ids_must_be_array"}, status_code=400)
+    if len(ids) == 0:
+        return JSONResponse({"error": "bad_request", "detail": "empty_task_ids"}, status_code=400)
+    if len(ids) != len(set(ids)):
+        return JSONResponse({"error": "bad_request", "detail": "duplicate_task_ids"}, status_code=400)
+    if any(not _is_uuid_like(tid) for tid in ids):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_task_ids"}, status_code=400)
+    try:
+        TASKS_SERVICE.list_tasks(unit_id, section_id, sub)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        ordered = TASKS_SERVICE.reorder_tasks(unit_id, section_id, sub, ids)
+    except ValueError as exc:
+        detail = str(exc) or "task_mismatch"
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return JSONResponse(content=[_serialize_task(t) for t in ordered], status_code=200)
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/materials")
@@ -2312,6 +2693,31 @@ def _serialize_material(m) -> dict:
         "created_at": getattr(m, "created_at", None),
         "updated_at": getattr(m, "updated_at", None),
     }
+
+
+def _serialize_task(t) -> dict:
+    if is_dataclass(t):
+        data = asdict(t)
+    elif isinstance(t, dict):
+        data = dict(t)
+    else:
+        data = {
+            "id": getattr(t, "id", None),
+            "unit_id": getattr(t, "unit_id", None),
+            "section_id": getattr(t, "section_id", None),
+            "instruction_md": getattr(t, "instruction_md", None),
+            "criteria": getattr(t, "criteria", []),
+            "hints_md": getattr(t, "hints_md", None),
+            "due_at": getattr(t, "due_at", None),
+            "max_attempts": getattr(t, "max_attempts", None),
+            "position": getattr(t, "position", None),
+            "created_at": getattr(t, "created_at", None),
+            "updated_at": getattr(t, "updated_at", None),
+        }
+    data.setdefault("kind", "native")
+    if data.get("criteria") is None:
+        data["criteria"] = []
+    return data
 
 
 def _teacher_id_of(course) -> str | None:

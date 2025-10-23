@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- fix(api/openapi): Align `/api/me` example `expires_at` to `+00:00` offset to match runtime serialization.
+- chore(openapi): Set spec version to `0.0.2` to match app version in backend/web/main.py.
+- docs(api): Document `Cache-Control: no-store` on `GET /api/users/search` and `GET /api/teaching/.../materials/{id}/download-url` (privacy‑sensitive responses).
+- feat(api/teaching): Add Tasks endpoints (list/create/update/delete/reorder) with read-only `kind="native"` responses.
+- db(teaching): Introduce `public.unit_tasks` (RLS, deferrable ordering, ownership triggers) via new Supabase migration.
+- feat(teaching): Wire TasksService + FastAPI adapter, ensuring Clean Architecture separation and in-memory fallback parity.
+- tests(teaching): Add OpenAPI contract tests, API integration tests, and TasksService unit tests covering validation edge cases.
+- docs(teaching): Plan & architecture docs updated to note Tasks MVP and `kind` forward-compatibility preparations.
+- fix(teaching): Ensure partial PATCH updates honour repo defaults and document `invalid_hints_md` error detail.
 - db(teaching): Make `module_section_releases.released_by` NOT NULL with backfill to 'system'.
 - feat(api/teaching): Add PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility to toggle section releases (owner-only), with explicit 400 detail codes.
 - db(teaching): Add `public.module_section_releases` table with RLS (owner-only via course_modules ↔ courses join); upsert semantics for visibility.
@@ -53,6 +62,11 @@
 - security(ops): /health responses include `Cache-Control: no-store` to prevent caching of diagnostics.
 - test(auth): Add smoke test for `/auth/logout/success` (200 + back-to-login link).
 - chore(auth): Remove deprecated `_cookie_opts` wrapper in auth routes; use shared `auth_utils.cookie_opts`.
+ - fix(api/openapi): Document 400 invalid path params for Tasks endpoints (invalid_unit_id, invalid_section_id, invalid_task_id).
+ - consistency(api/openapi): `criteria.items` now `minLength: 1` in TaskCreate/TaskUpdate.
+ - fix(api/teaching): DELETE /tasks returns 204 without body (HTTP semantics).
+ - feat(teaching): Accept `due_at` with trailing 'Z' (UTC) in TasksService.
+ - tests(teaching): Add invalid-UUID path tests and Zulu due_at acceptance.
 
 ## 2025-10-20
 - Teaching (Unterrichten) — Kursmanagement (MVP)

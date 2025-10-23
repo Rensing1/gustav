@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: GUSTAV API
-  version: 0.1.0
+  version: 0.0.2
   description: >-
     Contract-first API for minimal authentication/session integration with Keycloak.
     Endpoints cover login redirect, callback handling, logout, session info, and a
@@ -44,7 +44,7 @@ components:
         sub: "a1b2c3d4-ef01-2345-6789-abcdef012345"
         roles: ["student"]
         name: "Max Musterschüler"
-        expires_at: "2025-10-20T12:34:56Z"
+        expires_at: "2025-10-20T12:34:56+00:00"
     Error:
       type: object
       required: [error]
@@ -432,6 +432,122 @@ components:
           type: string
           format: date-time
           description: ISO timestamp when the download URL expires
+    Task:
+      type: object
+      required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        unit_id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        instruction_md:
+          type: string
+          minLength: 1
+          description: Task instruction shown to students (Markdown)
+        criteria:
+          type: array
+          items: { type: string }
+          minItems: 0
+          maxItems: 10
+          description: Optional evaluation criteria; one line per item
+        hints_md:
+          type: string
+          nullable: true
+          description: Optional hints or solution scaffolding (Markdown)
+        position:
+          type: integer
+          minimum: 1
+          description: 1-based ordering within the section
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        max_attempts:
+          type: integer
+          minimum: 1
+          nullable: true
+        kind:
+          type: string
+          readOnly: true
+          default: native
+          description: >-
+            Task type (forward-compat). MVP returns "native". This field is
+            read-only and must not be provided by clients.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TaskCreate:
+      type: object
+      required: [instruction_md]
+      properties:
+        instruction_md:
+          type: string
+          minLength: 1
+          description: Task instruction (Markdown)
+        criteria:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          minItems: 0
+          maxItems: 10
+          description: Optional evaluation criteria; one line per item
+        hints_md:
+          type: string
+          nullable: true
+          description: Optional hints or solution scaffolding (Markdown)
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        max_attempts:
+          type: integer
+          minimum: 1
+          nullable: true
+    TaskUpdate:
+      type: object
+      properties:
+        instruction_md:
+          type: string
+          minLength: 1
+        criteria:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          minItems: 0
+          maxItems: 10
+        hints_md:
+          type: string
+          nullable: true
+        due_at:
+            type: string
+            format: date-time
+            nullable: true
+        max_attempts:
+          type: integer
+          minimum: 1
+          nullable: true
+    TaskReorder:
+      type: object
+      required: [task_ids]
+      properties:
+        task_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Desired order (1..n) of task IDs for the given section
     CourseModule:
       type: object
       required: [id, course_id, unit_id, position, created_at, updated_at]
@@ -1394,6 +1510,300 @@ paths:
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks:
+    get:
+      tags: [Teaching]
+      summary: List tasks of a section (author only)
+      description: Returns tasks sorted by ascending position for the section's author.
+      operationId: listSectionTasks
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_unit_id:
+                  summary: Unit id not a UUID
+                  value: { error: bad_request, detail: invalid_unit_id }
+                invalid_section_id:
+                  summary: Section id not a UUID
+                  value: { error: bad_request, detail: invalid_section_id }
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      tags: [Teaching]
+      summary: Create a task in a section (author only)
+      operationId: createSectionTask
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid input or path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_instruction_md
+              - invalid_criteria
+              - invalid_due_at
+              - invalid_max_attempts
+              - invalid_hints_md
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
+                invalid_instruction_md: { value: { error: bad_request, detail: invalid_instruction_md } }
+                invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
+                invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
+                invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
+                invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}:
+    patch:
+      tags: [Teaching]
+      summary: Update a task (author only)
+      operationId: updateSectionTask
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+      responses:
+        '200':
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid input or path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+              - empty_payload
+              - invalid_instruction_md
+              - invalid_criteria
+              - invalid_due_at
+              - invalid_max_attempts
+              - invalid_hints_md
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
+                invalid_task_id: { value: { error: bad_request, detail: invalid_task_id } }
+                empty_payload: { value: { error: bad_request, detail: empty_payload } }
+                invalid_instruction_md: { value: { error: bad_request, detail: invalid_instruction_md } }
+                invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
+                invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
+                invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
+                invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Teaching]
+      summary: Delete a task (author only)
+      operationId: deleteSectionTask
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204': { description: Deleted (no content) }
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
+                invalid_task_id: { value: { error: bad_request, detail: invalid_task_id } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder:
+    post:
+      tags: [Teaching]
+      summary: Reorder tasks of a section (author only)
+      description: Atomically updates positions based on the provided task order.
+      operationId: reorderSectionTasks
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: section_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskReorder'
+      responses:
+        '200':
+          description: Tasks reordered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid path or task list. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - task_ids_must_be_array
+              - empty_task_ids
+              - duplicate_task_ids
+              - invalid_task_ids
+              - task_mismatch
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
+                task_ids_must_be_array: { value: { error: bad_request, detail: task_ids_must_be_array } }
+                empty_task_ids: { value: { error: bad_request, detail: empty_task_ids } }
+                duplicate_task_ids: { value: { error: bad_request, detail: duplicate_task_ids } }
+                invalid_task_ids: { value: { error: bad_request, detail: invalid_task_ids } }
+                task_mismatch: { value: { error: bad_request, detail: task_mismatch } }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
   /api/teaching/units/{unit_id}/sections/{section_id}/materials:
     get:
       tags: [Teaching]
@@ -1894,6 +2304,11 @@ paths:
       responses:
         '200':
           description: Short-lived download URL returned
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -2178,6 +2593,11 @@ paths:
       responses:
         '200':
           description: Results
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:

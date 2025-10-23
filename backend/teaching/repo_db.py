@@ -99,6 +99,41 @@ def _material_row_to_dict(row: Tuple) -> Dict[str, Any]:
     }
 
 
+_TASK_COLUMNS_SQL = """
+    id::text,
+    unit_id::text,
+    section_id::text,
+    instruction_md,
+    criteria,
+    hints_md,
+    case
+      when due_at is null then null
+      else to_char(due_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+    end as due_at_iso,
+    max_attempts,
+    position,
+    to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+    to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+"""
+
+
+def _task_row_to_dict(row: Tuple) -> Dict[str, Any]:
+    return {
+        "id": row[0],
+        "unit_id": row[1],
+        "section_id": row[2],
+        "instruction_md": row[3],
+        "criteria": list(row[4] or []),
+        "hints_md": row[5],
+        "due_at": row[6],
+        "max_attempts": int(row[7]) if row[7] is not None else None,
+        "position": int(row[8]) if row[8] is not None else None,
+        "created_at": row[9],
+        "updated_at": row[10],
+        "kind": "native",
+    }
+
+
 class DBTeachingRepo:
     def __init__(self, dsn: Optional[str] = None) -> None:
         """Initialize a Postgres-backed repository with RLS-first safety.
@@ -1399,6 +1434,262 @@ class DBTeachingRepo:
             }
             for r in rows
         ]
+
+    # --- Section tasks --------------------------------------------------------
+    def list_tasks_for_section_owned(self, unit_id: str, section_id: str, author_id: str) -> List[dict]:
+        """Return ordered tasks for a section authored by the caller."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    f"""
+                    select {_TASK_COLUMNS_SQL}
+                    from public.unit_tasks
+                    where unit_id = %s
+                      and section_id = %s
+                    order by position asc, id
+                    """,
+                    (unit_id, section_id),
+                )
+                rows = cur.fetchall() or []
+        return [_task_row_to_dict(r) for r in rows]
+
+    def create_task(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        *,
+        instruction_md: str,
+        criteria: List[str],
+        hints_md: str | None,
+        due_at,
+        max_attempts: int | None,
+    ) -> dict:
+        """Create a task at the next position within the section."""
+        if not instruction_md or not isinstance(instruction_md, str):
+            raise ValueError("invalid_instruction_md")
+        instruction = instruction_md.strip()
+        if not instruction:
+            raise ValueError("invalid_instruction_md")
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    "select id from public.unit_sections where id = %s and unit_id = %s for update",
+                    (section_id, unit_id),
+                )
+                sec_row = cur.fetchone()
+                if not sec_row:
+                    raise LookupError("section_not_found")
+                cur.execute(
+                    "select id from public.unit_tasks where section_id = %s for update",
+                    (section_id,),
+                )
+                cur.execute(
+                    "select coalesce(max(position), 0) + 1 from public.unit_tasks where section_id = %s",
+                    (section_id,),
+                )
+                next_pos = int(cur.fetchone()[0])
+                cur.execute(
+                    f"""
+                    insert into public.unit_tasks (
+                      unit_id, section_id, instruction_md, criteria, hints_md, due_at, max_attempts, position
+                    )
+                    values (%s, %s, %s, %s, %s, %s, %s, %s)
+                    returning {_TASK_COLUMNS_SQL}
+                    """,
+                    (unit_id, section_id, instruction, criteria, hints_md, due_at, max_attempts, next_pos),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise RuntimeError("unit_tasks insert returned no row")
+                conn.commit()
+        return _task_row_to_dict(row)
+
+    def update_task(
+        self,
+        unit_id: str,
+        section_id: str,
+        task_id: str,
+        author_id: str,
+        *,
+        instruction_md=_UNSET,
+        criteria=_UNSET,
+        hints_md=_UNSET,
+        due_at=_UNSET,
+        max_attempts=_UNSET,
+    ) -> Optional[dict]:
+        """Update mutable task fields when owned by the caller."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    f"""
+                    select {_TASK_COLUMNS_SQL}
+                    from public.unit_tasks
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                    for update
+                    """,
+                    (task_id, unit_id, section_id),
+                )
+                existing = cur.fetchone()
+                if not existing:
+                    return None
+                updates = []
+                params: List[object] = []
+                if instruction_md is not _UNSET:
+                    updates.append("instruction_md")
+                    params.append(instruction_md)
+                if criteria is not _UNSET:
+                    updates.append("criteria")
+                    params.append(criteria)
+                if hints_md is not _UNSET:
+                    updates.append("hints_md")
+                    params.append(hints_md)
+                if due_at is not _UNSET:
+                    updates.append("due_at")
+                    params.append(due_at)
+                if max_attempts is not _UNSET:
+                    updates.append("max_attempts")
+                    params.append(max_attempts)
+                if not updates:
+                    conn.rollback()
+                    return _task_row_to_dict(existing)
+                try:
+                    from psycopg import sql as _sql  # type: ignore
+
+                    assignments = [_sql.SQL("{} = %s").format(_sql.Identifier(col)) for col in updates]
+                    params.extend([task_id, unit_id, section_id])
+                    stmt = _sql.SQL(
+                        f"""
+                        update public.unit_tasks
+                        set {{assign}}
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        returning {_TASK_COLUMNS_SQL}
+                        """
+                    ).format(assign=_sql.SQL(", ").join(assignments))
+                    cur.execute(stmt, params)
+                except Exception:
+                    params = list(params[:-3]) + [task_id, unit_id, section_id]
+                    cols = ", ".join([f"{col} = %s" for col in updates])
+                    cur.execute(
+                        f"""
+                        update public.unit_tasks
+                        set {cols}
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        returning {_TASK_COLUMNS_SQL}
+                        """,
+                        params,
+                    )
+                row = cur.fetchone()
+                if not row:
+                    conn.rollback()
+                    return None
+                conn.commit()
+        return _task_row_to_dict(row)
+
+    def delete_task(self, unit_id: str, section_id: str, task_id: str, author_id: str) -> bool:
+        """Delete a task and resequence remaining positions."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id
+                    from public.unit_tasks
+                    where id = %s
+                      and unit_id = %s
+                      and section_id = %s
+                    for update
+                    """,
+                    (task_id, unit_id, section_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return False
+                cur.execute(
+                    "delete from public.unit_tasks where id = %s and unit_id = %s and section_id = %s",
+                    (task_id, unit_id, section_id),
+                )
+                cur.execute(
+                    """
+                    with ordered as (
+                      select id, row_number() over (order by position asc, id) as rn
+                      from public.unit_tasks
+                      where section_id = %s
+                    )
+                    update public.unit_tasks t
+                    set position = o.rn
+                    from ordered o
+                    where t.id = o.id
+                    """,
+                    (section_id,),
+                )
+                conn.commit()
+                return True
+
+    def reorder_section_tasks(
+        self,
+        unit_id: str,
+        section_id: str,
+        author_id: str,
+        task_ids: List[str],
+    ) -> List[dict]:
+        """Atomically reorder tasks owned by the caller."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    """
+                    select id::text
+                    from public.unit_tasks
+                    where unit_id = %s
+                      and section_id = %s
+                    order by position asc, id
+                    """,
+                    (unit_id, section_id),
+                )
+                existing = [row[0] for row in (cur.fetchall() or [])]
+                if not existing:
+                    raise ValueError("task_mismatch")
+                if set(existing) != set(task_ids) or len(existing) != len(task_ids):
+                    raise ValueError("task_mismatch")
+                cur.execute("set constraints unit_tasks_section_id_position_key deferred")
+                orderings = list(range(1, len(task_ids) + 1))
+                cur.execute(
+                    """
+                    with new_order as (
+                      select tid, ord from unnest(%s::uuid[], %s::int[]) as t(tid, ord)
+                    )
+                    update public.unit_tasks ut
+                    set position = n.ord
+                    from new_order n
+                    where ut.id = n.tid
+                      and ut.section_id = %s
+                      and ut.unit_id = %s
+                    """,
+                    (task_ids, orderings, section_id, unit_id),
+                )
+                cur.execute(
+                    f"""
+                    select {_TASK_COLUMNS_SQL}
+                    from public.unit_tasks
+                    where unit_id = %s
+                      and section_id = %s
+                    order by position asc, id
+                    """,
+                    (unit_id, section_id),
+                )
+                rows = cur.fetchall() or []
+                conn.commit()
+        return [_task_row_to_dict(r) for r in rows]
 
     # --- Course modules ---------------------------------------------------------
     def list_course_modules_for_owner(self, course_id: str, owner_sub: str) -> List[dict]:

@@ -537,6 +537,75 @@ async def test_create_submission_rejects_cross_origin_when_origin_header_present
 
 
 @pytest.mark.anyio
+async def test_create_submission_rejects_mismatched_scheme():
+    """CSRF: Origin https://... vs server http://... must be rejected."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        res = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Origin": "https://test"},
+            json={"kind": "text", "text_body": "a"},
+        )
+
+    assert res.status_code == 403
+    assert res.json().get("detail") == "csrf_violation"
+
+
+@pytest.mark.anyio
+async def test_create_submission_rejects_mismatched_port():
+    """CSRF: Origin with different port must be rejected."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        res = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Origin": "http://test:81"},
+            json={"kind": "text", "text_body": "a"},
+        )
+
+    assert res.status_code == 403
+    assert res.json().get("detail") == "csrf_violation"
+
+
+@pytest.mark.anyio
+async def test_create_submission_allows_same_origin_header():
+    """CSRF: Same Origin header passes and allows submission."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        res = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Origin": "http://test"},
+            json={"kind": "text", "text_body": "ok"},
+        )
+
+    assert res.status_code == 201
+
+
+@pytest.mark.anyio
+async def test_create_submission_allows_missing_origin():
+    """CSRF: No Origin header (non-browser clients) are allowed."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        res = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "ok"},
+        )
+
+    assert res.status_code == 201
+
+
+@pytest.mark.anyio
 async def test_sections_invalid_include_returns_400_with_cache_control():
     """Invalid include parameter yields 400 invalid_include and private cache headers."""
 

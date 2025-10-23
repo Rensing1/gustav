@@ -53,6 +53,8 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Submissions: Storage-Metadaten werden nur entgegengenommen, nicht erneut ausgegeben; Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
 - Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
 - CSRF: Zusätzlicher Same‑Origin‑Check (nur wenn `Origin` gesetzt ist). Nicht‑Browser‑Clients bleiben unverändert (kein `Origin`).
+  Berücksichtigt `X-Forwarded-Proto`/`X-Forwarded-Host` (Reverse‑Proxy) sowie Ports (80/443 Default),
+  vergleicht also Schema/Host/Port robust gegen die Server‑Origin.
 - Logging: Keine Payload-Inhalte für Submissions in Standard-Logs.
 
 ## Architektur & Adapter

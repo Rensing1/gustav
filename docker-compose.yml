@@ -24,6 +24,9 @@ services:
       - ./backend/identity_access:/app/identity_access:z
       # Teaching bounded context (use cases/repos)
       - ./backend/teaching:/app/teaching:z
+      # Learning bounded context
+      - ./backend/learning:/app/backend/learning:z
+      - ./backend/__init__.py:/app/backend/__init__.py:z
     env_file:
       - .env
     environment:

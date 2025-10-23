@@ -197,6 +197,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Import shared auth router and helpers from dedicated module
 from routes.auth import auth_router
+from routes.learning import learning_router
 from routes.teaching import teaching_router
 from routes.users import users_router
 
@@ -911,6 +912,7 @@ async def get_me(request: Request):
 
 # Register auth routes on the full application
 app.include_router(auth_router)
+app.include_router(learning_router)
 app.include_router(teaching_router)
 app.include_router(users_router)
 

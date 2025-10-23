@@ -58,6 +58,56 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Body `{ section_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
   - 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen/Invalid‑UUID; 404 bei fachfremden IDs; 403 bei Ownership
 
+#### Materialien (Materials) je Abschnitt
+- `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials` (Author only)
+  - 200 `[{ id, unit_id, section_id, title, body_md?, position, kind, created_at, updated_at, ... }]`
+- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials` (Author only)
+  - Markdown‑Material anlegen. Body `MaterialCreate { title[1..200], body_md }`
+  - 201 `Material` mit `kind='markdown'`; 400/403/404
+- `PATCH /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}` (Author only)
+  - Body `MaterialUpdate { title?, body_md?, alt_text? }`; `alt_text ≤ 500` (nur Dateien)
+  - 200 `Material`; 400/403/404
+- `DELETE /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}` (Author only)
+  - 204; resequenziert `position = 1..n` im Abschnitt; 403/404
+- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder` (Author only)
+  - Body `{ material_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
+  - 200 mit neuer Reihenfolge; 400 (Duplikate/Inkonsistenz/Invalid‑UUID); 404/403
+
+Datei‑Flow (presigned Upload)
+- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents`
+  - Body `{ filename, mime_type, size_bytes }`
+  - 201 `{ intent_id, material_id, storage_key, url, headers, accepted_mime_types, max_size_bytes, expires_at }`
+  - Akzeptierte MIME: `application/pdf`, `image/png`, `image/jpeg`; Max: `20 MiB`; TTL Upload‑URL: 3 min
+- Upload via `PUT url` (aus Response) mit angegebenen `headers`
+- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize`
+  - Body `{ intent_id, title[1..200], sha256, alt_text? }`
+  - 201 bei Neuerstellung, 200 wenn bereits finalisiert (idempotent)
+  - 400 Fehlercodes u.a.: `invalid_title | checksum_mismatch | intent_expired | mime_not_allowed | invalid_alt_text`
+- `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url?disposition=inline|attachment`
+  - 200 `{ url, expires_at }`; `Cache-Control: no-store`; 400 `invalid_disposition`; 403/404
+
+#### Aufgaben (Tasks) je Abschnitt
+- `GET /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)
+  - 200 `[{ id, unit_id, section_id, instruction_md, criteria[], hints_md?, due_at?, max_attempts?, position, kind, created_at, updated_at }]`
+- `POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)
+  - Body `TaskCreate { instruction_md, criteria?, hints_md?, due_at?, max_attempts? }`
+  - 201 `Task`; 400 Val.-Fehler: `invalid_instruction_md | invalid_criteria | invalid_due_at | invalid_max_attempts | invalid_hints_md`; 403/404
+- `PATCH /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}` (Author only)
+  - Body `TaskUpdate` (alle Felder optional; leere Werte sind ungültig, wo zutreffend)
+  - 200 `Task`; 400/403/404
+- `DELETE /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}` (Author only)
+  - 204; Resequenzierung `position = 1..n`; 403/404
+- `POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder` (Author only)
+  - Body `{ task_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
+  - 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen/Invalid‑UUID; 404/403
+
+Validierungsregeln (Tasks)
+- `instruction_md`: Pflicht, nicht leer.
+- `criteria`: Liste aus 0..10 nicht‑leeren Strings.
+- `due_at`: ISO‑8601 mit Zeitzone; `...Z` wird akzeptiert (UTC).
+- `max_attempts`: Ganzzahl ≥ 1.
+- `kind`: read‑only, aktuell stets `native` (Forward‑Compat für H5P).
+
 Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
 
 ## Schemas

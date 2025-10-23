@@ -823,24 +823,48 @@ paths:
                   $ref: '#/components/schemas/LearningSection'
         '400':
           description: Invalid input (e.g., malformed UUID or include parameter)
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Forbidden (student not enrolled in the course)
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Course not found or sections not released
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
           content:
             application/json:
               schema:
@@ -926,10 +950,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
-        '400': { description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden (not enrolled or CSRF same-origin check failed), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '400':
+          description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid)
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (not enrolled or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /auth/login:
     get:

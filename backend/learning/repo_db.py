@@ -24,12 +24,16 @@ def _default_limited_dsn() -> str:
 
 
 def _dsn() -> str:
-    for candidate in (
+    env = (os.getenv("GUSTAV_ENV", "dev") or "dev").lower()
+    candidates = [
         os.getenv("LEARNING_DATABASE_URL"),
         os.getenv("LEARNING_DB_URL"),
         os.getenv("DATABASE_URL"),
-        _default_limited_dsn(),
-    ):
+    ]
+    # Only allow default limited DSN implicitly in non-prod environments (dev/test)
+    if env != "prod":
+        candidates.append(_default_limited_dsn())
+    for candidate in candidates:
         if candidate:
             return candidate
     raise RuntimeError("Database DSN unavailable for Learning repo")
@@ -123,7 +127,8 @@ class DBLearningRepo:
                 "section": {
                     "id": section_id,
                     "title": row[1],
-                    "position": int(row[2]) if row[2] is not None else None,
+                    # Contract requires integer ≥ 1; fall back to 1 if DB position is NULL
+                    "position": int(row[2]) if row[2] is not None else 1,
                 },
                 "materials": [],
                 "tasks": [],
@@ -286,58 +291,92 @@ class DBLearningRepo:
 
                 feedback_md = self._render_feedback(data.kind, attempt_nr)
 
-                cur.execute(
-                    """
-                    insert into public.learning_submissions (
-                        course_id,
-                        task_id,
-                        student_sub,
-                        kind,
-                        text_body,
-                        storage_key,
-                        mime_type,
-                        size_bytes,
-                        sha256,
-                        attempt_nr,
-                        analysis_status,
-                        analysis_json,
-                        feedback_md,
-                        error_code,
-                        idempotency_key
+                try:
+                    cur.execute(
+                        """
+                        insert into public.learning_submissions (
+                            course_id,
+                            task_id,
+                            student_sub,
+                            kind,
+                            text_body,
+                            storage_key,
+                            mime_type,
+                            size_bytes,
+                            sha256,
+                            attempt_nr,
+                            analysis_status,
+                            analysis_json,
+                            feedback_md,
+                            error_code,
+                            idempotency_key
+                        )
+                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                'completed', null, %s, null, %s)
+                        returning id::text,
+                                  attempt_nr,
+                                  kind,
+                                  text_body,
+                                  mime_type,
+                                  size_bytes,
+                                  sha256,
+                                  analysis_status,
+                                  analysis_json,
+                                  feedback_md,
+                                  error_code,
+                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                  to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                        """,
+                        (
+                            course_uuid,
+                            task_uuid,
+                            data.student_sub,
+                            data.kind,
+                            data.text_body,
+                            data.storage_key,
+                            data.mime_type,
+                            data.size_bytes,
+                            data.sha256,
+                            attempt_nr,
+                            feedback_md,
+                            data.idempotency_key,
+                        ),
                     )
-                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            'completed', null, %s, null, %s)
-                    returning id::text,
-                              attempt_nr,
-                              kind,
-                              text_body,
-                              mime_type,
-                              size_bytes,
-                              sha256,
-                              analysis_status,
-                              analysis_json,
-                              feedback_md,
-                              error_code,
-                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                              to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    """,
-                    (
-                        course_uuid,
-                        task_uuid,
-                        data.student_sub,
-                        data.kind,
-                        data.text_body,
-                        data.storage_key,
-                        data.mime_type,
-                        data.size_bytes,
-                        data.sha256,
-                        attempt_nr,
-                        feedback_md,
-                        data.idempotency_key,
-                    ),
-                )
-                row = cur.fetchone()
-                conn.commit()
+                    row = cur.fetchone()
+                    conn.commit()
+                except Exception as exc:
+                    # If another in-flight request inserted with the same Idempotency-Key, reuse it
+                    from psycopg import errors as _pg_errors  # type: ignore
+
+                    if isinstance(exc, _pg_errors.UniqueViolation):
+                        conn.rollback()
+                        cur.execute(
+                            """
+                            select id::text,
+                                   attempt_nr,
+                                   kind,
+                                   text_body,
+                                   mime_type,
+                                   size_bytes,
+                                   sha256,
+                                   analysis_status,
+                                   analysis_json,
+                                   feedback_md,
+                                   error_code,
+                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                   to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                              from public.learning_submissions
+                             where course_id = %s and task_id = %s and student_sub = %s and idempotency_key = %s
+                            """,
+                            (course_uuid, task_uuid, data.student_sub, data.idempotency_key),
+                        )
+                        existing = cur.fetchone()
+                        if existing:
+                            row = existing
+                        else:  # defensive: re-raise if we cannot recover
+                            raise
+                    else:
+                        raise
         return self._row_to_submission(row)
 
     @staticmethod

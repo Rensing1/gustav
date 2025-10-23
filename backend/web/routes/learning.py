@@ -287,6 +287,13 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
 
     idempotency_key = request.headers.get("Idempotency-Key")
+    # Contract: Idempotency-Key must be ≤ 64 characters when provided
+    if idempotency_key is not None and len(idempotency_key) > 64:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_input"},
+            status_code=400,
+            headers=_cache_headers(),
+        )
 
     try:
         kind, clean_payload = _validate_submission_payload(payload)

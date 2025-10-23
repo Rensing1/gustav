@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import re
 from typing import Any
 from uuid import UUID
 
@@ -89,8 +90,31 @@ REPO = DBLearningRepo()
 LIST_SECTIONS_USECASE = ListSectionsUseCase(REPO)
 CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(REPO)
 
+# Narrow typing for test helpers without pulling framework types into use cases
+try:
+    from typing import Protocol  # Python 3.11
+except Exception:  # pragma: no cover - typing fallback
+    Protocol = object  # type: ignore
 
-def set_repo(repo) -> None:  # pragma: no cover - used in tests
+
+class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
+    def list_released_sections(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        include_materials: bool,
+        include_tasks: bool,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        ...
+
+    def create_submission(self, data) -> dict:
+        ...
+
+
+def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
     global REPO, LIST_SECTIONS_USECASE, CREATE_SUBMISSION_USECASE
     REPO = repo
     LIST_SECTIONS_USECASE = ListSectionsUseCase(repo)
@@ -112,12 +136,12 @@ async def list_sections(
     try:
         UUID(course_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
 
     try:
         include_materials, include_tasks = _parse_include(include)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers())
 
     input_data = ListSectionsInput(
         student_sub=str(user.get("sub", "")),
@@ -164,8 +188,13 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         mime_type = payload.get("mime_type")
         if not isinstance(mime_type, str) or not mime_type:
             raise ValueError("invalid_image_payload")
+        if mime_type not in ("image/jpeg", "image/png"):
+            raise ValueError("invalid_image_payload")
         storage_key = payload.get("storage_key")
         if not isinstance(storage_key, str) or not storage_key:
+            raise ValueError("invalid_image_payload")
+        # Restrict to path-like storage keys (defense-in-depth)
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_./\-]{0,255}", storage_key):
             raise ValueError("invalid_image_payload")
         sha256 = payload.get("sha256")
         if not isinstance(sha256, str):
@@ -190,11 +219,11 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     try:
         UUID(course_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
     try:
         UUID(task_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
 
     idempotency_key = request.headers.get("Idempotency-Key")
 
@@ -202,7 +231,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         kind, clean_payload = _validate_submission_payload(payload)
     except ValueError as exc:
         detail = str(exc) if str(exc) else "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers())
 
     submission_input = CreateSubmissionInput(
         course_id=course_id,

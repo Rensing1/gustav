@@ -149,15 +149,16 @@ async def _prepare_learning_fixture(
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
 
+    # Verify Teaching repository is DB-backed
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for Learning contract tests")
 
+    # Verify Learning repository is DB-backed
+    try:
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
-
         assert isinstance(learning.REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed LearningRepo required for Learning contract tests")
@@ -448,3 +449,69 @@ async def test_get_released_tasks_excludes_hidden_section():
             count = int(cur.fetchone()[0])
 
     assert count == 0
+
+
+@pytest.mark.anyio
+async def test_create_submission_image_mime_type_whitelist():
+    """Reject image uploads with non-whitelisted MIME type (spec alignment)."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={
+                "kind": "image",
+                "storage_key": "materials/abc.png",
+                "mime_type": "image/gif",  # not allowed
+                "size_bytes": 512,
+                "sha256": "a" * 64,
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json().get("detail") == "invalid_image_payload"
+
+
+@pytest.mark.anyio
+async def test_create_submission_image_storage_key_sane_pattern():
+    """Reject image uploads with suspicious storage_key (defense-in-depth)."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={
+                "kind": "image",
+                "storage_key": "../secrets/evil.png",
+                "mime_type": "image/png",
+                "size_bytes": 1024,
+                "sha256": "b" * 64,
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json().get("detail") == "invalid_image_payload"
+
+
+@pytest.mark.anyio
+async def test_sections_invalid_uuid_uses_contract_detail_and_cache_header():
+    """Invalid UUID returns 400 with detail=invalid_uuid and private cache header."""
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", student.session_id)
+        res = await client.get(
+            "/api/learning/courses/not-a-uuid/sections",
+            params={"include": "materials", "limit": 10, "offset": 0},
+        )
+
+    assert res.status_code == 400
+    body = res.json()
+    assert body.get("detail") == "invalid_uuid"
+    assert res.headers.get("Cache-Control") == "private, max-age=0"

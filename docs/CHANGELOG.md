@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+ - fix(api/learning): Enforce image MIME whitelist (image/jpeg, image/png) and sanitize storage_key via regex; new contract tests.
+ - consistency(api/learning): 400 invalid path params now use detail=invalid_uuid; 400 responses include Cache-Control: private, max-age=0.
+ - tests(learning): Add tests for MIME whitelist, storage_key pattern, and invalid_uuid detail + cache header.
 - security(db/learning): Harden `get_released_tasks_for_student` via new migration so unreleased sections leak no tasks; contract test added.
 - fix(api/openapi): Align Learning contract with implemented endpoints (remove upload-intents, document storage metadata for image submissions).
 - fix(api/learning): Validate image `sha256` format pre-insert to surface 400 `invalid_image_payload` instead of database check violations.

@@ -68,6 +68,29 @@ def _require_student(request: Request):
     return user, None
 
 
+def _is_same_origin(request: Request) -> bool:
+    """Basic CSRF defense: if `Origin` is present, require same-origin.
+
+    Rationale:
+        SameSite cookies mitigate many CSRF vectors, but explicit Origin checks
+        add defense-in-depth for POST endpoints called from browsers. We allow
+        non-browser clients (no Origin header) and validate only when `Origin`
+        is provided by the UA.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    try:
+        # Normalize server origin (scheme://host[:port])
+        scheme = request.url.scheme
+        host = request.headers.get("host") or request.url.hostname or ""
+        server_origin = f"{scheme}://{host}"
+        return origin.lower() == server_origin.lower()
+    except Exception:
+        # Fail closed if we cannot determine same-origin reliably
+        return False
+
+
 def _parse_include(value: str | None) -> tuple[bool, bool]:
     if not value:
         return False, False
@@ -215,6 +238,14 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     user, error = _require_student(request)
     if error:
         return error
+
+    # CSRF defense-in-depth: if Origin header is present and not same-origin -> 403
+    if not _is_same_origin(request):
+        return JSONResponse(
+            {"error": "forbidden", "detail": "csrf_violation"},
+            status_code=403,
+            headers=_cache_headers(),
+        )
 
     try:
         UUID(course_id)

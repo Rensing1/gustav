@@ -515,3 +515,41 @@ async def test_sections_invalid_uuid_uses_contract_detail_and_cache_header():
     body = res.json()
     assert body.get("detail") == "invalid_uuid"
     assert res.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_create_submission_rejects_cross_origin_when_origin_header_present():
+    """CSRF defense: POST with foreign Origin must be rejected with 403."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Origin": "http://evil.local"},
+            json={"kind": "text", "text_body": "x"},
+        )
+
+    assert resp.status_code == 403
+    assert resp.json().get("detail") == "csrf_violation"
+    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_sections_invalid_include_returns_400_with_cache_control():
+    """Invalid include parameter yields 400 invalid_include and private cache headers."""
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", student.session_id)
+        res = await client.get(
+            "/api/learning/courses/00000000-0000-0000-0000-000000000000/sections",
+            params={"include": "materials,invalid", "limit": 10, "offset": 0},
+        )
+
+    assert res.status_code == 400
+    assert res.json().get("detail") == "invalid_include"
+    assert res.headers.get("Cache-Control") == "private, max-age=0"

@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- feat(api/teaching): Add Tasks endpoints (list/create/update/delete/reorder) with read-only `kind="native"` responses.
+- db(teaching): Introduce `public.unit_tasks` (RLS, deferrable ordering, ownership triggers) via new Supabase migration.
+- feat(teaching): Wire TasksService + FastAPI adapter, ensuring Clean Architecture separation and in-memory fallback parity.
+- tests(teaching): Add OpenAPI contract tests, API integration tests, and TasksService unit tests covering validation edge cases.
+- docs(teaching): Plan & architecture docs updated to note Tasks MVP and `kind` forward-compatibility preparations.
 - db(teaching): Make `module_section_releases.released_by` NOT NULL with backfill to 'system'.
 - feat(api/teaching): Add PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility to toggle section releases (owner-only), with explicit 400 detail codes.
 - db(teaching): Add `public.module_section_releases` table with RLS (owner-only via course_modules ↔ courses join); upsert semantics for visibility.

@@ -69,25 +69,55 @@ def _require_student(request: Request):
 
 
 def _is_same_origin(request: Request) -> bool:
-    """Basic CSRF defense: if `Origin` is present, require same-origin.
+    """CSRF defense-in-depth: verify `Origin` matches server origin.
 
-    Rationale:
-        SameSite cookies mitigate many CSRF vectors, but explicit Origin checks
-        add defense-in-depth for POST endpoints called from browsers. We allow
-        non-browser clients (no Origin header) and validate only when `Origin`
-        is provided by the UA.
+    - If `Origin` header is absent: allow (non-browser clients).
+    - If present: compare scheme, host, and effective port against server
+      origin derived from `X-Forwarded-Proto`/`X-Forwarded-Host` (if present)
+      or FastAPI's request URL and Host header. Ports default to 80/443 when
+      not explicitly specified.
     """
-    origin = request.headers.get("origin")
-    if not origin:
+    origin_val = request.headers.get("origin")
+    if not origin_val:
         return True
     try:
-        # Normalize server origin (scheme://host[:port])
-        scheme = request.url.scheme
-        host = request.headers.get("host") or request.url.hostname or ""
-        server_origin = f"{scheme}://{host}"
-        return origin.lower() == server_origin.lower()
+        from urllib.parse import urlparse
+
+        def parse_origin(url: str) -> tuple[str, str, int]:
+            p = urlparse(url)
+            if not p.scheme or not p.hostname:
+                raise ValueError("invalid_origin")
+            scheme = p.scheme.lower()
+            host = p.hostname.lower()
+            port = p.port
+            if port is None:
+                port = 443 if scheme == "https" else 80
+            return scheme, host, int(port)
+
+        def parse_server(request: Request) -> tuple[str, str, int]:
+            xf_proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip()
+            xf_host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+            scheme = (xf_proto or request.url.scheme or "http").lower()
+            # xf_host or host may include port
+            if ":" in xf_host:
+                host_only, port_str = xf_host.rsplit(":", 1)
+                try:
+                    port = int(port_str)
+                except Exception:
+                    port = 443 if scheme == "https" else 80
+                host = host_only.lower()
+            else:
+                host = (xf_host or (request.url.hostname or "")).lower()
+                if request.url.port:
+                    port = int(request.url.port)
+                else:
+                    port = 443 if scheme == "https" else 80
+            return scheme, host, port
+
+        o_scheme, o_host, o_port = parse_origin(origin_val)
+        s_scheme, s_host, s_port = parse_server(request)
+        return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
     except Exception:
-        # Fail closed if we cannot determine same-origin reliably
         return False
 
 

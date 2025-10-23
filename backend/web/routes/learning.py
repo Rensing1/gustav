@@ -168,13 +168,16 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         if not isinstance(storage_key, str) or not storage_key:
             raise ValueError("invalid_image_payload")
         sha256 = payload.get("sha256")
-        if not isinstance(sha256, str) or len(sha256) != 64:
+        if not isinstance(sha256, str):
+            raise ValueError("invalid_image_payload")
+        sha256_normalized = sha256.strip().lower()
+        if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
             raise ValueError("invalid_image_payload")
         return kind, {
             "storage_key": storage_key,
             "mime_type": mime_type,
             "size_bytes": size_int,
-            "sha256": sha256,
+            "sha256": sha256_normalized,
         }
 
 

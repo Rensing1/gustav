@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- security(db/learning): Harden `get_released_tasks_for_student` via new migration so unreleased sections leak no tasks; contract test added.
+- fix(api/openapi): Align Learning contract with implemented endpoints (remove upload-intents, document storage metadata for image submissions).
+- fix(api/learning): Validate image `sha256` format pre-insert to surface 400 `invalid_image_payload` instead of database check violations.
 - fix(api/openapi): Align `/api/me` example `expires_at` to `+00:00` offset to match runtime serialization.
 - chore(openapi): Set spec version to `0.0.2` to match app version in backend/web/main.py.
 - docs(api): Document `Cache-Control: no-store` on `GET /api/users/search` and `GET /api/teaching/.../materials/{id}/download-url` (privacy‑sensitive responses).

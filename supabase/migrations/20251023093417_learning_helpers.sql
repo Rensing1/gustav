@@ -188,7 +188,9 @@ as $$
     to_char(t.updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
   from public.course_memberships cm
   join public.course_modules mod on mod.course_id = cm.course_id
-  join public.module_section_releases r on r.course_module_id = mod.id and coalesce(r.visible, false) = true
+  join public.module_section_releases r on r.course_module_id = mod.id
+                                  and r.section_id = p_section_id
+                                  and coalesce(r.visible, false) = true
   join public.unit_sections s on s.id = p_section_id and s.unit_id = mod.unit_id
   join public.unit_tasks t on t.section_id = s.id
   where cm.course_id = p_course_id

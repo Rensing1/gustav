@@ -59,6 +59,11 @@
 - security(ops): /health responses include `Cache-Control: no-store` to prevent caching of diagnostics.
 - test(auth): Add smoke test for `/auth/logout/success` (200 + back-to-login link).
 - chore(auth): Remove deprecated `_cookie_opts` wrapper in auth routes; use shared `auth_utils.cookie_opts`.
+ - fix(api/openapi): Document 400 invalid path params for Tasks endpoints (invalid_unit_id, invalid_section_id, invalid_task_id).
+ - consistency(api/openapi): `criteria.items` now `minLength: 1` in TaskCreate/TaskUpdate.
+ - fix(api/teaching): DELETE /tasks returns 204 without body (HTTP semantics).
+ - feat(teaching): Accept `due_at` with trailing 'Z' (UTC) in TasksService.
+ - tests(teaching): Add invalid-UUID path tests and Zulu due_at acceptance.
 
 ## 2025-10-20
 - Teaching (Unterrichten) — Kursmanagement (MVP)

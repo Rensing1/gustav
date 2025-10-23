@@ -106,8 +106,12 @@ def _parse_due_at(value: object) -> Optional[datetime]:
         return None
     if not isinstance(value, str):
         raise ValueError("invalid_due_at")
+    # Accept both '+00:00' and 'Z' suffix for UTC; trim whitespace
+    s = value.strip()
+    if s.endswith("Z") or s.endswith("z"):
+        s = s[:-1] + "+00:00"
     try:
-        parsed = datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(s)
     except ValueError as exc:  # pragma: no cover - defensive
         raise ValueError("invalid_due_at") from exc
     if parsed.tzinfo is None:

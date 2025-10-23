@@ -39,7 +39,14 @@ Geplant (siehe `docs/bounded_contexts.md:1`):
 - `analytics`: Berichte, Learning Analytics Dashboard
 - `core`: geteilte Basistypen (IDs, Zeit, Fehler, Policies)
 
-Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` wider. Startpunkt ist aktuell der Web‑Adapter; die Extraktion der Use Cases folgt, sobald erste API‑Funktionen entstehen.
+Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` wider. Startpunkt ist aktuell der Web-Adapter; die Extraktion der Use Cases folgt, sobald erste API-Funktionen entstehen.
+
+### Teaching: Aufgaben (Tasks) MVP
+- API: `GET|POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks`, `PATCH|DELETE /tasks/{task_id}`, `POST /tasks/reorder` (authorOnly, Teacher-role).
+- Vertrag: `Task` Schema besitzt `kind` (read-only, default `native`) für spätere H5P-Erweiterungen.
+- Use Case Layer: `teaching.services.tasks.TasksService` normalisiert Eingaben (Criteria, Hints, Due-Date, Max-Attempts) und delegiert an das Repo (`TasksRepoProtocol`).
+- Persistenz: Supabase-Migration legt `public.unit_tasks` mit RLS, Triggern für Positionsresequenzierung und DEFERRABLE Unique-Constraint an.
+- Tests: API-Integrationstests spiegeln die BDD-Szenarien (CRUD, Reorder, Fehlerfälle); dedizierte Unit-Tests prüfen den Service isoliert.
 
 ## Ordnerstruktur (aktuell)
 - `api/openapi.yml` – API‑Vertrag (Contract‑First)

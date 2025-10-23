@@ -494,7 +494,9 @@ components:
           description: Task instruction (Markdown)
         criteria:
           type: array
-          items: { type: string }
+          items:
+            type: string
+            minLength: 1
           minItems: 0
           maxItems: 10
           description: Optional evaluation criteria; one line per item
@@ -518,7 +520,9 @@ components:
           minLength: 1
         criteria:
           type: array
-          items: { type: string }
+          items:
+            type: string
+            minLength: 1
           minItems: 0
           maxItems: 10
         hints_md:
@@ -1531,6 +1535,22 @@ paths:
             type: string
             format: uuid
       responses:
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_unit_id:
+                  summary: Unit id not a UUID
+                  value: { error: bad_request, detail: invalid_unit_id }
+                invalid_section_id:
+                  summary: Section id not a UUID
+                  value: { error: bad_request, detail: invalid_section_id }
         '200':
           description: List of tasks
           content:
@@ -1579,7 +1599,9 @@ paths:
                 $ref: '#/components/schemas/Task'
         '400':
           description: |
-            Invalid input. detail codes:
+            Invalid input or path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
               - invalid_instruction_md
               - invalid_criteria
               - invalid_due_at
@@ -1589,6 +1611,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
                 invalid_instruction_md: { value: { error: bad_request, detail: invalid_instruction_md } }
                 invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
@@ -1642,7 +1666,10 @@ paths:
                 $ref: '#/components/schemas/Task'
         '400':
           description: |
-            Invalid input. detail codes:
+            Invalid input or path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
               - empty_payload
               - invalid_instruction_md
               - invalid_criteria
@@ -1653,6 +1680,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
+                invalid_task_id: { value: { error: bad_request, detail: invalid_task_id } }
                 empty_payload: { value: { error: bad_request, detail: empty_payload } }
                 invalid_instruction_md: { value: { error: bad_request, detail: invalid_instruction_md } }
                 invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
@@ -1692,6 +1722,20 @@ paths:
             format: uuid
       responses:
         '204': { description: Deleted (no content) }
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
+                invalid_task_id: { value: { error: bad_request, detail: invalid_task_id } }
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1737,7 +1781,9 @@ paths:
                   $ref: '#/components/schemas/Task'
         '400':
           description: |
-            Invalid task list. detail codes:
+            Invalid path or task list. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
               - task_ids_must_be_array
               - empty_task_ids
               - duplicate_task_ids
@@ -1747,6 +1793,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               examples:
+                invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
+                invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
                 task_ids_must_be_array: { value: { error: bad_request, detail: task_ids_must_be_array } }
                 empty_task_ids: { value: { error: bad_request, detail: empty_task_ids } }
                 duplicate_task_ids: { value: { error: bad_request, detail: duplicate_task_ids } }

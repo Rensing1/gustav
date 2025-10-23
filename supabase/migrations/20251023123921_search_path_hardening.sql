@@ -31,6 +31,7 @@ language sql
 security definer
 set search_path = pg_catalog, public
 as $$
+  -- Note: `cm.student_id` stores the same OIDC `sub` value that APIs call `student_sub`.
   select exists (
     select 1
       from public.course_memberships cm
@@ -62,6 +63,7 @@ language sql
 security definer
 set search_path = pg_catalog, public
 as $$
+  -- Note: `cm.student_id` equals API term `student_sub` (OIDC `sub`).
   select
     s.id,
     s.title,
@@ -109,6 +111,7 @@ language sql
 security definer
 set search_path = pg_catalog, public
 as $$
+  -- Note: `cm.student_id` equals API term `student_sub` (OIDC `sub`).
   select
     m.id,
     m.title,
@@ -155,6 +158,7 @@ language sql
 security definer
 set search_path = pg_catalog, public
 as $$
+  -- Note: `cm.student_id` equals API term `student_sub` (OIDC `sub`).
   select
     t.id,
     t.instruction_md,
@@ -223,5 +227,4 @@ grant execute on function public.get_released_tasks_for_student(text, uuid, uuid
 grant execute on function public.get_task_metadata_for_student(text, uuid, uuid) to gustav_limited;
 
 set check_function_bodies = on;
-
 

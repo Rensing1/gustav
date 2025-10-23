@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- security(learning): SECURITY DEFINER Funktionen gehärtet (`search_path = pg_catalog, public`), vollqualifizierte `public.*`-Objekte.
+- security(csrf): Same‑Origin vertraut `X‑Forwarded-*` nur mit `GUSTAV_TRUST_PROXY=true`.
+- devops: `docker-compose.yml` setzt `GUSTAV_TRUST_PROXY=true` für den `web`‑Dienst (Betrieb hinter Caddy).
+- docs: DSN‑Auflösung (Learning‑Repo) ergänzt; Terminologie‑Hinweis `student_sub` (API) ≙ `student_id` (DB) dokumentiert.
 - security(db/learning): Add CHECK constraints for `learning_submissions` (idempotency_key ≤ 64; kind‑specific field requirements).
  - fix(api/middleware): 401 `Cache-Control` aligned with contracts — Learning: `private, max-age=0`; other APIs remain `no-store`.
 - build(test): Remove import hack in `routes/learning.py`; tests now add repo root to `sys.path`.

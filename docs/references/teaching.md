@@ -25,6 +25,11 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Nur Teacher/Admin. Mindestlänge `q ≥ 2`, Limit-Cap `≤ 50`
   - 200 `[{ sub, name }]`, 400/403
 
+### Terminologie: student_sub vs. student_id
+- `student_sub` (API, DTO): Das OIDC‑Subject des Schülers, ein stabiler, undurchsichtiger Bezeichner ohne PII. Wird in API‑Requests/Responses verwendet.
+- `student_id` (DB‑Spalte): Speicherung desselben Wertes im Tabellen‑Schema (z. B. `public.course_memberships.student_id`).
+- Bedeutung: Beide meinen dasselbe Feld (OIDC `sub`). Die Benennung unterscheidet sich nur zwischen API (explizit `sub`) und Datenbank (allgemeines `*_id`). Eine Schema‑Angleichung ist perspektivisch möglich; heute gilt: synonym zu verstehen.
+
 ### Lerneinheiten & Kursmodule
 - `GET /api/teaching/units?limit&offset` (Teacher only)
   - 200 `[{ id, title, summary?, author_id, created_at, updated_at }]`

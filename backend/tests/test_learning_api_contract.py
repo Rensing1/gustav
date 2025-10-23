@@ -622,3 +622,58 @@ async def test_sections_invalid_include_returns_400_with_cache_control():
     assert res.status_code == 400
     assert res.json().get("detail") == "invalid_include"
     assert res.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_create_submission_idempotency_key_too_long_returns_400_invalid_input():
+    """Idempotency-Key header longer than 64 must yield 400 invalid_input with private cache header."""
+
+    fixture = await _prepare_learning_fixture()
+
+    too_long_key = "x" * 65
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        res = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": too_long_key},
+            json={"kind": "text", "text_body": "ok"},
+        )
+
+    assert res.status_code == 400
+    body = res.json()
+    assert body.get("detail") == "invalid_input"
+    assert res.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_sections_forbidden_has_private_cache_header():
+    """403 responses for sections include private Cache-Control header."""
+
+    fixture = await _prepare_learning_fixture(add_member=False)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        res = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/sections",
+            params={"include": "materials,tasks", "limit": 50, "offset": 0},
+        )
+
+    assert res.status_code == 403
+    assert res.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_sections_not_found_has_private_cache_header():
+    """404 responses for sections include private Cache-Control header."""
+
+    fixture = await _prepare_learning_fixture(visible=False)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        res = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/sections",
+            params={"include": "materials,tasks", "limit": 50, "offset": 0},
+        )
+
+    assert res.status_code == 404
+    assert res.headers.get("Cache-Control") == "private, max-age=0"

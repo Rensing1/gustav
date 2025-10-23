@@ -2,7 +2,7 @@
 
 ## Unreleased
 - security(db/learning): Add CHECK constraints for `learning_submissions` (idempotency_key ≤ 64; kind‑specific field requirements).
-- fix(api): API 401 responses use `Cache-Control: private, max-age=0` per contract.
+ - fix(api/middleware): 401 `Cache-Control` aligned with contracts — Learning: `private, max-age=0`; other APIs remain `no-store`.
 - build(test): Remove import hack in `routes/learning.py`; tests now add repo root to `sys.path`.
 - tests(learning): Assert 401 cache headers; add non‑member submission test coverage.
 - fix(api/learning): Enforce `Idempotency-Key` maxLength=64 with 400 `invalid_input` and `Cache-Control: private, max-age=0`.

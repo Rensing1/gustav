@@ -314,8 +314,15 @@ async def auth_enforcement(request: Request, call_next):
             logger.warning("Session store get failed (API): %s", exc.__class__.__name__)
             rec = None
         if not rec:
-            # For unauthenticated API requests, use no-store to avoid caching any response bodies.
-            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+            # Contract nuances:
+            # - Learning endpoints document `private, max-age=0` for error responses.
+            # - Other privacy‑sensitive APIs prefer `no-store` (e.g., /api/me).
+            cache_value = "private, max-age=0" if path.startswith("/api/learning/") else "no-store"
+            return JSONResponse(
+                {"error": "unauthenticated"},
+                status_code=401,
+                headers={"Cache-Control": cache_value},
+            )
         # Attach user info and proceed
         request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "roles": rec.roles}
         return await call_next(request)

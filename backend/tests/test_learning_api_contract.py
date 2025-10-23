@@ -260,6 +260,22 @@ async def test_sections_requires_authentication():
 
 
 @pytest.mark.anyio
+async def test_sections_requires_authentication_cache_header():
+    """401 for unauthenticated API requests must use private cache header (contract)."""
+
+    main.SESSION_STORE = SessionStore()
+
+    async with (await _client()) as client:
+        response = await client.get(
+            "/api/learning/courses/00000000-0000-0000-0000-000000000000/sections",
+            params={"include": "materials,tasks", "limit": 50, "offset": 0},
+        )
+
+    assert response.status_code == 401
+    assert response.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
 async def test_sections_returns_released_items_for_enrolled_student():
     """Released sections include materials and tasks for enrolled students."""
 
@@ -423,6 +439,45 @@ async def test_create_submission_image_requires_valid_sha256():
 
     assert response.status_code == 400
     assert response.json().get("detail") == "invalid_image_payload"
+
+
+@pytest.mark.anyio
+async def test_create_submission_csrf_origin():
+    """Same-origin is required: mismatched Origin must be rejected with 403."""
+
+    # Use in-memory session store for unit-style test (no DB)
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", student.session_id)
+        res = await client.post(
+            f"/api/learning/courses/{uuid4()}/tasks/{uuid4()}/submissions",
+            headers={"Origin": "http://evil.example"},
+            json={"kind": "text", "text_body": "hi"},
+        )
+
+    assert res.status_code == 403
+    assert res.json().get("detail") == "csrf_violation"
+
+
+@pytest.mark.anyio
+async def test_create_submission_idempotency_key_length():
+    """Idempotency-Key > 64 must return 400 invalid_input (pre-DB validation)."""
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", student.session_id)
+        res = await client.post(
+            f"/api/learning/courses/{uuid4()}/tasks/{uuid4()}/submissions",
+            headers={"Idempotency-Key": "a" * 65},
+            json={"kind": "text", "text_body": "hi"},
+        )
+
+    assert res.status_code == 400
+    assert res.json().get("detail") == "invalid_input"
 @pytest.mark.anyio
 async def test_get_released_tasks_excludes_hidden_section():
     """RLS helpers must not leak tasks from unreleased sections."""

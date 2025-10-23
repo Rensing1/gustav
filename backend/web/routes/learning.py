@@ -219,8 +219,11 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         storage_key = payload.get("storage_key")
         if not isinstance(storage_key, str) or not storage_key:
             raise ValueError("invalid_image_payload")
-        # Restrict to path-like storage keys (defense-in-depth)
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_./\-]{0,255}", storage_key):
+        # Restrict to path-like storage keys (defense-in-depth):
+        # - allow only lower-case, digits, _, ., /, -
+        # - first char must be [a-z0-9]
+        # - explicitly forbid any ".." sequence to avoid traversal-like patterns
+        if not re.fullmatch(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}", storage_key):
             raise ValueError("invalid_image_payload")
         sha256 = payload.get("sha256")
         if not isinstance(sha256, str):

@@ -10,6 +10,7 @@ Goal: Aufgaben (Tasks) als eigenständige Entität innerhalb eines Abschnitts ei
 - Begriffe gemäß `docs/glossary.md` (Task/Aufgabe im Unterrichten-Kontext).
  - Request-Body-Limits: instruction_md/hints_md werden serverseitig begrenzt (z. B. 1–2 MB) und im Vertrag dokumentiert.
  - Wiederverwendbarkeit: Gemeinsame Reorder-Utility für Validierung (Array-Form, Duplikate, UUIDs, exakte Permutation) und konsistentes Error-Mapping.
+ - H5P-Vorbereitung: Optionales, read-only Feld `kind` im Task-Response (Default: `native`). Create/Update akzeptieren kein `kind`. So bleibt das MVP schlank und zukunftssicher.
 
 ## User Story
 Als Lehrkraft möchte ich in einem Abschnitt Aufgaben mit einer Aufgabenstellung (Markdown), optionalen Kriterien (0–10 Zeilen), einem optionalen Lösungshinweis (Markdown) und Metadaten `due_at`/`max_attempts` anlegen, bearbeiten, löschen und deren Reihenfolge steuern, damit Schüler strukturiert arbeiten können. Aufgaben werden mit dem Abschnitt freigegeben.
@@ -67,6 +68,11 @@ components:
         position:
           type: integer
           minimum: 1
+        kind:
+          type: string
+          readOnly: true
+          default: native
+          description: Optionaler Task-Typ für Vorwärtskompatibilität (MVP liefert "native").
         due_at:
           type: string
           format: date-time
@@ -306,6 +312,20 @@ Datei: `backend/tests/test_teaching_tasks_api.py`
 - Reorder-Utility (shared): Wiederverwendbare Helper-Funktion (analog Materials) für Payload-Validierung (Array-Form, leer, Duplikate, UUID-Format, exakte Permutation) und einheitliches Mapping auf 400-Detailcodes.
 - Web-Adapter: `backend/web/routes/teaching.py` ergänzt Endpunkte; 400/403/404 konsistent zu Materials. Pfad‑UUIDs und Payload‑Validierung wie im bestehenden Code. Serverseitige Body-Limits für `instruction_md`/`hints_md` per Request-Guard enforced (z. B. 1–2 MB) und im Vertrag beschrieben.
 - Sichtbarkeit: Aufgaben folgen der Abschnittsfreigabe (keine separate Release‑Tabelle für Tasks).
+
+## Erweiterung: H5P Interactive Tasks
+- Zielbild: H5P wird als zusätzlicher Task-Typ innerhalb eines Abschnitts eingebettet (kein Ersatz für Markdown-Aufgaben). Autor:innen wählen beim Anlegen zwischen nativem Task und H5P-Referenz; Freigaben/Positionierung nutzen bestehende Task-Mechanik.
+- Präferierte Integration (Self-hosted, FOSS): Eigenen H5P-Service via `@lumieducation/h5p-server` (Node, TypeScript) bereitstellen. Service läuft als Docker-Container im Backend-Netz, speichert Bibliotheken/Inhalte in Supabase/S3, nutzt ClamAV-Addon für Upload-Scans, Cronjobs für `TemporaryFileManager.cleanUp` (~5 min) und Hub-Updates (~12 h). Auth erfolgt über kurzlebige Service-JWTs, die Gustav beim Öffnen eines H5P-Tasks ausstellt; Service prüft Autorenschaft/Teilnahme (Quelle: Lumieducation `docs/usage/integrating.md`, `docs/advanced/privacy.md`).
+- Alternative (H5P.com SaaS): Rapid LTI-Integration + Reporting out-of-the-box, aber Datenabfluss an US-Dienst, AVV erforderlich, Lizenzkosten, eingeschränkte FOSS-Nachvollziehbarkeit. Eher für Pilotbetrieb/Notfall vorgesehen; klare Dokumentation der Nachteile (Quelle: H5P.com Informationspaket, embed-Config).
+- Learning Analytics: H5P erzeugt xAPI-Statements (Antworten, Scores, Zeitbedarf). Wir implementieren eigenen xAPI-Ingest (FastAPI-Route) oder adaptieren `H5PxAPIkatchu`, persistieren Events in Supabase (JSONB) und harmonisieren sie mit bestehenden Progress-Metriken. Dashboard mappt H5P-Resultate auf Kurs, Abschnitt, Task. Optional: Forward an externes LRS (Grassblade/Watershed) für Forschungszwecke (Quelle: H5P xAPI/Analyzing Results Guide).
+- Lizenz & Compliance: Standardmäßig CC-BY für Inhalte, Code MIT/GPL. UI zeigt Lizenzfelder aus H5P-Metadaten an, Export respektiert Attribution. Privacy-Doku aktualisieren (Hub-Kontakt, Dritt-Requests an fonts.gstatic.com). Self-hosting minimiert Datentransfers; optional Content-Security-Policy für externe Bibliotheken.
+- Nächste Schritte H5P:
+  1. `docs/plan/...` um dedizierten Implementierungsplan erweitern (dieser Abschnitt als Start).
+  2. Architektur RFC für H5P-Service (Service-Schnittstellen, Auth, Storage).
+  3. Proof-of-Concept: Docker-Compose mit Node-H5P-Service + Supabase, minimaler Embed-Task in Gustav-Web.
+  4. API-Vertrag erweitern (`TaskCreate` → `kind` Enum, `H5PReference` Payload inkl. Editor/Content IDs).
+  5. Tests: pytest-Suite für H5P-Tasks (CRUD + xAPI-Mock), End-to-End Smoke-Test (Playwright) für Embed.
+  6. Datenschutz-Folgenabschätzung & AV-Klärung (nur falls SaaS-Option benötigt).
 
 ## Sicherheits- & Datenschutznotizen
 - RLS schützt Ownership strikt; App setzt `app.current_sub` pro Anfrage.

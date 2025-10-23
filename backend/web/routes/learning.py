@@ -11,39 +11,12 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-try:
-    from backend.learning.repo_db import DBLearningRepo
-    from backend.learning.usecases.sections import ListSectionsInput, ListSectionsUseCase
-    from backend.learning.usecases.submissions import (
-        CreateSubmissionInput,
-        CreateSubmissionUseCase,
-    )
-except ModuleNotFoundError:
-    root_candidate = None
-    current = Path(__file__).resolve()
-    for candidate in current.parents:
-        if (
-            (candidate / "backend" / "learning" / "repo_db.py").exists()
-            and (candidate / "backend" / "identity_access").exists()
-        ):
-            root_candidate = candidate
-            break
-        if (
-            (candidate / "backend" / "learning" / "repo_db.py").exists()
-            and (candidate / "backend" / "tests").exists()
-        ):
-            root_candidate = candidate
-            break
-    if root_candidate:
-        sys.path.insert(0, str(root_candidate))
-        sys.modules.pop("backend", None)
-        sys.modules.pop("backend.learning", None)
-    from backend.learning.repo_db import DBLearningRepo
-    from backend.learning.usecases.sections import ListSectionsInput, ListSectionsUseCase
-    from backend.learning.usecases.submissions import (
-        CreateSubmissionInput,
-        CreateSubmissionUseCase,
-    )
+from backend.learning.repo_db import DBLearningRepo
+from backend.learning.usecases.sections import ListSectionsInput, ListSectionsUseCase
+from backend.learning.usecases.submissions import (
+    CreateSubmissionInput,
+    CreateSubmissionUseCase,
+)
 
 
 learning_router = APIRouter(tags=["Learning"])

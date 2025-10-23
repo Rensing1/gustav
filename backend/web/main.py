@@ -314,6 +314,7 @@ async def auth_enforcement(request: Request, call_next):
             logger.warning("Session store get failed (API): %s", exc.__class__.__name__)
             rec = None
         if not rec:
+            # For unauthenticated API requests, use no-store to avoid caching any response bodies.
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
         # Attach user info and proceed
         request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "roles": rec.roles}

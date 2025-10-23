@@ -26,6 +26,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
+# Ensure top-level package path exists so `backend.*` imports resolve without hacks
+if str(REPO_ROOT) not in os.sys.path:
+    os.sys.path.insert(0, str(REPO_ROOT))
 
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402

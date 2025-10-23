@@ -51,6 +51,7 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Fehlersemantik: 404 bei nicht freigegebenen/fremden Ressourcen, um keine Existenzinformationen zu leaken.
 - Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, max-age=0`.
 - Submissions: Storage-Metadaten werden nur entgegengenommen, nicht erneut ausgegeben; Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
+- Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
 - Logging: Keine Payload-Inhalte für Submissions in Standard-Logs.
 
 ## Architektur & Adapter

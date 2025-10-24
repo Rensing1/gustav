@@ -783,6 +783,16 @@ components:
                     type: string
                     nullable: true
                     description: Short explanation helping students understand the score.
+          example:
+            text: "Antwort 1"
+            length: 9
+            scores:
+              - criterion: "Graph korrekt"
+                score: 8
+                explanation: "Stubbed analysis."
+              - criterion: "Steigung erläutert"
+                score: 9
+                explanation: "Stubbed analysis."
         feedback:
           type: string
           nullable: true

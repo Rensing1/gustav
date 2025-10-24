@@ -946,3 +946,41 @@ async def test_sections_not_found_has_private_cache_header():
         )
 
     assert res.status_code == 404
+    assert res.headers.get("Cache-Control") == "private, max-age=0"
+
+@pytest.mark.anyio
+async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
+    """Pagination clamps limit to <=100 and offset to >=0."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        # Create two attempts
+        for idx in (1, 2):
+            resp = await client.post(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+                headers={"Idempotency-Key": f"clamp-{idx}"},
+                json={"kind": "text", "text_body": f"Seite {idx}"},
+            )
+            assert resp.status_code == 201
+
+        # Negative offset should behave like 0 and return the latest
+        resp1 = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 1, "offset": -5},
+        )
+        assert resp1.status_code == 200
+        items1 = resp1.json()
+        assert isinstance(items1, list) and len(items1) == 1
+        assert items1[0]["attempt_nr"] == 2
+
+        # Huge limit should be clamped and with offset 1 returns the earlier attempt
+        resp2 = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 999, "offset": 1},
+        )
+        assert resp2.status_code == 200
+        items2 = resp2.json()
+        assert isinstance(items2, list) and len(items2) == 1
+        assert items2[0]["attempt_nr"] == 1

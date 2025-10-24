@@ -183,7 +183,7 @@ class DBLearningRepo:
                     "sha256": row[8],
                     "alt_text": row[9],
                     "position": int(row[10]) if row[10] is not None else None,
-                    "created_at": row[12],
+                    "created_at": row[11],
                     "updated_at": row[12],
                 }
             )
@@ -565,6 +565,6 @@ class DBLearningRepo:
             "analysis_json": analysis,
             "feedback": row[10],
             "error_code": row[11],
-            "created_at": row[12],
+            "created_at": row[11],
             "completed_at": row[13],
         }

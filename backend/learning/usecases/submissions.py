@@ -10,6 +10,17 @@ class LearningSubmissionRepoProtocol(Protocol):
     def create_submission(self, data: SubmissionInput) -> dict:
         ...
 
+    def list_submissions(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_id: str,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        ...
+
 
 @dataclass
 class CreateSubmissionInput:
@@ -63,4 +74,42 @@ class CreateSubmissionUseCase:
                 sha256=req.sha256,
                 idempotency_key=req.idempotency_key,
             )
+        )
+
+
+@dataclass
+class ListSubmissionsInput:
+    course_id: str
+    task_id: str
+    student_sub: str
+    limit: int
+    offset: int
+
+
+class ListSubmissionsUseCase:
+    def __init__(self, repo: LearningSubmissionRepoProtocol) -> None:
+        self._repo = repo
+
+    def execute(self, req: ListSubmissionsInput) -> list[dict]:
+        """Return the student's submissions for a task with safe pagination.
+
+        Intent:
+            Encapsulate pagination bounds and stay unaware of FastAPI/HTTP.
+
+        Behavior:
+            - Clamp limit to 1..100 and offset to >= 0.
+            - Delegate to the repository which enforces membership + visibility.
+
+        Permissions:
+            Same as create: caller must be an enrolled student with visibility
+            to the released task. Violations surface as PermissionError/LookupError.
+        """
+        limit = max(1, min(req.limit, 100))
+        offset = max(0, req.offset)
+        return self._repo.list_submissions(
+            student_sub=req.student_sub,
+            course_id=req.course_id,
+            task_id=req.task_id,
+            limit=limit,
+            offset=offset,
         )

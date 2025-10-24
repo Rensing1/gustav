@@ -751,11 +751,52 @@ components:
           enum: [pending, completed, error]
         analysis_json:
           type: object
-          additionalProperties: true
           nullable: true
-        feedback_md:
+          description: Synthetic or model-provided analysis payload; null while analysis is pending.
+          required: [text, scores]
+          additionalProperties: false
+          properties:
+            text:
+              type: string
+              description: Text that was analysed (submitted content or OCR output).
+            length:
+              type: integer
+              minimum: 0
+              description: Optional character count of the analysed text.
+            scores:
+              type: array
+              description: Per-criterion scoring result shown to learners.
+              items:
+                type: object
+                required: [criterion, score]
+                additionalProperties: false
+                properties:
+                  criterion:
+                    type: string
+                    description: Display name of the rubric criterion.
+                  score:
+                    type: integer
+                    minimum: 0
+                    maximum: 10
+                    description: Score between 0 and 10.
+                  explanation:
+                    type: string
+                    nullable: true
+                    description: Short explanation helping students understand the score.
+          example:
+            text: "Antwort 1"
+            length: 9
+            scores:
+              - criterion: "Graph korrekt"
+                score: 8
+                explanation: "Stubbed analysis."
+              - criterion: "Steigung erläutert"
+                score: 9
+                explanation: "Stubbed analysis."
+        feedback:
           type: string
           nullable: true
+          description: Human-readable formative feedback for the learner.
         error_code:
           type: string
           nullable: true
@@ -871,6 +912,106 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions:
+    get:
+      tags: [Learning]
+      summary: List submissions for the current student (most recent first)
+      description: Returns submissions created by the authenticated student for the specified task, newest first.
+      operationId: listLearningSubmissions
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Maximum number of submissions to return (capped at 100).
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Offset to start listing submissions.
+      responses:
+        '200':
+          description: Submissions visible to the student.
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearningSubmission'
+        '400':
+          description: Invalid input (e.g., malformed UUID or pagination parameter)
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (student not enrolled in the course)
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or task not found, or not released to the student
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags: [Learning]
       summary: Create a new submission for a task within a course
@@ -878,7 +1019,8 @@ paths:
         Accepts text submissions directly or stores metadata for an already uploaded image.
         Duplicate requests can be avoided using the optional Idempotency-Key header.
         Security: Requests must be same-origin when sent from a browser; cross-site
-        requests with a foreign `Origin` are rejected with 403.
+        requests with a foreign `Origin` are rejected with 403. When `Origin` is
+        absent (some browsers), the server falls back to validating the `Referer` origin.
       operationId: createLearningSubmission
       security:
         - cookieAuth: []
@@ -919,6 +1061,7 @@ paths:
                     text_body:
                       type: string
                       minLength: 1
+                      maxLength: 10000
                 - type: object
                   required: [kind, storage_key, mime_type, size_bytes, sha256]
                   properties:

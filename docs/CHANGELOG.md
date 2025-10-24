@@ -1,8 +1,20 @@
 # Changelog
 
 ## Unreleased
+- fix(api/learning): Blank text submissions now return 400 detail=invalid_input (contract-aligned); add tests. Enforce `text_body` maxLength=10000 (contract updated).
+- security(csrf): When not trusting proxy, CSRF origin check no longer reads Host header; derives origin strictly from ASGI URL.
+- consistency(api/learning): Use ALLOWED_IMAGE_MIME constant; delegate sections pagination clamping to use case only.
+- fix(learning): Map `created_at` correctly in submission DTO (row[12]); align list_submissions route to reuse pagination clamp helpers.
+- fix(learning): Correct materials created_at mapping; add pagination clamp tests and section 404 cache header assert.
 - security(learning): SECURITY DEFINER Funktionen gehärtet (`search_path = pg_catalog, public`), vollqualifizierte `public.*`-Objekte.
 - security(csrf): Same‑Origin vertraut `X‑Forwarded-*` nur mit `GUSTAV_TRUST_PROXY=true`.
+- security(csrf): Fallback auf `Referer` bei fehlendem `Origin`; Tests ergänzt. Berücksichtigt `X‑Forwarded‑Port` beim Proxy‑Trust.
+- fix(api/learning): Include `storage_key` in submission responses (image) and add tests; CSRF origin resolver now supports `X-Forwarded-Port` when proxy trust is enabled.
+- consistency(api/learning): storage_key‑Regex zentralisiert; doppelte Pagination‑Clamps in Route entfernt (Use Case clamped).
+- feat(api/learning): Add GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions with student-scoped history and cache headers.
+- feat(api/learning): Submissions now return structured `analysis_json` (text, length, scores[]) and `feedback`; synchronous stubs fill data for text/image attempts.
+- docs(learning): Reference updates for history endpoint, analysis_json structure, and `.env.example` guidance.
+- env: `.env.example` documents `GUSTAV_TRUST_PROXY=true` for reverse-proxy deployments.
 - devops: `docker-compose.yml` setzt `GUSTAV_TRUST_PROXY=true` für den `web`‑Dienst (Betrieb hinter Caddy).
 - docs: DSN‑Auflösung (Learning‑Repo) ergänzt; Terminologie‑Hinweis `student_sub` (API) ≙ `student_id` (DB) dokumentiert.
 - security(db/learning): Add CHECK constraints for `learning_submissions` (idempotency_key ≤ 64; kind‑specific field requirements).

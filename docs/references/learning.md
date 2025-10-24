@@ -8,9 +8,15 @@ Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchs
   - 200 `[{ section { id, title, position }, materials[], tasks[] }]`, 401/403/404.
   - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
 
+- `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
+  - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
+  - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).
+  - 200 `[{ id, attempt_nr, kind, storage_key?, analysis_status, analysis_json, feedback, created_at, completed_at, ... }]`, 400/401/403/404.
+
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`
   - Text‑Abgabe: `{ kind: 'text', text_body }`
   - Bild‑Abgabe: `{ kind: 'image', storage_key, mime_type, size_bytes, sha256 }`
+  - Validierung: Leerer `text_body` führt zu `400 detail=invalid_input`; maximale Länge `10000` Zeichen; MIME‑Typen nur `image/jpeg` und `image/png`.
   - Optionaler Header: `Idempotency-Key` (≤ 64 Zeichen; Dup‑Vermeidung bei Retries; gleiche Antwort, keine Doppelanlage)
   - Prüft: Mitgliedschaft, Release, `max_attempts`, CSRF (Same-Origin bei Browsern). 201 `Submission` (MVP synchron), 400/401/403/404.
 
@@ -26,6 +32,7 @@ Fehlercodes (Beispiele):
 - Submissions: `supabase/migrations/20251023093409_learning_submissions.sql`
   - Tabelle `public.learning_submissions` (immutable Entries, Attempt-Zähler, optionale Storage-Metadaten)
   - Indizes: `(course_id, task_id, student_sub)`, `created_at desc`, `student_sub/task_id/created_at desc`
+  - JSON-Feld `analysis_json` enthält MVP-Stubs `{ text, length, scores[] }`; Spalte `feedback_md` bleibt im Schema, wird im API-Layer als `feedback` ausgeliefert.
 - Helper-Funktionen: `supabase/migrations/20251023093417_learning_helpers.sql`
   - `hash_course_task_student`, `next_attempt_nr`, `check_task_visible_to_student`
   - `get_released_sections/materials/tasks_for_student`, `get_task_metadata_for_student`
@@ -52,18 +59,24 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Fehlersemantik: 404 bei nicht freigegebenen/fremden Ressourcen, um keine Existenzinformationen zu leaken.
 - Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, max-age=0`.
 - Fehlerantworten: 400/401/403/404 der Learning‑Endpoints senden ebenfalls `Cache-Control: private, max-age=0`.
-- Submissions: Storage-Metadaten werden nur entgegengenommen, nicht erneut ausgegeben; Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
+- Submissions: Storage-Metadaten werden bei Bildabgaben geprüft; `storage_key` wird in API‑Antworten zurückgegeben (nur für `kind=image`). Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
 - Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
-- CSRF: Zusätzlicher Same‑Origin‑Check (nur wenn `Origin` gesetzt ist). Nicht‑Browser‑Clients bleiben unverändert (kein `Origin`).
-  Reverse‑Proxy‑Header (`X‑Forwarded‑Proto`/`X‑Forwarded‑Host`) werden nur berücksichtigt, wenn `GUSTAV_TRUST_PROXY=true` gesetzt ist (z. B. hinter Caddy/Nginx). Ohne diese Variable werden Forwarded‑Header ignoriert, um Header‑Spoofing zu vermeiden.
+- CSRF: Same‑Origin‑Prüfung nutzt `Origin`, fällt bei fehlendem `Origin` auf `Referer` zurück (nur Origin‑Teil, Pfad ignoriert). Nicht‑Browser‑Clients bleiben unverändert (keine Header).
+  Reverse‑Proxy‑Header (`X‑Forwarded‑Proto`/`X‑Forwarded‑Host`/`X‑Forwarded‑Port`) werden nur berücksichtigt, wenn `GUSTAV_TRUST_PROXY=true` gesetzt ist (z. B. hinter Caddy/Nginx). Ohne diese Variable werden Forwarded‑Header ignoriert, um Header‑Spoofing zu vermeiden.
 - DB‑Funktionen (SECURITY DEFINER): Alle Helfer (`get_released_*`, `check_task_visible_to_student`, `next_attempt_nr`) verwenden gehärtete `search_path`‑Einstellungen (`pg_catalog, public`) und vollqualifizierte Tabellennamen, um Hijacking über fremde Schemas zu verhindern.
 - Logging: Keine Payload-Inhalte für Submissions in Standard-Logs.
+
+### `LearningSubmission` (API)
+- `analysis_status`: `pending | completed | error` — MVP liefert immer `completed`.
+- `analysis_json`: Struktur `{ text: string, length: number, scores: [{ criterion, score (0..10), explanation }] }`. Für Bildabgaben liefert der OCR-Stub ein Platzhalter-Transkript. Hinweis: Im MVP ist dieses Feld nie `null` (da synchrones Stub‑Scoring), auch wenn das Schema `nullable: true` für spätere asynchrone Varianten zulässt.
+- `feedback`: Kurztext für formatives Feedback (Stub). Später ersetzt durch echte KI-Ausgabe.
+– `created_at`: RFC3339‑Zeitstempel in UTC mit explizitem `+00:00`‑Offset (z. B. `2025-10-23T09:45:00+00:00`).
 
 ## Architektur & Adapter
 - Web‑Adapter: `backend/web/routes/learning.py`
 - Repo (DB): `backend/learning/repo_db.py` (psycopg3)
 - Use‑Cases: `backend/learning/usecases/*`
-- Analyse‑Adapter: `backend/learning/analysis_adapter.py` (MVP: synchroner Stub; später DSPy/Ollama/vllm/llama.cpp/lemonade)
+- Analyse‑Stub: aktuell direkt im Repo (`_build_analysis_payload` in `backend/learning/repo_db.py`); spätere Iteration ersetzt dies durch echte KI-Adapter (DSPy/Ollama/vllm/llama.cpp/lemonade).
 - Storage‑Adapter: Re‑Use `teaching.storage_supabase.SupabaseStorageAdapter` mit separatem Prefix (z. B. `submissions/`).
  - Asynchron: Einfacher Worker‑Prozess/Container mit Claim‑Loop (`FOR UPDATE SKIP LOCKED`), getrennte OCR‑ und Analyse‑Jobs möglich.
 

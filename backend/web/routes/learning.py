@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 import re
 from typing import Any
 from uuid import UUID
@@ -16,10 +14,22 @@ from backend.learning.usecases.sections import ListSectionsInput, ListSectionsUs
 from backend.learning.usecases.submissions import (
     CreateSubmissionInput,
     CreateSubmissionUseCase,
+    ListSubmissionsInput,
+    ListSubmissionsUseCase,
 )
 
 
 learning_router = APIRouter(tags=["Learning"])
+
+# Compiled pattern for path-like storage keys used in image submissions.
+# Rules:
+# - first char: [a-z0-9]
+# - allowed chars: lower-case letters, digits, underscore, dot, slash, dash
+# - forbid any ".." segment (defense-in-depth against traversal-like patterns)
+STORAGE_KEY_RE = re.compile(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}")
+
+# Whitelist for image MIME types accepted by the submissions endpoint.
+ALLOWED_IMAGE_MIME: set[str] = {"image/jpeg", "image/png"}
 
 
 def _cache_headers() -> dict[str, str]:
@@ -42,17 +52,16 @@ def _require_student(request: Request):
 
 
 def _is_same_origin(request: Request) -> bool:
-    """CSRF defense-in-depth: verify `Origin` matches server origin.
+    """CSRF defense-in-depth: verify same-origin via Origin or Referer.
 
-    - If `Origin` header is absent: allow (non-browser clients).
-    - If present: compare scheme, host, and effective port against server
-      origin derived from `X-Forwarded-Proto`/`X-Forwarded-Host` (if present)
-      or FastAPI's request URL and Host header. Ports default to 80/443 when
-      not explicitly specified.
+    Behavior:
+    - If `Origin` header is present, require exact match of scheme/host/port
+      vs. server origin (proxy-aware when `GUSTAV_TRUST_PROXY=true`).
+    - Else if `Referer` header is present, apply the same comparison using the
+      referer's origin (path is ignored).
+    - Else (no headers): allow to avoid breaking non-browser clients.
     """
     origin_val = request.headers.get("origin")
-    if not origin_val:
-        return True
     try:
         from urllib.parse import urlparse
         import os
@@ -93,25 +102,35 @@ def _is_same_origin(request: Request) -> bool:
                 else:
                     host = (xf_host or (request.url.hostname or "")).lower()
                     port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
+                xf_port_raw = request.headers.get("x-forwarded-port") or ""
+                if xf_port_raw:
+                    try:
+                        port = int(xf_port_raw.split(",")[0].strip())
+                    except Exception:
+                        port = 443 if scheme == "https" else 80
                 return scheme, host, port
 
-            # Not trusting proxy headers: use request URL/Host only
+            # Not trusting proxy headers: derive strictly from ASGI request URL
+            # to avoid relying on potentially spoofed Host header values.
             scheme = (request.url.scheme or "http").lower()
-            host = (request.url.hostname or (request.headers.get("host") or "")).lower()
+            host = (request.url.hostname or "").lower()
             port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-            # If Host header includes a port, normalize it
-            if ":" in host:
-                host_only, port_str = host.rsplit(":", 1)
-                host = host_only
-                try:
-                    port = int(port_str)
-                except Exception:
-                    port = 443 if scheme == "https" else 80
             return scheme, host, port
 
-        o_scheme, o_host, o_port = parse_origin(origin_val)
         s_scheme, s_host, s_port = parse_server(request)
-        return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
+
+        if origin_val:
+            o_scheme, o_host, o_port = parse_origin(origin_val)
+            return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
+
+        # Fallback: use Referer when Origin is missing (some browsers)
+        referer_val = request.headers.get("referer")
+        if referer_val:
+            r_scheme, r_host, r_port = parse_origin(referer_val)
+            return (r_scheme == s_scheme) and (r_host == s_host) and (r_port == s_port)
+
+        # No Origin/Referer -> allow non-browser clients
+        return True
     except Exception:
         return False
 
@@ -137,6 +156,7 @@ def _normalize_offset(value: int) -> int:
 REPO = DBLearningRepo()
 LIST_SECTIONS_USECASE = ListSectionsUseCase(REPO)
 CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(REPO)
+LIST_SUBMISSIONS_USECASE = ListSubmissionsUseCase(REPO)
 
 # Narrow typing for test helpers without pulling framework types into use cases
 try:
@@ -161,12 +181,24 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
     def create_submission(self, data) -> dict:
         ...
 
+    def list_submissions(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_id: str,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        ...
+
 
 def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
-    global REPO, LIST_SECTIONS_USECASE, CREATE_SUBMISSION_USECASE
+    global REPO, LIST_SECTIONS_USECASE, CREATE_SUBMISSION_USECASE, LIST_SUBMISSIONS_USECASE
     REPO = repo
     LIST_SECTIONS_USECASE = ListSectionsUseCase(repo)
     CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(repo)
+    LIST_SUBMISSIONS_USECASE = ListSubmissionsUseCase(repo)
 
 
 @learning_router.get("/api/learning/courses/{course_id}/sections")
@@ -177,6 +209,14 @@ async def list_sections(
     limit: int = 50,
     offset: int = 0,
 ):
+    """List released sections for a course (student-only).
+
+    Intent:
+        Return only sections released to the authenticated student.
+
+    Permissions:
+        Caller must have the `student` role and be enrolled in the course.
+    """
     user, error = _require_student(request)
     if error:
         return error
@@ -196,8 +236,9 @@ async def list_sections(
         course_id=course_id,
         include_materials=include_materials,
         include_tasks=include_tasks,
-        limit=_normalize_limit(limit),
-        offset=_normalize_offset(offset),
+        # Clamp happens in the use case to keep adapter thin
+        limit=limit,
+        offset=offset,
     )
 
     try:
@@ -219,7 +260,11 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
     if kind == "text":
         text_body = payload.get("text_body")
         if not isinstance(text_body, str) or not text_body.strip():
-            raise ValueError("invalid_text_body")
+            # Harmonize with API contract: return generic invalid_input
+            raise ValueError("invalid_input")
+        # Optional guardrail: prevent oversized payloads from overloading DB
+        if len(text_body) > 10_000:
+            raise ValueError("invalid_input")
         return kind, {"text_body": text_body.strip()}
     else:
         # Image submissions require finalized storage metadata
@@ -236,7 +281,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         mime_type = payload.get("mime_type")
         if not isinstance(mime_type, str) or not mime_type:
             raise ValueError("invalid_image_payload")
-        if mime_type not in ("image/jpeg", "image/png"):
+        if mime_type not in ALLOWED_IMAGE_MIME:
             raise ValueError("invalid_image_payload")
         storage_key = payload.get("storage_key")
         if not isinstance(storage_key, str) or not storage_key:
@@ -245,7 +290,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         # - allow only lower-case, digits, _, ., /, -
         # - first char must be [a-z0-9]
         # - explicitly forbid any ".." sequence to avoid traversal-like patterns
-        if not re.fullmatch(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}", storage_key):
+        if not STORAGE_KEY_RE.fullmatch(storage_key):
             raise ValueError("invalid_image_payload")
         sha256 = payload.get("sha256")
         if not isinstance(sha256, str):
@@ -263,6 +308,14 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
 
 @learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
 async def create_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
+    """Create a student submission for a task.
+
+    Security:
+        Enforces same-origin using Origin or Referer; rejects cross-site POSTs.
+
+    Permissions:
+        Caller must be an enrolled student with access to the released task.
+    """
     user, error = _require_student(request)
     if error:
         return error
@@ -323,3 +376,44 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers())
 
     return JSONResponse(submission, status_code=201, headers=_cache_headers())
+
+
+@learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
+async def list_submissions(
+    request: Request,
+    course_id: str,
+    task_id: str,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """Return the caller's submission history for a task (student-only).
+
+    Pagination:
+        `limit` is clamped to 1..100 and `offset` to >= 0 by the use case.
+    """
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    try:
+        UUID(course_id)
+        UUID(task_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
+
+    input_data = ListSubmissionsInput(
+        course_id=course_id,
+        task_id=task_id,
+        student_sub=str(user.get("sub", "")),
+        limit=limit,
+        offset=offset,
+    )
+
+    try:
+        submissions = LIST_SUBMISSIONS_USECASE.execute(input_data)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers())
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers())
+
+    return JSONResponse(submissions, status_code=200, headers=_cache_headers())

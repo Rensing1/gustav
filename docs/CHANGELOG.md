@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- fix(learning): Correct materials created_at mapping; add pagination clamp tests and section 404 cache header assert.
 - security(learning): SECURITY DEFINER Funktionen gehärtet (`search_path = pg_catalog, public`), vollqualifizierte `public.*`-Objekte.
 - security(csrf): Same‑Origin vertraut `X‑Forwarded-*` nur mit `GUSTAV_TRUST_PROXY=true`.
 - fix(api/learning): Include `storage_key` in submission responses (image) and add tests; CSRF origin resolver now supports `X-Forwarded-Port` when proxy trust is enabled.

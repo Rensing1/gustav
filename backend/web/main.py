@@ -708,6 +708,119 @@ async def wissenschaft(request: Request):
     return HTMLResponse(content=layout.render())
 
 
+def build_about_content() -> str:
+    """Return HTML snippet for the placeholder about page."""
+    return """
+    <section class="page-section" aria-labelledby="about-heading">
+        <h1 id="about-heading">Über GUSTAV</h1>
+        <p class="text-muted">
+            GUSTAV ist eine offene, sichere Lernplattform. Diese Seite dient als
+            Platzhalter, bis die finale Copy aus dem UI-UX-Leitfaden übernommen wird.
+        </p>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>Clean Architecture &amp; DSGVO-Konformität</li>
+            <li>Unterrichten, Lernen, Diagnostik als Bounded Contexts</li>
+            <li>Gelebtes TDD &amp; FOSS – Code dient auch als Lernmaterial</li>
+        </ul>
+    </section>
+    """
+
+
+def build_units_placeholder() -> str:
+    """Return HTML snippet for the teacher-facing units overview placeholder."""
+    return """
+    <section class="page-section" aria-labelledby="units-heading">
+        <h1 id="units-heading">Lerneinheiten (Platzhalter)</h1>
+        <p class="text-muted">
+            Hier entsteht die Übersicht für Lehrkräfte, um Lerneinheiten zu erstellen
+            und zu verwalten. Bis die Use Cases umgesetzt sind, zeigt die Seite
+            diese erklärende Karte.
+        </p>
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">Nächste Schritte</h2>
+                <ul class="space-y-1 list-disc pl-5">
+                    <li>Lerneinheit anlegen (Titel, Zusammenfassung)</li>
+                    <li>Abschnitte hinzufügen und sortieren</li>
+                    <li>Materialien &amp; Aufgaben verknüpfen</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+    """
+
+
+@app.get("/about", response_class=HTMLResponse)
+async def about_page(request: Request):
+    """Render the public “Über GUSTAV” placeholder page.
+
+    Why:
+        Sidebar-Verlinkung und Footer sollen auf eine SSR-Seite zeigen, die sowohl
+        Voll- als auch HTMX-Responses bedient. Inhalt bleibt bewusst leicht, bis
+        finales Copywriting vorliegt.
+    Permissions:
+        Authentifizierte Nutzer (alle Rollen) – Middleware lässt Public-Route zu.
+    """
+
+    content = build_about_content()
+
+    if "HX-Request" in request.headers:
+        user = getattr(request.state, "user", None)
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
+        return HTMLResponse(content=content + sidebar_oob)
+
+    layout = Layout(
+        title="Über GUSTAV",
+        content=content,
+        user=getattr(request.state, "user", None),
+        show_nav=True,
+        show_header=True,
+        current_path=request.url.path,
+    )
+    return HTMLResponse(content=layout.render())
+
+
+@app.get("/units", response_class=HTMLResponse)
+async def units_placeholder(request: Request):
+    """Render placeholder view for teacher unit management.
+
+    Permissions:
+        Caller must be authenticated teacher; others receive a redirect to
+        the homepage (HTMX requests return a 403 fragment) to prevent students
+        from discovering Verwaltungslinks über direkte URL.
+    """
+
+    user = getattr(request.state, "user", None)
+    role = (user or {}).get("role", "").lower()
+    if role != "teacher":
+        if "HX-Request" in request.headers:
+            return HTMLResponse(
+                content="""
+                <div class="alert alert-danger" role="alert">
+                    Keine Berechtigung für diese Ansicht.
+                </div>
+                """,
+                status_code=403,
+            )
+        return RedirectResponse(url="/", status_code=303)
+
+    content = build_units_placeholder()
+
+    if "HX-Request" in request.headers:
+        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
+        return HTMLResponse(content=content + sidebar_oob)
+
+    layout = Layout(
+        title="Lerneinheiten",
+        content=content,
+        user=user,
+        show_nav=True,
+        show_header=True,
+        current_path=request.url.path,
+    )
+    return HTMLResponse(content=layout.render())
+
+
 @app.get("/health")
 async def health_check():
     """Lightweight health and runtime diagnostics.

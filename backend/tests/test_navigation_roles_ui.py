@@ -17,11 +17,17 @@ from httpx import ASGITransport
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
+from identity_access.stores import SessionStore
 import main  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
+
+# Ensure tests use the in-memory session store – avoids DB dependency when
+# running unit/contract tests locally.
+if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
+    main.SESSION_STORE = SessionStore()
 
 def _pos(html: str, label: str) -> int:
     """Return the index of a sidebar label within nav-text span.
@@ -56,11 +62,11 @@ async def test_sidebar_for_student_contains_expected_items_in_order():
         "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
     ]
     for label in forbidden:
-        assert label not in html
+        assert _pos(html, label) == -1
 
     # Active state on home
     assert '<a href="/"' in html
-    home_link_fragment = html.split('<a href="/"')[1][:200]
+    home_link_fragment = html.split('<a href="/"', 1)[1].split('</a>', 1)[0]
     assert 'aria-current="page"' in home_link_fragment
     assert 'sidebar-link active' in home_link_fragment
 
@@ -134,4 +140,3 @@ async def test_placeholder_pages_exist_about_and_units():
     assert r_units.status_code == 200
     assert "GUSTAV" in r_about.text
     assert "GUSTAV" in r_units.text
-

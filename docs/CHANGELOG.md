@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-- fix(api/learning): Blank text submissions now return 400 detail=invalid_input (contract-aligned); add test.
+- fix(api/learning): Blank text submissions now return 400 detail=invalid_input (contract-aligned); add tests. Enforce `text_body` maxLength=10000 (contract updated).
 - security(csrf): When not trusting proxy, CSRF origin check no longer reads Host header; derives origin strictly from ASGI URL.
 - consistency(api/learning): Use ALLOWED_IMAGE_MIME constant; delegate sections pagination clamping to use case only.
 - fix(learning): Map `created_at` correctly in submission DTO (row[12]); align list_submissions route to reuse pagination clamp helpers.

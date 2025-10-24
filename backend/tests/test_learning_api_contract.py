@@ -561,6 +561,26 @@ async def test_create_submission_text_body_blank_returns_invalid_input():
     assert body.get("detail") == "invalid_input"
     assert res.headers.get("Cache-Control") == "private, max-age=0"
 
+
+@pytest.mark.anyio
+async def test_create_submission_text_body_too_long_returns_invalid_input():
+    """Text submissions exceeding 10k chars must yield 400 invalid_input."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        long_text = "x" * 10001
+        res = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": long_text},
+        )
+
+    assert res.status_code == 400
+    body = res.json()
+    assert body.get("detail") == "invalid_input"
+    assert res.headers.get("Cache-Control") == "private, max-age=0"
+
 @pytest.mark.anyio
 async def test_list_submissions_history_happy_path():
     """GET submissions must return the student's attempts newest-first with analysis + feedback."""

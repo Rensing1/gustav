@@ -8,6 +8,11 @@ Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchs
   - 200 `[{ section { id, title, position }, materials[], tasks[] }]`, 401/403/404.
   - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
 
+- `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
+  - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
+  - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).
+  - 200 `[{ id, attempt_nr, kind, analysis_status, analysis_json, feedback, created_at, completed_at, ... }]`, 400/401/403/404.
+
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`
   - Text‑Abgabe: `{ kind: 'text', text_body }`
   - Bild‑Abgabe: `{ kind: 'image', storage_key, mime_type, size_bytes, sha256 }`
@@ -26,6 +31,7 @@ Fehlercodes (Beispiele):
 - Submissions: `supabase/migrations/20251023093409_learning_submissions.sql`
   - Tabelle `public.learning_submissions` (immutable Entries, Attempt-Zähler, optionale Storage-Metadaten)
   - Indizes: `(course_id, task_id, student_sub)`, `created_at desc`, `student_sub/task_id/created_at desc`
+  - JSON-Feld `analysis_json` enthält MVP-Stubs `{ text, length, scores[] }`; Spalte `feedback_md` bleibt im Schema, wird im API-Layer als `feedback` ausgeliefert.
 - Helper-Funktionen: `supabase/migrations/20251023093417_learning_helpers.sql`
   - `hash_course_task_student`, `next_attempt_nr`, `check_task_visible_to_student`
   - `get_released_sections/materials/tasks_for_student`, `get_task_metadata_for_student`
@@ -59,11 +65,16 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - DB‑Funktionen (SECURITY DEFINER): Alle Helfer (`get_released_*`, `check_task_visible_to_student`, `next_attempt_nr`) verwenden gehärtete `search_path`‑Einstellungen (`pg_catalog, public`) und vollqualifizierte Tabellennamen, um Hijacking über fremde Schemas zu verhindern.
 - Logging: Keine Payload-Inhalte für Submissions in Standard-Logs.
 
+### `LearningSubmission` (API)
+- `analysis_status`: `pending | completed | error` — MVP liefert immer `completed`.
+- `analysis_json`: Struktur `{ text: string, length: number, scores: [{ criterion, score (0..10), explanation }] }`. Für Bildabgaben liefert der OCR-Stub ein Platzhalter-Transkript.
+- `feedback`: Kurztext für formatives Feedback (Stub). Später ersetzt durch echte KI-Ausgabe.
+
 ## Architektur & Adapter
 - Web‑Adapter: `backend/web/routes/learning.py`
 - Repo (DB): `backend/learning/repo_db.py` (psycopg3)
 - Use‑Cases: `backend/learning/usecases/*`
-- Analyse‑Adapter: `backend/learning/analysis_adapter.py` (MVP: synchroner Stub; später DSPy/Ollama/vllm/llama.cpp/lemonade)
+- Analyse‑Stub: aktuell direkt im Repo (`_build_analysis_payload` in `backend/learning/repo_db.py`); spätere Iteration ersetzt dies durch echte KI-Adapter (DSPy/Ollama/vllm/llama.cpp/lemonade).
 - Storage‑Adapter: Re‑Use `teaching.storage_supabase.SupabaseStorageAdapter` mit separatem Prefix (z. B. `submissions/`).
  - Asynchron: Einfacher Worker‑Prozess/Container mit Claim‑Loop (`FOR UPDATE SKIP LOCKED`), getrennte OCR‑ und Analyse‑Jobs möglich.
 

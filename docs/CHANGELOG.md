@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- fix(learning): Map `created_at` correctly in submission DTO (row[12]); align list_submissions route to reuse pagination clamp helpers.
 - fix(learning): Correct materials created_at mapping; add pagination clamp tests and section 404 cache header assert.
 - security(learning): SECURITY DEFINER Funktionen gehärtet (`search_path = pg_catalog, public`), vollqualifizierte `public.*`-Objekte.
 - security(csrf): Same‑Origin vertraut `X‑Forwarded-*` nur mit `GUSTAV_TRUST_PROXY=true`.

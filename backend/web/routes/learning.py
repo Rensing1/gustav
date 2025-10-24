@@ -367,8 +367,8 @@ async def list_submissions(
         course_id=course_id,
         task_id=task_id,
         student_sub=str(user.get("sub", "")),
-        limit=limit,
-        offset=offset,
+        limit=_normalize_limit(limit),
+        offset=_normalize_offset(offset),
     )
 
     try:

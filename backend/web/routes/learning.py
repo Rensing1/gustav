@@ -28,6 +28,9 @@ learning_router = APIRouter(tags=["Learning"])
 # - forbid any ".." segment (defense-in-depth against traversal-like patterns)
 STORAGE_KEY_RE = re.compile(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}")
 
+# Whitelist for image MIME types accepted by the submissions endpoint.
+ALLOWED_IMAGE_MIME: set[str] = {"image/jpeg", "image/png"}
+
 
 def _cache_headers() -> dict[str, str]:
     return {"Cache-Control": "private, max-age=0"}
@@ -107,18 +110,11 @@ def _is_same_origin(request: Request) -> bool:
                         port = 443 if scheme == "https" else 80
                 return scheme, host, port
 
-            # Not trusting proxy headers: use request URL/Host only
+            # Not trusting proxy headers: derive strictly from ASGI request URL
+            # to avoid relying on potentially spoofed Host header values.
             scheme = (request.url.scheme or "http").lower()
-            host = (request.url.hostname or (request.headers.get("host") or "")).lower()
+            host = (request.url.hostname or "").lower()
             port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-            # If Host header includes a port, normalize it
-            if ":" in host:
-                host_only, port_str = host.rsplit(":", 1)
-                host = host_only
-                try:
-                    port = int(port_str)
-                except Exception:
-                    port = 443 if scheme == "https" else 80
             return scheme, host, port
 
         s_scheme, s_host, s_port = parse_server(request)
@@ -240,8 +236,9 @@ async def list_sections(
         course_id=course_id,
         include_materials=include_materials,
         include_tasks=include_tasks,
-        limit=_normalize_limit(limit),
-        offset=_normalize_offset(offset),
+        # Clamp happens in the use case to keep adapter thin
+        limit=limit,
+        offset=offset,
     )
 
     try:
@@ -263,7 +260,11 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
     if kind == "text":
         text_body = payload.get("text_body")
         if not isinstance(text_body, str) or not text_body.strip():
-            raise ValueError("invalid_text_body")
+            # Harmonize with API contract: return generic invalid_input
+            raise ValueError("invalid_input")
+        # Optional guardrail: prevent oversized payloads from overloading DB
+        if len(text_body) > 10_000:
+            raise ValueError("invalid_input")
         return kind, {"text_body": text_body.strip()}
     else:
         # Image submissions require finalized storage metadata
@@ -280,7 +281,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         mime_type = payload.get("mime_type")
         if not isinstance(mime_type, str) or not mime_type:
             raise ValueError("invalid_image_payload")
-        if mime_type not in ("image/jpeg", "image/png"):
+        if mime_type not in ALLOWED_IMAGE_MIME:
             raise ValueError("invalid_image_payload")
         storage_key = payload.get("storage_key")
         if not isinstance(storage_key, str) or not storage_key:

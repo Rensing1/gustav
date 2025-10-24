@@ -672,23 +672,24 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
     except Exception:  # pragma: no cover - safety
         pytest.skip("psycopg not available")
 
-        dsn = os.getenv("RLS_TEST_SERVICE_DSN")
-        if not dsn:
-            pytest.skip("RLS_TEST_SERVICE_DSN required to rewrite timestamps for ordering test")
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    update public.learning_submissions
-                    set created_at = (
-                        select min(created_at)
-                        from public.learning_submissions
-                        where student_sub = %s and task_id = %s
-                    )
+    # Ensure both attempts share the same timestamp to test stable fallback ordering
+    dsn = os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("RLS_TEST_SERVICE_DSN required to rewrite timestamps for ordering test")
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                set created_at = (
+                    select min(created_at)
+                    from public.learning_submissions
                     where student_sub = %s and task_id = %s
-                    """,
-                    (fixture.student_sub, fixture.task["id"], fixture.student_sub, fixture.task["id"]),
                 )
+                where student_sub = %s and task_id = %s
+                """,
+                (fixture.student_sub, fixture.task["id"], fixture.student_sub, fixture.task["id"]),
+            )
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -701,6 +702,76 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
     payload = resp.json()
     assert payload[0]["attempt_nr"] == 2
     assert payload[1]["attempt_nr"] == 1
+
+
+@pytest.mark.anyio
+async def test_create_submission_rejects_cross_site_via_referer_when_origin_missing():
+    """CSRF defense: POST with foreign Referer (no Origin) must be rejected."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Referer": "http://evil.local/some/path"},
+            json={"kind": "text", "text_body": "x"},
+        )
+
+    assert resp.status_code == 403
+    assert resp.json().get("detail") == "csrf_violation"
+    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_create_submission_allows_same_origin_via_forwarded_when_trust_proxy_true():
+    """CSRF: when proxy is trusted, X-Forwarded-* defines the server origin."""
+
+    fixture = await _prepare_learning_fixture()
+
+    prev = os.environ.get("GUSTAV_TRUST_PROXY")
+    os.environ["GUSTAV_TRUST_PROXY"] = "true"
+    try:
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", fixture.student_session_id)
+            resp = await client.post(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+                headers={
+                    "Origin": "https://app.example",
+                    "X-Forwarded-Proto": "https",
+                    "X-Forwarded-Host": "app.example",
+                },
+                json={"kind": "text", "text_body": "x"},
+            )
+    finally:
+        if prev is None:
+            os.environ.pop("GUSTAV_TRUST_PROXY", None)
+        else:
+            os.environ["GUSTAV_TRUST_PROXY"] = prev
+
+    assert resp.status_code == 201
+
+
+@pytest.mark.anyio
+async def test_analysis_json_shape_has_expected_keys_only():
+    """analysis_json must only contain keys defined by the contract."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "analysis-shape"},
+            json={"kind": "text", "text_body": "Antwort"},
+        )
+
+    assert resp.status_code == 201
+    payload = resp.json()
+    analysis = payload.get("analysis_json")
+    assert isinstance(analysis, dict)
+    allowed = {"text", "length", "scores"}
+    assert set(analysis.keys()).issubset(allowed)
 
 
 @pytest.mark.anyio

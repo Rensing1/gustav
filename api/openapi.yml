@@ -1019,7 +1019,8 @@ paths:
         Accepts text submissions directly or stores metadata for an already uploaded image.
         Duplicate requests can be avoided using the optional Idempotency-Key header.
         Security: Requests must be same-origin when sent from a browser; cross-site
-        requests with a foreign `Origin` are rejected with 403.
+        requests with a foreign `Origin` are rejected with 403. When `Origin` is
+        absent (some browsers), the server falls back to validating the `Referer` origin.
       operationId: createLearningSubmission
       security:
         - cookieAuth: []

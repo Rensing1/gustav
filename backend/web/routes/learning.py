@@ -21,6 +21,13 @@ from backend.learning.usecases.submissions import (
 
 learning_router = APIRouter(tags=["Learning"])
 
+# Compiled pattern for path-like storage keys used in image submissions.
+# Rules:
+# - first char: [a-z0-9]
+# - allowed chars: lower-case letters, digits, underscore, dot, slash, dash
+# - forbid any ".." segment (defense-in-depth against traversal-like patterns)
+STORAGE_KEY_RE = re.compile(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}")
+
 
 def _cache_headers() -> dict[str, str]:
     return {"Cache-Control": "private, max-age=0"}
@@ -42,17 +49,16 @@ def _require_student(request: Request):
 
 
 def _is_same_origin(request: Request) -> bool:
-    """CSRF defense-in-depth: verify `Origin` matches server origin.
+    """CSRF defense-in-depth: verify same-origin via Origin or Referer.
 
-    - If `Origin` header is absent: allow (non-browser clients).
-    - If present: compare scheme, host, and effective port against server
-      origin derived from `X-Forwarded-Proto`/`X-Forwarded-Host` (if present)
-      or FastAPI's request URL and Host header. Ports default to 80/443 when
-      not explicitly specified.
+    Behavior:
+    - If `Origin` header is present, require exact match of scheme/host/port
+      vs. server origin (proxy-aware when `GUSTAV_TRUST_PROXY=true`).
+    - Else if `Referer` header is present, apply the same comparison using the
+      referer's origin (path is ignored).
+    - Else (no headers): allow to avoid breaking non-browser clients.
     """
     origin_val = request.headers.get("origin")
-    if not origin_val:
-        return True
     try:
         from urllib.parse import urlparse
         import os
@@ -115,9 +121,20 @@ def _is_same_origin(request: Request) -> bool:
                     port = 443 if scheme == "https" else 80
             return scheme, host, port
 
-        o_scheme, o_host, o_port = parse_origin(origin_val)
         s_scheme, s_host, s_port = parse_server(request)
-        return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
+
+        if origin_val:
+            o_scheme, o_host, o_port = parse_origin(origin_val)
+            return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
+
+        # Fallback: use Referer when Origin is missing (some browsers)
+        referer_val = request.headers.get("referer")
+        if referer_val:
+            r_scheme, r_host, r_port = parse_origin(referer_val)
+            return (r_scheme == s_scheme) and (r_host == s_host) and (r_port == s_port)
+
+        # No Origin/Referer -> allow non-browser clients
+        return True
     except Exception:
         return False
 
@@ -196,6 +213,14 @@ async def list_sections(
     limit: int = 50,
     offset: int = 0,
 ):
+    """List released sections for a course (student-only).
+
+    Intent:
+        Return only sections released to the authenticated student.
+
+    Permissions:
+        Caller must have the `student` role and be enrolled in the course.
+    """
     user, error = _require_student(request)
     if error:
         return error
@@ -264,7 +289,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         # - allow only lower-case, digits, _, ., /, -
         # - first char must be [a-z0-9]
         # - explicitly forbid any ".." sequence to avoid traversal-like patterns
-        if not re.fullmatch(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}", storage_key):
+        if not STORAGE_KEY_RE.fullmatch(storage_key):
             raise ValueError("invalid_image_payload")
         sha256 = payload.get("sha256")
         if not isinstance(sha256, str):
@@ -282,6 +307,14 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
 
 @learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
 async def create_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
+    """Create a student submission for a task.
+
+    Security:
+        Enforces same-origin using Origin or Referer; rejects cross-site POSTs.
+
+    Permissions:
+        Caller must be an enrolled student with access to the released task.
+    """
     user, error = _require_student(request)
     if error:
         return error
@@ -352,7 +385,11 @@ async def list_submissions(
     limit: int = 20,
     offset: int = 0,
 ):
-    """Return the caller's submission history for a task (student-only)."""
+    """Return the caller's submission history for a task (student-only).
+
+    Pagination:
+        `limit` is clamped to 1..100 and `offset` to >= 0 by the use case.
+    """
     user, error = _require_student(request)
     if error:
         return error
@@ -367,8 +404,8 @@ async def list_submissions(
         course_id=course_id,
         task_id=task_id,
         student_sub=str(user.get("sub", "")),
-        limit=_normalize_limit(limit),
-        offset=_normalize_offset(offset),
+        limit=limit,
+        offset=offset,
     )
 
     try:

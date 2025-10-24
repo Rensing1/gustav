@@ -8,6 +8,8 @@ import logging
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+import secrets
+from typing import Optional
 
 from components import (
     Layout,
@@ -208,7 +210,8 @@ def load_oidc_config() -> OIDCConfig:
     base_url = os.getenv("KC_BASE_URL") or os.getenv("KC_BASE") or "http://localhost:8080"
     realm = os.getenv("KC_REALM", "gustav")
     client_id = os.getenv("KC_CLIENT_ID", "gustav-web")
-    redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8100/auth/callback")
+    # Prefer explicit REDIRECT_URI. Default aligns with reverse-proxy dev host app.localhost.
+    redirect_uri = os.getenv("REDIRECT_URI", "http://app.localhost:8100/auth/callback")
     public_base = os.getenv("KC_PUBLIC_BASE_URL", base_url)
     return OIDCConfig(
         base_url=base_url,
@@ -346,6 +349,48 @@ async def auth_enforcement(request: Request, call_next):
     role = _primary_role(rec.roles)
     request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": role, "roles": rec.roles}
     return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Attach security headers to every response (HTML and JSON).
+
+    Why:
+        Consistent baseline security across SSR and API responses without
+        interfering with endpoint-specific Cache-Control semantics.
+
+    Behavior:
+        - Sets CSP with self-only sources and no framing beyond same-origin.
+        - Adds X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+          and a minimal Permissions-Policy.
+        - Does NOT modify Cache-Control.
+    """
+    resp = await call_next(request)
+
+    # Content-Security-Policy: keep sources restricted to self
+    csp = " ".join(
+        [
+            "default-src 'self'",
+            "img-src 'self' data:",
+            "style-src 'self'",
+            "script-src 'self'",
+            "base-uri 'none'",
+            "frame-ancestors 'self'",
+        ]
+    )
+    resp.headers.setdefault("Content-Security-Policy", csp)
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    resp.headers.setdefault("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+
+    # Only in production, advertise HSTS (without preload to keep rollout safe)
+    try:
+        if SETTINGS.environment == "prod":
+            resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    except Exception:
+        pass
+    return resp
 
 
 def build_home_content() -> str:
@@ -780,45 +825,411 @@ async def about_page(request: Request):
     return HTMLResponse(content=layout.render())
 
 
-@app.get("/units", response_class=HTMLResponse)
-async def units_placeholder(request: Request):
-    """Render placeholder view for teacher unit management.
+def _render_units_page_html(request: Request, items: list[dict], *, csrf_token: str, limit: int, offset: int, has_next: bool, error: str | None = None) -> str:
+    """Build the units list HTML with inline create form (no <script> tags).
+
+    Why:
+        Mirror /courses SSR but for Lerneinheiten; minimal and secure.
 
     Permissions:
-        Caller must be authenticated teacher; others receive a redirect to
-        the homepage (HTMX requests return a 403 fragment) to prevent students
-        from discovering Verwaltungslinks über direkte URL.
+        Only called after role check in the handler.
+    """
+    from components.base import Component
+    from components import TextInputField, SubmitButton
+
+    lis = []
+    for u in items:
+        title = Component.escape(u.get("title"))
+        lis.append(f'<li class="unit-item">{title}</li>')
+    list_html = "<ul class=\"unit-list\">" + "\n".join(lis) + "</ul>" if lis else (
+        """
+        <div class="empty-state" role="note">
+            <p>Noch keine Lerneinheiten. Lege deine erste Einheit an.</p>
+        </div>
+        """
+    )
+
+    title_field = TextInputField("title", "Titel der Lerneinheit", required=True)
+    field_html = title_field.render(value="")
+    error_html = f'<div class="form-error" role="alert">Fehler: {Component.escape(error)}</div>' if error else ""
+    submit_btn = SubmitButton("Lerneinheit anlegen")
+    form_html = f"""
+        <form method="post" action="/units" class="unit-create-form">
+            <input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">
+            {field_html}
+            {error_html}
+            <div class="form-actions">{submit_btn.render()}</div>
+        </form>
     """
 
+    if offset > 0:
+        prev_offset = max(0, offset - limit)
+        prev_html = f'<a data-testid="pager-prev" href="/units?limit={limit}&offset={prev_offset}">Zurück</a>'
+    else:
+        prev_html = '<span data-testid="pager-prev" aria-disabled="true">Zurück</span>'
+    next_html = f'<a data-testid="pager-next" href="/units?limit={limit}&offset={offset + limit}">Weiter</a>' if has_next else ""
+    pager_html = f'<nav class="pager" aria-label="Seiten"><div class="pager__inner">{prev_html} {next_html}</div></nav>'
+
+    return f"""<!DOCTYPE html>
+<html lang=\"de\">
+<head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>Lerneinheiten - GUSTAV</title>
+    <link rel=\"stylesheet\" href=\"/static/css/gustav.css?v=5\">
+    <meta http-equiv=\"X-Content-Type-Options\" content=\"nosniff\">
+    <meta http-equiv=\"X-Frame-Options\" content=\"SAMEORIGIN\">
+    <meta name=\"description\" content=\"Lerneinheitenverwaltung für Lehrkräfte\">
+    <!-- client-side scripts intentionally omitted in this view -->
+</head>
+<body>
+    <main id=\"main-content\" class=\"main-content\" role=\"main\">
+        <section class=\"page-section\" aria-labelledby=\"units-heading\">
+            <h1 id=\"units-heading\">Lerneinheiten</h1>
+            <div class=\"create-form\">{form_html}</div>
+            <div class=\"list-block\">{list_html}</div>
+            {pager_html}
+        </section>
+    </main>
+    
+</body>
+</html>"""
+
+
+@app.get("/units", response_class=HTMLResponse)
+async def units_index(request: Request):
+    """SSR list + create form for teacher units (PRG pattern).
+
+    Permissions:
+        Caller must be a teacher; non-teachers are redirected to "/" (303).
+    """
     user = getattr(request.state, "user", None)
     role = (user or {}).get("role", "").lower()
     if role != "teacher":
-        if "HX-Request" in request.headers:
-            return HTMLResponse(
-                content="""
-                <div class="alert alert-danger" role="alert">
-                    Keine Berechtigung für diese Ansicht.
-                </div>
-                """,
-                status_code=403,
-            )
         return RedirectResponse(url="/", status_code=303)
 
-    content = build_units_placeholder()
+    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
 
-    if "HX-Request" in request.headers:
-        sidebar_oob = Navigation(user, request.url.path).render_aside(oob=True)
-        return HTMLResponse(content=content + sidebar_oob)
+    try:
+        # Use internal API for consistency
+        import httpx
+        from httpx import ASGITransport
+        params = {"limit": str(limit), "offset": str(offset)}
+        async with httpx.AsyncClient(transport=ASGITransport(app=request.app), base_url="http://internal") as c:
+            sid = _get_session_id(request)
+            if sid:
+                c.cookies.set(SESSION_COOKIE_NAME, sid)
+            api_res = await c.get("/api/teaching/units", params=params)
+            items = api_res.json() if api_res.status_code == 200 else []
+        vm = [{"id": it.get("id"), "title": it.get("title", "") or ""} for it in items]
+        has_next = len(vm) >= limit
+    except Exception:
+        vm = []
+        has_next = False
 
-    layout = Layout(
-        title="Lerneinheiten",
-        content=content,
-        user=user,
-        show_nav=True,
-        show_header=True,
-        current_path=request.url.path,
+    sid = _get_session_id(request) or ""
+    token = _get_or_create_csrf_token(sid)
+    html = _render_units_page_html(request, vm, csrf_token=token, limit=limit, offset=offset, has_next=has_next)
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units", response_class=HTMLResponse)
+async def units_create(request: Request):
+    """Create unit via SSR form with PRG.
+
+    Security:
+        Requires synchronizer CSRF token bound to session.
+    """
+    user = getattr(request.state, "user", None)
+    role = (user or {}).get("role", "").lower()
+    if role != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+
+    form = await request.form()
+    title = (str(form.get("title")) if form.get("title") is not None else "").strip()
+    csrf_value = form.get("csrf_token")
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, csrf_value):
+        return HTMLResponse(content="", status_code=403)
+
+    if not title:
+        limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
+        token = _get_or_create_csrf_token(sid or "")
+        html = _render_units_page_html(
+            request,
+            items=[],
+            csrf_token=token,
+            limit=limit,
+            offset=offset,
+            has_next=False,
+            error="invalid_title",
+        )
+        return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
+
+    try:
+        from routes import teaching as teaching_routes
+        sub = (user or {}).get("sub") or ""
+        teaching_routes.REPO.create_unit(title=title, summary=None, author_id=sub)
+    except Exception:
+        limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
+        token = _get_or_create_csrf_token(sid or "")
+        html = _render_units_page_html(
+            request,
+            items=[],
+            csrf_token=token,
+            limit=limit,
+            offset=offset,
+            has_next=False,
+            error="backend_error",
+        )
+        return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
+
+    return RedirectResponse(url="/units", status_code=302)
+
+
+# --- Teaching UI: /courses (SSR) -----------------------------------------------
+
+# Minimal synchronizer CSRF: per-session token cached server-side.
+_CSRF_BY_SESSION: dict[str, str] = {}
+
+
+def _get_session_id(request: Request) -> Optional[str]:
+    return request.cookies.get(SESSION_COOKIE_NAME)
+
+
+def _get_or_create_csrf_token(session_id: str) -> str:
+    token = _CSRF_BY_SESSION.get(session_id)
+    if not token:
+        token = secrets.token_urlsafe(24)
+        _CSRF_BY_SESSION[session_id] = token
+    return token
+
+
+def _validate_csrf(session_id: Optional[str], form_value: Optional[str]) -> bool:
+    if not session_id or not form_value:
+        return False
+    expected = _CSRF_BY_SESSION.get(session_id)
+    if not expected:
+        return False
+    try:
+        import hmac
+
+        return hmac.compare_digest(expected, str(form_value))
+    except Exception:
+        return False
+
+
+def _clamp_pagination(limit_raw: str | None, offset_raw: str | None) -> tuple[int, int]:
+    try:
+        limit = int(limit_raw) if limit_raw is not None else 20
+    except Exception:
+        limit = 20
+    try:
+        offset = int(offset_raw) if offset_raw is not None else 0
+    except Exception:
+        offset = 0
+    if limit < 1:
+        limit = 1
+    if limit > 50:
+        limit = 50
+    if offset < 0:
+        offset = 0
+    return limit, offset
+
+
+def _render_courses_page_html(request: Request, items: list[dict], *, csrf_token: str, limit: int, offset: int, has_next: bool, error: str | None = None) -> str:
+    """Build the courses list HTML with inline create form.
+
+    Intent:
+        Keep markup minimal and safe. Do not include script tags so security tests
+        can assert that potentially malicious titles never introduce `<script>`.
+
+    Parameters:
+        items: List of dicts with keys id, title (escaped in component layer).
+        csrf_token: Synchronizer token bound to the current session.
+        has_next: Whether a next page exists (affects pager links).
+        error: Optional error code to render inline form feedback.
+    """
+    from components.base import Component
+    from components import TextInputField, SubmitButton
+
+    # Build listing (escape titles defensively)
+    lis = []
+    for c in items:
+        title = Component.escape(c.get("title"))
+        lis.append(f'<li class="course-item">{title}</li>')
+    list_html = "<ul class=\"course-list\">" + "\n".join(lis) + "</ul>" if lis else (
+        """
+        <div class="empty-state" role="note">
+            <p>Noch keine Kurse. Lege deinen ersten Kurs an.</p>
+        </div>
+        """
     )
-    return HTMLResponse(content=layout.render())
+
+    # Inline form
+    title_field = TextInputField("title", "Kursname", required=True)
+    field_html = title_field.render(value="")
+    error_html = ""
+    if error:
+        # Simple inline error area; tests look for "form-error" or role="alert"
+        error_html = f'<div class="form-error" role="alert">Fehler: {Component.escape(error)}</div>'
+    submit_btn = SubmitButton("Kurs anlegen")
+    form_html = f"""
+        <form method="post" action="/courses" class="course-create-form">
+            <input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">
+            {field_html}
+            {error_html}
+            <div class="form-actions">{submit_btn.render()}</div>
+        </form>
+    """
+
+    # Pagination
+    # Prev link only if offset > 0
+    prev_html = ""
+    if offset > 0:
+        prev_offset = max(0, offset - limit)
+        prev_html = f'<a data-testid="pager-prev" href="/courses?limit={limit}&offset={prev_offset}">Zurück</a>'
+    else:
+        prev_html = '<span data-testid="pager-prev" aria-disabled="true">Zurück</span>'
+
+    next_html = ""
+    if has_next:
+        next_offset = offset + limit
+        next_html = f'<a data-testid="pager-next" href="/courses?limit={limit}&offset={next_offset}">Weiter</a>'
+    pager_html = f'<nav class="pager" aria-label="Seiten"><div class="pager__inner">{prev_html} {next_html}</div></nav>'
+
+    # Assemble content section
+    return f"""<!DOCTYPE html>
+<html lang=\"de\">
+<head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>Kurse - GUSTAV</title>
+    <link rel=\"stylesheet\" href=\"/static/css/gustav.css?v=5\">
+    <meta http-equiv=\"X-Content-Type-Options\" content=\"nosniff\">
+    <meta http-equiv=\"X-Frame-Options\" content=\"SAMEORIGIN\">
+    <meta name=\"description\" content=\"Kursverwaltung für Lehrkräfte\">
+    <!-- client-side scripts intentionally omitted in this view -->
+    
+</head>
+<body>
+    <main id=\"main-content\" class=\"main-content\" role=\"main\">
+        <section class=\"page-section\" aria-labelledby=\"courses-heading\">
+            <h1 id=\"courses-heading\">Meine Kurse</h1>
+            <div class=\"create-form\">{form_html}</div>
+            <div class=\"list-block\">{list_html}</div>
+            {pager_html}
+        </section>
+    </main>
+</body>
+</html>"""
+
+
+@app.get("/courses", response_class=HTMLResponse)
+async def courses_index(request: Request):
+    """SSR list + create form for teacher courses (PRG pattern).
+
+    Permissions:
+        Caller must be a teacher; non-teachers are redirected to "/" (303).
+
+    Security:
+        - Renders a session-bound synchronizer CSRF token in hidden input.
+        - Sets `Cache-Control: private, no-store` to avoid caching sensitive HTML.
+    """
+    user = getattr(request.state, "user", None)
+    role = (user or {}).get("role", "").lower()
+    if role != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+
+    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
+
+    # Fetch items via teaching adapter repo
+    try:
+        # Query the internal API to ensure consistency across repo backends
+        import httpx
+        from httpx import ASGITransport
+
+        params = {"limit": str(limit), "offset": str(offset)}
+        async with httpx.AsyncClient(transport=ASGITransport(app=request.app), base_url="http://internal") as c:
+            sid = _get_session_id(request)
+            if sid:
+                c.cookies.set(SESSION_COOKIE_NAME, sid)
+            api_res = await c.get("/api/teaching/courses", params=params)
+            items = api_res.json() if api_res.status_code == 200 else []
+        vm = [{"id": it.get("id"), "title": it.get("title", "") or ""} for it in items]
+        has_next = len(vm) >= limit  # heuristic; adequate for test slice
+    except Exception:
+        vm = []
+        has_next = False
+
+    sid = _get_session_id(request) or ""
+    token = _get_or_create_csrf_token(sid)
+    html = _render_courses_page_html(request, vm, csrf_token=token, limit=limit, offset=offset, has_next=has_next)
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/courses", response_class=HTMLResponse)
+async def courses_create(request: Request):
+    """Create course via SSR form with PRG.
+
+    Behavior:
+        - On success: 302 redirect back to listing.
+        - On validation error: 200 with inline error in the form.
+
+    Security:
+        Requires a valid synchronizer CSRF token bound to the session.
+    """
+    user = getattr(request.state, "user", None)
+    role = (user or {}).get("role", "").lower()
+    if role != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+
+    # Parse form
+    form = await request.form()
+    title = (str(form.get("title")) if form.get("title") is not None else "").strip()
+    csrf_value = form.get("csrf_token")
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, csrf_value):
+        # CSRF failure – forbidden
+        return HTMLResponse(content="", status_code=403)
+
+    # Validation
+    if not title:
+        limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
+        token = _get_or_create_csrf_token(sid or "")
+        html = _render_courses_page_html(
+            request,
+            items=[],
+            csrf_token=token,
+            limit=limit,
+            offset=offset,
+            has_next=False,
+            error="invalid_title",
+        )
+        return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
+
+    # Create via repo
+    try:
+        from routes import teaching as teaching_routes
+        sub = (user or {}).get("sub") or ""
+        teaching_routes.REPO.create_course(title=title, subject=None, grade_level=None, term=None, teacher_id=sub)
+    except Exception:
+        # Fail-soft: display inline error
+        limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
+        token = _get_or_create_csrf_token(sid or "")
+        html = _render_courses_page_html(
+            request,
+            items=[],
+            csrf_token=token,
+            limit=limit,
+            offset=offset,
+            has_next=False,
+            error="backend_error",
+        )
+        return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
+
+    # PRG redirect
+    return RedirectResponse(url="/courses", status_code=302)
 
 
 @app.get("/health")

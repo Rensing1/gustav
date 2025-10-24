@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 import re
 from typing import Any
 from uuid import UUID
@@ -95,6 +93,12 @@ def _is_same_origin(request: Request) -> bool:
                 else:
                     host = (xf_host or (request.url.hostname or "")).lower()
                     port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
+                xf_port_raw = request.headers.get("x-forwarded-port") or ""
+                if xf_port_raw:
+                    try:
+                        port = int(xf_port_raw.split(",")[0].strip())
+                    except Exception:
+                        port = 443 if scheme == "https" else 80
                 return scheme, host, port
 
             # Not trusting proxy headers: use request URL/Host only

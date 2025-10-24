@@ -183,7 +183,7 @@ class DBLearningRepo:
                     "sha256": row[8],
                     "alt_text": row[9],
                     "position": int(row[10]) if row[10] is not None else None,
-                    "created_at": row[12],
+                    "created_at": row[11],
                     "updated_at": row[12],
                 }
             )
@@ -250,7 +250,6 @@ class DBLearningRepo:
                                text_body,
                                mime_type,
                                size_bytes,
-                               storage_key,
                                sha256,
                                analysis_status,
                                analysis_json,
@@ -331,8 +330,7 @@ class DBLearningRepo:
                                   text_body,
                                   mime_type,
                                   size_bytes,
-                               storage_key,
-                               sha256,
+                                  sha256,
                                   analysis_status,
                                   analysis_json,
                                   feedback_md,
@@ -373,8 +371,7 @@ class DBLearningRepo:
                                    text_body,
                                    mime_type,
                                    size_bytes,
-                               storage_key,
-                               sha256,
+                                   sha256,
                                    analysis_status,
                                    analysis_json,
                                    feedback_md,
@@ -453,8 +450,7 @@ class DBLearningRepo:
                            text_body,
                            mime_type,
                            size_bytes,
-                               storage_key,
-                               sha256,
+                           sha256,
                            analysis_status,
                            analysis_json,
                            feedback_md,
@@ -546,7 +542,7 @@ class DBLearningRepo:
 
     @staticmethod
     def _row_to_submission(row: Iterable[Any]) -> dict:
-        analysis = row[9]
+        analysis = row[8]
         if isinstance(analysis, str):
             try:
                 analysis = json.loads(analysis)
@@ -559,12 +555,11 @@ class DBLearningRepo:
             "text_body": row[3],
             "mime_type": row[4],
             "size_bytes": row[5],
-            "storage_key": row[6],
-            "sha256": row[7],
-            "analysis_status": row[8],
+            "sha256": row[6],
+            "analysis_status": row[7],
             "analysis_json": analysis,
-            "feedback": row[10],
-            "error_code": row[11],
-            "created_at": row[12],
-            "completed_at": row[13],
+            "feedback": row[9],
+            "error_code": row[10],
+            "created_at": row[11],
+            "completed_at": row[12],
         }

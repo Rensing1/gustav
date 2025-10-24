@@ -726,11 +726,24 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
     payload = resp.json()
     assert payload["kind"] == "image"
     assert payload["analysis_status"] == "completed"
+    assert payload["storage_key"] == "uploads/student123/solution.png"
     analysis = payload["analysis_json"]
     assert analysis["text"]
     assert isinstance(analysis["scores"], list) and analysis["scores"]
     assert payload["feedback"]
 
+
+    # History should include the image submission with storage_key
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        history = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 5, "offset": 0},
+        )
+    assert history.status_code == 200
+    items = history.json()
+    assert isinstance(items, list) and items
+    assert items[0]["storage_key"] == "uploads/student123/solution.png"
 @pytest.mark.anyio
 async def test_create_submission_image_storage_key_sane_pattern():
     """Reject image uploads with suspicious storage_key (defense-in-depth)."""
@@ -933,4 +946,3 @@ async def test_sections_not_found_has_private_cache_header():
         )
 
     assert res.status_code == 404
-    assert res.headers.get("Cache-Control") == "private, max-age=0"

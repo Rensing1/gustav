@@ -16,7 +16,7 @@ Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchs
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`
   - Text‑Abgabe: `{ kind: 'text', text_body }`
   - Bild‑Abgabe: `{ kind: 'image', storage_key, mime_type, size_bytes, sha256 }`
-  - Validierung: Leerer `text_body` führt zu `400 detail=invalid_input`; MIME‑Typen nur `image/jpeg` und `image/png`.
+  - Validierung: Leerer `text_body` führt zu `400 detail=invalid_input`; maximale Länge `10000` Zeichen; MIME‑Typen nur `image/jpeg` und `image/png`.
   - Optionaler Header: `Idempotency-Key` (≤ 64 Zeichen; Dup‑Vermeidung bei Retries; gleiche Antwort, keine Doppelanlage)
   - Prüft: Mitgliedschaft, Release, `max_attempts`, CSRF (Same-Origin bei Browsern). 201 `Submission` (MVP synchron), 400/401/403/404.
 

@@ -3,6 +3,7 @@
 ## Unreleased
 - security(learning): SECURITY DEFINER Funktionen gehärtet (`search_path = pg_catalog, public`), vollqualifizierte `public.*`-Objekte.
 - security(csrf): Same‑Origin vertraut `X‑Forwarded-*` nur mit `GUSTAV_TRUST_PROXY=true`.
+- fix(api/learning): Include `storage_key` in submission responses (image) and add tests; CSRF origin resolver now supports `X-Forwarded-Port` when proxy trust is enabled.
 - feat(api/learning): Add GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions with student-scoped history and cache headers.
 - feat(api/learning): Submissions now return structured `analysis_json` (text, length, scores[]) and `feedback`; synchronous stubs fill data for text/image attempts.
 - docs(learning): Reference updates for history endpoint, analysis_json structure, and `.env.example` guidance.

@@ -11,7 +11,7 @@ Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchs
 - `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
   - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).
-  - 200 `[{ id, attempt_nr, kind, analysis_status, analysis_json, feedback, created_at, completed_at, ... }]`, 400/401/403/404.
+  - 200 `[{ id, attempt_nr, kind, storage_key?, analysis_status, analysis_json, feedback, created_at, completed_at, ... }]`, 400/401/403/404.
 
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`
   - Text‑Abgabe: `{ kind: 'text', text_body }`
@@ -58,7 +58,7 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Fehlersemantik: 404 bei nicht freigegebenen/fremden Ressourcen, um keine Existenzinformationen zu leaken.
 - Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, max-age=0`.
 - Fehlerantworten: 400/401/403/404 der Learning‑Endpoints senden ebenfalls `Cache-Control: private, max-age=0`.
-- Submissions: Storage-Metadaten werden nur entgegengenommen, nicht erneut ausgegeben; Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
+- Submissions: Storage-Metadaten werden bei Bildabgaben geprüft; `storage_key` wird in API‑Antworten zurückgegeben (nur für `kind=image`). Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
 - Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
 - CSRF: Zusätzlicher Same‑Origin‑Check (nur wenn `Origin` gesetzt ist). Nicht‑Browser‑Clients bleiben unverändert (kein `Origin`).
   Reverse‑Proxy‑Header (`X‑Forwarded‑Proto`/`X‑Forwarded‑Host`) werden nur berücksichtigt, wenn `GUSTAV_TRUST_PROXY=true` gesetzt ist (z. B. hinter Caddy/Nginx). Ohne diese Variable werden Forwarded‑Header ignoriert, um Header‑Spoofing zu vermeiden.

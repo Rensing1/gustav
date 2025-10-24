@@ -984,3 +984,34 @@ async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
         items2 = resp2.json()
         assert isinstance(items2, list) and len(items2) == 1
         assert items2[0]["attempt_nr"] == 1
+
+
+@pytest.mark.anyio
+async def test_submission_created_at_is_rfc3339_and_present():
+    """History items must include RFC3339 UTC created_at (contract alignment)."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        # Create one attempt to have a history entry
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "created-at-check"},
+            json={"kind": "text", "text_body": "Zeitstempel"},
+        )
+        assert resp.status_code == 201
+
+        history = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 1, "offset": 0},
+        )
+
+    assert history.status_code == 200
+    payload = history.json()
+    assert isinstance(payload, list) and payload
+    created_at = payload[0].get("created_at")
+    assert isinstance(created_at, str) and created_at, "created_at must be a non-empty string"
+    # Expected format produced by the DB: YYYY-MM-DD"T"HH:MM:SS+00:00
+    import re as _re
+    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00", created_at), created_at

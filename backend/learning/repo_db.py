@@ -565,6 +565,7 @@ class DBLearningRepo:
             "analysis_json": analysis,
             "feedback": row[10],
             "error_code": row[11],
-            "created_at": row[11],
+            # created_at is returned by SQL as ISO string in column index 12
+            "created_at": row[12],
             "completed_at": row[13],
         }

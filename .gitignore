@@ -22,3 +22,4 @@ backend/web/components/cards/__pycache__/
 backend/web/components/forms/__pycache__/
 backend/web/components/pages/__pycache__/
 .env
+.vscode/

@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Optional
+from typing import Any, Iterable, List, Optional, Sequence
+import json
 import os
 import re
 from uuid import UUID
 
 try:  # pragma: no cover -- optional dependency in some environments
     import psycopg
+    from psycopg import Connection
+    from psycopg.types.json import Json
 
     HAVE_PSYCOPG = True
 except Exception:  # pragma: no cover
     psycopg = None  # type: ignore
+    Json = None  # type: ignore
+    Connection = Any  # type: ignore
     HAVE_PSYCOPG = False
 
 
@@ -117,53 +122,52 @@ class DBLearningRepo:
                 )
                 rows = cur.fetchall()
 
-        if not rows:
-            raise LookupError("no_released_sections")
+            if not rows:
+                raise LookupError("no_released_sections")
 
-        sections: List[dict] = []
-        for row in rows:
-            section_id = row[0]
-            entry = {
-                "section": {
-                    "id": section_id,
-                    "title": row[1],
-                    # Contract requires integer ≥ 1; fall back to 1 if DB position is NULL
-                    "position": int(row[2]) if row[2] is not None else 1,
-                },
-                "materials": [],
-                "tasks": [],
-            }
-            if include_materials:
-                entry["materials"] = self._fetch_materials(student_sub, course_uuid, section_id)
-            if include_tasks:
-                entry["tasks"] = self._fetch_tasks(student_sub, course_uuid, section_id)
-            sections.append(entry)
-        return sections
+            sections: List[dict] = []
+            for row in rows:
+                section_id = row[0]
+                entry = {
+                    "section": {
+                        "id": section_id,
+                        "title": row[1],
+                        # Contract requires integer ≥ 1; fall back to 1 if DB position is NULL
+                        "position": int(row[2]) if row[2] is not None else 1,
+                    },
+                    "materials": [],
+                    "tasks": [],
+                }
+                if include_materials:
+                    entry["materials"] = self._fetch_materials(conn, student_sub, course_uuid, section_id)
+                if include_tasks:
+                    entry["tasks"] = self._fetch_tasks(conn, student_sub, course_uuid, section_id)
+                sections.append(entry)
+            return sections
 
-    def _fetch_materials(self, student_sub: str, course_id: str, section_id: str) -> List[dict]:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                self._set_current_sub(cur, student_sub)
-                cur.execute(
-                    """
-                    select id::text,
-                           title,
-                           kind,
-                           body_md,
-                           mime_type,
-                           size_bytes,
-                           filename_original,
-                           storage_key,
-                           sha256,
-                           alt_text,
-                           material_position,
-                           created_at_iso,
-                           updated_at_iso
-                      from public.get_released_materials_for_student(%s, %s, %s)
-                    """,
-                    (student_sub, course_id, section_id),
-                )
-                rows = cur.fetchall()
+    def _fetch_materials(self, conn: Connection, student_sub: str, course_id: str, section_id: str) -> List[dict]:
+        with conn.cursor() as cur:
+            self._set_current_sub(cur, student_sub)
+            cur.execute(
+                """
+                select id::text,
+                       title,
+                       kind,
+                       body_md,
+                       mime_type,
+                       size_bytes,
+                       filename_original,
+                       storage_key,
+                       sha256,
+                       alt_text,
+                       material_position,
+                       created_at_iso,
+                       updated_at_iso
+                  from public.get_released_materials_for_student(%s, %s, %s)
+                """,
+                (student_sub, course_id, section_id),
+            )
+            rows = cur.fetchall()
         materials: List[dict] = []
         for row in rows:
             materials.append(
@@ -185,26 +189,25 @@ class DBLearningRepo:
             )
         return materials
 
-    def _fetch_tasks(self, student_sub: str, course_id: str, section_id: str) -> List[dict]:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                self._set_current_sub(cur, student_sub)
-                cur.execute(
-                    """
-                    select id::text,
-                           instruction_md,
-                           criteria,
-                           hints_md,
-                           due_at_iso,
-                           max_attempts,
-                           task_position,
-                           created_at_iso,
-                           updated_at_iso
-                      from public.get_released_tasks_for_student(%s, %s, %s)
-                    """,
-                    (student_sub, course_id, section_id),
-                )
-                rows = cur.fetchall()
+    def _fetch_tasks(self, conn: Connection, student_sub: str, course_id: str, section_id: str) -> List[dict]:
+        with conn.cursor() as cur:
+            self._set_current_sub(cur, student_sub)
+            cur.execute(
+                """
+                select id::text,
+                       instruction_md,
+                       criteria,
+                       hints_md,
+                       due_at_iso,
+                       max_attempts,
+                       task_position,
+                       created_at_iso,
+                       updated_at_iso
+                  from public.get_released_tasks_for_student(%s, %s, %s)
+                """,
+                (student_sub, course_id, section_id),
+            )
+            rows = cur.fetchall()
         tasks: List[dict] = []
         for row in rows:
             tasks.append(
@@ -247,6 +250,7 @@ class DBLearningRepo:
                                text_body,
                                mime_type,
                                size_bytes,
+                               storage_key,
                                sha256,
                                analysis_status,
                                analysis_json,
@@ -280,6 +284,7 @@ class DBLearningRepo:
                 if not meta:
                     raise LookupError("task_not_visible")
                 max_attempts = meta[3]
+                criteria = self._fetch_task_criteria(cur, task_uuid, data.student_sub)
 
                 cur.execute(
                     "select public.next_attempt_nr(%s, %s, %s)",
@@ -290,6 +295,13 @@ class DBLearningRepo:
                     raise ValueError("max_attempts_exceeded")
 
                 feedback_md = self._render_feedback(data.kind, attempt_nr)
+                analysis_json = self._build_analysis_payload(
+                    kind=data.kind,
+                    text_body=data.text_body,
+                    storage_key=data.storage_key,
+                    sha256=data.sha256,
+                    criteria=criteria,
+                )
 
                 try:
                     cur.execute(
@@ -312,14 +324,15 @@ class DBLearningRepo:
                             idempotency_key
                         )
                         values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                                'completed', null, %s, null, %s)
+                                'completed', %s, %s, null, %s)
                         returning id::text,
                                   attempt_nr,
                                   kind,
                                   text_body,
                                   mime_type,
                                   size_bytes,
-                                  sha256,
+                               storage_key,
+                               sha256,
                                   analysis_status,
                                   analysis_json,
                                   feedback_md,
@@ -338,6 +351,8 @@ class DBLearningRepo:
                             data.size_bytes,
                             data.sha256,
                             attempt_nr,
+                            # psycopg needs explicit Json wrapper to serialize dict payloads correctly.
+                            Json(analysis_json) if Json and analysis_json is not None else analysis_json,
                             feedback_md,
                             data.idempotency_key,
                         ),
@@ -358,7 +373,8 @@ class DBLearningRepo:
                                    text_body,
                                    mime_type,
                                    size_bytes,
-                                   sha256,
+                               storage_key,
+                               sha256,
                                    analysis_status,
                                    analysis_json,
                                    feedback_md,
@@ -379,14 +395,163 @@ class DBLearningRepo:
                         raise
         return self._row_to_submission(row)
 
+    def list_submissions(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_id: str,
+        limit: int,
+        offset: int,
+    ) -> List[dict]:
+        """Fetch the caller's submission history for a task.
+
+        Intent:
+            Encapsulate membership/visibility guards and stable ordering inside
+            the persistence layer while keeping use cases framework-agnostic.
+
+        Parameters:
+            student_sub: Authenticated student's subject identifier.
+            course_id: Course scope for the task, UUID string.
+            task_id: Target task UUID.
+            limit/offset: Pagination parameters (already clamped by use case).
+
+        Permissions:
+            Caller must be enrolled in the course and the section must be
+            released; enforced via membership check and
+            `get_task_metadata_for_student`.
+        """
+        course_uuid = str(UUID(course_id))
+        task_uuid = str(UUID(task_id))
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise PermissionError("not_course_member")
+
+                cur.execute(
+                    """
+                    select task_id::text
+                      from public.get_task_metadata_for_student(%s, %s, %s)
+                    """,
+                    (student_sub, course_uuid, task_uuid),
+                )
+                visible = cur.fetchone()
+                if not visible:
+                    raise LookupError("task_not_visible")
+
+                cur.execute(
+                    """
+                    select id::text,
+                           attempt_nr,
+                           kind,
+                           text_body,
+                           mime_type,
+                           size_bytes,
+                               storage_key,
+                               sha256,
+                           analysis_status,
+                           analysis_json,
+                           feedback_md,
+                           error_code,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                      from public.learning_submissions
+                     where course_id = %s
+                       and task_id = %s
+                       and student_sub = %s
+                     order by created_at desc, attempt_nr desc
+                     limit %s offset %s
+                    """,
+                    (course_uuid, task_uuid, student_sub, int(limit), int(offset)),
+                )
+                rows = cur.fetchall()
+
+        return [self._row_to_submission(row) for row in rows]
+
     @staticmethod
     def _render_feedback(kind: str, attempt: int) -> str:
         if kind == "text":
-            return f"Attempt {attempt}: Good job!"
-        return f"Attempt {attempt}: Image received."
+            return f"Attempt {attempt}: Thanks for your explanation."
+        return f"Attempt {attempt}: Image submission received."
+
+    def _fetch_task_criteria(self, cur, task_id: str, student_sub: str) -> Sequence[str]:
+        """Load rubric criteria for the task while keeping RLS context intact."""
+        self._set_current_sub(cur, student_sub)
+        cur.execute("select criteria from public.unit_tasks where id = %s", (task_id,))
+        row = cur.fetchone()
+        if not row:
+            return []
+        criteria = row[0] or []
+        if isinstance(criteria, list):
+            return [str(entry).strip() for entry in criteria if str(entry).strip()]
+        return []
+
+    def _build_analysis_payload(
+        self,
+        *,
+        kind: str,
+        text_body: Optional[str],
+        storage_key: Optional[str],
+        sha256: Optional[str],
+        criteria: Sequence[str],
+    ) -> dict:
+        """Produce the synchronous analysis stub used until ML integration."""
+        if kind == "text":
+            text = (text_body or "").strip()
+        else:
+            text = self._image_text_stub(storage_key, sha256)
+        length = len(text)
+        scores = self._build_scores(criteria, length)
+        return {
+            "text": text,
+            "length": length,
+            "scores": scores,
+        }
+
+    def _build_scores(self, criteria: Sequence[str], text_length: int) -> List[dict]:
+        """Generate rubric-style scores with deterministic, easy-to-read values."""
+        names = [c for c in criteria if c]
+        if not names:
+            names = ["Submission"]
+        # Simple heuristic: longer answers receive slightly higher stub scores.
+        base_score = 6 if text_length < 20 else 8
+        scores: List[dict] = []
+        for index, criterion in enumerate(names):
+            score = min(10, base_score + min(index, 2))
+            scores.append(
+                {
+                    "criterion": criterion,
+                    "score": score,
+                    "explanation": "Stubbed analysis until machine learning is integrated.",
+                }
+            )
+        return scores
+
+    @staticmethod
+    def _image_text_stub(storage_key: Optional[str], sha256: Optional[str]) -> str:
+        """Derive a deterministic textual placeholder for OCR output."""
+        if storage_key:
+            token = storage_key.split("/")[-1]
+        elif sha256:
+            token = sha256[:12]
+        else:
+            token = "image"
+        return f"OCR placeholder for {token}"
 
     @staticmethod
     def _row_to_submission(row: Iterable[Any]) -> dict:
+        analysis = row[9]
+        if isinstance(analysis, str):
+            try:
+                analysis = json.loads(analysis)
+            except Exception:  # pragma: no cover - defensive
+                pass
         return {
             "id": row[0],
             "attempt_nr": int(row[1]),
@@ -394,11 +559,13 @@ class DBLearningRepo:
             "text_body": row[3],
             "mime_type": row[4],
             "size_bytes": row[5],
-            "sha256": row[6],
-            "analysis_status": row[7],
-            "analysis_json": row[8],
-            "feedback_md": row[9],
-            "error_code": row[10],
-            "created_at": row[11],
-            "completed_at": row[12],
+            "storage_key": row[6],
+            "sha256": row[7],
+            "analysis_status": row[8],
+            "analysis_json": analysis,
+            "feedback": row[10],
+            "error_code": row[11],
+            # created_at is returned by SQL as ISO string in column index 12
+            "created_at": row[12],
+            "completed_at": row[13],
         }

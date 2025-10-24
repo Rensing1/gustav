@@ -16,6 +16,8 @@ from backend.learning.usecases.sections import ListSectionsInput, ListSectionsUs
 from backend.learning.usecases.submissions import (
     CreateSubmissionInput,
     CreateSubmissionUseCase,
+    ListSubmissionsInput,
+    ListSubmissionsUseCase,
 )
 
 
@@ -137,6 +139,7 @@ def _normalize_offset(value: int) -> int:
 REPO = DBLearningRepo()
 LIST_SECTIONS_USECASE = ListSectionsUseCase(REPO)
 CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(REPO)
+LIST_SUBMISSIONS_USECASE = ListSubmissionsUseCase(REPO)
 
 # Narrow typing for test helpers without pulling framework types into use cases
 try:
@@ -161,12 +164,24 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
     def create_submission(self, data) -> dict:
         ...
 
+    def list_submissions(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_id: str,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        ...
+
 
 def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
-    global REPO, LIST_SECTIONS_USECASE, CREATE_SUBMISSION_USECASE
+    global REPO, LIST_SECTIONS_USECASE, CREATE_SUBMISSION_USECASE, LIST_SUBMISSIONS_USECASE
     REPO = repo
     LIST_SECTIONS_USECASE = ListSectionsUseCase(repo)
     CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(repo)
+    LIST_SUBMISSIONS_USECASE = ListSubmissionsUseCase(repo)
 
 
 @learning_router.get("/api/learning/courses/{course_id}/sections")
@@ -323,3 +338,40 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers())
 
     return JSONResponse(submission, status_code=201, headers=_cache_headers())
+
+
+@learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
+async def list_submissions(
+    request: Request,
+    course_id: str,
+    task_id: str,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """Return the caller's submission history for a task (student-only)."""
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    try:
+        UUID(course_id)
+        UUID(task_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
+
+    input_data = ListSubmissionsInput(
+        course_id=course_id,
+        task_id=task_id,
+        student_sub=str(user.get("sub", "")),
+        limit=limit,
+        offset=offset,
+    )
+
+    try:
+        submissions = LIST_SUBMISSIONS_USECASE.execute(input_data)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers())
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers())
+
+    return JSONResponse(submissions, status_code=200, headers=_cache_headers())

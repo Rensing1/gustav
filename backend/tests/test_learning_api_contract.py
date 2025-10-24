@@ -353,7 +353,18 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         first_payload = resp1.json()
         assert first_payload["attempt_nr"] == 1
         assert first_payload["analysis_status"] == "completed"
-        assert first_payload["feedback_md"]
+        assert first_payload["feedback"]
+        analysis = first_payload["analysis_json"]
+        assert isinstance(analysis, dict)
+        assert analysis["text"] == "Versuch 1"
+        assert analysis.get("length") == len("Versuch 1")
+        assert isinstance(analysis.get("scores"), list)
+        assert analysis["scores"], "Expected at least one rubric score"
+        first_score = analysis["scores"][0]
+        assert first_score["criterion"]
+        assert isinstance(first_score["score"], int)
+        assert 0 <= first_score["score"] <= 10
+        assert "explanation" in first_score
         submission_id = first_payload["id"]
 
         # Idempotent retry must not create a second attempt
@@ -531,6 +542,194 @@ async def test_create_submission_image_mime_type_whitelist():
     assert response.status_code == 400
     assert response.json().get("detail") == "invalid_image_payload"
 
+
+@pytest.mark.anyio
+async def test_list_submissions_history_happy_path():
+    """GET submissions must return the student's attempts newest-first with analysis + feedback."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        # Create two attempts to exercise ordering
+        for idx in (1, 2):
+            resp = await client.post(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+                headers={"Idempotency-Key": f"attempt-{idx}"},
+                json={"kind": "text", "text_body": f"Antwort {idx}"},
+            )
+            assert resp.status_code == 201
+
+        history_resp = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 20, "offset": 0},
+        )
+
+    assert history_resp.status_code == 200
+    assert history_resp.headers.get("Cache-Control") == "private, max-age=0"
+    payload = history_resp.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 2
+
+    latest, earliest = payload[0], payload[-1]
+    assert latest["attempt_nr"] == 2
+    assert latest["analysis_status"] == "completed"
+    assert latest["feedback"]
+    assert latest["analysis_json"]["text"] == "Antwort 2"
+    assert latest["analysis_json"]["scores"]
+    assert earliest["attempt_nr"] == 1
+    assert earliest["analysis_json"]["text"] == "Antwort 1"
+
+
+@pytest.mark.anyio
+async def test_list_submissions_history_empty_returns_200_array():
+    """Empty histories must still return HTTP 200 with an empty list."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 20, "offset": 0},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_list_submissions_forbidden_non_member():
+    """Non-members must receive 403 without leaking payload."""
+
+    fixture = await _prepare_learning_fixture(add_member=False)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 20, "offset": 0},
+        )
+
+    assert resp.status_code == 403
+    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_list_submissions_404_when_not_released():
+    """Unreleased tasks must look like they do not exist."""
+
+    fixture = await _prepare_learning_fixture(visible=False)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 20, "offset": 0},
+        )
+
+    assert resp.status_code == 404
+    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_list_submissions_invalid_uuid_returns_400_with_cache_header():
+    """Malformed identifiers must yield 400 with private cache headers."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.get(
+            "/api/learning/courses/not-a-uuid/tasks/also-not-a-uuid/submissions",
+            params={"limit": 20, "offset": 0},
+        )
+
+    assert resp.status_code == 400
+    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
+async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc():
+    """When timestamps match, ordering must fall back to attempt_nr DESC."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        for idx in (1, 2):
+            resp = await client.post(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+                headers={"Idempotency-Key": f"stable-{idx}"},
+                json={"kind": "text", "text_body": f"Gleichzeit {idx}"},
+            )
+            assert resp.status_code == 201
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover - safety
+        pytest.skip("psycopg not available")
+
+        dsn = os.getenv("RLS_TEST_SERVICE_DSN")
+        if not dsn:
+            pytest.skip("RLS_TEST_SERVICE_DSN required to rewrite timestamps for ordering test")
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update public.learning_submissions
+                    set created_at = (
+                        select min(created_at)
+                        from public.learning_submissions
+                        where student_sub = %s and task_id = %s
+                    )
+                    where student_sub = %s and task_id = %s
+                    """,
+                    (fixture.student_sub, fixture.task["id"], fixture.student_sub, fixture.task["id"]),
+                )
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 20, "offset": 0},
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload[0]["attempt_nr"] == 2
+    assert payload[1]["attempt_nr"] == 1
+
+
+@pytest.mark.anyio
+async def test_create_submission_image_includes_text_and_scores_in_analysis_json():
+    """Image submissions should include OCR text and rubric scores in the analysis payload."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={
+                "kind": "image",
+                "storage_key": "uploads/student123/solution.png",
+                "mime_type": "image/png",
+                "size_bytes": 1024,
+                "sha256": "0" * 64,
+            },
+        )
+
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert payload["kind"] == "image"
+    assert payload["analysis_status"] == "completed"
+    analysis = payload["analysis_json"]
+    assert analysis["text"]
+    assert isinstance(analysis["scores"], list) and analysis["scores"]
+    assert payload["feedback"]
 
 @pytest.mark.anyio
 async def test_create_submission_image_storage_key_sane_pattern():

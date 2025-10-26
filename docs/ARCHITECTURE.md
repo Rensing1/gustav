@@ -221,6 +221,16 @@ E2E‑Tests (Identity):
 - Drag & Drop löst einen Fetch mit `credentials: same-origin` und `X‑CSRF‑Token` aus; es gibt keine parallelen HTMX‑Reorder‑Requests.
 - Fehlerfälle: API-Fehlercodes (z.B. `invalid_title`, `not_found`) werden UI-seitig angezeigt; fehlgeschlagene Reorder-Requests melden sich per Alert.
 
+#### SSR‑UI für Materialien & Aufgaben
+- Abschnitts‑Detailseite `/units/{unit_id}/sections/{section_id}` zeigt nur die Listen (Materialien, Aufgaben) und zwei klare Aktionen „+ Material“ / „+ Aufgabe“.
+- Erstellen erfolgt auf getrennten Seiten:
+  - `/units/{u}/sections/{s}/materials/new`: Text‑Material (title, body_md) und Datei‑Upload (Intent → Upload → Finalize). CSRF in beiden Formularen. Bei Datei‑Material Finalize erzeugt Material per API.
+  - `/units/{u}/sections/{s}/tasks/new`: Anweisung, 0–10 Kriterien, Hinweise, optional `due_at` und `max_attempts`.
+- Per‑Entry‑Detailseiten:
+  - Material: `/units/{u}/sections/{s}/materials/{m}` mit Bearbeiten/Löschen; bei Datei‑Material wird „Download anzeigen“ (presigned URL) eingeblendet.
+  - Aufgabe: `/units/{u}/sections/{s}/tasks/{t}` mit Bearbeiten/Löschen (inkl. Kriterien/Hinweise/due_at/max_attempts).
+- PRG‑Muster: POST der UI routet immer zur API und leitet danach (303) zur passenden SSR‑Seite zurück.
+
 ### Lokaler Betrieb & UFW
 - Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.
 - Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:8100`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 8100 proto tcp`.

@@ -145,12 +145,8 @@ def _parse_include(value: str | None) -> tuple[bool, bool]:
     return "materials" in tokens, "tasks" in tokens
 
 
-def _normalize_limit(value: int) -> int:
-    return max(1, min(value, 100))
-
-
-def _normalize_offset(value: int) -> int:
-    return max(0, value)
+# Note: Pagination clamping is handled in the use case layer to keep this
+# adapter thin and framework-agnostic.
 
 
 REPO = DBLearningRepo()

@@ -164,6 +164,18 @@ E2E‑Tests (Identity):
 - Redirect‑Parameter sind nur als interne absolute Pfade erlaubt. Server‑seitig erzwungenes Pattern (spiegelt OpenAPI): `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`. Doppelte Slashes (`//`) und Pfadtraversalen (`..`) sind nicht erlaubt. Ungültige Werte werden ignoriert (Login → `/`, Logout → `/auth/logout/success`).
 - `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
 
+#### CSRF‑Strategie (Browser‑Flows)
+- Same‑Site Cookies: In PROD `SameSite=strict` + `Secure`; in DEV `lax`.
+- Server prüft bei schreibenden Learning‑APIs (`POST /submissions`) die **Origin**.
+  Fehlt `Origin`, wird als Fallback die **Referer**‑Origin herangezogen.
+- Um diesen Fallback zu unterstützen und dennoch keine sensiblen Daten zu leaken,
+  wird global `Referrer-Policy: strict-origin-when-cross-origin` gesetzt.
+
+#### Redirect‑URI‑Sicherheit
+- `redirect_uri` wird dynamisch nur dann auf den Request‑Host gesetzt, wenn
+  dieser Host gegen `WEB_BASE` (oder die konfigurierte `OIDC_CFG.redirect_uri`)
+  übereinstimmt. Bei Mismatch wird die statische `redirect_uri` verwendet.
+
 #### Nonce & Session‑TTL
 - Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: no-store`.
 - Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). In PROD wird das `gustav_session`‑Cookie mit `Max-Age=<TTL>` gesetzt; Flags: `HttpOnly; Secure; SameSite=strict`. In DEV wird kein `Max-Age` gesetzt (`SameSite=lax`).

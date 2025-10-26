@@ -53,6 +53,24 @@ def _request_app_base(request: Request) -> str:
     return f"{scheme}://{host}"
 
 
+def _hostport_from_url(url: str) -> str:
+    """Return lowercased host[:port] from a URL string.
+
+    Defensive parsing: falls back to empty string on errors.
+    """
+    try:
+        from urllib.parse import urlparse
+
+        p = urlparse(url)
+        if p.hostname:
+            host = p.hostname.lower()
+            port = p.port
+            return f"{host}:{port}" if port else host
+    except Exception:
+        pass
+    return ""
+
+
 @auth_router.get("/auth/login")
 async def auth_login(request: Request, redirect: str | None = None):
     """
@@ -77,13 +95,21 @@ async def auth_login(request: Request, redirect: str | None = None):
     rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
     final_state = rec.state
     # Use a fresh client bound to current config (allows monkeypatch in tests)
-    # Prefer dynamic redirect_uri matching the current host if allowed by the IdP
-    dynamic_redirect_uri = f"{_request_app_base(request).rstrip('/')}/auth/callback"
+    # Prefer dynamic redirect_uri only when the current request host matches
+    # the allowed app host (from WEB_BASE or configured redirect_uri).
+    current_base = _request_app_base(request).rstrip("/")
+    dynamic_redirect_uri = f"{current_base}/auth/callback"
+    import os as _os
+
+    allowed_base = (_os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
+
+    redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
     cfg = OIDCConfig(
         base_url=main.OIDC_CFG.base_url,
         realm=main.OIDC_CFG.realm,
         client_id=main.OIDC_CFG.client_id,
-        redirect_uri=dynamic_redirect_uri,
+        redirect_uri=redirect_uri,
         public_base_url=main.OIDC_CFG.public_base_url,
     )
     oidc = OIDCClient(cfg)
@@ -125,13 +151,18 @@ async def auth_register(request: Request, login_hint: str | None = None):
     nonce = secrets.token_urlsafe(16)
     rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=None, nonce=nonce)
     final_state = rec.state
-    # Use dynamic redirect_uri matching current host (must be allowed in KC)
-    dynamic_redirect_uri = f"{_request_app_base(request).rstrip('/')}/auth/callback"
+    # Use dynamic redirect_uri only for allowed hosts, else fallback to configured
+    current_base = _request_app_base(request).rstrip("/")
+    dynamic_redirect_uri = f"{current_base}/auth/callback"
+    import os as _os
+    allowed_base = (_os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
+    redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
     cfg = OIDCConfig(
         base_url=main.OIDC_CFG.base_url,
         realm=main.OIDC_CFG.realm,
         client_id=main.OIDC_CFG.client_id,
-        redirect_uri=dynamic_redirect_uri,
+        redirect_uri=redirect_uri,
         public_base_url=main.OIDC_CFG.public_base_url,
     )
     oidc = OIDCClient(cfg)

@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- fix(auth): Remove duplicate /auth/callback route in auth-only test app to avoid ambiguous routing.
+- security(csp): Harden CSP in prod (drop 'unsafe-inline' for scripts/styles); keep inline allowed in dev for DX.
+- security(cache): Add Cache-Control: private, no-store to Teaching JSON endpoints (courses list, course get, members list).
+- tests(security): New tests assert private/no-store on courses list and ensure prod CSP omits 'unsafe-inline'.
 - fix(web/sections): Escape SectionCreateForm hx-post/action and add POST fallback to close XSS gap and keep non-HTMX submits working.
 - fix(web/units): Always render #unit-list-section wrapper and POST-enabled create form so the first HTMX swap succeeds on empty lists.
 - tests(web): Add regression coverage for sections/unit forms (escaping, HTMX targets) to guard the fixes.

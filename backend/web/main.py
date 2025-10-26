@@ -165,10 +165,18 @@ async def auth_enforcement(request: Request, call_next):
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     # Baseline defensive headers
-    csp = (
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; font-src 'self' data:; connect-src 'self';"
-    )
+    if SETTINGS.environment == "prod":
+        # Harden CSP in production: avoid 'unsafe-inline' to reduce XSS surface.
+        csp = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "img-src 'self' data:; font-src 'self' data:; connect-src 'self';"
+        )
+    else:
+        # Developer experience: allow inline for local SSR templates/components.
+        csp = (
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self' data:; connect-src 'self';"
+        )
     response.headers.setdefault("Content-Security-Policy", csp)
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -895,8 +903,7 @@ async def sections_create(request: Request, unit_id: str):
     
     form = await request.form()
     title = str(form.get("title", "")).strip()
-    summary = str(form.get("summary", "")).strip() # Summary is not used for sections, but good for debugging
-    print(f"DEBUG: sections_create - Received title: '{title}', summary: '{summary}'")
+    # Note: No debug prints to avoid leaking PII into logs.
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
@@ -1251,13 +1258,5 @@ def create_app_auth_only() -> FastAPI:
             "name": "",
             "expires_at": None,
         }, headers={"Cache-Control": "no-store"})
-    # Lightweight callback for contract tests: validate presence of code/state
-    @sub.get("/auth/callback")
-    async def callback_stub(code: str | None = None, state: str | None = None):
-        if not code or not state:
-            return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
-        # set a dummy cookie to exercise contract
-        resp = RedirectResponse(url="/", status_code=302)
-        _set_session_cookie(resp, secrets.token_urlsafe(24))
-        return resp
+    # Note: A single callback stub is defined above to avoid duplicate routes.
     return sub

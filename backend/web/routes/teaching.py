@@ -1018,6 +1018,15 @@ def _guard_unit_author(unit_id: str, author_sub: str):
     return JSONResponse({"error": "forbidden"}, status_code=403)
 
 
+def _json_private(payload, *, status_code: int = 200) -> JSONResponse:
+    """Return a JSONResponse with cache disabled for shared caches and browsers.
+
+    Rationale: Teaching endpoints expose user- and role-scoped data. To avoid
+    accidental caching in proxies or browsers, respond with "private, no-store".
+    """
+    return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+
+
 def _guard_course_owner(course_id: str, owner_sub: str):
     """Ensure caller owns the course, mapping to 404/403 appropriately."""
     try:
@@ -1066,7 +1075,7 @@ async def list_courses(request: Request, limit: int = 20, offset: int = 0):
         items = REPO.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
     else:
         items = REPO.list_courses_for_student(student_id=sub, limit=limit, offset=offset)
-    return JSONResponse(content=[_serialize_course(c) for c in items], status_code=200)
+    return _json_private([_serialize_course(c) for c in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/courses")
@@ -1138,7 +1147,7 @@ async def get_course(request: Request, course_id: str):
         c = REPO.get_course(course_id)
     if not c:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse(content=_serialize_course(c), status_code=200)
+    return _json_private(_serialize_course(c), status_code=200)
 
 class CourseUpdate(BaseModel):
     # Accept raw strings (including empty) and validate in handler to return 400
@@ -2876,7 +2885,7 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
     result = []
     for sid, joined_at in pairs:
         result.append({"sub": sid, "name": names.get(sid, sid), "joined_at": joined_at})
-    return JSONResponse(content=result, status_code=200)
+    return _json_private(result, status_code=200)
 
 
 class AddMember(BaseModel):

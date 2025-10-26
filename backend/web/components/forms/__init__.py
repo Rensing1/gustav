@@ -7,6 +7,9 @@ used inside task cards and dialogs.
 
 from .fields import FormField, TextAreaField, FileUploadField, TextInputField
 from .submit import SubmitButton
+from .course_create_form import CourseCreateForm
+from .unit_create_form import UnitCreateForm
+from .section_create_form import SectionCreateForm
 
 __all__ = [
     "FormField",
@@ -14,4 +17,7 @@ __all__ = [
     "FileUploadField",
     "TextInputField",
     "SubmitButton",
+    "CourseCreateForm",
+    "UnitCreateForm",
+    "SectionCreateForm",
 ]

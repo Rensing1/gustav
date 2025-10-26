@@ -381,7 +381,7 @@ async def security_headers(request: Request, call_next):
     resp.headers.setdefault("Content-Security-Policy", csp)
     resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
 
     # Only in production, advertise HSTS (without preload to keep rollout safe)

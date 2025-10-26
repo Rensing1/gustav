@@ -38,6 +38,12 @@ def _extract_value(html: str, field: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _extract_hidden_token(html: str, name: str) -> str | None:
+    pattern = rf'name="{re.escape(name)}"\s+value="([^"]+)"'
+    m = re.search(pattern, html)
+    return m.group(1) if m else None
+
+
 @pytest.mark.anyio
 async def test_unit_edit_prefill_uses_get_by_id_beyond_first_page():
     # Arrange: teacher with 55 units; target is #55 (outside first 50)
@@ -62,6 +68,31 @@ async def test_unit_edit_prefill_uses_get_by_id_beyond_first_page():
 
 
 @pytest.mark.anyio
+async def test_unit_edit_invalid_payload_shows_error_message():
+    sess = main.SESSION_STORE.create(sub="t-unit-edit-err-1", name="Teacher", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "Physik"})
+        assert r_unit.status_code == 201
+        uid = r_unit.json()["id"]
+
+        edit_page = await c.get(f"/units/{uid}/edit")
+        assert edit_page.status_code == 200
+        token = _extract_hidden_token(edit_page.text, "csrf_token") or ""
+
+        resp = await c.post(
+            f"/units/{uid}/edit",
+            data={"csrf_token": token, "title": "   ", "summary": ""},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            follow_redirects=False,
+        )
+
+    assert resp.status_code == 400
+    assert "invalid_title" in resp.text
+    assert "form-error" in resp.text
+
+
+@pytest.mark.anyio
 async def test_unit_edit_csrf_required_on_post():
     sess = main.SESSION_STORE.create(sub="t-unit-csrf-1", name="Teacher", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
@@ -79,4 +110,3 @@ async def test_unit_edit_csrf_required_on_post():
         )
 
     assert r_post.status_code == 403
-

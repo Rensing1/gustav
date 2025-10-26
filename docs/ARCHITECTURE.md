@@ -219,6 +219,7 @@ E2E‑Tests (Identity):
   - Reorder: `POST /api/teaching/units/{unit_id}/sections/reorder`
 - Der DOM enthält immer einen stabilen Sortable‑Container (auch bei leerer Liste) zur sofortigen Reinitialisierung nach HTMX‑Swaps.
 - Drag & Drop löst einen Fetch mit `credentials: same-origin` und `X‑CSRF‑Token` aus; es gibt keine parallelen HTMX‑Reorder‑Requests.
+- Fehlerfälle: API-Fehlercodes (z.B. `invalid_title`, `not_found`) werden UI-seitig angezeigt; fehlgeschlagene Reorder-Requests melden sich per Alert.
 
 ### Lokaler Betrieb & UFW
 - Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.

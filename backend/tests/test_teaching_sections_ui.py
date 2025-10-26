@@ -200,6 +200,26 @@ async def test_sections_create_preserves_existing_and_sortable_stays_active():
 
 
 @pytest.mark.anyio
+async def test_sections_create_invalid_title_returns_error_fragment():
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-4b", name="Lehrer CE", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-4b")
+        page = await c.get(f"/units/{unit_id}")
+        token = _extract_csrf_token(page.text) or ""
+
+        resp = await c.post(
+            f"/units/{unit_id}/sections",
+            data={"title": "   ", "csrf_token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true"},
+        )
+
+    assert resp.status_code == 200
+    assert "invalid_title" in resp.text
+    assert "form-error" in resp.text
+
+
+@pytest.mark.anyio
 async def test_sections_reorder_requires_csrf_and_accepts_header():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-5", name="Lehrer CSRF", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
@@ -283,8 +303,54 @@ async def test_sections_reorder_calls_api_for_db_unit():
         # API must reflect Beta before Alpha now
         lst = await c.get(f"/api/teaching/units/{uid}/sections")
         assert lst.status_code == 200
-        ids = [s["id"] for s in lst.json()]
-        assert ids[:2] == [b["id"], a["id"]]
+    ids = [s["id"] for s in lst.json()]
+    assert ids[:2] == [b["id"], a["id"]]
+
+
+@pytest.mark.anyio
+async def test_sections_delete_unknown_section_returns_error_fragment():
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-del-err", name="Lehrer DEL", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-DelErr")
+        page = await c.get(f"/units/{unit_id}")
+        token = _extract_csrf_token(page.text) or ""
+
+        resp = await c.post(
+            f"/units/{unit_id}/sections/not-real/delete",
+            data={"csrf_token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true"},
+        )
+
+    assert resp.status_code == 200
+    assert "section-error" in resp.text
+    assert "not_found" in resp.text
+
+
+@pytest.mark.anyio
+async def test_sections_reorder_invalid_ids_returns_error_response():
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-reorder-err", name="Lehrer RE", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-ReorderErr")
+        page = await c.get(f"/units/{unit_id}")
+        token = _extract_csrf_token(page.text) or ""
+
+        a = await _create_section_via_ui(c, unit_id=unit_id, title="Alpha", csrf_token=token)
+        await _create_section_via_ui(c, unit_id=unit_id, title="Beta", csrf_token=token)
+
+        resp = await c.post(
+            f"/units/{unit_id}/sections/reorder",
+            content=f"id=section_{a}&id=section_notreal",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRF-Token": token,
+            },
+        )
+
+    assert resp.status_code == 400
+    payload = resp.json()
+    assert payload.get("detail") == "invalid_section_ids"
 
 
 @pytest.mark.anyio

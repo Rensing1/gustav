@@ -42,10 +42,33 @@
               credentials: 'same-origin'
             }).then(function (r) {
               if (!r.ok) {
-                console.warn('Reorder request failed', r.status);
+                r.clone().text().then(function (payload) {
+                  var message = 'unknown_error';
+                  if (payload) {
+                    try {
+                      var data = JSON.parse(payload);
+                      if (data && typeof data === 'object') {
+                        message = data.detail || data.error || payload;
+                      } else {
+                        message = payload;
+                      }
+                    } catch (e) {
+                      message = payload;
+                    }
+                  }
+                  console.warn('Reorder request failed', r.status, message);
+                  if (typeof window !== 'undefined') {
+                    window.alert('Reorder failed (' + r.status + '): ' + message);
+                  }
+                }).catch(function () {
+                  console.warn('Reorder request failed', r.status);
+                });
               }
             }).catch(function (e) {
               console.warn('Reorder request error', e);
+              if (typeof window !== 'undefined') {
+                window.alert('Reorder failed: ' + e);
+              }
             });
           }
         });

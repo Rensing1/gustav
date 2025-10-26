@@ -78,7 +78,7 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
         name = str(it.get("name", ""))
         if sub and name:
             norm.append({"sub": sub, "name": name})
-    return JSONResponse(norm, headers={"Cache-Control": "no-store"})
+    return JSONResponse(norm, headers={"Cache-Control": "private, no-store"})
 
 
 @users_router.get("/api/users/list")
@@ -102,4 +102,4 @@ async def users_list(request: Request, role: str, limit: int = 50, offset: int =
         name = str(it.get("name", ""))
         if sub and name:
             norm.append({"sub": sub, "name": name})
-    return JSONResponse(norm, headers={"Cache-Control": "no-store"})
+    return JSONResponse(norm, headers={"Cache-Control": "private, no-store"})

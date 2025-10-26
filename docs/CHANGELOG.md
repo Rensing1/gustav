@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- security(cache): Add Cache-Control: private, no-store to Teaching units list and sections list (200 responses); prevent caching of teacher-scoped data.
+- docs(openapi): Document Cache-Control header for GET /api/teaching/units and GET /api/teaching/units/{unit_id}/sections.
+- api(teaching): GET /api/teaching/courses/{course_id} validates UUID; returns 400 detail=invalid_course_id. Documented Cache-Control on 200.
+- api(teaching): GET /api/teaching/units/{unit_id} documented Cache-Control on 200.
+- api(users): /api/users/search, /api/users/list responses set Cache-Control: private, no-store; OpenAPI x-permissions require teacher/admin.
+- fix(web/units): SSR edit form and sections UI now display API validation errors; reorder surfaces backend failures to the user.
 - fix(auth): Remove duplicate /auth/callback route in auth-only test app to avoid ambiguous routing.
 - security(csp): Harden CSP in prod (drop 'unsafe-inline' for scripts/styles); keep inline allowed in dev for DX.
 - security(cache): Add Cache-Control: private, no-store to Teaching JSON endpoints (courses list, course get, members list).
@@ -10,6 +16,10 @@
 - tests(web): Add regression coverage for sections/unit forms (escaping, HTMX targets) to guard the fixes.
 - feat(users): Add GET /api/users/list for role‑scoped user listing (Keycloak Admin API). Used by Members UI to auto‑populate candidates.
 - feat(teaching/api): Add GET /api/teaching/courses/{id} (owner‑only) for direct lookups (Edit/Mitglieder SSR prefill; avoids list scans).
+- feat(teaching/api): Add GET /api/teaching/units/{id} (author‑only) for direct lookups (SSR Umbenennen‑Formular).
+- feat(web/units): Add SSR routes GET/POST /units/{id}/edit with CSRF; prefill via API GET.
+- feat(web/sections): SSR reorder now calls API reorder for DB-backed units (UUID ids) while keeping UI dummy store in sync; tests added.
+- ux(web/sections): Drag & drop works on entire item (not only handle); clicks on buttons/links are ignored while dragging.
 - feat(web/members): Auto‑load candidates (students not yet members) under the search input; search now filters candidates server‑side.
 - fix(web/members): Removing a member immediately updates the current members list; inline error banner on API failure.
 - docs(teaching): Reference updated for Users list endpoint and SSR member management behavior.

@@ -10,7 +10,17 @@ from .cards import (
     HistoryEntry,
     TaskMetaItem,
 )
-from .forms import FormField, TextAreaField, FileUploadField, TextInputField, SubmitButton, CourseCreateForm, UnitCreateForm, SectionCreateForm
+from .forms import (
+    FormField,
+    TextAreaField,
+    FileUploadField,
+    TextInputField,
+    SubmitButton,
+    CourseCreateForm,
+    UnitCreateForm,
+    UnitEditForm,
+    SectionCreateForm,
+)
 from .onpage_nav import OnPageNavigation, OnPageNavItem
 
 __all__ = [
@@ -28,6 +38,7 @@ __all__ = [
     "SubmitButton",
     "CourseCreateForm",
     "UnitCreateForm",
+    "UnitEditForm",
     "SectionCreateForm",
     "OnPageNavigation",
     "OnPageNavItem",

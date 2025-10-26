@@ -86,6 +86,8 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
   - Caddy routet hostbasiert:
     - `http://app.localhost:8100` → Web (GUSTAV)
     - `http://id.localhost:8100` → Keycloak (IdP)
+  - Persistenz (DEV): `keycloak_data:/opt/keycloak/data` Volume hält Realm‑ und Benutzer‑Daten über Rebuilds.
+    Für PROD sollte Keycloak an eine externe DB (KC_DB=postgres) angebunden werden.
   - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
   - Setup: `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`.
 - PROD (Security‑first, geringe App‑Komplexität):

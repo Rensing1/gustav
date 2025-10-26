@@ -65,3 +65,16 @@ gustav-alpha2/
 - Empfehlung: Setze vor E2E-Läufen explizit
 - `export WEB_BASE=http://app.localhost:8100`
 - `export KC_BASE=http://id.localhost:8100`
+
+## Persistenz (Keycloak‑Accounts)
+
+- In DEV startet Keycloak mit `start-dev --import-realm`. Ohne Persistenz gehen
+  manuell angelegte Nutzer bei Rebuilds verloren.
+- Dieses Compose aktiviert ein Volume: `keycloak_data:/opt/keycloak/data`.
+  Dadurch bleiben Realm‑Daten und Benutzer erhalten.
+- Hinweise:
+  - Der Realm‑Import greift nur bei leerem Datenverzeichnis. Änderungen an
+    `keycloak/realm-gustav.json` werden erst nach Löschen des Volumes erneut importiert
+    (z. B. `docker compose down -v && docker volume rm <projekt>_keycloak_data`).
+  - Für Produktion wird empfohlen, `KC_DB=postgres` zu konfigurieren und Keycloak an
+    eine externe Datenbank anzubinden. Das Volume erleichtert DEV, ersetzt aber keine Prod‑DB.

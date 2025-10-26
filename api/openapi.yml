@@ -1705,6 +1705,11 @@ paths:
       responses:
         '200':
           description: List of authored learning units
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -1914,6 +1919,11 @@ paths:
       responses:
         '200':
           description: List of sections
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:

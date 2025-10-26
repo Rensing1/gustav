@@ -76,3 +76,13 @@ async def test_get_unit_by_id_unknown_returns_404():
         r = await c.get(f"/api/teaching/units/{unknown}")
     assert r.status_code == 404
 
+
+@pytest.mark.anyio
+async def test_get_unit_invalid_id_returns_400():
+    owner = main.SESSION_STORE.create(sub="t-unit-owner-4", name="Owner", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c.get("/api/teaching/units/not-a-uuid")
+    assert r.status_code == 400
+    body = r.json()
+    assert body.get("detail") == "invalid_unit_id"

@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- security(cache): Add Cache-Control: private, no-store to Teaching units list and sections list (200 responses); prevent caching of teacher-scoped data.
+- docs(openapi): Document Cache-Control header for GET /api/teaching/units and GET /api/teaching/units/{unit_id}/sections.
 - api(teaching): GET /api/teaching/courses/{course_id} validates UUID; returns 400 detail=invalid_course_id. Documented Cache-Control on 200.
 - api(teaching): GET /api/teaching/units/{unit_id} documented Cache-Control on 200.
 - api(users): /api/users/search, /api/users/list responses set Cache-Control: private, no-store; OpenAPI x-permissions require teacher/admin.

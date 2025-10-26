@@ -47,12 +47,19 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 ### Lerneinheiten & Kursmodule
 - `GET /api/teaching/units?limit&offset` (Teacher only)
   - 200 `[{ id, title, summary?, author_id, created_at, updated_at }]`
+  - Cache: `Cache-Control: private, no-store`
+- `GET /api/teaching/units/{unit_id}` (Author only)
+  - 200 `{ id, title, summary?, author_id, created_at, updated_at }`; 404 wenn Unit nicht existiert; 403 wenn nicht Autor
 - `POST /api/teaching/units` (Teacher only)
   - Body `{ title, summary? }`, 201 `Unit` oder 400/403
 - `PATCH /api/teaching/units/{unit_id}` (Author only)
   - 200 `Unit` oder 400/403/404
 - `DELETE /api/teaching/units/{unit_id}` (Author only)
   - 204 oder 403/404
+
+#### SSR‑Seite „Abschnitte verwalten“
+- UI: `/units/{unit_id}` (nur Lehrkräfte)
+- Datenquelle: ausschließlich die Teaching‑API (kein Dummy‑Fallback). Reorder nutzt Fetch mit `credentials: same-origin` + `X‑CSRF‑Token` und spricht `POST /api/teaching/units/{unit_id}/sections/reorder` an.
 - `GET /api/teaching/courses/{course_id}/modules` (Owner only)
   - 200 `[{ id, course_id, unit_id, position, context_notes?, created_at, updated_at }]`
 - `POST /api/teaching/courses/{course_id}/modules` (Owner only)
@@ -67,6 +74,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 #### Abschnitte (Sections) je Lerneinheit
 - `GET /api/teaching/units/{unit_id}/sections` (Author only)
   - 200 `[{ id, unit_id, title, position, created_at, updated_at }]`; 403/404 gemäß Ownership‑Guard; 400 bei ungültiger UUID
+  - Cache: `Cache-Control: private, no-store`
 - `POST /api/teaching/units/{unit_id}/sections` (Author only)
   - Body `{ title[1..200] }`, 201 `Section` am Ende (nächste `position`); 400/403/404
 - `PATCH /api/teaching/units/{unit_id}/sections/{section_id}` (Author only)

@@ -175,6 +175,10 @@ E2E‑Tests (Identity):
 - Entwicklung: CSP erlaubt Inline‑Skripte/‑Styles zur besseren DX (`script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'`).
 - Produktion: CSP ist strikt, ohne `unsafe-inline` für Skripte/Styles (`script-src 'self'; style-src 'self'`).
 
+#### API-Caching-Policy
+- Personalisierte API‑Antworten (Teaching/Users) werden mit `Cache-Control: private, no-store` geliefert.
+- Ziel: Keine Zwischenspeicherung in geteilten Proxies/Browsern; verhindert ungewolltes Leaken von personenbezogenen Daten.
+
 #### Redirect‑URI‑Sicherheit
 - `redirect_uri` wird dynamisch nur dann auf den Request‑Host gesetzt, wenn
   dieser Host gegen `WEB_BASE` (oder die konfigurierte `OIDC_CFG.redirect_uri`)
@@ -205,6 +209,17 @@ E2E‑Tests (Identity):
 - Author‑Scope: `unit_sections` ist über `units.author_id = app.current_sub` abgesichert (SELECT/INSERT/UPDATE/DELETE).
 - Atomare Reorder: Unique `(unit_id, position)` ist DEFERRABLE; Reorder setzt `SET CONSTRAINTS … DEFERRED` und updated alle Positionen in einer Transaktion.
 - Concurrency: Neue `position` wird mit Row‑Lock auf die Unit‑Sections ermittelt, um doppelte Positionen zu vermeiden.
+
+#### SSR‑UI für Abschnitte (API‑only)
+- Seite `/units/{unit_id}` lädt/ändert ausschließlich über die Teaching‑API:
+  - Unit: `GET /api/teaching/units/{unit_id}` (authorOnly)
+  - Sections: `GET /api/teaching/units/{unit_id}/sections`
+  - Create: `POST /api/teaching/units/{unit_id}/sections`
+  - Delete: `DELETE /api/teaching/units/{unit_id}/sections/{section_id}`
+  - Reorder: `POST /api/teaching/units/{unit_id}/sections/reorder`
+- Der DOM enthält immer einen stabilen Sortable‑Container (auch bei leerer Liste) zur sofortigen Reinitialisierung nach HTMX‑Swaps.
+- Drag & Drop löst einen Fetch mit `credentials: same-origin` und `X‑CSRF‑Token` aus; es gibt keine parallelen HTMX‑Reorder‑Requests.
+- Fehlerfälle: API-Fehlercodes (z.B. `invalid_title`, `not_found`) werden UI-seitig angezeigt; fehlgeschlagene Reorder-Requests melden sich per Alert.
 
 ### Lokaler Betrieb & UFW
 - Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.

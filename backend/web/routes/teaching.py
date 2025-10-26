@@ -1132,6 +1132,9 @@ async def get_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    # Validate path parameter format early to avoid unintended 500s
+    if not _is_uuid_like(course_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     guard = _guard_course_owner(course_id, sub)
     if guard:
         return guard
@@ -1505,7 +1508,7 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     except Exception as exc:
         logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=[_serialize_unit(u) for u in units], status_code=200)
+    return _json_private([_serialize_unit(u) for u in units], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units")
@@ -1540,6 +1543,47 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return JSONResponse(content=_serialize_unit(unit), status_code=201)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}")
+async def get_unit(request: Request, unit_id: str):
+    """
+    Get a learning unit by id — author only.
+
+    Why:
+        The SSR edit form and API clients need a direct lookup to prefill
+        fields without scanning a paginated list.
+
+    Behavior:
+        - 200 with `Unit` when the caller authored the unit
+        - 400 when `unit_id` is not UUID-like
+        - 404 when the unit does not exist
+        - 403 when the caller is not the author
+
+    Permissions:
+        Caller must be a teacher and the author of the unit.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    # Author confirmed; fetch the unit via repo (DB or in-memory)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            u = REPO.get_unit_for_author(unit_id, sub)
+        else:
+            u = REPO.get_unit_for_author(unit_id, sub)
+    except Exception:
+        u = REPO.get_unit_for_author(unit_id, sub)
+    if not u:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return _json_private(_serialize_unit(u), status_code=200)
 
 
 @teaching_router.patch("/api/teaching/units/{unit_id}")
@@ -1635,7 +1679,7 @@ async def list_sections(request: Request, unit_id: str):
         items = REPO.list_sections_for_author(unit_id, sub)
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=[_serialize_section(s) for s in items], status_code=200)
+    return _json_private([_serialize_section(s) for s in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections")

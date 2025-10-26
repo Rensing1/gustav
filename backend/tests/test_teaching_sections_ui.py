@@ -44,7 +44,12 @@ def _extract_csrf_token(html: str) -> str | None:
     return m.group(1) if m else None
 
 
-UNIT_ID = "u1"  # vorbefüllte Dummy-Einheit in main._DUMMY_UNITS_STORE
+async def _create_unit_via_api(client: httpx.AsyncClient, *, title: str) -> str:
+    r = await client.post("/api/teaching/units", json={"title": title})
+    assert r.status_code == 201
+    body = r.json()
+    assert isinstance(body, dict) and body.get("id")
+    return body["id"]
 
 
 async def _create_section_via_ui(client: httpx.AsyncClient, *, unit_id: str, title: str, csrf_token: str) -> str:
@@ -82,8 +87,8 @@ async def test_sections_page_renders_wrapper_and_sortable():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-1", name="Lehrer S", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        # Act: Seite der Dummy-Einheit abrufen
-        page = await c.get(f"/units/{UNIT_ID}")
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-1")
+        page = await c.get(f"/units/{unit_id}")
 
     assert page.status_code == 200
     html = page.text
@@ -96,17 +101,17 @@ async def test_sections_delete_returns_wrapper_and_removes_item():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-2", name="Lehrer D", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        # CSRF besorgen aus Dummy-Einheit
-        get_r = await c.get(f"/units/{UNIT_ID}")
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-2")
+        get_r = await c.get(f"/units/{unit_id}")
         token = _extract_csrf_token(get_r.text) or ""
 
         # Zwei Abschnitte anlegen
-        a_id = await _create_section_via_ui(c, unit_id=UNIT_ID, title="Alpha", csrf_token=token)
-        b_id = await _create_section_via_ui(c, unit_id=UNIT_ID, title="Beta", csrf_token=token)
+        a_id = await _create_section_via_ui(c, unit_id=unit_id, title="Alpha", csrf_token=token)
+        b_id = await _create_section_via_ui(c, unit_id=unit_id, title="Beta", csrf_token=token)
 
         # Act: Alpha löschen
         del_r = await c.post(
-            f"/units/{UNIT_ID}/sections/{a_id}/delete",
+            f"/units/{unit_id}/sections/{a_id}/delete",
             data={"csrf_token": token},
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
@@ -123,17 +128,17 @@ async def test_sections_reorder_accepts_id_param_and_changes_order():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-3", name="Lehrer R", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        # CSRF besorgen aus Dummy-Einheit
-        get_r = await c.get(f"/units/{UNIT_ID}")
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-3")
+        get_r = await c.get(f"/units/{unit_id}")
         token = _extract_csrf_token(get_r.text) or ""
 
         # Zwei Abschnitte (Alpha, Beta) erzeugen
         # Erzeugen
-        await _create_section_via_ui(c, unit_id=UNIT_ID, title="Alpha", csrf_token=token)
-        await _create_section_via_ui(c, unit_id=UNIT_ID, title="Beta", csrf_token=token)
+        await _create_section_via_ui(c, unit_id=unit_id, title="Alpha", csrf_token=token)
+        await _create_section_via_ui(c, unit_id=unit_id, title="Beta", csrf_token=token)
 
         # IDs zuverlässig aus ganzer Seite extrahieren
-        page_after = await c.get(f"/units/{UNIT_ID}")
+        page_after = await c.get(f"/units/{unit_id}")
         assert page_after.status_code == 200
         html_after = page_after.text
         alpha_id = _find_section_id_by_title(html_after, "Alpha") or ""
@@ -144,7 +149,7 @@ async def test_sections_reorder_accepts_id_param_and_changes_order():
         # Act: Reihenfolge umdrehen – htmx-sortable sendet id=section_<id>
         form_body = f"id=section_{beta_id}&id=section_{alpha_id}"
         reorder_r = await c.post(
-            f"/units/{UNIT_ID}/sections/reorder",
+            f"/units/{unit_id}/sections/reorder",
             content=form_body,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
@@ -154,7 +159,7 @@ async def test_sections_reorder_accepts_id_param_and_changes_order():
         assert reorder_r.status_code in (200, 204)
 
         # Assert: Seite neu laden und prüfen, ob 'Beta' vor 'Alpha' steht
-        page = await c.get(f"/units/{UNIT_ID}")
+        page = await c.get(f"/units/{unit_id}")
         html = page.text
         assert page.status_code == 200
 
@@ -168,18 +173,19 @@ async def test_sections_create_preserves_existing_and_sortable_stays_active():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-4", name="Lehrer C", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        initial = await c.get(f"/units/{UNIT_ID}")
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-4")
+        initial = await c.get(f"/units/{unit_id}")
         assert initial.status_code == 200
         initial_html = initial.text
         assert 'hx-ext="sortable"' in initial_html
         # Zähle initiale Karten
         initial_count = len(re.findall(r'<div class=\"card section-card\" id=\"section_', initial_html))
-        assert initial_count >= 1
+        assert initial_count >= 0
 
         token = _extract_csrf_token(initial_html) or ""
         # Abschnitt hinzufügen
         create_r = await c.post(
-            f"/units/{UNIT_ID}/sections",
+            f"/units/{unit_id}/sections",
             data={"title": "Gamma", "csrf_token": token},
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
@@ -194,19 +200,40 @@ async def test_sections_create_preserves_existing_and_sortable_stays_active():
 
 
 @pytest.mark.anyio
+async def test_sections_create_invalid_title_returns_error_fragment():
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-4b", name="Lehrer CE", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-4b")
+        page = await c.get(f"/units/{unit_id}")
+        token = _extract_csrf_token(page.text) or ""
+
+        resp = await c.post(
+            f"/units/{unit_id}/sections",
+            data={"title": "   ", "csrf_token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true"},
+        )
+
+    assert resp.status_code == 200
+    assert "invalid_title" in resp.text
+    assert "form-error" in resp.text
+
+
+@pytest.mark.anyio
 async def test_sections_reorder_requires_csrf_and_accepts_header():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-5", name="Lehrer CSRF", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        page = await c.get(f"/units/{UNIT_ID}")
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-5")
+        page = await c.get(f"/units/{unit_id}")
         assert page.status_code == 200
         token = _extract_csrf_token(page.text) or ""
 
         # Mindestens zwei Einträge sicherstellen
-        await _create_section_via_ui(c, unit_id=UNIT_ID, title="C1", csrf_token=token)
-        await _create_section_via_ui(c, unit_id=UNIT_ID, title="C2", csrf_token=token)
+        await _create_section_via_ui(c, unit_id=unit_id, title="C1", csrf_token=token)
+        await _create_section_via_ui(c, unit_id=unit_id, title="C2", csrf_token=token)
 
-        page2 = await c.get(f"/units/{UNIT_ID}")
+        page2 = await c.get(f"/units/{unit_id}")
         html2 = page2.text
         id1 = _find_section_id_by_title(html2, "C1") or ""
         id2 = _find_section_id_by_title(html2, "C2") or ""
@@ -214,7 +241,7 @@ async def test_sections_reorder_requires_csrf_and_accepts_header():
 
         # Ohne CSRF → 403
         r_forbidden = await c.post(
-            f"/units/{UNIT_ID}/sections/reorder",
+            f"/units/{unit_id}/sections/reorder",
             content=f"id=section_{id2}&id=section_{id1}",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
@@ -222,7 +249,7 @@ async def test_sections_reorder_requires_csrf_and_accepts_header():
 
         # Mit Header-Token → 200/204
         r_ok = await c.post(
-            f"/units/{UNIT_ID}/sections/reorder",
+            f"/units/{unit_id}/sections/reorder",
             content=f"id=section_{id2}&id=section_{id1}",
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
@@ -233,11 +260,105 @@ async def test_sections_reorder_requires_csrf_and_accepts_header():
 
 
 @pytest.mark.anyio
+async def test_sections_reorder_calls_api_for_db_unit():
+    """
+    SSR reorder should call the API reorder for DB-backed units when IDs are UUID-like.
+    We verify by creating sections via API, calling the SSR reorder endpoint with
+    DOM-style ids, and then asserting the API list reflects the new order.
+    """
+    from utils.db import require_db_or_skip as _require_db_or_skip
+    _require_db_or_skip()
+    try:
+        import routes.teaching as teaching  # noqa: F401
+    except Exception:
+        pytest.skip("Teaching routes unavailable")
+
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-6-db", name="Lehrer DB", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        # Create unit and two sections via API
+        r_unit = await c.post("/api/teaching/units", json={"title": "DB-Unit"})
+        assert r_unit.status_code == 201
+        uid = r_unit.json()["id"]
+        a = (await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Alpha"})).json()
+        b = (await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Beta"})).json()
+
+        # Get CSRF token from SSR page (token only; list is dummy)
+        page = await c.get(f"/units/{uid}")
+        assert page.status_code == 200
+        token = _extract_csrf_token(page.text) or ""
+
+        # Call SSR reorder with DOM-style ids: Beta first, then Alpha
+        form_body = f"id=section_{b['id']}&id=section_{a['id']}"
+        r_reorder = await c.post(
+            f"/units/{uid}/sections/reorder",
+            content=form_body,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRF-Token": token,
+            },
+        )
+        assert r_reorder.status_code in (200, 204)
+
+        # API must reflect Beta before Alpha now
+        lst = await c.get(f"/api/teaching/units/{uid}/sections")
+        assert lst.status_code == 200
+    ids = [s["id"] for s in lst.json()]
+    assert ids[:2] == [b["id"], a["id"]]
+
+
+@pytest.mark.anyio
+async def test_sections_delete_unknown_section_returns_error_fragment():
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-del-err", name="Lehrer DEL", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-DelErr")
+        page = await c.get(f"/units/{unit_id}")
+        token = _extract_csrf_token(page.text) or ""
+
+        resp = await c.post(
+            f"/units/{unit_id}/sections/not-real/delete",
+            data={"csrf_token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true"},
+        )
+
+    assert resp.status_code == 200
+    assert "section-error" in resp.text
+    assert "not_found" in resp.text
+
+
+@pytest.mark.anyio
+async def test_sections_reorder_invalid_ids_returns_error_response():
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-reorder-err", name="Lehrer RE", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-ReorderErr")
+        page = await c.get(f"/units/{unit_id}")
+        token = _extract_csrf_token(page.text) or ""
+
+        a = await _create_section_via_ui(c, unit_id=unit_id, title="Alpha", csrf_token=token)
+        await _create_section_via_ui(c, unit_id=unit_id, title="Beta", csrf_token=token)
+
+        resp = await c.post(
+            f"/units/{unit_id}/sections/reorder",
+            content=f"id=section_{a}&id=section_notreal",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRF-Token": token,
+            },
+        )
+
+    assert resp.status_code == 400
+    payload = resp.json()
+    assert payload.get("detail") == "invalid_section_ids"
+
+
+@pytest.mark.anyio
 async def test_sections_page_supports_repo_created_unit_and_allows_create():
     """
     Given a teacher creates a unit via the Teaching API (Repo)
     When they open /units/{unit_id}
-    Then the dummy sections UI renders (wrapper present) and creating a section works.
+    Then the sections UI renders (wrapper present) and creating a section works.
     """
     # Arrange: authenticated teacher session
     sess = main.SESSION_STORE.create(sub="t-ui-sec-6", name="Lehrer RepoUnit", roles=["teacher"])  # type: ignore

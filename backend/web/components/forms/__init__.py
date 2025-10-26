@@ -9,6 +9,7 @@ from .fields import FormField, TextAreaField, FileUploadField, TextInputField
 from .submit import SubmitButton
 from .course_create_form import CourseCreateForm
 from .unit_create_form import UnitCreateForm
+from .unit_edit_form import UnitEditForm
 from .section_create_form import SectionCreateForm
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "SubmitButton",
     "CourseCreateForm",
     "UnitCreateForm",
+    "UnitEditForm",
     "SectionCreateForm",
 ]

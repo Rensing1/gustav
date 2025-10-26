@@ -6,6 +6,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 - `GET /api/teaching/courses?limit&offset`
   - Lehrer: eigene Kurse; Schüler: belegte Kurse
   - 200 `[Course]`, 401/403 gemäß Auth-Middleware
+  - Cache: `Cache-Control: private, no-store`
 - `POST /api/teaching/courses` (Teacher only)
   - Body `CourseCreate { title, subject?, grade_level?, term? }`
   - 201 `Course`, 400 bei ungültigen Feldern, 403 wenn nicht `teacher`
@@ -16,8 +17,10 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - 204, entfernt auch Mitgliedschaften; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
 - `GET /api/teaching/courses/{course_id}` (Owner only)
   - 200 `Course`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
+  - Cache: `Cache-Control: private, no-store`
 - `GET /api/teaching/courses/{course_id}/members?limit&offset` (Owner only)
   - 200 `[CourseMember { sub, name, joined_at }]`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
+  - Cache: `Cache-Control: private, no-store`
 - `POST /api/teaching/courses/{course_id}/members` (Owner only, idempotent)
   - Body `{ student_sub }`
   - 201 neu, 204 existierend, 400/403/404

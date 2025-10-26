@@ -10,6 +10,10 @@
 - tests(web): Add regression coverage for sections/unit forms (escaping, HTMX targets) to guard the fixes.
 - feat(users): Add GET /api/users/list for role‑scoped user listing (Keycloak Admin API). Used by Members UI to auto‑populate candidates.
 - feat(teaching/api): Add GET /api/teaching/courses/{id} (owner‑only) for direct lookups (Edit/Mitglieder SSR prefill; avoids list scans).
+- feat(teaching/api): Add GET /api/teaching/units/{id} (author‑only) for direct lookups (SSR Umbenennen‑Formular).
+- feat(web/units): Add SSR routes GET/POST /units/{id}/edit with CSRF; prefill via API GET.
+- feat(web/sections): SSR reorder now calls API reorder for DB-backed units (UUID ids) while keeping UI dummy store in sync; tests added.
+- ux(web/sections): Drag & drop works on entire item (not only handle); clicks on buttons/links are ignored while dragging.
 - feat(web/members): Auto‑load candidates (students not yet members) under the search input; search now filters candidates server‑side.
 - fix(web/members): Removing a member immediately updates the current members list; inline error banner on API failure.
 - docs(teaching): Reference updated for Users list endpoint and SSR member management behavior.

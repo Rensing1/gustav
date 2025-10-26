@@ -206,6 +206,16 @@ E2E‑Tests (Identity):
 - Atomare Reorder: Unique `(unit_id, position)` ist DEFERRABLE; Reorder setzt `SET CONSTRAINTS … DEFERRED` und updated alle Positionen in einer Transaktion.
 - Concurrency: Neue `position` wird mit Row‑Lock auf die Unit‑Sections ermittelt, um doppelte Positionen zu vermeiden.
 
+#### SSR‑UI für Abschnitte (API‑only)
+- Seite `/units/{unit_id}` lädt/ändert ausschließlich über die Teaching‑API:
+  - Unit: `GET /api/teaching/units/{unit_id}` (authorOnly)
+  - Sections: `GET /api/teaching/units/{unit_id}/sections`
+  - Create: `POST /api/teaching/units/{unit_id}/sections`
+  - Delete: `DELETE /api/teaching/units/{unit_id}/sections/{section_id}`
+  - Reorder: `POST /api/teaching/units/{unit_id}/sections/reorder`
+- Der DOM enthält immer einen stabilen Sortable‑Container (auch bei leerer Liste) zur sofortigen Reinitialisierung nach HTMX‑Swaps.
+- Drag & Drop löst einen Fetch mit `credentials: same-origin` und `X‑CSRF‑Token` aus; es gibt keine parallelen HTMX‑Reorder‑Requests.
+
 ### Lokaler Betrieb & UFW
 - Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.
 - Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:8100`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 8100 proto tcp`.

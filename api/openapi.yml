@@ -1745,6 +1745,41 @@ paths:
         '403': { description: Forbidden (not a teacher), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}:
+    get:
+      tags: [Teaching]
+      summary: Get a learning unit by id (author only)
+      description: Returns the unit if the authenticated teacher is the author.
+      operationId: getUnit
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Learning unit owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     patch:
       tags: [Teaching]
       summary: Update a learning unit (author only)

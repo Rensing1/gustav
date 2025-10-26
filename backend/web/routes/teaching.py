@@ -1542,6 +1542,47 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     return JSONResponse(content=_serialize_unit(unit), status_code=201)
 
 
+@teaching_router.get("/api/teaching/units/{unit_id}")
+async def get_unit(request: Request, unit_id: str):
+    """
+    Get a learning unit by id — author only.
+
+    Why:
+        The SSR edit form and API clients need a direct lookup to prefill
+        fields without scanning a paginated list.
+
+    Behavior:
+        - 200 with `Unit` when the caller authored the unit
+        - 400 when `unit_id` is not UUID-like
+        - 404 when the unit does not exist
+        - 403 when the caller is not the author
+
+    Permissions:
+        Caller must be a teacher and the author of the unit.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    # Author confirmed; fetch the unit via repo (DB or in-memory)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            u = REPO.get_unit_for_author(unit_id, sub)
+        else:
+            u = REPO.get_unit_for_author(unit_id, sub)
+    except Exception:
+        u = REPO.get_unit_for_author(unit_id, sub)
+    if not u:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return _json_private(_serialize_unit(u), status_code=200)
+
+
 @teaching_router.patch("/api/teaching/units/{unit_id}")
 async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload):
     """

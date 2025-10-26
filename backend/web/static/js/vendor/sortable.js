@@ -8,15 +8,18 @@
   function initSortables(root) {
     if (typeof Sortable === 'undefined') return;
     var scope = root || document;
-    var nodes = scope.querySelectorAll('[hx-ext~="sortable"][hx-post]');
+    var nodes = scope.querySelectorAll('[hx-ext~="sortable"]');
     nodes.forEach(function (el) {
       if (el.dataset.sortableReady === 'true') return;
       try {
         new Sortable(el, {
           animation: 150,
-          handle: '.drag-handle',
+          // Allow dragging anywhere in the item for better UX; ignore clicks on actionable elements
+          filter: 'button, a, form, input, textarea, select',
+          preventOnFilter: false,
+          dragoverBubble: true,
           onEnd: function () {
-            var url = el.getAttribute('hx-post');
+            var url = el.getAttribute('data-reorder-url');
             if (!url) return;
             var ids = Array.from(el.children)
               .map(function (c) { return c.id; })
@@ -35,7 +38,14 @@
             fetch(url, {
               method: 'POST',
               headers: headers,
-              body: body
+              body: body,
+              credentials: 'same-origin'
+            }).then(function (r) {
+              if (!r.ok) {
+                console.warn('Reorder request failed', r.status);
+              }
+            }).catch(function (e) {
+              console.warn('Reorder request error', e);
             });
           }
         });
@@ -54,12 +64,16 @@
 
   // Re-init on HTMX swaps
   document.body && document.body.addEventListener && document.body.addEventListener('htmx:afterSwap', function (evt) {
-    initSortables(document);
+    initSortables(evt && (evt.detail && evt.detail.elt) ? evt.detail.elt : document);
   });
   document.body && document.body.addEventListener && document.body.addEventListener('htmx:oobAfterSwap', function (evt) {
-    initSortables(document);
+    initSortables(evt && (evt.detail && evt.detail.elt) ? evt.detail.elt : document);
   });
   document.body && document.body.addEventListener && document.body.addEventListener('htmx:afterSettle', function (evt) {
-    initSortables(document);
+    initSortables(evt && (evt.detail && evt.detail.elt) ? evt.detail.elt : document);
+  });
+  document.body && document.body.addEventListener && document.body.addEventListener('htmx:load', function (evt) {
+    // Fired for new content; ensure local subtree initializes
+    initSortables(evt && evt.detail && evt.detail.elt ? evt.detail.elt : document);
   });
 })();

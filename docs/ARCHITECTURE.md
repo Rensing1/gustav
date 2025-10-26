@@ -175,6 +175,10 @@ E2E‑Tests (Identity):
 - Entwicklung: CSP erlaubt Inline‑Skripte/‑Styles zur besseren DX (`script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'`).
 - Produktion: CSP ist strikt, ohne `unsafe-inline` für Skripte/Styles (`script-src 'self'; style-src 'self'`).
 
+#### API-Caching-Policy
+- Personalisierte API‑Antworten (Teaching/Users) werden mit `Cache-Control: private, no-store` geliefert.
+- Ziel: Keine Zwischenspeicherung in geteilten Proxies/Browsern; verhindert ungewolltes Leaken von personenbezogenen Daten.
+
 #### Redirect‑URI‑Sicherheit
 - `redirect_uri` wird dynamisch nur dann auf den Request‑Host gesetzt, wenn
   dieser Host gegen `WEB_BASE` (oder die konfigurierte `OIDC_CFG.redirect_uri`)

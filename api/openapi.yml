@@ -1455,10 +1455,23 @@ paths:
       responses:
         '200':
           description: Course
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Course'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_course_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1765,6 +1778,11 @@ paths:
       responses:
         '200':
           description: Learning unit owned by the caller
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -3176,6 +3194,8 @@ paths:
       operationId: searchUsers
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRoles: [teacher, admin]
       parameters:
         - in: query
           name: q
@@ -3245,6 +3265,8 @@ paths:
       operationId: listUsers
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRoles: [teacher, admin]
       parameters:
         - in: query
           name: role

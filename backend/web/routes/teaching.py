@@ -1132,6 +1132,9 @@ async def get_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    # Validate path parameter format early to avoid unintended 500s
+    if not _is_uuid_like(course_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     guard = _guard_course_owner(course_id, sub)
     if guard:
         return guard

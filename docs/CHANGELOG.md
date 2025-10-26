@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- api(teaching): GET /api/teaching/courses/{course_id} validates UUID; returns 400 detail=invalid_course_id. Documented Cache-Control on 200.
+- api(teaching): GET /api/teaching/units/{unit_id} documented Cache-Control on 200.
+- api(users): /api/users/search, /api/users/list responses set Cache-Control: private, no-store; OpenAPI x-permissions require teacher/admin.
 - fix(auth): Remove duplicate /auth/callback route in auth-only test app to avoid ambiguous routing.
 - security(csp): Harden CSP in prod (drop 'unsafe-inline' for scripts/styles); keep inline allowed in dev for DX.
 - security(cache): Add Cache-Control: private, no-store to Teaching JSON endpoints (courses list, course get, members list).

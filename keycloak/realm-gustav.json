@@ -3,6 +3,7 @@
   "enabled": true,
   "displayName": "GUSTAV Realm",
   "loginTheme": "gustav",
+  "defaultRoles": ["student"],
   "internationalizationEnabled": true,
   "defaultLocale": "de",
   "supportedLocales": ["de", "en"],

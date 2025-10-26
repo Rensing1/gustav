@@ -1433,6 +1433,35 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /api/teaching/courses/{course_id}:
+    get:
+      tags: [Teaching]
+      summary: Get a course by id (owner only)
+      description: |
+        Returns the course when the caller owns it. Responds 404 when the
+        course does not exist and 403 when the caller is not the owner.
+      operationId: getCourse
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Course
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     patch:
       tags: [Teaching]
       summary: Update a course (owner only)
@@ -3170,5 +3199,62 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_role
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/users/list:
+    get:
+      tags: [Users]
+      summary: List users by role
+      description: Teachers/Admins list users by role; returns sub and name for pagination and UI population.
+      operationId: listUsers
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: role
+          required: true
+          schema:
+            $ref: '#/components/schemas/Role'
+          description: Filter by role (e.g., student)
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Results
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [sub, name]
+                  properties:
+                    sub: { type: string }
+                    name: { type: string }
+        '400':
+          description: |
+            Invalid query. detail codes:
+              - invalid_role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

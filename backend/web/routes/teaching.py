@@ -1508,7 +1508,7 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     except Exception as exc:
         logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=[_serialize_unit(u) for u in units], status_code=200)
+    return _json_private([_serialize_unit(u) for u in units], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units")
@@ -1679,7 +1679,7 @@ async def list_sections(request: Request, unit_id: str):
         items = REPO.list_sections_for_author(unit_id, sub)
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=[_serialize_section(s) for s in items], status_code=200)
+    return _json_private([_serialize_section(s) for s in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections")

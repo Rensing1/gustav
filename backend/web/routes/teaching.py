@@ -906,6 +906,11 @@ else:
 
 
 def _build_default_repo():
+    """Prefer DB-backed TeachingRepo; fall back to in-memory if unavailable.
+
+    Matches the original project behavior so DB-based contract tests run when
+    a fake psycopg/test DSN is provided; otherwise we degrade gracefully.
+    """
     if DBTeachingRepo is None:
         if _DB_REPO_IMPORT_ERROR:
             logger.warning("Teaching repo import failed: %s", _DB_REPO_IMPORT_ERROR)
@@ -1097,6 +1102,43 @@ async def create_course(request: Request, payload: CourseCreate):
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     return JSONResponse(content=_serialize_course(course), status_code=201)
 
+
+@teaching_router.get("/api/teaching/courses/{course_id}")
+async def get_course(request: Request, course_id: str):
+    """Get a course by id — owner-only.
+
+    Why:
+        UI (edit form, members page) and API clients need a direct lookup that
+        respects ownership without scanning lists.
+
+    Behavior:
+        - 200 with `Course` when the caller owns the course
+        - 404 when the course does not exist
+        - 403 when the caller is not the owner
+
+    Permissions:
+        Caller must be a teacher AND owner of the course.
+    """
+    user = getattr(request.state, "user", None)
+    sub = _current_sub(user)
+    if not _role_in(user, "teacher"):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        return guard
+    # Owner confirmed; fetch course and return
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            # Use owner-scoped helper under RLS
+            c = REPO.get_course_for_owner(course_id, sub)
+        else:
+            c = REPO.get_course(course_id)
+    except Exception:
+        c = REPO.get_course(course_id)
+    if not c:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return JSONResponse(content=_serialize_course(c), status_code=200)
 
 class CourseUpdate(BaseModel):
     # Accept raw strings (including empty) and validate in handler to return 400

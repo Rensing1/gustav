@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 # Component Imports
 from components import Layout, CourseCreateForm, UnitCreateForm, SectionCreateForm
+from components.forms.unit_edit_form import UnitEditForm
 from components.base import Component
 from components.navigation import Navigation
 from components.pages import SciencePage
@@ -245,6 +246,17 @@ def _clamp_pagination(limit_raw: str | None, offset_raw: str | None) -> tuple[in
         offset = 0
     return max(1, min(50, limit)), max(0, offset)
 
+def _is_uuid_like(value: str) -> bool:
+    """Best-effort check whether a string is UUID-like.
+
+    Used by SSR routes to decide whether to call API endpoints that expect UUIDs.
+    """
+    try:
+        uuid.UUID(str(value))
+        return True
+    except Exception:
+        return False
+
 # --- Page Rendering Helpers -----------------------------------------------------
 
 def _render_course_list_partial(items: list[dict], limit: int, offset: int, has_next: bool, *, csrf_token: str) -> str:
@@ -438,16 +450,14 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
         </div>
         ''')
 
-    if items:
-        inner = (
-            f'<div class="section-list" hx-ext="sortable" '
-            f'hx-post="/units/{unit_id}/sections/reorder" hx-trigger="end" hx-swap="none" '
-            f'data-csrf-token="{csrf_token}">'
-            + "\n".join(items)
-            + "</div>"
-        )
-    else:
-        inner = '<div class="empty-state"><p>Noch keine Abschnitte vorhanden.</p></div>'
+    # Always render sortable container for consistent client behavior
+    sortable_open = (
+        f'<div class="section-list" hx-ext="sortable" '
+        f'data-reorder-url="/units/{unit_id}/sections/reorder" '
+        f'data-csrf-token="{csrf_token}">'
+    )
+    inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Abschnitte vorhanden.</p></div>'
+    inner = sortable_open + inner_content + "</div>"
     return f'<section id="section-list-section">{inner}</section>'
 
 def _render_sections_page_html(unit: dict, sections: list[dict], csrf_token: str, error: str | None = None) -> str:
@@ -822,78 +832,121 @@ async def units_create(request: Request):
     return RedirectResponse(url="/units", status_code=302)
 
 
+@app.get("/units/{unit_id}/edit", response_class=HTMLResponse)
+async def units_edit_form(request: Request, unit_id: str):
+    """Render the unit edit form populated from API when possible.
+
+    Permissions: Caller must be a teacher and (ideally) author; API enforces
+    authorship. UI performs CSRF and PRG.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+    values: dict[str, str] = {}
+    # Prefill current values via direct GET /api/teaching/units/{id}
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(f"/api/teaching/units/{unit_id}")
+            if r.status_code == 200 and isinstance(r.json(), dict):
+                it = r.json()
+                for k in ("title", "summary"):
+                    if it.get(k) is not None:
+                        values[k] = str(it.get(k))
+            elif r.status_code == 404:
+                return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+    except Exception:
+        pass
+    form_component = UnitEditForm(unit_id=unit_id, csrf_token=token, values=values)
+    content = f'<div class="container"><h1>Lerneinheit umbenennen</h1><section class="card">{form_component.render()}</section></div>'
+    layout = Layout(title="Lerneinheit bearbeiten", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/edit", response_class=HTMLResponse)
+async def units_edit_submit(request: Request, unit_id: str):
+    """Submit unit updates via API PATCH then PRG back to /units.
+
+    Security: CSRF at UI; authorship via API + RLS.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse(content="CSRF Error", status_code=403)
+    payload = {
+        "title": (str(form.get("title", "")).strip() or None),
+        "summary": (str(form.get("summary", "")).strip() or None),
+    }
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            await client.patch(f"/api/teaching/units/{unit_id}", json=payload)
+    except Exception:
+        pass
+    return RedirectResponse(url="/units", status_code=303)
+
 @app.get("/units/{unit_id}", response_class=HTMLResponse)
 async def unit_details_index(request: Request, unit_id: str):
-    """Sections management UI for a unit.
+    """Sections management UI for a unit (API-backed, no dummies).
 
-    Why: Teachers need a simple, server-rendered page to add/delete/reorder
-    sections. Until full DB integration for sections is ready, this page uses a
-    dummy in-memory store for the sections themselves.
+    Why: Teachers manage sections with server-rendered UI; all data loads and
+    mutations go through the Teaching API to stay DB-consistent.
 
     Behavior:
-    - Resolves the unit metadata by preferring the Teaching repo (DB/in-memory)
-      for the current teacher; if not found, falls back to the local dummy list
-      to keep the page functional in demos.
-    - Renders the sections list with stable wrapper id (section-list-section)
-      and CSRF-protected forms.
+    - GET unit details via /api/teaching/units/{id} (author-only)
+    - GET sections via /api/teaching/units/{id}/sections
+    - Render stable wrapper id (section-list-section) with CSRF-protected forms
 
-    Permissions: Caller must be a teacher; requires a valid session (CSRF ties
-    to session id).
+    Permissions: Caller must be a teacher with a valid session.
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
         return RedirectResponse(url="/", status_code=303)
 
-    # 1) Resolve unit meta (title/summary) – prefer Repo, fallback to dummy
-    unit_title: str | None = None
-    unit_summary: str | None = None
-    try:
-        from routes import teaching as teaching_routes  # type: ignore
-        author_sub = str((user or {}).get("sub") or "")
-        # Preferred: direct lookup when available
-        u = None
-        try:
-            u = teaching_routes.REPO.get_unit_for_author(unit_id, author_sub)  # type: ignore[attr-defined]
-        except Exception:
-            u = None
-        if u is None:
-            # Fallback: scan author's units to find matching id (works for DB/in-memory)
-            try:
-                items = teaching_routes.REPO.list_units_for_author(author_id=author_sub, limit=50, offset=0)
-                for item in (items or []):
-                    if getattr(item, "id", None) == unit_id or (isinstance(item, dict) and item.get("id") == unit_id):
-                        u = item
-                        break
-            except Exception:
-                u = None
-        if u is not None:
-            unit_title = getattr(u, "title", None) if not isinstance(u, dict) else u.get("title")
-            unit_summary = getattr(u, "summary", None) if not isinstance(u, dict) else u.get("summary")
-    except Exception:
-        # Repo import or calls failed; continue to dummy fallback
-        pass
-
-    if unit_title is None:
-        dummy = next((u for u in _DUMMY_UNITS_STORE if u.get("id") == unit_id), None)
-        if dummy:
-            unit_title = str(dummy.get("title") or "Lerneinheit")
-            unit_summary = str(dummy.get("summary") or "") or None
-
-    if unit_title is None:
-        return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
-
-    # 2) Load sections from the local dummy store keyed by unit_id
-    sections = _DUMMY_SECTIONS_STORE.get(unit_id, [])
-
-    # 3) CSRF token tied to session id
     sid = _get_session_id(request) or ""
     if not sid:
         return RedirectResponse(url="/auth/login", status_code=302)
     token = _get_or_create_csrf_token(sid)
 
-    unit_vm = {"id": unit_id, "title": unit_title, "summary": unit_summary}
+    unit_title: str | None = None
+    unit_summary: str | None = None
+    sections: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            u = await client.get(f"/api/teaching/units/{unit_id}")
+            if u.status_code != 200 or not isinstance(u.json(), dict):
+                return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+            ud = u.json()
+            unit_title = str(ud.get("title") or "") or None
+            unit_summary = str(ud.get("summary") or "") or None
+            s = await client.get(f"/api/teaching/units/{unit_id}/sections")
+            if s.status_code == 200 and isinstance(s.json(), list):
+                # Keep only fields needed for rendering
+                sections = [
+                    {"id": it.get("id"), "title": it.get("title")}
+                    for it in s.json()
+                ]
+    except Exception:
+        return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+
+    unit_vm = {"id": unit_id, "title": unit_title or "Lerneinheit", "summary": unit_summary or None}
     content = _render_sections_page_html(unit_vm, sections, csrf_token=token)
-    layout = Layout(title=f"Abschnitte für {unit_title}", content=content, user=user, current_path=request.url.path)
+    layout = Layout(title=f"Abschnitte für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
     return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
 
 
@@ -905,16 +958,35 @@ async def sections_create(request: Request, unit_id: str):
     
     form = await request.form()
     title = str(form.get("title", "")).strip()
-    # Note: No debug prints to avoid leaking PII into logs.
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
 
+    # Call API to create a section when title is valid
     if title:
-        new_section = {"id": str(uuid.uuid4()), "title": title}
-        _DUMMY_SECTIONS_STORE.setdefault(unit_id, []).append(new_section)
+        try:
+            import httpx
+            from httpx import ASGITransport
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                if sid:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid)
+                await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+        except Exception:
+            pass
 
-    sections = _DUMMY_SECTIONS_STORE.get(unit_id, [])
+    # Re-fetch current list from API to render updated fragment
+    sections: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(f"/api/teaching/units/{unit_id}/sections")
+            if r.status_code == 200 and isinstance(r.json(), list):
+                sections = [{"id": it.get("id"), "title": it.get("title")} for it in r.json()]
+    except Exception:
+        pass
     token = _get_or_create_csrf_token(sid or "")
     
     # Fragment 1: The updated section list
@@ -938,11 +1010,32 @@ async def sections_delete(request: Request, unit_id: str, section_id: str):
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
 
-    sections = _DUMMY_SECTIONS_STORE.get(unit_id, [])
-    _DUMMY_SECTIONS_STORE[unit_id] = [s for s in sections if s.get("id") != section_id]
-    
+    # Call API to delete
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            await client.delete(f"/api/teaching/units/{unit_id}/sections/{section_id}")
+    except Exception:
+        pass
+
+    # Re-fetch list to render
+    sections: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(f"/api/teaching/units/{unit_id}/sections")
+            if r.status_code == 200 and isinstance(r.json(), list):
+                sections = [{"id": it.get("id"), "title": it.get("title")} for it in r.json()]
+    except Exception:
+        pass
     token = _get_or_create_csrf_token(sid or "")
-    return HTMLResponse(content=_render_section_list_partial(unit_id, _DUMMY_SECTIONS_STORE.get(unit_id, []), csrf_token=token))
+    return HTMLResponse(content=_render_section_list_partial(unit_id, sections, csrf_token=token))
 
 @app.post("/units/{unit_id}/sections/reorder", response_class=Response)
 async def sections_reorder(request: Request, unit_id: str):
@@ -973,14 +1066,23 @@ async def sections_reorder(request: Request, unit_id: str):
     # with the parameter name 'id', e.g.: id=section_<uuid>
     ordered_ids = [sid.replace("section_", "") for sid in form.getlist("id")]
 
-    if unit_id in _DUMMY_SECTIONS_STORE:
-        # Create a map of the existing sections by their ID
-        section_map = {s["id"]: s for s in _DUMMY_SECTIONS_STORE[unit_id]}
-        # Create the new ordered list
-        reordered_sections = [section_map[sid] for sid in ordered_ids if sid in section_map]
-        _DUMMY_SECTIONS_STORE[unit_id] = reordered_sections
+    # 1) Try to persist via API when unit/ids are UUID-like (DB-backed path)
+    if _is_uuid_like(unit_id) and ordered_ids and all(_is_uuid_like(sid) for sid in ordered_ids):
+        try:
+            import httpx
+            from httpx import ASGITransport
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                if sid:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid)
+                await client.post(
+                    f"/api/teaching/units/{unit_id}/sections/reorder",
+                    json={"section_ids": ordered_ids},
+                )
+        except Exception:
+            # Fall back to dummy update below
+            pass
 
-    # No content response, as the UI is already updated optimistically
+    # No content; client already updated DOM optimistically
     return Response(status_code=200)
 
 @app.get("/courses/{course_id}/members", response_class=HTMLResponse)

@@ -1,6 +1,23 @@
 # Changelog
 
 ## Unreleased
+- fix(auth): Remove duplicate /auth/callback route in auth-only test app to avoid ambiguous routing.
+- security(csp): Harden CSP in prod (drop 'unsafe-inline' for scripts/styles); keep inline allowed in dev for DX.
+- security(cache): Add Cache-Control: private, no-store to Teaching JSON endpoints (courses list, course get, members list).
+- tests(security): New tests assert private/no-store on courses list and ensure prod CSP omits 'unsafe-inline'.
+- fix(web/sections): Escape SectionCreateForm hx-post/action and add POST fallback to close XSS gap and keep non-HTMX submits working.
+- fix(web/units): Always render #unit-list-section wrapper and POST-enabled create form so the first HTMX swap succeeds on empty lists.
+- tests(web): Add regression coverage for sections/unit forms (escaping, HTMX targets) to guard the fixes.
+- feat(users): Add GET /api/users/list for role‑scoped user listing (Keycloak Admin API). Used by Members UI to auto‑populate candidates.
+- feat(teaching/api): Add GET /api/teaching/courses/{id} (owner‑only) for direct lookups (Edit/Mitglieder SSR prefill; avoids list scans).
+- feat(web/members): Auto‑load candidates (students not yet members) under the search input; search now filters candidates server‑side.
+- fix(web/members): Removing a member immediately updates the current members list; inline error banner on API failure.
+- docs(teaching): Reference updated for Users list endpoint and SSR member management behavior.
+- devops(keycloak): Set defaultRoles=["student"] in realm import; docker‑compose passes KC_ADMIN_USERNAME/PASSWORD (defaults admin/admin) for directory access.
+- security(web): Global security headers middleware now covered by tests; HSTS only in `prod`.
+- security(auth): Dynamic `redirect_uri` derives host:port from ASGI request when not trusting proxy; tests for `/auth/register` added.
+- security(ssr): Do not mint CSRF tokens when no session cookie present (defensive guard for `/courses` and `/units`).
+- consistency(ssr): Removed redundant XFO/XCTO meta tags from `/units` SSR HTML; rely on middleware headers.
 - Security: Set Referrer-Policy to strict-origin-when-cross-origin to support Origin/Referer CSRF fallback while protecting cross-site leakage.
 - Auth: Dynamic redirect_uri now used only when request host matches WEB_BASE (or configured redirect_uri host); otherwise falls back to static redirect_uri. Prevents IdP errors and open redirect vectors.
 - Learning API: Add GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions listing endpoint; returns newest-first history for the current student.

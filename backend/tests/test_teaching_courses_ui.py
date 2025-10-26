@@ -43,6 +43,13 @@ async def _seed_course(client: httpx.AsyncClient, *, title: str, teacher_session
     assert resp.status_code == 201, resp.text
 
 
+async def _list_courses(client: httpx.AsyncClient, *, teacher_session_cookie: str) -> list[dict]:
+    client.cookies.set(main.SESSION_COOKIE_NAME, teacher_session_cookie)
+    r = await client.get("/api/teaching/courses")
+    assert r.status_code == 200
+    return r.json()
+
+
 def _extract_csrf_token(html: str) -> str | None:
     # Hidden input, name=csrf_token
     m = re.search(r'name=["\']csrf_token["\']\s+value=["\']([^"\']+)["\']', html)
@@ -198,3 +205,93 @@ async def test_courses_pagination_clamps_limit_offset_and_links_render():
     # And either a disabled "Zurück" or no prev link when offset=0
     assert ("data-testid=\"pager-prev\"" not in html) or ("aria-disabled=\"true\"" in html)
 
+
+@pytest.mark.anyio
+async def test_courses_create_htmx_from_empty_list_updates_list_section():
+    # Arrange: teacher session with initially no courses
+    sess = main.SESSION_STORE.create(sub="t-208", name="Lehrer I", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+
+        # Initial GET renders the page; ensure wrapper for list exists even if empty
+        r_get = await c.get("/courses")
+        assert r_get.status_code == 200
+        html = r_get.text
+        assert 'id="course-list-section"' in html, "List wrapper must always be present"
+        token = _extract_csrf_token(html) or ""
+
+        # Act: HTMX POST to create the first course
+        r_post = await c.post(
+            "/courses",
+            data={"title": "Informatik 11", "csrf_token": token},
+            headers={
+                "HX-Request": "true",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            follow_redirects=False,
+        )
+        # Assert: returns partial HTML containing the updated list wrapper and new title
+        assert r_post.status_code == 200
+        body = r_post.text
+        assert 'id="course-list-section"' in body
+        assert "Informatik 11" in body
+
+
+@pytest.mark.anyio
+async def test_courses_delete_htmx_updates_list_via_api_not_dummy():
+    # Arrange: teacher with two real DB courses
+    sess = main.SESSION_STORE.create(sub="t-209", name="Lehrer J", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        await _seed_course(c, title="Geschichte 7", teacher_session_cookie=sess.session_id)
+        await _seed_course(c, title="Biologie 8", teacher_session_cookie=sess.session_id)
+        courses = await _list_courses(c, teacher_session_cookie=sess.session_id)
+        assert len(courses) >= 2
+        # Pick one to delete
+        to_delete = courses[0]["id"]
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        # Fetch page for CSRF
+        page = await c.get("/courses")
+        token = _extract_csrf_token(page.text) or ""
+        # Act: HTMX delete
+        r = await c.post(
+            f"/courses/{to_delete}/delete",
+            data={"csrf_token": token},
+            headers={"HX-Request": "true", "Content-Type": "application/x-www-form-urlencoded"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        body = r.text
+        # Assert: updated list wrapper present and deleted title not present anymore
+        assert 'id="course-list-section"' in body
+        # Re-fetch from API to confirm deletion persisted
+        courses_after = await _list_courses(c, teacher_session_cookie=sess.session_id)
+        ids_after = {c["id"] for c in courses_after}
+    assert to_delete not in ids_after
+
+
+@pytest.mark.anyio
+async def test_courses_edit_page_allows_patch_and_redirects():
+    # Arrange: teacher + seed one course
+    sess = main.SESSION_STORE.create(sub="t-210", name="Lehrer K", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        await _seed_course(c, title="Deutsch 6", teacher_session_cookie=sess.session_id)
+        courses = await _list_courses(c, teacher_session_cookie=sess.session_id)
+        cid = courses[0]["id"]
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        # GET edit form
+        r_form = await c.get(f"/courses/{cid}/edit")
+        assert r_form.status_code == 200
+        token = _extract_csrf_token(r_form.text) or ""
+        # Submit patch
+        r_post = await c.post(
+            f"/courses/{cid}/edit",
+            data={"csrf_token": token, "title": "Deutsch 6a"},
+            follow_redirects=False,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert r_post.status_code in (302, 303)
+        assert r_post.headers.get("location", "").startswith("/courses")
+        # Verify list reflects new title
+        r_list = await c.get("/courses")
+        assert r_list.status_code == 200
+        assert "Deutsch 6a" in r_list.text

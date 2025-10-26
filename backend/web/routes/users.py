@@ -25,6 +25,22 @@ def search_users_by_name(*, role: str, q: str, limit: int) -> list[dict]:
         return []
 
 
+def list_users_by_role(*, role: str, limit: int, offset: int) -> list[dict]:
+    """List users by role via directory adapter; test/dummy-safe when unavailable.
+
+    Returns: [{ sub, name }]
+    """
+    try:
+        from identity_access import directory  # type: ignore
+        if hasattr(directory, "list_users_by_role"):
+            return directory.list_users_by_role(role=role, limit=limit, offset=offset)  # type: ignore
+        # Fallback: approximate by over-fetching search and slicing (no q)
+        data = directory.search_users_by_name(role=role, q="", limit=limit + offset)  # type: ignore
+        return data[offset: offset + limit]
+    except Exception:
+        return []
+
+
 def _is_teacher_or_admin(user: dict | None) -> bool:
     roles = (user or {}).get("roles") or []
     return isinstance(roles, list) and any(r in ("teacher", "admin") for r in roles)
@@ -56,6 +72,30 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
     limit = max(1, min(50, int(limit or 20)))
     results = search_users_by_name(role=role, q=q, limit=limit)
     # Defensive: normalize shape
+    norm = []
+    for it in results or []:
+        sub = str(it.get("sub", ""))
+        name = str(it.get("name", ""))
+        if sub and name:
+            norm.append({"sub": sub, "name": name})
+    return JSONResponse(norm, headers={"Cache-Control": "no-store"})
+
+
+@users_router.get("/api/users/list")
+async def users_list(request: Request, role: str, limit: int = 50, offset: int = 0):
+    """List users by role — teachers/admins only.
+
+    Permissions:
+        Caller must have role `teacher` or `admin`.
+    """
+    user = getattr(request.state, "user", None)
+    if not _is_teacher_or_admin(user):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    if role not in ALLOWED_ROLES:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_role"}, status_code=400)
+    limit = max(1, min(200, int(limit or 50)))
+    offset = max(0, int(offset or 0))
+    results = list_users_by_role(role=role, limit=limit, offset=offset)
     norm = []
     for it in results or []:
         sub = str(it.get("sub", ""))

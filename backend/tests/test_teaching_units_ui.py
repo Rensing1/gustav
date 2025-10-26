@@ -176,3 +176,30 @@ async def test_units_pagination_clamps_limit_offset_and_links_render():
     assert "href=\"/units?limit=50&offset=50\"" in html
     assert ("data-testid=\"pager-prev\"" not in html) or ("aria-disabled=\"true\"" in html)
 
+
+@pytest.mark.anyio
+async def test_units_create_form_includes_method_and_action_attributes():
+    """The create-unit form must degrade gracefully without HTMX by using POST + action."""
+    session = main.SESSION_STORE.create(sub="teacher-units-form", name="Teacher Units", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, session.session_id)
+        response = await client.get("/units")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'method="post"' in html, "Create-unit form must declare method=post for non-HTMX submits"
+    assert 'action="/units"' in html, "Create-unit form must declare action=/units for graceful fallback"
+
+
+@pytest.mark.anyio
+async def test_units_list_renders_target_wrapper_even_when_empty():
+    """The HTMX target #unit-list-section must exist, even with zero units."""
+    session = main.SESSION_STORE.create(sub="teacher-units-empty", name="Teacher Empty Units", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, session.session_id)
+        response = await client.get("/units")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="unit-list-section"' in html, "Unit list wrapper is required for initial HTMX swaps"
+    assert "Noch keine Lerneinheiten vorhanden." in html, "Empty state should be rendered for clarity"

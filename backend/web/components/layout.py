@@ -113,7 +113,11 @@ class Layout(Component):
     <link rel="stylesheet" href="/static/css/gustav.css?v=5">
 
     <!-- HTMX for interactivity (local copy) -->
-    <script src="/static/js/vendor/htmx.min.js"></script>
+    <SCRIPT src="/static/js/vendor/htmx.min.js"></SCRIPT>
+    <!-- Sortable.js for drag-and-drop -->
+    <SCRIPT src="/static/js/vendor/Sortable.min.js?v=3"></SCRIPT>
+    <!-- HTMX Sortable Extension (local integration) -->
+    <SCRIPT src="/static/js/vendor/sortable.js?v=3"></SCRIPT>
 
     <!-- Minimal custom JavaScript -->
-    <script src="/static/js/gustav.js?v=5" defer></script>"""
+    <SCRIPT src="/static/js/gustav.js?v=5" defer></SCRIPT>"""

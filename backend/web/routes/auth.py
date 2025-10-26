@@ -44,7 +44,15 @@ def _request_app_base(request: Request) -> str:
     import os
     trust_proxy = (os.getenv("GUSTAV_TRUST_PROXY", "false") or "").lower() == "true"
     scheme = (request.url.scheme or "http").lower()
-    host = request.headers.get("host") or (request.url.hostname or "")
+    # Prefer ASGI-parsed host:port when not trusting proxy headers to avoid
+    # Host header spoofing; fall back to Host for completeness.
+    if request.url.hostname:
+        if request.url.port:
+            host = f"{request.url.hostname}:{request.url.port}"
+        else:
+            host = request.url.hostname
+    else:
+        host = request.headers.get("host") or ""
     if trust_proxy:
         xf_proto = (request.headers.get("x-forwarded-proto") or scheme).split(",")[0].strip()
         xf_host = (request.headers.get("x-forwarded-host") or host).split(",")[0].strip()

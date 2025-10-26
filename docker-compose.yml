@@ -36,6 +36,9 @@ services:
       - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://id.localhost:8100}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
+      # Keycloak Admin API credentials for /api/users/search and name resolution
+      - KC_ADMIN_USERNAME=${KC_ADMIN_USERNAME:-admin}
+      - KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-admin}
       # Browser-facing app base controls callback host
       - WEB_BASE=${WEB_BASE:-http://app.localhost:8100}
       - REDIRECT_URI=${WEB_BASE:-http://app.localhost:8100}/auth/callback
@@ -45,6 +48,8 @@ services:
       - SESSIONS_BACKEND=db
       # App runtime DSN (limited role; RLS enforced). Prefer direct Docker network DNS to Supabase DB.
       - DATABASE_URL=postgresql://gustav_limited:gustav-limited@supabase_db_gustav-alpha2:5432/postgres
+      # Teaching repo DSN must not fallback to RLS_TEST_DSN in containers; set explicitly
+      - TEACHING_DATABASE_URL=postgresql://gustav_limited:gustav-limited@supabase_db_gustav-alpha2:5432/postgres
       # Sessions DSN (service role; app_sessions policies allow server-side access)
       - SESSION_DATABASE_URL=postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres
     restart: unless-stopped

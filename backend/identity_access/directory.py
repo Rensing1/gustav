@@ -115,3 +115,29 @@ def resolve_student_names(subs: List[str]) -> Dict[str, str]:
         except Exception:
             out[sid] = sid
     return out
+
+
+def list_users_by_role(*, role: str, limit: int, offset: int) -> List[dict]:
+    """List users for a given role using Keycloak Admin API.
+
+    Returns: list of { sub, name } with pagination.
+    """
+    kc = _KC()
+    token = kc.token()
+    if role not in ALLOWED_ROLES:
+        raise ValueError("invalid role")
+    url = f"{kc.base_url}/admin/realms/{kc.realm}/roles/{role}/users"
+    # Use KC pagination directly
+    params = {"first": max(0, int(offset or 0)), "max": max(1, min(200, int(limit or 50)))}
+    ca = os.getenv("KEYCLOAK_CA_BUNDLE")
+    verify_opt = ca if ca else True
+    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt)
+    r.raise_for_status()
+    arr = r.json() or []
+    results: List[dict] = []
+    for u in arr:
+        name = _display_name(u)
+        sub = u.get("id")
+        if sub and name:
+            results.append({"sub": str(sub), "name": name})
+    return results

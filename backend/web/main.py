@@ -180,7 +180,9 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Content-Security-Policy", csp)
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    # Support Origin/Referer fallback in CSRF checks without leaking cross-site
+    # paths: strict-origin-when-cross-origin.
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     if SETTINGS.environment == "prod":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

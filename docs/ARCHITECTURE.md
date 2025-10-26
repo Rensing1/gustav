@@ -171,6 +171,10 @@ E2E‑Tests (Identity):
 - Um diesen Fallback zu unterstützen und dennoch keine sensiblen Daten zu leaken,
   wird global `Referrer-Policy: strict-origin-when-cross-origin` gesetzt.
 
+#### Content Security Policy (CSP)
+- Entwicklung: CSP erlaubt Inline‑Skripte/‑Styles zur besseren DX (`script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'`).
+- Produktion: CSP ist strikt, ohne `unsafe-inline` für Skripte/Styles (`script-src 'self'; style-src 'self'`).
+
 #### Redirect‑URI‑Sicherheit
 - `redirect_uri` wird dynamisch nur dann auf den Request‑Host gesetzt, wenn
   dieser Host gegen `WEB_BASE` (oder die konfigurierte `OIDC_CFG.redirect_uri`)

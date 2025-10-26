@@ -203,43 +203,54 @@ class Navigation(Component):
     </aside>"""
 
     def _get_nav_items(self) -> List[Tuple[str, str, str]]:
-        """Legacy: flat list of items (kept for compatibility)"""
-        role = self.user.get("role", "student")
+        """Return role-aware flat list of navigation entries.
 
-        # Common items for all authenticated users
-        items = [
-            ("/", "Startseite", "🏠"),
-            ("/dashboard", "Dashboard", "📊"),
-            ("/wissenschaft", "Wissenschaft", "🔬"),  # Available for all roles
+        Keeps the list data-driven so roles can be extended without rewriting
+        rendering logic. When an unknown role is supplied we fall back to a
+        minimal menu (Startseite, Über GUSTAV) – this aligns with the security
+        posture that visibility alone must not grant additional permissions.
+        """
+
+        data = self.user or {}
+        role = str(data.get("role", "")).lower()
+        roles_list = [
+            str(value).lower()
+            for value in data.get("roles", [])
+            if isinstance(value, str)
         ]
 
-        # Role-specific items
-        if role == "student":
-            items.extend([
+        nav_config: Dict[str, List[Tuple[str, str, str]]] = {
+            "student": [
+                ("/", "Startseite", "🏠"),
                 ("/courses", "Meine Kurse", "📚"),
-                ("/progress", "Fortschritt", "📈"),
-                ("/flashcards", "Karteikarten", "🗂️"),
-            ])
+                ("/about", "Über GUSTAV", "ℹ️"),
+            ],
+            "teacher": [
+                ("/", "Startseite", "🏠"),
+                ("/courses", "Kurse", "📚"),
+                ("/units", "Lerneinheiten", "🧭"),
+                ("/about", "Über GUSTAV", "ℹ️"),
+            ],
+            # Administrators currently share the minimal fallback menu. We can
+            # extend this once dedicated Admin-Oberflächen exist.
+            "admin": [
+                ("/", "Startseite", "🏠"),
+                ("/about", "Über GUSTAV", "ℹ️"),
+            ],
+        }
 
-        elif role == "teacher":
-            items.extend([
-                ("/courses", "Kursverwaltung", "📚"),
-                ("/students", "Schüler", "👥"),
-                ("/analytics", "Analytics", "📈"),
-                ("/content", "Inhalte erstellen", "✏️"),
-            ])
+        default_menu = [
+            ("/", "Startseite", "🏠"),
+            ("/about", "Über GUSTAV", "ℹ️"),
+        ]
 
-        elif role == "admin":
-            items.extend([
-                ("/users", "Nutzerverwaltung", "👥"),
-                ("/system", "System", "⚙️"),
-                ("/analytics", "Analytics", "📈"),
-            ])
-
-        # Settings for all authenticated users
-        items.append(("/settings", "Einstellungen", "⚙️"))
-
-        return items
+        if "teacher" in roles_list or (role == "teacher" and not roles_list):
+            return nav_config["teacher"]
+        if "student" in roles_list or (role == "student" and not roles_list):
+            return nav_config["student"]
+        if "admin" in roles_list or (role == "admin" and not roles_list):
+            return nav_config["admin"]
+        return default_menu
 
     def _get_nav_tree(self) -> List[Tuple[str, str, str, Optional[List[Tuple[str, str, str]]]]]:
         """Return navigation items with optional children (submenus)

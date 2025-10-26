@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- Security: Set Referrer-Policy to strict-origin-when-cross-origin to support Origin/Referer CSRF fallback while protecting cross-site leakage.
+- Auth: Dynamic redirect_uri now used only when request host matches WEB_BASE (or configured redirect_uri host); otherwise falls back to static redirect_uri. Prevents IdP errors and open redirect vectors.
+- Learning API: Add GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions listing endpoint; returns newest-first history for the current student.
+- Contract: analysis_json schema tightened (required keys, examples) and feedback field renamed to feedback.
+- Validation: Enforce text_body maxLength 10k; harmonize 400 invalid_input for blank/oversized; sanitize image storage_key via strict regex and MIME whitelist.
+- UI/SSR: Add security headers middleware; /courses form uses synchronizer CSRF tokens; navigation updated per role.
 - fix(api/learning): Blank text submissions now return 400 detail=invalid_input (contract-aligned); add tests. Enforce `text_body` maxLength=10000 (contract updated).
 - security(csrf): When not trusting proxy, CSRF origin check no longer reads Host header; derives origin strictly from ASGI URL.
 - consistency(api/learning): Use ALLOWED_IMAGE_MIME constant; delegate sections pagination clamping to use case only.

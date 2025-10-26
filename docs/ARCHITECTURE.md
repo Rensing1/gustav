@@ -86,6 +86,8 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
   - Caddy routet hostbasiert:
     - `http://app.localhost:8100` → Web (GUSTAV)
     - `http://id.localhost:8100` → Keycloak (IdP)
+  - Persistenz (DEV): `keycloak_data:/opt/keycloak/data` Volume hält Realm‑ und Benutzer‑Daten über Rebuilds.
+    Für PROD sollte Keycloak an eine externe DB (KC_DB=postgres) angebunden werden.
   - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
   - Setup: `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`.
 - PROD (Security‑first, geringe App‑Komplexität):
@@ -161,6 +163,18 @@ E2E‑Tests (Identity):
 - `/auth/login` ignoriert einen client‑übergebenen `state` vollständig; `state` wird ausschließlich serverseitig erzeugt und validiert (CSRF‑Schutz).
 - Redirect‑Parameter sind nur als interne absolute Pfade erlaubt. Server‑seitig erzwungenes Pattern (spiegelt OpenAPI): `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`. Doppelte Slashes (`//`) und Pfadtraversalen (`..`) sind nicht erlaubt. Ungültige Werte werden ignoriert (Login → `/`, Logout → `/auth/logout/success`).
 - `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
+
+#### CSRF‑Strategie (Browser‑Flows)
+- Same‑Site Cookies: In PROD `SameSite=strict` + `Secure`; in DEV `lax`.
+- Server prüft bei schreibenden Learning‑APIs (`POST /submissions`) die **Origin**.
+  Fehlt `Origin`, wird als Fallback die **Referer**‑Origin herangezogen.
+- Um diesen Fallback zu unterstützen und dennoch keine sensiblen Daten zu leaken,
+  wird global `Referrer-Policy: strict-origin-when-cross-origin` gesetzt.
+
+#### Redirect‑URI‑Sicherheit
+- `redirect_uri` wird dynamisch nur dann auf den Request‑Host gesetzt, wenn
+  dieser Host gegen `WEB_BASE` (oder die konfigurierte `OIDC_CFG.redirect_uri`)
+  übereinstimmt. Bei Mismatch wird die statische `redirect_uri` verwendet.
 
 #### Nonce & Session‑TTL
 - Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: no-store`.

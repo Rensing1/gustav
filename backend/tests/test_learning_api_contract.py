@@ -620,6 +620,23 @@ async def test_list_submissions_history_happy_path():
 
 
 @pytest.mark.anyio
+async def test_list_submissions_requires_authentication():
+    """Anonymous callers must receive 401 with private cache control."""
+
+    # Fresh in-memory store without any session
+    main.SESSION_STORE = SessionStore()
+
+    async with (await _client()) as client:
+        resp = await client.get(
+            f"/api/learning/courses/00000000-0000-0000-0000-000000000000/tasks/00000000-0000-0000-0000-000000000000/submissions",
+            params={"limit": 10, "offset": 0},
+        )
+
+    assert resp.status_code == 401
+    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+
+
+@pytest.mark.anyio
 async def test_list_submissions_history_empty_returns_200_array():
     """Empty histories must still return HTTP 200 with an empty list."""
 

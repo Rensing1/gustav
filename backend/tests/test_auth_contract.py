@@ -208,6 +208,62 @@ async def test_login_redirect():
 
 
 @pytest.mark.anyio
+async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.MonkeyPatch):
+    """When Host matches WEB_BASE/redirect_uri host, use dynamic redirect_uri."""
+    import main  # type: ignore  # noqa: E402
+    from identity_access.oidc import OIDCConfig
+    from urllib.parse import urlparse, parse_qs
+
+    test_cfg = OIDCConfig(
+        base_url="http://kc.example:8080",
+        realm="gustav",
+        client_id="gustav-web",
+        redirect_uri="http://app.localhost:8100/auth/callback",
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as client:
+        # Simulate request on the allowed host
+        resp = await client.get("/auth/login", follow_redirects=False, headers={"Host": "app.localhost:8100"})
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("location", "")
+    u = urlparse(loc)
+    qs = parse_qs(u.query)
+    assert qs.get("redirect_uri") == ["http://app.localhost:8100/auth/callback"]
+
+
+@pytest.mark.anyio
+async def test_login_dynamic_redirect_falls_back_on_mismatch(monkeypatch: pytest.MonkeyPatch):
+    """When Host differs, fall back to configured redirect_uri (avoid IdP errors)."""
+    import main  # type: ignore  # noqa: E402
+    from identity_access.oidc import OIDCConfig
+    from urllib.parse import urlparse, parse_qs
+
+    static_redirect = "http://app.localhost:8100/auth/callback"
+    test_cfg = OIDCConfig(
+        base_url="http://kc.example:8080",
+        realm="gustav",
+        client_id="gustav-web",
+        redirect_uri=static_redirect,
+    )
+    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    # Intentionally set WEB_BASE to allowed app host
+    monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://evil.localhost:8100") as client:
+        # Simulate request from a different host -> must not echo back
+        resp = await client.get("/auth/login", follow_redirects=False, headers={"Host": "evil.localhost:8100"})
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("location", "")
+    u = urlparse(loc)
+    qs = parse_qs(u.query)
+    assert qs.get("redirect_uri") == [static_redirect]
+
+
+@pytest.mark.anyio
 async def test_forgot_redirect():
     app = create_app_auth_only()
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

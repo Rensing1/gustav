@@ -20,7 +20,7 @@ from urllib.parse import urlencode
 import os
 import secrets
 
-from identity_access.oidc import OIDCClient
+from identity_access.oidc import OIDCClient, OIDCConfig
 import re
 import logging
 
@@ -35,8 +35,44 @@ INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
 MAX_INAPP_REDIRECT_LEN = 256
 
 
+def _request_app_base(request: Request) -> str:
+    """Derive the browser-facing app base from the incoming request.
+
+    Honors trusted proxy headers when GUSTAV_TRUST_PROXY=true; otherwise uses
+    ASGI's scheme/host. Returns scheme://host[:port].
+    """
+    import os
+    trust_proxy = (os.getenv("GUSTAV_TRUST_PROXY", "false") or "").lower() == "true"
+    scheme = (request.url.scheme or "http").lower()
+    host = request.headers.get("host") or (request.url.hostname or "")
+    if trust_proxy:
+        xf_proto = (request.headers.get("x-forwarded-proto") or scheme).split(",")[0].strip()
+        xf_host = (request.headers.get("x-forwarded-host") or host).split(",")[0].strip()
+        scheme = (xf_proto or scheme).lower()
+        host = xf_host or host
+    return f"{scheme}://{host}"
+
+
+def _hostport_from_url(url: str) -> str:
+    """Return lowercased host[:port] from a URL string.
+
+    Defensive parsing: falls back to empty string on errors.
+    """
+    try:
+        from urllib.parse import urlparse
+
+        p = urlparse(url)
+        if p.hostname:
+            host = p.hostname.lower()
+            port = p.port
+            return f"{host}:{port}" if port else host
+    except Exception:
+        pass
+    return ""
+
+
 @auth_router.get("/auth/login")
-async def auth_login(redirect: str | None = None):
+async def auth_login(request: Request, redirect: str | None = None):
     """
     Start OIDC flow with PKCE and server-side state; redirect to IdP.
 
@@ -59,7 +95,24 @@ async def auth_login(redirect: str | None = None):
     rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
     final_state = rec.state
     # Use a fresh client bound to current config (allows monkeypatch in tests)
-    oidc = OIDCClient(main.OIDC_CFG)
+    # Prefer dynamic redirect_uri only when the current request host matches
+    # the allowed app host (from WEB_BASE or configured redirect_uri).
+    current_base = _request_app_base(request).rstrip("/")
+    dynamic_redirect_uri = f"{current_base}/auth/callback"
+    import os as _os
+
+    allowed_base = (_os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
+
+    redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
+    cfg = OIDCConfig(
+        base_url=main.OIDC_CFG.base_url,
+        realm=main.OIDC_CFG.realm,
+        client_id=main.OIDC_CFG.client_id,
+        redirect_uri=redirect_uri,
+        public_base_url=main.OIDC_CFG.public_base_url,
+    )
+    oidc = OIDCClient(cfg)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
     return RedirectResponse(url=url, status_code=302)
 
@@ -80,7 +133,7 @@ async def auth_forgot(login_hint: str | None = None):
 
 
 @auth_router.get("/auth/register")
-async def auth_register(login_hint: str | None = None):
+async def auth_register(request: Request, login_hint: str | None = None):
     """
     Redirect to Keycloak registration by hinting kc_action=register on the auth endpoint.
 
@@ -98,7 +151,21 @@ async def auth_register(login_hint: str | None = None):
     nonce = secrets.token_urlsafe(16)
     rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=None, nonce=nonce)
     final_state = rec.state
-    oidc = OIDCClient(main.OIDC_CFG)
+    # Use dynamic redirect_uri only for allowed hosts, else fallback to configured
+    current_base = _request_app_base(request).rstrip("/")
+    dynamic_redirect_uri = f"{current_base}/auth/callback"
+    import os as _os
+    allowed_base = (_os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
+    redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
+    cfg = OIDCConfig(
+        base_url=main.OIDC_CFG.base_url,
+        realm=main.OIDC_CFG.realm,
+        client_id=main.OIDC_CFG.client_id,
+        redirect_uri=redirect_uri,
+        public_base_url=main.OIDC_CFG.public_base_url,
+    )
+    oidc = OIDCClient(cfg)
     # Include nonce in the authorization request similar to /auth/login
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
     sep = '&' if '?' in url else '?'

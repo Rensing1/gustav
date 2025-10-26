@@ -36,8 +36,9 @@ services:
       - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://id.localhost:8100}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
-      # Align redirect with WEB_BASE used by tests and reverse proxy
-      - REDIRECT_URI=http://localhost:8100/auth/callback
+      # Browser-facing app base controls callback host
+      - WEB_BASE=${WEB_BASE:-http://app.localhost:8100}
+      - REDIRECT_URI=${WEB_BASE:-http://app.localhost:8100}/auth/callback
       # Trust reverse-proxy headers for Same-Origin checks in CSRF logic
       - GUSTAV_TRUST_PROXY=true
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
@@ -68,7 +69,10 @@ services:
       KC_HOSTNAME_URL: http://id.localhost:8100
       KC_HOSTNAME_ADMIN_URL: http://id.localhost:8100
       # In dev we rely on the embedded DB; for prod, configure KC_DB=postgres and friends.
-    # No volumes: theme and app CSS are baked into the image for reproducible deployments
+    volumes:
+      # Persist realm, users and admin config across container rebuilds
+      - keycloak_data:/opt/keycloak/data
+    # Theme and app CSS are baked into the image for reproducible deployments
     # No host port mapping in local-only mode; reachable via caddy reverse proxy
     restart: unless-stopped
     networks:
@@ -79,3 +83,6 @@ networks:
     driver: bridge
   supabase_network_gustav-alpha2:
     external: true
+volumes:
+  keycloak_data:
+    driver: local

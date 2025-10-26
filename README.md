@@ -6,7 +6,7 @@ KI‑gestützte Lernplattform mit FastAPI und HTMX. Server‑seitiges Rendern (S
 
 - Voraussetzungen: Docker & Docker Compose, Port `8100` frei
 - Start: `docker compose build && docker compose up`
-- Öffnen: `http://localhost:8100`
+- Öffnen (Reverse Proxy aktiv): `http://app.localhost:8100`
 - Entwicklung: Live‑Reload für `backend/web` ist aktiv
 - Nützlich: `docker compose up -d`, `docker compose logs -f`, `docker compose down`
 
@@ -52,15 +52,29 @@ gustav-alpha2/
   - `GUSTAV_ENV`: `dev` (Default) oder `prod` → steuert Cookie-Flags (`Secure`, `SameSite`)
   - `SESSIONS_BACKEND`: `memory` (Default) oder `db` (Postgres/Supabase)
   - `DATABASE_URL` (oder `SUPABASE_DB_URL`): DSN für DB-gestützte Sessions
-  - `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen; wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
+- `WEB_BASE`: Browser‑sichtbare Basis‑URL der App (z. B. `http://app.localhost:8100`)
+- `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `http://app.localhost:8100/auth/callback`); wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
 
 ### E2E-Hosts und Cookies
 
 - Cookies sind hostgebunden. Für eine stabile E2E-Anmeldung müssen Web‑Host und Cookie‑Host übereinstimmen.
 - Standard-Setup (Reverse‑Proxy `Caddyfile`):
-  - App: `http://app.localhost:8100`
-  - Keycloak: `http://id.localhost:8100`
+- App: `http://app.localhost:8100`
+- Keycloak: `http://id.localhost:8100`
 - E2E-Tests leiten `WEB_BASE` automatisch aus `REDIRECT_URI` ab (wenn `WEB_BASE` nicht gesetzt ist) und nutzen `KC_BASE` bzw. `KC_PUBLIC_BASE_URL`.
 - Empfehlung: Setze vor E2E-Läufen explizit
-  - `export WEB_BASE=http://app.localhost:8100`
-  - `export KC_BASE=http://id.localhost:8100`
+- `export WEB_BASE=http://app.localhost:8100`
+- `export KC_BASE=http://id.localhost:8100`
+
+## Persistenz (Keycloak‑Accounts)
+
+- In DEV startet Keycloak mit `start-dev --import-realm`. Ohne Persistenz gehen
+  manuell angelegte Nutzer bei Rebuilds verloren.
+- Dieses Compose aktiviert ein Volume: `keycloak_data:/opt/keycloak/data`.
+  Dadurch bleiben Realm‑Daten und Benutzer erhalten.
+- Hinweise:
+  - Der Realm‑Import greift nur bei leerem Datenverzeichnis. Änderungen an
+    `keycloak/realm-gustav.json` werden erst nach Löschen des Volumes erneut importiert
+    (z. B. `docker compose down -v && docker volume rm <projekt>_keycloak_data`).
+  - Für Produktion wird empfohlen, `KC_DB=postgres` zu konfigurieren und Keycloak an
+    eine externe Datenbank anzubinden. Das Volume erleichtert DEV, ersetzt aber keine Prod‑DB.

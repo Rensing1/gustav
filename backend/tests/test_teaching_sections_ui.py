@@ -61,22 +61,24 @@ async def _create_section_via_ui(client: httpx.AsyncClient, *, unit_id: str, tit
     assert resp.status_code == 200
     # Der Handler liefert das aktualisierte List-Fragment zurück.
     # Finde die section-ID, die zum gerade angelegten Titel gehört.
-    pattern = r'<div class=\"card section-card\" id=\"section_([a-f0-9\-]+)\"[\s\S]*?</div>\s*</div>\s*</div>'
-    m = None
-    for block in re.finditer(pattern, resp.text, re.S):
-        if f'<h4 class=\"card-title\">{re.escape(title)}<' in re.sub(r"\\s+", " ", block.group(0)):
-            m = block
-            break
-    assert m, f"no section id found for title {title!r} in: {resp.text[:500]}"
-    # type: ignore[union-attr]
-    return m.group(1)  # noqa: E1101
+    # Robust extraction: scan cards by id and check local block for title
+    for m in re.finditer(r'id=\"section_([a-f0-9\-]+)\"', resp.text):
+        start = m.start()
+        next_m = re.search(r'id=\"section_[a-f0-9\-]+\"', resp.text[start + 1 :])
+        end = start + 1 + next_m.start() if next_m else len(resp.text)
+        block = resp.text[start:end]
+        if title in block:
+            return m.group(1)
+    assert False, f"no section id found for title {title!r} in: {resp.text[:500]}"
 
 
 def _find_section_id_by_title(html: str, title: str) -> str | None:
-    pattern = r'<div class=\"card section-card\" id=\"section_([a-f0-9\-]+)\"[\s\S]*?</div>\s*</div>\s*</div>'
-    for m in re.finditer(pattern, html, re.S):
-        block = m.group(0)
-        if f'<h4 class=\"card-title\">{title}<' in block:
+    for m in re.finditer(r'id=\"section_([a-f0-9\-]+)\"', html):
+        start = m.start()
+        next_m = re.search(r'id=\"section_[a-f0-9\-]+\"', html[start + 1 :])
+        end = start + 1 + next_m.start() if next_m else len(html)
+        block = html[start:end]
+        if title in block:
             return m.group(1)
     return None
 
@@ -217,6 +219,34 @@ async def test_sections_create_invalid_title_returns_error_fragment():
     assert resp.status_code == 200
     assert "invalid_title" in resp.text
     assert "form-error" in resp.text
+
+
+@pytest.mark.anyio
+async def test_section_cards_link_to_detail_page():
+    # Arrange
+    sess = main.SESSION_STORE.create(sub="t-ui-sec-link-1", name="Lehrer L", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        import routes.teaching as teaching  # type: ignore
+        teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit_id = await _create_unit_via_api(c, title="UI-Unit-Link")
+        page = await c.get(f"/units/{unit_id}")
+        token = _extract_csrf_token(page.text) or ""
+        # Create a section via UI
+        create_r = await c.post(
+            f"/units/{unit_id}/sections",
+            data={"title": "Erster Abschnitt", "csrf_token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert create_r.status_code == 200
+
+        # Load updated page and find section id by title
+        page2 = await c.get(f"/units/{unit_id}")
+        html2 = page2.text
+        sid = _find_section_id_by_title(html2, "Erster Abschnitt") or ""
+        assert sid, html2
+        # Expect an anchor to the detail view
+        assert f' href="/units/{unit_id}/sections/{sid}"' in html2
 
 
 @pytest.mark.anyio

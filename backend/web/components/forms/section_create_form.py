@@ -21,9 +21,10 @@ class SectionCreateForm(Component):
         title_field = TextInputField("title", "Titel des Abschnitts", required=True)
         error_html = f'<div class="form-error" role="alert">{self.escape(self.error)}</div>' if self.error else ""
         submit_btn = SubmitButton("Abschnitt hinzufügen")
+        safe_unit_id = self.escape(self.unit_id)
 
         form_html = f"""
-        <form hx-post="/units/{self.unit_id}/sections" hx-target="#section-list-section" hx-swap="outerHTML">
+        <form method="post" action="/units/{safe_unit_id}/sections" hx-post="/units/{safe_unit_id}/sections" hx-target="#section-list-section" hx-swap="outerHTML">
             <input type="hidden" name="csrf_token" value="{self.escape(self.csrf_token)}">
             {title_field.render(value=self.values.get("title", ""), class_="form-input")}
             {error_html}

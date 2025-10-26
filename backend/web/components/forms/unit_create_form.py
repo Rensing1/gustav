@@ -27,7 +27,7 @@ class UnitCreateForm(Component):
         submit_btn = SubmitButton("Lerneinheit anlegen")
 
         form_html = f"""
-        <form hx-post="/units" hx-target="#unit-list-section" hx-swap="outerHTML">
+        <form method="post" action="/units" hx-post="/units" hx-target="#unit-list-section" hx-swap="outerHTML">
             <input type="hidden" name="csrf_token" value="{self.escape(self.csrf_token)}">
             {title_field.render(value=self.values.get("title", ""), class_="form-input")}
             {summary_field.render(value=self.values.get("summary", ""), class_="form-textarea", rows=3)}

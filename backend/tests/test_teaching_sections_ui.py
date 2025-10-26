@@ -11,13 +11,14 @@ Hinweis: Wir seeden die Lerneinheit über die Teaching-API. Abschnitte werden
 
 from __future__ import annotations
 
+import html
 import re
 from pathlib import Path
 import sys
 
-import pytest
 import httpx
 from httpx import ASGITransport
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore  # noqa: E402
+from components.forms import SectionCreateForm  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 
 
@@ -262,3 +264,19 @@ async def test_sections_page_supports_repo_created_unit_and_allows_create():
         )
         assert create_ui.status_code == 200
         assert "Delta" in create_ui.text
+
+
+@pytest.mark.anyio
+async def test_section_create_form_escapes_unit_id_and_sets_method_action():
+    """SectionCreateForm must escape the unit identifier and provide method/action for accessibility."""
+    malicious_unit_id = 'unit_<script>alert(1)</script>'
+    form = SectionCreateForm(unit_id=malicious_unit_id, csrf_token="csrf123")
+    markup = form.render()
+    escaped_id = html.escape(malicious_unit_id, quote=True)
+    expected_hx_post = f'hx-post="/units/{escaped_id}/sections"'
+    expected_action = f'action="/units/{escaped_id}/sections"'
+    assert expected_hx_post in markup, "hx-post attribute must escape the unit identifier"
+    assert expected_action in markup, "Form action must escape the unit identifier"
+    form_tag = re.search(r'<form[^>]+>', markup)
+    assert form_tag, "Form element should be rendered"
+    assert 'method="post"' in form_tag.group(0), "Section create form must declare method=post for non-HTMX fallback"

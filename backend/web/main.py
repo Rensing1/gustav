@@ -382,7 +382,11 @@ def _render_unit_list_partial(items: list[dict]) -> str:
         </div>
         ''')
     joined_cards = "\n".join(cards)
-    return f'<section id="unit-list-section"><div class="unit-list">{joined_cards}</div></section>' if cards else '<div class="empty-state"><p>Noch keine Lerneinheiten vorhanden.</p></div>'
+    if cards:
+        inner = f'<div class="unit-list">{joined_cards}</div>'
+    else:
+        inner = '<div class="empty-state"><p>Noch keine Lerneinheiten vorhanden.</p></div>'
+    return f'<section id="unit-list-section">{inner}</section>'
 
 def _render_units_page_html(items: list[dict], csrf_token: str, error: str | None = None) -> str:
     from components import UnitCreateForm

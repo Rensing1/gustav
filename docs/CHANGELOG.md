@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- fix(web/sections): Escape SectionCreateForm hx-post/action and add POST fallback to close XSS gap and keep non-HTMX submits working.
+- fix(web/units): Always render #unit-list-section wrapper and POST-enabled create form so the first HTMX swap succeeds on empty lists.
+- tests(web): Add regression coverage for sections/unit forms (escaping, HTMX targets) to guard the fixes.
 - feat(users): Add GET /api/users/list for role‑scoped user listing (Keycloak Admin API). Used by Members UI to auto‑populate candidates.
 - feat(teaching/api): Add GET /api/teaching/courses/{id} (owner‑only) for direct lookups (Edit/Mitglieder SSR prefill; avoids list scans).
 - feat(web/members): Auto‑load candidates (students not yet members) under the search input; search now filters candidates server‑side.

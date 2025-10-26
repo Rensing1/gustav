@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- security(web): Global security headers middleware now covered by tests; HSTS only in `prod`.
+- security(auth): Dynamic `redirect_uri` derives host:port from ASGI request when not trusting proxy; tests for `/auth/register` added.
+- security(ssr): Do not mint CSRF tokens when no session cookie present (defensive guard for `/courses` and `/units`).
+- consistency(ssr): Removed redundant XFO/XCTO meta tags from `/units` SSR HTML; rely on middleware headers.
 - Security: Set Referrer-Policy to strict-origin-when-cross-origin to support Origin/Referer CSRF fallback while protecting cross-site leakage.
 - Auth: Dynamic redirect_uri now used only when request host matches WEB_BASE (or configured redirect_uri host); otherwise falls back to static redirect_uri. Prevents IdP errors and open redirect vectors.
 - Learning API: Add GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions listing endpoint; returns newest-first history for the current student.

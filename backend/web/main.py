@@ -877,8 +877,6 @@ def _render_units_page_html(request: Request, items: list[dict], *, csrf_token: 
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>Lerneinheiten - GUSTAV</title>
     <link rel=\"stylesheet\" href=\"/static/css/gustav.css?v=5\">
-    <meta http-equiv=\"X-Content-Type-Options\" content=\"nosniff\">
-    <meta http-equiv=\"X-Frame-Options\" content=\"SAMEORIGIN\">
     <meta name=\"description\" content=\"Lerneinheitenverwaltung für Lehrkräfte\">
     <!-- client-side scripts intentionally omitted in this view -->
 </head>
@@ -928,6 +926,9 @@ async def units_index(request: Request):
         has_next = False
 
     sid = _get_session_id(request) or ""
+    if not sid:
+        # Defensive: if middleware didn't attach session, do not mint CSRF tokens
+        return RedirectResponse(url="/auth/login", status_code=302)
     token = _get_or_create_csrf_token(sid)
     html = _render_units_page_html(request, vm, csrf_token=token, limit=limit, offset=offset, has_next=has_next)
     return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
@@ -1163,6 +1164,9 @@ async def courses_index(request: Request):
         has_next = False
 
     sid = _get_session_id(request) or ""
+    if not sid:
+        # Defensive: if middleware didn't attach session, do not mint CSRF tokens
+        return RedirectResponse(url="/auth/login", status_code=302)
     token = _get_or_create_csrf_token(sid)
     html = _render_courses_page_html(request, vm, csrf_token=token, limit=limit, offset=offset, has_next=has_next)
     return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})

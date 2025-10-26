@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- feat(users): Add GET /api/users/list for role‑scoped user listing (Keycloak Admin API). Used by Members UI to auto‑populate candidates.
+- feat(teaching/api): Add GET /api/teaching/courses/{id} (owner‑only) for direct lookups (Edit/Mitglieder SSR prefill; avoids list scans).
+- feat(web/members): Auto‑load candidates (students not yet members) under the search input; search now filters candidates server‑side.
+- fix(web/members): Removing a member immediately updates the current members list; inline error banner on API failure.
+- docs(teaching): Reference updated for Users list endpoint and SSR member management behavior.
+- devops(keycloak): Set defaultRoles=["student"] in realm import; docker‑compose passes KC_ADMIN_USERNAME/PASSWORD (defaults admin/admin) for directory access.
 - security(web): Global security headers middleware now covered by tests; HSTS only in `prod`.
 - security(auth): Dynamic `redirect_uri` derives host:port from ASGI request when not trusting proxy; tests for `/auth/register` added.
 - security(ssr): Do not mint CSRF tokens when no session cookie present (defensive guard for `/courses` and `/units`).

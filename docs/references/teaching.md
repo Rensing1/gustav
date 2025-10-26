@@ -14,6 +14,8 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - 200 `Course` oder 400/403/404
 - `DELETE /api/teaching/courses/{course_id}` (Owner only)
   - 204, entfernt auch Mitgliedschaften; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
+- `GET /api/teaching/courses/{course_id}` (Owner only)
+  - 200 `Course`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
 - `GET /api/teaching/courses/{course_id}/members?limit&offset` (Owner only)
   - 200 `[CourseMember { sub, name, joined_at }]`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
 - `POST /api/teaching/courses/{course_id}/members` (Owner only, idempotent)
@@ -24,6 +26,15 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 - `GET /api/users/search?q=&role=student&limit` (Users‑Namespace)
   - Nur Teacher/Admin. Mindestlänge `q ≥ 2`, Limit-Cap `≤ 50`
   - 200 `[{ sub, name }]`, 400/403
+- `GET /api/users/list?role=student&limit&offset` (Users‑Namespace)
+  - Nur Teacher/Admin. Paginierte Auflistung von Nutzern mit Rolle `student`
+  - 200 `[{ sub, name }]`, 400/403
+
+### SSR‑UI: Mitglieder verwalten
+- Rechte Spalte (Schüler hinzufügen) lädt beim Seitenaufruf automatisch bis zu 50 Schüler (Rolle `student`) und schließt bereits eingeschriebene Mitglieder aus.
+- Das Suchfeld filtert diese Liste serverseitig (q) — es löst keine eigenständige Verzeichnissuche mehr aus.
+- Nach „Hinzufügen“ verschwindet der Schüler aus der Kandidatenliste und erscheint unter „Aktuelle Kursmitglieder“.
+- Nach „Entfernen“ verschwindet der Schüler aus „Aktuelle Kursmitglieder“ und taucht wieder in der Kandidatenliste auf.
 
 ### Terminologie: student_sub vs. student_id
 - `student_sub` (API, DTO): Das OIDC‑Subject des Schülers, ein stabiler, undurchsichtiger Bezeichner ohne PII. Wird in API‑Requests/Responses verwendet.

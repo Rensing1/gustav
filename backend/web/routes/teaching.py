@@ -1109,7 +1109,8 @@ async def create_course(request: Request, payload: CourseCreate):
     except ValueError:
         # Map repo validation to contract 400
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
-    return JSONResponse(content=_serialize_course(course), status_code=201)
+    # Security: return private, no-store to prevent caching of owner-scoped data
+    return _json_private(_serialize_course(course), status_code=201)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}")
@@ -1542,7 +1543,7 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
         return JSONResponse({"error": "bad_request"}, status_code=400)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_unit(unit), status_code=201)
+    return _json_private(_serialize_unit(unit), status_code=201)
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}")
@@ -1622,7 +1623,7 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
     if not updated:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse(content=_serialize_unit(updated), status_code=200)
+    return _json_private(_serialize_unit(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}")
@@ -1651,7 +1652,8 @@ async def delete_unit(request: Request, unit_id: str):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return Response(status_code=204)
+    # No content but still enforce private, no-store to be explicit in proxies
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections")
@@ -1821,7 +1823,10 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
 async def list_section_tasks(request: Request, unit_id: str, section_id: str):
-    """List tasks of a section for the authoring teacher."""
+    """List tasks of a section for the authoring teacher.
+
+    Cache policy: private, no-store (teacher-scoped data must not be cached).
+    """
 
     user, error = _require_teacher(request)
     if error:
@@ -1838,7 +1843,7 @@ async def list_section_tasks(request: Request, unit_id: str, section_id: str):
         items = TASKS_SERVICE.list_tasks(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse(content=[_serialize_task(t) for t in items], status_code=200)
+    return _json_private([_serialize_task(t) for t in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
@@ -2056,7 +2061,7 @@ async def list_section_materials(request: Request, unit_id: str, section_id: str
         items = MATERIALS_SERVICE.list_markdown_materials(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse(content=[_serialize_material(m) for m in items], status_code=200)
+    return _json_private([_serialize_material(m) for m in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials")

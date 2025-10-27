@@ -1374,6 +1374,12 @@ paths:
       responses:
         '200':
           description: List of courses
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1460,6 +1466,7 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1710,6 +1717,7 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1788,6 +1796,7 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1924,6 +1933,7 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -2169,6 +2179,20 @@ paths:
             type: string
             format: uuid
       responses:
+        '200':
+          description: List of tasks
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
         '400':
           description: |
             Invalid path. detail codes:
@@ -2185,14 +2209,6 @@ paths:
                 invalid_section_id:
                   summary: Section id not a UUID
                   value: { error: bad_request, detail: invalid_section_id }
-        '200':
-          description: List of tasks
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Task'
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -2465,6 +2481,12 @@ paths:
       responses:
         '200':
           description: List of materials
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3234,6 +3256,7 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3305,6 +3328,7 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
+                example: private, no-store
           content:
             application/json:
               schema:

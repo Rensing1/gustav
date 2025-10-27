@@ -811,6 +811,7 @@ components:
     LearningCourse:
       type: object
       required: [id, title]
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -829,6 +830,7 @@ components:
     UnitPublic:
       type: object
       required: [id, title]
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -881,6 +883,18 @@ paths:
                   $ref: '#/components/schemas/LearningCourse'
         '401':
           description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden — caller is not a student
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -1055,6 +1069,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden — caller is not a student
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Course not found or not visible to the student
           headers:
@@ -1062,7 +1088,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:

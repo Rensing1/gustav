@@ -147,7 +147,7 @@ async def auth_enforcement(request: Request, call_next):
     if not rec:
         if path.startswith("/api/"):
             if path.startswith("/api/learning/"):
-                cache = "private, max-age=0"
+                cache = "private, no-store"
             elif path == "/api/me":
                 cache = "no-store"
             else:

@@ -38,9 +38,14 @@ STORAGE_KEY_RE = re.compile(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}")
 ALLOWED_IMAGE_MIME: set[str] = {"image/jpeg", "image/png"}
 
 
-def _cache_headers() -> dict[str, str]:
-    # Private with explicit zero max-age to match contract and tests.
+def _cache_headers_success() -> dict[str, str]:
+    # Success responses: private cache with zero max-age (not stored by shared caches).
     return {"Cache-Control": "private, max-age=0"}
+
+
+def _cache_headers_error() -> dict[str, str]:
+    # Error responses: must never be stored; protects PII-bearing error pages.
+    return {"Cache-Control": "private, no-store"}
 
 
 def _current_user(request: Request) -> dict | None:
@@ -51,10 +56,10 @@ def _current_user(request: Request) -> dict | None:
 def _require_student(request: Request):
     user = _current_user(request)
     if not user:
-        return None, JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_cache_headers())
+        return None, JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_cache_headers_error())
     roles = user.get("roles") or []
     if not isinstance(roles, list) or "student" not in roles:
-        return None, JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers())
+        return None, JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     return user, None
 
 
@@ -231,12 +236,12 @@ async def list_sections(
     try:
         UUID(course_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
 
     try:
         include_materials, include_tasks = _parse_include(include)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
 
     input_data = ListSectionsInput(
         student_sub=str(user.get("sub", "")),
@@ -251,11 +256,11 @@ async def list_sections(
     try:
         sections = LIST_SECTIONS_USECASE.execute(input_data)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers())
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers())
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
-    return JSONResponse(sections, headers=_cache_headers())
+    return JSONResponse(sections, headers=_cache_headers_success())
 
 
 @learning_router.get("/api/learning/courses")
@@ -289,7 +294,7 @@ async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
     items = LIST_COURSES_USECASE.execute(
         ListCoursesInput(student_sub=str(user.get("sub", "")), limit=int(limit or 20), offset=int(offset or 0))
     )
-    return JSONResponse(items, headers=_cache_headers())
+    return JSONResponse(items, headers=_cache_headers_success())
 
 
 @learning_router.get("/api/learning/courses/{course_id}/units")
@@ -321,14 +326,14 @@ async def list_course_units(request: Request, course_id: str):
     try:
         UUID(course_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
     try:
         rows = LIST_COURSE_UNITS_USECASE.execute(
             ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=str(course_id))
         )
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers())
-    return JSONResponse(rows, headers=_cache_headers())
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+    return JSONResponse(rows, headers=_cache_headers_success())
 
 
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -405,17 +410,17 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         return JSONResponse(
             {"error": "forbidden", "detail": "csrf_violation"},
             status_code=403,
-            headers=_cache_headers(),
+            headers=_cache_headers_error(),
         )
 
     try:
         UUID(course_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
     try:
         UUID(task_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
 
     idempotency_key = request.headers.get("Idempotency-Key")
     # Contract: Idempotency-Key must be ≤ 64 characters when provided
@@ -423,14 +428,14 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         return JSONResponse(
             {"error": "bad_request", "detail": "invalid_input"},
             status_code=400,
-            headers=_cache_headers(),
+            headers=_cache_headers_error(),
         )
 
     try:
         kind, clean_payload = _validate_submission_payload(payload)
     except ValueError as exc:
         detail = str(exc) if str(exc) else "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
 
     submission_input = CreateSubmissionInput(
         course_id=course_id,
@@ -448,14 +453,14 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     try:
         submission = CREATE_SUBMISSION_USECASE.execute(submission_input)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers())
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers())
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
 
-    return JSONResponse(submission, status_code=201, headers=_cache_headers())
+    return JSONResponse(submission, status_code=201, headers=_cache_headers_success())
 
 
 @learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
@@ -479,7 +484,7 @@ async def list_submissions(
         UUID(course_id)
         UUID(task_id)
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers())
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
 
     input_data = ListSubmissionsInput(
         course_id=course_id,
@@ -492,8 +497,8 @@ async def list_submissions(
     try:
         submissions = LIST_SUBMISSIONS_USECASE.execute(input_data)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers())
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers())
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
-    return JSONResponse(submissions, status_code=200, headers=_cache_headers())
+    return JSONResponse(submissions, status_code=200, headers=_cache_headers_success())

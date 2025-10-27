@@ -613,6 +613,10 @@ components:
           type: integer
           minimum: 1
           description: 1-based ordering within the course release
+        unit_id:
+          type: string
+          format: uuid
+          description: Identifier of the learning unit this section belongs to (for UI grouping/filtering).
     LearningMaterial:
       type: object
       required: [id, title, kind]
@@ -1088,6 +1092,218 @@ paths:
           headers:
             Cache-Control:
               description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/courses/{course_id}/units/{unit_id}/sections:
+    get:
+      tags: [Learning]
+      summary: List released sections of a unit for the current student
+      description: Returns only sections released to the authenticated student within the given course and unit. Responds 200 with an array, which may be empty when no sections are released yet.
+      operationId: listLearningUnitSections
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: include
+          schema:
+            type: string
+            pattern: '^(materials|tasks)(,(materials|tasks))*$'
+          description: 'Comma-separated list controlling embedded resources (supported: "materials", "tasks").'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum number of sections to return.
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Offset for pagination.
+      responses:
+        '200':
+          description: Released sections of the unit visible to the student (may be empty).
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearningSection'
+        '400':
+          description: Invalid input (e.g., malformed UUID or include parameter)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/courses/{course_id}/modules/{module_id}/sections/releases:
+    get:
+      tags: [Teaching]
+      summary: List release states for sections in a course module (owner)
+      description: Returns visibility records for sections attached to the specified module. Missing entries imply hidden sections.
+      operationId: listModuleSectionReleases
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Release state entries for the module (can be empty).
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [course_module_id, section_id, visible]
+                  properties:
+                    course_module_id:
+                      type: string
+                      format: uuid
+                    section_id:
+                      type: string
+                      format: uuid
+                    visible:
+                      type: boolean
+                    released_at:
+                      type: string
+                      nullable: true
+                      description: RFC3339 UTC timestamp or null when hidden
+                    released_by:
+                      type: string
+                      description: Teacher id (subject)
+        '400':
+          description: Invalid identifiers
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (caller is not the course owner)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course/module not found or not visible to the owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (student not enrolled in the course)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or unit not found, or unit does not belong to the course
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store

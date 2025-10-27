@@ -2046,6 +2046,61 @@ class DBTeachingRepo:
             "released_by": result[4],
         }
 
+    def list_module_section_releases_owned(self, course_id: str, module_id: str, owner_sub: str) -> list[dict]:
+        """List release records for sections within a course module owned by `owner_sub`.
+
+        Security:
+            - Sets `app.current_sub` to the owner for RLS.
+            - Verifies that the module belongs to the given course and that the
+              course is owned by `owner_sub`.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                # Verify ownership by joining courses
+                cur.execute(
+                    """
+                    select m.id::text
+                      from public.course_modules m
+                      join public.courses c on c.id = m.course_id
+                     where m.id = %s
+                       and m.course_id = %s
+                       and c.teacher_id = coalesce(current_setting('app.current_sub', true), '')
+                    """,
+                    (module_id, course_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise LookupError("module_not_found")
+
+                # Fetch release rows for the module
+                cur.execute(
+                    """
+                    select course_module_id::text,
+                           section_id::text,
+                           visible,
+                           to_char(released_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           released_by
+                      from public.module_section_releases
+                     where course_module_id = %s
+                     order by section_id asc
+                    """,
+                    (module_id,),
+                )
+                rows = cur.fetchall()
+        result: list[dict] = []
+        for r in rows:
+            result.append(
+                {
+                    "course_module_id": r[0],
+                    "section_id": r[1],
+                    "visible": bool(r[2]),
+                    "released_at": _iso(r[3]) if r[3] is not None else None,
+                    "released_by": r[4],
+                }
+            )
+        return result
+
     # --- Owner-scoped helpers (RLS-friendly) ------------------------------------
     def get_course_for_owner(self, course_id: str, owner_sub: str) -> Optional[dict]:
         with psycopg.connect(self._dsn) as conn:

@@ -847,7 +847,7 @@ paths:
     get:
       tags: [Learning]
       summary: List courses for the current student (alphabetical)
-      description: Returns courses where the authenticated student is a member, ordered by title.
+      description: Returns courses where the authenticated student is a member, ordered by title asc with a stable secondary order by id asc.
       operationId: listLearningCourses
       security:
         - cookieAuth: []
@@ -875,7 +875,7 @@ paths:
               description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -952,7 +952,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1033,7 +1033,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:

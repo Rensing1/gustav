@@ -39,8 +39,9 @@ ALLOWED_IMAGE_MIME: set[str] = {"image/jpeg", "image/png"}
 
 
 def _cache_headers_success() -> dict[str, str]:
-    # Success responses: private cache with zero max-age (not stored by shared caches).
-    return {"Cache-Control": "private, max-age=0"}
+    # Success responses: private and explicitly non-storable (defense-in-depth
+    # against history stores and intermediary caches potentially keeping PII).
+    return {"Cache-Control": "private, no-store"}
 
 
 def _cache_headers_error() -> dict[str, str]:
@@ -279,9 +280,9 @@ async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
 
     Behavior:
         - Requires an authenticated session with role "student".
-        - Returns courses where the caller is a member, sorted by title asc
-          with a stable secondary order.
-        - Uses private Cache-Control headers to prevent shared caching.
+        - Returns courses where the caller is a member, sorted by
+          title asc, id asc (stable secondary order).
+        - Uses private, no-store Cache-Control headers.
 
     Permissions:
         Caller must have the `student` role; membership filtering is enforced in

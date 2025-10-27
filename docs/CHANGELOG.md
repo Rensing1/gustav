@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+- security(db): Make `public.get_course_units_for_student` SECURITY DEFINER owned by `gustav_limited` to avoid BYPASSRLS escalation; keep EXECUTE grant.
+- fix(db/repo): Remove duplicate `set_config('app.current_sub')` call in units listing query.
+ - tests(learning): Add Cache-Control success header checks for courses and units (private, no-store).
+ - tests(learning): Add pagination clamping test (limit>50, offset<0) and empty list case for student courses.
+ - docs(openapi): Document stable secondary ordering for /api/learning/courses (title asc, id asc).
+- api(learning): Document 403 Forbidden for student-only endpoints `/api/learning/courses` and `/api/learning/courses/{course_id}/units`.
+- security(cache): Learning API responses use `Cache-Control: private, no-store` and contract examples updated accordingly.
+ - docs(openapi): Align Learning Submissions Cache-Control examples to `private, no-store` (GET/POST 200/201/4xx).
+ - tests(learning): Assert `Cache-Control: private, no-store` on 201 Create Submission; ensure 404 units carry private cache header and generic error.
+- tests(learning): Add assertions for Cache-Control on 401/403 and 403 for non-student units access.
+- docs(openapi): Add `additionalProperties: false` to `LearningCourse` and `UnitPublic` schemas to constrain payloads.
+- ux(learning/ui): Align page title to “Meine Kurse” for student course list.
 - fix(openapi): Document Cache-Control on GET /api/teaching/courses (200) and remove duplicate example entry in course GET header.
 - security(cache): POST /api/teaching/courses returns 201 with Cache-Control: private, no-store (align API and contract).
 - security(cache): Add Cache-Control: private, no-store to 201/200 responses on POST/PATCH for teaching units; harden proxies/browsers.

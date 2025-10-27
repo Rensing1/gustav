@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- security(db): Make `public.get_course_units_for_student` SECURITY DEFINER owned by `gustav_limited` to avoid BYPASSRLS escalation; keep EXECUTE grant.
+- fix(db/repo): Remove duplicate `set_config('app.current_sub')` call in units listing query.
+- tests(learning): Add Cache-Control success header checks for courses and units (private, max-age=0).
 - api(learning): Document 403 Forbidden for student-only endpoints `/api/learning/courses` and `/api/learning/courses/{course_id}/units`.
 - security(cache): Learning API responses use `Cache-Control: private, no-store` and contract examples updated accordingly.
 - tests(learning): Add assertions for Cache-Control on 401/403 and 403 for non-student units access.

@@ -64,80 +64,60 @@ Prinzipien
 - Privacy: Seiten liefern `Cache-Control: private, no-store`.
 
 Seitenfluss (Lehrkraft)
-- `/units/{unit_id}` (bereits vorhanden: „Abschnitte verwalten“)
-  - Jede Abschnittskarte erhält eine Schaltfläche „Material & Aufgaben“, die zur Detailseite führt: `/units/{unit_id}/sections/{section_id}`.
+- `/units/{unit_id}` (Abschnitte verwalten)
+  - Jede Abschnittskarte enthält eine Aktion „Material & Aufgaben“, die zur Abschnitts‑Detailseite führt: `/units/{unit_id}/sections/{section_id}`.
 
-- `/units/{unit_id}/sections/{section_id}` (neu: Abschnitts‑Detailverwaltung)
-  - Layout: Zweispaltig auf Desktop, einspaltig auf Mobil.
-    - Linke Spalte: „Materialien“
-      - Formular „Neues Material (Markdown)“ mit Feldern `title`, `body_md`; `hx-post` an UI‑Route, Ziel ist die Material‑Liste.
-      - Sekundäre Aktion „Datei hochladen“: startet 2‑Phasen‑Flow (Upload‑Intent → Direkt‑Upload → Finalize). UI ruft nacheinander die API‑Endpunkte auf und aktualisiert die Liste nach erfolgreichem Finalize.
-      - Liste der Materialien inkl. Drag‑Handle für Reorder.
-    - Rechte Spalte: „Aufgaben“
-      - Formular „Neue Aufgabe“ mit `instruction_md`, optional `criteria[]`, `hints_md`, `due_at`, `max_attempts`.
-      - Liste der Aufgaben inkl. Drag‑Handle für Reorder.
-  - Fehlermeldungen werden oberhalb des jeweiligen Formulars angezeigt (`role="alert"`).
-  - CSRF: Hidden‑Field `csrf_token` analog zu `/courses`/`/units`.
+- `/units/{unit_id}/sections/{section_id}` (Abschnitts‑Detail)
+  - Zeigt zwei Listen (Materialien | Aufgaben) und darüber zwei Buttons „+ Material“ und „+ Aufgabe“.
+  - Einträge sind klickbar und führen zur jeweiligen Detailseite.
+  - Reorder per Drag & Drop (htmx‑sortable); CSRF via `X‑CSRF‑Token`.
 
-UI‑Routen (nur HTML, rufen intern JSON‑API)
-- GET `/units/{unit_id}/sections/{section_id}`
-  - Holt via API: Unit, Section, Materials (GET `/api/…/materials`), Tasks (GET `/api/…/tasks`)
-  - Rendert zwei Kartenbereiche mit Create‑Form und Listencontainern
-  - Response‑Header: `Cache-Control: private, no-store`
-- POST `/units/{unit_id}/sections/{section_id}/materials/create`
-  - Validiert CSRF, ruft POST `/api/…/materials` und rendert den Material‑Listen‑Partial neu (HX‑Target: `#material-list-section-{section_id}`)
-- POST `/units/{unit_id}/sections/{section_id}/materials/reorder`
-  - Liest Sortierreihenfolge aus DOM (hx‑ext=sortable), ruft POST `/api/…/materials/reorder`, rendert Liste neu
-- POST `/units/{unit_id}/sections/{section_id}/tasks/create`
-  - Validiert CSRF, ruft POST `/api/…/tasks`, rendert Aufgaben‑Liste neu (HX‑Target: `#task-list-section-{section_id}`)
-- POST `/units/{unit_id}/sections/{section_id}/tasks/reorder`
-  - Analog Materialien
-- Upload‑Flow (Datei‑Material):
-  - POST `/units/{unit_id}/sections/{section_id}/materials/upload-intent` → ruft API `materials/upload-intents`, UI zeigt Upload‑URL/Headers (oder nutzt fetch) an
-  - POST `/units/{unit_id}/sections/{section_id}/materials/finalize` → ruft API `materials/finalize`, danach Liste neu laden
+- Erstellen
+  - `/units/{u}/sections/{s}/materials/new`: Zwei Flows — Markdown‑Text (title, body_md) und Datei‑Upload (Upload‑Intent → Upload → Finalize). CSRF‑Formulare, PRG zurück zur Abschnittsseite.
+  - `/units/{u}/sections/{s}/tasks/new`: instruction_md, Kriterien[0..10], hints_md; optional due_at (RFC3339) und max_attempts; PRG zurück zur Abschnittsseite.
+
+- Detailseiten pro Eintrag
+  - `/units/{u}/sections/{s}/materials/{m}`: Bearbeiten/Löschen; bei Datei‑Materialien „Download anzeigen“ (presigned URL via API `…/download-url`).
+  - `/units/{u}/sections/{s}/tasks/{t}`: Bearbeiten/Löschen (inkl. Kriterien/Hinweise/due_at/max_attempts).
+
+UI‑Routen (HTML; delegieren an JSON‑API)
+- GET `/units/{unit_id}/sections/{section_id}` → lädt Unit/Section/Listen via API; Rendert nur Listen + Aktionen; `Cache-Control: private, no-store`.
+- GET `/units/{u}/sections/{s}/materials/new` und `/tasks/new` → Erstellen‑Seiten (s. o.).
+- POST `/units/{u}/sections/{s}/materials/create|tasks/create` → ruft API, PRG zurück zur Abschnittsseite (bei HTMX optional Partial‑Update).
+- POST `/units/{u}/sections/{s}/materials/reorder|tasks/reorder` → ruft API‑Reorder; Fehler werden als Banner gemeldet.
+- POST `/units/{u}/sections/{s}/materials/upload-intent` und `/materials/finalize` → 2‑Phasen Datei‑Flow.
+- GET `/units/{u}/sections/{s}/materials/{m}` und `/tasks/{t}` → per‑Entry Detailseiten mit Edit/Delete, Datei‑Downloadlink für File‑Materialien.
 
 Listen‑Partials (HTML‑IDs & Reorder)
 - Materialien: Wrapper `<section id="material-list-section-{section_id}">` mit innerem `<div class="material-list" hx-ext="sortable" data-reorder-url="…/materials/reorder">` und Items `<div class="card material-card" id="material_{id}">`.
 - Aufgaben: Wrapper `<section id="task-list-section-{section_id}">` mit `<div class="task-list" hx-ext="sortable" data-reorder-url="…/tasks/reorder">` und Items `<div class="card task-card" id="task_{id}">`.
 - Drag‑Handle Symbol `☰` als Griff; Fallback‑Buttons „Nach oben/Nach unten“ für Tastaturbedienung.
 
-Fehlertypen (UI‑Mapping)
-- 400 → zeige validierte `detail` über dem Formular (z. B. `invalid_title`, `invalid_instruction_md`).
-- 403 → Banner „Keine Berechtigung“; verlinke zurück zu `/units`.
-- 404 → Banner „Abschnitt nicht gefunden“; verlinke zurück zu `/units`.
+Fehlermapping (geplant)
+- 400 → Feldfehler markieren (aria-invalid) und erklärenden Text per aria-describedby anzeigen (z. B. `invalid_title`, `invalid_due_at`).
+- 403 → Banner „Keine Berechtigung“ (role="alert"); Link zurück zu `/units`.
+- 404 → Banner „Nicht gefunden“ (role="alert"); Link zurück zu `/units`.
 
-Detailseiten für einzelne Einträge (im Scope dieser Iteration)
-- Routen:
-  - GET `/units/{unit_id}/sections/{section_id}/materials/{material_id}`
-  - GET `/units/{unit_id}/sections/{section_id}/tasks/{task_id}`
-- Inhalt:
-  - Material: Vollansicht (Markdown gerendert) bzw. Dateidownload‑Aktionen, Meta (MIME, Größe), Bearbeiten‑Button (PATCH via API), Entfernen.
-  - Aufgabe: Volltext `instruction_md`, Kriterienliste, Fälligkeitsdatum, max. Versuche; Bearbeiten/Entfernen.
-- Nutzen:
-  - Klare Fokussicht pro Eintrag; Vorbereitung für Versionsverläufe/Audit und Kommentierung.
+Detailseiten für einzelne Einträge
+- siehe oben unter „Seitenfluss“ (bereits implementiert)
 
 ## Nächste Schritte (Umsetzung)
 
-1) Abschnitts‑Detailseite (SSR) anlegen
-- GET `/units/{unit_id}/sections/{section_id}` in `backend/web/main.py`
-- Intern: `GET /api/teaching/units/{unit_id}`, `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials`, `GET /api/teaching/units/{unit_id}/sections/{section_id}/tasks`
-- HTML: Zweispaltiges Layout, je ein Create‑Formular und eine Liste mit Reorder (hx-ext=sortable)
-- Header: `Cache-Control: private, no-store`
+1) A11y & Fehlermapping
+- Banner‑Partial (role="alert"/aria-live) + Feldfehler (aria-invalid, aria-describedby) für Create/Detail‑Formulare (Material/Text, Datei‑Finalize, Task).
+- Fokusmanagement nach Fehlersubmit (erstes Fehlerfeld/Banner fokusieren).
+- Mapping‑Tabelle (API detail → UI‑Text): `invalid_title`, `invalid_body_md`, `invalid_criteria`, `invalid_due_at`, `invalid_max_attempts`, `mime_not_allowed`, `checksum_mismatch`, `intent_expired`, `forbidden`, `not_found`.
+- Tests: Prüfen, dass Fehlermeldungen sichtbar (role="alert") und den Feldern zugeordnet sind.
 
-2) Materialien (Markdown) — Create + List + Reorder (UI)
-- POST UI‑Route `/units/{unit_id}/sections/{section_id}/materials/create` → ruft API `POST …/materials`
-- POST UI‑Route `/units/{unit_id}/sections/{section_id}/materials/reorder` → ruft API `POST …/materials/reorder`
-- CSRF validieren, Fehler ins Formular mappen
+2) Reorder Tastatur‑Fallback
+- Neben dem Drag‑Handle Buttons „↑/↓“ pro Item einblenden (postet neue Reihenfolge).
+- Tests: Pfeil‑Buttons erzeugen gültige Reihenfolge; CSRF enforced.
 
-3) Materialien (Datei‑Upload) — 2‑Phasen‑Flow (Intent → Upload → Finalize)
-- UI‑Route `/materials/upload-intent` → ruft API `…/materials/upload-intents`, zeigt URL/Headers
-- Client‑Upload (fetch oder `<form enctype>`), danach UI‑Route `/materials/finalize` → ruft API `…/materials/finalize`
-- Nach Erfolg Liste neu laden; Fehlermeldungen (mime_not_allowed, checksum_mismatch) anzeigen
+3) Download‑Umschalter (optional)
+- „Im Browser anzeigen / Als Datei herunterladen“ (disposition=`inline|attachment`).
 
-4) Aufgaben — Create + List + Reorder (UI)
-- POST UI‑Route `/units/{unit_id}/sections/{section_id}/tasks/create` → ruft API `POST …/tasks`
-- POST UI‑Route `/units/{unit_id}/sections/{section_id}/tasks/reorder` → ruft API `POST …/tasks/reorder`
-- Validierungen (instruction_md, criteria, due_at, max_attempts) sauber mappen
+4) Komponenten
+- Listen‑Partials in `backend/web/components` extrahieren (Wiederverwendung, Tests vereinfachen).
 
 5) Detailseiten pro Eintrag (Material/Aufgabe)
 - GET UI‑Routen: `/materials/{material_id}` und `/tasks/{task_id}` (unterhalb des Abschnitts)
@@ -170,17 +150,14 @@ Detailseiten für einzelne Einträge (im Scope dieser Iteration)
   - UI-Rework: Hauptseite zeigt nur Listen + Buttons „+ Material“/„+ Aufgabe“. Anlegen erfolgt auf separaten Seiten:
     - GET `/units/{u}/sections/{s}/materials/new` (Text‑Material und Datei‑Upload, beides mit CSRF)
     - GET `/units/{u}/sections/{s}/tasks/new` (Anweisung, 0–10 Kriterien, Hinweise)
-  - Tests (pytest): `backend/tests/test_teaching_section_detail_ui.py`
-    - Rendert Wrapper + Cache‑Header
-    - Create‑Flows (Material Markdown, Task minimal)
+  - Tests (pytest): `backend/tests/test_teaching_section_detail_ui.py`, `backend/tests/test_teaching_entry_detail_ui.py`
+    - Wrapper + Cache‑Header
+    - Create‑Flows via PRG (Material Markdown/Datei, Task mit Kriterien/Hinweisen)
     - Reorder‑Flows (Material/Task) inkl. CSRF‑Negativfall
+    - Detailseiten (Edit/Delete) inkl. Datei‑Download
 
 - Offene Punkte (nächste Schritte):
-  - Datei‑Upload (2‑Phasen) in der UI verdrahten:
-    - `POST /units/{u}/sections/{s}/materials/upload-intent` (UI) ruft API‑Intent, zeigt URL/Headers
-    - Upload clientseitig, danach `POST /…/materials/finalize` (UI) → API finalize, Liste aktualisieren
-    - Fehlerabbildung (mime_not_allowed, checksum_mismatch, intent_expired) in UI‑Banner
-  - Detailansichten pro Eintrag (Anzeige/Bearbeiten):
-    - GET `/units/{u}/sections/{s}/materials/{m}` und `/tasks/{t}` (SSR)
-  - UI‑Fehlermapping verbessern (Formfehlermeldungen, i18n‑Keys) und A11y‑Labels ergänzen
-  - Evtl. kleine Komponenten für Listen‑Partials (`backend/web/components`) extrahieren
+  - A11y & Fehlermapping (Banner/Feldmarkierung, Fokus, Mapping‑Tabelle; s. oben)
+  - Tastatur‑Fallback für Reorder (Buttons „↑/↓“)
+  - Optional: Download‑Umschalter (inline/attachment)
+  - Komponenten‑Extraktion für Partials (`backend/web/components`)

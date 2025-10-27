@@ -102,6 +102,8 @@ async def test_list_student_courses_alphabetical_and_minimal_fields():
         r = await c.get("/api/learning/courses", params={"limit": 50, "offset": 0})
         assert r.status_code == 200
         items = r.json()
+        # Success responses may be privately cached with zero max-age
+        assert r.headers.get("Cache-Control") == "private, max-age=0"
         # Alphabetical by title asc
         assert [it["title"] for it in items] == ["Algebra", "Biologie"]
         # Minimal fields, no teacher_id
@@ -144,6 +146,8 @@ async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r_ok = await c.get(f"/api/learning/courses/{course_id}/units")
         assert r_ok.status_code == 200
+        # Success responses may be privately cached with zero max-age
+        assert r_ok.headers.get("Cache-Control") == "private, max-age=0"
         rows = r_ok.json()
         assert [row["unit"]["title"] for row in rows] == ["Optik", "Mechanik"]
         assert [row["position"] for row in rows] == [1, 2]

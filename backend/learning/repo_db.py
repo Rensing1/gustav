@@ -23,8 +23,16 @@ except Exception:  # pragma: no cover
 
 
 def _default_limited_dsn() -> str:
+    """Supabase-local fallback DSN for dev/test only.
+
+    This matches the docker compose defaults used in the project and is only
+    considered in non-production environments by `_dsn()`. In production, an
+    explicit DATABASE_URL/LEARNING_DATABASE_URL must be provided.
+    """
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
+    # We intentionally keep the well-known dev credentials here because they
+    # point to the local Supabase Postgres used in tests.
     return f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
 
 
@@ -141,8 +149,6 @@ class DBLearningRepo:
                 )
                 if not bool(cur.fetchone()[0]):
                     raise LookupError("not_member_or_missing")
-
-                self._set_current_sub(cur, student_sub)
                 cur.execute(
                     """
                     select unit_id::text, title, summary, module_position

@@ -27,6 +27,9 @@ as $$
    order by m.position asc, u.id asc;
 $$;
 
+-- Ensure the SECURITY DEFINER function is owned by the limited, non-BYPASSRLS role
+alter function public.get_course_units_for_student(text, uuid) owner to gustav_limited;
+
 grant execute on function public.get_course_units_for_student(text, uuid) to gustav_limited;
 
 set check_function_bodies = on;

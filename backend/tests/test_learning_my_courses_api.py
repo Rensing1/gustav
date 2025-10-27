@@ -159,6 +159,8 @@ async def test_learning_courses_auth_and_uuid_errors():
     async with (await _client()) as c:
         r = await c.get("/api/learning/courses")
         assert r.status_code == 401
+        # Security: error responses must not be cached by intermediaries
+        assert r.headers.get("Cache-Control") == "private, no-store"
 
     # Invalid UUID for units → 400
     main.SESSION_STORE = SessionStore()
@@ -179,6 +181,7 @@ async def test_non_student_forbidden_learning_courses():
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r = await c.get("/api/learning/courses")
         assert r.status_code == 403
+        assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -188,6 +191,29 @@ async def test_units_unauthenticated_401():
     async with (await _client()) as c:
         r = await c.get(f"/api/learning/courses/{uuid4()}/units")
         assert r.status_code == 401
+        assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_non_student_forbidden_units():
+    _require_db_or_skip()
+    # Teacher session should yield 403 on student-only units endpoint
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r = await c.get(f"/api/learning/courses/{uuid4()}/units")
+        assert r.status_code == 403 or r.status_code == 400  # UUID may be invalid; ensure 403 with valid UUID below
+
+    # Use a valid UUID to assert 403 specifically
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])  # type: ignore
+    valid_course_id = str(uuid4())
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r = await c.get(f"/api/learning/courses/{valid_course_id}/units")
+        assert r.status_code == 403
+        assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

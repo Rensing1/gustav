@@ -272,7 +272,7 @@ async def test_sections_requires_authentication_cache_header():
         )
 
     assert response.status_code == 401
-    assert response.headers.get("Cache-Control") == "private, max-age=0"
+    assert response.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -559,7 +559,7 @@ async def test_create_submission_text_body_blank_returns_invalid_input():
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_input"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -579,7 +579,7 @@ async def test_create_submission_text_body_too_long_returns_invalid_input():
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_input"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 @pytest.mark.anyio
 async def test_list_submissions_history_happy_path():
@@ -604,6 +604,7 @@ async def test_list_submissions_history_happy_path():
         )
 
     assert history_resp.status_code == 200
+    # Success responses may be privately cached with zero max-age
     assert history_resp.headers.get("Cache-Control") == "private, max-age=0"
     payload = history_resp.json()
     assert isinstance(payload, list)
@@ -633,7 +634,7 @@ async def test_list_submissions_requires_authentication():
         )
 
     assert resp.status_code == 401
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -668,7 +669,7 @@ async def test_list_submissions_forbidden_non_member():
         )
 
     assert resp.status_code == 403
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -685,7 +686,7 @@ async def test_list_submissions_404_when_not_released():
         )
 
     assert resp.status_code == 404
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -702,7 +703,7 @@ async def test_list_submissions_invalid_uuid_returns_400_with_cache_header():
         )
 
     assert resp.status_code == 400
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -775,7 +776,7 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
 
     assert resp.status_code == 403
     assert resp.json().get("detail") == "csrf_violation"
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -910,7 +911,7 @@ async def test_sections_invalid_uuid_uses_contract_detail_and_cache_header():
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_uuid"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -929,7 +930,7 @@ async def test_create_submission_rejects_cross_origin_when_origin_header_present
 
     assert resp.status_code == 403
     assert resp.json().get("detail") == "csrf_violation"
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1017,7 +1018,7 @@ async def test_sections_invalid_include_returns_400_with_cache_control():
 
     assert res.status_code == 400
     assert res.json().get("detail") == "invalid_include"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1038,7 +1039,7 @@ async def test_create_submission_idempotency_key_too_long_returns_400_invalid_in
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_input"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1055,7 +1056,7 @@ async def test_sections_forbidden_has_private_cache_header():
         )
 
     assert res.status_code == 403
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1072,7 +1073,7 @@ async def test_sections_not_found_has_private_cache_header():
         )
 
     assert res.status_code == 404
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 @pytest.mark.anyio
 async def test_list_submissions_pagination_clamps_and_returns_expected_slice():

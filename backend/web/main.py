@@ -277,6 +277,7 @@ def _render_course_list_partial(items: list[dict], limit: int, offset: int, has_
                     <span><strong>Stufe:</strong> {Component.escape(c.get("grade_level"))}</span>
                 </div>
                 <div class="card-actions">
+                    <a href="/courses/{c.get("id")}/modules" class="btn btn-secondary">Lerneinheiten</a>
                     <a href="/courses/{c.get("id")}/edit" class="btn btn-secondary">Bearbeiten</a>
                     <a href="/courses/{c.get("id")}/members" class="btn btn-secondary">Mitglieder</a>
                     <form hx-post="/courses/{c.get("id")}/delete" hx-target="#course-list-section" hx-swap="outerHTML" style="display: inline;">
@@ -518,6 +519,171 @@ async def courses_edit_submit(request: Request, course_id: str):
         pass
     return RedirectResponse(url="/courses", status_code=303)
 
+
+@app.get("/courses/{course_id}/modules", response_class=HTMLResponse)
+async def courses_modules_page(request: Request, course_id: str):
+    """Render the course modules management page (owner only).
+
+    Left: modules in the course (sortable, delete), Right: available units to add.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+    modules: list[dict] = []
+    units: list[dict] = []
+    # Fetch via internal API to reuse guards and serialization
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r_mod = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if r_mod.status_code == 200 and isinstance(r_mod.json(), list):
+                modules = r_mod.json()
+            # Load up to 100 units for the owner
+            r_units = await client.get("/api/teaching/units", params={"limit": 100, "offset": 0})
+            if r_units.status_code == 200 and isinstance(r_units.json(), list):
+                units = r_units.json()
+    except Exception:
+        pass
+    unit_titles = {str(u.get("id")): str(u.get("title") or "") for u in (units or [])}
+    attached_unit_ids = {str(m.get("unit_id")) for m in (modules or [])}
+    module_list_html = _render_module_list_partial(course_id, modules, unit_titles=unit_titles, csrf_token=token)
+    available_html = _render_available_units_partial(course_id, units=units, attached_unit_ids=attached_unit_ids, csrf_token=token)
+    content = (
+        '<div class="container">'
+        '<h1>Lerneinheiten im Kurs</h1>'
+        f'<div class="grid grid-2cols"><div>{module_list_html}</div><div>{available_html}</div></div>'
+        '</div>'
+    )
+    layout = Layout(title="Lerneinheiten", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/courses/{course_id}/modules/create", response_class=HTMLResponse)
+async def courses_modules_create(request: Request, course_id: str):
+    """Attach a unit to a course via API and return updated modules partial.
+
+    Requires CSRF; non-HTMX requests use PRG back to the page.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    unit_id = str(form.get("unit_id") or "").strip()
+    error: str | None = None
+    modules: list[dict] = []
+    units: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+            if r.status_code >= 400:
+                error = _extract_api_error_detail(r)
+            # Refresh lists
+            r_mod = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if r_mod.status_code == 200:
+                modules = r_mod.json()
+            r_units = await client.get("/api/teaching/units", params={"limit": 100, "offset": 0})
+            if r_units.status_code == 200:
+                units = r_units.json()
+    except Exception:
+        error = "backend_error"
+    if "HX-Request" not in request.headers:
+        return RedirectResponse(url=f"/courses/{course_id}/modules", status_code=303)
+    unit_titles = {str(u.get("id")): str(u.get("title") or "") for u in (units or [])}
+    token = _get_or_create_csrf_token(sid or "")
+    html_main = _render_module_list_partial(course_id, modules, unit_titles=unit_titles, csrf_token=token, error=error)
+    # Also update the available units pane out-of-band so it reflects the change immediately
+    updated_attached = {str(m.get("unit_id")) for m in (modules or [])}
+    html_oob = _render_available_units_partial(course_id, units=units, attached_unit_ids=updated_attached, csrf_token=token, oob=True)
+    return HTMLResponse(html_main + html_oob)
+
+
+@app.post("/courses/{course_id}/modules/reorder", response_class=Response)
+async def courses_modules_reorder(request: Request, course_id: str):
+    """Forward sortable reorder to API; requires CSRF."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return Response(status_code=403)
+    form = await request.form()
+    sid = _get_session_id(request)
+    csrf_header = request.headers.get("X-CSRF-Token")
+    csrf_field = form.get("csrf_token")
+    if not _validate_csrf(sid, csrf_header or csrf_field):
+        return Response(status_code=403)
+    ordered_ids = [sid.replace("module_", "") for sid in form.getlist("id")]
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            resp = await client.post(
+                f"/api/teaching/courses/{course_id}/modules/reorder",
+                json={"module_ids": ordered_ids},
+            )
+    except Exception:
+        return JSONResponse({"error": "bad_request", "detail": "reorder_failed"}, status_code=400)
+    if resp.status_code >= 400:
+        detail = _extract_api_error_detail(resp)
+        status = resp.status_code if resp.status_code in (400, 403, 404) else 400
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=status)
+    return Response(status_code=200)
+
+
+@app.post("/courses/{course_id}/modules/{module_id}/delete", response_class=HTMLResponse)
+async def courses_modules_delete(request: Request, course_id: str, module_id: str):
+    """Forward delete to API and return updated modules list partial.
+
+    Requires CSRF. Non-HTMX PRG back to the modules page.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    error: str | None = None
+    modules: list[dict] = []
+    units: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            dr = await client.delete(f"/api/teaching/courses/{course_id}/modules/{module_id}")
+            if dr.status_code >= 400:
+                error = _extract_api_error_detail(dr)
+            r_mod = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if r_mod.status_code == 200:
+                modules = r_mod.json()
+            r_units = await client.get("/api/teaching/units", params={"limit": 100, "offset": 0})
+            if r_units.status_code == 200:
+                units = r_units.json()
+    except Exception:
+        error = "backend_error"
+    if "HX-Request" not in request.headers:
+        return RedirectResponse(url=f"/courses/{course_id}/modules", status_code=303)
+    unit_titles = {str(u.get("id")): str(u.get("title") or "") for u in (units or [])}
+    token = _get_or_create_csrf_token(sid or "")
+    html_main = _render_module_list_partial(course_id, modules, unit_titles=unit_titles, csrf_token=token, error=error)
+    updated_attached = {str(m.get("unit_id")) for m in (modules or [])}
+    html_oob = _render_available_units_partial(course_id, units=units, attached_unit_ids=updated_attached, csrf_token=token, oob=True)
+    return HTMLResponse(html_main + html_oob)
+
 def _render_unit_list_partial(items: list[dict]) -> str:
     cards = []
     for u in items:
@@ -691,6 +857,71 @@ def _render_task_list_partial(unit_id: str, section_id: str, tasks: list[dict], 
         else ""
     )
     return f'<section id="task-list-section-{section_id}">{error_html}{sortable_open}{inner_content}</div></section>'
+
+
+def _render_module_list_partial(course_id: str, modules: list[dict], *, unit_titles: dict[str, str], csrf_token: str, error: str | None = None) -> str:
+    """Render the course module list with sortable behavior.
+
+    Wrapper id: `module-list-section`, item ids: `module_<uuid>`.
+    """
+    items: list[str] = []
+    for m in modules:
+        mid = str(m.get("id") or "")
+        uid = str(m.get("unit_id") or "")
+        title = Component.escape(unit_titles.get(uid) or "Unbenannte Lerneinheit")
+        pos = m.get("position")
+        del_action = (
+            f'<form method="post" action="/courses/{course_id}/modules/{mid}/delete" '
+            f'hx-post="/courses/{course_id}/modules/{mid}/delete" '
+            f'hx-target="#module-list-section" hx-swap="outerHTML" style="display:inline">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+            f'<button class="btn btn-danger btn-sm" type="submit">Entfernen</button>'
+            f'</form>'
+        )
+        link = f'/units/{uid}' if uid else '#'
+        items.append(
+            f'<div class="card module-card" id="module_{mid}"><div class="card-body">'
+            f'<span class="badge">{pos}</span> '
+            f'<span class="module-title"><a class="module-link" href="{link}">{title}</a></span> '
+            f'{del_action}'
+            f'</div></div>'
+        )
+    inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Lerneinheiten im Kurs.</p></div>'
+    sortable_open = (
+        f'<div class="module-list" hx-ext="sortable" '
+        f'data-reorder-url="/courses/{course_id}/modules/reorder" '
+        f'data-csrf-token="{Component.escape(csrf_token)}">'
+    )
+    error_html = (
+        f'<div class="section-error" role="alert" data-testid="module-error">{Component.escape(error)}</div>' if error else ""
+    )
+    return f'<section id="module-list-section">{error_html}{sortable_open}{inner_content}</div></section>'
+
+
+def _render_available_units_partial(course_id: str, *, units: list[dict], attached_unit_ids: set[str], csrf_token: str, oob: bool = False) -> str:
+    """Render a simple list of available units to add to the course.
+
+    Filters out units already attached.
+    """
+    rows: list[str] = []
+    for u in units:
+        uid = str(u.get("id") or "")
+        if uid in attached_unit_ids:
+            continue
+        title = Component.escape(str(u.get("title") or "Unbenannte Lerneinheit"))
+        form = (
+            f'<form method="post" action="/courses/{course_id}/modules/create" '
+            f'hx-post="/courses/{course_id}/modules/create" '
+            f'hx-target="#module-list-section" hx-swap="outerHTML" class="inline-form">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+            f'<input type="hidden" name="unit_id" value="{uid}">'
+            f'<button class="btn btn-secondary btn-sm" type="submit">Hinzufügen</button>'
+            f'</form>'
+        )
+        rows.append(f'<li><span class="unit-title">{title}</span> {form}</li>')
+    inner = "\n".join(rows) if rows else '<li class="text-muted">Keine weiteren Lerneinheiten verfügbar.</li>'
+    oob_attr = ' hx-swap-oob="true"' if oob else ""
+    return f'<section id="available-units-section" class="card"{oob_attr}><h2>Verfügbare Lerneinheiten</h2><ul class="available-units">{inner}</ul></section>'
 
 
 def _render_section_detail_page_html(

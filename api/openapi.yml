@@ -3294,6 +3294,43 @@ paths:
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /api/teaching/courses/{course_id}/modules/{module_id}:
+    delete:
+      tags: [Teaching]
+      summary: Remove a unit from a course (owner only)
+      description: Deletes a course module and resequences remaining positions contiguously.
+      operationId: deleteCourseModule
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      x-security-notes:
+        - "Transactional delete + resequence; RLS enforces ownership via course_modules policies."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204': { description: Module removed }
+        '400':
+          description: "Invalid identifiers (detail: invalid_course_id | invalid_module_id)"
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
   /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility:
     patch:
       tags: [Teaching]

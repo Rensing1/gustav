@@ -50,6 +50,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Cache: `Cache-Control: private, no-store`
 - `GET /api/teaching/units/{unit_id}` (Author only)
   - 200 `{ id, title, summary?, author_id, created_at, updated_at }`; 404 wenn Unit nicht existiert; 403 wenn nicht Autor
+  - Cache: `Cache-Control: private, no-store`
 - `POST /api/teaching/units` (Teacher only)
   - Body `{ title, summary? }`, 201 `Unit` oder 400/403
 - `PATCH /api/teaching/units/{unit_id}` (Author only)
@@ -146,6 +147,7 @@ Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
   - Material: `/units/{u}/sections/{s}/materials/{m}` (Bearbeiten/Löschen, „Download anzeigen“ für Datei‑Materialien)
   - Aufgabe: `/units/{u}/sections/{s}/tasks/{t}` (Bearbeiten/Löschen)
 - Sicherheit: CSRF in Formularen, `Cache-Control: private, no-store` für SSR, Delegation an API (kein Repo‑Bypass), PRG nach POST.
+  - PRG‑Semantik: Erfolgreiche POSTs verwenden `303 See Other` (z. B. `/units`, `/courses`).
 
 ## Schemas
 - `Course { id, title, subject?, grade_level?, term?, teacher_id, created_at, updated_at }`

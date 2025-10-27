@@ -925,7 +925,7 @@ async def courses_create(request: Request):
         return HTMLResponse(content=course_list_html + form_html)
 
     # PRG: redirect back to the listing page
-    return RedirectResponse(url="/courses", status_code=302)
+    return RedirectResponse(url="/courses", status_code=303)
 
 @app.post("/courses/{course_id}/delete", response_class=HTMLResponse)
 async def delete_course_htmx(request: Request, course_id: str):
@@ -1063,7 +1063,7 @@ async def units_create(request: Request):
         form_html = f'<div id="create-unit-form-container" hx-swap-oob="true">{form_component.render()}</div>'
         return HTMLResponse(content=unit_list_html + form_html)
 
-    return RedirectResponse(url="/units", status_code=302)
+    return RedirectResponse(url="/units", status_code=303)
 
 
 @app.get("/units/{unit_id}/edit", response_class=HTMLResponse)
@@ -1206,6 +1206,10 @@ async def unit_details_index(request: Request, unit_id: str):
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             u = await client.get(f"/api/teaching/units/{unit_id}")
             if u.status_code != 200 or not isinstance(u.json(), dict):
+                # Preserve API semantics for clarity and correctness
+                if u.status_code in (403, 404):
+                    msg = "Zugriff verweigert" if u.status_code == 403 else "Lerneinheit nicht gefunden"
+                    return HTMLResponse(msg, status_code=u.status_code)
                 return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
             ud = u.json()
             unit_title = str(ud.get("title") or "") or None

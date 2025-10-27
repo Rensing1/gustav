@@ -1542,7 +1542,7 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
         return JSONResponse({"error": "bad_request"}, status_code=400)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_unit(unit), status_code=201)
+    return _json_private(_serialize_unit(unit), status_code=201)
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}")
@@ -1622,7 +1622,7 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
     if not updated:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse(content=_serialize_unit(updated), status_code=200)
+    return _json_private(_serialize_unit(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}")
@@ -1651,7 +1651,8 @@ async def delete_unit(request: Request, unit_id: str):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return Response(status_code=204)
+    # No content but still enforce private, no-store to be explicit in proxies
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections")

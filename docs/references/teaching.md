@@ -10,6 +10,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 - `POST /api/teaching/courses` (Teacher only)
   - Body `CourseCreate { title, subject?, grade_level?, term? }`
   - 201 `Course`, 400 bei ungültigen Feldern, 403 wenn nicht `teacher`
+  - Cache: `Cache-Control: private, no-store`
 - `PATCH /api/teaching/courses/{course_id}` (Owner only)
   - Body `CourseUpdate` (alle Felder optional)
   - 200 `Course` oder 400/403/404
@@ -53,6 +54,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Cache: `Cache-Control: private, no-store`
 - `POST /api/teaching/units` (Teacher only)
   - Body `{ title, summary? }`, 201 `Unit` oder 400/403
+  - Cache: `Cache-Control: private, no-store`
 - `PATCH /api/teaching/units/{unit_id}` (Author only)
   - 200 `Unit` oder 400/403/404
 - `DELETE /api/teaching/units/{unit_id}` (Author only)

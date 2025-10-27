@@ -544,6 +544,108 @@ async def test_course_modules_reorder_non_owner_invalid_payload_is_403():
 
 
 @pytest.mark.anyio
+async def test_course_modules_delete_resequences_positions():
+    """Deleting a module resequences remaining positions to 1..n (owner only)."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-del-mod", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(client, title="Mathe 9")
+        unit_a = await _create_unit(client, title="A")
+        unit_b = await _create_unit(client, title="B")
+        unit_c = await _create_unit(client, title="C")
+
+        mod_a = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_a["id"]})).json()
+        mod_b = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_b["id"]})).json()
+        _mod_c = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_c["id"]})).json()
+
+        # Delete middle module (B)
+        resp_del = await client.delete(f"/api/teaching/courses/{course_id}/modules/{mod_b['id']}")
+        assert resp_del.status_code == 204
+
+        # Remaining modules are A and C with positions 1 and 2
+        after = await client.get(f"/api/teaching/courses/{course_id}/modules")
+        assert after.status_code == 200
+        items = after.json()
+        assert [m["position"] for m in items] == [1, 2]
+        unit_ids = [m["unit_id"] for m in items]
+        assert unit_a["id"] in unit_ids and unit_b["id"] not in unit_ids and unit_c["id"] in unit_ids
+
+
+@pytest.mark.anyio
+async def test_course_modules_delete_invalid_ids_returns_400():
+    """Invalid UUIDs map to 400 with invalid_* detail (contract)."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-del-bad", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(client, title="Biologie 7")
+        unit = await _create_unit(client, title="DNA")
+        mod = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit["id"]})).json()
+
+        # Invalid module uuid → 400 invalid_module_id
+        bad_mod = await client.delete(f"/api/teaching/courses/{course_id}/modules/not-a-uuid")
+        assert bad_mod.status_code == 400
+        assert bad_mod.json().get("detail") == "invalid_module_id"
+
+        # Invalid course uuid → 400 invalid_course_id
+        bad_course = await client.delete(f"/api/teaching/courses/not-a-uuid/modules/{mod['id']}")
+        assert bad_course.status_code == 400
+        assert bad_course.json().get("detail") == "invalid_course_id"
+
+
+@pytest.mark.anyio
+async def test_course_modules_delete_non_owner_is_403_or_404():
+    """Non-owner receives 403/404 for delete to avoid error oracle (not 400)."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    owner = main.SESSION_STORE.create(sub="owner-del", name="Owner", roles=["teacher"])
+    other = main.SESSION_STORE.create(sub="other-del", name="Other", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", owner.session_id)
+        course_id = await _create_course(client, title="Security Del")
+        unit = await _create_unit(client, title="Auth")
+        mod = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit["id"]})).json()
+
+        client.cookies.set("gustav_session", other.session_id)
+        resp = await client.delete(f"/api/teaching/courses/{course_id}/modules/{mod['id']}")
+        assert resp.status_code in (403, 404)
+        assert resp.status_code != 400
+
+
+@pytest.mark.anyio
 async def test_sections_reorder_non_author_invalid_payload_is_403():
     """Non-author should get 403/404 even with invalid payload (avoid error oracle for sections)."""
     main.SESSION_STORE = SessionStore()

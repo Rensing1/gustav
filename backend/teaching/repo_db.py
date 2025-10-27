@@ -1888,6 +1888,60 @@ class DBTeachingRepo:
             for r in rows
         ]
 
+    def delete_course_module_owned(self, course_id: str, module_id: str, owner_sub: str) -> bool:
+        """Delete a course module owned by `owner_sub` and resequence positions.
+
+        Why:
+            Keep contiguous ordering (1..n) after deletions to simplify the UI
+            and avoid gaps in positions.
+
+        Behavior:
+            - Returns True when the row is visible and deleted; False when the
+              row is not visible (not found or not owned).
+
+        Security:
+            - `set_config('app.current_sub', ...)` engages RLS policies to
+              restrict visibility to course owners.
+        """
+        try:
+            _ = str(UUID(str(module_id)))
+        except (ValueError, TypeError):
+            # Let the web layer map invalid UUID path params; here we just ensure
+            # consistent behavior when called directly.
+            pass
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                # Lock the target row to maintain a stable resequencing base
+                cur.execute(
+                    "select id from public.course_modules where id = %s and course_id = %s for update",
+                    (module_id, course_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return False
+                cur.execute(
+                    "delete from public.course_modules where id = %s and course_id = %s",
+                    (module_id, course_id),
+                )
+                # Resequence remaining modules contiguously
+                cur.execute(
+                    """
+                    with ordered as (
+                      select id, row_number() over (order by position asc, id) as rn
+                      from public.course_modules
+                      where course_id = %s
+                    )
+                    update public.course_modules m
+                    set position = o.rn
+                    from ordered o
+                    where m.id = o.id
+                    """,
+                    (course_id,),
+                )
+                conn.commit()
+                return True
+
     def set_module_section_visibility(
         self,
         course_id: str,

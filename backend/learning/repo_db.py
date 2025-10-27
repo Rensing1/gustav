@@ -23,8 +23,16 @@ except Exception:  # pragma: no cover
 
 
 def _default_limited_dsn() -> str:
+    """Supabase-local fallback DSN for dev/test only.
+
+    This matches the docker compose defaults used in the project and is only
+    considered in non-production environments by `_dsn()`. In production, an
+    explicit DATABASE_URL/LEARNING_DATABASE_URL must be provided.
+    """
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
+    # We intentionally keep the well-known dev credentials here because they
+    # point to the local Supabase Postgres used in tests.
     return f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
 
 
@@ -85,6 +93,83 @@ class DBLearningRepo:
 
     def _set_current_sub(self, cur, sub: str) -> None:
         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+
+    # ------------------------------------------------------------------
+    def list_courses_for_student(self, *, student_sub: str, limit: int, offset: int) -> List[dict]:
+        """Return the student's courses with minimal fields, alphabetically.
+
+        Security:
+            Uses explicit membership join to avoid leaking teacher-owned courses
+            in mixed-role scenarios. RLS remains active via gustav_limited and
+            app.current_sub.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                cur.execute(
+                    """
+                    select c.id::text, c.title, c.subject, c.grade_level, c.term
+                      from public.courses c
+                      join public.course_memberships m on m.course_id = c.id
+                     where m.student_id = %s
+                     order by c.title asc, c.id asc
+                     offset %s
+                     limit %s
+                    """,
+                    (student_sub, int(max(0, offset)), int(max(1, limit))),
+                )
+                rows = cur.fetchall()
+        items: List[dict] = []
+        for row in rows:
+            items.append(
+                {
+                    "id": row[0],
+                    "title": row[1],
+                    "subject": row[2],
+                    "grade_level": row[3],
+                    "term": row[4],
+                }
+            )
+        return items
+
+    def list_units_for_student_course(self, *, student_sub: str, course_id: str) -> List[dict]:
+        """Return units for the student's course ordered by module position.
+
+        Raises LookupError when the course does not exist or the student is not
+        a member (for 404 semantics in the API layer).
+        """
+        course_uuid = str(UUID(course_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                # Membership check for strict 404 semantics
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise LookupError("not_member_or_missing")
+                cur.execute(
+                    """
+                    select unit_id::text, title, summary, module_position
+                      from public.get_course_units_for_student(%s, %s)
+                    """,
+                    (student_sub, course_uuid),
+                )
+                rows = cur.fetchall()
+        result: List[dict] = []
+        for row in rows:
+            result.append(
+                {
+                    "unit": {
+                        "id": row[0],
+                        "title": row[1],
+                        "summary": row[2],
+                    },
+                    "position": int(row[3]) if row[3] is not None else 1,
+                }
+            )
+        return result
 
     # ------------------------------------------------------------------
     def list_released_sections(

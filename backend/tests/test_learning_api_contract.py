@@ -272,7 +272,7 @@ async def test_sections_requires_authentication_cache_header():
         )
 
     assert response.status_code == 401
-    assert response.headers.get("Cache-Control") == "private, max-age=0"
+    assert response.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -559,7 +559,7 @@ async def test_create_submission_text_body_blank_returns_invalid_input():
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_input"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -579,7 +579,7 @@ async def test_create_submission_text_body_too_long_returns_invalid_input():
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_input"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 @pytest.mark.anyio
 async def test_list_submissions_history_happy_path():
@@ -604,7 +604,8 @@ async def test_list_submissions_history_happy_path():
         )
 
     assert history_resp.status_code == 200
-    assert history_resp.headers.get("Cache-Control") == "private, max-age=0"
+    # Security: success responses must not be cached
+    assert history_resp.headers.get("Cache-Control") == "private, no-store"
     payload = history_resp.json()
     assert isinstance(payload, list)
     assert len(payload) == 2
@@ -633,7 +634,7 @@ async def test_list_submissions_requires_authentication():
         )
 
     assert resp.status_code == 401
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -651,7 +652,8 @@ async def test_list_submissions_history_empty_returns_200_array():
 
     assert resp.status_code == 200
     assert resp.json() == []
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    # Security: success responses must not be cached
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -668,7 +670,7 @@ async def test_list_submissions_forbidden_non_member():
         )
 
     assert resp.status_code == 403
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -685,7 +687,7 @@ async def test_list_submissions_404_when_not_released():
         )
 
     assert resp.status_code == 404
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -702,7 +704,7 @@ async def test_list_submissions_invalid_uuid_returns_400_with_cache_header():
         )
 
     assert resp.status_code == 400
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -775,7 +777,7 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
 
     assert resp.status_code == 403
     assert resp.json().get("detail") == "csrf_violation"
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -910,7 +912,7 @@ async def test_sections_invalid_uuid_uses_contract_detail_and_cache_header():
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_uuid"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -929,7 +931,7 @@ async def test_create_submission_rejects_cross_origin_when_origin_header_present
 
     assert resp.status_code == 403
     assert resp.json().get("detail") == "csrf_violation"
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1017,7 +1019,7 @@ async def test_sections_invalid_include_returns_400_with_cache_control():
 
     assert res.status_code == 400
     assert res.json().get("detail") == "invalid_include"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1038,7 +1040,7 @@ async def test_create_submission_idempotency_key_too_long_returns_400_invalid_in
     assert res.status_code == 400
     body = res.json()
     assert body.get("detail") == "invalid_input"
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1055,7 +1057,7 @@ async def test_sections_forbidden_has_private_cache_header():
         )
 
     assert res.status_code == 403
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -1072,7 +1074,7 @@ async def test_sections_not_found_has_private_cache_header():
         )
 
     assert res.status_code == 404
-    assert res.headers.get("Cache-Control") == "private, max-age=0"
+    assert res.headers.get("Cache-Control") == "private, no-store"
 
 @pytest.mark.anyio
 async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
@@ -1141,3 +1143,20 @@ async def test_submission_created_at_is_rfc3339_and_present():
     # Expected format produced by the DB: YYYY-MM-DD"T"HH:MM:SS+00:00
     import re as _re
     assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00", created_at), created_at
+
+
+@pytest.mark.anyio
+async def test_create_submission_201_has_private_no_store_cache_header():
+    """201 Create Submission must include Cache-Control: private, no-store."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "Header-Test"},
+        )
+
+    assert resp.status_code == 201
+    assert resp.headers.get("Cache-Control") == "private, no-store"

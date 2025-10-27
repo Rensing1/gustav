@@ -852,6 +852,28 @@ class _Repo:
         self.modules_by_course[course_id] = list(module_ids)
         return self.list_course_modules_for_owner(course_id, owner_id)
 
+    def delete_course_module_owned(self, course_id: str, module_id: str, owner_id: str) -> bool:
+        """Delete a module from a course if owned by `owner_id` and resequence."""
+        course = self.courses.get(course_id)
+        if not course or course.teacher_id != owner_id:
+            return False
+        module = self.course_modules.get(module_id)
+        if not module or module.course_id != course_id:
+            return False
+        # Remove from storage
+        self.course_modules.pop(module_id, None)
+        bucket = self.modules_by_course.get(course_id, [])
+        bucket = [mid for mid in bucket if mid != module_id]
+        self.modules_by_course[course_id] = bucket
+        # Resequence positions
+        for idx, mid in enumerate(bucket, start=1):
+            m = self.course_modules.get(mid)
+            if m:
+                m.position = idx
+                m.updated_at = datetime.now(timezone.utc).isoformat()
+                self.course_modules[mid] = m
+        return True
+
     def set_module_section_visibility(
         self,
         course_id: str,
@@ -2651,6 +2673,41 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     # Uniform API shape: explicit JSONResponse with status 200
     return JSONResponse(content=[_serialize_module(m) for m in modules], status_code=200)
 
+
+@teaching_router.delete("/api/teaching/courses/{course_id}/modules/{module_id}")
+async def delete_course_module(request: Request, course_id: str, module_id: str):
+    """
+    Remove a unit from a course (owner only).
+
+    Why:
+        Teachers need to detach mistakenly added units and keep positions tidy.
+
+    Behavior:
+        - 204 on success.
+        - 400 when `course_id` or `module_id` are not UUID-like.
+        - 403/404 via ownership guard and RLS visibility.
+
+    Permissions:
+        Caller must be a teacher and the owner of the course.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(course_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        return guard
+    try:
+        deleted = REPO.delete_course_module_owned(course_id, module_id, sub)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return Response(status_code=204)
 
 @teaching_router.patch("/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility")
 async def update_module_section_visibility(

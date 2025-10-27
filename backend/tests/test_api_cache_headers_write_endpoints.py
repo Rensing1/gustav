@@ -4,6 +4,7 @@ API Cache-Control for write endpoints (POST/PATCH).
 Scenarios (RED):
 - POST /api/teaching/units returns 201 with Cache-Control: private, no-store
 - PATCH /api/teaching/units/{id} returns 200 with Cache-Control: private, no-store
+- POST /api/teaching/courses returns 201 with Cache-Control: private, no-store
 """
 
 from __future__ import annotations
@@ -61,5 +62,21 @@ async def test_update_unit_200_has_private_no_store():
         r = await c.patch(f"/api/teaching/units/{uid}", json={"title": "Neu"})
 
     assert r.status_code == 200
+    cc = r.headers.get("Cache-Control", "")
+    assert "private" in cc and "no-store" in cc
+
+
+@pytest.mark.anyio
+async def test_create_course_201_has_private_no_store():
+    # Use in-memory repo to stay DB-independent
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-cache-write-3", name="Teach", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r = await c.post("/api/teaching/courses", json={"title": "Kurs A"})
+
+    assert r.status_code == 201
     cc = r.headers.get("Cache-Control", "")
     assert "private" in cc and "no-store" in cc

@@ -1109,7 +1109,8 @@ async def create_course(request: Request, payload: CourseCreate):
     except ValueError:
         # Map repo validation to contract 400
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
-    return JSONResponse(content=_serialize_course(course), status_code=201)
+    # Security: return private, no-store to prevent caching of owner-scoped data
+    return _json_private(_serialize_course(course), status_code=201)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}")

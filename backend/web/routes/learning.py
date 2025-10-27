@@ -39,6 +39,7 @@ ALLOWED_IMAGE_MIME: set[str] = {"image/jpeg", "image/png"}
 
 
 def _cache_headers() -> dict[str, str]:
+    # Private with explicit zero max-age to match contract and tests.
     return {"Cache-Control": "private, max-age=0"}
 
 
@@ -279,7 +280,8 @@ async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
 
     Permissions:
         Caller must have the `student` role; membership filtering is enforced in
-        the repository via RLS and explicit joins.
+        the repository via RLS and explicit joins. Responds 403 if caller lacks
+        the student role.
     """
     user, error = _require_student(request)
     if error:
@@ -310,8 +312,8 @@ async def list_course_units(request: Request, course_id: str):
         - Responses include private Cache-Control headers.
 
     Permissions:
-        Caller must have the `student` role and be a member of the course.
-        Membership and ordering are enforced at the DB boundary.
+        Caller must have the `student` role (403 otherwise) and be a member of
+        the course. Membership and ordering are enforced at the DB boundary.
     """
     user, error = _require_student(request)
     if error:

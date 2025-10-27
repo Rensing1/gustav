@@ -168,3 +168,55 @@ async def test_learning_courses_auth_and_uuid_errors():
         r = await c.get("/api/learning/courses/not-a-uuid/units")
         assert r.status_code == 400
 
+
+@pytest.mark.anyio
+async def test_non_student_forbidden_learning_courses():
+    _require_db_or_skip()
+    # Teacher session should yield 403 on student-only endpoint
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r = await c.get("/api/learning/courses")
+        assert r.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_units_unauthenticated_401():
+    _require_db_or_skip()
+    # No session cookie → 401
+    async with (await _client()) as c:
+        r = await c.get(f"/api/learning/courses/{uuid4()}/units")
+        assert r.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_courses_pagination_clamp_limit_upper_bound():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    teacher, student = _setup_sessions()
+    async with (await _client()) as c:
+        # Create a small number of courses; the check focuses on clamping behavior and non-error
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        course_ids = [
+            await _create_course(c, title=f"Clamp {i:02d}")
+            for i in range(3)
+        ]
+        for cid in course_ids:
+            await _add_member(c, cid, student.sub)
+        # Request an excessive limit; should succeed and never exceed 50 items
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.get("/api/learning/courses", params={"limit": 500, "offset": 0})
+        assert r.status_code == 200
+        items = r.json()
+        assert isinstance(items, list)
+        assert len(items) <= 50

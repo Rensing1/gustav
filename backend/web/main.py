@@ -428,7 +428,7 @@ async def learning_index(request: Request):
         f'{_render_student_course_list(items, limit, offset, len(items) == limit)}'
         '</div>'
     )
-    layout = Layout(title="Kurse", content=content, user=user, current_path=request.url.path)
+    layout = Layout(title="Meine Kurse", content=content, user=user, current_path=request.url.path)
     return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}", response_class=HTMLResponse)

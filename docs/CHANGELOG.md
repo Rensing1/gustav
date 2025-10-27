@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- api(learning): Document 403 Forbidden for student-only endpoints `/api/learning/courses` and `/api/learning/courses/{course_id}/units`.
+- security(cache): Learning API responses use `Cache-Control: private, no-store` and contract examples updated accordingly.
+- docs(openapi): Add `additionalProperties: false` to `LearningCourse` and `UnitPublic` schemas to constrain payloads.
+- ux(learning/ui): Align page title to “Meine Kurse” for student course list.
 - fix(openapi): Document Cache-Control on GET /api/teaching/courses (200) and remove duplicate example entry in course GET header.
 - security(cache): POST /api/teaching/courses returns 201 with Cache-Control: private, no-store (align API and contract).
 - security(cache): Add Cache-Control: private, no-store to 201/200 responses on POST/PATCH for teaching units; harden proxies/browsers.

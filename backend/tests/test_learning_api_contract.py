@@ -604,8 +604,8 @@ async def test_list_submissions_history_happy_path():
         )
 
     assert history_resp.status_code == 200
-    # Success responses may be privately cached with zero max-age
-    assert history_resp.headers.get("Cache-Control") == "private, max-age=0"
+    # Security: success responses must not be cached
+    assert history_resp.headers.get("Cache-Control") == "private, no-store"
     payload = history_resp.json()
     assert isinstance(payload, list)
     assert len(payload) == 2
@@ -652,7 +652,8 @@ async def test_list_submissions_history_empty_returns_200_array():
 
     assert resp.status_code == 200
     assert resp.json() == []
-    assert resp.headers.get("Cache-Control") == "private, max-age=0"
+    # Security: success responses must not be cached
+    assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

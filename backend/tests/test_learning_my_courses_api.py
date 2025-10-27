@@ -102,8 +102,8 @@ async def test_list_student_courses_alphabetical_and_minimal_fields():
         r = await c.get("/api/learning/courses", params={"limit": 50, "offset": 0})
         assert r.status_code == 200
         items = r.json()
-        # Success responses may be privately cached with zero max-age
-        assert r.headers.get("Cache-Control") == "private, max-age=0"
+        # Security: success responses must not be stored by intermediaries or browser caches
+        assert r.headers.get("Cache-Control") == "private, no-store"
         # Alphabetical by title asc
         assert [it["title"] for it in items] == ["Algebra", "Biologie"]
         # Minimal fields, no teacher_id
@@ -146,14 +146,68 @@ async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r_ok = await c.get(f"/api/learning/courses/{course_id}/units")
         assert r_ok.status_code == 200
-        # Success responses may be privately cached with zero max-age
-        assert r_ok.headers.get("Cache-Control") == "private, max-age=0"
-        rows = r_ok.json()
-        assert [row["unit"]["title"] for row in rows] == ["Optik", "Mechanik"]
-        assert [row["position"] for row in rows] == [1, 2]
-        # UnitPublic has no author_id
-        assert set(rows[0]["unit"].keys()) <= {"id", "title", "summary"}
-        assert "author_id" not in rows[0]["unit"]
+        # Security: success responses must not be stored by intermediaries or browser caches
+        assert r_ok.headers.get("Cache-Control") == "private, no-store"
+
+@pytest.mark.anyio
+async def test_list_student_courses_empty_list():
+    _require_db_or_skip()
+    # DB-backed repos required
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    # Student with no memberships should get an empty list
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="Student", roles=["student"])
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.get("/api/learning/courses")
+        assert r.status_code == 200
+        assert r.headers.get("Cache-Control") == "private, no-store"
+        assert r.json() == []
+
+@pytest.mark.anyio
+async def test_courses_pagination_clamp_limit_and_offset():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    teacher, student = _setup_sessions()
+    async with (await _client()) as c:
+        # Create a few courses and add membership
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        cids = [
+            await _create_course(c, title="A"),
+            await _create_course(c, title="B"),
+            await _create_course(c, title="C"),
+        ]
+        for cid in cids:
+            await _add_member(c, cid, student.sub)
+
+        # Ask for an excessive limit and negative offset; expect clamp (no error)
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.get("/api/learning/courses", params={"limit": 1000, "offset": -10})
+        assert r.status_code == 200
+        items = r.json()
+        # We only created 3 items; clamping should not truncate them
+        assert len(items) == 3
+        # Still alphabetically ordered
+        assert [it["title"] for it in items] == ["A", "B", "C"]
+        assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

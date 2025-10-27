@@ -808,7 +808,89 @@ components:
           format: date-time
           nullable: true
 
+    LearningCourse:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        grade_level:
+          type: string
+          nullable: true
+        term:
+          type: string
+          nullable: true
+    UnitPublic:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+
 paths:
+  /api/learning/courses:
+    get:
+      tags: [Learning]
+      summary: List courses for the current student (alphabetical)
+      description: Returns courses where the authenticated student is a member, ordered by title.
+      operationId: listLearningCourses
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Student's courses ordered by title asc
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearningCourse'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/learning/courses/{course_id}/sections:
     get:
       tags: [Learning]
@@ -900,6 +982,81 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Course not found or sections not released
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/courses/{course_id}/units:
+    get:
+      tags: [Learning]
+      summary: List learning units of a course for the current student
+      description: Requires membership in the course; returns units ordered by course module position.
+      operationId: listLearningCourseUnits
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Units of the course
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [unit, position]
+                  properties:
+                    unit:
+                      $ref: '#/components/schemas/UnitPublic'
+                    position:
+                      type: integer
+        '400':
+          description: Invalid UUID
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security hardening — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, max-age=0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course not found or not visible to the student
           headers:
             Cache-Control:
               description: Security hardening — responses are private and not cacheable by shared caches.

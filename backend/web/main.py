@@ -309,13 +309,52 @@ def _render_course_list_partial(items: list[dict], limit: int, offset: int, has_
         f'</section>'
     )
 
+def _render_student_course_list(items: list[dict], limit: int, offset: int, has_next: bool) -> str:
+    """Render a simple course list for students without edit actions.
+
+    Links route to /learning/courses/{id}.
+    """
+    cards = []
+    for c in items:
+        cid = str(c.get("id", ""))
+        title = Component.escape(str(c.get("title", "")))
+        subject = Component.escape(str(c.get("subject", "") or ""))
+        grade = Component.escape(str(c.get("grade_level", "") or ""))
+        term = Component.escape(str(c.get("term", "") or ""))
+        meta_bits = [b for b in [subject, grade, term] if b]
+        meta_html = f'<div class="card-meta">{" · ".join(meta_bits)}</div>' if meta_bits else ''
+        cards.append(
+            f'<div class="card course-card" data-course-id="{cid}">'
+            f'<div class="card-body">'
+            f'<h3 class="card-title"><a href="/learning/courses/{cid}">{title}</a></h3>'
+            f'{meta_html}'
+            f'</div>'
+            f'</div>'
+        )
+    list_html = "\n".join(cards)
+    prev_disabled = offset <= 0
+    prev_href = f"/learning?limit={limit}&offset={max(0, offset - limit)}"
+    next_href = f"/learning?limit={limit}&offset={offset + limit}"
+    pager_html = []
+    disabled_attr = 'aria-disabled="true"' if prev_disabled else ''
+    pager_html.append(
+        f'<a data-testid="pager-prev" href="{prev_href}" class="pager-link" {disabled_attr}>Zurück</a>'
+    )
+    if has_next:
+        pager_html.append(f'<a data-testid="pager-next" href="{next_href}" class="pager-link">Weiter</a>')
+    pager = f"<nav class=\"pager\">{' '.join(pager_html)}</nav>" if cards else ""
+    inner = (
+        f'<div class="course-list">{list_html}</div>{pager}' if cards else '<div class="empty-state"><p>Du bist noch in keinem Kurs.</p></div>'
+    )
+    return f'<section class="course-list-section" aria-labelledby="student-courses-heading"><h2 id="student-courses-heading" class="sr-only">Meine Kurse</h2>{inner}</section>'
+
 def _render_courses_page_html(request: Request, items: list[dict], *, csrf_token: str, limit: int, offset: int, has_next: bool, error: str | None = None) -> str:
     form_component = CourseCreateForm(csrf_token=csrf_token, error=error)
     form_html = form_component.render()
     course_list_html = _render_course_list_partial(items, limit, offset, has_next, csrf_token=csrf_token)
     return f'''
         <div class="container">
-            <h1 id="courses-heading">Meine Kurse</h1>
+            <h1 id="courses-heading">Kurse</h1>
             <section class="card create-course-section" aria-labelledby="create-course-heading" id="create-course-form-container">
                 <h2 id="create-course-heading">Neuen Kurs erstellen</h2>
                 {form_html}
@@ -356,6 +395,97 @@ async def courses_edit_form(request: Request, course_id: str):
     form_component = CourseEditForm(course_id=course_id, csrf_token=token, values=values)
     content = f'<div class="container"><h1>Kurs bearbeiten</h1><section class="card">{form_component.render()}</section></div>'
     layout = Layout(title="Kurs bearbeiten", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+@app.get("/learning", response_class=HTMLResponse)
+async def learning_index(request: Request):
+    """SSR page listing the student's courses via the Learning API.
+
+    Permissions:
+        Caller must be a student; otherwise redirect to home.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return RedirectResponse(url="/", status_code=303)
+    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
+    items: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get("/api/learning/courses", params={"limit": limit, "offset": offset})
+            if r.status_code == 200 and isinstance(r.json(), list):
+                items = r.json()
+    except Exception:
+        items = []
+    content = (
+        '<div class="container">'
+        '<h1>Meine Kurse</h1>'
+        f'{_render_student_course_list(items, limit, offset, len(items) == limit)}'
+        '</div>'
+    )
+    layout = Layout(title="Kurse", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+@app.get("/learning/courses/{course_id}", response_class=HTMLResponse)
+async def learning_course_detail(request: Request, course_id: str):
+    """SSR page showing the units of a course for the current student.
+
+    Behavior: Fetches units via Learning API. Uses a best-effort course title
+    lookup via the courses list; falls back to a generic header when not found.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return RedirectResponse(url="/", status_code=303)
+    # Validate UUID-ish to avoid calling the API with garbage
+    if not _is_uuid_like(course_id):
+        return RedirectResponse(url="/learning", status_code=303)
+    title = "Kurs"
+    units: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            # Try lookup for title from course list (best-effort)
+            try:
+                r_courses = await client.get("/api/learning/courses", params={"limit": 50, "offset": 0})
+                if r_courses.status_code == 200 and isinstance(r_courses.json(), list):
+                    for it in r_courses.json():
+                        if isinstance(it, dict) and str(it.get("id")) == str(course_id):
+                            t = it.get("title")
+                            if isinstance(t, str) and t:
+                                title = t
+                            break
+            except Exception:
+                pass
+            r_units = await client.get(f"/api/learning/courses/{course_id}/units")
+            if r_units.status_code == 200 and isinstance(r_units.json(), list):
+                units = r_units.json()
+    except Exception:
+        units = []
+
+    # Render simple unit list
+    unit_items = []
+    for row in units:
+        u = row.get("unit", {}) if isinstance(row, dict) else {}
+        uid = Component.escape(str(u.get("id", "")))
+        utitle = Component.escape(str(u.get("title", "")))
+        unit_items.append(f'<li><span class="badge">{row.get("position", "")}</span> {utitle}</li>')
+    units_html = '<ul class="unit-list">' + ("\n".join(unit_items) if unit_items else '<li class="text-muted">Keine Lerneinheiten.</li>') + '</ul>'
+    content = (
+        '<div class="container">'
+        f'<h1>{Component.escape(title)}</h1>'
+        f'<p><a href="/learning">Zurück zu „Meine Kurse“</a></p>'
+        f'<section class="card"><h2>Lerneinheiten</h2>{units_html}</section>'
+        '</div>'
+    )
+    layout = Layout(title=Component.escape(title), content=content, user=user, current_path=request.url.path)
     return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)

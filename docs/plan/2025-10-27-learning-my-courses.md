@@ -7,7 +7,7 @@ Scope (Iteration)
 - API (Learning, getrennt vom Teaching‑Kontext):
   - GET `/api/learning/courses` – Kurse für eingeloggten Schüler, alphabetisch.
   - GET `/api/learning/courses/{course_id}/units` – Einheiten eines Kurses mit Positionswert.
-- DB: Optionaler Helper (SECURITY DEFINER) für Units‑Liste; keine Schemaänderung an Tabellen notwendig.
+- DB: Helper (SECURITY DEFINER) für Units‑Liste implementiert; keine Schemaänderung an Tabellen notwendig.
 
 Nicht‑Ziele (spätere Iterationen)
 - Anzeige freigegebener Abschnitte inkl. Material/Aufgaben (siehe docs/references/learning.md).
@@ -194,7 +194,7 @@ paths:
 Bestehende Tabellen genügen: `public.courses`, `public.course_memberships`, `public.units`, `public.course_modules` (+ RLS). Zur Vereinfachung und Härtung schlagen wir einen SECURITY‑DEFINER‑Helper vor:
 
 ```sql
--- Datei (Entwurf): supabase/migrations/20251027121500_learning_course_units_helper.sql
+-- Datei: supabase/migrations/20251027114908_learning_course_units_helper.sql
 set check_function_bodies = off;
 
 drop function if exists public.get_course_units_for_student(text, uuid);
@@ -206,13 +206,13 @@ returns table (
   unit_id uuid,
   title text,
   summary text,
-  position integer
+  module_position integer
 )
 language sql
 security definer
 set search_path = public, pg_temp
 as $$
-  select u.id, u.title, u.summary, m.position
+  select u.id, u.title, u.summary, m.position as module_position
     from public.course_memberships cm
     join public.course_modules m on m.course_id = cm.course_id
     join public.units u on u.id = m.unit_id
@@ -225,6 +225,9 @@ grant execute on function public.get_course_units_for_student(text, uuid) to gus
 
 set check_function_bodies = on;
 ```
+
+UI‑Hinweis
+- Navigationseintrag für Schüler „Meine Kurse“ verlinkt auf `/learning`.
 
 Optional (Performance spätere Iteration): Index `create index idx_courses_title on public.courses(title);` für alphabetische Sortierung.
 
@@ -275,3 +278,32 @@ Mocking:
 - `supabase migration up`
 - `.venv/bin/pytest -q`
 
+## Implementierung (Stand)
+
+- Vertrag (OpenAPI): `api/openapi.yml`
+  - Schemas: `LearningCourse`, `UnitPublic`
+  - Pfade: `GET /api/learning/courses`, `GET /api/learning/courses/{course_id}/units`
+- Web‑Adapter (API): `backend/web/routes/learning.py`
+  - `list_my_courses` (alphabetisch, minimale Felder, private Cache‑Header)
+  - `list_course_units` (geordnet nach Kursmodul‑Position, 404‑Semantik, private Cache‑Header)
+  - Docstrings (Why/Parameters/Behavior/Permissions) ergänzt
+- Use‑Cases: `backend/learning/usecases/courses.py`
+  - `ListCoursesUseCase`, `ListCourseUnitsUseCase`
+- Repository (DB): `backend/learning/repo_db.py`
+  - `list_courses_for_student` (JOIN auf `course_memberships`, `title asc, id asc`)
+  - `list_units_for_student_course` (Helper‑Funktion, 404 bei Nicht‑Mitgliedschaft)
+- DB‑Helper (SECURITY DEFINER): `supabase/migrations/20251027114908_learning_course_units_helper.sql`
+  - `get_course_units_for_student(p_student_sub, p_course_id)`; Rückgabespalte `module_position`
+- SSR‑Seiten: `backend/web/main.py`
+  - `/learning` (Meine Kurse, Schüler)
+  - `/learning/courses/{id}` (Lerneinheitenliste pro Kurs, Schüler)
+- Navigation: `backend/web/components/navigation.py`
+  - Schüler‑Eintrag „Meine Kurse“ → `/learning`
+- Tests: `backend/tests/test_learning_my_courses_api.py` (alphabetical, 404/400/401, ordering; grün)
+- UI‑Copy‑Feinschliff:
+  - Lehrer‑Kursliste H1 „Kurse“ (statt „Meine Kurse“)
+  - Schüler‑Kursdetail: „Zurück zu „Meine Kurse““
+
+Bekannte Grenzen (MVP)
+- Kein Fortschrittsindikator in Listen
+- Keine Anzeige freigegebener Abschnitte/Materialien/Aufgaben (folgt in späterer Iteration)

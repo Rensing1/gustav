@@ -1374,6 +1374,12 @@ paths:
       responses:
         '200':
           description: List of courses
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1460,7 +1466,6 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
-                example: private, no-store
                 example: private, no-store
           content:
             application/json:
@@ -1928,6 +1933,7 @@ paths:
               description: Security — responses must not be cached
               schema:
                 type: string
+                example: private, no-store
           content:
             application/json:
               schema:

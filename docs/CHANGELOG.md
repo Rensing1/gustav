@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- fix(openapi): Document Cache-Control on GET /api/teaching/courses (200) and remove duplicate example entry in course GET header.
+- security(cache): POST /api/teaching/courses returns 201 with Cache-Control: private, no-store (align API and contract).
 - security(cache): Add Cache-Control: private, no-store to 201/200 responses on POST/PATCH for teaching units; harden proxies/browsers.
 - docs(openapi): Add `example: private, no-store` to Cache-Control headers for courses, units, sections, users endpoints.
 - fix(web/units): Unit detail page maps 403 (not author) and 404 (missing) distinctly, mirroring API semantics.

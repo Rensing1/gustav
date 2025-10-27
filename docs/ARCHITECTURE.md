@@ -177,6 +177,8 @@ E2E‑Tests (Identity):
 
 #### API-Caching-Policy
 - Personalisierte API‑Antworten (Teaching/Users) werden mit `Cache-Control: private, no-store` geliefert.
+- Gilt für GET‑Listen/Details und ebenso für erfolgreiche POST/PATCH (201/200),
+  um Proxy‑/Browser‑Caching sensibler Daten auszuschließen.
 - Ziel: Keine Zwischenspeicherung in geteilten Proxies/Browsern; verhindert ungewolltes Leaken von personenbezogenen Daten.
 
 #### Redirect‑URI‑Sicherheit

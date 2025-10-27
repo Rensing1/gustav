@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- security(cache): Add Cache-Control: private, no-store to 201/200 responses on POST/PATCH for teaching units; harden proxies/browsers.
+- docs(openapi): Add `example: private, no-store` to Cache-Control headers for courses, units, sections, users endpoints.
+- fix(web/units): Unit detail page maps 403 (not author) and 404 (missing) distinctly, mirroring API semantics.
+- consistency(PRG): Use 303 See Other after POST on `/units` and `/courses`.
 - feat(web/sections): Add SSR section detail page with slim UI (lists only) and clear create actions. Lists now link to per‑entry detail pages (materials/tasks). PRG flows, CSRF enforced, Cache‑Control private, no-store.
 - feat(web/materials): Dedicated create page for materials with two flows — Markdown text and 2‑phase file upload (intent → finalize). File materials show a “Download anzeigen” link (short‑lived URL) on the detail page.
 - feat(web/tasks): Dedicated create page for tasks with 0–10 analysis criteria and optional hints. Add due_at (RFC3339) and max_attempts to create/update UI; delegated to API for validation.

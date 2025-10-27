@@ -222,7 +222,7 @@ class Navigation(Component):
         nav_config: Dict[str, List[Tuple[str, str, str]]] = {
             "student": [
                 ("/", "Startseite", "🏠"),
-                ("/courses", "Meine Kurse", "📚"),
+                ("/learning", "Meine Kurse", "📚"),
                 ("/about", "Über GUSTAV", "ℹ️"),
             ],
             "teacher": [

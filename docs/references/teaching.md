@@ -10,6 +10,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 - `POST /api/teaching/courses` (Teacher only)
   - Body `CourseCreate { title, subject?, grade_level?, term? }`
   - 201 `Course`, 400 bei ungültigen Feldern, 403 wenn nicht `teacher`
+  - Cache: `Cache-Control: private, no-store`
 - `PATCH /api/teaching/courses/{course_id}` (Owner only)
   - Body `CourseUpdate` (alle Felder optional)
   - 200 `Course` oder 400/403/404
@@ -50,8 +51,10 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - Cache: `Cache-Control: private, no-store`
 - `GET /api/teaching/units/{unit_id}` (Author only)
   - 200 `{ id, title, summary?, author_id, created_at, updated_at }`; 404 wenn Unit nicht existiert; 403 wenn nicht Autor
+  - Cache: `Cache-Control: private, no-store`
 - `POST /api/teaching/units` (Teacher only)
   - Body `{ title, summary? }`, 201 `Unit` oder 400/403
+  - Cache: `Cache-Control: private, no-store`
 - `PATCH /api/teaching/units/{unit_id}` (Author only)
   - 200 `Unit` oder 400/403/404
 - `DELETE /api/teaching/units/{unit_id}` (Author only)
@@ -136,6 +139,17 @@ Validierungsregeln (Tasks)
 - `kind`: read‑only, aktuell stets `native` (Forward‑Compat für H5P).
 
 Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
+
+### SSR‑UI: Materialien & Aufgaben (Überblick)
+- `/units/{unit_id}/sections/{section_id}` zeigt nur Listen (Materialien, Aufgaben) sowie Aktionen „+ Material“ und „+ Aufgabe“.
+- Erstellen erfolgt auf separaten Seiten:
+  - Materialien: `/units/{u}/sections/{s}/materials/new` (Text oder Datei‑Upload mit Intent→Finalize)
+  - Aufgaben: `/units/{u}/sections/{s}/tasks/new` (instruction_md, Kriterien[0..10], hints_md, due_at?, max_attempts?)
+- Detailseiten:
+  - Material: `/units/{u}/sections/{s}/materials/{m}` (Bearbeiten/Löschen, „Download anzeigen“ für Datei‑Materialien)
+  - Aufgabe: `/units/{u}/sections/{s}/tasks/{t}` (Bearbeiten/Löschen)
+- Sicherheit: CSRF in Formularen, `Cache-Control: private, no-store` für SSR, Delegation an API (kein Repo‑Bypass), PRG nach POST.
+  - PRG‑Semantik: Erfolgreiche POSTs verwenden `303 See Other` (z. B. `/units`, `/courses`).
 
 ## Schemas
 - `Course { id, title, subject?, grade_level?, term?, teacher_id, created_at, updated_at }`

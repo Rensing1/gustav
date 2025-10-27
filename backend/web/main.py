@@ -435,13 +435,16 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
     """
     items: list[str] = []
     for section in sections:
+        sec_id = section.get("id")
+        title = Component.escape(section.get("title"))
         items.append(f'''
-        <div class="card section-card" id="section_{section.get("id")}" data-section-id="{section.get("id")}">
+        <div class="card section-card" id="section_{sec_id}" data-section-id="{sec_id}">
             <div class="card-body">
                 <span class="drag-handle">☰</span>
-                <h4 class="card-title">{Component.escape(section.get("title"))}</h4>
+                <h4 class="card-title"><a href="/units/{unit_id}/sections/{sec_id}">{title}</a></h4>
                 <div class="card-actions">
-                    <form hx-post="/units/{unit_id}/sections/{section.get("id")}/delete" hx-target="#section-list-section" hx-swap="outerHTML">
+                    <a class="btn btn-sm" href="/units/{unit_id}/sections/{sec_id}">Material & Aufgaben</a>
+                    <form hx-post="/units/{unit_id}/sections/{sec_id}/delete" hx-target="#section-list-section" hx-swap="outerHTML">
                         <input type="hidden" name="csrf_token" value="{csrf_token}">
                         <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
                     </form>
@@ -482,6 +485,163 @@ def _render_sections_page_html(unit: dict, sections: list[dict], csrf_token: str
             {section_list_html}
         </div>
     '''
+
+
+def _render_material_list_partial(unit_id: str, section_id: str, materials: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    """Render the materials list with a stable wrapper and sortable container.
+
+    Why:
+    - Keep a stable wrapper id so HTMX targets work even when the list is empty.
+    - Use predictable child element ids (`material_<uuid>`) so the Sortable
+      helper can submit the new order as form fields `id=material_<uuid>`.
+
+    Parameters:
+    - unit_id: Current learning unit id (string).
+    - section_id: Current section id (string).
+    - materials: Minimal view models (id, title) from the Teaching API.
+    - csrf_token: Synchronizer token required by UI POSTs.
+    - error: Optional UI error key to display in a banner.
+
+    Behavior:
+    - Renders an empty-state when there are no materials.
+    - Embeds CSRF token on the sortable container as `data-csrf-token` so the
+      client script can forward it as `X-CSRF-Token` during reorder.
+
+    Permissions:
+    - Caller must be a teacher; ownership checks are enforced by the API.
+    """
+    items: list[str] = []
+    for m in materials:
+        title = Component.escape(str(m.get("title") or "Untitled"))
+        mid = m.get("id") or ""
+        href = f"/units/{unit_id}/sections/{section_id}/materials/{mid}"
+        items.append(
+            f'''<div class="card material-card" id="material_{mid}"><div class="card-body"><h4 class="card-title"><a href="{href}">{title}</a></h4></div></div>'''
+        )
+    inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Materialien.</p></div>'
+    sortable_open = (
+        f'<div class="material-list" hx-ext="sortable" '
+        f'data-reorder-url="/units/{unit_id}/sections/{section_id}/materials/reorder" '
+        f'data-csrf-token="{Component.escape(csrf_token)}">'
+    )
+    error_html = (
+        f'<div class="section-error" role="alert" data-testid="material-error">{Component.escape(error)}</div>'
+        if error
+        else ""
+    )
+    return f'<section id="material-list-section-{section_id}">{error_html}{sortable_open}{inner_content}</div></section>'
+
+
+def _render_task_list_partial(unit_id: str, section_id: str, tasks: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    """Render the tasks list with a stable wrapper and sortable container.
+
+    Wrapper id: `task-list-section-<section_id>`, item ids: `task_<uuid>`.
+
+    Keeps markup minimal for learning purposes; the excerpt shows the first
+    characters of `instruction_md` so users can recognize entries.
+    """
+    items: list[str] = []
+    for t in tasks:
+        instr = str(t.get("instruction_md") or "")
+        excerpt = Component.escape(instr[:140])
+        tid = t.get("id") or ""
+        href = f"/units/{unit_id}/sections/{section_id}/tasks/{tid}"
+        items.append(
+            f'''<div class="card task-card" id="task_{tid}"><div class="card-body"><div class="task-instruction"><a href="{href}">{excerpt}</a></div></div></div>'''
+        )
+    inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Aufgaben.</p></div>'
+    sortable_open = (
+        f'<div class="task-list" hx-ext="sortable" '
+        f'data-reorder-url="/units/{unit_id}/sections/{section_id}/tasks/reorder" '
+        f'data-csrf-token="{Component.escape(csrf_token)}">'
+    )
+    error_html = (
+        f'<div class="section-error" role="alert" data-testid="task-error">{Component.escape(error)}</div>'
+        if error
+        else ""
+    )
+    return f'<section id="task-list-section-{section_id}">{error_html}{sortable_open}{inner_content}</div></section>'
+
+
+def _render_section_detail_page_html(
+    *,
+    unit: dict,
+    section: dict,
+    materials: list[dict],
+    tasks: list[dict],
+    csrf_token: str,
+    error_materials: str | None = None,
+    error_tasks: str | None = None,
+) -> str:
+    """Builds the two-column section detail page content.
+
+    Left: materials (create form + list)
+    Right: tasks (create form + list)
+    """
+    unit_id = unit.get("id")
+    section_id = section.get("id")
+
+    # Minimal create forms (Markdown material, native task)
+    mat_form = (
+        f'<form id="material-create-text" method="post" action="/units/{unit_id}/sections/{section_id}/materials/create" '
+        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/create" '
+        f'hx-target="#material-list-section-{section_id}" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
+        f'<label>Markdown<textarea class="form-input" name="body_md" required></textarea></label>'
+        f'<button class="btn btn-primary" type="submit">Material anlegen</button>'
+        f'</form>'
+    )
+    # Tasks form with criteria[0..10] (as repeated name="criteria") and hints
+    criteria_inputs = []
+    for i in range(10):
+        criteria_inputs.append(
+            f'<div class="form-field"><input class="form-input" type="text" name="criteria" placeholder="Kriterium {i+1}"></div>'
+        )
+    criteria_html = "".join(criteria_inputs)
+    task_form = (
+        f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/create" '
+        f'hx-post="/units/{unit_id}/sections/{section_id}/tasks/create" '
+        f'hx-target="#task-list-section-{section_id}" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Anweisung<textarea class="form-input" name="instruction_md" required></textarea></label>'
+        f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
+        f'<label>Lösungshinweise<textarea class="form-input" name="hints_md"></textarea></label>'
+        f'<button class="btn btn-primary" type="submit">Aufgabe anlegen</button>'
+        f'</form>'
+    )
+
+    # Optional: lightweight upload-intent form for file materials
+    upload_form = (
+        f'<form id="material-upload-intent-form" method="post" action="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
+        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
+        f'hx-target="#material-upload-area" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Dateiname<input class="form-input" type="text" name="filename" required></label>'
+        f'<label>MIME<input class="form-input" type="text" name="mime_type" value="application/pdf" required></label>'
+        f'<label>Größe (Bytes)<input class="form-input" type="number" name="size_bytes" value="1024" min="1" required></label>'
+        f'<button class="btn" type="submit">Upload vorbereiten</button>'
+        f'</form>'
+    )
+    materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=csrf_token, error=error_materials)
+    tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=csrf_token, error=error_tasks)
+
+    return (
+        '<div class="container">'
+        f'<h1>Abschnitt: {Component.escape(section.get("title") or "Abschnitt")}</h1>'
+        '<div class="two-col">'
+        f'<section class="card col-left"><h2>Materialien</h2>'
+        # Create buttons linking to dedicated create pages (simpler UI)
+        f'<div class="actions"><a class="btn btn-primary" id="btn-create-material" '
+        f'href="/units/{unit_id}/sections/{section_id}/materials/new">+ Material</a></div>'
+        f'{materials_html}</section>'
+        f'<section class="card col-right"><h2>Aufgaben</h2>'
+        f'<div class="actions"><a class="btn btn-primary" id="btn-create-task" '
+        f'href="/units/{unit_id}/sections/{section_id}/tasks/new">+ Aufgabe</a></div>'
+        f'{tasks_html}</section>'
+        '</div>'
+        '</div>'
+    )
 
 
 def _extract_api_error_detail(response) -> str:
@@ -765,7 +925,7 @@ async def courses_create(request: Request):
         return HTMLResponse(content=course_list_html + form_html)
 
     # PRG: redirect back to the listing page
-    return RedirectResponse(url="/courses", status_code=302)
+    return RedirectResponse(url="/courses", status_code=303)
 
 @app.post("/courses/{course_id}/delete", response_class=HTMLResponse)
 async def delete_course_htmx(request: Request, course_id: str):
@@ -903,7 +1063,7 @@ async def units_create(request: Request):
         form_html = f'<div id="create-unit-form-container" hx-swap-oob="true">{form_component.render()}</div>'
         return HTMLResponse(content=unit_list_html + form_html)
 
-    return RedirectResponse(url="/units", status_code=302)
+    return RedirectResponse(url="/units", status_code=303)
 
 
 @app.get("/units/{unit_id}/edit", response_class=HTMLResponse)
@@ -1046,6 +1206,10 @@ async def unit_details_index(request: Request, unit_id: str):
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             u = await client.get(f"/api/teaching/units/{unit_id}")
             if u.status_code != 200 or not isinstance(u.json(), dict):
+                # Preserve API semantics for clarity and correctness
+                if u.status_code in (403, 404):
+                    msg = "Zugriff verweigert" if u.status_code == 403 else "Lerneinheit nicht gefunden"
+                    return HTMLResponse(msg, status_code=u.status_code)
                 return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
             ud = u.json()
             unit_title = str(ud.get("title") or "") or None
@@ -1064,6 +1228,819 @@ async def unit_details_index(request: Request, unit_id: str):
     content = _render_sections_page_html(unit_vm, sections, csrf_token=token)
     layout = Layout(title=f"Abschnitte für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
     return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session_id: str) -> list[dict]:
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/materials")
+    except Exception:
+        return []
+    if r.status_code != 200:
+        return []
+    data = r.json()
+    if not isinstance(data, list):
+        return []
+    cleaned: list[dict] = []
+    for it in data:
+        if isinstance(it, dict):
+            cleaned.append({"id": it.get("id"), "title": it.get("title")})
+    return cleaned
+
+
+async def _fetch_tasks_for_section(unit_id: str, section_id: str, *, session_id: str) -> list[dict]:
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
+    except Exception:
+        return []
+    if r.status_code != 200:
+        return []
+    data = r.json()
+    if not isinstance(data, list):
+        return []
+    cleaned: list[dict] = []
+    for it in data:
+        if isinstance(it, dict):
+            cleaned.append({"id": it.get("id"), "instruction_md": it.get("instruction_md")})
+    return cleaned
+
+
+@app.get("/units/{unit_id}/sections/{section_id}", response_class=HTMLResponse)
+async def section_detail_index(request: Request, unit_id: str, section_id: str):
+    """SSR detail page for a section showing materials and tasks with create/reorder.
+
+    Why:
+    - Provide a clear, focused page to manage content within a section.
+    - UI delegates to the public Teaching API (contract-first, no DB shortcuts).
+
+    Parameters:
+    - unit_id, section_id: Path identifiers used to resolve the view via API.
+
+    Expected behavior:
+    - 200 with two-column layout (materials | tasks) and CSRF-protected forms.
+    - 404 when the unit/section is not found for the current author.
+    - Cache-Control: private, no-store (sensitive teacher data).
+
+    Permissions:
+    - Caller must be a teacher in a valid session. Ownership is enforced by API.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+
+    unit_title: str | None = None
+    section_title: str | None = None
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            u = await client.get(f"/api/teaching/units/{unit_id}")
+            if u.status_code != 200:
+                return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+            ud = u.json() if isinstance(u.json(), dict) else {}
+            unit_title = str(ud.get("title") or "") or None
+            s = await client.get(f"/api/teaching/units/{unit_id}/sections")
+            if s.status_code == 200 and isinstance(s.json(), list):
+                for it in s.json():
+                    if isinstance(it, dict) and it.get("id") == section_id:
+                        section_title = str(it.get("title") or "") or None
+                        break
+    except Exception:
+        return HTMLResponse("Abschnitt nicht gefunden", status_code=404)
+
+    if section_title is None:
+        return HTMLResponse("Abschnitt nicht gefunden", status_code=404)
+
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid)
+    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid)
+    content = _render_section_detail_page_html(
+        unit={"id": unit_id, "title": unit_title or "Lerneinheit"},
+        section={"id": section_id, "title": section_title or "Abschnitt"},
+        materials=materials,
+        tasks=tasks,
+        csrf_token=token,
+    )
+    layout = Layout(title=f"Abschnitt – {section_title or ''}", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+    # Reuse forms prepared earlier, add simple heading and back link
+    text_form = (
+        f'<form id="material-create-text" method="post" action="/units/{unit_id}/sections/{section_id}/materials/create">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
+        f'<label>Markdown<textarea class="form-input" name="body_md" required></textarea></label>'
+        f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
+        f'</form>'
+    )
+    upload_intent_form = (
+        f'<form id="material-upload-intent-form" method="post" action="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
+        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
+        f'hx-target="#material-upload-area" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Dateiname<input class="form-input" type="text" name="filename" required></label>'
+        f'<label>MIME<input class="form-input" type="text" name="mime_type" value="application/pdf" required></label>'
+        f'<label>Größe (Bytes)<input class="form-input" type="number" name="size_bytes" value="1024" min="1" required></label>'
+        f'<div class="form-actions"><button class="btn" type="submit">Upload vorbereiten</button></div>'
+        f'</form>'
+    )
+    return (
+        '<div class="container">'
+        f'<h1>Material anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
+        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        '<div class="two-col">'
+        f'<section class="card"><h2>Text‑Material</h2>{text_form}</section>'
+        f'<section class="card"><h2>Datei‑Material</h2><div id="material-upload-area">{upload_intent_form}</div></section>'
+        '</div>'
+        '</div>'
+    )
+
+
+def _render_task_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+    criteria_inputs = []
+    for i in range(10):
+        criteria_inputs.append(
+            f'<div class="form-field"><input class="form-input" type="text" name="criteria" placeholder="Kriterium {i+1}"></div>'
+        )
+    criteria_html = "".join(criteria_inputs)
+    form = (
+        f'<form id="task-create-form" method="post" action="/units/{unit_id}/sections/{section_id}/tasks/create">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Anweisung<textarea class="form-input" name="instruction_md" required></textarea></label>'
+        f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
+        f'<label>Lösungshinweise<textarea class="form-input" name="hints_md"></textarea></label>'
+        f'<label>Fällig bis (ISO 8601)<input class="form-input" type="text" name="due_at" placeholder="2025-01-01T10:00:00+00:00"></label>'
+        f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" min="1"></label>'
+        f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
+        f'</form>'
+    )
+    return (
+        '<div class="container">'
+        f'<h1>Aufgabe anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
+        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        f'<section class="card">{form}</section>'
+        '</div>'
+    )
+
+
+@app.get("/units/{unit_id}/sections/{section_id}/materials/new", response_class=HTMLResponse)
+async def materials_new(request: Request, unit_id: str, section_id: str):
+    """Render the dedicated create page for materials (text and file).
+
+    Why:
+    - Keep the section detail page minimal (lists only) and move creation to a
+      focused page with fewer distractions.
+
+    Behavior:
+    - Shows two forms: markdown text material and file upload intent.
+    - Returns SSR HTML with `Cache-Control: private, no-store`.
+
+    Permissions:
+    - Caller must be a logged-in teacher; ownership enforced by called APIs.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+    # Fetch section title via sections list (keeps API-only approach)
+    title = "Abschnitt"
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            s = await client.get(f"/api/teaching/units/{unit_id}/sections")
+            if s.status_code == 200 and isinstance(s.json(), list):
+                for it in s.json():
+                    if isinstance(it, dict) and it.get("id") == section_id:
+                        t = it.get("title")
+                        if isinstance(t, str) and t:
+                            title = t
+                        break
+    except Exception:
+        pass
+    content = _render_material_create_page_html(unit_id, section_id, title, csrf_token=token)
+    layout = Layout(title="Material anlegen", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/sections/{section_id}/tasks/new", response_class=HTMLResponse)
+async def tasks_new(request: Request, unit_id: str, section_id: str):
+    """Render the dedicated create page for tasks.
+
+    Includes fields for instruction, up to 10 analysis criteria, and optional
+    solution hints (`hints_md`). Submits to the UI route which delegates to the
+    Teaching API and then redirects back to the section detail.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+    # Fetch section title similarly
+    title = "Abschnitt"
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            s = await client.get(f"/api/teaching/units/{unit_id}/sections")
+            if s.status_code == 200 and isinstance(s.json(), list):
+                for it in s.json():
+                    if isinstance(it, dict) and it.get("id") == section_id:
+                        t = it.get("title")
+                        if isinstance(t, str) and t:
+                            title = t
+                        break
+    except Exception:
+        pass
+    content = _render_task_create_page_html(unit_id, section_id, title, csrf_token=token)
+    layout = Layout(title="Aufgabe anlegen", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+async def _fetch_material_detail(unit_id: str, section_id: str, material_id: str, *, session_id: str) -> dict | None:
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/materials")
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            if isinstance(data, list):
+                for m in data:
+                    if isinstance(m, dict) and str(m.get("id")) == material_id:
+                        return m
+    except Exception:
+        return None
+    return None
+
+
+async def _fetch_task_detail(unit_id: str, section_id: str, task_id: str, *, session_id: str) -> dict | None:
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            if isinstance(data, list):
+                for t in data:
+                    if isinstance(t, dict) and str(t.get("id")) == task_id:
+                        return t
+    except Exception:
+        return None
+    return None
+
+
+def _render_material_detail_page_html(unit_id: str, section_id: str, material: dict, *, csrf_token: str, download_url: str | None = None) -> str:
+    title = Component.escape(str(material.get("title") or "Material"))
+    body_md = Component.escape(str(material.get("body_md") or ""))
+    mid = str(material.get("id") or "")
+    form = (
+        f'<form method="post" action="/units/{unit_id}/sections/{section_id}/materials/{mid}/update">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Titel<input class="form-input" type="text" name="title" value="{title}"></label>'
+        f'<label>Markdown<textarea class="form-input" name="body_md">{body_md}</textarea></label>'
+        f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'
+        f'</form>'
+    )
+    download_html = (
+        f'<p><a id="material-download-link" class="btn" href="{Component.escape(download_url)}" target="_blank">Download anzeigen</a></p>'
+        if download_url else ''
+    )
+    delete_form = (
+        f'<form method="post" action="/units/{unit_id}/sections/{section_id}/materials/{mid}/delete">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<button class="btn btn-danger" type="submit">Löschen</button>'
+        f'</form>'
+    )
+    return (
+        '<div class="container">'
+        f'<h1>Material bearbeiten</h1>'
+        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        f'<section class="card">{download_html}{form}{delete_form}</section>'
+        '</div>'
+    )
+
+
+def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, csrf_token: str) -> str:
+    instr = Component.escape(str(task.get("instruction_md") or ""))
+    tid = str(task.get("id") or "")
+    criteria = task.get("criteria") or []
+    crit_inputs = []
+    for i in range(10):
+        val = Component.escape(str(criteria[i]) if i < len(criteria) else "")
+        crit_inputs.append(f'<div class="form-field"><input class="form-input" type="text" name="criteria" value="{val}"></div>')
+    hints = Component.escape(str(task.get("hints_md") or ""))
+    due_at = Component.escape(str(task.get("due_at") or ""))
+    max_attempts = Component.escape(str(task.get("max_attempts") or ""))
+    form = (
+        f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/{tid}/update">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<label>Anweisung<textarea class="form-input" name="instruction_md">{instr}</textarea></label>'
+        f'<fieldset><legend>Analysekriterien (0–10)</legend>{"".join(crit_inputs)}</fieldset>'
+        f'<label>Lösungshinweise<textarea class="form-input" name="hints_md">{hints}</textarea></label>'
+        f'<label>Fällig bis<input class="form-input" type="text" name="due_at" value="{due_at}"></label>'
+        f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" value="{max_attempts}" min="1"></label>'
+        f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'
+        f'</form>'
+    )
+    delete_form = (
+        f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/{tid}/delete">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        f'<button class="btn btn-danger" type="submit">Löschen</button>'
+        f'</form>'
+    )
+    return (
+        '<div class="container">'
+        f'<h1>Aufgabe bearbeiten</h1>'
+        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        f'<section class="card">{form}{delete_form}</section>'
+        '</div>'
+    )
+
+
+@app.get("/units/{unit_id}/sections/{section_id}/materials/{material_id}", response_class=HTMLResponse)
+async def material_detail_page(request: Request, unit_id: str, section_id: str, material_id: str):
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+    mat = await _fetch_material_detail(unit_id, section_id, material_id, session_id=sid)
+    if mat is None:
+        return HTMLResponse("Material nicht gefunden", status_code=404)
+    # If it's a file material, fetch a download URL (inline)
+    download_url = None
+    try:
+        if str(mat.get("kind") or "") == "file":
+            import httpx
+            from httpx import ASGITransport
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                resp = await client.get(
+                    f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url",
+                    params={"disposition": "inline"},
+                )
+                if resp.status_code == 200 and isinstance(resp.json(), dict):
+                    download_url = str(resp.json().get("url") or "") or None
+    except Exception:
+        download_url = None
+    content = _render_material_detail_page_html(unit_id, section_id, mat, csrf_token=token, download_url=download_url)
+    layout = Layout(title="Material bearbeiten", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/materials/{material_id}/update")
+async def material_detail_update(request: Request, unit_id: str, section_id: str, material_id: str):
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    payload = {}
+    if form.get("title") is not None:
+        payload["title"] = str(form.get("title") or "").strip() or None
+    if form.get("body_md") is not None:
+        payload["body_md"] = str(form.get("body_md"))
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            await client.patch(
+                f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}",
+                json=payload,
+            )
+    except Exception:
+        pass
+    return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}/materials/{material_id}", status_code=303)
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/materials/{material_id}/delete")
+async def material_detail_delete(request: Request, unit_id: str, section_id: str, material_id: str):
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            await client.delete(f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
+    except Exception:
+        pass
+    return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
+
+
+@app.get("/units/{unit_id}/sections/{section_id}/tasks/{task_id}", response_class=HTMLResponse)
+async def task_detail_page(request: Request, unit_id: str, section_id: str, task_id: str):
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+    task = await _fetch_task_detail(unit_id, section_id, task_id, session_id=sid)
+    if task is None:
+        return HTMLResponse("Aufgabe nicht gefunden", status_code=404)
+    content = _render_task_detail_page_html(unit_id, section_id, task, csrf_token=token)
+    layout = Layout(title="Aufgabe bearbeiten", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/tasks/{task_id}/update")
+async def task_detail_update(request: Request, unit_id: str, section_id: str, task_id: str):
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    payload: dict[str, object] = {}
+    if form.get("instruction_md") is not None:
+        payload["instruction_md"] = str(form.get("instruction_md"))
+    # criteria fields
+    crit = [c.strip() for c in form.getlist("criteria") if isinstance(c, str) and c.strip()]
+    if crit:
+        payload["criteria"] = crit[:10]
+    if form.get("hints_md") is not None:
+        hints = str(form.get("hints_md") or "")
+        payload["hints_md"] = hints or None
+    if form.get("due_at") is not None:
+        payload["due_at"] = str(form.get("due_at") or "") or None
+    if form.get("max_attempts") is not None and str(form.get("max_attempts")) != "":
+        try:
+            payload["max_attempts"] = int(form.get("max_attempts"))
+        except Exception:
+            pass
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            await client.patch(
+                f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}",
+                json=payload,
+            )
+    except Exception:
+        pass
+    return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}/tasks/{task_id}", status_code=303)
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/tasks/{task_id}/delete")
+async def task_detail_delete(request: Request, unit_id: str, section_id: str, task_id: str):
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            await client.delete(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
+    except Exception:
+        pass
+    return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/materials/create", response_class=HTMLResponse)
+async def materials_create(request: Request, unit_id: str, section_id: str):
+    """Create a markdown material via the API and return the updated list partial.
+
+    Why:
+    - Keep UI logic thin and reusable; API validates input and authorship.
+
+    Parameters form fields:
+    - title: Required, non-empty, <=200 chars
+    - body_md: Required Markdown body
+    - csrf_token: Required synchronizer token
+
+    Returns:
+    - 200 HTML fragment replacing `#material-list-section-<section_id>`
+    - 403 CSRF error when token invalid/missing
+
+    Permissions:
+    - Caller must be a teacher; API enforces author-only semantics.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    title = str(form.get("title", "")).strip()
+    body_md = str(form.get("body_md", ""))
+    error: str | None = None
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            payload = {"title": title, "body_md": body_md}
+            resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/materials", json=payload)
+            if resp.status_code >= 400:
+                error = _extract_api_error_detail(resp)
+    except Exception:
+        error = "backend_error"
+    # Non-HTMX: PRG back to section detail
+    if "HX-Request" not in request.headers:
+        return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid or "")
+    token = _get_or_create_csrf_token(sid or "")
+    return HTMLResponse(_render_material_list_partial(unit_id, section_id, materials, csrf_token=token, error=error))
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/materials/reorder", response_class=Response)
+async def materials_reorder(request: Request, unit_id: str, section_id: str):
+    """Reorder materials by accepting DOM ids from the sortable container.
+
+    Input:
+    - Repeated form fields `id=material_<uuid>` in desired order.
+    - CSRF token provided as `X-CSRF-Token` header or `csrf_token` field.
+
+    Behavior:
+    - Delegates to API `POST …/materials/reorder` and returns 200 on success.
+    - Returns 400/403/404 JSON error mapping when API rejects the request.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return Response(status_code=403)
+    form = await request.form()
+    sid = _get_session_id(request)
+    csrf_header = request.headers.get("X-CSRF-Token")
+    csrf_field = form.get("csrf_token")
+    if not _validate_csrf(sid, csrf_header or csrf_field):
+        return Response(status_code=403)
+    ordered_ids = [sid.replace("material_", "") for sid in form.getlist("id")]
+    # Delegate to API when UUID-like ids are present
+    if _is_uuid_like(section_id):
+        try:
+            import httpx
+            from httpx import ASGITransport
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                if sid:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid)
+                resp = await client.post(
+                    f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder",
+                    json={"material_ids": ordered_ids},
+                )
+        except Exception:
+            return JSONResponse({"error": "bad_request", "detail": "reorder_failed"}, status_code=400)
+        if resp.status_code >= 400:
+            detail = _extract_api_error_detail(resp)
+            status = resp.status_code if resp.status_code in (400, 403, 404) else 400
+            return JSONResponse({"error": "bad_request", "detail": detail}, status_code=status)
+        return Response(status_code=200)
+    return Response(status_code=200)
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/tasks/create", response_class=HTMLResponse)
+async def tasks_create(request: Request, unit_id: str, section_id: str):
+    """Create a native task via the API and return the updated list partial.
+
+    Parameters form fields:
+    - instruction_md: Required Markdown instruction
+    - csrf_token: Required
+
+    Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    instruction_md = str(form.get("instruction_md", ""))
+    # Collect up to 10 non-empty criteria from repeated fields
+    criteria = [c.strip() for c in form.getlist("criteria") if isinstance(c, str) and c.strip()]
+    if len(criteria) > 10:
+        criteria = criteria[:10]
+    hints_md = str(form.get("hints_md", "")) if form.get("hints_md") is not None else None
+    due_at = str(form.get("due_at", "")).strip() or None
+    max_attempts_raw = form.get("max_attempts")
+    max_attempts = None
+    if max_attempts_raw not in (None, ""):
+        try:
+            max_attempts = int(max_attempts_raw)  # API will validate >0
+        except Exception:
+            max_attempts = None
+    error: str | None = None
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            payload = {
+                "instruction_md": instruction_md,
+                "criteria": criteria,
+                "hints_md": (hints_md if hints_md else None),
+                "due_at": due_at,
+                "max_attempts": max_attempts,
+            }
+            resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)
+            if resp.status_code >= 400:
+                error = _extract_api_error_detail(resp)
+    except Exception:
+        error = "backend_error"
+    if "HX-Request" not in request.headers:
+        return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
+    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid or "")
+    token = _get_or_create_csrf_token(sid or "")
+    return HTMLResponse(_render_task_list_partial(unit_id, section_id, tasks, csrf_token=token, error=error))
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/tasks/reorder", response_class=Response)
+async def tasks_reorder(request: Request, unit_id: str, section_id: str):
+    """Reorder tasks by accepting DOM ids (`id=task_<uuid>`) from Sortable.
+
+    Forwards to API `POST …/tasks/reorder`. Enforces CSRF at the UI boundary.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return Response(status_code=403)
+    form = await request.form()
+    sid = _get_session_id(request)
+    csrf_header = request.headers.get("X-CSRF-Token")
+    csrf_field = form.get("csrf_token")
+    if not _validate_csrf(sid, csrf_header or csrf_field):
+        return Response(status_code=403)
+    ordered_ids = [sid.replace("task_", "") for sid in form.getlist("id")]
+    if _is_uuid_like(section_id):
+        try:
+            import httpx
+            from httpx import ASGITransport
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                if sid:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid)
+                resp = await client.post(
+                    f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder",
+                    json={"task_ids": ordered_ids},
+                )
+        except Exception:
+            return JSONResponse({"error": "bad_request", "detail": "reorder_failed"}, status_code=400)
+        if resp.status_code >= 400:
+            detail = _extract_api_error_detail(resp)
+            status = resp.status_code if resp.status_code in (400, 403, 404) else 400
+            return JSONResponse({"error": "bad_request", "detail": detail}, status_code=status)
+        return Response(status_code=200)
+    return Response(status_code=200)
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/materials/upload-intent", response_class=HTMLResponse)
+async def materials_upload_intent(request: Request, unit_id: str, section_id: str):
+    """Create an upload intent via API and return a small UI helper fragment.
+
+    Form fields: filename (str), mime_type (str), size_bytes (int), csrf_token.
+
+    Returns HTML with data-upload-url and a finalize form containing intent_id.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    filename = str(form.get("filename", "")).strip()
+    mime_type = str(form.get("mime_type", "")).strip()
+    size_raw = str(form.get("size_bytes", "")).strip()
+    try:
+        size_bytes = int(size_raw)
+    except Exception:
+        size_bytes = 0
+    token = _get_or_create_csrf_token(sid or "")
+
+    # Call API to get presigned upload details
+    presign = None
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            resp = await client.post(
+                f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents",
+                json={"filename": filename, "mime_type": mime_type, "size_bytes": size_bytes},
+            )
+            if resp.status_code == 200:
+                presign = resp.json()
+    except Exception:
+        presign = None
+
+    if not isinstance(presign, dict) or not presign.get("intent_id"):
+        error_html = '<div class="alert alert-error" role="alert">upload_intent_failed</div>'
+        return HTMLResponse(f'<div id="material-upload-area">{error_html}</div>')
+
+    # Render a helper fragment including finalize form; client still needs to upload the file
+    intent_id = Component.escape(presign.get("intent_id", ""))
+    upload_url = Component.escape(presign.get("url", ""))
+    finalize_form = (
+        f'<form method="post" action="/units/{unit_id}/sections/{section_id}/materials/finalize" '
+        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/finalize" '
+        f'hx-target="#material-list-section-{section_id}" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        f'<input type="hidden" name="intent_id" value="{intent_id}">'
+        f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
+        f'<label>SHA-256<input class="form-input" type="text" name="sha256" required></label>'
+        f'<label>Alt-Text<input class="form-input" type="text" name="alt_text"></label>'
+        f'<button class="btn btn-primary" type="submit">Upload abschließen</button>'
+        f'</form>'
+    )
+    html = (
+        f'<div id="material-upload-area" data-upload-url="{upload_url}">'
+        f'<p class="text-muted">Upload-URL vorbereitet. Bitte Datei hochladen und anschließend oben abschließen.</p>'
+        f'{finalize_form}'
+        f'</div>'
+    )
+    return HTMLResponse(html)
+
+
+@app.post("/units/{unit_id}/sections/{section_id}/materials/finalize", response_class=HTMLResponse)
+async def materials_finalize(request: Request, unit_id: str, section_id: str):
+    """Finalize an upload intent via the API and return updated materials list.
+
+    Form fields: intent_id, title, sha256, alt_text?, csrf_token.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    intent_id = str(form.get("intent_id", "")).strip()
+    title = str(form.get("title", "")).strip()
+    sha256 = str(form.get("sha256", "")).strip()
+    alt_text = str(form.get("alt_text", "")).strip() or None
+    error: str | None = None
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            resp = await client.post(
+                f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize",
+                json={"intent_id": intent_id, "title": title, "sha256": sha256, "alt_text": alt_text},
+            )
+            if resp.status_code >= 400:
+                error = _extract_api_error_detail(resp)
+    except Exception:
+        error = "backend_error"
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid or "")
+    token = _get_or_create_csrf_token(sid or "")
+    # If finalize failed, we still return the list with an error banner
+    return HTMLResponse(_render_material_list_partial(unit_id, section_id, materials, csrf_token=token, error=error))
 
 
 @app.post("/units/{unit_id}/sections", response_class=HTMLResponse)

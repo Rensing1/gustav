@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+- fix(openapi): Document Cache-Control on GET /api/teaching/courses (200) and remove duplicate example entry in course GET header.
+- security(cache): POST /api/teaching/courses returns 201 with Cache-Control: private, no-store (align API and contract).
+- security(cache): Add Cache-Control: private, no-store to 201/200 responses on POST/PATCH for teaching units; harden proxies/browsers.
+- docs(openapi): Add `example: private, no-store` to Cache-Control headers for courses, units, sections, users endpoints.
+- fix(web/units): Unit detail page maps 403 (not author) and 404 (missing) distinctly, mirroring API semantics.
+- consistency(PRG): Use 303 See Other after POST on `/units` and `/courses`.
+- feat(web/sections): Add SSR section detail page with slim UI (lists only) and clear create actions. Lists now link to per‑entry detail pages (materials/tasks). PRG flows, CSRF enforced, Cache‑Control private, no-store.
+- feat(web/materials): Dedicated create page for materials with two flows — Markdown text and 2‑phase file upload (intent → finalize). File materials show a “Download anzeigen” link (short‑lived URL) on the detail page.
+- feat(web/tasks): Dedicated create page for tasks with 0–10 analysis criteria and optional hints. Add due_at (RFC3339) and max_attempts to create/update UI; delegated to API for validation.
+- feat(web/entry-detail): Per‑entry SSR detail pages for materials and tasks including Edit (PATCH via API) and Delete (DELETE via API), PRG redirects.
+- ux(web): Section cards and list items now have explicit links to detail pages; section cards include a prominent “Material & Aufgaben” action.
+- tests(web): Add coverage for SSR section detail (lists, reorder, CSRF), per‑entry detail pages (edit/delete), create pages (materials/tasks), and upload intent UI. Stabilize reorder tests to accept anchor‑wrapped titles.
+- docs(plan): Update 2025‑10‑26 plan with status (SSR section detail, per‑entry, upload UI) and next steps.
 - security(cache): Add Cache-Control: private, no-store to Teaching units list and sections list (200 responses); prevent caching of teacher-scoped data.
 - docs(openapi): Document Cache-Control header for GET /api/teaching/units and GET /api/teaching/units/{unit_id}/sections.
 - api(teaching): GET /api/teaching/courses/{course_id} validates UUID; returns 400 detail=invalid_course_id. Documented Cache-Control on 200.

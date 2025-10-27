@@ -158,6 +158,10 @@
  - feat(teaching): Accept `due_at` with trailing 'Z' (UTC) in TasksService.
  - tests(teaching): Add invalid-UUID path tests and Zulu due_at acceptance.
 
+- feat(teaching/ui): Abschnittsfreigaben (Owner) — SSR‑UI mit Schalter „Freigegeben“, Zeitstempel „Freigegeben am …“, und kurzer Erfolgsmeldung nach Toggle.
+- feat(teaching/api): `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` speichert sofort (UPSERT) mit `released_by`/`released_at` (RLS‑gesichert).
+- feat(learning/api+ui): `GET /api/learning/courses/{course_id}/units/{unit_id}/sections` (private, no‑store). Schüler‑Unit‑Seite rendert freigegebene Abschnitte ohne Titel, getrennt durch `<hr>`.
+
 ## 2025-10-20
 - Teaching (Unterrichten) — Kursmanagement (MVP)
   - OpenAPI erweitert: `Course`, `CourseCreate`, `CourseUpdate`, `CourseMember`

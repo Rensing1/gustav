@@ -213,12 +213,15 @@ class DBLearningRepo:
             sections: List[dict] = []
             for row in rows:
                 section_id = row[0]
+                unit_id = row[3]
                 entry = {
                     "section": {
                         "id": section_id,
                         "title": row[1],
                         # Contract requires integer ≥ 1; fall back to 1 if DB position is NULL
                         "position": int(row[2]) if row[2] is not None else 1,
+                        # Expose owning unit to allow UI grouping/filtering per unit page.
+                        "unit_id": unit_id,
                     },
                     "materials": [],
                     "tasks": [],
@@ -310,6 +313,89 @@ class DBLearningRepo:
                 }
             )
         return tasks
+
+    def list_released_sections_by_unit(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        unit_id: str,
+        include_materials: bool,
+        include_tasks: bool,
+        limit: int,
+        offset: int,
+    ) -> List[dict]:
+        """List released sections for a specific unit (student scope).
+
+        Security:
+            Validates that the student is a member of the course and that the
+            unit belongs to the course (via course_modules). Uses a dedicated
+            SQL helper for efficient server-side filtering.
+        """
+        course_uuid = str(UUID(course_id))
+        unit_uuid = str(UUID(unit_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                # Ensure membership exists
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise PermissionError("not_course_member")
+
+                # Verify that the unit belongs to the course from the student's perspective
+                self._set_current_sub(cur, student_sub)
+                cur.execute(
+                    """
+                    select exists (
+                             select 1
+                               from public.get_course_units_for_student(%s, %s) t
+                              where t.unit_id = %s
+                           )
+                    """,
+                    (student_sub, course_uuid, unit_uuid),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise LookupError("unit_not_in_course")
+
+                # Fetch released sections for the unit (may be empty)
+                self._set_current_sub(cur, student_sub)
+                cur.execute(
+                    """
+                    select section_id::text,
+                           section_title,
+                           section_position,
+                           unit_id::text,
+                           course_module_id::text
+                      from public.get_released_sections_for_student_by_unit(%s, %s, %s, %s, %s)
+                    """,
+                    (student_sub, course_uuid, unit_uuid, int(limit), int(offset)),
+                )
+                rows = cur.fetchall()
+
+            # Unit-scoped: return an empty list when no sections are released
+            sections: List[dict] = []
+            for row in rows:
+                section_id = row[0]
+                entry = {
+                    "section": {
+                        "id": section_id,
+                        "title": row[1],
+                        # Fallback to 1 if NULL to satisfy contract >= 1
+                        "position": int(row[2]) if row[2] is not None else 1,
+                        "unit_id": row[3],
+                    },
+                    "materials": [],
+                    "tasks": [],
+                }
+                if include_materials:
+                    entry["materials"] = self._fetch_materials(conn, student_sub, course_uuid, section_id)
+                if include_tasks:
+                    entry["tasks"] = self._fetch_tasks(conn, student_sub, course_uuid, section_id)
+                sections.append(entry)
+            return sections
 
     # ------------------------------------------------------------------
     def create_submission(self, data: SubmissionInput) -> dict:

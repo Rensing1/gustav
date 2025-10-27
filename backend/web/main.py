@@ -489,6 +489,106 @@ async def learning_course_detail(request: Request, course_id: str):
     layout = Layout(title=Component.escape(title), content=content, user=user, current_path=request.url.path)
     return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
 
+@app.get("/learning/courses/{course_id}/units/{unit_id}", response_class=HTMLResponse)
+async def learning_unit_sections(request: Request, course_id: str, unit_id: str):
+    """Render released content of a unit for students without section titles.
+
+    Why:
+        Students should see only released materials/tasks grouped by sections,
+        with sections separated visually (horizontal lines), but without
+        exposing the section titles.
+
+    Behavior:
+        - Requires role "student"; non-students are redirected to home.
+        - Loads units list for course to derive the unit title for the header.
+        - Fetches released sections via unit-scoped Learning API endpoint.
+        - Renders materials and tasks; places an <hr> between section groups.
+        - Uses private, no-store cache headers.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return RedirectResponse(url="/", status_code=303)
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
+        return RedirectResponse(url=f"/learning/courses/{course_id}", status_code=303)
+    unit_title = "Lerneinheit"
+    sections: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            # Find unit title from units listing
+            try:
+                r_units = await client.get(f"/api/learning/courses/{course_id}/units")
+                if r_units.status_code == 200 and isinstance(r_units.json(), list):
+                    for row in r_units.json():
+                        u = row.get("unit", {}) if isinstance(row, dict) else {}
+                        if str(u.get("id")) == str(unit_id):
+                            t = u.get("title")
+                            if isinstance(t, str) and t:
+                                unit_title = t
+                            break
+            except Exception:
+                pass
+            # Fetch released sections for this unit (with embedded materials/tasks)
+            r_sections = await client.get(
+                f"/api/learning/courses/{course_id}/units/{unit_id}/sections",
+                params={"include": "materials,tasks", "limit": 100, "offset": 0},
+            )
+            if r_sections.status_code == 200 and isinstance(r_sections.json(), list):
+                sections = list(r_sections.json())
+            # Render neutral message when none are released
+            if not sections:
+                return HTMLResponse(
+                    content=Layout(
+                        title=Component.escape(unit_title),
+                        content=(
+                            "<div class=\"container\">"
+                            f"<h1>{Component.escape(unit_title)}</h1>"
+                            f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
+                            "<section class=\"card\"><p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p></section>"
+                            "</div>"
+                        ),
+                        user=user,
+                        current_path=request.url.path,
+                    ).render(),
+                    headers={"Cache-Control": "private, no-store"},
+                )
+    except Exception:
+        sections = []
+
+    # Build HTML without section titles; separate groups with <hr>
+    parts: list[str] = []
+    for idx, entry in enumerate(sections):
+        mats = entry.get("materials", []) if isinstance(entry, dict) else []
+        tasks = entry.get("tasks", []) if isinstance(entry, dict) else []
+        # Materials
+        for m in mats:
+            title = Component.escape(str(m.get("title") or "Material"))
+            kind = str(m.get("kind") or "")
+            body = Component.escape(str(m.get("body_md") or "")) if kind == "markdown" else ""
+            parts.append(f"<div class=\"material-item\"><h4>{title}</h4><div class=\"material-body\">{body}</div></div>")
+        # Tasks
+        for t in tasks:
+            instr = Component.escape(str(t.get("instruction_md") or ""))
+            parts.append(f"<div class=\"task-item\"><p class=\"task-instruction\">{instr}</p></div>")
+        # Separator between sections, but not after the last group
+        if idx < len(sections) - 1:
+            parts.append("<hr class=\"section-separator\">")
+
+    inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p>"
+    content = (
+        "<div class=\"container\">"
+        f"<h1>{Component.escape(unit_title)}</h1>"
+        f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
+        f"<section class=\"card\" id=\"student-unit-sections\">{inner}</section>"
+        "</div>"
+    )
+    layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)
 async def courses_edit_submit(request: Request, course_id: str):
     """Submit course updates via API PATCH then PRG back to /courses.
@@ -608,6 +708,207 @@ async def courses_modules_create(request: Request, course_id: str):
     updated_attached = {str(m.get("unit_id")) for m in (modules or [])}
     html_oob = _render_available_units_partial(course_id, units=units, attached_unit_ids=updated_attached, csrf_token=token, oob=True)
     return HTMLResponse(html_main + html_oob)
+
+
+@app.get("/courses/{course_id}/modules/{module_id}/sections", response_class=HTMLResponse)
+async def course_module_sections_page(request: Request, course_id: str, module_id: str):
+    """Owner page to manage section releases (HTMX toggles).
+
+    Why:
+        Teachers toggle visibility per section for a module. Page shows all
+        sections from the attached unit with a checked/unchecked toggle.
+
+    Security:
+        Owner-only via API; include CSRF token in HTMX headers for future checks.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+    unit_id = None
+    unit_title = ""
+    sections: list[dict] = []
+    releases: dict[str, dict] = {}
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            # Resolve unit via modules list
+            r_mod = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if r_mod.status_code == 200 and isinstance(r_mod.json(), list):
+                for m in r_mod.json():
+                    if str(m.get("id")) == str(module_id):
+                        unit_id = str(m.get("unit_id"))
+                        break
+            if unit_id:
+                # Load sections
+                r_secs = await client.get(f"/api/teaching/units/{unit_id}/sections")
+                if r_secs.status_code == 200 and isinstance(r_secs.json(), list):
+                    sections = r_secs.json()
+                # Load release state
+                r_rel = await client.get(f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/releases")
+                if r_rel.status_code == 200 and isinstance(r_rel.json(), list):
+                    for rec in r_rel.json():
+                        releases[str(rec.get("section_id"))] = rec
+                # Unit title best-effort
+                r_units = await client.get("/api/teaching/units", params={"limit": 100, "offset": 0})
+                if r_units.status_code == 200 and isinstance(r_units.json(), list):
+                    for u in r_units.json():
+                        if str(u.get("id")) == str(unit_id):
+                            unit_title = str(u.get("title") or "")
+                            break
+    except Exception:
+        pass
+    # Render list with toggles (SSR form + HTMX submit on change)
+    rows = []
+    for sec in sections:
+        sid_ = str(sec.get("id"))
+        pos = int(sec.get("position") or 1)
+        title = Component.escape(str(sec.get("title") or "Abschnitt"))
+        rec = releases.get(sid_) or {}
+        visible = bool(rec.get("visible"))
+        released_at = str(rec.get("released_at") or "")
+        checked = "checked" if visible else ""
+        meta_html = f'<span class="release-meta">Freigegeben am {Component.escape(released_at)}</span>' if (visible and released_at) else ''
+        row = (
+            f'<div class="section-row" id="section_{sid_}">'
+            f'  <div class="section-row__left">'
+            f'    <span class="badge">{pos}</span>'
+            f'    <span class="section-title">{title}</span>'
+            f'  </div>'
+            f'  <div class="section-row__right">'
+            f'    <form style="display:inline-block">'
+            f'      <input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            f'      <label class="switch">'
+            f'        <input type="checkbox" name="visible" {checked} '
+            f'               hx-post="/courses/{course_id}/modules/{module_id}/sections/{sid_}/toggle" '
+            f'               hx-include="closest form" '
+            f'               hx-target="#module-sections" hx-swap="outerHTML" '
+            f'               hx-trigger="change"> Freigegeben'
+            f'      </label>'
+            f'    </form>'
+            f'    {meta_html}'
+            f'  </div>'
+            f'</div>'
+        )
+        rows.append(row)
+    inner = "\n".join(rows) if rows else '<p class="text-muted">Keine Abschnitte vorhanden.</p>'
+    content = (
+        '<div class="container">'
+        f'<h1>Abschnittsfreigaben: {Component.escape(unit_title or "Unit")}</h1>'
+        f'<p><a href="/courses/{course_id}/modules">Zurück zu den Modulen</a></p>'
+        # Always include a hidden CSRF input in the container so tests and
+        # client-side scripts can retrieve a token even when no rows exist
+        f'<section class="card" id="module-sections">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        f'{inner}'
+        f'</section>'
+        '</div>'
+    )
+    layout = Layout(title="Abschnittsfreigaben", content=content, user=user, current_path=request.url.path)
+    return HTMLResponse(layout.render())
+
+
+@app.post("/courses/{course_id}/modules/{module_id}/sections/{section_id}/toggle", response_class=HTMLResponse)
+async def course_module_sections_toggle(request: Request, course_id: str, module_id: str, section_id: str):
+    """Toggle visibility for a section via API and return updated sections partial.
+
+    Security: Requires teacher role and CSRF token (hidden field or header).
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return Response(status_code=403)
+    form = await request.form()
+    sid = _get_session_id(request)
+    csrf_header = request.headers.get("X-CSRF-Token")
+    csrf_field = form.get("csrf_token")
+    if not _validate_csrf(sid, csrf_header or csrf_field):
+        return Response(status_code=403)
+    visible = bool(form.get("visible"))
+    # Call API to persist
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            resp = await client.patch(
+                f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
+                json={"visible": visible},
+            )
+            # Propagate API errors to the SSR caller (HTMX will handle)
+            if resp.status_code in (400, 401, 403, 404):
+                return Response(status_code=resp.status_code)
+            # After update, re-render the sections card
+            # Resolve unit and lists as in GET handler
+            unit_id = None
+            releases: dict[str, dict] = {}
+            sections: list[dict] = []
+            r_mod = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if r_mod.status_code == 200 and isinstance(r_mod.json(), list):
+                for m in r_mod.json():
+                    if str(m.get("id")) == str(module_id):
+                        unit_id = str(m.get("unit_id"))
+                        break
+            if unit_id:
+                r_secs = await client.get(f"/api/teaching/units/{unit_id}/sections")
+                if r_secs.status_code == 200 and isinstance(r_secs.json(), list):
+                    sections = r_secs.json()
+                r_rel = await client.get(f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/releases")
+                if r_rel.status_code == 200 and isinstance(r_rel.json(), list):
+                    for rec in r_rel.json():
+                        releases[str(rec.get("section_id"))] = rec
+            # Build inner rows
+            token = _get_or_create_csrf_token(sid or "")
+            rows = []
+            for sec in sections:
+                sid_ = str(sec.get("id"))
+                pos = int(sec.get("position") or 1)
+                title = Component.escape(str(sec.get("title") or "Abschnitt"))
+                rec = releases.get(sid_) or {}
+                vis = bool(rec.get("visible"))
+                released_at = str(rec.get("released_at") or "")
+                chk = "checked" if vis else ""
+                meta_html = f'<span class="release-meta">Freigegeben am {Component.escape(released_at)}</span>' if (vis and released_at) else ''
+                rows.append(
+                    f'<div class="section-row" id="section_{sid_}">'
+                    f'  <div class="section-row__left">'
+                    f'    <span class="badge">{pos}</span>'
+                    f'    <span class="section-title">{title}</span>'
+                    f'  </div>'
+                    f'  <div class="section-row__right">'
+                    f'    <form style="display:inline-block">'
+                    f'      <input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+                    f'      <label class="switch">'
+                    f'        <input type="checkbox" name="visible" {chk} '
+                    f'               hx-post="/courses/{course_id}/modules/{module_id}/sections/{sid_}/toggle" '
+                    f'               hx-include="closest form" '
+                    f'               hx-target="#module-sections" hx-swap="outerHTML" '
+                    f'               hx-trigger="change"> Freigegeben'
+                    f'      </label>'
+                    f'    </form>'
+                    f'    {meta_html}'
+                    f'  </div>'
+                    f'</div>'
+                )
+            inner = "\n".join(rows) if rows else '<p class="text-muted">Keine Abschnitte vorhanden.</p>'
+            success_note = '<div class="alert alert-success" role="status">Änderung gespeichert</div>'
+            html = f'<section class="card" id="module-sections">{success_note}{inner}</section>'
+            # Fire a toast via HTMX custom event; handled by gustav.js
+            try:
+                import json as _json
+                trigger = _json.dumps({
+                    "showMessage": {"message": "Änderung gespeichert", "type": "success"}
+                })
+                return HTMLResponse(html, headers={"HX-Trigger": trigger})
+            except Exception:
+                return HTMLResponse(html)
+    except Exception:
+        return Response(status_code=400)
 
 
 @app.post("/courses/{course_id}/modules/reorder", response_class=Response)
@@ -879,10 +1180,12 @@ def _render_module_list_partial(course_id: str, modules: list[dict], *, unit_tit
             f'</form>'
         )
         link = f'/units/{uid}' if uid else '#'
+        manage_link = f'<a class="btn btn-sm" href="/courses/{course_id}/modules/{mid}/sections">Abschnitte freigeben</a>'
         items.append(
             f'<div class="card module-card" id="module_{mid}"><div class="card-body">'
             f'<span class="badge">{pos}</span> '
             f'<span class="module-title"><a class="module-link" href="{link}">{title}</a></span> '
+            f'{manage_link} '
             f'{del_action}'
             f'</div></div>'
         )

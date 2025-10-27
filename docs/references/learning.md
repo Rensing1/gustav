@@ -8,6 +8,11 @@ Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchs
   - 200 `[{ section { id, title, position }, materials[], tasks[] }]`, 401/403/404.
   - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
 
+- `GET /api/learning/courses/{course_id}/units/{unit_id}/sections?include=materials,tasks&limit&offset`
+  - Liefert nur freigegebene Abschnitte der angegebenen Lerneinheit im Kurs (Server‑Filter nach `unit_id`).
+  - 200 Liste (ggf. leer); 400 bei Invalid‑UUID; 401/403 wie oben; 404 bei Kurs/Unit‑Mismatch.
+  - Cache: `Cache-Control: private, no-store`.
+
 - `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
   - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).
@@ -91,3 +96,11 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 ## DSGVO / Audit
 - Timestamps `created_at` und `completed_at` je Abgabe.
 - Keine Speicherung von Klarnamen in Learning‑Tabellen; Auflösung von Anzeigenamen erfolgt ausschließlich im UI über Directory‑Adapter.
+## Schüler‑UI: Lerneinheit mit Abschnitten
+- Route: `/learning/courses/{course_id}/units/{unit_id}` (SSR)
+- Darstellung:
+  - Abschnittstitel werden ausgeblendet; Gruppen sind durch genau eine horizontale Linie `<hr>` getrennt.
+  - Innerhalb eines Abschnitts werden Materialien (Markdown/File) und Aufgaben in der kursüblichen Reihenfolge dargestellt.
+  - Bei keiner Freigabe zeigt die Seite einen neutralen Hinweis.
+- Datenquelle: der obige Unit‑Sections‑Endpoint mit `include=materials,tasks`.
+- Sicherheit: Seite setzt `Cache-Control: private, no-store`.

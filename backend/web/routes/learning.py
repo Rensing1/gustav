@@ -10,7 +10,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.learning.repo_db import DBLearningRepo
-from backend.learning.usecases.sections import ListSectionsInput, ListSectionsUseCase
+from backend.learning.usecases.sections import (
+    ListSectionsInput,
+    ListSectionsUseCase,
+    ListUnitSectionsInput,
+    ListUnitSectionsUseCase,
+)
 from backend.learning.usecases.courses import (
     ListCoursesInput,
     ListCoursesUseCase,
@@ -164,6 +169,7 @@ def _parse_include(value: str | None) -> tuple[bool, bool]:
 
 REPO = DBLearningRepo()
 LIST_SECTIONS_USECASE = ListSectionsUseCase(REPO)
+LIST_UNIT_SECTIONS_USECASE = ListUnitSectionsUseCase(REPO)
 LIST_COURSES_USECASE = ListCoursesUseCase(REPO)
 LIST_COURSE_UNITS_USECASE = ListCourseUnitsUseCase(REPO)
 CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(REPO)
@@ -205,9 +211,10 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
 
 
 def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
-    global REPO, LIST_SECTIONS_USECASE, LIST_COURSES_USECASE, LIST_COURSE_UNITS_USECASE, CREATE_SUBMISSION_USECASE, LIST_SUBMISSIONS_USECASE
+    global REPO, LIST_SECTIONS_USECASE, LIST_UNIT_SECTIONS_USECASE, LIST_COURSES_USECASE, LIST_COURSE_UNITS_USECASE, CREATE_SUBMISSION_USECASE, LIST_SUBMISSIONS_USECASE
     REPO = repo
     LIST_SECTIONS_USECASE = ListSectionsUseCase(repo)
+    LIST_UNIT_SECTIONS_USECASE = ListUnitSectionsUseCase(repo)
     LIST_COURSES_USECASE = ListCoursesUseCase(repo)
     LIST_COURSE_UNITS_USECASE = ListCourseUnitsUseCase(repo)
     CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(repo)
@@ -335,6 +342,62 @@ async def list_course_units(request: Request, course_id: str):
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
     return JSONResponse(rows, headers=_cache_headers_success())
+
+
+@learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/sections")
+async def list_unit_sections(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    include: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List released sections for a specific unit (student-only).
+
+    Why:
+        Unit-scoped endpoint aligns with the SSR unit page and avoids
+        client-side filtering. Returns 200 with an array that may be empty.
+
+    Permissions:
+        Caller must have the `student` role and be enrolled in the course.
+        The unit must belong to the course; otherwise respond with 404 to avoid
+        leaking existence details.
+    """
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    # Validate path params eagerly to align with contract detail=invalid_uuid
+    try:
+        UUID(course_id)
+        UUID(unit_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    try:
+        include_materials, include_tasks = _parse_include(include)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
+
+    input_data = ListUnitSectionsInput(
+        student_sub=str(user.get("sub", "")),
+        course_id=course_id,
+        unit_id=unit_id,
+        include_materials=include_materials,
+        include_tasks=include_tasks,
+        limit=limit,
+        offset=offset,
+    )
+    try:
+        sections = LIST_UNIT_SECTIONS_USECASE.execute(input_data)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    # 200 with possibly empty list
+    return JSONResponse(sections, headers=_cache_headers_success())
 
 
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:

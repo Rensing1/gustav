@@ -139,6 +139,10 @@ async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r_forbidden = await c.get(f"/api/learning/courses/{course_id}/units")
         assert r_forbidden.status_code == 404
+        # Contract/Security: errors are private and not cacheable
+        assert r_forbidden.headers.get("Cache-Control") == "private, no-store"
+        # Error payload should not leak details beyond a generic not_found
+        assert (r_forbidden.json() or {}).get("error") == "not_found"
 
         # Add membership and fetch
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

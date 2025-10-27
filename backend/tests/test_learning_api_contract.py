@@ -1143,3 +1143,20 @@ async def test_submission_created_at_is_rfc3339_and_present():
     # Expected format produced by the DB: YYYY-MM-DD"T"HH:MM:SS+00:00
     import re as _re
     assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00", created_at), created_at
+
+
+@pytest.mark.anyio
+async def test_create_submission_201_has_private_no_store_cache_header():
+    """201 Create Submission must include Cache-Control: private, no-store."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "Header-Test"},
+        )
+
+    assert resp.status_code == 201
+    assert resp.headers.get("Cache-Control") == "private, no-store"

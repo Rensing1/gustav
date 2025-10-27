@@ -1142,7 +1142,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1156,7 +1156,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1168,7 +1168,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1180,7 +1180,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1192,7 +1192,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1273,7 +1273,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1285,7 +1285,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1297,7 +1297,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1309,7 +1309,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1321,7 +1321,7 @@ paths:
               description: Security hardening — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, max-age=0
+                example: private, no-store
           content:
             application/json:
               schema:

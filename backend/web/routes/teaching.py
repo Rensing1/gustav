@@ -2873,15 +2873,18 @@ async def list_module_section_releases(request: Request, course_id: str, module_
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     if not _is_uuid_like(course_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     if not _is_uuid_like(module_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
     # Guard ownership (403/404 semantics handled by helper)
     guard = _guard_course_owner(course_id, sub)
     if guard:
-        return guard
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -2892,16 +2895,16 @@ async def list_module_section_releases(request: Request, course_id: str, module_
             # Sections for module's unit
             module = REPO.course_modules.get(module_id)
             if not module or module.course_id != course_id:
-                return JSONResponse({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404)
             for (mid, sid), rec in REPO.module_section_releases.items():
                 if mid == module_id:
                     entries.append(rec)
             releases = entries
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(releases, status_code=200, headers={"Cache-Control": "private, no-store"})
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(releases, status_code=200)
 
 
 def _serialize_course(c) -> dict:

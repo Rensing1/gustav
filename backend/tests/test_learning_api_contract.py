@@ -398,6 +398,24 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
 
 
 @pytest.mark.anyio
+async def test_create_submission_uses_teacher_defined_criteria_names():
+    """Rubric scores should expose the criteria defined by the teacher."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "Lineare Funktionen analysiert"},
+        )
+
+    assert response.status_code == 201
+    scores = response.json()["analysis_json"]["scores"]
+    assert [score["criterion"] for score in scores][:2] == ["Graph korrekt", "Steigung erläutert"]
+
+
+@pytest.mark.anyio
 async def test_create_submission_requires_membership():
     """Students without memberships must receive 403 on submission creation."""
 

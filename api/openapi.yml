@@ -3584,7 +3584,10 @@ paths:
     patch:
       tags: [Teaching]
       summary: Update section visibility within a course module (owner only)
-      description: Sets whether a section is released to students enrolled in the course.
+      description: |
+        Sets whether a section is released to students enrolled in the course.
+        Security: When called from a browser, requests must be same-origin; a foreign
+        `Origin` or `Referer` results in 403 with `detail=csrf_violation`.
       operationId: updateModuleSectionVisibility
       security:
         - cookieAuth: []
@@ -3593,6 +3596,7 @@ paths:
         ownerOnly: true
       x-security-notes:
         - "RLS: module_section_releases table joins course_modules to enforce owner checks."
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       parameters:
         - in: path
           name: course_id
@@ -3621,6 +3625,12 @@ paths:
       responses:
         '200':
           description: Visibility state updated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3644,18 +3654,50 @@ paths:
                     released_by: "teacher-123"
         '400':
           description: "Invalid identifiers or payload (detail: invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type)"
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden (not the course owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden (not the course owner or CSRF violation)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '404':
           description: |
             Course, module, or section not found within the module.
             detail codes:
               - module_not_found
               - section_not_in_module
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:

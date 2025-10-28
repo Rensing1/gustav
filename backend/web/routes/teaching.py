@@ -1049,6 +1049,87 @@ def _json_private(payload, *, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
 
 
+def _private_error(payload: dict, *, status_code: int) -> JSONResponse:
+    """Return error JSON with private, no-store cache headers.
+
+    Keep error responses out of shared caches to avoid leaking owner-scoped
+    metadata via intermediary proxies or browser history.
+    """
+    return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+
+
+def _is_same_origin(request: Request) -> bool:
+    """CSRF defense-in-depth: verify same-origin using Origin or Referer.
+
+    Behavior:
+    - If Origin header is present, require exact scheme/host/port match with
+      the server origin (optionally proxy-aware via GUSTAV_TRUST_PROXY=true).
+    - Else if Referer is present, validate its origin similarly.
+    - Else (no headers): allow to not break non-browser API clients.
+    """
+    origin_val = request.headers.get("origin")
+    try:
+        from urllib.parse import urlparse
+        import os
+
+        def parse_origin(url: str) -> tuple[str, str, int]:
+            p = urlparse(url)
+            if not p.scheme or not p.hostname:
+                raise ValueError("invalid_origin")
+            scheme = p.scheme.lower()
+            host = p.hostname.lower()
+            port = p.port
+            if port is None:
+                port = 443 if scheme == "https" else 80
+            return scheme, host, int(port)
+
+        def parse_server(request: Request) -> tuple[str, str, int]:
+            trust_proxy = (os.getenv("GUSTAV_TRUST_PROXY", "false") or "").lower() == "true"
+            if trust_proxy:
+                xf_proto_raw = request.headers.get("x-forwarded-proto") or request.url.scheme or ""
+                xf_host_raw = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+                xf_proto = xf_proto_raw.split(",")[0].strip()
+                xf_host = xf_host_raw.split(",")[0].strip()
+                scheme = (xf_proto or request.url.scheme or "http").lower()
+                if ":" in xf_host:
+                    host_only, port_str = xf_host.rsplit(":", 1)
+                    try:
+                        port = int(port_str)
+                    except Exception:
+                        port = 443 if scheme == "https" else 80
+                    host = host_only.lower()
+                else:
+                    host = (xf_host or (request.url.hostname or "")).lower()
+                    port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
+                xf_port_raw = request.headers.get("x-forwarded-port") or ""
+                if xf_port_raw:
+                    try:
+                        port = int(xf_port_raw.split(",")[0].strip())
+                    except Exception:
+                        port = 443 if scheme == "https" else 80
+                return scheme, host, port
+
+            scheme = (request.url.scheme or "http").lower()
+            host = (request.url.hostname or "").lower()
+            port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
+            return scheme, host, port
+
+        s_scheme, s_host, s_port = parse_server(request)
+
+        if origin_val:
+            o_scheme, o_host, o_port = parse_origin(origin_val)
+            return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
+
+        referer_val = request.headers.get("referer")
+        if referer_val:
+            r_scheme, r_host, r_port = parse_origin(referer_val)
+            return (r_scheme == s_scheme) and (r_host == s_host) and (r_port == s_port)
+
+        return True
+    except Exception:
+        return False
+
+
 def _guard_course_owner(course_id: str, owner_sub: str):
     """Ensure caller owns the course, mapping to 404/403 appropriately."""
     try:
@@ -2720,6 +2801,9 @@ async def update_module_section_visibility(
     """
     Toggle the visibility of a section within a course module.
 
+    Why:
+        Course owners decide when students can access individual sections.
+
     Parameters:
         request: FastAPI request containing the authenticated session.
         course_id: Course identifier whose module will be updated.
@@ -2727,36 +2811,44 @@ async def update_module_section_visibility(
         section_id: Identifier of the section to release or hide.
         payload: Body containing the `visible` flag.
 
-    Why:
-        Course owners decide when students can access individual sections.
+    Security:
+        - Requires role `teacher` and course ownership (RLS enforced in repo).
+        - Enforces same-origin for browser requests (Origin/Referer must match).
+        - All responses include `Cache-Control: private, no-store`.
 
     Behavior:
         - 200 with the persisted visibility record.
         - 400 on invalid identifiers or payload (`missing_visible`, `invalid_visible_type`).
-        - 403 when caller is not the course owner.
+        - 403 when caller is not the course owner or on CSRF violation (`detail=csrf_violation`).
         - 404 when the module or section is unknown for the course.
-
-    Permissions:
-        Caller must be a teacher and owner of the course.
     """
     user, error = _require_teacher(request)
     if error:
-        return error
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+    # CSRF defense-in-depth: block cross-site PATCH attempts
+    if not _is_same_origin(request):
+        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+
     if not _is_uuid_like(course_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     if not _is_uuid_like(module_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
     if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_course_owner(course_id, sub)
     if guard:
-        return guard
+        # Normalize guard response to include private cache header
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403)
     visible_value = payload.visible
     if visible_value is None:
-        return JSONResponse({"error": "bad_request", "detail": "missing_visible"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "missing_visible"}, status_code=400)
     if not isinstance(visible_value, bool):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_visible_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_visible_type"}, status_code=400)
     try:
         # Repository applies transactional upsert with RLS enforcement.
         record = REPO.set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
@@ -2765,10 +2857,10 @@ async def update_module_section_visibility(
         body = {"error": "not_found"}
         if detail:
             body["detail"] = detail
-        return JSONResponse(body, status_code=404)
+        return _private_error(body, status_code=404)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=record, status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(record, status_code=200)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections/releases")

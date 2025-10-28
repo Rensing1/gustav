@@ -17,6 +17,19 @@ class LearningRepoProtocol(Protocol):
     ) -> list[dict]:
         ...
 
+    def list_released_sections_by_unit(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        unit_id: str,
+        include_materials: bool,
+        include_tasks: bool,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        ...
+
 
 @dataclass
 class ListSectionsInput:
@@ -51,6 +64,44 @@ class ListSectionsUseCase:
         return self._repo.list_released_sections(
             student_sub=req.student_sub,
             course_id=req.course_id,
+            include_materials=req.include_materials,
+            include_tasks=req.include_tasks,
+            limit=limit,
+            offset=offset,
+        )
+
+
+@dataclass
+class ListUnitSectionsInput:
+    student_sub: str
+    course_id: str
+    unit_id: str
+    include_materials: bool
+    include_tasks: bool
+    limit: int
+    offset: int
+
+
+class ListUnitSectionsUseCase:
+    def __init__(self, repo: LearningRepoProtocol) -> None:
+        self._repo = repo
+
+    def execute(self, req: ListUnitSectionsInput) -> list[dict]:
+        """Return released sections for a specific unit visible to the student.
+
+        Intent:
+            Server-side filter by unit, stable ordering by position,id, and
+            pagination bounds clamped here to keep adapters thin.
+
+        Security:
+            Repository enforces course membership and unit-in-course relation.
+        """
+        limit = max(1, min(req.limit, 100))
+        offset = max(0, req.offset)
+        return self._repo.list_released_sections_by_unit(
+            student_sub=req.student_sub,
+            course_id=req.course_id,
+            unit_id=req.unit_id,
             include_materials=req.include_materials,
             include_tasks=req.include_tasks,
             limit=limit,

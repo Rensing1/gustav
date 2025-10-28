@@ -33,7 +33,7 @@ class ListCoursesUseCase:
         Permissions:
             Caller must be a student; underlying repo filters to membership.
         """
-        limit = max(1, min(50, int(req.limit)))
+        limit = max(1, min(100, int(req.limit)))
         offset = max(0, int(req.offset))
         return self._repo.list_courses_for_student(student_sub=req.student_sub, limit=limit, offset=offset)
 
@@ -59,4 +59,3 @@ class ListCourseUnitsUseCase:
             Caller must be the enrolled student of the course.
         """
         return self._repo.list_units_for_student_course(student_sub=req.student_sub, course_id=req.course_id)
-

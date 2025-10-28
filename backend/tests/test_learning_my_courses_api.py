@@ -301,10 +301,10 @@ async def test_courses_pagination_clamp_limit_upper_bound():
         ]
         for cid in course_ids:
             await _add_member(c, cid, student.sub)
-        # Request an excessive limit; should succeed and never exceed 50 items
+        # Request an excessive limit; should succeed and never exceed 100 items per contract
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get("/api/learning/courses", params={"limit": 500, "offset": 0})
         assert r.status_code == 200
         items = r.json()
         assert isinstance(items, list)
-        assert len(items) <= 50
+        assert len(items) <= 100

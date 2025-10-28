@@ -254,7 +254,7 @@ Mocking:
 
 ## Minimaler Implementierungsschnitt (Red‑Green‑Refactor)
 
-1) Contract (openapi.yml) erweitern: Schemas `LearningCourse`, `UnitPublic`; Pfade `GET /api/learning/courses`, `GET /api/learning/courses/{course_id}/units` (Header `Cache-Control: private, max-age=0`).
+1) Contract (openapi.yml) erweitern: Schemas `LearningCourse`, `UnitPublic`; Pfade `GET /api/learning/courses`, `GET /api/learning/courses/{course_id}/units` (Header `Cache-Control: private, no-store`).
 2) Migration für Helper `get_course_units_for_student` hinzufügen; `supabase migration up`.
 3) Learning‑Webroute implementieren (`backend/web/routes/learning.py`):
    - `GET /api/learning/courses`: prüft Rolle `student`, clamped pagination, query: Kurse des Studenten alphabetisch, reduziert auf Felder.

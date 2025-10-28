@@ -7,6 +7,10 @@ info:
     Endpoints cover login redirect, callback handling, logout, session info, and a
     convenience redirect for "forgot password". Sessions are represented by an
     httpOnly cookie.
+  x-changelog:
+    - date: "2025-10-28"
+      type: breaking
+      note: "LearningSectionCore now requires unit_id (update client models)."
 
 servers:
   - url: /
@@ -600,7 +604,7 @@ components:
           description: Desired order (1..n) of course_module IDs for the given course
     LearningSectionCore:
       type: object
-      required: [id, title, position]
+      required: [id, title, position, unit_id]
       properties:
         id:
           type: string
@@ -613,6 +617,10 @@ components:
           type: integer
           minimum: 1
           description: 1-based ordering within the course release
+        unit_id:
+          type: string
+          format: uuid
+          description: Identifier of the learning unit this section belongs to (for UI grouping/filtering).
     LearningMaterial:
       type: object
       required: [id, title, kind]
@@ -859,8 +867,8 @@ paths:
           schema:
             type: integer
             minimum: 1
-            maximum: 50
-            default: 20
+            maximum: 100
+            default: 50
         - in: query
           name: offset
           schema:
@@ -925,6 +933,8 @@ paths:
             format: uuid
         - in: query
           name: include
+          style: form
+          explode: false
           schema:
             type: string
             pattern: '^(materials|tasks)(,(materials|tasks))*$'
@@ -949,7 +959,7 @@ paths:
           description: Released sections visible to the student.
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -963,7 +973,7 @@ paths:
           description: Invalid input (e.g., malformed UUID or include parameter)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -975,7 +985,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -987,7 +997,7 @@ paths:
           description: Forbidden (student not enrolled in the course)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -999,7 +1009,7 @@ paths:
           description: Course not found or sections not released
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1030,7 +1040,7 @@ paths:
           description: Units of the course
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1051,7 +1061,7 @@ paths:
           description: Invalid UUID
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1063,7 +1073,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1075,7 +1085,7 @@ paths:
           description: Forbidden — caller is not a student
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1087,7 +1097,222 @@ paths:
           description: Course not found or not visible to the student
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/courses/{course_id}/units/{unit_id}/sections:
+    get:
+      tags: [Learning]
+      summary: List released sections of a unit for the current student
+      description: Returns only sections released to the authenticated student within the given course and unit. Responds 200 with an array, which may be empty when no sections are released yet.
+      operationId: listLearningUnitSections
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: include
+          style: form
+          explode: false
+          schema:
+            type: string
+            pattern: '^(materials|tasks)(,(materials|tasks))*$'
+          description: 'Comma-separated list controlling embedded resources (supported: "materials", "tasks").'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum number of sections to return.
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Offset for pagination.
+      responses:
+        '200':
+          description: Released sections of the unit visible to the student (may be empty).
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearningSection'
+        '400':
+          description: Invalid input (e.g., malformed UUID or include parameter)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (student not enrolled in the course)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or unit not found, or unit does not belong to the course
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/courses/{course_id}/modules/{module_id}/sections/releases:
+    get:
+      tags: [Teaching]
+      summary: List release states for sections in a course module (owner)
+      description: Returns visibility records for sections attached to the specified module. Missing entries imply hidden sections.
+      operationId: listModuleSectionReleases
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Release state entries for the module (can be empty).
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [course_module_id, section_id, visible]
+                  properties:
+                    course_module_id:
+                      type: string
+                      format: uuid
+                    section_id:
+                      type: string
+                      format: uuid
+                    visible:
+                      type: boolean
+                    released_at:
+                      type: string
+                      nullable: true
+                      description: RFC3339 UTC timestamp or null when hidden
+                    released_by:
+                      type: string
+                      description: Teacher id (subject)
+        '400':
+          description: Invalid identifiers
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (caller is not the course owner)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course/module not found or not visible to the owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1139,7 +1364,7 @@ paths:
           description: Submissions visible to the student.
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1153,7 +1378,7 @@ paths:
           description: Invalid input (e.g., malformed UUID or pagination parameter)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1165,7 +1390,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1177,7 +1402,7 @@ paths:
           description: Forbidden (student not enrolled in the course)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1189,7 +1414,7 @@ paths:
           description: Course or task not found, or not released to the student
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1230,7 +1455,8 @@ paths:
           schema:
             type: string
             maxLength: 64
-          description: Optional idempotency token to de-duplicate retries (case-sensitive).
+            pattern: '^[A-Za-z0-9_-]{1,64}$'
+          description: "Optional idempotency token to de-duplicate retries (ASCII token: letters, digits, underscore, hyphen; case-sensitive)."
       requestBody:
         required: true
         content:
@@ -1270,7 +1496,7 @@ paths:
           description: Submission created with synchronous feedback (MVP default).
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1282,7 +1508,7 @@ paths:
           description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1294,7 +1520,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1306,7 +1532,7 @@ paths:
           description: Forbidden (not enrolled or CSRF same-origin check failed)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1318,7 +1544,7 @@ paths:
           description: Not found
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1394,7 +1620,7 @@ paths:
           description: Invalid or expired code/state
           headers:
             Cache-Control:
-              description: Security hardening — responses must not be cached
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
           content:
@@ -1513,7 +1739,7 @@ paths:
           description: User context
           headers:
             Cache-Control:
-              description: Security hardening — responses must not be cached
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
           content:
@@ -1524,7 +1750,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses must not be cached
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
           content:
@@ -3363,7 +3589,10 @@ paths:
     patch:
       tags: [Teaching]
       summary: Update section visibility within a course module (owner only)
-      description: Sets whether a section is released to students enrolled in the course.
+      description: |
+        Sets whether a section is released to students enrolled in the course.
+        Security: When called from a browser, requests must be same-origin; a foreign
+        `Origin` or `Referer` results in 403 with `detail=csrf_violation`.
       operationId: updateModuleSectionVisibility
       security:
         - cookieAuth: []
@@ -3372,6 +3601,7 @@ paths:
         ownerOnly: true
       x-security-notes:
         - "RLS: module_section_releases table joins course_modules to enforce owner checks."
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       parameters:
         - in: path
           name: course_id
@@ -3400,6 +3630,12 @@ paths:
       responses:
         '200':
           description: Visibility state updated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3423,18 +3659,50 @@ paths:
                     released_by: "teacher-123"
         '400':
           description: "Invalid identifiers or payload (detail: invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type)"
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden (not the course owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden (not the course owner or CSRF violation)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '404':
           description: |
             Course, module, or section not found within the module.
             detail codes:
               - module_not_found
               - section_not_in_module
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:

@@ -72,7 +72,19 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
 - `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` (Owner only)
   - Body `{ visible: bool }`, 200 `ModuleSectionVisibility`
   - 400 mit `detail`: `invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type`
-  - 403 wenn nicht Owner; 404 wenn Abschnitt nicht zum Modul gehört
+  - 403 wenn nicht Owner oder bei CSRF‑Verletzung (`detail=csrf_violation`); 404 wenn Abschnitt nicht zum Modul gehört
+  - Cache: `Cache-Control: private, no-store`
+  - Fehlerantworten (400/403/404) senden ebenfalls `Cache-Control: private, no-store`.
+
+#### Abschnittsfreigaben (Owner) — SSR‑UI
+- Navigation: Modulliste → Button „Abschnitte freigeben“ → `/courses/{course_id}/modules/{module_id}/sections`.
+- Zeile je Abschnitt: links Badge+Titel, rechts Schalter „Freigegeben“. Bei aktivem Zustand erscheint der Hinweis „Freigegeben am <UTC‑ISO>“.
+- Aktion: Schalter sendet `hx-post` an `/courses/{course_id}/modules/{module_id}/sections/{section_id}/toggle`.
+  - Server ruft `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` (JSON `{ visible }`).
+  - Erfolgreich: Der Abschnitts‑Container (`#module-sections`) wird ersetzt und zeigt eine kurze Erfolgsmeldung „Änderung gespeichert“.
+  - Fehler: Status 400/403/404 wird an den Client propagiert; der Container bleibt unverändert.
+- Sicherheit: CSRF via Same‑Origin‑Prüfung (Origin/Referer müssen zur Server‑Origin passen). Kein Token nötig.
+  RLS/Owner‑Check erfolgt in der DB; Antworten setzen `Cache-Control: private, no-store`.
 
 #### Abschnitte (Sections) je Lerneinheit
 - `GET /api/teaching/units/{unit_id}/sections` (Author only)

@@ -26,11 +26,11 @@ Nicht enthalten (später): Asynchrone Jobs/Worker, echtes Modell‑Inference, SS
 - History – Leere Historie:
   - Given: Mitglied, Abschnitt freigegeben, noch keine Abgabe.
   - When: GET history.
-  - Then: 200, leeres Array `[]`, Header `Cache-Control: private, max-age=0`.
+  - Then: 200, leeres Array `[]`, Header `Cache-Control: private, no-store`.
 - History – Forbidden:
   - Given: Kein Mitglied.
   - When: GET history.
-  - Then: 403 `forbidden` mit `Cache-Control: private, max-age=0`.
+  - Then: 403 `forbidden` mit `Cache-Control: private, no-store`.
 - History – Not Found:
   - Given: Mitglied, Task/Section nicht freigegeben.
   - When: GET history.
@@ -42,7 +42,7 @@ Nicht enthalten (später): Asynchrone Jobs/Worker, echtes Modell‑Inference, SS
 - History – Ungültige UUID:
   - Given: Authentifiziert.
   - When: GET mit `course_id` oder `task_id` ≠ UUID.
-  - Then: 400 `detail=invalid_uuid`, Header `Cache-Control: private, max-age=0`.
+  - Then: 400 `detail=invalid_uuid`, Header `Cache-Control: private, no-store`.
 - Create – Text + Analyse‑Stub:
   - Given: Freigegeben, Versuche verfügbar.
   - When: POST submission `{ kind: 'text', text_body: 'Hallo Welt' }`.
@@ -73,7 +73,7 @@ Nicht enthalten (später): Asynchrone Jobs/Worker, echtes Modell‑Inference, SS
     - path: `course_id` (uuid), `task_id` (uuid)
     - query: `limit` (int, 1..100, default 20), `offset` (int, ≥0, default 0)
   - responses:
-    - 200: array of `LearningSubmission` (bestehendes Schema), Header `Cache-Control: private, max-age=0`
+    - 200: array of `LearningSubmission` (bestehendes Schema), Header `Cache-Control: private, no-store`
     - 400: `invalid_uuid`
     - 401/403/404: wie bestehende Learning‑Endpunkte (gleiche Cache‑Header)
 

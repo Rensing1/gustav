@@ -35,6 +35,7 @@ from pydantic.functional_validators import field_validator
 from teaching.services.materials import MaterialFileSettings, MaterialsService
 from teaching.services.tasks import TasksService
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
+from .security import _is_same_origin
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -1047,6 +1048,18 @@ def _json_private(payload, *, status_code: int = 200) -> JSONResponse:
     accidental caching in proxies or browsers, respond with "private, no-store".
     """
     return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+
+
+def _private_error(payload: dict, *, status_code: int) -> JSONResponse:
+    """Return error JSON with private, no-store cache headers.
+
+    Keep error responses out of shared caches to avoid leaking owner-scoped
+    metadata via intermediary proxies or browser history.
+    """
+    return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+
+
+"""CSRF helper imported from .security"""
 
 
 def _guard_course_owner(course_id: str, owner_sub: str):
@@ -2720,6 +2733,9 @@ async def update_module_section_visibility(
     """
     Toggle the visibility of a section within a course module.
 
+    Why:
+        Course owners decide when students can access individual sections.
+
     Parameters:
         request: FastAPI request containing the authenticated session.
         course_id: Course identifier whose module will be updated.
@@ -2727,36 +2743,44 @@ async def update_module_section_visibility(
         section_id: Identifier of the section to release or hide.
         payload: Body containing the `visible` flag.
 
-    Why:
-        Course owners decide when students can access individual sections.
+    Security:
+        - Requires role `teacher` and course ownership (RLS enforced in repo).
+        - Enforces same-origin for browser requests (Origin/Referer must match).
+        - All responses include `Cache-Control: private, no-store`.
 
     Behavior:
         - 200 with the persisted visibility record.
         - 400 on invalid identifiers or payload (`missing_visible`, `invalid_visible_type`).
-        - 403 when caller is not the course owner.
+        - 403 when caller is not the course owner or on CSRF violation (`detail=csrf_violation`).
         - 404 when the module or section is unknown for the course.
-
-    Permissions:
-        Caller must be a teacher and owner of the course.
     """
     user, error = _require_teacher(request)
     if error:
-        return error
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+    # CSRF defense-in-depth: block cross-site PATCH attempts
+    if not _is_same_origin(request):
+        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+
     if not _is_uuid_like(course_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     if not _is_uuid_like(module_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
     if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_course_owner(course_id, sub)
     if guard:
-        return guard
+        # Normalize guard response to include private cache header
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403)
     visible_value = payload.visible
     if visible_value is None:
-        return JSONResponse({"error": "bad_request", "detail": "missing_visible"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "missing_visible"}, status_code=400)
     if not isinstance(visible_value, bool):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_visible_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_visible_type"}, status_code=400)
     try:
         # Repository applies transactional upsert with RLS enforcement.
         record = REPO.set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
@@ -2765,10 +2789,54 @@ async def update_module_section_visibility(
         body = {"error": "not_found"}
         if detail:
             body["detail"] = detail
-        return JSONResponse(body, status_code=404)
+        return _private_error(body, status_code=404)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=record, status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(record, status_code=200)
+
+
+@teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections/releases")
+async def list_module_section_releases(request: Request, course_id: str, module_id: str):
+    """List release state entries for sections in a module (owner only).
+
+    Permissions:
+        Caller must be a teacher and the owner of the course.
+    """
+    user = getattr(request.state, "user", None)
+    sub = _current_sub(user)
+    if not _role_in(user, "teacher"):
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not _is_uuid_like(course_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    # Guard ownership (403/404 semantics handled by helper)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            releases = REPO.list_module_section_releases_owned(course_id, module_id, sub)
+        else:
+            # In-memory: derive from internal state
+            entries = []
+            # Sections for module's unit
+            module = REPO.course_modules.get(module_id)
+            if not module or module.course_id != course_id:
+                return _private_error({"error": "not_found"}, status_code=404)
+            for (mid, sid), rec in REPO.module_section_releases.items():
+                if mid == module_id:
+                    entries.append(rec)
+            releases = entries
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(releases, status_code=200)
 
 
 def _serialize_course(c) -> dict:

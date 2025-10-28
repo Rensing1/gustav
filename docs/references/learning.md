@@ -2,11 +2,24 @@
 
 Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchszähler und sofortigem (Stub‑)Feedback. Dokumentiert API, Schema, RLS und Teststrategie.
 
+Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Feld `unit_id`. Aktualisiere ggf. generierte Client‑Modelle.
+
 ## Endpunkte (API)
+- `GET /api/learning/courses?limit&offset`
+  - Liefert die Kurse, in denen der eingeloggte Schüler Mitglied ist (alphabetisch: `title asc`, sekundär `id asc`).
+  - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
+
 - `GET /api/learning/courses/{course_id}/sections?include=materials,tasks&limit&offset`
   - Liefert nur freigegebene Abschnitte für den eingeloggten Schüler (Mitgliedschaft erforderlich).
-  - 200 `[{ section { id, title, position }, materials[], tasks[] }]`, 401/403/404.
+- 200 `[{ section { id, title, position, unit_id }, materials[], tasks[] }]`, 401/403/404.
   - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
+  - Query `include`: CSV‑Liste im Stil `form`, `explode: false` (z. B. `include=materials,tasks`).
+
+- `GET /api/learning/courses/{course_id}/units/{unit_id}/sections?include=materials,tasks&limit&offset`
+  - Liefert nur freigegebene Abschnitte der angegebenen Lerneinheit im Kurs (Server‑Filter nach `unit_id`).
+  - 200 Liste (ggf. leer); 400 bei Invalid‑UUID; 401/403 wie oben; 404 bei Kurs/Unit‑Mismatch.
+  - Cache: `Cache-Control: private, no-store`.
+  - Query `include`: CSV‑Liste im Stil `form`, `explode: false`.
 
 - `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
@@ -36,6 +49,7 @@ Fehlercodes (Beispiele):
 - Helper-Funktionen: `supabase/migrations/20251023093417_learning_helpers.sql`
   - `hash_course_task_student`, `next_attempt_nr`, `check_task_visible_to_student`
   - `get_released_sections/materials/tasks_for_student`, `get_task_metadata_for_student`
+    (liefert seit 2025-10-28 zusätzlich `criteria text[]` für Rubrik-Anzeigen)
 - RLS-Policies: `supabase/migrations/20251023093421_learning_rls_policies.sql`
   - SELECT limitiert auf eigene `student_sub`; INSERT prüft Sichtbarkeit via `check_task_visible_to_student`
 - Hardening-Fix: `supabase/migrations/20251023111657_learning_tasks_rls_fix.sql`
@@ -57,8 +71,8 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 ## Sicherheit & Datenschutz
 - Minimierte DTOs: Identität über `sub`, kein PII in API‑Antworten.
 - Fehlersemantik: 404 bei nicht freigegebenen/fremden Ressourcen, um keine Existenzinformationen zu leaken.
-- Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, max-age=0`.
-- Fehlerantworten: 400/401/403/404 der Learning‑Endpoints senden ebenfalls `Cache-Control: private, max-age=0`.
+- Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, no-store`.
+- Fehlerantworten: 400/401/403/404 der Learning‑Endpoints senden ebenfalls `Cache-Control: private, no-store`.
 - Submissions: Storage-Metadaten werden bei Bildabgaben geprüft; `storage_key` wird in API‑Antworten zurückgegeben (nur für `kind=image`). Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
 - Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
 - CSRF: Same‑Origin‑Prüfung nutzt `Origin`, fällt bei fehlendem `Origin` auf `Referer` zurück (nur Origin‑Teil, Pfad ignoriert). Nicht‑Browser‑Clients bleiben unverändert (keine Header).
@@ -91,3 +105,19 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 ## DSGVO / Audit
 - Timestamps `created_at` und `completed_at` je Abgabe.
 - Keine Speicherung von Klarnamen in Learning‑Tabellen; Auflösung von Anzeigenamen erfolgt ausschließlich im UI über Directory‑Adapter.
+## Schüler‑UI: Lerneinheit mit Abschnitten
+- Route: `/learning/courses/{course_id}/units/{unit_id}` (SSR)
+- Darstellung:
+  - Abschnittstitel werden ausgeblendet; Gruppen sind durch genau eine horizontale Linie `<hr>` getrennt.
+  - Innerhalb eines Abschnitts werden Materialien (Markdown/File) und Aufgaben in der kursüblichen Reihenfolge dargestellt.
+  - Bei keiner Freigabe zeigt die Seite einen neutralen Hinweis.
+- Datenquelle: der obige Unit‑Sections‑Endpoint mit `include=materials,tasks`.
+- Sicherheit: Seite setzt `Cache-Control: private, no-store`.
+
+## Schüler‑UI: Kursansicht (Units‑Liste)
+- Route: `/learning/courses/{course_id}` (SSR)
+- Darstellung:
+  - Listet alle Lerneinheiten des Kurses mit Position als Badge.
+  - Jeder Eintrag verlinkt auf `/learning/courses/{course_id}/units/{unit_id}`.
+  - Kein Bearbeiten/Sortieren (read‑only für Schüler).
+- Sicherheit: Seite setzt `Cache-Control: private, no-store`.

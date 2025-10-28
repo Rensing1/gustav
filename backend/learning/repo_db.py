@@ -185,6 +185,7 @@ class DBLearningRepo:
         course_uuid = str(UUID(course_id))
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
+                # RLS: set caller identity for membership check and all subsequent helpers
                 self._set_current_sub(cur, student_sub)
                 cur.execute(
                     "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
@@ -213,12 +214,15 @@ class DBLearningRepo:
             sections: List[dict] = []
             for row in rows:
                 section_id = row[0]
+                unit_id = row[3]
                 entry = {
                     "section": {
                         "id": section_id,
                         "title": row[1],
                         # Contract requires integer ≥ 1; fall back to 1 if DB position is NULL
                         "position": int(row[2]) if row[2] is not None else 1,
+                        # Expose owning unit to allow UI grouping/filtering per unit page.
+                        "unit_id": unit_id,
                     },
                     "materials": [],
                     "tasks": [],
@@ -311,8 +315,113 @@ class DBLearningRepo:
             )
         return tasks
 
+    def list_released_sections_by_unit(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        unit_id: str,
+        include_materials: bool,
+        include_tasks: bool,
+        limit: int,
+        offset: int,
+    ) -> List[dict]:
+        """List released sections for a specific unit (student scope).
+
+        Security:
+            Validates that the student is a member of the course and that the
+            unit belongs to the course (via course_modules). Uses a dedicated
+            SQL helper for efficient server-side filtering.
+        """
+        course_uuid = str(UUID(course_id))
+        unit_uuid = str(UUID(unit_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                # Ensure membership exists
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise PermissionError("not_course_member")
+
+                # Verify that the unit belongs to the course from the student's perspective
+                cur.execute(
+                    """
+                    select exists (
+                             select 1
+                               from public.get_course_units_for_student(%s, %s) t
+                              where t.unit_id = %s
+                           )
+                    """,
+                    (student_sub, course_uuid, unit_uuid),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise LookupError("unit_not_in_course")
+
+                # Fetch released sections for the unit (may be empty)
+                cur.execute(
+                    """
+                    select section_id::text,
+                           section_title,
+                           section_position,
+                           unit_id::text,
+                           course_module_id::text
+                      from public.get_released_sections_for_student_by_unit(%s, %s, %s, %s, %s)
+                    """,
+                    (student_sub, course_uuid, unit_uuid, int(limit), int(offset)),
+                )
+                rows = cur.fetchall()
+
+            # Unit-scoped: return an empty list when no sections are released
+            sections: List[dict] = []
+            for row in rows:
+                section_id = row[0]
+                entry = {
+                    "section": {
+                        "id": section_id,
+                        "title": row[1],
+                        # Fallback to 1 if NULL to satisfy contract >= 1
+                        "position": int(row[2]) if row[2] is not None else 1,
+                        "unit_id": row[3],
+                    },
+                    "materials": [],
+                    "tasks": [],
+                }
+                if include_materials:
+                    entry["materials"] = self._fetch_materials(conn, student_sub, course_uuid, section_id)
+                if include_tasks:
+                    entry["tasks"] = self._fetch_tasks(conn, student_sub, course_uuid, section_id)
+                sections.append(entry)
+            return sections
+
     # ------------------------------------------------------------------
     def create_submission(self, data: SubmissionInput) -> dict:
+        """Persist a student submission after enforcing membership and attempts.
+
+        Why:
+            Centralizes membership checks, release visibility, rubric retrieval
+            and attempt counting within the persistence adapter so the use case
+            stays framework-agnostic.
+
+        Parameters:
+            data: SubmissionInput containing course/task identifiers, caller
+                  `student_sub`, payload kind and optional storage metadata.
+
+        Behavior:
+            - Verifies membership via course_memberships (RLS-aware).
+            - Reuses existing row when an Idempotency-Key is supplied.
+            - Fetches release metadata (max_attempts + rubric criteria) via
+              `get_task_metadata_for_student`, which already scopes rows to
+              the caller and visible sections.
+            - Persists the submission and returns the stored record with stub
+              analysis/feedback fields.
+
+        Permissions:
+            Caller must be the enrolled student and the section must be
+            released. Database helper functions enforce this through RLS.
+        """
         course_uuid = str(UUID(data.course_id))
         task_uuid = str(UUID(data.task_id))
 
@@ -360,7 +469,8 @@ class DBLearningRepo:
                     select task_id::text,
                            section_id::text,
                            unit_id::text,
-                           max_attempts
+                           max_attempts,
+                           coalesce(criteria, array[]::text[])
                       from public.get_task_metadata_for_student(%s, %s, %s)
                     """,
                     (data.student_sub, course_uuid, task_uuid),
@@ -369,7 +479,9 @@ class DBLearningRepo:
                 if not meta:
                     raise LookupError("task_not_visible")
                 max_attempts = meta[3]
-                criteria = self._fetch_task_criteria(cur, task_uuid, data.student_sub)
+                # Rubric criteria come from the helper (already filtered by RLS).
+                raw_criteria = list(meta[4] or [])
+                criteria = [str(entry).strip() for entry in raw_criteria if str(entry).strip()]
 
                 cur.execute(
                     "select public.next_attempt_nr(%s, %s, %s)",
@@ -564,18 +676,6 @@ class DBLearningRepo:
         if kind == "text":
             return f"Attempt {attempt}: Thanks for your explanation."
         return f"Attempt {attempt}: Image submission received."
-
-    def _fetch_task_criteria(self, cur, task_id: str, student_sub: str) -> Sequence[str]:
-        """Load rubric criteria for the task while keeping RLS context intact."""
-        self._set_current_sub(cur, student_sub)
-        cur.execute("select criteria from public.unit_tasks where id = %s", (task_id,))
-        row = cur.fetchone()
-        if not row:
-            return []
-        criteria = row[0] or []
-        if isinstance(criteria, list):
-            return [str(entry).strip() for entry in criteria if str(entry).strip()]
-        return []
 
     def _build_analysis_payload(
         self,

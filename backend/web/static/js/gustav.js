@@ -214,6 +214,11 @@ class Gustav {
     document.body.addEventListener('htmx:showMessage', (evt) => {
       this.showNotification(evt.detail.message, evt.detail.type || 'info');
     });
+    // Also support plain 'showMessage' events (e.g., via HX-Trigger)
+    document.body.addEventListener('showMessage', (evt) => {
+      const detail = evt.detail || {};
+      this.showNotification(detail.message || 'Aktion ausgeführt', detail.type || 'info');
+    });
   }
 
   /**

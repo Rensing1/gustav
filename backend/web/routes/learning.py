@@ -10,7 +10,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.learning.repo_db import DBLearningRepo
-from backend.learning.usecases.sections import ListSectionsInput, ListSectionsUseCase
+from .security import _is_same_origin
+from backend.learning.usecases.sections import (
+    ListSectionsInput,
+    ListSectionsUseCase,
+    ListUnitSectionsInput,
+    ListUnitSectionsUseCase,
+)
 from backend.learning.usecases.courses import (
     ListCoursesInput,
     ListCoursesUseCase,
@@ -64,88 +70,7 @@ def _require_student(request: Request):
     return user, None
 
 
-def _is_same_origin(request: Request) -> bool:
-    """CSRF defense-in-depth: verify same-origin via Origin or Referer.
-
-    Behavior:
-    - If `Origin` header is present, require exact match of scheme/host/port
-      vs. server origin (proxy-aware when `GUSTAV_TRUST_PROXY=true`).
-    - Else if `Referer` header is present, apply the same comparison using the
-      referer's origin (path is ignored).
-    - Else (no headers): allow to avoid breaking non-browser clients.
-    """
-    origin_val = request.headers.get("origin")
-    try:
-        from urllib.parse import urlparse
-        import os
-
-        def parse_origin(url: str) -> tuple[str, str, int]:
-            p = urlparse(url)
-            if not p.scheme or not p.hostname:
-                raise ValueError("invalid_origin")
-            scheme = p.scheme.lower()
-            host = p.hostname.lower()
-            port = p.port
-            if port is None:
-                port = 443 if scheme == "https" else 80
-            return scheme, host, int(port)
-
-        def parse_server(request: Request) -> tuple[str, str, int]:
-            """Resolve the server origin for CSRF checks.
-
-            Trust `X-Forwarded-*` only when explicitly enabled. Otherwise rely on
-            ASGI's URL/Host to avoid header spoofing when running without a proxy.
-            """
-            trust_proxy = (os.getenv("GUSTAV_TRUST_PROXY", "false") or "").lower() == "true"
-
-            if trust_proxy:
-                xf_proto_raw = request.headers.get("x-forwarded-proto") or request.url.scheme or ""
-                xf_host_raw = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-                xf_proto = xf_proto_raw.split(",")[0].strip()
-                xf_host = xf_host_raw.split(",")[0].strip()
-                scheme = (xf_proto or request.url.scheme or "http").lower()
-                # xf_host or host may include port
-                if ":" in xf_host:
-                    host_only, port_str = xf_host.rsplit(":", 1)
-                    try:
-                        port = int(port_str)
-                    except Exception:
-                        port = 443 if scheme == "https" else 80
-                    host = host_only.lower()
-                else:
-                    host = (xf_host or (request.url.hostname or "")).lower()
-                    port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-                xf_port_raw = request.headers.get("x-forwarded-port") or ""
-                if xf_port_raw:
-                    try:
-                        port = int(xf_port_raw.split(",")[0].strip())
-                    except Exception:
-                        port = 443 if scheme == "https" else 80
-                return scheme, host, port
-
-            # Not trusting proxy headers: derive strictly from ASGI request URL
-            # to avoid relying on potentially spoofed Host header values.
-            scheme = (request.url.scheme or "http").lower()
-            host = (request.url.hostname or "").lower()
-            port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-            return scheme, host, port
-
-        s_scheme, s_host, s_port = parse_server(request)
-
-        if origin_val:
-            o_scheme, o_host, o_port = parse_origin(origin_val)
-            return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
-
-        # Fallback: use Referer when Origin is missing (some browsers)
-        referer_val = request.headers.get("referer")
-        if referer_val:
-            r_scheme, r_host, r_port = parse_origin(referer_val)
-            return (r_scheme == s_scheme) and (r_host == s_host) and (r_port == s_port)
-
-        # No Origin/Referer -> allow non-browser clients
-        return True
-    except Exception:
-        return False
+"""CSRF helper imported from .security"""
 
 
 def _parse_include(value: str | None) -> tuple[bool, bool]:
@@ -164,6 +89,7 @@ def _parse_include(value: str | None) -> tuple[bool, bool]:
 
 REPO = DBLearningRepo()
 LIST_SECTIONS_USECASE = ListSectionsUseCase(REPO)
+LIST_UNIT_SECTIONS_USECASE = ListUnitSectionsUseCase(REPO)
 LIST_COURSES_USECASE = ListCoursesUseCase(REPO)
 LIST_COURSE_UNITS_USECASE = ListCourseUnitsUseCase(REPO)
 CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(REPO)
@@ -205,9 +131,10 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
 
 
 def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
-    global REPO, LIST_SECTIONS_USECASE, LIST_COURSES_USECASE, LIST_COURSE_UNITS_USECASE, CREATE_SUBMISSION_USECASE, LIST_SUBMISSIONS_USECASE
+    global REPO, LIST_SECTIONS_USECASE, LIST_UNIT_SECTIONS_USECASE, LIST_COURSES_USECASE, LIST_COURSE_UNITS_USECASE, CREATE_SUBMISSION_USECASE, LIST_SUBMISSIONS_USECASE
     REPO = repo
     LIST_SECTIONS_USECASE = ListSectionsUseCase(repo)
+    LIST_UNIT_SECTIONS_USECASE = ListUnitSectionsUseCase(repo)
     LIST_COURSES_USECASE = ListCoursesUseCase(repo)
     LIST_COURSE_UNITS_USECASE = ListCourseUnitsUseCase(repo)
     CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(repo)
@@ -265,7 +192,7 @@ async def list_sections(
 
 
 @learning_router.get("/api/learning/courses")
-async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
+async def list_my_courses(request: Request, limit: int = 50, offset: int = 0):
     """List courses for the current student (alphabetical, minimal fields).
 
     Why:
@@ -275,7 +202,7 @@ async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
 
     Parameters:
         request: FastAPI request carrying the authenticated user context.
-        limit: Page size clamp to 1..50 (default 20).
+        limit: Page size clamp to 1..100 (default 50).
         offset: Zero-based starting index (default 0).
 
     Behavior:
@@ -293,7 +220,7 @@ async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
     if error:
         return error
     items = LIST_COURSES_USECASE.execute(
-        ListCoursesInput(student_sub=str(user.get("sub", "")), limit=int(limit or 20), offset=int(offset or 0))
+        ListCoursesInput(student_sub=str(user.get("sub", "")), limit=int(limit or 50), offset=int(offset or 0))
     )
     return JSONResponse(items, headers=_cache_headers_success())
 
@@ -335,6 +262,62 @@ async def list_course_units(request: Request, course_id: str):
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
     return JSONResponse(rows, headers=_cache_headers_success())
+
+
+@learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/sections")
+async def list_unit_sections(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    include: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List released sections for a specific unit (student-only).
+
+    Why:
+        Unit-scoped endpoint aligns with the SSR unit page and avoids
+        client-side filtering. Returns 200 with an array that may be empty.
+
+    Permissions:
+        Caller must have the `student` role and be enrolled in the course.
+        The unit must belong to the course; otherwise respond with 404 to avoid
+        leaking existence details.
+    """
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    # Validate path params eagerly to align with contract detail=invalid_uuid
+    try:
+        UUID(course_id)
+        UUID(unit_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    try:
+        include_materials, include_tasks = _parse_include(include)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
+
+    input_data = ListUnitSectionsInput(
+        student_sub=str(user.get("sub", "")),
+        course_id=course_id,
+        unit_id=unit_id,
+        include_materials=include_materials,
+        include_tasks=include_tasks,
+        limit=limit,
+        offset=offset,
+    )
+    try:
+        sections = LIST_UNIT_SECTIONS_USECASE.execute(input_data)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    # 200 with possibly empty list
+    return JSONResponse(sections, headers=_cache_headers_success())
 
 
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -431,6 +414,14 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
             status_code=400,
             headers=_cache_headers_error(),
         )
+    if idempotency_key is not None:
+        import re as _re
+        if not _re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
+            return JSONResponse(
+                {"error": "bad_request", "detail": "invalid_input"},
+                status_code=400,
+                headers=_cache_headers_error(),
+            )
 
     try:
         kind, clean_payload = _validate_submission_payload(payload)

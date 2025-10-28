@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+ - BREAKING(api/openapi): LearningSectionCore now requires `unit_id`. Update clients accordingly; older clients must ignore unknown fields or update schema.
+ - security(openapi): Unify Cache-Control header descriptions to "Security — responses are private and not cacheable by shared caches." across Learning/Teaching endpoints.
+ - security(api/learning): POST submissions validates `Idempotency-Key` as ASCII token (`[A-Za-z0-9_-]{1,64}`); rejects invalid/too-long tokens with 400.
+ - consistency(web/ssr): Align SSR pagination clamp defaults to API (limit default 50, max 100).
+- security(api/teaching): Enforce same-origin (CSRF) for PATCH visibility endpoint; all responses include `Cache-Control: private, no-store`.
+- fix(api/teaching): Module section releases endpoint returns private, no-store cache headers for 400/403/404.
+- fix(ui/markdown): Headings rendered on student cards are emitted as block-level tags without wrapping `<p>` containers.
+ - fix(api/openapi): Add 401/403/404 to GET /api/learning/courses/{course_id}/units/{unit_id}/sections; remove misplaced response blocks; align Cache-Control wording.
+ - tests(contract): Add OpenAPI contract test for unit sections responses.
+ - tests(learning): Add 403 (not enrolled) and 400 invalid include tests for unit sections.
+ - security(db): Harden `get_released_sections_for_student_by_unit` search_path to `pg_catalog, public` (defense-in-depth).
+- security(db): Set OWNER to `gustav_limited` for all SECURITY DEFINER learning helpers
+  (`next_attempt_nr`, `check_task_visible_to_student`, section/material/task helpers,
+  `get_task_metadata_for_student`) and remove owner-swallowing DO block.
+- security(container): Run web image as non-root user `app` (UID 10001).
+- docs(env): Clarify Supabase Service Role key is server-only and must never be exposed to clients.
+ - docs/openapi: Align /api/learning/courses pagination defaults (limit default 50, max 100) with other Learning endpoints.
+ - docs(openapi): Declare `include` query as CSV (`style: form`, `explode: false`) for Learning sections endpoints.
+ - api(teaching): Mark module section releases listing as owner-only via `x-permissions.ownerOnly=true`.
 - security(db): Make `public.get_course_units_for_student` SECURITY DEFINER owned by `gustav_limited` to avoid BYPASSRLS escalation; keep EXECUTE grant.
 - fix(db/repo): Remove duplicate `set_config('app.current_sub')` call in units listing query.
  - tests(learning): Add Cache-Control success header checks for courses and units (private, no-store).
@@ -79,14 +98,14 @@
  - fix(api/middleware): 401 `Cache-Control` aligned with contracts — Learning: `private, max-age=0`; other APIs remain `no-store`.
 - build(test): Remove import hack in `routes/learning.py`; tests now add repo root to `sys.path`.
 - tests(learning): Assert 401 cache headers; add non‑member submission test coverage.
-- fix(api/learning): Enforce `Idempotency-Key` maxLength=64 with 400 `invalid_input` and `Cache-Control: private, max-age=0`.
+- fix(api/learning): Enforce `Idempotency-Key` maxLength=64 with 400 `invalid_input` and `Cache-Control: private, no-store`.
 - fix(api/learning): Guarantee `section.position` is an integer ≥ 1 in responses (fallback to 1 when NULL).
 - fix(db/learning): Handle idempotent insert races by catching unique violations and returning the existing row.
 - security(db/learning): Restrict default limited DSN to non-prod; prod requires explicit DSN env var.
 - docs(openapi): Add `Cache-Control` headers to 400/401/403/404 for Learning sections/submissions endpoints.
 - build(docker): Include `backend/teaching` in production image to satisfy imports.
  - fix(api/learning): Enforce image MIME whitelist (image/jpeg, image/png) and sanitize storage_key via regex; new contract tests.
- - consistency(api/learning): 400 invalid path params now use detail=invalid_uuid; 400 responses include Cache-Control: private, max-age=0.
+ - consistency(api/learning): 400 invalid path params now use detail=invalid_uuid; 400 responses include Cache-Control: private, no-store.
  - tests(learning): Add tests for MIME whitelist, storage_key pattern, and invalid_uuid detail + cache header.
 - security(db/learning): Harden `get_released_tasks_for_student` via new migration so unreleased sections leak no tasks; contract test added.
 - fix(api/openapi): Align Learning contract with implemented endpoints (remove upload-intents, document storage metadata for image submissions).
@@ -157,6 +176,10 @@
  - fix(api/teaching): DELETE /tasks returns 204 without body (HTTP semantics).
  - feat(teaching): Accept `due_at` with trailing 'Z' (UTC) in TasksService.
  - tests(teaching): Add invalid-UUID path tests and Zulu due_at acceptance.
+
+- feat(teaching/ui): Abschnittsfreigaben (Owner) — SSR‑UI mit Schalter „Freigegeben“, Zeitstempel „Freigegeben am …“, und kurzer Erfolgsmeldung nach Toggle.
+- feat(teaching/api): `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` speichert sofort (UPSERT) mit `released_by`/`released_at` (RLS‑gesichert).
+- feat(learning/api+ui): `GET /api/learning/courses/{course_id}/units/{unit_id}/sections` (private, no‑store). Schüler‑Unit‑Seite rendert freigegebene Abschnitte ohne Titel, getrennt durch `<hr>`.
 
 ## 2025-10-20
 - Teaching (Unterrichten) — Kursmanagement (MVP)

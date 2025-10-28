@@ -24,6 +24,10 @@ COPY backend/__init__.py ./backend/__init__.py
 
 ENV PYTHONPATH=/app:/app/backend
 
+# Security: run as non-root user (least privilege)
+RUN useradd -m -u 10001 app && chown -R app:app /app
+USER app
+
 # Port freigeben
 EXPOSE 8000
 

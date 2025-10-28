@@ -44,14 +44,8 @@ as $$
         end;
 $$;
 
-do $$
-begin
-  begin
-    alter function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer) owner to gustav_limited;
-  exception when insufficient_privilege then
-    -- Local/dev environments may run migrations without membership in the target role.
-    -- In that case, keep the current owner and rely on EXECUTE privilege below.
-    null;
-  end;
-end $$;
-grant execute on function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer) to gustav_limited;
+-- Ensure SECURITY DEFINER function ownership is set to the limited role
+alter function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer)
+  owner to gustav_limited;
+grant execute on function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer)
+  to gustav_limited;

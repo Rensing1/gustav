@@ -1794,12 +1794,23 @@ class DBTeachingRepo:
         }
 
     def reorder_course_modules_owned(self, course_id: str, owner_sub: str, module_ids: List[str]) -> List[dict]:
-        """
-        Reorder modules for a course owned by `owner_sub`.
+        """Reorder modules for a course owned by `owner_sub`.
+
+        Why:
+            Persist the new order without relying on deferrable constraints so
+            deployments that missed the deferrable migration still behave
+            correctly.
 
         Behavior:
             - Validates the requested set matches the course modules exactly.
-            - Uses a two-phase update (offset then final order) to avoid unique(position) conflicts.
+            - Two-phase update inside a single transaction to preserve uniqueness:
+              (1) Temporarily bump all positions in the course by N to avoid collisions.
+              (2) Assign final contiguous positions 1..N in the requested order.
+
+        Permissions:
+            RLS enforced via `set_config('app.current_sub', owner_sub, true)`.
+            Caller must be the course owner; otherwise, RLS hides rows and
+            validation fails appropriately.
         """
         if not module_ids:
             raise ValueError("empty_reorder")
@@ -1842,7 +1853,14 @@ class DBTeachingRepo:
                         if count:
                             raise LookupError("module_not_found")
                     raise ValueError("module_mismatch")
-                cur.execute("set constraints course_modules_course_id_position_key deferred")
+                # Phase 1: bump all positions in the target course by N to avoid
+                # temporary uniqueness collisions on (course_id, position).
+                bump = len(module_ids)
+                cur.execute(
+                    "update public.course_modules set position = position + %s where course_id = %s",
+                    (bump, course_id),
+                )
+                # Phase 2: assign final positions 1..N in requested order.
                 orderings = list(range(1, len(module_ids) + 1))
                 cur.execute(
                     """
@@ -2045,6 +2063,61 @@ class DBTeachingRepo:
             "released_at": _iso(result[3]) if result[3] is not None else None,
             "released_by": result[4],
         }
+
+    def list_module_section_releases_owned(self, course_id: str, module_id: str, owner_sub: str) -> list[dict]:
+        """List release records for sections within a course module owned by `owner_sub`.
+
+        Security:
+            - Sets `app.current_sub` to the owner for RLS.
+            - Verifies that the module belongs to the given course and that the
+              course is owned by `owner_sub`.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                # Verify ownership by joining courses
+                cur.execute(
+                    """
+                    select m.id::text
+                      from public.course_modules m
+                      join public.courses c on c.id = m.course_id
+                     where m.id = %s
+                       and m.course_id = %s
+                       and c.teacher_id = coalesce(current_setting('app.current_sub', true), '')
+                    """,
+                    (module_id, course_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise LookupError("module_not_found")
+
+                # Fetch release rows for the module
+                cur.execute(
+                    """
+                    select course_module_id::text,
+                           section_id::text,
+                           visible,
+                           to_char(released_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           released_by
+                      from public.module_section_releases
+                     where course_module_id = %s
+                     order by section_id asc
+                    """,
+                    (module_id,),
+                )
+                rows = cur.fetchall()
+        result: list[dict] = []
+        for r in rows:
+            result.append(
+                {
+                    "course_module_id": r[0],
+                    "section_id": r[1],
+                    "visible": bool(r[2]),
+                    "released_at": _iso(r[3]) if r[3] is not None else None,
+                    "released_by": r[4],
+                }
+            )
+        return result
 
     # --- Owner-scoped helpers (RLS-friendly) ------------------------------------
     def get_course_for_owner(self, course_id: str, owner_sub: str) -> Optional[dict]:

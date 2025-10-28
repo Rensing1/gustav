@@ -304,6 +304,30 @@ async def test_sections_returns_released_items_for_enrolled_student():
 
 
 @pytest.mark.anyio
+async def test_sections_includes_unit_id_in_section_core():
+    """Course-level sections response must include section.unit_id (contract)."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/sections",
+            params={"limit": 50, "offset": 0},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    section_entry = payload[0]
+    assert "section" in section_entry
+    sec = section_entry["section"]
+    assert isinstance(sec.get("unit_id"), str)
+    assert sec["unit_id"] == fixture.unit_id
+
+
+@pytest.mark.anyio
 async def test_sections_forbidden_for_non_member():
     """Students without membership must receive 403 when accessing sections."""
 
@@ -395,6 +419,24 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         )
         assert resp3.status_code == 400
         assert resp3.json().get("detail") == "max_attempts_exceeded"
+
+
+@pytest.mark.anyio
+async def test_create_submission_uses_teacher_defined_criteria_names():
+    """Rubric scores should expose the criteria defined by the teacher."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "Lineare Funktionen analysiert"},
+        )
+
+    assert response.status_code == 201
+    scores = response.json()["analysis_json"]["scores"]
+    assert [score["criterion"] for score in scores][:2] == ["Graph korrekt", "Steigung erläutert"]
 
 
 @pytest.mark.anyio

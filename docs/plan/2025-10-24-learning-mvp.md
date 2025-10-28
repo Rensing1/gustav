@@ -173,7 +173,7 @@ Weitere Indizes & Felder:
 - Presigned URLs: kurze TTL (2–5 Min.), `disposition=inline|attachment`, strikte MIME‑Whitelist; keine PII in Query‑Parametern.
 - Dateien: Bilder `image/jpeg|png`, max. 10 MB; SHA‑256 wird bei Finalize überprüft.
 - Markdown‑Sanitizing: `body_md`/`feedback_md` werden sicher zu HTML gerendert (keine unsichere Inline‑HTML‑Übernahme; Sanitizer aktiv), um XSS zu verhindern.
-- HTTP‑Header (Learning‑API/Frontend): `Cache-Control: private, max-age=0`, `Referrer-Policy: no-referrer`; CSP im Frontend strikt (`img-src`/`frame-src` nur eigene Domains/Storage‑Domain, `object-src 'none'`).
+- HTTP‑Header (Learning‑API/Frontend): `Cache-Control: private, no-store`, `Referrer-Policy: no-referrer`; CSP im Frontend strikt (`img-src`/`frame-src` nur eigene Domains/Storage‑Domain, `object-src 'none'`).
 - Logging: Presigned‑URL‑Querystrings werden nicht geloggt.
 
 ## Tests (TDD‑Plan)

@@ -91,10 +91,11 @@ def _kc_set_password_policy(policy: str) -> None:
 
 
 def test_register_invalid_shows_error():
-    # Ensure password policy is known and relaxed (no special char required)
-    _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
+    # Wait for IdP and web app to be ready before using Admin API
     _wait_for(f"{KC_BASE}/realms/{REALM}/.well-known/openid-configuration")
     _wait_for(f"{WEB_BASE}/health")
+    # Ensure password policy is known and relaxed (no special char required)
+    _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
 
     sess = requests.Session()
     # Go to our login page and follow redirects to IdP
@@ -129,10 +130,11 @@ def test_register_invalid_shows_error():
 
 
 def test_register_invalid_email_and_weak_password_show_error():
-    # Ensure password policy is known and relaxed
-    _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
+    # Wait for IdP and web app to be ready before using Admin API
     _wait_for(f"{KC_BASE}/realms/{REALM}/.well-known/openid-configuration")
     _wait_for(f"{WEB_BASE}/health")
+    # Ensure password policy is known and relaxed
+    _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
 
     sess = requests.Session()
     r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=20)
@@ -177,9 +179,10 @@ def test_register_invalid_email_and_weak_password_show_error():
 
 
 def test_register_password_mismatch_and_duplicate_email():
-    _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
+    # Wait for IdP and web app to be ready before using Admin API
     _wait_for(f"{KC_BASE}/realms/{REALM}/.well-known/openid-configuration")
     _wait_for(f"{WEB_BASE}/health")
+    _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
 
     sess = requests.Session()
     r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=20)

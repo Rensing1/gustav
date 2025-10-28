@@ -38,6 +38,8 @@ begin
 end;
 $$;
 
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
+
 drop function if exists public.check_task_visible_to_student(text, uuid, uuid);
 create or replace function public.check_task_visible_to_student(p_student_sub text, p_course_id uuid, p_task_id uuid)
 returns boolean
@@ -57,6 +59,8 @@ as $$
        and coalesce(r.visible, false) = true
   );
 $$;
+
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 grant execute on function public.hash_course_task_student(uuid, uuid, text) to gustav_limited;
 grant execute on function public.next_attempt_nr(uuid, uuid, text) to gustav_limited;
@@ -101,6 +105,8 @@ as $$
           else p_limit
         end;
 $$;
+
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 drop function if exists public.get_released_materials_for_student(text, uuid, uuid);
 create or replace function public.get_released_materials_for_student(
@@ -152,6 +158,8 @@ as $$
   order by m.position, m.id;
 $$;
 
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
+
 drop function if exists public.get_released_tasks_for_student(text, uuid, uuid);
 create or replace function public.get_released_tasks_for_student(
   p_student_sub text,
@@ -197,6 +205,8 @@ as $$
     and cm.student_id = p_student_sub
   order by t.position, t.id;
 $$;
+
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 drop function if exists public.get_task_metadata_for_student(text, uuid, uuid);
 create or replace function public.get_task_metadata_for_student(

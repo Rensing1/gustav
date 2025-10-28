@@ -139,3 +139,93 @@ Schrittweise Migration der produktiven Daten aus der Legacy-Supabase in das neue
 - Prüfen, ob Legacy-Storage erreichbar ist, um echte Datei-Metadaten zu generieren.
 - Definieren, wie `solution_data`-Einreichungen mit komplexen Strukturen (z. B. mehrere Anhänge) in Alpha2 abgebildet werden sollen.
 - Skripte modular implementieren (z. B. Python + SQL) und lokal gegen Test-DB validieren, bevor sie auf Produktionsdaten laufen.
+
+## Review / Analyse (Kurzreport)
+
+Dieser Abschnitt fasst den Migrationsansatz zusammen, benennt Risiken/Fehlerquellen und listet Daten auf, die voraussichtlich nicht oder nur degradiert migrierbar sind. Er dient als Referenz für Dry-Run, Audit und Go/No‑Go‑Entscheidungen.
+
+### 1) Wie funktioniert die Migration (Ablauf)
+- Identitäten mappen
+  - Legacy‑User werden in Keycloak übernommen; eine Mapping‑Tabelle `legacy_user_map(legacy_id, sub)` ordnet Legacy‑UUID → OIDC `sub` zu (Service‑/Postgres‑Role für Bulk, Zeiten in UTC).
+- Kurse und Mitgliedschaften
+  - `course` → `public.courses` (Owner via `creator_id` → `teacher_id`).
+  - `course_student` → `public.course_memberships`; `course_teacher` wird verworfen (nur Log/Audit).
+- Lerneinheiten und Module
+  - `learning_unit` → `public.units` (description → summary; author über Mapping).
+  - `course_learning_unit_assignment` → `public.course_modules` mit Positionen 1..n je Kurs.
+- Abschnitte und Freigaben
+  - `unit_section` → `public.unit_sections` (order_in_unit → position).
+  - `course_unit_section_status` → `public.module_section_releases` (nur veröffentlichte; `released_at` übernehmen, `released_by` setzen bzw. Fallback `'system'`).
+- Materialien
+  - Pro Abschnitt Legacy‑JSON transformieren: Markdown → `unit_materials(kind='markdown')`.
+  - Dateien: wenn Storage zugreifbar → Download, `size_bytes` und `sha256` berechnen, `kind='file'`; sonst als Markdown‑Link importieren (Constraint‑sicher).
+- Aufgaben
+  - `task_base` + `regular_tasks` → `public.unit_tasks` (instruction → `instruction_md`, criteria(JSON) → `text[]`, hints, `max_attempts`, `position`).
+  - `unit_id` wird aus Abschnitt erzwungen (Trigger/Checks), Positionen je Section.
+- Einreichungen
+  - `submission` → `public.learning_submissions`: Text → `kind='text', text_body`; Bild → `kind='image'` mit Storage‑Metadaten/Hash.
+  - `course_id` deterministisch ableiten über Mitgliedschaft, Modul, Release und Zeitpunkte; bei Ambiguität/Fehler Skip + Audit.
+  - `attempt_nr` pro `(course_id, task_id, student_sub)` aus Historie ableiten (bzw. Helper nutzen).
+- Betrieb/Runbook
+  - Batchweise (1–5k), idempotent (ON CONFLICT), optionale DEFERRABLE‑Constraints bei Reorder, Dry‑Run + Audit‑Zählungen, PII‑Masking.
+
+Relevante Migrationsdateien (Beispiele):
+- Materialien/Dateien: `supabase/migrations/20251022093725_teaching_materials_file_support.sql`, `supabase/migrations/20251022112541_strengthen_sha256_check.sql`
+- Abschnitte/Freigaben: `supabase/migrations/20251022135746_teaching_module_section_releases.sql`, `supabase/migrations/20251022145331_teaching_module_section_releases_released_by_not_null.sql`
+- Aufgaben: `supabase/migrations/20251023061402_teaching_unit_tasks.sql`
+- Einreichungen: `supabase/migrations/20251023093409_learning_submissions.sql`, `supabase/migrations/20251023120751_learning_submissions_constraints.sql`, Helper `supabase/migrations/20251023093417_learning_helpers.sql`
+
+### 2) Mögliche Probleme / Risiken
+- Identitäts‑Mapping
+  - Fehlende/mehrdeutige User‑Zuordnung (Legacy‑ID ohne neues `sub`) verhindert Owner‑Felder und verursacht FK/RLS‑Konflikte.
+- Strenge Constraints im neuen Schema
+  - `unit_materials(kind='file')` verlangt vollständige Metadaten und hex‑`sha256` per Regex; ohne Storage‑Zugriff schlägt Insert fehl → Fallback als Markdown‑Link notwendig.
+  - `unit_tasks` erzwingt konsistentes `(unit_id, section_id)` und eindeutige Positionen je Section (DEFERRABLE). Doppelte/fehlerhafte Positionswerte aus Legacy erfordern Re‑Sequenzierung.
+  - `module_section_releases.released_by` ist NOT NULL; fehlende Historie erfordert Fallback `'system'`.
+  - `learning_submissions`: `kind`‑spezifische Exklusivität; Bilder nur JPEG/PNG, positive Größe, `sha256` Regex. Andere Formate (HEIC/GIF/WebP) oder fehlende Hashes → Verstoß.
+- Kursableitung für Submissions
+  - Mehrdeutige Zuordnung bei mehreren Kursen mit derselben Unit; es braucht den Resolver (Release‑Zeitpunkt bevorzugen). Fehlen Zeitstempel/Release‑Daten → Skip.
+- Orphans/Referenzen
+  - Legacy‑Datensätze mit fehlenden Eltern (z. B. Task ohne Section) → FK‑Verletzung → Skip mit Audit.
+- RLS/DSN
+  - Import mit Limited‑Role triggert RLS und bricht Bulk/Idempotenz; Bulk‑Imports mit Service‑Role durchführen.
+- Performance/Idempotenz
+  - Einzel‑Inserts/ohne Upsert sind langsam/anfällig; Batching/COPY und ON CONFLICT nutzen.
+- Zeit/Zeitzonen
+  - Nicht‑normalisierte Zeiten verfälschen Kursableitung (Release‑Timing); alles in UTC normalisieren.
+- Datenqualität
+  - `criteria`: Leereinträge/mehr als 10 → Check‑Verstöße; vor Insert trimmen, deduplizieren, cap 10.
+
+### 3) Nicht oder nur degradiert migrierbare Daten
+- Mastery & verwandte Tabellen
+  - `mastery_tasks`, `student_mastery_progress`, `mastery_log`, `user_model_weights` werden nicht migriert (bewusste Entscheidung).
+- Submission‑Queue‑Artefakte
+  - Alte Queue‑Felder (Status/Retry) werden verworfen; nur Inhalt/Feedback, falls vorhanden, bleibt.
+- Mehrfach‑Lehrer‑Zuordnungen
+  - `course_teacher` entfällt; nur Primär‑Owner (Legacy `creator_id`).
+- Unauflösbare Identitäten/Kontexte
+  - Datensätze ohne eindeutiges Mapping (Owner/Student), ohne referenzierbare Eltern (Unit/Section/Task) oder ohne eindeutige Kursableitung bei Submissions → Skip + Audit.
+- Datei‑Blobs ohne Zugriff
+  - Materialien/Einreichungen ohne erreichbare Blobs oder ohne Hash/Größe: Materialien als Markdown‑Link (Fallback) oder Submissions (Bild) → Skip.
+- Komplexe `solution_data`
+  - Mehrere Anhänge/komplexe Strukturen passen nicht in `kind in ('text','image')` → Konvertierung oder Ausschluss nötig.
+- Bildformate jenseits JPEG/PNG
+  - Nicht erlaubte Formate sind schema‑inkompatibel → Konvertierung oder Ausschluss.
+- Freigabe‑Historie
+  - Feine Verlaufsdaten aus Legacy werden zu Zustand + `released_at` verdichtet; detaillierte Historie geht verloren.
+
+### Empfehlungen / Checkliste für den Dry‑Run
+- Staging & Dry‑Run
+  - Zuerst Staging‑Tabellen und `--dry-run` mit Zählungen; Audit‑Struktur verwenden (`import_audit_runs`, `import_audit_mappings`).
+- Deterministischer Resolver
+  - `submission.course_id` strikt gemäß Plan implementieren; Ambiguitäten/Fehler mit Codes (`ambiguous_course`, `missing_course`) auditieren.
+- Datei‑Strategie
+  - Erreichbarkeit des Legacy‑Storage früh klären. Materialien ohne Zugriff als Markdown‑Link; Submissions (Bild) ohne Metadaten skippen; `blob_missing` auditieren.
+- Normalisierung vor Inserts
+  - `criteria` cleanup (trim, dedupe, max 10), Titel/Text normalisieren, Positionswerte je Section/Modul resequenzieren, Zeiten auf UTC.
+- Rollen & Transaktionen
+  - Service‑Role für Bulk, Batches à 1–5k, DEFERRABLE nur gezielt DEFERRED setzen, danach `ANALYZE`.
+- PII/Logging
+  - PII in Logs maskieren; vollständige PII nur in Audit‑Tabellen mit Service‑Role‑Zugriff.
+
+Hinweis: Diese Analyse spiegelt den Stand der Migrationen unter `supabase/migrations/` und der Referenzdokumente unter `docs/references/*` wider und sollte bei Schema‑Änderungen aktualisiert werden.

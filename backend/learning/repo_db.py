@@ -185,7 +185,6 @@ class DBLearningRepo:
         course_uuid = str(UUID(course_id))
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
-                self._set_current_sub(cur, student_sub)
                 cur.execute(
                     "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
                     (course_uuid, student_sub),
@@ -346,7 +345,6 @@ class DBLearningRepo:
                     raise PermissionError("not_course_member")
 
                 # Verify that the unit belongs to the course from the student's perspective
-                self._set_current_sub(cur, student_sub)
                 cur.execute(
                     """
                     select exists (
@@ -361,7 +359,6 @@ class DBLearningRepo:
                     raise LookupError("unit_not_in_course")
 
                 # Fetch released sections for the unit (may be empty)
-                self._set_current_sub(cur, student_sub)
                 cur.execute(
                     """
                     select section_id::text,

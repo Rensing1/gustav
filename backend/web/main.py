@@ -192,6 +192,9 @@ async def security_headers(request: Request, call_next):
     # Support Origin/Referer fallback in CSRF checks without leaking cross-site
     # paths: strict-origin-when-cross-origin.
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # Opt-in to stronger document isolation; mitigates certain cross-origin leaks.
+    if SETTINGS.environment == "prod":
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     if SETTINGS.environment == "prod":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -244,15 +247,19 @@ def _validate_csrf(session_id: Optional[str], form_value: Optional[str]) -> bool
     return hmac.compare_digest(expected, str(form_value))
 
 def _clamp_pagination(limit_raw: str | None, offset_raw: str | None) -> tuple[int, int]:
+    """Clamp pagination for SSR views to align with Learning API defaults.
+
+    Defaults to limit=50, offset=0; clamps limit to 1..100 and offset to >= 0.
+    """
     try:
-        limit = int(limit_raw) if limit_raw is not None else 20
+        limit = int(limit_raw) if limit_raw is not None else 50
     except (ValueError, TypeError):
-        limit = 20
+        limit = 50
     try:
         offset = int(offset_raw) if offset_raw is not None else 0
     except (ValueError, TypeError):
         offset = 0
-    return max(1, min(50, limit)), max(0, offset)
+    return max(1, min(100, limit)), max(0, offset)
 
 def _is_uuid_like(value: str) -> bool:
     """Best-effort check whether a string is UUID-like.

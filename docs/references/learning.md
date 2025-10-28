@@ -47,6 +47,7 @@ Fehlercodes (Beispiele):
 - Helper-Funktionen: `supabase/migrations/20251023093417_learning_helpers.sql`
   - `hash_course_task_student`, `next_attempt_nr`, `check_task_visible_to_student`
   - `get_released_sections/materials/tasks_for_student`, `get_task_metadata_for_student`
+    (liefert seit 2025-10-28 zusätzlich `criteria text[]` für Rubrik-Anzeigen)
 - RLS-Policies: `supabase/migrations/20251023093421_learning_rls_policies.sql`
   - SELECT limitiert auf eigene `student_sub`; INSERT prüft Sichtbarkeit via `check_task_visible_to_student`
 - Hardening-Fix: `supabase/migrations/20251023111657_learning_tasks_rls_fix.sql`

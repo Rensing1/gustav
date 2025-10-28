@@ -104,3 +104,11 @@ Bezüge zu Unterrichten (bestehende Tabellen):
   - Bei keiner Freigabe zeigt die Seite einen neutralen Hinweis.
 - Datenquelle: der obige Unit‑Sections‑Endpoint mit `include=materials,tasks`.
 - Sicherheit: Seite setzt `Cache-Control: private, no-store`.
+
+## Schüler‑UI: Kursansicht (Units‑Liste)
+- Route: `/learning/courses/{course_id}` (SSR)
+- Darstellung:
+  - Listet alle Lerneinheiten des Kurses mit Position als Badge.
+  - Jeder Eintrag verlinkt auf `/learning/courses/{course_id}/units/{unit_id}`.
+  - Kein Bearbeiten/Sortieren (read‑only für Schüler).
+- Sicherheit: Seite setzt `Cache-Control: private, no-store`.

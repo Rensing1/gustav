@@ -44,8 +44,19 @@ as $$
         end;
 $$;
 
--- Ensure SECURITY DEFINER function ownership is set to the limited role
-alter function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer)
-  owner to gustav_limited;
-grant execute on function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer)
-  to gustav_limited;
+-- Ensure SECURITY DEFINER function ownership is set to the limited role (best-effort)
+do $$
+begin
+  begin
+    alter function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer)
+      owner to gustav_limited;
+  exception when insufficient_privilege then
+    raise notice 'Skipping owner change for get_released_sections_for_student_by_unit: insufficient privileges';
+  end;
+  begin
+    grant execute on function public.get_released_sections_for_student_by_unit(text, uuid, uuid, integer, integer)
+      to gustav_limited;
+  exception when others then
+    raise notice 'Grant execute failed for get_released_sections_for_student_by_unit: %', sqlerrm;
+  end;
+end $$;

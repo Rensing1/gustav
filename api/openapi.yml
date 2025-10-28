@@ -600,7 +600,7 @@ components:
           description: Desired order (1..n) of course_module IDs for the given course
     LearningSectionCore:
       type: object
-      required: [id, title, position]
+      required: [id, title, position, unit_id]
       properties:
         id:
           type: string
@@ -929,6 +929,8 @@ paths:
             format: uuid
         - in: query
           name: include
+          style: form
+          explode: false
           schema:
             type: string
             pattern: '^(materials|tasks)(,(materials|tasks))*$'
@@ -1125,6 +1127,8 @@ paths:
             format: uuid
         - in: query
           name: include
+          style: form
+          explode: false
           schema:
             type: string
             pattern: '^(materials|tasks)(,(materials|tasks))*$'
@@ -1218,6 +1222,7 @@ paths:
         - cookieAuth: []
       x-permissions:
         requiredRole: teacher
+        ownerOnly: true
       parameters:
         - in: path
           name: course_id

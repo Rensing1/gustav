@@ -74,6 +74,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - 400 mit `detail`: `invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type`
   - 403 wenn nicht Owner oder bei CSRF‑Verletzung (`detail=csrf_violation`); 404 wenn Abschnitt nicht zum Modul gehört
   - Cache: `Cache-Control: private, no-store`
+  - Fehlerantworten (400/403/404) senden ebenfalls `Cache-Control: private, no-store`.
 
 #### Abschnittsfreigaben (Owner) — SSR‑UI
 - Navigation: Modulliste → Button „Abschnitte freigeben“ → `/courses/{course_id}/modules/{module_id}/sections`.

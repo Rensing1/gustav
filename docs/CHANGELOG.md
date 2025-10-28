@@ -2,7 +2,9 @@
 
 ## Unreleased
  - BREAKING(api/openapi): LearningSectionCore now requires `unit_id`. Update clients accordingly; older clients must ignore unknown fields or update schema.
- - security(api/teaching): Enforce same-origin (CSRF) for PATCH visibility endpoint; all responses include `Cache-Control: private, no-store`.
+- security(api/teaching): Enforce same-origin (CSRF) for PATCH visibility endpoint; all responses include `Cache-Control: private, no-store`.
+- fix(api/teaching): Module section releases endpoint returns private, no-store cache headers for 400/403/404.
+- fix(ui/markdown): Headings rendered on student cards are emitted as block-level tags without wrapping `<p>` containers.
  - fix(api/openapi): Add 401/403/404 to GET /api/learning/courses/{course_id}/units/{unit_id}/sections; remove misplaced response blocks; align Cache-Control wording.
  - tests(contract): Add OpenAPI contract test for unit sections responses.
  - tests(learning): Add 403 (not enrolled) and 400 invalid include tests for unit sections.

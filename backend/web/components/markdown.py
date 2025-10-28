@@ -58,10 +58,14 @@ def render_markdown_safe(src: str) -> str:
     # Split into paragraphs on blank lines
     paragraphs = [p for p in re.split(r"\n\s*\n", with_headings) if p.strip()]
     rendered_parts: list[str] = []
-    for p in paragraphs:
+    for chunk in paragraphs:
+        stripped = chunk.strip()
+        if re.fullmatch(r"<h[1-6]>.*</h[1-6]>", stripped):
+            # Heading already rendered as block-level tag
+            rendered_parts.append(stripped)
+            continue
         # Convert single newlines to <br>
-        p = p.replace("\n", "<br>")
-        rendered_parts.append(f"<p>{_render_inline(p)}</p>")
+        chunk = chunk.replace("\n", "<br>")
+        rendered_parts.append(f"<p>{_render_inline(chunk)}</p>")
 
     return "".join(rendered_parts)
-

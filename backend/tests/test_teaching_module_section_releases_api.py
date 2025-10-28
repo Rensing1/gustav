@@ -97,6 +97,7 @@ async def test_list_releases_owner_only_and_cache_header():
         c.cookies.set("gustav_session", other.session_id)
         r_forbidden = await c.get(_releases_path(course_id, module["id"]))
         assert r_forbidden.status_code == 403
+        assert r_forbidden.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -107,4 +108,4 @@ async def test_list_releases_invalid_uuids():
         c.cookies.set("gustav_session", teacher.session_id)
         r = await c.get("/api/teaching/courses/not-a-uuid/modules/not-a-uuid/sections/releases")
         assert r.status_code == 400
-
+        assert r.headers.get("Cache-Control") == "private, no-store"

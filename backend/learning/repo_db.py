@@ -185,6 +185,8 @@ class DBLearningRepo:
         course_uuid = str(UUID(course_id))
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
+                # RLS: set caller identity for membership check and all subsequent helpers
+                self._set_current_sub(cur, student_sub)
                 cur.execute(
                     "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
                     (course_uuid, student_sub),

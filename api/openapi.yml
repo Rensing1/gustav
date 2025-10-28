@@ -1456,7 +1456,7 @@ paths:
             type: string
             maxLength: 64
             pattern: '^[A-Za-z0-9_-]{1,64}$'
-          description: Optional idempotency token to de-duplicate retries (ASCII token: letters, digits, underscore, hyphen; case-sensitive).
+          description: "Optional idempotency token to de-duplicate retries (ASCII token: letters, digits, underscore, hyphen; case-sensitive)."
       requestBody:
         required: true
         content:

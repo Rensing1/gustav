@@ -151,3 +151,57 @@ async def test_unit_sections_invalid_uuid_uses_contract_detail_and_cache_header(
     assert body.get("detail") == "invalid_uuid"
     assert r.headers.get("Cache-Control") == "private, no-store"
 
+
+@pytest.mark.anyio
+async def test_unit_sections_403_when_student_not_member():
+    """403 when caller is not enrolled in the course."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-unit-403", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    stranger = main.SESSION_STORE.create(sub="s-unit-403", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        # Prepare course/unit/section and release it but do not enroll the student
+        c.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(c, "Kurs 403")
+        unit = await _create_unit(c, "Unit 403")
+        section = await _create_section(c, unit["id"], "Abschnitt 403")
+        module = await _attach_unit(c, course_id, unit["id"])
+        await c.patch(_visibility_path(course_id, module["id"], section["id"]), json={"visible": True})
+
+        # Non-member student tries to list
+        c.cookies.set("gustav_session", stranger.session_id)
+        r = await c.get(
+            f"/api/learning/courses/{course_id}/units/{unit['id']}/sections",
+            params={"include": "materials,tasks", "limit": 10, "offset": 0},
+        )
+        assert r.status_code == 403
+        assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_unit_sections_400_on_invalid_include_param():
+    """400 when include contains unsupported tokens."""
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-unit-inc", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(
+            "/api/learning/courses/11111111-1111-1111-1111-111111111111/units/22222222-2222-2222-2222-222222222222/sections",
+            params={"include": "materials,comments"},
+        )
+    assert r.status_code == 400
+    body = r.json()
+    assert body.get("detail") == "invalid_include"
+    assert r.headers.get("Cache-Control") == "private, no-store"

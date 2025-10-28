@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+ - fix(api/openapi): Add 401/403/404 to GET /api/learning/courses/{course_id}/units/{unit_id}/sections; remove misplaced response blocks; align Cache-Control wording.
+ - tests(contract): Add OpenAPI contract test for unit sections responses.
+ - tests(learning): Add 403 (not enrolled) and 400 invalid include tests for unit sections.
+ - security(db): Harden `get_released_sections_for_student_by_unit` search_path to `pg_catalog, public` (defense-in-depth).
 - security(db): Set OWNER to `gustav_limited` for all SECURITY DEFINER learning helpers
   (`next_attempt_nr`, `check_task_visible_to_student`, section/material/task helpers,
   `get_task_metadata_for_student`) and remove owner-swallowing DO block.

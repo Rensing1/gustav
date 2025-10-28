@@ -24,6 +24,9 @@ begin
 end;
 $$;
 
+-- Ensure SECURITY DEFINER helpers are owned by limited role
+alter function public.next_attempt_nr(uuid, uuid, text) owner to gustav_limited;
+
 -- check_task_visible_to_student with hardened search_path
 create or replace function public.check_task_visible_to_student(p_student_sub text, p_course_id uuid, p_task_id uuid)
 returns boolean
@@ -44,6 +47,8 @@ as $$
        and coalesce(r.visible, false) = true
   );
 $$;
+
+alter function public.check_task_visible_to_student(text, uuid, uuid) owner to gustav_limited;
 
 -- get_released_sections_for_student with hardened search_path
 create or replace function public.get_released_sections_for_student(
@@ -85,6 +90,8 @@ as $$
           else p_limit
         end;
 $$;
+
+alter function public.get_released_sections_for_student(text, uuid, integer, integer) owner to gustav_limited;
 
 -- get_released_materials_for_student with hardened search_path
 create or replace function public.get_released_materials_for_student(
@@ -137,6 +144,8 @@ as $$
   order by m.position, m.id;
 $$;
 
+alter function public.get_released_materials_for_student(text, uuid, uuid) owner to gustav_limited;
+
 -- get_released_tasks_for_student with hardened search_path
 create or replace function public.get_released_tasks_for_student(
   p_student_sub text,
@@ -185,6 +194,8 @@ as $$
   order by t.position, t.id;
 $$;
 
+alter function public.get_released_tasks_for_student(text, uuid, uuid) owner to gustav_limited;
+
 -- get_task_metadata_for_student with hardened search_path
 create or replace function public.get_task_metadata_for_student(
   p_student_sub text,
@@ -219,6 +230,8 @@ as $$
   limit 1;
 $$;
 
+alter function public.get_task_metadata_for_student(text, uuid, uuid) owner to gustav_limited;
+
 grant execute on function public.next_attempt_nr(uuid, uuid, text) to gustav_limited;
 grant execute on function public.check_task_visible_to_student(text, uuid, uuid) to gustav_limited;
 grant execute on function public.get_released_sections_for_student(text, uuid, integer, integer) to gustav_limited;
@@ -227,4 +240,3 @@ grant execute on function public.get_released_tasks_for_student(text, uuid, uuid
 grant execute on function public.get_task_metadata_for_student(text, uuid, uuid) to gustav_limited;
 
 set check_function_bodies = on;
-

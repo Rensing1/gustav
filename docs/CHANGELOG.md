@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- security(db): Set OWNER to `gustav_limited` for all SECURITY DEFINER learning helpers
+  (`next_attempt_nr`, `check_task_visible_to_student`, section/material/task helpers,
+  `get_task_metadata_for_student`) and remove owner-swallowing DO block.
+- security(container): Run web image as non-root user `app` (UID 10001).
+- docs(env): Clarify Supabase Service Role key is server-only and must never be exposed to clients.
+- docs/openapi: Align /api/learning/courses pagination defaults (limit default 50, max 100) with other Learning endpoints.
 - security(db): Make `public.get_course_units_for_student` SECURITY DEFINER owned by `gustav_limited` to avoid BYPASSRLS escalation; keep EXECUTE grant.
 - fix(db/repo): Remove duplicate `set_config('app.current_sub')` call in units listing query.
  - tests(learning): Add Cache-Control success header checks for courses and units (private, no-store).

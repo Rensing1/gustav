@@ -25,7 +25,7 @@ end;
 $$;
 
 -- Ensure SECURITY DEFINER helpers are owned by limited role
-alter function public.next_attempt_nr(uuid, uuid, text) owner to gustav_limited;
+-- Ownership will be corrected in a follow-up migration (best-effort)
 
 -- check_task_visible_to_student with hardened search_path
 create or replace function public.check_task_visible_to_student(p_student_sub text, p_course_id uuid, p_task_id uuid)
@@ -48,7 +48,7 @@ as $$
   );
 $$;
 
-alter function public.check_task_visible_to_student(text, uuid, uuid) owner to gustav_limited;
+-- Ownership will be corrected in a follow-up migration (best-effort)
 
 -- get_released_sections_for_student with hardened search_path
 create or replace function public.get_released_sections_for_student(
@@ -91,7 +91,7 @@ as $$
         end;
 $$;
 
-alter function public.get_released_sections_for_student(text, uuid, integer, integer) owner to gustav_limited;
+-- Ownership will be corrected in a follow-up migration (best-effort)
 
 -- get_released_materials_for_student with hardened search_path
 create or replace function public.get_released_materials_for_student(
@@ -144,7 +144,7 @@ as $$
   order by m.position, m.id;
 $$;
 
-alter function public.get_released_materials_for_student(text, uuid, uuid) owner to gustav_limited;
+-- Ownership will be corrected in a follow-up migration (best-effort)
 
 -- get_released_tasks_for_student with hardened search_path
 create or replace function public.get_released_tasks_for_student(
@@ -194,7 +194,7 @@ as $$
   order by t.position, t.id;
 $$;
 
-alter function public.get_released_tasks_for_student(text, uuid, uuid) owner to gustav_limited;
+-- Ownership will be corrected in a follow-up migration (best-effort)
 
 -- get_task_metadata_for_student with hardened search_path
 create or replace function public.get_task_metadata_for_student(
@@ -230,7 +230,7 @@ as $$
   limit 1;
 $$;
 
-alter function public.get_task_metadata_for_student(text, uuid, uuid) owner to gustav_limited;
+-- Ownership will be corrected in a follow-up migration (best-effort)
 
 grant execute on function public.next_attempt_nr(uuid, uuid, text) to gustav_limited;
 grant execute on function public.check_task_visible_to_student(text, uuid, uuid) to gustav_limited;

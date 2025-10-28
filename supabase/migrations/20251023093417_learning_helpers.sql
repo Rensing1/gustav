@@ -38,8 +38,7 @@ begin
 end;
 $$;
 
--- SECURITY: ensure SECURITY DEFINER function is not owned by a superuser
-alter function public.next_attempt_nr(uuid, uuid, text) owner to gustav_limited;
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 drop function if exists public.check_task_visible_to_student(text, uuid, uuid);
 create or replace function public.check_task_visible_to_student(p_student_sub text, p_course_id uuid, p_task_id uuid)
@@ -61,8 +60,7 @@ as $$
   );
 $$;
 
--- SECURITY: ensure SECURITY DEFINER function is not owned by a superuser
-alter function public.check_task_visible_to_student(text, uuid, uuid) owner to gustav_limited;
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 grant execute on function public.hash_course_task_student(uuid, uuid, text) to gustav_limited;
 grant execute on function public.next_attempt_nr(uuid, uuid, text) to gustav_limited;
@@ -108,8 +106,7 @@ as $$
         end;
 $$;
 
--- SECURITY: ensure SECURITY DEFINER function is not owned by a superuser
-alter function public.get_released_sections_for_student(text, uuid, integer, integer) owner to gustav_limited;
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 drop function if exists public.get_released_materials_for_student(text, uuid, uuid);
 create or replace function public.get_released_materials_for_student(
@@ -161,8 +158,7 @@ as $$
   order by m.position, m.id;
 $$;
 
--- SECURITY: ensure SECURITY DEFINER function is not owned by a superuser
-alter function public.get_released_materials_for_student(text, uuid, uuid) owner to gustav_limited;
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 drop function if exists public.get_released_tasks_for_student(text, uuid, uuid);
 create or replace function public.get_released_tasks_for_student(
@@ -210,8 +206,7 @@ as $$
   order by t.position, t.id;
 $$;
 
--- SECURITY: ensure SECURITY DEFINER function is not owned by a superuser
-alter function public.get_released_tasks_for_student(text, uuid, uuid) owner to gustav_limited;
+-- SECURITY: ownership will be corrected in a follow-up migration (best-effort)
 
 drop function if exists public.get_task_metadata_for_student(text, uuid, uuid);
 create or replace function public.get_task_metadata_for_student(

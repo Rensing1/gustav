@@ -91,14 +91,14 @@
  - fix(api/middleware): 401 `Cache-Control` aligned with contracts — Learning: `private, max-age=0`; other APIs remain `no-store`.
 - build(test): Remove import hack in `routes/learning.py`; tests now add repo root to `sys.path`.
 - tests(learning): Assert 401 cache headers; add non‑member submission test coverage.
-- fix(api/learning): Enforce `Idempotency-Key` maxLength=64 with 400 `invalid_input` and `Cache-Control: private, max-age=0`.
+- fix(api/learning): Enforce `Idempotency-Key` maxLength=64 with 400 `invalid_input` and `Cache-Control: private, no-store`.
 - fix(api/learning): Guarantee `section.position` is an integer ≥ 1 in responses (fallback to 1 when NULL).
 - fix(db/learning): Handle idempotent insert races by catching unique violations and returning the existing row.
 - security(db/learning): Restrict default limited DSN to non-prod; prod requires explicit DSN env var.
 - docs(openapi): Add `Cache-Control` headers to 400/401/403/404 for Learning sections/submissions endpoints.
 - build(docker): Include `backend/teaching` in production image to satisfy imports.
  - fix(api/learning): Enforce image MIME whitelist (image/jpeg, image/png) and sanitize storage_key via regex; new contract tests.
- - consistency(api/learning): 400 invalid path params now use detail=invalid_uuid; 400 responses include Cache-Control: private, max-age=0.
+ - consistency(api/learning): 400 invalid path params now use detail=invalid_uuid; 400 responses include Cache-Control: private, no-store.
  - tests(learning): Add tests for MIME whitelist, storage_key pattern, and invalid_uuid detail + cache header.
 - security(db/learning): Harden `get_released_tasks_for_student` via new migration so unreleased sections leak no tasks; contract test added.
 - fix(api/openapi): Align Learning contract with implemented endpoints (remove upload-intents, document storage metadata for image submissions).

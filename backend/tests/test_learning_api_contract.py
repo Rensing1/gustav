@@ -304,6 +304,30 @@ async def test_sections_returns_released_items_for_enrolled_student():
 
 
 @pytest.mark.anyio
+async def test_sections_includes_unit_id_in_section_core():
+    """Course-level sections response must include section.unit_id (contract)."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/sections",
+            params={"limit": 50, "offset": 0},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    section_entry = payload[0]
+    assert "section" in section_entry
+    sec = section_entry["section"]
+    assert isinstance(sec.get("unit_id"), str)
+    assert sec["unit_id"] == fixture.unit_id
+
+
+@pytest.mark.anyio
 async def test_sections_forbidden_for_non_member():
     """Students without membership must receive 403 when accessing sections."""
 

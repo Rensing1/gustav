@@ -12,7 +12,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Resp
 from fastapi.staticfiles import StaticFiles
 
 # Component Imports
-from components import Layout, CourseCreateForm, UnitCreateForm, SectionCreateForm
+from components import (
+    Layout,
+    CourseCreateForm,
+    UnitCreateForm,
+    SectionCreateForm,
+    MaterialCard,
+    TaskCard,
+)
+from components.markdown import render_markdown_safe
 from components.forms.unit_edit_form import UnitEditForm
 from components.base import Component
 from components.navigation import Navigation
@@ -414,9 +422,14 @@ async def learning_index(request: Request):
         import httpx
         from httpx import ASGITransport
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
+                try:
+                    if os.getenv("PYTEST_CURRENT_TEST"):
+                        print("__SSR_DEBUG_SID__", sid)
+                except Exception:
+                    pass
             r = await client.get("/api/learning/courses", params={"limit": limit, "offset": offset})
             if r.status_code == 200 and isinstance(r.json(), list):
                 items = r.json()
@@ -450,7 +463,7 @@ async def learning_course_detail(request: Request, course_id: str):
         import httpx
         from httpx import ASGITransport
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             # Try lookup for title from course list (best-effort)
@@ -471,13 +484,18 @@ async def learning_course_detail(request: Request, course_id: str):
     except Exception:
         units = []
 
-    # Render simple unit list
+    # Render unit list with links to the unit detail page
+    # Intention: Students can click a unit to view released content.
     unit_items = []
     for row in units:
         u = row.get("unit", {}) if isinstance(row, dict) else {}
         uid = Component.escape(str(u.get("id", "")))
         utitle = Component.escape(str(u.get("title", "")))
-        unit_items.append(f'<li><span class="badge">{row.get("position", "")}</span> {utitle}</li>')
+        href = f"/learning/courses/{course_id}/units/{uid}"
+        unit_items.append(
+            f'<li><span class="badge">{row.get("position", "")}</span> '
+            f'<a href="{href}">{utitle}</a></li>'
+        )
     units_html = '<ul class="unit-list">' + ("\n".join(unit_items) if unit_items else '<li class="text-muted">Keine Lerneinheiten.</li>') + '</ul>'
     content = (
         '<div class="container">'
@@ -503,6 +521,10 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
         - Loads units list for course to derive the unit title for the header.
         - Fetches released sections via unit-scoped Learning API endpoint.
         - Renders materials and tasks; places an <hr> between section groups.
+        - Each material and each task renders as its own card component
+          (`MaterialCard`/`TaskCard`). Markdown in materials (and task
+          instructions) is rendered to a safe HTML subset using
+          `render_markdown_safe`.
         - Uses private, no-store cache headers.
     """
     user = getattr(request.state, "user", None)
@@ -532,13 +554,26 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             break
             except Exception:
                 pass
+            # Silence in production; errors handled gracefully below
             # Fetch released sections for this unit (with embedded materials/tasks)
             r_sections = await client.get(
                 f"/api/learning/courses/{course_id}/units/{unit_id}/sections",
                 params={"include": "materials,tasks", "limit": 100, "offset": 0},
             )
+            # Silent in production; errors handled below
             if r_sections.status_code == 200 and isinstance(r_sections.json(), list):
                 sections = list(r_sections.json())
+            else:
+                # Fallback: fetch all released sections for the course and filter by unit.
+                r_all = await client.get(
+                    f"/api/learning/courses/{course_id}/sections",
+                    params={"include": "materials,tasks", "limit": 100, "offset": 0},
+                )
+                # Fallback used only when unit-scoped endpoint failed
+                if r_all.status_code == 200 and isinstance(r_all.json(), list):
+                    sections = [
+                        row for row in r_all.json() if str((row.get("section") or {}).get("unit_id")) == str(unit_id)
+                    ]
             # Render neutral message when none are released
             if not sections:
                 return HTMLResponse(
@@ -560,20 +595,31 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
         sections = []
 
     # Build HTML without section titles; separate groups with <hr>
+    # For readability, render each material and each task as its own card.
     parts: list[str] = []
     for idx, entry in enumerate(sections):
         mats = entry.get("materials", []) if isinstance(entry, dict) else []
         tasks = entry.get("tasks", []) if isinstance(entry, dict) else []
-        # Materials
+        # Materials → MaterialCard
         for m in mats:
-            title = Component.escape(str(m.get("title") or "Material"))
+            mid = str(m.get("id") or "")
+            title = str(m.get("title") or "Material")
             kind = str(m.get("kind") or "")
-            body = Component.escape(str(m.get("body_md") or "")) if kind == "markdown" else ""
-            parts.append(f"<div class=\"material-item\"><h4>{title}</h4><div class=\"material-body\">{body}</div></div>")
-        # Tasks
+            preview_html = ""
+            if kind == "markdown":
+                # Render a tiny, safe Markdown subset. Input is escaped first
+                # inside the helper to avoid XSS while keeping formatting.
+                preview_html = render_markdown_safe(str(m.get("body_md") or ""))
+            card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
+            parts.append(card.render())
+        # Tasks → TaskCard
         for t in tasks:
-            instr = Component.escape(str(t.get("instruction_md") or ""))
-            parts.append(f"<div class=\"task-item\"><p class=\"task-instruction\">{instr}</p></div>")
+            tid = str(t.get("id") or "")
+            title = str(t.get("title") or "Aufgabe")
+            # Instruction text also benefits from Markdown (e.g., emphasis)
+            instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
+            tcard = TaskCard(task_id=tid, title=title, instruction_html=instruction_html)
+            parts.append(tcard.render())
         # Separator between sections, but not after the last group
         if idx < len(sections) - 1:
             parts.append("<hr class=\"section-separator\">")
@@ -913,7 +959,12 @@ async def course_module_sections_toggle(request: Request, course_id: str, module
 
 @app.post("/courses/{course_id}/modules/reorder", response_class=Response)
 async def courses_modules_reorder(request: Request, course_id: str):
-    """Forward sortable reorder to API; requires CSRF."""
+    """Forward sortable reorder to API; requires CSRF.
+
+    Notes:
+        Avoid variable shadowing by using a distinct name for item element ids
+        extracted from the form body (which look like `module_<uuid>`).
+    """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
         return Response(status_code=403)
@@ -923,7 +974,8 @@ async def courses_modules_reorder(request: Request, course_id: str):
     csrf_field = form.get("csrf_token")
     if not _validate_csrf(sid, csrf_header or csrf_field):
         return Response(status_code=403)
-    ordered_ids = [sid.replace("module_", "") for sid in form.getlist("id")]
+    # Extract `module_<uuid>` ids submitted by Sortable and strip the prefix.
+    ordered_ids = [elem_id.replace("module_", "") for elem_id in form.getlist("id")]
     try:
         import httpx
         from httpx import ASGITransport

@@ -1794,12 +1794,23 @@ class DBTeachingRepo:
         }
 
     def reorder_course_modules_owned(self, course_id: str, owner_sub: str, module_ids: List[str]) -> List[dict]:
-        """
-        Reorder modules for a course owned by `owner_sub`.
+        """Reorder modules for a course owned by `owner_sub`.
+
+        Why:
+            Persist the new order without relying on deferrable constraints so
+            deployments that missed the deferrable migration still behave
+            correctly.
 
         Behavior:
             - Validates the requested set matches the course modules exactly.
-            - Uses a two-phase update (offset then final order) to avoid unique(position) conflicts.
+            - Two-phase update inside a single transaction to preserve uniqueness:
+              (1) Temporarily bump all positions in the course by N to avoid collisions.
+              (2) Assign final contiguous positions 1..N in the requested order.
+
+        Permissions:
+            RLS enforced via `set_config('app.current_sub', owner_sub, true)`.
+            Caller must be the course owner; otherwise, RLS hides rows and
+            validation fails appropriately.
         """
         if not module_ids:
             raise ValueError("empty_reorder")
@@ -1842,7 +1853,14 @@ class DBTeachingRepo:
                         if count:
                             raise LookupError("module_not_found")
                     raise ValueError("module_mismatch")
-                cur.execute("set constraints course_modules_course_id_position_key deferred")
+                # Phase 1: bump all positions in the target course by N to avoid
+                # temporary uniqueness collisions on (course_id, position).
+                bump = len(module_ids)
+                cur.execute(
+                    "update public.course_modules set position = position + %s where course_id = %s",
+                    (bump, course_id),
+                )
+                # Phase 2: assign final positions 1..N in requested order.
                 orderings = list(range(1, len(module_ids) + 1))
                 cur.execute(
                     """

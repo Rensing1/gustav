@@ -272,7 +272,7 @@ async def list_sections(
 
 
 @learning_router.get("/api/learning/courses")
-async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
+async def list_my_courses(request: Request, limit: int = 50, offset: int = 0):
     """List courses for the current student (alphabetical, minimal fields).
 
     Why:
@@ -282,7 +282,7 @@ async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
 
     Parameters:
         request: FastAPI request carrying the authenticated user context.
-        limit: Page size clamp to 1..50 (default 20).
+        limit: Page size clamp to 1..100 (default 50).
         offset: Zero-based starting index (default 0).
 
     Behavior:
@@ -300,7 +300,7 @@ async def list_my_courses(request: Request, limit: int = 20, offset: int = 0):
     if error:
         return error
     items = LIST_COURSES_USECASE.execute(
-        ListCoursesInput(student_sub=str(user.get("sub", "")), limit=int(limit or 20), offset=int(offset or 0))
+        ListCoursesInput(student_sub=str(user.get("sub", "")), limit=int(limit or 50), offset=int(offset or 0))
     )
     return JSONResponse(items, headers=_cache_headers_success())
 

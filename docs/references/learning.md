@@ -3,15 +3,21 @@
 Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchszähler und sofortigem (Stub‑)Feedback. Dokumentiert API, Schema, RLS und Teststrategie.
 
 ## Endpunkte (API)
+- `GET /api/learning/courses?limit&offset`
+  - Liefert die Kurse, in denen der eingeloggte Schüler Mitglied ist (alphabetisch: `title asc`, sekundär `id asc`).
+  - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
+
 - `GET /api/learning/courses/{course_id}/sections?include=materials,tasks&limit&offset`
   - Liefert nur freigegebene Abschnitte für den eingeloggten Schüler (Mitgliedschaft erforderlich).
   - 200 `[{ section { id, title, position }, materials[], tasks[] }]`, 401/403/404.
   - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
+  - Query `include`: CSV‑Liste im Stil `form`, `explode: false` (z. B. `include=materials,tasks`).
 
 - `GET /api/learning/courses/{course_id}/units/{unit_id}/sections?include=materials,tasks&limit&offset`
   - Liefert nur freigegebene Abschnitte der angegebenen Lerneinheit im Kurs (Server‑Filter nach `unit_id`).
   - 200 Liste (ggf. leer); 400 bei Invalid‑UUID; 401/403 wie oben; 404 bei Kurs/Unit‑Mismatch.
   - Cache: `Cache-Control: private, no-store`.
+  - Query `include`: CSV‑Liste im Stil `form`, `explode: false`.
 
 - `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
@@ -62,8 +68,8 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 ## Sicherheit & Datenschutz
 - Minimierte DTOs: Identität über `sub`, kein PII in API‑Antworten.
 - Fehlersemantik: 404 bei nicht freigegebenen/fremden Ressourcen, um keine Existenzinformationen zu leaken.
-- Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, max-age=0`.
-- Fehlerantworten: 400/401/403/404 der Learning‑Endpoints senden ebenfalls `Cache-Control: private, max-age=0`.
+- Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, no-store`.
+- Fehlerantworten: 400/401/403/404 der Learning‑Endpoints senden ebenfalls `Cache-Control: private, no-store`.
 - Submissions: Storage-Metadaten werden bei Bildabgaben geprüft; `storage_key` wird in API‑Antworten zurückgegeben (nur für `kind=image`). Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
 - Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
 - CSRF: Same‑Origin‑Prüfung nutzt `Origin`, fällt bei fehlendem `Origin` auf `Referer` zurück (nur Origin‑Teil, Pfad ignoriert). Nicht‑Browser‑Clients bleiben unverändert (keine Header).

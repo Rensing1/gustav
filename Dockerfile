@@ -23,6 +23,8 @@ COPY backend/learning ./backend/learning
 COPY backend/__init__.py ./backend/__init__.py
 
 ENV PYTHONPATH=/app:/app/backend
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Security: run as non-root user (least privilege)
 RUN useradd -m -u 10001 app && chown -R app:app /app

@@ -247,19 +247,19 @@ def _validate_csrf(session_id: Optional[str], form_value: Optional[str]) -> bool
     return hmac.compare_digest(expected, str(form_value))
 
 def _clamp_pagination(limit_raw: str | None, offset_raw: str | None) -> tuple[int, int]:
-    """Clamp pagination for SSR views to align with Learning API defaults.
+    """Clamp pagination for SSR views.
 
-    Defaults to limit=50, offset=0; clamps limit to 1..100 and offset to >= 0.
+    Defaults to limit=20, offset=0; clamps limit to 1..50 (UI design) and offset to >= 0.
     """
     try:
-        limit = int(limit_raw) if limit_raw is not None else 50
+        limit = int(limit_raw) if limit_raw is not None else 20
     except (ValueError, TypeError):
-        limit = 50
+        limit = 20
     try:
         offset = int(offset_raw) if offset_raw is not None else 0
     except (ValueError, TypeError):
         offset = 0
-    return max(1, min(100, limit)), max(0, offset)
+    return max(1, min(50, limit)), max(0, offset)
 
 def _is_uuid_like(value: str) -> bool:
     """Best-effort check whether a string is UUID-like.

@@ -59,6 +59,47 @@ def _visibility_path(course_id: str, module_id: str, section_id: str) -> str:
 
 
 @pytest.mark.anyio
+async def test_unit_sections_returns_unit_id_for_released_section():
+    """When a section is released, response section includes unit_id per contract."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-unit-unitid", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-unit-unitid", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(c, "Kurs UnitID")
+        unit = await _create_unit(c, "Unit U1")
+        section = await _create_section(c, unit["id"], "Abschnitt S1")
+        module = await _attach_unit(c, course_id, unit["id"])
+        # Release the section
+        await c.patch(_visibility_path(course_id, module["id"], section["id"]), json={"visible": True})
+        # Enroll student
+        await _add_member(c, course_id, student.sub)
+
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(
+            f"/api/learning/courses/{course_id}/units/{unit['id']}/sections",
+            params={"limit": 5, "offset": 0},
+        )
+        assert r.status_code == 200
+        items = r.json()
+        assert isinstance(items, list) and len(items) >= 1
+        sec = items[0]["section"]
+        assert "unit_id" in sec and isinstance(sec["unit_id"], str)
+        assert sec["unit_id"] == unit["id"]
+
+@pytest.mark.anyio
 async def test_unit_sections_returns_200_and_empty_list_when_none_released():
     """New endpoint returns 200 with [] when no sections are released for the unit."""
     _require_db_or_skip()

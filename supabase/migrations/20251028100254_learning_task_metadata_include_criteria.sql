@@ -27,10 +27,10 @@ as $$
     t.max_attempts,
     t.criteria
   from public.course_memberships cm
-  join public.course_modules mod on mod.course_id = cm.course_id
-  join public.unit_sections s on s.unit_id = mod.unit_id
+  join public.course_modules m on m.course_id = cm.course_id
+  join public.unit_sections s on s.unit_id = m.unit_id
   join public.unit_tasks t on t.section_id = s.id
-  join public.module_section_releases r on r.course_module_id = mod.id
+  join public.module_section_releases r on r.course_module_id = m.id
                                   and r.section_id = s.id
   where cm.course_id = p_course_id
     and cm.student_id = p_student_sub

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.learning.repo_db import DBLearningRepo
+from .security import _is_same_origin
 from backend.learning.usecases.sections import (
     ListSectionsInput,
     ListSectionsUseCase,
@@ -69,88 +70,7 @@ def _require_student(request: Request):
     return user, None
 
 
-def _is_same_origin(request: Request) -> bool:
-    """CSRF defense-in-depth: verify same-origin via Origin or Referer.
-
-    Behavior:
-    - If `Origin` header is present, require exact match of scheme/host/port
-      vs. server origin (proxy-aware when `GUSTAV_TRUST_PROXY=true`).
-    - Else if `Referer` header is present, apply the same comparison using the
-      referer's origin (path is ignored).
-    - Else (no headers): allow to avoid breaking non-browser clients.
-    """
-    origin_val = request.headers.get("origin")
-    try:
-        from urllib.parse import urlparse
-        import os
-
-        def parse_origin(url: str) -> tuple[str, str, int]:
-            p = urlparse(url)
-            if not p.scheme or not p.hostname:
-                raise ValueError("invalid_origin")
-            scheme = p.scheme.lower()
-            host = p.hostname.lower()
-            port = p.port
-            if port is None:
-                port = 443 if scheme == "https" else 80
-            return scheme, host, int(port)
-
-        def parse_server(request: Request) -> tuple[str, str, int]:
-            """Resolve the server origin for CSRF checks.
-
-            Trust `X-Forwarded-*` only when explicitly enabled. Otherwise rely on
-            ASGI's URL/Host to avoid header spoofing when running without a proxy.
-            """
-            trust_proxy = (os.getenv("GUSTAV_TRUST_PROXY", "false") or "").lower() == "true"
-
-            if trust_proxy:
-                xf_proto_raw = request.headers.get("x-forwarded-proto") or request.url.scheme or ""
-                xf_host_raw = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-                xf_proto = xf_proto_raw.split(",")[0].strip()
-                xf_host = xf_host_raw.split(",")[0].strip()
-                scheme = (xf_proto or request.url.scheme or "http").lower()
-                # xf_host or host may include port
-                if ":" in xf_host:
-                    host_only, port_str = xf_host.rsplit(":", 1)
-                    try:
-                        port = int(port_str)
-                    except Exception:
-                        port = 443 if scheme == "https" else 80
-                    host = host_only.lower()
-                else:
-                    host = (xf_host or (request.url.hostname or "")).lower()
-                    port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-                xf_port_raw = request.headers.get("x-forwarded-port") or ""
-                if xf_port_raw:
-                    try:
-                        port = int(xf_port_raw.split(",")[0].strip())
-                    except Exception:
-                        port = 443 if scheme == "https" else 80
-                return scheme, host, port
-
-            # Not trusting proxy headers: derive strictly from ASGI request URL
-            # to avoid relying on potentially spoofed Host header values.
-            scheme = (request.url.scheme or "http").lower()
-            host = (request.url.hostname or "").lower()
-            port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-            return scheme, host, port
-
-        s_scheme, s_host, s_port = parse_server(request)
-
-        if origin_val:
-            o_scheme, o_host, o_port = parse_origin(origin_val)
-            return (o_scheme == s_scheme) and (o_host == s_host) and (o_port == s_port)
-
-        # Fallback: use Referer when Origin is missing (some browsers)
-        referer_val = request.headers.get("referer")
-        if referer_val:
-            r_scheme, r_host, r_port = parse_origin(referer_val)
-            return (r_scheme == s_scheme) and (r_host == s_host) and (r_port == s_port)
-
-        # No Origin/Referer -> allow non-browser clients
-        return True
-    except Exception:
-        return False
+"""CSRF helper imported from .security"""
 
 
 def _parse_include(value: str | None) -> tuple[bool, bool]:
@@ -494,6 +414,14 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
             status_code=400,
             headers=_cache_headers_error(),
         )
+    if idempotency_key is not None:
+        import re as _re
+        if not _re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
+            return JSONResponse(
+                {"error": "bad_request", "detail": "invalid_input"},
+                status_code=400,
+                headers=_cache_headers_error(),
+            )
 
     try:
         kind, clean_payload = _validate_submission_payload(payload)

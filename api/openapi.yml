@@ -997,7 +997,7 @@ paths:
           description: Forbidden (student not enrolled in the course)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1009,7 +1009,7 @@ paths:
           description: Course not found or sections not released
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1040,7 +1040,7 @@ paths:
           description: Units of the course
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1061,7 +1061,7 @@ paths:
           description: Invalid UUID
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1073,7 +1073,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1085,7 +1085,7 @@ paths:
           description: Forbidden — caller is not a student
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1097,7 +1097,7 @@ paths:
           description: Course not found or not visible to the student
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1157,7 +1157,7 @@ paths:
           description: Released sections of the unit visible to the student (may be empty).
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1171,7 +1171,7 @@ paths:
           description: Invalid input (e.g., malformed UUID or include parameter)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1183,7 +1183,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1195,7 +1195,7 @@ paths:
           description: Forbidden (student not enrolled in the course)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1207,7 +1207,7 @@ paths:
           description: Course or unit not found, or unit does not belong to the course
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1276,7 +1276,7 @@ paths:
           description: Invalid identifiers
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1288,7 +1288,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1300,7 +1300,7 @@ paths:
           description: Forbidden (caller is not the course owner)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1312,7 +1312,7 @@ paths:
           description: Course/module not found or not visible to the owner
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1364,7 +1364,7 @@ paths:
           description: Submissions visible to the student.
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1378,7 +1378,7 @@ paths:
           description: Invalid input (e.g., malformed UUID or pagination parameter)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1390,7 +1390,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1402,7 +1402,7 @@ paths:
           description: Forbidden (student not enrolled in the course)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1414,7 +1414,7 @@ paths:
           description: Course or task not found, or not released to the student
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1455,7 +1455,8 @@ paths:
           schema:
             type: string
             maxLength: 64
-          description: Optional idempotency token to de-duplicate retries (case-sensitive).
+            pattern: '^[A-Za-z0-9_-]{1,64}$'
+          description: Optional idempotency token to de-duplicate retries (ASCII token: letters, digits, underscore, hyphen; case-sensitive).
       requestBody:
         required: true
         content:
@@ -1495,7 +1496,7 @@ paths:
           description: Submission created with synchronous feedback (MVP default).
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1507,7 +1508,7 @@ paths:
           description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1519,7 +1520,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1531,7 +1532,7 @@ paths:
           description: Forbidden (not enrolled or CSRF same-origin check failed)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1543,7 +1544,7 @@ paths:
           description: Not found
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -1619,7 +1620,7 @@ paths:
           description: Invalid or expired code/state
           headers:
             Cache-Control:
-              description: Security hardening — responses must not be cached
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
           content:
@@ -1738,7 +1739,7 @@ paths:
           description: User context
           headers:
             Cache-Control:
-              description: Security hardening — responses must not be cached
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
           content:
@@ -1749,7 +1750,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses must not be cached
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
           content:

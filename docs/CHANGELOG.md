@@ -2,6 +2,9 @@
 
 ## Unreleased
  - BREAKING(api/openapi): LearningSectionCore now requires `unit_id`. Update clients accordingly; older clients must ignore unknown fields or update schema.
+ - security(openapi): Unify Cache-Control header descriptions to "Security — responses are private and not cacheable by shared caches." across Learning/Teaching endpoints.
+ - security(api/learning): POST submissions validates `Idempotency-Key` as ASCII token (`[A-Za-z0-9_-]{1,64}`); rejects invalid/too-long tokens with 400.
+ - consistency(web/ssr): Align SSR pagination clamp defaults to API (limit default 50, max 100).
 - security(api/teaching): Enforce same-origin (CSRF) for PATCH visibility endpoint; all responses include `Cache-Control: private, no-store`.
 - fix(api/teaching): Module section releases endpoint returns private, no-store cache headers for 400/403/404.
 - fix(ui/markdown): Headings rendered on student cards are emitted as block-level tags without wrapping `<p>` containers.

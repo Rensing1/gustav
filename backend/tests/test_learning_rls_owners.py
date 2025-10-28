@@ -40,6 +40,8 @@ async def test_security_definer_helpers_owned_by_limited():
         "next_attempt_nr",
         "check_task_visible_to_student",
         "get_released_sections_for_student",
+        # New helper used by unit-scoped sections endpoint
+        "get_released_sections_for_student_by_unit",
         "get_released_materials_for_student",
         "get_released_tasks_for_student",
         "get_task_metadata_for_student",

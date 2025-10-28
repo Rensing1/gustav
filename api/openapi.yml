@@ -7,6 +7,10 @@ info:
     Endpoints cover login redirect, callback handling, logout, session info, and a
     convenience redirect for "forgot password". Sessions are represented by an
     httpOnly cookie.
+  x-changelog:
+    - date: "2025-10-28"
+      type: breaking
+      note: "LearningSectionCore now requires unit_id (update client models)."
 
 servers:
   - url: /
@@ -955,7 +959,7 @@ paths:
           description: Released sections visible to the student.
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -969,7 +973,7 @@ paths:
           description: Invalid input (e.g., malformed UUID or include parameter)
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store
@@ -981,7 +985,7 @@ paths:
           description: Unauthenticated
           headers:
             Cache-Control:
-              description: Security hardening — responses are private and not cacheable by shared caches.
+              description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
                 example: private, no-store

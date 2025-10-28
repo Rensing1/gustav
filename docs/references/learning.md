@@ -2,6 +2,8 @@
 
 Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchszähler und sofortigem (Stub‑)Feedback. Dokumentiert API, Schema, RLS und Teststrategie.
 
+Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Feld `unit_id`. Aktualisiere ggf. generierte Client‑Modelle.
+
 ## Endpunkte (API)
 - `GET /api/learning/courses?limit&offset`
   - Liefert die Kurse, in denen der eingeloggte Schüler Mitglied ist (alphabetisch: `title asc`, sekundär `id asc`).

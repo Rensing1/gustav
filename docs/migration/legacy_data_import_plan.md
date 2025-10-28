@@ -229,3 +229,285 @@ Relevante Migrationsdateien (Beispiele):
   - PII in Logs maskieren; vollständige PII nur in Audit‑Tabellen mit Service‑Role‑Zugriff.
 
 Hinweis: Diese Analyse spiegelt den Stand der Migrationen unter `supabase/migrations/` und der Referenzdokumente unter `docs/references/*` wider und sollte bei Schema‑Änderungen aktualisiert werden.
+
+## Dry‑Run‑Checkliste (konkret)
+
+Diese Checkliste beschreibt eine pragmatische, reproduzierbare Abfolge für einen Dry‑Run (ohne Schreiboperationen) und den anschließenden ETL‑Import mit Zähl‑/Integritäts‑Checks. Wo möglich werden Beispiel‑SQLs angegeben.
+
+### 0) Vorbereitung
+- Verbindung mit Service‑/Owner‑Role (RLS‑Bypass) verwenden; `search_path` auf `public, pg_temp` setzen.
+- Sicherstellen, dass alle Supabase‑Migrationen angewendet sind (`supabase migration up`).
+- Zeiten konsistent als UTC verarbeiten; Eingabedateien/Dumps dokumentieren (Quelle, Timestamp, Hash).
+
+### 1) Audit‑ & Mapping‑Struktur (einmalig)
+```sql
+-- Audit-Tabellen
+create table if not exists public.import_audit_runs (
+  id uuid primary key default gen_random_uuid(),
+  source text not null,
+  started_at_utc timestamptz not null default now(),
+  ended_at_utc timestamptz null,
+  notes text null
+);
+
+create table if not exists public.import_audit_mappings (
+  run_id uuid not null references public.import_audit_runs(id) on delete cascade,
+  entity text not null, -- z.B. 'course' | 'unit' | 'submission'
+  legacy_id text not null,
+  target_table text not null,
+  target_id text null,
+  status text not null check (status in ('ok','skip','conflict','error')),
+  reason text null,
+  created_at_utc timestamptz not null default now()
+);
+
+-- User-Mapping
+create table if not exists public.legacy_user_map (
+  legacy_id uuid primary key,
+  sub text unique
+);
+```
+
+Start eines Laufes (Beispiel):
+```sql
+insert into public.import_audit_runs(source, notes)
+values ('legacy-alpha1-backup-YYYYMMDD', 'dry-run')
+returning id;
+```
+
+### 2) Staging laden (CSV/NDJSON → staging.*)
+- Anlage eines `staging`‑Schemas empfohlen; Tabellen: `staging.users`, `staging.courses`, `staging.course_students`, `staging.learning_units`, `staging.course_unit_assignments`, `staging.unit_sections`, `staging.section_releases`, `staging.materials_json`, `staging.tasks_base`, `staging.tasks_regular`, `staging.submissions`.
+- Import via COPY/psql:
+```sql
+-- Beispiel
+create schema if not exists staging;
+-- CSV mit Header
+\copy staging.courses from '/imports/courses.csv' with (format csv, header true);
+```
+
+Dry‑Run‑Zählungen (Sollwerte dokumentieren):
+```sql
+select count(*) as cnt_courses from staging.courses;
+select count(*) as cnt_units from staging.learning_units;
+select count(*) as cnt_sections from staging.unit_sections;
+select count(*) as cnt_tasks from staging.tasks_regular;
+select count(*) as cnt_submissions from staging.submissions;
+```
+
+### 3) Identitäten mappen (WRITE optional in Dry‑Run → nur Zählungen)
+```sql
+-- Kandidaten ohne Mapping
+select count(*) from staging.users su
+left join public.legacy_user_map m on m.legacy_id = su.id
+where m.legacy_id is null;
+
+-- In Echt: Upsert
+insert into public.legacy_user_map(legacy_id, sub)
+select id, sub from staging.users
+on conflict (legacy_id) do update set sub = excluded.sub;
+```
+
+### 4) Kurse & Mitgliedschaften
+Positions der Schritte: Kurse → Mitgliedschaften.
+```sql
+-- Dry-Run: fehlende Owner-Mappings ermitteln
+select count(*) as missing_owner
+from staging.courses c
+left join public.legacy_user_map m on m.legacy_id = c.creator_id
+where m.sub is null;
+
+-- Import: Kurse (Legacy-UUID als id beibehalten)
+insert into public.courses(id, title, subject, grade_level, term, teacher_id, created_at)
+select c.id, c.title, c.subject, c.grade_level, c.term, m.sub, c.created_at
+from staging.courses c
+join public.legacy_user_map m on m.legacy_id = c.creator_id
+on conflict (id) do nothing;
+
+-- Mitgliedschaften
+insert into public.course_memberships(course_id, student_id, created_at)
+select cs.course_id, m.sub, cs.created_at
+from staging.course_students cs
+join public.legacy_user_map m on m.legacy_id = cs.student_id
+on conflict (course_id, student_id) do nothing;
+```
+
+Validierung:
+```sql
+-- Orphans vermeiden
+select count(*) from public.course_memberships cm
+left join public.courses c on c.id = cm.course_id
+where c.id is null; -- sollte 0 sein
+```
+
+### 5) Einheiten & Kursmodule
+```sql
+-- Units
+insert into public.units(id, title, summary, author_id, created_at)
+select u.id, u.title, u.description, m.sub, u.created_at
+from staging.learning_units u
+join public.legacy_user_map m on m.legacy_id = u.creator_id
+on conflict (id) do nothing;
+
+-- Course-Unit-Assignments → course_modules (Position je Kurs)
+insert into public.course_modules(id, course_id, unit_id, position)
+select gen_random_uuid(), cua.course_id, cua.unit_id,
+       row_number() over (partition by cua.course_id order by coalesce(cua.created_at, now()), cua.unit_id)
+from staging.course_unit_assignments cua
+on conflict (course_id, unit_id) do nothing;
+```
+
+Validierung:
+```sql
+-- Eindeutigkeit pro Kurs
+select course_id, count(*)
+from public.course_modules
+group by 1
+having count(*) <> count(distinct unit_id);
+```
+
+### 6) Abschnitte & Freigaben
+```sql
+-- Sections
+insert into public.unit_sections(id, unit_id, title, position, created_at)
+select s.id, s.unit_id, s.title, s.order_in_unit, s.created_at
+from staging.unit_sections s
+on conflict (id) do nothing;
+
+-- Releases (nur sichtbare)
+insert into public.module_section_releases(course_module_id, section_id, visible, released_at, released_by)
+select m.id, r.section_id, true, r.released_at,
+       coalesce(c.teacher_id, 'system')
+from staging.section_releases r
+join public.course_modules m on m.course_id = r.course_id and m.unit_id = r.unit_id
+join public.courses c on c.id = m.course_id
+where coalesce(r.visible, true) = true
+on conflict (course_module_id, section_id) do nothing;
+```
+
+### 7) Materialien (Markdown + Datei)
+```sql
+-- Markdown direkt
+insert into public.unit_materials(id, section_id, title, kind, body_md, position, created_at)
+select m.id, m.section_id, coalesce(m.title, 'Untitled'), 'markdown', m.body_md, m.position, m.created_at
+from staging.materials_json m
+where m.kind = 'markdown'
+on conflict (id) do nothing;
+
+-- Dateien: nur mit vollständigen Metadaten (sonst als Markdown-Link fallbacken)
+insert into public.unit_materials(id, section_id, title, kind, storage_key, filename_original, mime_type, size_bytes, sha256, alt_text, position, created_at)
+select m.id, m.section_id, coalesce(m.title, m.filename), 'file', m.storage_key, m.filename, m.mime_type, m.size_bytes, m.sha256, m.alt_text, m.position, m.created_at
+from staging.materials_json m
+where m.kind = 'file'
+  and m.storage_key is not null and m.size_bytes > 0 and m.sha256 ~ '^[0-9a-f]{64}$'
+on conflict (id) do nothing;
+
+-- Fallback für nicht erreichbare Dateien: Markdown-Link
+insert into public.unit_materials(id, section_id, title, kind, body_md, position, created_at)
+select m.id, m.section_id, coalesce(m.title, m.filename), 'markdown',
+       format('Datei nicht verfügbar: %s', m.legacy_url), m.position, m.created_at
+from staging.materials_json m
+where m.kind = 'file'
+  and not (m.storage_key is not null and m.size_bytes > 0 and m.sha256 ~ '^[0-9a-f]{64}$')
+on conflict (id) do nothing;
+```
+
+### 8) Aufgaben (Tasks)
+```sql
+-- Kriterien normalisieren (trim, dedupe, max 10) aus JSON → text[]
+with norm as (
+  select tr.id, tr.section_id, s.unit_id,
+         tb.instruction_md,
+         (
+           select array(
+             select distinct on (trim(x)) trim(x)
+             from jsonb_array_elements_text(tb.assessment_criteria) as e(x)
+             where length(trim(x)) > 0
+             limit 10
+           )
+         ) as criteria,
+         tb.hints_md, tb.max_attempts, tr.order_in_section as position, tr.created_at
+  from staging.tasks_regular tr
+  join staging.tasks_base tb on tb.id = tr.id
+  join public.unit_sections s on s.id = tr.section_id
+)
+insert into public.unit_tasks(id, unit_id, section_id, instruction_md, criteria, hints_md, due_at, max_attempts, position, created_at)
+select n.id, n.unit_id, n.section_id, n.instruction_md, coalesce(n.criteria, '{}'), n.hints_md, null, n.max_attempts, n.position, n.created_at
+from norm n
+on conflict (id) do nothing;
+```
+
+### 9) Einreichungen (Submissions)
+Deterministische Kursableitung und Versuchszähler (Dry‑Run: nur Zählungen/Ausreißer, Echtlauf: Insert).
+```sql
+-- Kandidatenkurse pro Submission (vereinfachte Sicht)
+with s as (
+  select * from staging.submissions
+), task_map as (
+  select t.id as task_id, t.section_id, t.unit_id from public.unit_tasks t
+), candidates as (
+  select s.id as sub_id, c.id as course_id
+  from s
+  join task_map t on t.task_id = s.task_id
+  join public.course_memberships cm on cm.student_id = s.student_sub
+  join public.course_modules m on m.course_id = cm.course_id and m.unit_id = t.unit_id
+  join public.module_section_releases r on r.course_module_id = m.id and r.section_id = t.section_id
+  join public.courses c on c.id = cm.course_id
+  where coalesce(r.visible, false) = true
+)
+select sub_id, count(*) as candidate_courses
+from candidates
+group by 1
+having count(*) <> 1; -- Ambig oder fehlend → auditieren
+
+-- Versuchszähler per (course_id, task_id, student_sub)
+-- (Im Echtlauf kann auch public.next_attempt_nr() genutzt werden)
+with ordered as (
+  select s.*, row_number() over (partition by c.course_id, s.task_id, s.student_sub order by s.created_at) as attempt_nr,
+         c.course_id
+  from staging.submissions s
+  join candidates c on c.sub_id = s.id
+)
+insert into public.learning_submissions(course_id, task_id, student_sub, kind, text_body, storage_key, mime_type, size_bytes, sha256, attempt_nr, feedback_md, created_at)
+select o.course_id, o.task_id, o.student_sub,
+       case when o.kind = 'text' then 'text' else 'image' end,
+       case when o.kind = 'text' then o.text_body end,
+       case when o.kind = 'image' then o.storage_key end,
+       case when o.kind = 'image' then o.mime_type end,
+       case when o.kind = 'image' then o.size_bytes end,
+       case when o.kind = 'image' then o.sha256 end,
+       o.attempt_nr, o.feedback_md, o.created_at
+from ordered o
+where (o.kind = 'text' and o.text_body is not null)
+   or (o.kind = 'image' and o.storage_key is not null and o.size_bytes > 0 and o.sha256 ~ '^[0-9a-f]{64}$' and o.mime_type in ('image/jpeg','image/png'))
+on conflict do nothing;
+```
+
+### 10) Integritäts‑ & Plausibilitäts‑Checks (nach jedem Block)
+```sql
+-- Verwaiste FKs (Beispiele)
+select count(*) from public.unit_sections s left join public.units u on u.id = s.unit_id where u.id is null;
+select count(*) from public.unit_tasks t left join public.unit_sections s on s.id = t.section_id where s.id is null;
+select count(*) from public.module_section_releases r left join public.course_modules m on m.id = r.course_module_id where m.id is null;
+
+-- Positionskonsistenz (keine Duplikate je Section)
+select section_id, count(*), count(distinct position) from public.unit_tasks group by 1 having count(*) <> count(distinct position);
+
+-- Submissions: uniqueness
+select count(*) from public.learning_submissions;
+select count(distinct course_id, task_id, student_sub, attempt_nr) from public.learning_submissions;
+```
+
+### 11) Abschluss & Metriken
+```sql
+update public.import_audit_runs set ended_at_utc = now(), notes = 'dry-run ok' where id = :run_id;
+
+-- Beispielhafte Kennzahlen
+select 'courses_imported' as k, count(*) from public.courses
+union all select 'units_imported', count(*) from public.units
+union all select 'sections_imported', count(*) from public.unit_sections
+union all select 'materials_total', count(*) from public.unit_materials
+union all select 'tasks_imported', count(*) from public.unit_tasks
+union all select 'submissions_imported', count(*) from public.learning_submissions;
+```
+
+Hinweis: Bei Wiederanläufen Upserts (`on conflict do nothing/update`) beibehalten und pro Entität idempotent gestalten. DEFERRABLE‑Constraints nur während Reorder‑Operationen auf `DEFERRED` setzen und anschließend `ANALYZE` ausführen.

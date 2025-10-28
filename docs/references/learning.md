@@ -9,7 +9,7 @@ Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchs
 
 - `GET /api/learning/courses/{course_id}/sections?include=materials,tasks&limit&offset`
   - Liefert nur freigegebene Abschnitte für den eingeloggten Schüler (Mitgliedschaft erforderlich).
-  - 200 `[{ section { id, title, position }, materials[], tasks[] }]`, 401/403/404.
+- 200 `[{ section { id, title, position, unit_id }, materials[], tasks[] }]`, 401/403/404.
   - Pagination: `limit [1..100] (default 50)`, `offset ≥ 0`.
   - Query `include`: CSV‑Liste im Stil `form`, `explode: false` (z. B. `include=materials,tasks`).
 

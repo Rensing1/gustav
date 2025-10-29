@@ -68,13 +68,15 @@ gustav-alpha2/
 
 ## Persistenz (Keycloak‑Accounts)
 
-- In DEV startet Keycloak mit `start-dev --import-realm`. Ohne Persistenz gehen
-  manuell angelegte Nutzer bei Rebuilds verloren.
-- Dieses Compose aktiviert ein Volume: `keycloak_data:/opt/keycloak/data`.
-  Dadurch bleiben Realm‑Daten und Benutzer erhalten.
-- Hinweise:
-  - Der Realm‑Import greift nur bei leerem Datenverzeichnis. Änderungen an
-    `keycloak/realm-gustav.json` werden erst nach Löschen des Volumes erneut importiert
-    (z. B. `docker compose down -v && docker volume rm <projekt>_keycloak_data`).
-  - Für Produktion wird empfohlen, `KC_DB=postgres` zu konfigurieren und Keycloak an
-    eine externe Datenbank anzubinden. Das Volume erleichtert DEV, ersetzt aber keine Prod‑DB.
+- Keycloak nutzt nun denselben PostgreSQL‑Stack wie die App: Compose stellt dafür
+  den Service `keycloak-db` (PostgreSQL 16) bereit.
+- Konfiguration über `.env`:
+  - `KC_DB=postgres`
+  - `KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak`
+  - `KC_DB_USERNAME`, `KC_DB_PASSWORD` (Dev‑Defaults `keycloak`/`keycloak`)
+  - `KC_DB_URL_PROPERTIES=sslmode=disable` (für Prod auf `sslmode=require`/TLS anpassen)
+- Der Erststart importiert den Realm `gustav`, danach verwaltet Keycloak alle Daten
+  direkt in PostgreSQL. Neustarts sowie Rebuilds erhalten Benutzer und Konfiguration.
+- `depends_on.condition=service_healthy` sorgt dafür, dass Keycloak erst nach
+  erfolgreichem `pg_isready` gegen den Datenbankdienst hochfährt.
+- Produktion: Binde `KC_DB_URL` an eine gemanagte Postgres‑Instanz (TLS, Backups, Secret‑Store).

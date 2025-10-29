@@ -66,6 +66,7 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
   - `database_schema.md` – Schema (derzeit leer; geplant über Migrationen zu füllen)
   - `UI-UX-Leitfaden.md` – Richtlinien für Gestaltung/Interaktionen
 - `Dockerfile`, `docker-compose.yml` – Containerisierung (Dev‑Setup)
+  - Keycloak läuft in allen Umgebungen gegen den dedizierten Compose-Service `keycloak-db` (PostgreSQL 16) anstelle des früheren lokalen Volumes. Startparameter (`KC_DB_URL`, Benutzer/Passwort) kommen aus `.env` bzw. Secret-Store; die Datenbank hält Realm- und Benutzerzustand persistent.
 - `legacy-code-alpha1/` – Referenz Altcode
 
 Geplante Ergänzungen (separat anlegen, wenn benötigt):
@@ -86,8 +87,8 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
   - Caddy routet hostbasiert:
     - `http://app.localhost:8100` → Web (GUSTAV)
     - `http://id.localhost:8100` → Keycloak (IdP)
-  - Persistenz (DEV): `keycloak_data:/opt/keycloak/data` Volume hält Realm‑ und Benutzer‑Daten über Rebuilds.
-    Für PROD sollte Keycloak an eine externe DB (KC_DB=postgres) angebunden werden.
+  - Persistenz (DEV): Keycloak speichert Realm und Benutzer im Compose-internen Postgres-Service `keycloak-db` (PostgreSQL 16) mit Volume `keycloak_pg_data`. Der Service ist über `depends_on.condition=service_healthy` als Startbedingung definiert, damit Keycloak erst nach erfolgreichem `pg_isready` hochfährt.
+    PROD nutzt dieselbe Konfiguration, aber `KC_DB_URL` zeigt auf eine gemanagte Instanz (TLS, Backups, Secret-Store); `KC_DB_URL_PROPERTIES` sollte dort mindestens `sslmode=require` setzen.
   - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
   - Setup: `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`.
 - PROD (Security‑first, geringe App‑Komplexität):

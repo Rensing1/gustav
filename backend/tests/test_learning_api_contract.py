@@ -772,9 +772,9 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
         pytest.skip("psycopg not available")
 
     # Ensure both attempts share the same timestamp to test stable fallback ordering
-    dsn = os.getenv("RLS_TEST_SERVICE_DSN")
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
     if not dsn:
-        pytest.skip("RLS_TEST_SERVICE_DSN required to rewrite timestamps for ordering test")
+        pytest.skip("SERVICE_ROLE_DSN required to rewrite timestamps for ordering test")
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute(

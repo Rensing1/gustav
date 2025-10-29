@@ -52,9 +52,11 @@ def _ensure_db_env_defaults() -> None:
     if _probe(service_dsn):
         _assign_or_override("SESSION_TEST_DSN", service_dsn)
         _assign_or_override("RLS_TEST_SERVICE_DSN", service_dsn)
+        _assign_or_override("SERVICE_ROLE_DSN", service_dsn)
     else:
         os.environ.pop("SESSION_TEST_DSN", None)
         os.environ.pop("RLS_TEST_SERVICE_DSN", None)
+        os.environ.pop("SERVICE_ROLE_DSN", None)
 
     os.environ["SESSIONS_BACKEND"] = os.getenv("SESSIONS_BACKEND", "db")
 

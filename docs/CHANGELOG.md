@@ -12,15 +12,16 @@
  - tests(contract): Add OpenAPI contract test for unit sections responses.
  - tests(learning): Add 403 (not enrolled) and 400 invalid include tests for unit sections.
  - security(db): Harden `get_released_sections_for_student_by_unit` search_path to `pg_catalog, public` (defense-in-depth).
-- security(db): Set OWNER to `gustav_limited` for all SECURITY DEFINER learning helpers
-  (`next_attempt_nr`, `check_task_visible_to_student`, section/material/task helpers,
-  `get_task_metadata_for_student`) and remove owner-swallowing DO block.
+- security(db): Learning helpers run as SECURITY INVOKER with hardened search_path; rely on
+  `gustav_limited` RLS instead of SECURITY DEFINER ownership changes. Added student-facing
+  SELECT policies on units/modules/sections/materials/tasks/releases to expose only released data.
 - security(container): Run web image as non-root user `app` (UID 10001).
 - docs(env): Clarify Supabase Service Role key is server-only and must never be exposed to clients.
  - docs/openapi: Align /api/learning/courses pagination defaults (limit default 50, max 100) with other Learning endpoints.
  - docs(openapi): Declare `include` query as CSV (`style: form`, `explode: false`) for Learning sections endpoints.
  - api(teaching): Mark module section releases listing as owner-only via `x-permissions.ownerOnly=true`.
-- security(db): Make `public.get_course_units_for_student` SECURITY DEFINER owned by `gustav_limited` to avoid BYPASSRLS escalation; keep EXECUTE grant.
+- security(db): `public.get_course_units_for_student` now stays SECURITY INVOKER; relies on RLS
+  while keeping EXECUTE grant for `gustav_limited`.
 - fix(db/repo): Remove duplicate `set_config('app.current_sub')` call in units listing query.
  - tests(learning): Add Cache-Control success header checks for courses and units (private, no-store).
  - tests(learning): Add pagination clamping test (limit>50, offset<0) and empty list case for student courses.

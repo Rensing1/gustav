@@ -1,0 +1,4 @@
+# Exclude large archives from the repository
+*
+!.gitignore
+!README.md

@@ -35,3 +35,7 @@ EXPOSE 8000
 
 # Server starten (ohne Reload für stabile In-Memory-State während E2E)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Lightweight healthcheck hitting the app's health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+  CMD python -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3); print('ok')" || exit 1

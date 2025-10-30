@@ -3095,26 +3095,26 @@ async def about_page(request: Request):
 @app.get("/auth/callback")
 async def auth_callback(request: Request, code: str | None = None, state: str | None = None):
     if not code or not state:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     rec = STATE_STORE.pop_valid(state)
     if not rec:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     try:
         tokens = OIDC.exchange_code_for_tokens(code=code, code_verifier=rec.code_verifier)
     except Exception as exc:
         logger.warning("Token exchange failed: %s", exc.__class__.__name__)
-        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     id_token = tokens.get("id_token")
     if not id_token or not isinstance(id_token, str):
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     try:
         claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
     except IDTokenVerificationError as exc:
         logger.warning("ID token verification failed: %s", exc.code)
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     claim_nonce = claims.get("nonce")
     if getattr(rec, "nonce", None) and claim_nonce != rec.nonce:
-        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "private, no-store"})
 
     sub = str(claims.get("sub") or "unknown-sub")
     email = claims.get("email") or claims.get("preferred_username") or ""
@@ -3134,6 +3134,7 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
+    resp.headers["Cache-Control"] = "private, no-store"
     max_age = sess.ttl_seconds if SETTINGS.environment == "prod" else None
     _set_session_cookie(resp, sess.session_id, max_age=max_age, request=request)
     return resp
@@ -3160,7 +3161,7 @@ def create_app_auth_only() -> FastAPI:
     Why: Tests import this to exercise authentication contracts in isolation
     without pulling in unrelated routers or DB-dependent wiring.
     """
-    sub = FastAPI(title="GUSTAV alpha-2 (auth-only)", description="Auth slice", version="0.0.2")
+    sub = FastAPI(title="GUSTAV alpha-2 (auth-only)", description="Auth slice", version="0.2.0")
     sub.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     sub.include_router(auth_router)
     # Lightweight callback stub for contract tests
@@ -3168,9 +3169,10 @@ def create_app_auth_only() -> FastAPI:
     async def _callback_stub(request: Request, code: str | None = None, state: str | None = None):
         # Treat explicit "invalid" values as invalid for negative-path tests
         if (not code or not state) or (code == "invalid" or state == "invalid"):
-            return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
+            return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
         sid = secrets.token_urlsafe(24)
         resp = RedirectResponse(url="/", status_code=302)
+        resp.headers["Cache-Control"] = "private, no-store"
         _set_session_cookie(resp, sid, request=request)
         return resp
     # Provide a lightweight /api/me for auth-only tests

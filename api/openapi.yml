@@ -1,12 +1,11 @@
-openapi: 3.0.3
 info:
   title: GUSTAV API
-  version: 0.0.2
+  version: 0.2.0
   description: >-
-    Contract-first API for minimal authentication/session integration with Keycloak.
-    Endpoints cover login redirect, callback handling, logout, session info, and a
-    convenience redirect for "forgot password". Sessions are represented by an
-    httpOnly cookie.
+    Contract-first API for authentication (Keycloak), Teaching, and Learning.
+    Endpoints cover login redirect, callback handling, logout, session info,
+    course/unit/section/task/material management for teachers, and student
+    views for released content. Sessions are represented by an httpOnly cookie.
   x-changelog:
     - date: "2025-10-28"
       type: breaking
@@ -1577,6 +1576,11 @@ paths:
         '302':
           description: Redirect to Keycloak authorization endpoint
           headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
             Location:
               description: Authorization URL at Keycloak
               schema:
@@ -1604,6 +1608,11 @@ paths:
         '302':
           description: Session established, redirect to application page
           headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
             Set-Cookie:
               description: >-
                 httpOnly session cookie `gustav_session`.
@@ -1623,6 +1632,7 @@ paths:
               description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
+              example: private, no-store
           content:
             application/json:
               schema:
@@ -1653,6 +1663,11 @@ paths:
         '302':
           description: Redirect to IdP end-session endpoint (then back to the app)
           headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
             Set-Cookie:
               description: >-
                 Clears the httpOnly session cookie `gustav_session` (expires it).
@@ -1673,6 +1688,12 @@ paths:
       responses:
         '200':
           description: HTML page confirming logout
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
           content:
             text/html:
               schema:
@@ -1696,6 +1717,11 @@ paths:
         '302':
           description: Redirect to Keycloak password reset page
           headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
             Location:
               schema:
                 type: string
@@ -1721,6 +1747,11 @@ paths:
         '302':
           description: Redirect to Keycloak registration page
           headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
             Location:
               schema:
                 type: string

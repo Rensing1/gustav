@@ -54,6 +54,7 @@ gustav-alpha2/
   - `DATABASE_URL` (oder `SUPABASE_DB_URL`): DSN für DB-gestützte Sessions
 - `WEB_BASE`: Browser‑sichtbare Basis‑URL der App (z. B. `http://app.localhost:8100`)
 - `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `http://app.localhost:8100/auth/callback`); wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
+- `KC_BASE_URL` (bevorzugt) bzw. `KC_BASE` (Legacy): Öffentliche Basis‑URL von Keycloak. Für Proxys `KC_PUBLIC_BASE_URL` setzen.
 
 ### E2E-Hosts und Cookies
 

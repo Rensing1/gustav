@@ -934,12 +934,17 @@ def _build_default_repo():
     Matches the original project behavior so DB-based contract tests run when
     a fake psycopg/test DSN is provided; otherwise we degrade gracefully.
     """
+    # Use DB repo only when explicitly configured via TEACHING_DATABASE_URL.
+    # This avoids accidental connections to localhost during unit tests.
     if DBTeachingRepo is None:
         if _DB_REPO_IMPORT_ERROR:
             logger.warning("Teaching repo import failed: %s", _DB_REPO_IMPORT_ERROR)
         return _Repo()
+    dsn = os.getenv("TEACHING_DATABASE_URL")
+    if not dsn:
+        return _Repo()
     try:
-        return DBTeachingRepo()
+        return DBTeachingRepo(dsn)
     except Exception as exc:  # pragma: no cover - exercised when DSN missing
         logger.warning("Teaching repo unavailable (%s); using in-memory fallback", exc)
         return _Repo()

@@ -24,21 +24,42 @@ class _KC:
     def __init__(self) -> None:
         self.base_url = os.getenv("KC_BASE_URL", "http://localhost:8080").rstrip("/")
         self.realm = os.getenv("KC_REALM", "gustav")
+        # Token realm for admin client — typically 'master'
         self.admin_realm = os.getenv("KC_ADMIN_REALM", "master")
-        self.admin_client_id = os.getenv("KC_ADMIN_CLIENT_ID", "admin-cli")
+        # Confidential client for admin API access (preferred)
+        self.admin_client_id = os.getenv("KC_ADMIN_CLIENT_ID", "gustav-admin-cli")
+        self.admin_client_secret = os.getenv("KC_ADMIN_CLIENT_SECRET")
+        # Legacy fallback (password grant) — discouraged; retained for dev only
         self.admin_username = os.getenv("KC_ADMIN_USERNAME")
         self.admin_password = os.getenv("KC_ADMIN_PASSWORD")
 
     def token(self) -> str:
-        if not self.admin_username or not self.admin_password:
-            raise RuntimeError("Keycloak admin credentials missing (KC_ADMIN_USERNAME/PASSWORD)")
+        """Obtain an admin bearer token.
+
+        Prefers OAuth2 client_credentials using a confidential client. Falls
+        back to the legacy password grant only when username/password are set
+        and no client secret is configured. Do not enable password grant in
+        production.
+        """
         url = f"{self.base_url}/realms/{self.admin_realm}/protocol/openid-connect/token"
-        data = {
-            "grant_type": "password",
-            "client_id": self.admin_client_id,
-            "username": self.admin_username,
-            "password": self.admin_password,
-        }
+        # Prefer client credentials
+        if self.admin_client_secret:
+            data = {
+                "grant_type": "client_credentials",
+                "client_id": self.admin_client_id,
+                "client_secret": self.admin_client_secret,
+            }
+        else:
+            if not self.admin_username or not self.admin_password:
+                raise RuntimeError(
+                    "Keycloak admin credentials missing: set KC_ADMIN_CLIENT_SECRET or KC_ADMIN_USERNAME/PASSWORD"
+                )
+            data = {
+                "grant_type": "password",
+                "client_id": self.admin_client_id,
+                "username": self.admin_username,
+                "password": self.admin_password,
+            }
         # Honor CA bundle in production environments; default to system CAs
         ca = os.getenv("KEYCLOAK_CA_BUNDLE")
         verify_opt = ca if ca else True

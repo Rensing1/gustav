@@ -56,6 +56,15 @@ gustav-alpha2/
 - `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `http://app.localhost:8100/auth/callback`); wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
 - `KC_BASE_URL` (bevorzugt) bzw. `KC_BASE` (Legacy): Öffentliche Basis‑URL von Keycloak. Für Proxys `KC_PUBLIC_BASE_URL` setzen.
 
+### Directory (Users API) — Admin‑Client
+
+- Für `/api/users/search` und `/api/users/list` nutzt GUSTAV einen vertraulichen Admin‑Client (Client‑Credentials) gegen Keycloak:
+  - `KC_ADMIN_REALM` (Default `master`)
+  - `KC_ADMIN_CLIENT_ID` (z. B. `gustav-admin-cli`)
+  - `KC_ADMIN_CLIENT_SECRET` (nicht commiten; nur Server‑Side!)
+- Der Client benötigt minimale `realm-management` Rollen (z. B. `view-users`, `query-users`).
+- Legacy‑Fallback (nur dev): `KC_ADMIN_USERNAME`/`KC_ADMIN_PASSWORD` (Password‑Grant) ist weiterhin möglich, in Produktion aber zu vermeiden.
+
 ### E2E-Hosts und Cookies
 
 - Cookies sind hostgebunden. Für eine stabile E2E-Anmeldung müssen Web‑Host und Cookie‑Host übereinstimmen.

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from typing import Dict
 from identity_access.domain import ALLOWED_ROLES
 
 
@@ -46,6 +47,10 @@ def _is_teacher_or_admin(user: dict | None) -> bool:
     return isinstance(roles, list) and any(r in ("teacher", "admin") for r in roles)
 
 
+def _private_no_store() -> dict:
+    return {"Cache-Control": "private, no-store"}
+
+
 @users_router.get("/api/users/search")
 async def users_search(request: Request, q: str, role: str, limit: int = 20):
     """Search users by display name — teachers/admins only.
@@ -63,12 +68,12 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
     """
     user = getattr(request.state, "user", None)
     if not _is_teacher_or_admin(user):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_no_store())
     q = (q or "").strip()
     if len(q) < 2:
-        return JSONResponse({"error": "bad_request", "detail": "q_too_short"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "q_too_short"}, status_code=400, headers=_private_no_store())
     if role not in ALLOWED_ROLES:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_role"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_role"}, status_code=400, headers=_private_no_store())
     limit = max(1, min(50, int(limit or 20)))
     results = search_users_by_name(role=role, q=q, limit=limit)
     # Defensive: normalize shape
@@ -78,7 +83,7 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
         name = str(it.get("name", ""))
         if sub and name:
             norm.append({"sub": sub, "name": name})
-    return JSONResponse(norm, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse(norm, headers=_private_no_store())
 
 
 @users_router.get("/api/users/list")
@@ -90,9 +95,9 @@ async def users_list(request: Request, role: str, limit: int = 50, offset: int =
     """
     user = getattr(request.state, "user", None)
     if not _is_teacher_or_admin(user):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_no_store())
     if role not in ALLOWED_ROLES:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_role"}, status_code=400)
+        return JSONResponse({"error": "bad_request", "detail": "invalid_role"}, status_code=400, headers=_private_no_store())
     limit = max(1, min(200, int(limit or 50)))
     offset = max(0, int(offset or 0))
     results = list_users_by_role(role=role, limit=limit, offset=offset)
@@ -102,4 +107,4 @@ async def users_list(request: Request, role: str, limit: int = 50, offset: int =
         name = str(it.get("name", ""))
         if sub and name:
             norm.append({"sub": sub, "name": name})
-    return JSONResponse(norm, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse(norm, headers=_private_no_store())

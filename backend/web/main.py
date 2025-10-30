@@ -3067,7 +3067,7 @@ async def _handle_member_change_api(course_id: str, sid: str | None, *, error: s
         candidates = []
     add_student_html = _render_add_student_wrapper(course_id, csrf_token=token)
     error_html = f'<div class="alert alert-error" role="alert">{Component.escape(error)}</div>' if error else ''
-    return HTMLResponse(content=f'<div class="members-layout" id="members-layout">{error_html}<section class="members-column card" id="members-current"><h2>Aktuelle Kursmitglieder</h2>{members_list_html}</section><section class="members-column card" id="members-add"><h2>Schüler hinzufügen</h2>{add_student_html}</section></div>', headers={"Cache-Control": "no-store"})
+    return HTMLResponse(content=f'<div class="members-layout" id="members-layout">{error_html}<section class="members-column card" id="members-current"><h2>Aktuelle Kursmitglieder</h2>{members_list_html}</section><section class="members-column card" id="members-add"><h2>Schüler hinzufügen</h2>{add_student_html}</section></div>', headers={"Cache-Control": "private, no-store"})
 
 # --- Other Routes & App Includes -----------------------------------------------
 

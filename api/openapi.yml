@@ -1,6 +1,6 @@
 info:
   title: GUSTAV API
-  version: 0.2.0
+  version: 0.0.2
   description: >-
     Contract-first API for authentication (Keycloak), Teaching, and Learning.
     Endpoints cover login redirect, callback handling, logout, session info,
@@ -1577,10 +1577,10 @@ paths:
           description: Redirect to Keycloak authorization endpoint
           headers:
             Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
+              description: Security — responses must not be cached.
               schema:
                 type: string
-              example: private, no-store
+              example: no-store
             Location:
               description: Authorization URL at Keycloak
               schema:
@@ -1609,10 +1609,10 @@ paths:
           description: Session established, redirect to application page
           headers:
             Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
+              description: Security — responses must not be cached.
               schema:
                 type: string
-              example: private, no-store
+              example: no-store
             Set-Cookie:
               description: >-
                 httpOnly session cookie `gustav_session`.
@@ -1629,10 +1629,10 @@ paths:
           description: Invalid or expired code/state
           headers:
             Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
+              description: Security — responses must not be cached.
               schema:
                 type: string
-              example: private, no-store
+              example: no-store
           content:
             application/json:
               schema:
@@ -1664,10 +1664,10 @@ paths:
           description: Redirect to IdP end-session endpoint (then back to the app)
           headers:
             Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
+              description: Security — responses must not be cached.
               schema:
                 type: string
-              example: private, no-store
+              example: no-store
             Set-Cookie:
               description: >-
                 Clears the httpOnly session cookie `gustav_session` (expires it).
@@ -1690,10 +1690,10 @@ paths:
           description: HTML page confirming logout
           headers:
             Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
+              description: Security — responses must not be cached.
               schema:
                 type: string
-              example: private, no-store
+              example: no-store
           content:
             text/html:
               schema:

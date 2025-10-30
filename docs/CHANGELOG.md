@@ -1,9 +1,7 @@
 # Changelog
 
 ## Unreleased
-- breaking(api/version): Bump OpenAPI `info.version` to 0.2.0; note breaking change `LearningSectionCore.unit_id`.
-- security(auth): Add `Cache-Control: private, no-store` to /auth/login, /auth/callback (302/400), /auth/logout, and /auth/logout/success.
-- dev(teaching): Default Teaching repo to in-memory unless `TEACHING_DATABASE_URL` is set (prevents accidental localhost DB connects in unit tests).
+- security(auth): Add `Cache-Control: no-store` to /auth/login, /auth/callback (302/400), /auth/logout, and /auth/logout/success.
 - docs(env): `.env.example` uses `DUMMY_DO_NOT_USE` for service role key; README clarifies `KC_BASE_URL` vs legacy `KC_BASE`.
 - ops(docker): Add container `HEALTHCHECK` hitting `/health`.
  - BREAKING(api/openapi): LearningSectionCore now requires `unit_id`. Update clients accordingly; older clients must ignore unknown fields or update schema.

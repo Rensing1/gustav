@@ -167,7 +167,9 @@ E2E‑Tests (Identity):
 
 #### CSRF‑Strategie (Browser‑Flows)
 - Same‑Site Cookies: In PROD `SameSite=strict` + `Secure`; in DEV `lax`.
-- Server prüft bei schreibenden Learning‑APIs (`POST /submissions`) die **Origin**.
+- Server prüft bei schreibenden Endpunkten die **Origin** (Same‑Origin‑Pflicht):
+  - Learning: z. B. `POST /api/learning/.../submissions`
+  - Teaching: alle Schreib‑APIs (z. B. `POST /api/teaching/courses`, `POST/PATCH /api/teaching/units`, Reorder/Materials/Tasks/Members)
   Fehlt `Origin`, wird als Fallback die **Referer**‑Origin herangezogen.
 - Um diesen Fallback zu unterstützen und dennoch keine sensiblen Daten zu leaken,
   wird global `Referrer-Policy: strict-origin-when-cross-origin` gesetzt.

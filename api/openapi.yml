@@ -1809,6 +1809,8 @@ paths:
       operationId: createCourse
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       requestBody:
         required: true
         content:
@@ -1818,6 +1820,12 @@ paths:
       responses:
         '201':
           description: Course created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1902,6 +1910,8 @@ paths:
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       parameters:
         - in: path
           name: course_id
@@ -1918,6 +1928,12 @@ paths:
       responses:
         '200':
           description: Updated course
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -2145,6 +2161,8 @@ paths:
         - cookieAuth: []
       x-permissions:
         requiredRole: teacher
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       requestBody:
         required: true
         content:
@@ -2154,6 +2172,12 @@ paths:
       responses:
         '201':
           description: Learning unit created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -2232,6 +2256,8 @@ paths:
       x-permissions:
         requiredRole: teacher
         authorOnly: true
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       parameters:
         - in: path
           name: unit_id
@@ -2248,6 +2274,12 @@ paths:
       responses:
         '200':
           description: Updated learning unit
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:

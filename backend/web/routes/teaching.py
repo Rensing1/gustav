@@ -1059,6 +1059,18 @@ def _private_error(payload: dict, *, status_code: int) -> JSONResponse:
     return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
 
 
+def _csrf_guard(request: Request) -> JSONResponse | None:
+    """Enforce same-origin for browser write requests.
+
+    Returns a JSONResponse 403 with detail=csrf_violation and private cache headers
+    when the Origin/Referer does not match the server origin. When headers are
+    absent (e.g., non-browser clients), allow the request.
+    """
+    if not _is_same_origin(request):
+        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+    return None
+
+
 """CSRF helper imported from .security"""
 
 
@@ -1132,6 +1144,15 @@ async def create_course(request: Request, payload: CourseCreate):
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     try:
         course = REPO.create_course(
@@ -1168,6 +1189,12 @@ async def get_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     # Validate path parameter format early to avoid unintended 500s
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
@@ -1536,6 +1563,12 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
     sub = _current_sub(user)
@@ -1567,6 +1600,12 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     try:
         title = payload.title or ""
@@ -1602,6 +1641,9 @@ async def get_unit(request: Request, unit_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
@@ -1644,6 +1686,9 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1677,6 +1722,9 @@ async def delete_unit(request: Request, unit_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1736,6 +1784,9 @@ async def create_section(request: Request, unit_id: str, payload: SectionCreateP
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1766,6 +1817,9 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
@@ -1800,6 +1854,9 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
@@ -1828,6 +1885,9 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
@@ -1888,6 +1948,9 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -1938,6 +2001,9 @@ async def update_section_task(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -1995,6 +2061,9 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2026,6 +2095,9 @@ async def reorder_section_tasks(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2197,6 +2269,9 @@ async def update_section_material(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2284,6 +2359,9 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2346,6 +2424,9 @@ async def create_section_material_upload_intent(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2390,6 +2471,9 @@ async def finalize_section_material_upload(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):

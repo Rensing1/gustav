@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+ - security(ops): Add startup guard to prevent dummy/unset SUPABASE_SERVICE_ROLE_KEY and `sslmode=disable` in production.
+ - docs(openapi): Document `/health` endpoint (no auth, no-store cache header).
 - security(auth): Add `Cache-Control: no-store` to /auth/login, /auth/callback (302/400), /auth/logout, and /auth/logout/success.
 - docs(env): `.env.example` uses `DUMMY_DO_NOT_USE` for service role key; README clarifies `KC_BASE_URL` vs legacy `KC_BASE`.
 - ops(docker): Add container `HEALTHCHECK` hitting `/health`.

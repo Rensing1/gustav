@@ -201,6 +201,12 @@ E2E‑Tests (Identity):
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
+#### Startup-Sicherheitsprüfung (Production/Staging)
+- Beim Start prüft die App grundlegende Sicherheitsbedingungen und beendet sich bei Fehlkonfigurationen:
+  - `SUPABASE_SERVICE_ROLE_KEY` muss gesetzt sein und darf nicht der Platzhalter `DUMMY_DO_NOT_USE` sein.
+  - `DATABASE_URL` darf in PROD kein `sslmode=disable` enthalten (TLS erzwingen).
+- In DEV/TEST sind diese Prüfungen deaktiviert, um lokale Entwicklung zu erleichtern.
+
 ### Storage (Supabase)
 - Self‑hosted via Supabase CLI. Storage ist privat; Zugriff ausschließlich über kurzlebige signierte URLs.
 - Bucket: `materials` (lokal in `supabase/config.toml` konfiguriert; 20 MiB; PDF/PNG/JPEG).

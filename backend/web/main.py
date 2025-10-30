@@ -44,6 +44,19 @@ try:
 except ImportError:
     pass
 
+# Minimal production safety checks (fail-fast on insecure config)
+# Support both "flat" (Docker image) and package (repo test) layouts.
+_cfg = None
+try:
+    import config as _cfg  # type: ignore
+except Exception:  # pragma: no cover
+    try:
+        from backend.web import config as _cfg  # type: ignore
+    except Exception:
+        _cfg = None  # as a last resort, skip guard (should not happen in app)
+if _cfg is not None:
+    _cfg.ensure_secure_config_on_startup()
+
 # --- App & Settings Setup -------------------------------------------------------
 
 class AuthSettings:

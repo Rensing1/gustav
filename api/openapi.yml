@@ -851,6 +851,29 @@ components:
           nullable: true
 
 paths:
+  /health:
+    get:
+      summary: Health check
+      description: Lightweight readiness probe for orchestration and tests.
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          headers:
+            Cache-Control:
+              description: Security — not cacheable.
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: healthy
   /api/learning/courses:
     get:
       tags: [Learning]

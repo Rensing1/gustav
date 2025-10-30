@@ -16,11 +16,6 @@ legacy-code-alpha1/
 # Python bytecode cache
 __pycache__/
 *.pyc
-backend/web/__pycache__/
-backend/web/components/__pycache__/
-backend/web/components/cards/__pycache__/
-backend/web/components/forms/__pycache__/
-backend/web/components/pages/__pycache__/
 .env*
 !.env.example
 .vscode/

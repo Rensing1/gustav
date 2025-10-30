@@ -5,18 +5,22 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # System-Dependencies (falls später benötigt)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/*
 
 # Python-Dependencies installieren
 COPY backend/web/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+  && apt-get purge -y --auto-remove gcc || true
 
 # Web-App-Code kopieren (SSR/HTMX)
 # Copy web layer first so reload still works as expected
 COPY backend/web/ .
 # Identity Access domain layer is located outside web package; copy it explicitly
+# Clean Architecture layout: we ship the web layer plus domain packages.
+# Identity/Teaching live as top-level packages; Learning stays under backend/ to
+# keep imports stable (existing code uses `from backend.learning...`).
 COPY backend/identity_access ./identity_access
 COPY backend/teaching ./teaching
 COPY backend/learning ./backend/learning

@@ -3078,7 +3078,10 @@ app.include_router(users_router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    # Minimal health endpoint used by orchestrators and tests.
+    # Security: include no-store to avoid caching any runtime status.
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"status": "healthy"}, headers={"Cache-Control": "no-store"})
 
 @app.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):

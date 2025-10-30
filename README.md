@@ -33,7 +33,7 @@ gustav-alpha2/
 
 ## Healthcheck
 
-- `GET /health` → `{ "status": "healthy", "service": "gustav-v2" }`
+- `GET /health` → `{ "status": "healthy" }`
 
 ## Dokumentation
 

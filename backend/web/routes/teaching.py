@@ -1041,22 +1041,28 @@ def _guard_unit_author(unit_id: str, author_sub: str):
     return JSONResponse({"error": "forbidden"}, status_code=403)
 
 
-def _json_private(payload, *, status_code: int = 200) -> JSONResponse:
+def _json_private(payload, *, status_code: int = 200, vary_origin: bool = False) -> JSONResponse:
     """Return a JSONResponse with cache disabled for shared caches and browsers.
 
     Rationale: Teaching endpoints expose user- and role-scoped data. To avoid
     accidental caching in proxies or browsers, respond with "private, no-store".
     """
-    return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store"}
+    if vary_origin:
+        headers["Vary"] = "Origin"
+    return JSONResponse(content=payload, status_code=status_code, headers=headers)
 
 
-def _private_error(payload: dict, *, status_code: int) -> JSONResponse:
+def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False) -> JSONResponse:
     """Return error JSON with private, no-store cache headers.
 
     Keep error responses out of shared caches to avoid leaking owner-scoped
     metadata via intermediary proxies or browser history.
     """
-    return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store"}
+    if vary_origin:
+        headers["Vary"] = "Origin"
+    return JSONResponse(content=payload, status_code=status_code, headers=headers)
 
 
 def _csrf_guard(request: Request) -> JSONResponse | None:
@@ -2840,31 +2846,56 @@ async def update_module_section_visibility(
     """
     user, error = _require_teacher(request)
     if error:
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
     # CSRF defense-in-depth: block cross-site PATCH attempts
     if not _is_same_origin(request):
-        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+        return _private_error(
+            {"error": "forbidden", "detail": "csrf_violation"},
+            status_code=403,
+            vary_origin=True,
+        )
 
     if not _is_uuid_like(course_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_course_id"},
+            status_code=400,
+            vary_origin=True,
+        )
     if not _is_uuid_like(module_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_module_id"},
+            status_code=400,
+            vary_origin=True,
+        )
     if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_section_id"},
+            status_code=400,
+            vary_origin=True,
+        )
     sub = _current_sub(user)
     guard = _guard_course_owner(course_id, sub)
     if guard:
         # Normalize guard response to include private cache header
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
             return guard
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
     visible_value = payload.visible
     if visible_value is None:
-        return _private_error({"error": "bad_request", "detail": "missing_visible"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "missing_visible"},
+            status_code=400,
+            vary_origin=True,
+        )
     if not isinstance(visible_value, bool):
-        return _private_error({"error": "bad_request", "detail": "invalid_visible_type"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_visible_type"},
+            status_code=400,
+            vary_origin=True,
+        )
     try:
         # Repository applies transactional upsert with RLS enforcement.
         record = REPO.set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
@@ -2873,10 +2904,10 @@ async def update_module_section_visibility(
         body = {"error": "not_found"}
         if detail:
             body["detail"] = detail
-        return _private_error(body, status_code=404)
+        return _private_error(body, status_code=404, vary_origin=True)
     except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(record, status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+    return _json_private(record, status_code=200, vary_origin=True)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections/releases")

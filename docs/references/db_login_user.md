@@ -16,7 +16,8 @@ Warum: Die App-Rolle `gustav_limited` ist NOLOGIN (Least Privilege, keine festen
 - Login-User out-of-band per Secret-Management anlegen (kein Skriptlauf im Deploy).  
 - DSNs per Secret injizieren.  
 - Startup-Guard verhindert direkte Logins als `gustav_limited`.
+- Achtung: In `GUSTAV_ENV=prod|stage` existiert kein Dev-Fallback – `TEACHING_DATABASE_URL`
+  (und ggf. `LEARNING_DATABASE_URL`) müssen gesetzt sein.
 
 ## Verifikation
 - `\du | grep gustav_app` (psql), `select rolcanlogin from pg_roles where rolname='gustav_limited';` → false.
-

@@ -17,4 +17,4 @@ Status: Stable
 ## Transport/Caching
 - PROD: TLS enforced; keine `sslmode=disable`.
 - `Cache-Control: no-store` für sensitive Endpunkte.
-
+- CSRF: State-changing Responses setzen `Vary: Origin`.

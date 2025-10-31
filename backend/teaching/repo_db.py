@@ -38,15 +38,17 @@ def _default_limited_dsn() -> str:
 
 
 def _dsn() -> str:
-    """Resolve the DSN for DB access, always falling back to limited-role credentials."""
+    """Resolve the DSN for DB access with env-aware fallbacks."""
+    env = (os.getenv("GUSTAV_ENV", "dev") or "dev").lower()
     candidates = [
         os.getenv("TEACHING_DATABASE_URL"),
         os.getenv("TEACHING_DB_URL"),
         os.getenv("RLS_TEST_DSN"),
         os.getenv("DATABASE_URL"),
         os.getenv("SUPABASE_DB_URL"),
-        _default_limited_dsn(),
     ]
+    if env not in {"prod", "production", "stage", "staging"}:
+        candidates.append(_default_limited_dsn())
     for dsn in candidates:
         if dsn:
             return dsn

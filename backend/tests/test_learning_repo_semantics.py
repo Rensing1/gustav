@@ -17,7 +17,9 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 def _dsn() -> str:
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
-    return os.getenv("RLS_TEST_DSN") or os.getenv("DATABASE_URL") or f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    return os.getenv("RLS_TEST_DSN") or os.getenv("DATABASE_URL") or f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
 
 def _seed_course_with_section(cur, *, teacher: str) -> dict[str, str]:

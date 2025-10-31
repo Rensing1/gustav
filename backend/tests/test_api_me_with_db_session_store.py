@@ -73,7 +73,7 @@ async def test_api_me_with_db_session_store(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.anyio
 async def test_api_me_with_db_store_expired_session_returns_401(monkeypatch: pytest.MonkeyPatch):
-    """If the DB-backed session is expired, /api/me must return 401 with no-store."""
+    """If the DB-backed session is expired, /api/me must return 401 with private no-store headers."""
     store, _ = _prepare_store(monkeypatch)
     monkeypatch.setattr(main, "SESSION_STORE", store)
 
@@ -85,7 +85,7 @@ async def test_api_me_with_db_store_expired_session_returns_401(monkeypatch: pyt
 
     try:
         assert resp.status_code == 401
-        assert resp.headers.get("Cache-Control") == "no-store"
+        assert resp.headers.get("Cache-Control") == "private, no-store"
         assert resp.json().get("error") == "unauthenticated"
     finally:
         _cleanup_store(store, rec)

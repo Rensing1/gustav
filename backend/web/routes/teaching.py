@@ -1005,7 +1005,7 @@ def _require_teacher(request: Request):
     """Return (user, error_response) ensuring caller has teacher role."""
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
-        return None, JSONResponse({"error": "forbidden"}, status_code=403)
+        return None, _private_error({"error": "forbidden"}, status_code=403)
     return user, None
 
 
@@ -1021,7 +1021,7 @@ def _is_uuid_like(value: str) -> bool:
 def _guard_unit_author(unit_id: str, author_sub: str):
     """Validate unit ownership, returning an error response when access is denied."""
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -1029,34 +1029,52 @@ def _guard_unit_author(unit_id: str, author_sub: str):
                 return None
             exists = REPO.unit_exists(unit_id)
             if exists is False:
-                return JSONResponse({"error": "not_found"}, status_code=404)
-            return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "not_found"}, status_code=404)
+            return _private_error({"error": "forbidden"}, status_code=403)
     except Exception:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     # Fallback for in-memory repo
     if hasattr(REPO, "unit_exists_for_author") and REPO.unit_exists_for_author(unit_id, author_sub):
         return None
     if hasattr(REPO, "unit_exists") and not REPO.unit_exists(unit_id):
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _private_error({"error": "forbidden"}, status_code=403)
 
 
-def _json_private(payload, *, status_code: int = 200) -> JSONResponse:
+def _json_private(payload, *, status_code: int = 200, vary_origin: bool = False) -> JSONResponse:
     """Return a JSONResponse with cache disabled for shared caches and browsers.
 
     Rationale: Teaching endpoints expose user- and role-scoped data. To avoid
     accidental caching in proxies or browsers, respond with "private, no-store".
     """
-    return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store"}
+    if vary_origin:
+        headers["Vary"] = "Origin"
+    return JSONResponse(content=payload, status_code=status_code, headers=headers)
 
 
-def _private_error(payload: dict, *, status_code: int) -> JSONResponse:
+def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False) -> JSONResponse:
     """Return error JSON with private, no-store cache headers.
 
     Keep error responses out of shared caches to avoid leaking owner-scoped
     metadata via intermediary proxies or browser history.
     """
-    return JSONResponse(content=payload, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store"}
+    if vary_origin:
+        headers["Vary"] = "Origin"
+    return JSONResponse(content=payload, status_code=status_code, headers=headers)
+
+
+def _csrf_guard(request: Request) -> JSONResponse | None:
+    """Enforce same-origin for browser write requests.
+
+    Returns a JSONResponse 403 with detail=csrf_violation and private cache headers
+    when the Origin/Referer does not match the server origin. When headers are
+    absent (e.g., non-browser clients), allow the request.
+    """
+    if not _is_same_origin(request):
+        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+    return None
 
 
 """CSRF helper imported from .security"""
@@ -1132,6 +1150,9 @@ async def create_course(request: Request, payload: CourseCreate):
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     try:
         course = REPO.create_course(
@@ -1168,6 +1189,9 @@ async def get_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     # Validate path parameter format early to avoid unintended 500s
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
@@ -1490,6 +1514,10 @@ async def delete_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    # CSRF defense-in-depth for browser clients
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -1501,7 +1529,7 @@ async def delete_course(request: Request, course_id: str):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course_owned(course_id, sub)
             _mark_recently_deleted(sub, course_id)
-            return Response(status_code=204)
+            return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
         else:
             course = REPO.get_course(course_id)
             if not course:
@@ -1511,7 +1539,7 @@ async def delete_course(request: Request, course_id: str):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course(course_id)
             _mark_recently_deleted(sub, course_id)
-            return Response(status_code=204)
+            return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
     except Exception:
         # Conservative default: do not claim deletion if ownership/existence cannot be determined
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -1536,6 +1564,9 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
     sub = _current_sub(user)
@@ -1567,6 +1598,9 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     try:
         title = payload.title or ""
@@ -1602,6 +1636,9 @@ async def get_unit(request: Request, unit_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
@@ -1644,6 +1681,9 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1677,6 +1717,9 @@ async def delete_unit(request: Request, unit_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1736,6 +1779,9 @@ async def create_section(request: Request, unit_id: str, payload: SectionCreateP
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1766,6 +1812,9 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
@@ -1800,6 +1849,9 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
@@ -1809,7 +1861,7 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     deleted = REPO.delete_section(unit_id, section_id, sub)
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/reorder")
@@ -1828,6 +1880,9 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
@@ -1888,6 +1943,9 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -1938,6 +1996,9 @@ async def update_section_task(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -1995,6 +2056,9 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2011,7 +2075,7 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")
@@ -2026,6 +2090,9 @@ async def reorder_section_tasks(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2197,6 +2264,9 @@ async def update_section_material(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2284,6 +2354,9 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2331,7 +2404,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents")
@@ -2346,6 +2419,9 @@ async def create_section_material_upload_intent(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2390,6 +2466,9 @@ async def finalize_section_material_upload(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2485,7 +2564,7 @@ async def get_section_material_download_url(
         if str(exc) == "storage_adapter_not_configured":
             return JSONResponse({"error": "service_unavailable"}, status_code=503)
         raise
-    return JSONResponse(content=payload, status_code=200, headers={"Cache-Control": "no-store"})
+    return JSONResponse(content=payload, status_code=200, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder")
@@ -2715,12 +2794,16 @@ async def delete_course_module(request: Request, course_id: str, module_id: str)
     if guard:
         return guard
     try:
+        # CSRF guard for DELETE
+        csrf = _csrf_guard(request)
+        if csrf:
+            return csrf
         deleted = REPO.delete_course_module_owned(course_id, module_id, sub)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 @teaching_router.patch("/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility")
 async def update_module_section_visibility(
@@ -2756,31 +2839,56 @@ async def update_module_section_visibility(
     """
     user, error = _require_teacher(request)
     if error:
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
     # CSRF defense-in-depth: block cross-site PATCH attempts
     if not _is_same_origin(request):
-        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+        return _private_error(
+            {"error": "forbidden", "detail": "csrf_violation"},
+            status_code=403,
+            vary_origin=True,
+        )
 
     if not _is_uuid_like(course_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_course_id"},
+            status_code=400,
+            vary_origin=True,
+        )
     if not _is_uuid_like(module_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_module_id"},
+            status_code=400,
+            vary_origin=True,
+        )
     if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_section_id"},
+            status_code=400,
+            vary_origin=True,
+        )
     sub = _current_sub(user)
     guard = _guard_course_owner(course_id, sub)
     if guard:
         # Normalize guard response to include private cache header
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
             return guard
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
     visible_value = payload.visible
     if visible_value is None:
-        return _private_error({"error": "bad_request", "detail": "missing_visible"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "missing_visible"},
+            status_code=400,
+            vary_origin=True,
+        )
     if not isinstance(visible_value, bool):
-        return _private_error({"error": "bad_request", "detail": "invalid_visible_type"}, status_code=400)
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_visible_type"},
+            status_code=400,
+            vary_origin=True,
+        )
     try:
         # Repository applies transactional upsert with RLS enforcement.
         record = REPO.set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
@@ -2789,10 +2897,10 @@ async def update_module_section_visibility(
         body = {"error": "not_found"}
         if detail:
             body["detail"] = detail
-        return _private_error(body, status_code=404)
+        return _private_error(body, status_code=404, vary_origin=True)
     except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(record, status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+    return _json_private(record, status_code=200, vary_origin=True)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections/releases")
@@ -3107,7 +3215,9 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
-    return JSONResponse({}, status_code=201) if created else Response(status_code=204)
+    if created:
+        return JSONResponse({}, status_code=201, headers={"Cache-Control": "private, no-store"})
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.delete("/api/teaching/courses/{course_id}/members/{student_sub}")
@@ -3125,6 +3235,10 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    # CSRF guard for membership mutation
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -3141,4 +3255,4 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})

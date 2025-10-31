@@ -74,5 +74,5 @@ async def test_register_callback_rejects_when_id_token_nonce_mismatch(monkeypatc
         # Complete callback with mismatching nonce
         r_cb = await client.get(f"/auth/callback?code=valid&state={state}")
     assert r_cb.status_code == 400
-    assert r_cb.headers.get("Cache-Control") == "no-store"
+    assert r_cb.headers.get("Cache-Control") == "private, no-store"
     assert r_cb.json().get("error") in {"invalid_id_token", "invalid_nonce"}

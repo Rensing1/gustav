@@ -66,7 +66,19 @@ Bezüge zu Unterrichten (bestehende Tabellen):
   - Submissions SELECT: nur `student_sub = app.current_sub`.
   - Submissions INSERT: nur wenn `check_task_visible_to_student` true und `max_attempts` nicht überschritten.
   - Keine UPDATE/DELETE im MVP (Abgaben sind unveränderlich).
-- DSN‑Auflösung (Learning‑Repo): `LEARNING_DATABASE_URL` > `LEARNING_DB_URL` > `DATABASE_URL` > Fallback (dev/test): `postgresql://gustav_limited:…@127.0.0.1:54322/postgres`. In PROD ist ein expliziter DSN erforderlich.
+- Rollbacks löschen Transaktions-GUCs. Nach `conn.rollback()` muss der Repo-Code `set_config('app.current_sub', student_sub, true)` neu setzen, bevor weitere Statements laufen (siehe `DBLearningRepo.create_submission`).
+- DSN‑Auflösung (Learning‑Repo): `LEARNING_DATABASE_URL` > `LEARNING_DB_URL` > `DATABASE_URL` > Fallback (dev/test): `postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres`. In PROD ist ein expliziter DSN erforderlich.
+- Helper laufen als SECURITY INVOKER mit gehärtetem `search_path`; zusätzliche Grants für
+  `supabase_admin` sind nicht erforderlich, solange Migrationen mit Standard-Supabase-Rollen laufen.
+- Zusätzliche SELECT-Policies erlauben Schülern (über `gustav_limited`) Lesezugriff nur auf freigegebene
+  Kursinhalte: Units, Course Modules, Unit Sections, Module Section Releases (sichtbare), Unit Materials
+  und Unit Tasks. Die Policies prüfen Mitgliedschaft (`course_memberships`) und Freigaben (`visible`).
+- Spezifische Prüffunktionen für Schülerzugriff:
+  - `student_is_course_member(p_student_sub text, p_course_id uuid)`
+  - `student_can_access_unit(p_student_sub text, p_unit_id uuid)`
+  - `student_can_access_course_module(p_student_sub text, p_course_module_id uuid)`
+  - `student_can_access_section(p_student_sub text, p_section_id uuid)`
+  Diese Funktionen laufen als SECURITY INVOKER und besitzen nur EXECUTE für `gustav_limited`.
 
 ## Sicherheit & Datenschutz
 - Minimierte DTOs: Identität über `sub`, kein PII in API‑Antworten.

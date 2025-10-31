@@ -1,5 +1,5 @@
--- Learning — Helper to list units for a student's course
--- SECURITY DEFINER with hardened search_path and fully-qualified table names
+-- Learning — Helper to list units for a student's course.
+-- SECURITY INVOKER relies on gustav_limited RLS; search_path hardened.
 
 set check_function_bodies = off;
 
@@ -15,7 +15,6 @@ returns table (
   module_position integer
 )
 language sql
-security definer
 set search_path = public, pg_temp
 as $$
   select u.id, u.title, u.summary, m.position as module_position
@@ -26,9 +25,6 @@ as $$
      and cm.student_id = p_student_sub
    order by m.position asc, u.id asc;
 $$;
-
--- Ensure the SECURITY DEFINER function is owned by the limited, non-BYPASSRLS role
-alter function public.get_course_units_for_student(text, uuid) owner to gustav_limited;
 
 grant execute on function public.get_course_units_for_student(text, uuid) to gustav_limited;
 

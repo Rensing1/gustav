@@ -20,11 +20,13 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 def _pick_dsn() -> str:
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
     return (
         os.getenv("RLS_TEST_DSN")
         or os.getenv("TEACHING_DATABASE_URL")
         or os.getenv("DATABASE_URL")
-        or f"postgresql://gustav_limited:gustav-limited@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
+        or f"postgresql://{user}:{password}@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
     )
 
 

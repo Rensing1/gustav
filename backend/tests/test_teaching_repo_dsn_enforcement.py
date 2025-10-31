@@ -42,3 +42,24 @@ def test_repo_allows_override_flag(monkeypatch: pytest.MonkeyPatch):
     # Should not raise now (we don't actually connect in constructor)
     DBTeachingRepo(dsn=bad_dsn)
 
+
+def test_repo_prod_env_requires_explicit_dsn(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like environments the repo must not fall back to the dev DSN."""
+    try:
+        import psycopg  # type: ignore  # noqa: F401
+    except Exception:
+        pytest.skip("psycopg not available")
+
+    # Simulate production environment without DSN configuration.
+    monkeypatch.delenv("TEACHING_DATABASE_URL", raising=False)
+    monkeypatch.delenv("TEACHING_DB_URL", raising=False)
+    monkeypatch.delenv("RLS_TEST_DSN", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
+    monkeypatch.delenv("ALLOW_SERVICE_DSN_FOR_TESTING", raising=False)
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+
+    from teaching import repo_db  # type: ignore
+
+    with pytest.raises(RuntimeError):
+        repo_db._dsn()

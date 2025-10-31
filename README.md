@@ -33,7 +33,7 @@ gustav-alpha2/
 
 ## Healthcheck
 
-- `GET /health` → `{ "status": "healthy", "service": "gustav-v2" }`
+- `GET /health` → `{ "status": "healthy" }`
 
 ## Dokumentation
 
@@ -54,6 +54,16 @@ gustav-alpha2/
   - `DATABASE_URL` (oder `SUPABASE_DB_URL`): DSN für DB-gestützte Sessions
 - `WEB_BASE`: Browser‑sichtbare Basis‑URL der App (z. B. `http://app.localhost:8100`)
 - `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `http://app.localhost:8100/auth/callback`); wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
+- `KC_BASE_URL` (bevorzugt) bzw. `KC_BASE` (Legacy): Öffentliche Basis‑URL von Keycloak. Für Proxys `KC_PUBLIC_BASE_URL` setzen.
+
+### Directory (Users API) — Admin‑Client
+
+- Für `/api/users/search` und `/api/users/list` nutzt GUSTAV einen vertraulichen Admin‑Client (Client‑Credentials) gegen Keycloak:
+  - `KC_ADMIN_REALM` (Default `master`)
+  - `KC_ADMIN_CLIENT_ID` (z. B. `gustav-admin-cli`)
+  - `KC_ADMIN_CLIENT_SECRET` (nicht commiten; nur Server‑Side!)
+- Der Client benötigt minimale `realm-management` Rollen (z. B. `view-users`, `query-users`).
+- Legacy‑Fallback (nur dev): `KC_ADMIN_USERNAME`/`KC_ADMIN_PASSWORD` (Password‑Grant) ist weiterhin möglich, in Produktion aber zu vermeiden.
 
 ### E2E-Hosts und Cookies
 
@@ -68,13 +78,15 @@ gustav-alpha2/
 
 ## Persistenz (Keycloak‑Accounts)
 
-- In DEV startet Keycloak mit `start-dev --import-realm`. Ohne Persistenz gehen
-  manuell angelegte Nutzer bei Rebuilds verloren.
-- Dieses Compose aktiviert ein Volume: `keycloak_data:/opt/keycloak/data`.
-  Dadurch bleiben Realm‑Daten und Benutzer erhalten.
-- Hinweise:
-  - Der Realm‑Import greift nur bei leerem Datenverzeichnis. Änderungen an
-    `keycloak/realm-gustav.json` werden erst nach Löschen des Volumes erneut importiert
-    (z. B. `docker compose down -v && docker volume rm <projekt>_keycloak_data`).
-  - Für Produktion wird empfohlen, `KC_DB=postgres` zu konfigurieren und Keycloak an
-    eine externe Datenbank anzubinden. Das Volume erleichtert DEV, ersetzt aber keine Prod‑DB.
+- Keycloak nutzt nun denselben PostgreSQL‑Stack wie die App: Compose stellt dafür
+  den Service `keycloak-db` (PostgreSQL 16) bereit.
+- Konfiguration über `.env`:
+  - `KC_DB=postgres`
+  - `KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak`
+  - `KC_DB_USERNAME`, `KC_DB_PASSWORD` (Dev‑Defaults `keycloak`/`keycloak`)
+  - `KC_DB_URL_PROPERTIES=sslmode=disable` (für Prod auf `sslmode=require`/TLS anpassen)
+- Der Erststart importiert den Realm `gustav`, danach verwaltet Keycloak alle Daten
+  direkt in PostgreSQL. Neustarts sowie Rebuilds erhalten Benutzer und Konfiguration.
+- `depends_on.condition=service_healthy` sorgt dafür, dass Keycloak erst nach
+  erfolgreichem `pg_isready` gegen den Datenbankdienst hochfährt.
+- Produktion: Binde `KC_DB_URL` an eine gemanagte Postgres‑Instanz (TLS, Backups, Secret‑Store).

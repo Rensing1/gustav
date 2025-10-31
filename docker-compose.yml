@@ -46,12 +46,14 @@ services:
       - GUSTAV_TRUST_PROXY=true
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
       - SESSIONS_BACKEND=db
-      # App runtime DSN (limited role; RLS enforced). Prefer direct Docker network DNS to Supabase DB.
-      - DATABASE_URL=postgresql://gustav_limited:gustav-limited@supabase_db_gustav-alpha2:5432/postgres
-      # Teaching repo DSN must not fallback to RLS_TEST_DSN in containers; set explicitly
-      - TEACHING_DATABASE_URL=postgresql://gustav_limited:gustav-limited@supabase_db_gustav-alpha2:5432/postgres
+      # App runtime DSN: build from app login user/pass and container DB host.
+      - APP_DB_USER=${APP_DB_USER:-gustav_app}
+      - APP_DB_PASSWORD=${APP_DB_PASSWORD:-CHANGE_ME_DEV}
+      - DATABASE_URL=postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres
+      # Teaching repo DSN uses same credentials/host unless overridden.
+      - TEACHING_DATABASE_URL=${TEACHING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Sessions DSN (service role; app_sessions policies allow server-side access)
-      - SESSION_DATABASE_URL=postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres
+      - SESSION_DATABASE_URL=${SESSION_DATABASE_URL:-postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -70,15 +72,37 @@ services:
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
+      KC_DB_URL_PROPERTIES: ${KC_DB_URL_PROPERTIES:-sslmode=disable}
       KC_PROXY: edge
       KC_HOSTNAME_URL: http://id.localhost:8100
       KC_HOSTNAME_ADMIN_URL: http://id.localhost:8100
-      # In dev we rely on the embedded DB; for prod, configure KC_DB=postgres and friends.
-    volumes:
-      # Persist realm, users and admin config across container rebuilds
-      - keycloak_data:/opt/keycloak/data
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
     # Theme and app CSS are baked into the image for reproducible deployments
     # No host port mapping in local-only mode; reachable via caddy reverse proxy
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
+
+  keycloak-db:
+    image: postgres:16
+    container_name: gustav-keycloak-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: ${KC_DB_USERNAME:-keycloak}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
+    volumes:
+      - keycloak_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KC_DB_USERNAME:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
@@ -89,5 +113,5 @@ networks:
   supabase_network_gustav-alpha2:
     external: true
 volumes:
-  keycloak_data:
+  keycloak_pg_data:
     driver: local

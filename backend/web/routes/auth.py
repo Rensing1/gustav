@@ -90,6 +90,8 @@ async def auth_login(request: Request, redirect: str | None = None):
           URLs are rejected. Persists the validated redirect together with the
           server-generated state in a server-side store.
         - Redirects to Keycloak authorization endpoint.
+        - Sets `Cache-Control: private, no-store` on the 302 response to
+          prevent caching of sensitive redirects.
     Permissions:
         Public.
     """
@@ -122,13 +124,17 @@ async def auth_login(request: Request, redirect: str | None = None):
     )
     oidc = OIDCClient(cfg)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
-    return RedirectResponse(url=url, status_code=302)
+    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
 
 @auth_router.get("/auth/forgot")
 async def auth_forgot(login_hint: str | None = None):
     """
     Redirect to Keycloak 'Forgot Password' page.
+
+    Security:
+        Adds `Cache-Control: private, no-store` to avoid caching redirect
+        responses by browsers or proxies.
     """
     import main  # late import
 
@@ -137,7 +143,7 @@ async def auth_forgot(login_hint: str | None = None):
     base = f"{public_or_internal}/realms/{main.OIDC_CFG.realm}/login-actions/reset-credentials"
     query = {"login_hint": login_hint} if login_hint else None
     target = f"{base}?{urlencode(query)}" if query else base
-    return RedirectResponse(url=target, status_code=302)
+    return RedirectResponse(url=target, status_code=302, headers={"Cache-Control": "private, no-store"})
 
 
 @auth_router.get("/auth/register")
@@ -150,6 +156,8 @@ async def auth_register(request: Request, login_hint: str | None = None):
         includes a fresh nonce (OIDC replay protection), same as the login flow.
     Permissions:
         Public.
+    Security:
+        Adds `Cache-Control: private, no-store` to prevent caching.
     """
     import main  # late import
 
@@ -183,7 +191,7 @@ async def auth_register(request: Request, login_hint: str | None = None):
         url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
         sep = '&'
     url = f"{url}{sep}kc_action=register"
-    return RedirectResponse(url=url, status_code=302)
+    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
 
 @auth_router.get("/auth/logout")
@@ -200,6 +208,8 @@ async def auth_logout(request: Request, redirect: str | None = None):
           External URLs are rejected/ignored to prevent open redirects.
     Permissions:
         Public; IdP end-session relies on IdP browser cookie.
+    Security:
+        Adds `Cache-Control: private, no-store` to the 302 response.
     """
     import main  # late import for stores and cookie policy
 
@@ -238,6 +248,7 @@ async def auth_logout(request: Request, redirect: str | None = None):
         logger.warning("Logout URL composition failed: %s", exc.__class__.__name__)
 
     resp = RedirectResponse(url=end_session, status_code=302)
+    resp.headers["Cache-Control"] = "private, no-store"
     # Clear cookie consistent with environment flags
     # Late import with fallback for both package and top-level import contexts
     try:
@@ -263,6 +274,7 @@ async def auth_logout_success():
     """Render a minimal success page after logout with a link to /auth/login.
 
     Public page (allowlisted by middleware). No user data is displayed.
+    Security: Include `Cache-Control: private, no-store`.
     """
     html = """
     <!DOCTYPE html>
@@ -284,7 +296,7 @@ async def auth_logout_success():
     </body>
     </html>
     """
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 
 # Removed separate /auth/logout/idp — unified into GET /auth/logout

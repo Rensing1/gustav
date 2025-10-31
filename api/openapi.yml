@@ -885,7 +885,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: gustav_limited policies scope results to the authenticated student."
       x-permissions:
         requiredRole: student
       parameters:
@@ -950,7 +950,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: helper functions expose only sections released to the authenticated student."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1056,7 +1056,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: course membership guard filters units per authenticated student."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1146,7 +1146,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: student scope enforced via helper functions filtering visibility."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1258,7 +1258,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: course ownership enforced via gustav_limited policies."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -1365,7 +1365,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: submissions table enforces student ownership via policies."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1472,7 +1472,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: policies ensure only the owning teacher can read the course."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1625,6 +1625,41 @@ paths:
               description: Authorization URL at Keycloak
               schema:
                 type: string
+        '400':
+          description: Invalid or expired request (e.g., stale state)
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many login attempts (rate limited)
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: no-store
+            Retry-After:
+              description: Seconds until another login attempt is accepted.
+              schema:
+                type: string
+              example: "60"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                rate_limited:
+                  summary: Rate limit enforced
+                  value:
+                    error: rate_limited
+                    detail: retry_later
 
 
   /auth/callback:
@@ -1765,6 +1800,29 @@ paths:
             Location:
               schema:
                 type: string
+        '429':
+          description: Too many reset attempts from this client (rate limited)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
+            Retry-After:
+              description: Seconds until another password reset redirect is allowed.
+              schema:
+                type: string
+              example: "60"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                rate_limited:
+                  summary: Password reset rate limit hit
+                  value:
+                    error: rate_limited
+                    detail: retry_later
 
 
   /auth/register:
@@ -1881,7 +1939,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: ownership enforced; only the author can read this resource."
       requestBody:
         required: true
         content:
@@ -1938,8 +1996,6 @@ paths:
       operationId: getCourse
       security:
         - cookieAuth: []
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -1981,12 +2037,10 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: author-only policies scope sections to the calling teacher."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       parameters:
         - in: path
           name: course_id
@@ -2041,7 +2095,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: author-only policies limit task visibility to the owning teacher."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -2077,7 +2131,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: author-only policies control material visibility."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -2371,8 +2425,6 @@ paths:
       x-permissions:
         requiredRole: teacher
         authorOnly: true
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       parameters:
         - in: path
           name: unit_id
@@ -2677,8 +2729,6 @@ paths:
       operationId: reorderSections
       security:
         - cookieAuth: []
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3359,8 +3409,6 @@ paths:
       operationId: reorderSectionMaterials
       security:
         - cookieAuth: []
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3919,7 +3967,12 @@ paths:
               description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-                example: private, no-store
+              example: private, no-store
+            Vary:
+              description: Security — responses vary by request Origin for CSRF enforcement.
+              schema:
+                type: string
+              example: Origin
           content:
             application/json:
               schema:

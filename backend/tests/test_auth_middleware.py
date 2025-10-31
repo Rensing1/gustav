@@ -36,7 +36,7 @@ async def test_json_request_without_session_returns_401():
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get("/api/me", headers={"Accept": "application/json"})
     assert r.status_code == 401
-    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

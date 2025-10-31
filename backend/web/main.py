@@ -167,13 +167,8 @@ async def auth_enforcement(request: Request, call_next):
 
     if not rec:
         if path.startswith("/api/"):
-            if path.startswith("/api/learning/"):
-                cache = "private, no-store"
-            elif path == "/api/me":
-                cache = "no-store"
-            else:
-                cache = "no-store"
-            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": cache})
+            headers = {"Cache-Control": "private, no-store"}
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:
             return Response(status_code=401, headers={"HX-Redirect": "/auth/login"})
         return RedirectResponse(url="/auth/login", status_code=302)
@@ -3094,7 +3089,7 @@ async def health_check():
     # Minimal health endpoint used by orchestrators and tests.
     # Security: include no-store to avoid caching any runtime status.
     from fastapi.responses import JSONResponse
-    return JSONResponse({"status": "healthy"}, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"status": "healthy"}, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
@@ -3111,26 +3106,26 @@ async def about_page(request: Request):
 @app.get("/auth/callback")
 async def auth_callback(request: Request, code: str | None = None, state: str | None = None):
     if not code or not state:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     rec = STATE_STORE.pop_valid(state)
     if not rec:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     try:
         tokens = OIDC.exchange_code_for_tokens(code=code, code_verifier=rec.code_verifier)
     except Exception as exc:
         logger.warning("Token exchange failed: %s", exc.__class__.__name__)
-        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     id_token = tokens.get("id_token")
     if not id_token or not isinstance(id_token, str):
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     try:
         claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
     except IDTokenVerificationError as exc:
         logger.warning("ID token verification failed: %s", exc.code)
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "private, no-store"})
     claim_nonce = claims.get("nonce")
     if getattr(rec, "nonce", None) and claim_nonce != rec.nonce:
-        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "private, no-store"})
 
     sub = str(claims.get("sub") or "unknown-sub")
     email = claims.get("email") or claims.get("preferred_username") or ""
@@ -3150,7 +3145,7 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
-    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["Cache-Control"] = "private, no-store"
     max_age = sess.ttl_seconds if SETTINGS.environment == "prod" else None
     _set_session_cookie(resp, sess.session_id, max_age=max_age, request=request)
     return resp
@@ -3158,11 +3153,11 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
 @app.get("/api/me")
 async def get_me(request: Request):
     if SESSION_COOKIE_NAME not in request.cookies:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
     sid = request.cookies.get(SESSION_COOKIE_NAME)
     rec = SESSION_STORE.get(sid or "")
     if not rec:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
     
     exp_iso = datetime.fromtimestamp(rec.expires_at, tz=timezone.utc).isoformat(timespec="seconds") if rec.expires_at else None
     return JSONResponse({
@@ -3170,7 +3165,7 @@ async def get_me(request: Request):
         "roles": rec.roles,
         "name": getattr(rec, "name", ""),
         "expires_at": exp_iso,
-    }, headers={"Cache-Control": "no-store"})
+    }, headers={"Cache-Control": "private, no-store"})
 def create_app_auth_only() -> FastAPI:
     """Factory returning a lightweight FastAPI app exposing only auth routes.
 
@@ -3185,22 +3180,22 @@ def create_app_auth_only() -> FastAPI:
     async def _callback_stub(request: Request, code: str | None = None, state: str | None = None):
         # Treat explicit "invalid" values as invalid for negative-path tests
         if (not code or not state) or (code == "invalid" or state == "invalid"):
-            return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "no-store"})
+            return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
         sid = secrets.token_urlsafe(24)
         resp = RedirectResponse(url="/", status_code=302)
-        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Cache-Control"] = "private, no-store"
         _set_session_cookie(resp, sid, request=request)
         return resp
     # Provide a lightweight /api/me for auth-only tests
     @sub.get("/api/me")
     async def me_stub(request: Request):
         if SESSION_COOKIE_NAME not in request.cookies:
-            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
         return JSONResponse({
             "sub": "test-user",
             "roles": ["student"],
             "name": "",
             "expires_at": None,
-        }, headers={"Cache-Control": "no-store"})
+        }, headers={"Cache-Control": "private, no-store"})
     # Note: A single callback stub is defined above to avoid duplicate routes.
     return sub

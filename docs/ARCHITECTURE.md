@@ -150,18 +150,18 @@ E2E‑Tests (Identity):
 
 ### Auth Router & Security (aktualisiert)
 - Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
-- `/api/me`: Antworten enthalten `Cache-Control: no-store` zur Verhinderung von Caching von Auth‑Zuständen.
+- `/api/me`: Antworten enthalten `Cache-Control: private, no-store` zur Verhinderung von Caching von Auth‑Zuständen.
 - Vereinheitlichter Logout: `GET /auth/logout` löscht die App‑Session (Cookie) und leitet zur End‑Session beim IdP; danach Rückkehr zur Erfolgsseite (`/auth/logout/success`). Optional ist ein interner absoluter Redirect‑Pfad erlaubt; unsichere oder zu lange Werte werden ignoriert.
 
 #### Auth‑Erzwingung (Middleware)
 - Allowlist: `/auth/*`, `/health`, `/static/*`, `/favicon.ico` werden nie umgeleitet.
 - HTML‑Anfragen ohne Session: `302` Redirect zu `/auth/login`.
-- JSON‑/API‑Anfragen ohne Session (Pfad beginnt mit `/api/`): `401` JSON mit `Cache-Control: no-store`.
+- JSON‑/API‑Anfragen ohne Session (Pfad beginnt mit `/api/`): `401` JSON mit `Cache-Control: private, no-store`.
 - HTMX‑Requests ohne Session: `401` mit Header `HX-Redirect: /auth/login`.
 - Bei erfolgreicher Authentifizierung setzt die Middleware `request.state.user = { sub, name, role, roles }` für SSR; die primäre Rolle wird deterministisch nach Priorität gewählt (admin > teacher > student).
 
 #### Sicherheits‑Härtung (Auth)
-- `/auth/callback` liefert bei allen Fehlern `400` mit `Cache-Control: no-store` (nicht cachebar).
+- `/auth/callback` liefert bei allen Fehlern `400` mit `Cache-Control: private, no-store` (nicht cachebar).
 - `/auth/login` ignoriert einen client‑übergebenen `state` vollständig; `state` wird ausschließlich serverseitig erzeugt und validiert (CSRF‑Schutz).
 - Redirect‑Parameter sind nur als interne absolute Pfade erlaubt. Server‑seitig erzwungenes Pattern (spiegelt OpenAPI): `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`. Doppelte Slashes (`//`) und Pfadtraversalen (`..`) sind nicht erlaubt. Ungültige Werte werden ignoriert (Login → `/`, Logout → `/auth/logout/success`).
 - `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
@@ -191,7 +191,7 @@ E2E‑Tests (Identity):
   übereinstimmt. Bei Mismatch wird die statische `redirect_uri` verwendet.
 
 #### Nonce & Session‑TTL
-- Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: no-store`.
+- Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: private, no-store`.
 - Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). In PROD wird das `gustav_session`‑Cookie mit `Max-Age=<TTL>` gesetzt; Flags: `HttpOnly; Secure; SameSite=strict`. In DEV wird kein `Max-Age` gesetzt (`SameSite=lax`).
 - /api/me: liefert zusätzlich `expires_at` (UTC‑ISO‑8601), damit Clients die Restlaufzeit anzeigen können. Antworten sind nie cachebar.
 

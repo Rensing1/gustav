@@ -1005,7 +1005,7 @@ def _require_teacher(request: Request):
     """Return (user, error_response) ensuring caller has teacher role."""
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
-        return None, JSONResponse({"error": "forbidden"}, status_code=403)
+        return None, _private_error({"error": "forbidden"}, status_code=403)
     return user, None
 
 
@@ -1021,7 +1021,7 @@ def _is_uuid_like(value: str) -> bool:
 def _guard_unit_author(unit_id: str, author_sub: str):
     """Validate unit ownership, returning an error response when access is denied."""
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -1029,16 +1029,16 @@ def _guard_unit_author(unit_id: str, author_sub: str):
                 return None
             exists = REPO.unit_exists(unit_id)
             if exists is False:
-                return JSONResponse({"error": "not_found"}, status_code=404)
-            return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "not_found"}, status_code=404)
+            return _private_error({"error": "forbidden"}, status_code=403)
     except Exception:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     # Fallback for in-memory repo
     if hasattr(REPO, "unit_exists_for_author") and REPO.unit_exists_for_author(unit_id, author_sub):
         return None
     if hasattr(REPO, "unit_exists") and not REPO.unit_exists(unit_id):
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _private_error({"error": "forbidden"}, status_code=403)
 
 
 def _json_private(payload, *, status_code: int = 200, vary_origin: bool = False) -> JSONResponse:
@@ -1153,12 +1153,6 @@ async def create_course(request: Request, payload: CourseCreate):
     csrf = _csrf_guard(request)
     if csrf:
         return csrf
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     sub = _current_sub(user)
     try:
         course = REPO.create_course(
@@ -1195,9 +1189,6 @@ async def get_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     csrf = _csrf_guard(request)
     if csrf:
         return csrf
@@ -1576,9 +1567,6 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     csrf = _csrf_guard(request)
     if csrf:
         return csrf
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
     sub = _current_sub(user)
@@ -1610,9 +1598,6 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     csrf = _csrf_guard(request)
     if csrf:
         return csrf
@@ -2579,7 +2564,7 @@ async def get_section_material_download_url(
         if str(exc) == "storage_adapter_not_configured":
             return JSONResponse({"error": "service_unavailable"}, status_code=503)
         raise
-    return JSONResponse(content=payload, status_code=200, headers={"Cache-Control": "no-store"})
+    return JSONResponse(content=payload, status_code=200, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder")

@@ -866,7 +866,7 @@ paths:
               description: Security — not cacheable.
               schema:
                 type: string
-                example: no-store
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -1621,7 +1621,7 @@ paths:
               description: Security — responses must not be cached.
               schema:
                 type: string
-              example: no-store
+              example: private, no-store
             Location:
               description: Authorization URL at Keycloak
               schema:
@@ -1633,7 +1633,7 @@ paths:
               description: Security — responses must not be cached.
               schema:
                 type: string
-              example: no-store
+              example: private, no-store
           content:
             application/json:
               schema:
@@ -1666,7 +1666,7 @@ paths:
               description: Security — responses must not be cached.
               schema:
                 type: string
-              example: no-store
+              example: private, no-store
             Set-Cookie:
               description: >-
                 httpOnly session cookie `gustav_session`.
@@ -1686,7 +1686,7 @@ paths:
               description: Security — responses must not be cached.
               schema:
                 type: string
-              example: no-store
+              example: private, no-store
           content:
             application/json:
               schema:
@@ -1721,7 +1721,7 @@ paths:
               description: Security — responses must not be cached.
               schema:
                 type: string
-              example: no-store
+              example: private, no-store
             Set-Cookie:
               description: >-
                 Clears the httpOnly session cookie `gustav_session` (expires it).
@@ -1747,7 +1747,7 @@ paths:
               description: Security — responses must not be cached.
               schema:
                 type: string
-              example: no-store
+              example: private, no-store
           content:
             text/html:
               schema:

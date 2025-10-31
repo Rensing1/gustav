@@ -26,7 +26,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 ## Security
 - Use Service Role key only in the backend. Never expose keys to the browser.
 - Buckets must be private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
-- Download URL responses include `Cache-Control: no-store` to avoid caching.
+- Download URL responses include `Cache-Control: private, no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.
 
 ## Gateway

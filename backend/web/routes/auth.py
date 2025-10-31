@@ -124,7 +124,7 @@ async def auth_login(request: Request, redirect: str | None = None):
     )
     oidc = OIDCClient(cfg)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
-    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "no-store"})
+    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
 
 @auth_router.get("/auth/forgot")
@@ -143,7 +143,7 @@ async def auth_forgot(login_hint: str | None = None):
     base = f"{public_or_internal}/realms/{main.OIDC_CFG.realm}/login-actions/reset-credentials"
     query = {"login_hint": login_hint} if login_hint else None
     target = f"{base}?{urlencode(query)}" if query else base
-    return RedirectResponse(url=target, status_code=302, headers={"Cache-Control": "no-store"})
+    return RedirectResponse(url=target, status_code=302, headers={"Cache-Control": "private, no-store"})
 
 
 @auth_router.get("/auth/register")
@@ -191,7 +191,7 @@ async def auth_register(request: Request, login_hint: str | None = None):
         url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
         sep = '&'
     url = f"{url}{sep}kc_action=register"
-    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "no-store"})
+    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
 
 @auth_router.get("/auth/logout")
@@ -248,7 +248,7 @@ async def auth_logout(request: Request, redirect: str | None = None):
         logger.warning("Logout URL composition failed: %s", exc.__class__.__name__)
 
     resp = RedirectResponse(url=end_session, status_code=302)
-    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["Cache-Control"] = "private, no-store"
     # Clear cookie consistent with environment flags
     # Late import with fallback for both package and top-level import contexts
     try:
@@ -296,7 +296,7 @@ async def auth_logout_success():
     </body>
     </html>
     """
-    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 
 # Removed separate /auth/logout/idp — unified into GET /auth/logout

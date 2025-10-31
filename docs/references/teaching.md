@@ -131,7 +131,7 @@ Datei‑Flow (presigned Upload)
   - 201 bei Neuerstellung, 200 wenn bereits finalisiert (idempotent)
   - 400 Fehlercodes u.a.: `invalid_title | checksum_mismatch | intent_expired | mime_not_allowed | invalid_alt_text`
 - `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url?disposition=inline|attachment`
-  - 200 `{ url, expires_at }`; `Cache-Control: no-store`; 400 `invalid_disposition`; 403/404
+  - 200 `{ url, expires_at }`; `Cache-Control: private, no-store`; 400 `invalid_disposition`; 403/404
 
 #### Aufgaben (Tasks) je Abschnitt
 - `GET /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)

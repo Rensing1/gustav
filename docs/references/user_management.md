@@ -13,7 +13,7 @@ Ziel: Übersicht über Authentifizierung, Session-Handling und den UserContextDT
 - `GET /auth/callback` → Code-Exchange, ID-Token verifizieren (JWKS, iss, aud, exp), Session anlegen.
 - `GET /auth/logout` → App-Session löschen, Redirect zu IdP End-Session (`id_token_hint` wenn vorhanden).
 - `GET /auth/forgot`/`/auth/register` → Redirects zu IdP.
-- `GET /api/me` → 200 `{ sub, roles, name, expires_at }` oder 401 `{ error }` (mit `Cache-Control: no-store`).
+- `GET /api/me` → 200 `{ sub, roles, name, expires_at }` oder 401 `{ error }` (mit `Cache-Control: private, no-store`).
 
 ## UserContextDTO
 Minimaler, kontextübergreifender Nutzerdatensatz:
@@ -36,7 +36,7 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
   - Migration: `supabase/migrations/20251019135804_persistent_app_sessions.sql`
 
 ## Sicherheit
-- Signaturprüfung ID‑Token über JWKS; Fehlerfälle mit 400 und `Cache-Control: no-store`.
+- Signaturprüfung ID‑Token über JWKS; Fehlerfälle mit 400 und `Cache-Control: private, no-store`.
 - `state` und `nonce` im Login‑Flow; `nonce` wird gegen ID‑Token geprüft.
 - Cookies httpOnly; in PROD mit `Secure` + `SameSite=strict` und `Max-Age`.
 - Open Redirects verhindert: In‑App‑Pfadprüfung für Redirect‑Parameter.

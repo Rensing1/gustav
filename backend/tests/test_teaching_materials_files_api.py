@@ -234,6 +234,7 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
             params={"disposition": "inline"},
         )
         assert download.status_code == 200
+        assert download.headers.get("Cache-Control") == "private, no-store"
         dl_payload = download.json()
         assert dl_payload["url"].startswith("http://storage.local/download")
         assert datetime.fromisoformat(dl_payload["expires_at"]) > datetime.now(timezone.utc)
@@ -255,6 +256,7 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
             "/download-url",
         )
         assert forbidden_download.status_code == 403
+        assert forbidden_download.headers.get("Cache-Control") == "private, no-store"
 
         # Invalid disposition returns 400.
         client.cookies.set("gustav_session", teacher.session_id)
@@ -984,8 +986,8 @@ async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage
 
 
 @pytest.mark.anyio
-async def test_download_url_sets_no_store_header(_reset_storage_adapter):
-    """Download URL responses must not be cacheable (Cache-Control: no-store)."""
+async def test_download_url_sets_private_no_store_header(_reset_storage_adapter):
+    """Download URL responses must not be cacheable (Cache-Control: private, no-store)."""
     main.SESSION_STORE = SessionStore()
     import routes.teaching as teaching  # noqa: E402
 
@@ -1021,7 +1023,7 @@ async def test_download_url_sets_no_store_header(_reset_storage_adapter):
             params={"disposition": "inline"},
         )
         assert resp.status_code == 200
-        assert resp.headers.get("Cache-Control") == "no-store"
+        assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

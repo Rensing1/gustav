@@ -1638,29 +1638,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
-          description: Too many login attempts (rate limited)
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: no-store
-            Retry-After:
-              description: Seconds until another login attempt is accepted.
-              schema:
-                type: string
-              example: "60"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              examples:
-                rate_limited:
-                  summary: Rate limit enforced
-                  value:
-                    error: rate_limited
-                    detail: retry_later
+        
 
 
   /auth/callback:
@@ -1801,23 +1779,7 @@ paths:
             Location:
               schema:
                 type: string
-        '429':
-          description: Too many reset attempts from this client (rate limited)
-          headers:
-            Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-              example: private, no-store
-            Retry-After:
-              description: Seconds until another password reset redirect is allowed.
-              schema:
-                type: string
-              example: "60"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        
               examples:
                 rate_limited:
                   summary: Password reset rate limit hit

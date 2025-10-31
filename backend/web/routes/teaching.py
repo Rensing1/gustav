@@ -1523,6 +1523,10 @@ async def delete_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    # CSRF defense-in-depth for browser clients
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -1534,7 +1538,7 @@ async def delete_course(request: Request, course_id: str):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course_owned(course_id, sub)
             _mark_recently_deleted(sub, course_id)
-            return Response(status_code=204)
+            return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
         else:
             course = REPO.get_course(course_id)
             if not course:
@@ -1544,7 +1548,7 @@ async def delete_course(request: Request, course_id: str):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             REPO.delete_course(course_id)
             _mark_recently_deleted(sub, course_id)
-            return Response(status_code=204)
+            return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
     except Exception:
         # Conservative default: do not claim deletion if ownership/existence cannot be determined
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -1872,7 +1876,7 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     deleted = REPO.delete_section(unit_id, section_id, sub)
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/reorder")
@@ -2086,7 +2090,7 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")
@@ -2415,7 +2419,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents")
@@ -2805,12 +2809,16 @@ async def delete_course_module(request: Request, course_id: str, module_id: str)
     if guard:
         return guard
     try:
+        # CSRF guard for DELETE
+        csrf = _csrf_guard(request)
+        if csrf:
+            return csrf
         deleted = REPO.delete_course_module_owned(course_id, module_id, sub)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 @teaching_router.patch("/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility")
 async def update_module_section_visibility(
@@ -3222,7 +3230,9 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
-    return JSONResponse({}, status_code=201) if created else Response(status_code=204)
+    if created:
+        return JSONResponse({}, status_code=201, headers={"Cache-Control": "private, no-store"})
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.delete("/api/teaching/courses/{course_id}/members/{student_sub}")
@@ -3240,6 +3250,10 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    # CSRF guard for membership mutation
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -3256,4 +3270,4 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})

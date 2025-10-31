@@ -83,3 +83,22 @@ def ensure_secure_config_on_startup() -> None:
                 f"Refusing to start: {key} authenticates as 'gustav_limited' in production. "
                 "Create an environment-specific login role that is IN ROLE gustav_limited and use that instead."
             )
+
+    # 4) Keycloak endpoints must use HTTPS in production-like environments
+    def _must_be_https(url_value: str, var_name: str) -> None:
+        try:
+            if not url_value:
+                return
+            val = url_value.strip().lower()
+            if val.startswith("http://"):
+                raise SystemExit(
+                    f"Refusing to start: {var_name} must use https in production (got http)."
+                )
+        except SystemExit:
+            raise
+        except Exception:
+            # If parsing fails, be conservative and abort
+            raise SystemExit(f"Refusing to start: invalid {var_name} value in production.")
+
+    _must_be_https(os.getenv("KC_BASE_URL", ""), "KC_BASE_URL")
+    _must_be_https(os.getenv("KC_PUBLIC_BASE_URL", ""), "KC_PUBLIC_BASE_URL")

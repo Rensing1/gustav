@@ -201,10 +201,19 @@ E2E‑Tests (Identity):
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
+#### Runbooks & Migration
+- Preflight‑Checkliste: `docs/runbooks/preflight_checklist.md`.
+- Hardware Cutover Playbook: `docs/migration/hardware_cutover_playbook.md`.
+- Release‑Prozess: `docs/runbooks/release_process.md`.
+- DB Provisioning/DSN/Netz: `docs/references/db_provisioning.md`, `docs/references/config_matrix.md`, `docs/references/network_topology.md`, `docs/references/compose_env.md`.
+- Make‑Ziele: `docs/references/make_targets.md`.
+- E2E How‑To: `docs/tests/e2e_howto.md`.
+
 #### Startup-Sicherheitsprüfung (Production/Staging)
 - Beim Start prüft die App grundlegende Sicherheitsbedingungen und beendet sich bei Fehlkonfigurationen:
   - `SUPABASE_SERVICE_ROLE_KEY` muss gesetzt sein und darf nicht der Platzhalter `DUMMY_DO_NOT_USE` sein.
   - `DATABASE_URL` darf in PROD kein `sslmode=disable` enthalten (TLS erzwingen).
+  - `DATABASE_URL` darf in PROD/Stage nicht als Benutzer `gustav_limited` authentifizieren. Diese Rolle ist NOLOGIN; verwende einen umgebungsspezifischen Login (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.
 - In DEV/TEST sind diese Prüfungen deaktiviert, um lokale Entwicklung zu erleichtern.
 
 ### Storage (Supabase)
@@ -215,8 +224,8 @@ E2E‑Tests (Identity):
 - ENV: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SUPABASE_STORAGE_BUCKET` (default: `materials`). Siehe `.env.example` und `docs/references/storage_and_gateway.md`.
 
 ### RLS & Ordering (Teaching/Sections)
-- RLS‑Identität: Jede DB‑Operation setzt `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen.
-- Limited‑Role‑DSN: Runtime verwendet ausschließlich die `gustav_limited`‑Rolle. Service‑/Owner‑Rollen sind Migrationen vorbehalten.
+- RLS‑Identität: Heute setzt jede DB‑Operation `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen. Dieses Muster wird mittelfristig durch JWT/Claims in Policies ersetzt (separater Plan).
+- Rollen‑Trennung: `gustav_limited` definiert die Berechtigungen (RLS/Grants) und ist NOLOGIN. Die Anwendung verbindet sich über einen umgebungsspezifischen Login‑User (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.
 - Author‑Scope: `unit_sections` ist über `units.author_id = app.current_sub` abgesichert (SELECT/INSERT/UPDATE/DELETE).
 - Atomare Reorder: Unique `(unit_id, position)` ist DEFERRABLE; Reorder setzt `SET CONSTRAINTS … DEFERRED` und updated alle Positionen in einer Transaktion.
 - Concurrency: Neue `position` wird mit Row‑Lock auf die Unit‑Sections ermittelt, um doppelte Positionen zu vermeiden.

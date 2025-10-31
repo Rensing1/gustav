@@ -1472,7 +1472,8 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
-        - "RLS: policies ensure only the owning teacher can read the course."
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: student ownership and course membership enforced via policies and helpers."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1939,6 +1940,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "RLS: ownership enforced; only the author can read this resource."
       requestBody:
         required: true
@@ -2037,6 +2039,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "RLS: author-only policies scope sections to the calling teacher."
       x-permissions:
         requiredRole: teacher
@@ -2095,6 +2098,7 @@ paths:
       security:
         - cookieAuth: []
       x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "RLS: author-only policies limit task visibility to the owning teacher."
       x-permissions:
         requiredRole: teacher
@@ -3967,7 +3971,7 @@ paths:
               description: Security — responses are private and not cacheable by shared caches.
               schema:
                 type: string
-              example: private, no-store
+                example: private, no-store
             Vary:
               description: Security — responses vary by request Origin for CSRF enforcement.
               schema:

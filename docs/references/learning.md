@@ -66,6 +66,7 @@ Bezüge zu Unterrichten (bestehende Tabellen):
   - Submissions SELECT: nur `student_sub = app.current_sub`.
   - Submissions INSERT: nur wenn `check_task_visible_to_student` true und `max_attempts` nicht überschritten.
   - Keine UPDATE/DELETE im MVP (Abgaben sind unveränderlich).
+- Rollbacks löschen Transaktions-GUCs. Nach `conn.rollback()` muss der Repo-Code `set_config('app.current_sub', student_sub, true)` neu setzen, bevor weitere Statements laufen (siehe `DBLearningRepo.create_submission`).
 - DSN‑Auflösung (Learning‑Repo): `LEARNING_DATABASE_URL` > `LEARNING_DB_URL` > `DATABASE_URL` > Fallback (dev/test): `postgresql://gustav_limited:…@127.0.0.1:54322/postgres`. In PROD ist ein expliziter DSN erforderlich.
 - Helper laufen als SECURITY INVOKER mit gehärtetem `search_path`; zusätzliche Grants für
   `supabase_admin` sind nicht erforderlich, solange Migrationen mit Standard-Supabase-Rollen laufen.

@@ -124,7 +124,7 @@ async def auth_login(request: Request, redirect: str | None = None):
     )
     oidc = OIDCClient(cfg)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
-    headers = {"Cache-Control": "private, no-store"}
+    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
     if request.headers.get("HX-Request"):
         headers["HX-Redirect"] = url
         return Response(status_code=204, headers=headers)
@@ -195,7 +195,7 @@ async def auth_register(request: Request, login_hint: str | None = None):
         url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
         sep = '&'
     url = f"{url}{sep}kc_action=register"
-    headers = {"Cache-Control": "private, no-store"}
+    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
     if request.headers.get("HX-Request"):
         headers["HX-Redirect"] = url
         return Response(status_code=204, headers=headers)

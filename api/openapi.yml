@@ -1614,6 +1614,23 @@ paths:
             URLs are rejected; invalid values are ignored. Disallows double-slash
             and path traversal segments.
       responses:
+        '204':
+          description: HTMX request — instruct the browser to redirect via header
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
+            HX-Redirect:
+              description: Target authorization URL for client-side redirect
+              schema:
+                type: string
         '302':
           description: Redirect to Keycloak authorization endpoint
           headers:
@@ -1622,6 +1639,11 @@ paths:
               schema:
                 type: string
               example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
             Location:
               description: Authorization URL at Keycloak
               schema:
@@ -1805,6 +1827,23 @@ paths:
             format: email
           description: Optional email to prefill in the registration form.
       responses:
+        '204':
+          description: HTMX request — instruct the browser to redirect via header
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
+            HX-Redirect:
+              description: Target authorization URL for client-side redirect
+              schema:
+                type: string
         '302':
           description: Redirect to Keycloak registration page
           headers:
@@ -1813,6 +1852,11 @@ paths:
               schema:
                 type: string
               example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
             Location:
               schema:
                 type: string

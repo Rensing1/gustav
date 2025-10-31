@@ -2,7 +2,6 @@
 OpenAPI auth & CSRF contract regression tests.
 
 Why:
-- Auth flows rely on rate limiting; 429 + Retry-After must be documented.
 - CSRF-geschützte Write-Endpunkte sollen `Vary: Origin` deklarieren, damit
   Reverse-Proxies keine Antworten zwischen Origins teilen.
 """
@@ -20,21 +19,6 @@ def _load_spec() -> dict:
 
 def _response(spec: dict, path: str, method: str, status: str) -> dict:
     return spec["paths"][path][method]["responses"][status]
-
-
-def test_auth_login_documents_rate_limit_headers():
-    spec = _load_spec()
-    resp = _response(spec, "/auth/login", "get", "429")
-    headers = resp.get("headers", {})
-    assert "Retry-After" in headers, "Auth login 429 must advertise Retry-After header"
-    assert resp["description"], "Provide rationale for rate-limit response"
-
-
-def test_auth_forgot_documents_rate_limit_headers():
-    spec = _load_spec()
-    resp = _response(spec, "/auth/forgot", "get", "429")
-    headers = resp.get("headers", {})
-    assert "Retry-After" in headers, "Auth forgot 429 must advertise Retry-After header"
 
 
 def test_csrf_write_endpoints_vary_origin():

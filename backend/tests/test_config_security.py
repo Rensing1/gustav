@@ -68,6 +68,9 @@ async def test_dsn_user_guard_prod_allows_nonlimited_user(monkeypatch: pytest.Mo
     monkeypatch.setenv("GUSTAV_ENV", "prod")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_NON_DUMMY")
+    # Ensure Keycloak URLs are https to satisfy production guards
+    monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",

@@ -27,6 +27,9 @@ def ensure_secure_config_on_startup() -> None:
     Checks:
     - Supabase Service Role key must be set and not a known dummy placeholder.
     - DATABASE_URL must not explicitly disable TLS in prod-like envs.
+    - DATABASE_URL user must not be the application role `gustav_limited` in
+      prod-like envs (role is NOLOGIN by design; use an env-specific login that
+      is IN ROLE gustav_limited).
     """
 
     env = os.getenv("GUSTAV_ENV", "dev")
@@ -47,3 +50,29 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: DATABASE_URL contains sslmode=disable in production. Use sslmode=require or verify TLS."
         )
 
+    # 3) DSN user must not be the app role in prod-like envs
+    def _parse_user(dsn_value: str) -> str | None:
+        try:
+            if "://" in dsn_value:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(dsn_value)
+                return parsed.username
+            # Keyword form: host=... user=... dbname=...
+            import re
+
+            m = re.search(r"\buser\s*=\s*([^\s]+)", dsn_value)
+            return m.group(1) if m else None
+        except Exception:
+            return None
+
+    for key in ("DATABASE_URL", "TEACHING_DATABASE_URL", "SESSION_DATABASE_URL"):
+        val = os.getenv(key, "")
+        if not val:
+            continue
+        user = (_parse_user(val) or "").lower()
+        if user == "gustav_limited":
+            raise SystemExit(
+                f"Refusing to start: {key} authenticates as 'gustav_limited' in production. "
+                "Create an environment-specific login role that is IN ROLE gustav_limited and use that instead."
+            )

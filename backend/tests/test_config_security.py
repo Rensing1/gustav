@@ -43,3 +43,37 @@ async def test_service_role_key_guard_dev_allows_dummy(monkeypatch: pytest.Monke
     importlib.reload(cfg)
     cfg.ensure_secure_config_on_startup()
 
+
+@pytest.mark.anyio
+async def test_dsn_user_guard_prod_raises_if_limited_user(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like env, DSN must not authenticate as the app role."""
+    monkeypatch.setenv("GUSTAV_ENV", "production")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
+    # Valid TLS setting
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://gustav_limited:secret@db.example.com:5432/postgres?sslmode=require",
+    )
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    with pytest.raises(SystemExit):
+        cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+async def test_dsn_user_guard_prod_allows_nonlimited_user(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like env, a separate login IN ROLE gustav_limited is allowed."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
+    )
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    # Should not raise
+    cfg.ensure_secure_config_on_startup()

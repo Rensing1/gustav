@@ -240,7 +240,7 @@ Anwenden lokal:
 - `supabase migration up`
 - Rückgängig: `supabase migration down 1`
 
-DSN (Beispiel): `DATABASE_URL=postgresql://gustav_limited:gustav-limited@127.0.0.1:54322/postgres`
+DSN (Beispiel): `DATABASE_URL=postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres`
 
 ## Sicherheit & Datenschutz
 - Owner‑Policy: Nur Kurs‑Autor (teacher_id == sub) verwaltet Kurs/Mitglieder und sieht Mitgliederliste.

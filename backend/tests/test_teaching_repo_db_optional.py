@@ -10,6 +10,14 @@ import os
 import pytest
 
 
+def _fallback_login_dsn() -> str:
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    return f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+
 def _probe_dsn(dsn: str) -> bool:
     try:
         import psycopg  # type: ignore
@@ -21,9 +29,7 @@ def _probe_dsn(dsn: str) -> bool:
 
 @pytest.mark.anyio
 async def test_db_repo_create_and_list_courses_when_db_available():
-    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
-    port = os.getenv("TEST_DB_PORT", "54322")
-    dsn = os.getenv("DATABASE_URL") or f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    dsn = os.getenv("DATABASE_URL") or _fallback_login_dsn()
     if not _probe_dsn(dsn):
         pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 
@@ -41,9 +47,7 @@ async def test_db_repo_create_and_list_courses_when_db_available():
 
 
 def test_db_repo_memberships_enforce_owner_rls():
-    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
-    port = os.getenv("TEST_DB_PORT", "54322")
-    dsn = os.getenv("DATABASE_URL") or f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    dsn = os.getenv("DATABASE_URL") or _fallback_login_dsn()
     if not _probe_dsn(dsn):
         pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 
@@ -72,9 +76,7 @@ def test_db_repo_memberships_enforce_owner_rls():
 
 
 def test_course_memberships_insert_blocked_for_non_owner():
-    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
-    port = os.getenv("TEST_DB_PORT", "54322")
-    dsn = os.getenv("DATABASE_URL") or f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    dsn = os.getenv("DATABASE_URL") or _fallback_login_dsn()
     if not _probe_dsn(dsn):
         pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 

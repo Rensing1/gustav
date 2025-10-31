@@ -36,7 +36,7 @@ async def test_rls_helpers_no_public_execute_and_app_role_can_run():
 
     dsn = (
         os.getenv("DATABASE_URL")
-        or f"postgresql://gustav_limited:gustav-limited@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
+        or f"postgresql://{os.getenv('APP_DB_USER', 'gustav_app')}:{os.getenv('APP_DB_PASSWORD', 'CHANGE_ME_DEV')}@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
     )
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
@@ -79,4 +79,3 @@ async def test_rls_helpers_no_public_execute_and_app_role_can_run():
                 )
                 # The value is arbitrary false for dummy ids; we only care execution works
                 _ = cur.fetchone()[0]
-

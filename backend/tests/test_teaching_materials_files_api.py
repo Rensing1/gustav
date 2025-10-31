@@ -591,7 +591,9 @@ async def test_finalize_rejects_expired_intent(_reset_storage_adapter):
         if not dsn:
             host = os.getenv("TEST_DB_HOST", "127.0.0.1")
             port = os.getenv("TEST_DB_PORT", "54322")
-            dsn = f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+            user = os.getenv("APP_DB_USER", "gustav_app")
+            password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+            dsn = f"postgresql://{user}:{password}@{host}:{port}/postgres"
         with psycopg.connect(dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (teacher.sub,))

@@ -28,7 +28,9 @@ def _probe_db_and_helpers() -> bool:
     # Try DATABASE_URL, then default limited DSN (127.0.0.1:54322)
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
-    candidates = [os.getenv("DATABASE_URL"), f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"]
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    candidates = [os.getenv("DATABASE_URL"), f"postgresql://{user}:{password}@{host}:{port}/postgres"]
     try:
         import psycopg  # type: ignore
         for dsn in candidates:

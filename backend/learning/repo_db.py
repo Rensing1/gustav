@@ -22,18 +22,28 @@ except Exception:  # pragma: no cover
     HAVE_PSYCOPG = False
 
 
-def _default_limited_dsn() -> str:
-    """Supabase-local fallback DSN for dev/test only.
+def _default_app_login_dsn() -> str:
+    """Return the local dev DSN using the app login role (e.g. gustav_app).
 
-    This matches the docker compose defaults used in the project and is only
-    considered in non-production environments by `_dsn()`. In production, an
-    explicit DATABASE_URL/LEARNING_DATABASE_URL must be provided.
+    Why:
+        The application role `gustav_limited` is NOLOGIN. Local development
+        therefore uses an environment-specific login (created via
+        `make db-login-user`) that inherits from `gustav_limited`.
+
+    Behavior:
+        - Falls back to APP_DB_USER/APP_DB_PASSWORD (defaults mirror .env.example).
+        - Raises a helpful error when the user still points to `gustav_limited`.
     """
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
-    # We intentionally keep the well-known dev credentials here because they
-    # point to the local Supabase Postgres used in tests.
-    return f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    if not user or user == "gustav_limited":
+        raise RuntimeError(
+            "APP_DB_USER must reference the environment-specific login role "
+            "(e.g. gustav_app). Run `make db-login-user` to provision it."
+        )
+    return f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
 
 def _dsn() -> str:
@@ -45,7 +55,7 @@ def _dsn() -> str:
     ]
     # Only allow default limited DSN implicitly in non-prod environments (dev/test)
     if env != "prod":
-        candidates.append(_default_limited_dsn())
+        candidates.append(_default_app_login_dsn())
     for candidate in candidates:
         if candidate:
             return candidate

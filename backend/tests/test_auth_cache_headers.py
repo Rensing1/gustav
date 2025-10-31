@@ -39,7 +39,7 @@ async def test_auth_login_has_private_no_store_cache_header():
         r = await c.get("/auth/login")
     assert r.status_code == 302
     cc = r.headers.get("Cache-Control", "")
-    assert cc == "no-store"
+    assert cc == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -49,7 +49,7 @@ async def test_auth_callback_400_has_private_no_store_cache_header():
         r = await c.get("/auth/callback")
     assert r.status_code == 400
     cc = r.headers.get("Cache-Control", "")
-    assert cc == "no-store"
+    assert cc == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -58,7 +58,7 @@ async def test_auth_logout_has_private_no_store_cache_header():
         r = await c.get("/auth/logout")
     assert r.status_code == 302
     cc = r.headers.get("Cache-Control", "")
-    assert cc == "no-store"
+    assert cc == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -67,4 +67,4 @@ async def test_auth_logout_success_has_private_no_store_cache_header():
         r = await c.get("/auth/logout/success")
     assert r.status_code == 200
     cc = r.headers.get("Cache-Control", "")
-    assert cc == "no-store"
+    assert cc == "private, no-store"

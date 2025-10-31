@@ -73,7 +73,7 @@ async def test_callback_rejects_when_id_token_nonce_mismatch(monkeypatch: pytest
         r_cb = await client.get(f"/auth/callback?code=valid&state={state}")
     # Assert: should be 400 once nonce checking is implemented
     assert r_cb.status_code == 400, "Callback should reject nonce mismatch (RED)"
-    assert r_cb.headers.get("Cache-Control") == "no-store"
+    assert r_cb.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -127,7 +127,7 @@ async def test_me_includes_expires_at_and_no_store():
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/api/me")
     assert r.status_code == 200
-    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.headers.get("Cache-Control") == "private, no-store"
     body = r.json()
     # expires_at must be present and ISO-8601 like
     assert "expires_at" in body, "RED: endpoint should include expires_at"

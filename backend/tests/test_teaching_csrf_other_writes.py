@@ -27,10 +27,18 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_create_course_blocks_cross_origin_and_allows_same_origin():
+async def test_create_course_blocks_cross_origin_and_allows_same_origin(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
     main.SESSION_STORE = SessionStore()
     teacher = main.SESSION_STORE.create(sub="t-csrf-course", name="Teach", roles=["teacher"])  # type: ignore
+    csrf_calls = {"count": 0}
+    original_guard = teaching._csrf_guard
+
+    def _counting_guard(request):
+        csrf_calls["count"] += 1
+        return original_guard(request)
+
+    monkeypatch.setattr(teaching, "_csrf_guard", _counting_guard)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -41,16 +49,26 @@ async def test_create_course_blocks_cross_origin_and_allows_same_origin():
         assert r.headers.get("Cache-Control") == "private, no-store"
 
         # Same-origin → 201 + private cache headers
+        csrf_calls["count"] = 0
         r2 = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
         assert r2.status_code == 201
         assert r2.headers.get("Cache-Control") == "private, no-store"
+        assert csrf_calls["count"] == 1, "CSRF guard should be evaluated exactly once per request"
 
 
 @pytest.mark.anyio
-async def test_create_unit_blocks_cross_origin_and_allows_same_origin():
+async def test_create_unit_blocks_cross_origin_and_allows_same_origin(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
     main.SESSION_STORE = SessionStore()
     teacher = main.SESSION_STORE.create(sub="t-csrf-unit", name="Teach", roles=["teacher"])  # type: ignore
+    csrf_calls = {"count": 0}
+    original_guard = teaching._csrf_guard
+
+    def _counting_guard(request):
+        csrf_calls["count"] += 1
+        return original_guard(request)
+
+    monkeypatch.setattr(teaching, "_csrf_guard", _counting_guard)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -61,7 +79,8 @@ async def test_create_unit_blocks_cross_origin_and_allows_same_origin():
         assert r.headers.get("Cache-Control") == "private, no-store"
 
         # Same-origin → 201 + private cache headers
+        csrf_calls["count"] = 0
         r2 = await c.post("/api/teaching/units", json={"title": "Unit"}, headers={"Origin": "http://test"})
         assert r2.status_code == 201
         assert r2.headers.get("Cache-Control") == "private, no-store"
-
+        assert csrf_calls["count"] == 1, "CSRF guard should be evaluated exactly once per request"

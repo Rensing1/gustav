@@ -19,3 +19,5 @@ __pycache__/
 .env*
 !.env.example
 .vscode/
+.DS_Store
+*.swp

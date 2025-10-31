@@ -1,20 +1,20 @@
-# Basis-Image: Python 3.11 (slim für kleinere Größe)
+# Base image: Python 3.11-slim keeps the runtime lean
 FROM python:3.11-slim
 
-# Arbeitsverzeichnis im Container
+# Set container working directory
 WORKDIR /app
 
-# System-Dependencies (falls später benötigt)
+# System build dependencies (kept minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
   && rm -rf /var/lib/apt/lists/*
 
-# Python-Dependencies installieren
+# Install Python dependencies
 COPY backend/web/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
   && apt-get purge -y --auto-remove gcc || true
 
-# Web-App-Code kopieren (SSR/HTMX)
+# Copy web app source (SSR/HTMX)
 # Copy web layer first so reload still works as expected
 COPY backend/web/ .
 # Identity Access domain layer is located outside web package; copy it explicitly
@@ -34,10 +34,10 @@ ENV PYTHONUNBUFFERED=1
 RUN useradd -m -u 10001 app && chown -R app:app /app
 USER app
 
-# Port freigeben
+# Expose FastAPI port
 EXPOSE 8000
 
-# Server starten (ohne Reload für stabile In-Memory-State während E2E)
+# Start server (no reload to keep in-memory state stable during E2E tests)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # Lightweight healthcheck hitting the app's health endpoint

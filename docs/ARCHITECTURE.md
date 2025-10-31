@@ -66,6 +66,7 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
   - `database_schema.md` – Schema (derzeit leer; geplant über Migrationen zu füllen)
   - `UI-UX-Leitfaden.md` – Richtlinien für Gestaltung/Interaktionen
 - `Dockerfile`, `docker-compose.yml` – Containerisierung (Dev‑Setup)
+  - Runtime Layout: Der Container kopiert `backend/web/` sowie die Domänenpakete `identity_access`, `teaching` und `backend/learning`. `PYTHONPATH=/app:/app/backend` stellt sicher, dass Import-Pfade (`from backend.learning...`) sowohl lokal als auch im Image identisch bleiben.
   - Keycloak läuft in allen Umgebungen gegen den dedizierten Compose-Service `keycloak-db` (PostgreSQL 16) anstelle des früheren lokalen Volumes. Startparameter (`KC_DB_URL`, Benutzer/Passwort) kommen aus `.env` bzw. Secret-Store; die Datenbank hält Realm- und Benutzerzustand persistent.
 - `legacy-code-alpha1/` – Referenz Altcode
 

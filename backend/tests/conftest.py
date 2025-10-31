@@ -45,8 +45,9 @@ def _ensure_db_env_defaults() -> None:
             os.environ[var] = default
 
     # Prefer the limited-role DSN for application traffic so every query is RLS-protected.
-    os.environ["RLS_TEST_DSN"] = limited_dsn
-    os.environ["DATABASE_URL"] = limited_dsn
+    # Respect pre-configured env (e.g., a dedicated login IN ROLE gustav_limited).
+    _assign_or_override("RLS_TEST_DSN", limited_dsn)
+    _assign_or_override("DATABASE_URL", limited_dsn)
 
     # Still expose service DSNs for dedicated tests when the host DB is reachable.
     if _probe(service_dsn):

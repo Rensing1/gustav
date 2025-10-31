@@ -46,12 +46,14 @@ services:
       - GUSTAV_TRUST_PROXY=true
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
       - SESSIONS_BACKEND=db
-      # App runtime DSN (limited role; RLS enforced). Prefer direct Docker network DNS to Supabase DB.
-      - DATABASE_URL=postgresql://gustav_limited:gustav-limited@supabase_db_gustav-alpha2:5432/postgres
-      # Teaching repo DSN must not fallback to RLS_TEST_DSN in containers; set explicitly
-      - TEACHING_DATABASE_URL=postgresql://gustav_limited:gustav-limited@supabase_db_gustav-alpha2:5432/postgres
+      # App runtime DSN: build from app login user/pass and container DB host.
+      - APP_DB_USER=${APP_DB_USER:-gustav_app}
+      - APP_DB_PASSWORD=${APP_DB_PASSWORD:-CHANGE_ME_DEV}
+      - DATABASE_URL=postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres
+      # Teaching repo DSN uses same credentials/host unless overridden.
+      - TEACHING_DATABASE_URL=${TEACHING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Sessions DSN (service role; app_sessions policies allow server-side access)
-      - SESSION_DATABASE_URL=postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres
+      - SESSION_DATABASE_URL=${SESSION_DATABASE_URL:-postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

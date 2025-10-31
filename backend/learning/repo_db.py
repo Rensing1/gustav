@@ -575,28 +575,31 @@ class DBLearningRepo:
 
                     if isinstance(exc, _pg_errors.UniqueViolation):
                         conn.rollback()
-                        cur.execute(
-                            """
-                            select id::text,
-                                   attempt_nr,
-                                   kind,
-                                   text_body,
-                                   mime_type,
-                                   size_bytes,
-                               storage_key,
-                               sha256,
-                                   analysis_status,
-                                   analysis_json,
-                                   feedback_md,
-                                   error_code,
-                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                   to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                              from public.learning_submissions
-                             where course_id = %s and task_id = %s and student_sub = %s and idempotency_key = %s
-                            """,
-                            (course_uuid, task_uuid, data.student_sub, data.idempotency_key),
-                        )
-                        existing = cur.fetchone()
+                        with conn.cursor() as cur2:
+                            # Rollback clears transaction-scoped GUCs; restore RLS context before querying.
+                            self._set_current_sub(cur2, data.student_sub)
+                            cur2.execute(
+                                """
+                                select id::text,
+                                       attempt_nr,
+                                       kind,
+                                       text_body,
+                                       mime_type,
+                                       size_bytes,
+                                       storage_key,
+                                       sha256,
+                                       analysis_status,
+                                       analysis_json,
+                                       feedback_md,
+                                       error_code,
+                                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                       to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                                  from public.learning_submissions
+                                 where course_id = %s and task_id = %s and student_sub = %s and idempotency_key = %s
+                                """,
+                                (course_uuid, task_uuid, data.student_sub, data.idempotency_key),
+                            )
+                            existing = cur2.fetchone()
                         if existing:
                             row = existing
                         else:  # defensive: re-raise if we cannot recover

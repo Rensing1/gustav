@@ -1793,6 +1793,11 @@ pre {
   margin-left: 65px;
 }
 
+.main-content .container {
+  margin-left: 0;
+  margin-right: auto;
+}
+
 /* Footer in main content */
 .content-footer {
   margin-top: auto;

@@ -23,7 +23,6 @@ from components import (
 from components.markdown import render_markdown_safe
 from components.forms.unit_edit_form import UnitEditForm
 from components.base import Component
-from components.navigation import Navigation
 from components.pages import SciencePage
 from components.forms.course_edit_form import CourseEditForm
 
@@ -387,6 +386,45 @@ def _render_courses_page_html(request: Request, items: list[dict], *, csrf_token
         </div>
     '''
 
+
+def _layout_response(
+    request: Request,
+    layout: Layout,
+    *,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> HTMLResponse:
+    """Render Layout with HTMX-aware semantics and return an HTMLResponse.
+
+    Why:
+        Centralises the rule that HTMX navigation must only receive the main
+        fragment plus a single out-of-band sidebar to keep the toggle JS happy.
+    Parameters:
+        request: FastAPI request carrying headers such as `HX-Request`.
+        layout: Prepared Layout component with page title, content and user info.
+        status_code: HTTP status code for the response (defaults to 200).
+        headers: Optional header overrides (e.g., `Cache-Control`).
+    Behavior:
+        - Returns the fragment/OOB combination when `HX-Request` is present.
+        - Otherwise renders the complete document including `<head>` and
+          navigation.
+        - Merges caller-provided headers onto the response.
+    Permissions:
+        None. Individual route handlers must enforce course- or role-based
+        checks before calling this helper.
+    """
+    if request.headers.get("HX-Request"):
+        # HTMX swaps require fragment-only responses and a sidebar OOB update.
+        body = layout.render_fragment()
+    else:
+        body = layout.render()
+    response = HTMLResponse(content=body, status_code=status_code)
+    if headers:
+        for key, value in headers.items():
+            response.headers[key] = value
+    return response
+
+
 @app.get("/courses/{course_id}/edit", response_class=HTMLResponse)
 async def courses_edit_form(request: Request, course_id: str):
     """Render the course edit form populated from API when possible.
@@ -419,7 +457,7 @@ async def courses_edit_form(request: Request, course_id: str):
     form_component = CourseEditForm(course_id=course_id, csrf_token=token, values=values)
     content = f'<div class="container"><h1>Kurs bearbeiten</h1><section class="card">{form_component.render()}</section></div>'
     layout = Layout(title="Kurs bearbeiten", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning", response_class=HTMLResponse)
 async def learning_index(request: Request):
@@ -457,7 +495,7 @@ async def learning_index(request: Request):
         '</div>'
     )
     layout = Layout(title="Meine Kurse", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}", response_class=HTMLResponse)
 async def learning_course_detail(request: Request, course_id: str):
@@ -520,7 +558,7 @@ async def learning_course_detail(request: Request, course_id: str):
         '</div>'
     )
     layout = Layout(title=Component.escape(title), content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}/units/{unit_id}", response_class=HTMLResponse)
 async def learning_unit_sections(request: Request, course_id: str, unit_id: str):
@@ -648,7 +686,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
         "</div>"
     )
     layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)
 async def courses_edit_submit(request: Request, course_id: str):
@@ -722,7 +760,7 @@ async def courses_modules_page(request: Request, course_id: str):
         '</div>'
     )
     layout = Layout(title="Lerneinheiten", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/courses/{course_id}/modules/create", response_class=HTMLResponse)
@@ -871,7 +909,7 @@ async def course_module_sections_page(request: Request, course_id: str, module_i
         '</div>'
     )
     layout = Layout(title="Abschnittsfreigaben", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(layout.render())
+    return _layout_response(request, layout)
 
 
 @app.post("/courses/{course_id}/modules/{module_id}/sections/{section_id}/toggle", response_class=HTMLResponse)
@@ -1419,6 +1457,7 @@ async def _fetch_sections_for_unit(unit_id: str, *, session_id: str) -> list[dic
 
 
 def _render_unit_edit_response(
+    request: Request,
     *,
     unit_id: str,
     user: dict | None,
@@ -1436,8 +1475,9 @@ def _render_unit_edit_response(
         "</div>"
     )
     layout = Layout(title="Lerneinheit bearbeiten", content=content, user=user, current_path=f"/units/{unit_id}/edit")
-    return HTMLResponse(
-        content=layout.render(),
+    return _layout_response(
+        request,
+        layout,
         status_code=status_code,
         headers={"Cache-Control": "private, no-store"},
     )
@@ -1534,11 +1574,7 @@ async def home(request: Request):
     </div>
     """
     layout = Layout(title="Startseite", content=content, user=user, current_path=request.url.path)
-    html = layout.render()
-    if request.headers.get("HX-Request"):
-        aside_oob = Navigation(user, request.url.path).render_aside(oob=True)
-        html = html + aside_oob
-    return HTMLResponse(content=html)
+    return _layout_response(request, layout)
 
 @app.get("/courses", response_class=HTMLResponse)
 async def courses_index(request: Request):
@@ -1585,7 +1621,7 @@ async def courses_index(request: Request):
     token = _get_or_create_csrf_token(sid)
     content = _render_courses_page_html(request, items, csrf_token=token, limit=limit, offset=offset, has_next=has_next)
     layout = Layout(title="Meine Kurse", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses", response_class=HTMLResponse)
 async def courses_create(request: Request):
@@ -1748,7 +1784,7 @@ async def units_index(request: Request):
     # Append pager after the main units content
     content = base_content + (pager if pager else "")
     layout = Layout(title="Lerneinheiten", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/units", response_class=HTMLResponse)
 async def units_create(request: Request):
@@ -1837,6 +1873,7 @@ async def units_edit_form(request: Request, unit_id: str):
         error_msg = "unit_load_failed"
     status = 200 if error_msg is None else 400
     return _render_unit_edit_response(
+        request,
         unit_id=unit_id,
         user=user,
         csrf_token=token,
@@ -1869,6 +1906,7 @@ async def units_edit_submit(request: Request, unit_id: str):
 
     if not cleaned_title:
         return _render_unit_edit_response(
+            request,
             unit_id=unit_id,
             user=user,
             csrf_token=token,
@@ -1896,6 +1934,7 @@ async def units_edit_submit(request: Request, unit_id: str):
         status_code = resp.status_code if resp.status_code in (400, 403, 404) else 400
 
     return _render_unit_edit_response(
+        request,
         unit_id=unit_id,
         user=user,
         csrf_token=token,
@@ -1958,7 +1997,7 @@ async def unit_details_index(request: Request, unit_id: str):
     unit_vm = {"id": unit_id, "title": unit_title or "Lerneinheit", "summary": unit_summary or None}
     content = _render_sections_page_html(unit_vm, sections, csrf_token=token)
     layout = Layout(title=f"Abschnitte für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session_id: str) -> list[dict]:
@@ -2066,7 +2105,7 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
         csrf_token=token,
     )
     layout = Layout(title=f"Abschnitt – {section_title or ''}", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
@@ -2170,7 +2209,7 @@ async def materials_new(request: Request, unit_id: str, section_id: str):
         pass
     content = _render_material_create_page_html(unit_id, section_id, title, csrf_token=token)
     layout = Layout(title="Material anlegen", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/units/{unit_id}/sections/{section_id}/tasks/new", response_class=HTMLResponse)
@@ -2207,7 +2246,7 @@ async def tasks_new(request: Request, unit_id: str, section_id: str):
         pass
     content = _render_task_create_page_html(unit_id, section_id, title, csrf_token=token)
     layout = Layout(title="Aufgabe anlegen", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 async def _fetch_material_detail(unit_id: str, section_id: str, material_id: str, *, session_id: str) -> dict | None:
@@ -2348,7 +2387,7 @@ async def material_detail_page(request: Request, unit_id: str, section_id: str, 
         download_url = None
     content = _render_material_detail_page_html(unit_id, section_id, mat, csrf_token=token, download_url=download_url)
     layout = Layout(title="Material bearbeiten", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/units/{unit_id}/sections/{section_id}/materials/{material_id}/update")
@@ -2415,7 +2454,7 @@ async def task_detail_page(request: Request, unit_id: str, section_id: str, task
         return HTMLResponse("Aufgabe nicht gefunden", status_code=404)
     content = _render_task_detail_page_html(unit_id, section_id, task, csrf_token=token)
     layout = Layout(title="Aufgabe bearbeiten", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/units/{unit_id}/sections/{section_id}/tasks/{task_id}/update")
@@ -2947,7 +2986,7 @@ async def members_index(request: Request, course_id: str):
     course_vm = {"id": course_id, "title": course_title}
     content = _render_members_page_html(request, course=course_vm, members=members, csrf_token=token)
     layout = Layout(title=f"Mitglieder für {course_vm['title']}", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/courses/{course_id}/members/search", response_class=HTMLResponse)
 async def search_students_for_course(request: Request, course_id: str):
@@ -3101,7 +3140,7 @@ async def about_page(request: Request):
     </div>
     """
     layout = Layout(title="Über GUSTAV", content=content, user=user, current_path=request.url.path)
-    return HTMLResponse(content=layout.render(), headers={"Cache-Control": "private, no-store"})
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/auth/callback")
 async def auth_callback(request: Request, code: str | None = None, state: str | None = None):

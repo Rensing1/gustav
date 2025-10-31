@@ -66,6 +66,8 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
   - `database_schema.md` – Schema (derzeit leer; geplant über Migrationen zu füllen)
   - `UI-UX-Leitfaden.md` – Richtlinien für Gestaltung/Interaktionen
 - `Dockerfile`, `docker-compose.yml` – Containerisierung (Dev‑Setup)
+  - Runtime Layout: Der Container kopiert `backend/web/` sowie die Domänenpakete `identity_access`, `teaching` und `backend/learning`. `PYTHONPATH=/app:/app/backend` stellt sicher, dass Import-Pfade (`from backend.learning...`) sowohl lokal als auch im Image identisch bleiben.
+  - Keycloak läuft in allen Umgebungen gegen den dedizierten Compose-Service `keycloak-db` (PostgreSQL 16) anstelle des früheren lokalen Volumes. Startparameter (`KC_DB_URL`, Benutzer/Passwort) kommen aus `.env` bzw. Secret-Store; die Datenbank hält Realm- und Benutzerzustand persistent.
 - `legacy-code-alpha1/` – Referenz Altcode
 
 Geplante Ergänzungen (separat anlegen, wenn benötigt):
@@ -86,8 +88,8 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
   - Caddy routet hostbasiert:
     - `http://app.localhost:8100` → Web (GUSTAV)
     - `http://id.localhost:8100` → Keycloak (IdP)
-  - Persistenz (DEV): `keycloak_data:/opt/keycloak/data` Volume hält Realm‑ und Benutzer‑Daten über Rebuilds.
-    Für PROD sollte Keycloak an eine externe DB (KC_DB=postgres) angebunden werden.
+  - Persistenz (DEV): Keycloak speichert Realm und Benutzer im Compose-internen Postgres-Service `keycloak-db` (PostgreSQL 16) mit Volume `keycloak_pg_data`. Der Service ist über `depends_on.condition=service_healthy` als Startbedingung definiert, damit Keycloak erst nach erfolgreichem `pg_isready` hochfährt.
+    PROD nutzt dieselbe Konfiguration, aber `KC_DB_URL` zeigt auf eine gemanagte Instanz (TLS, Backups, Secret-Store); `KC_DB_URL_PROPERTIES` sollte dort mindestens `sslmode=require` setzen.
   - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
   - Setup: `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`.
 - PROD (Security‑first, geringe App‑Komplexität):
@@ -148,25 +150,27 @@ E2E‑Tests (Identity):
 
 ### Auth Router & Security (aktualisiert)
 - Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
-- `/api/me`: Antworten enthalten `Cache-Control: no-store` zur Verhinderung von Caching von Auth‑Zuständen.
+- `/api/me`: Antworten enthalten `Cache-Control: private, no-store` zur Verhinderung von Caching von Auth‑Zuständen.
 - Vereinheitlichter Logout: `GET /auth/logout` löscht die App‑Session (Cookie) und leitet zur End‑Session beim IdP; danach Rückkehr zur Erfolgsseite (`/auth/logout/success`). Optional ist ein interner absoluter Redirect‑Pfad erlaubt; unsichere oder zu lange Werte werden ignoriert.
 
 #### Auth‑Erzwingung (Middleware)
 - Allowlist: `/auth/*`, `/health`, `/static/*`, `/favicon.ico` werden nie umgeleitet.
 - HTML‑Anfragen ohne Session: `302` Redirect zu `/auth/login`.
-- JSON‑/API‑Anfragen ohne Session (Pfad beginnt mit `/api/`): `401` JSON mit `Cache-Control: no-store`.
+- JSON‑/API‑Anfragen ohne Session (Pfad beginnt mit `/api/`): `401` JSON mit `Cache-Control: private, no-store`.
 - HTMX‑Requests ohne Session: `401` mit Header `HX-Redirect: /auth/login`.
 - Bei erfolgreicher Authentifizierung setzt die Middleware `request.state.user = { sub, name, role, roles }` für SSR; die primäre Rolle wird deterministisch nach Priorität gewählt (admin > teacher > student).
 
 #### Sicherheits‑Härtung (Auth)
-- `/auth/callback` liefert bei allen Fehlern `400` mit `Cache-Control: no-store` (nicht cachebar).
+- `/auth/callback` liefert bei allen Fehlern `400` mit `Cache-Control: private, no-store` (nicht cachebar).
 - `/auth/login` ignoriert einen client‑übergebenen `state` vollständig; `state` wird ausschließlich serverseitig erzeugt und validiert (CSRF‑Schutz).
 - Redirect‑Parameter sind nur als interne absolute Pfade erlaubt. Server‑seitig erzwungenes Pattern (spiegelt OpenAPI): `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`. Doppelte Slashes (`//`) und Pfadtraversalen (`..`) sind nicht erlaubt. Ungültige Werte werden ignoriert (Login → `/`, Logout → `/auth/logout/success`).
 - `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
 
 #### CSRF‑Strategie (Browser‑Flows)
 - Same‑Site Cookies: In PROD `SameSite=strict` + `Secure`; in DEV `lax`.
-- Server prüft bei schreibenden Learning‑APIs (`POST /submissions`) die **Origin**.
+- Server prüft bei schreibenden Endpunkten die **Origin** (Same‑Origin‑Pflicht):
+  - Learning: z. B. `POST /api/learning/.../submissions`
+  - Teaching: alle Schreib‑APIs (z. B. `POST /api/teaching/courses`, `POST/PATCH /api/teaching/units`, Reorder/Materials/Tasks/Members)
   Fehlt `Origin`, wird als Fallback die **Referer**‑Origin herangezogen.
 - Um diesen Fallback zu unterstützen und dennoch keine sensiblen Daten zu leaken,
   wird global `Referrer-Policy: strict-origin-when-cross-origin` gesetzt.
@@ -187,7 +191,7 @@ E2E‑Tests (Identity):
   übereinstimmt. Bei Mismatch wird die statische `redirect_uri` verwendet.
 
 #### Nonce & Session‑TTL
-- Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: no-store`.
+- Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: private, no-store`.
 - Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). In PROD wird das `gustav_session`‑Cookie mit `Max-Age=<TTL>` gesetzt; Flags: `HttpOnly; Secure; SameSite=strict`. In DEV wird kein `Max-Age` gesetzt (`SameSite=lax`).
 - /api/me: liefert zusätzlich `expires_at` (UTC‑ISO‑8601), damit Clients die Restlaufzeit anzeigen können. Antworten sind nie cachebar.
 
@@ -198,6 +202,21 @@ E2E‑Tests (Identity):
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
+#### Runbooks & Migration
+- Preflight‑Checkliste: `docs/runbooks/preflight_checklist.md`.
+- Hardware Cutover Playbook: `docs/migration/hardware_cutover_playbook.md`.
+- Release‑Prozess: `docs/runbooks/release_process.md`.
+- DB Provisioning/DSN/Netz: `docs/references/db_provisioning.md`, `docs/references/config_matrix.md`, `docs/references/network_topology.md`, `docs/references/compose_env.md`.
+- Make‑Ziele: `docs/references/make_targets.md`.
+- E2E How‑To: `docs/tests/e2e_howto.md`.
+
+#### Startup-Sicherheitsprüfung (Production/Staging)
+- Beim Start prüft die App grundlegende Sicherheitsbedingungen und beendet sich bei Fehlkonfigurationen:
+  - `SUPABASE_SERVICE_ROLE_KEY` muss gesetzt sein und darf nicht der Platzhalter `DUMMY_DO_NOT_USE` sein.
+  - `DATABASE_URL` darf in PROD kein `sslmode=disable` enthalten (TLS erzwingen).
+  - `DATABASE_URL` darf in PROD/Stage nicht als Benutzer `gustav_limited` authentifizieren. Diese Rolle ist NOLOGIN; verwende einen umgebungsspezifischen Login (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.
+- In DEV/TEST sind diese Prüfungen deaktiviert, um lokale Entwicklung zu erleichtern.
+
 ### Storage (Supabase)
 - Self‑hosted via Supabase CLI. Storage ist privat; Zugriff ausschließlich über kurzlebige signierte URLs.
 - Bucket: `materials` (lokal in `supabase/config.toml` konfiguriert; 20 MiB; PDF/PNG/JPEG).
@@ -206,8 +225,8 @@ E2E‑Tests (Identity):
 - ENV: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SUPABASE_STORAGE_BUCKET` (default: `materials`). Siehe `.env.example` und `docs/references/storage_and_gateway.md`.
 
 ### RLS & Ordering (Teaching/Sections)
-- RLS‑Identität: Jede DB‑Operation setzt `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen.
-- Limited‑Role‑DSN: Runtime verwendet ausschließlich die `gustav_limited`‑Rolle. Service‑/Owner‑Rollen sind Migrationen vorbehalten.
+- RLS‑Identität: Heute setzt jede DB‑Operation `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen. Dieses Muster wird mittelfristig durch JWT/Claims in Policies ersetzt (separater Plan).
+- Rollen‑Trennung: `gustav_limited` definiert die Berechtigungen (RLS/Grants) und ist NOLOGIN. Die Anwendung verbindet sich über einen umgebungsspezifischen Login‑User (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.
 - Author‑Scope: `unit_sections` ist über `units.author_id = app.current_sub` abgesichert (SELECT/INSERT/UPDATE/DELETE).
 - Atomare Reorder: Unique `(unit_id, position)` ist DEFERRABLE; Reorder setzt `SET CONSTRAINTS … DEFERRED` und updated alle Positionen in einer Transaktion.
 - Concurrency: Neue `position` wird mit Row‑Lock auf die Unit‑Sections ermittelt, um doppelte Positionen zu vermeiden.

@@ -17,6 +17,8 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
+from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
@@ -24,6 +26,14 @@ import main  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
+
+
+@pytest.fixture(autouse=True)
+def _reset_session_store(monkeypatch: pytest.MonkeyPatch):
+    """Use in-memory session store to avoid DB dependency in hardening tests."""
+    store = SessionStore()
+    monkeypatch.setattr(main, "SESSION_STORE", store, raising=False)
+    return store
 
 
 @pytest.mark.anyio
@@ -83,7 +93,7 @@ async def test_callback_errors_set_no_store_header():
         # Missing code/state
         r = await client.get("/auth/callback")
     assert r.status_code == 400
-    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -179,7 +189,7 @@ async def test_state_expiry_leads_to_400_no_store():
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}")
     assert r.status_code == 400
-    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.headers.get("Cache-Control") == "private, no-store"
     assert r.json().get("error") == "invalid_code_or_state"
 
 
@@ -198,7 +208,7 @@ async def test_callback_no_store_on_token_exchange_failure(monkeypatch: pytest.M
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}")
     assert r.status_code == 400
-    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.headers.get("Cache-Control") == "private, no-store"
     assert r.json().get("error") == "token_exchange_failed"
 
 
@@ -217,7 +227,7 @@ async def test_callback_no_store_on_invalid_id_token(monkeypatch: pytest.MonkeyP
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}")
     assert r.status_code == 400
-    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.headers.get("Cache-Control") == "private, no-store"
     assert r.json().get("error") == "invalid_id_token"
 
 
@@ -378,7 +388,7 @@ async def test_api_me_handles_session_store_failure(monkeypatch: pytest.MonkeyPa
         resp = await client.get("/api/me")
 
     assert resp.status_code == 401
-    assert resp.headers.get("Cache-Control") == "no-store"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
     assert resp.json().get("error") == "unauthenticated"
 
 
@@ -409,5 +419,5 @@ async def test_callback_rejects_when_id_token_nonce_missing(monkeypatch: pytest.
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=valid&state={rec.state}")
     assert r.status_code == 400
-    assert r.headers.get("Cache-Control") == "no-store"
+    assert r.headers.get("Cache-Control") == "private, no-store"
     assert r.json().get("error") in {"invalid_id_token", "invalid_nonce"}

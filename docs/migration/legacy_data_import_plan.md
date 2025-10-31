@@ -12,6 +12,11 @@ Schrittweise Migration der produktiven Daten aus der Legacy-Supabase in das neue
 - **Datei-Materialien:** Falls keine echten Metadaten vorliegen, werden Dateien als Markdown-Link importiert oder – wenn zugreifbar – beim Import gehasht.
 - **Feedback-Queue:** Spalten zur asynchronen Verarbeitung in `submission` werden ignoriert; Feedbacksystem wird in Alpha2 neu implementiert.
 
+## Referenz-Artefakte (Stand 2025-10-28)
+- **DB-Dump (Legacy Schema + Daten):** `legacy-code-alpha1/backups/db_backup_2025-09-25_18-15-07.sql.gz` (zusätzliche Schnappschüsse zur Verifikation vorhanden).
+- **Storage-Blobs (Buckets `section_materials`, `submissions`):** `docs/backups/storage_blobs_2025-10-28_13-13-13.tar.gz`, entpackt standardmäßig nach `/tmp/legacy_storage/stub/stub`.
+- **User-Mapping-Skript:** `legacy-code-alpha1/backend/tools/legacy_user_import.py` erzeugt `legacy_user_map` vor dem eigentlichen Importlauf.
+
 ## Migrationsschritte
 1. **Identity Mapping vorbereiten**
    - Legacy-Keycloak Import (`backend/tools/legacy_user_import.py`).
@@ -121,12 +126,14 @@ Schrittweise Migration der produktiven Daten aus der Legacy-Supabase in das neue
 - Priorität: echte Metadaten generieren (Download → `sha256`, `size_bytes`) und `kind='file'` setzen.
 - Kein Zugriff: Fallback `kind='markdown'` mit Link; Audit-Eintrag mit Kennzeichnung "blob_missing" und Ziel-URL.
 - Optional: `legacy_blobs`-Bucket/Staging für spätere Backfills; eigener Job, der Links auflöst und Metadaten ergänzt.
+- **Backup-Quelle:** Vollständige Legacy-Blobs liegen im Repo unter `docs/backups/storage_blobs_2025-10-28_13-13-13.tar.gz` (≈447 MB); vor dem Import nach `/tmp/legacy_storage` entpacken und Pfad an das Migrationsskript übergeben.
 
 ### Betrieb & Runbook
 - Dry-Run: jeder Schritt mit `--dry-run` ausführbar (nur Zählungen, keine Writes), Report als JSON.
 - Resume/Retry: Idempotente Upserts, Fortschritt pro Entität in `import_audit_runs` vermerken.
 - Rollback: Import in Staging-Tabellen mit anschließender Switch-Operation (wo praktikabel) oder transaktionsbasiert pro Batch.
 - Downtime: Falls erforderlich, nur für schreibende Teile; lesende Altumgebung parallel betreiben. Post-Import `ANALYZE` betroffene Tabellen.
+- Tests: dedizierte Suite unter `backend/migration_tests/`, ausführbar via eigenem Skript (z. B. `scripts/test_legacy_migration.sh`) und getrennt vom regulären `.venv/bin/pytest`-Lauf.
 
 ### Observability & Sicherheit
 - Strukturierte Logs (JSON) mit Countern: `courses_imported`, `units_imported`, `materials_as_links`, `submissions_skipped`, …
@@ -136,7 +143,7 @@ Schrittweise Migration der produktiven Daten aus der Legacy-Supabase in das neue
 
 
 ## Offene Punkte / TODO
-- Prüfen, ob Legacy-Storage erreichbar ist, um echte Datei-Metadaten zu generieren.
+- Pfad und Umgang mit entpacktem Storage-Archiv (`/tmp/legacy_storage`) im Migrationsskript parametrisieren.
 - Definieren, wie `solution_data`-Einreichungen mit komplexen Strukturen (z. B. mehrere Anhänge) in Alpha2 abgebildet werden sollen.
 - Skripte modular implementieren (z. B. Python + SQL) und lokal gegen Test-DB validieren, bevor sie auf Produktionsdaten laufen.
 

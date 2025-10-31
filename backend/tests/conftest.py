@@ -25,7 +25,14 @@ def _ensure_db_env_defaults() -> None:
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
     service_dsn = f"postgresql://postgres:postgres@{host}:{port}/postgres"
-    limited_dsn = f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    app_user = os.getenv("APP_DB_USER", "gustav_app")
+    app_password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    if not app_user or app_user == "gustav_limited":
+        raise RuntimeError(
+            "APP_DB_USER must point to the environment-specific login role "
+            "(e.g. gustav_app). Run `make db-login-user` to provision it."
+        )
+    login_dsn = f"postgresql://{app_user}:{app_password}@{host}:{port}/postgres"
 
     def _probe(dsn: str) -> bool:
         try:
@@ -44,17 +51,20 @@ def _ensure_db_env_defaults() -> None:
         if not current or "supabase_db_gustav-alpha2" in current:
             os.environ[var] = default
 
-    # Prefer the limited-role DSN for application traffic so every query is RLS-protected.
-    os.environ["RLS_TEST_DSN"] = limited_dsn
-    os.environ["DATABASE_URL"] = limited_dsn
+    # Prefer the app login DSN (IN ROLE gustav_limited) for application traffic so every query is RLS-protected.
+    # Respect pre-configured env (e.g., a CI-provided login).
+    _assign_or_override("RLS_TEST_DSN", login_dsn)
+    _assign_or_override("DATABASE_URL", login_dsn)
 
     # Still expose service DSNs for dedicated tests when the host DB is reachable.
     if _probe(service_dsn):
         _assign_or_override("SESSION_TEST_DSN", service_dsn)
         _assign_or_override("RLS_TEST_SERVICE_DSN", service_dsn)
+        _assign_or_override("SERVICE_ROLE_DSN", service_dsn)
     else:
         os.environ.pop("SESSION_TEST_DSN", None)
         os.environ.pop("RLS_TEST_SERVICE_DSN", None)
+        os.environ.pop("SERVICE_ROLE_DSN", None)
 
     os.environ["SESSIONS_BACKEND"] = os.getenv("SESSIONS_BACKEND", "db")
 

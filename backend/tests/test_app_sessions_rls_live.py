@@ -9,7 +9,7 @@ Why:
 How to run (optional):
 - Set environment variables before running pytest:
   - `RLS_TEST_DSN` → DSN for a non-service/limited role (expected to be denied)
-  - `RLS_TEST_SERVICE_DSN` → DSN for a service role (expected to succeed)
+  - `SERVICE_ROLE_DSN` → DSN for a service role (expected to succeed; `RLS_TEST_SERVICE_DSN` still accepted for compatibility)
 - Ensure migration `supabase/migrations/20251019135804_persistent_app_sessions.sql` is applied.
 
 Tests are skipped by default when the env vars or psycopg3 are not available.
@@ -57,7 +57,7 @@ def test_rls_denies_insert_and_select_for_limited_role():
 
 def test_service_role_can_insert_and_select():
     """Service role should read/write; fallback asserts table and indexes are defined in migration."""
-    dsn = os.getenv("RLS_TEST_SERVICE_DSN")
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
     if dsn and psycopg is not None:
         with psycopg.connect(dsn, autocommit=True) as conn:
             with conn.cursor() as cur:

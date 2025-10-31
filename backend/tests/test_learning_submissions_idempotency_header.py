@@ -122,3 +122,28 @@ async def test_accepts_valid_idempotency_key_token():
         body = r.json()
         assert body.get("id") and body.get("attempt_nr") == 1
 
+
+@pytest.mark.anyio
+async def test_idempotent_retry_returns_existing_submission():
+    fx = await _prepare_fixture()
+    token = "retry-token-1"
+    payload = {"kind": "text", "text_body": "Dies ist meine Lösung"}
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", fx["student"].session_id)
+        first = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+            headers={"Idempotency-Key": token},
+            json=payload,
+        )
+        assert first.status_code == 201
+        first_body = first.json()
+        second = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+            headers={"Idempotency-Key": token},
+            json=payload,
+        )
+        assert second.status_code == 201
+        second_body = second.json()
+        assert second_body["id"] == first_body["id"]
+        assert second_body["attempt_nr"] == first_body["attempt_nr"]
+        assert second.headers.get("Cache-Control") == "private, no-store"

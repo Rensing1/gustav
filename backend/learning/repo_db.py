@@ -22,18 +22,28 @@ except Exception:  # pragma: no cover
     HAVE_PSYCOPG = False
 
 
-def _default_limited_dsn() -> str:
-    """Supabase-local fallback DSN for dev/test only.
+def _default_app_login_dsn() -> str:
+    """Return the local dev DSN using the app login role (e.g. gustav_app).
 
-    This matches the docker compose defaults used in the project and is only
-    considered in non-production environments by `_dsn()`. In production, an
-    explicit DATABASE_URL/LEARNING_DATABASE_URL must be provided.
+    Why:
+        The application role `gustav_limited` is NOLOGIN. Local development
+        therefore uses an environment-specific login (created via
+        `make db-login-user`) that inherits from `gustav_limited`.
+
+    Behavior:
+        - Falls back to APP_DB_USER/APP_DB_PASSWORD (defaults mirror .env.example).
+        - Raises a helpful error when the user still points to `gustav_limited`.
     """
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
-    # We intentionally keep the well-known dev credentials here because they
-    # point to the local Supabase Postgres used in tests.
-    return f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    if not user or user == "gustav_limited":
+        raise RuntimeError(
+            "APP_DB_USER must reference the environment-specific login role "
+            "(e.g. gustav_app). Run `make db-login-user` to provision it."
+        )
+    return f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
 
 def _dsn() -> str:
@@ -45,7 +55,7 @@ def _dsn() -> str:
     ]
     # Only allow default limited DSN implicitly in non-prod environments (dev/test)
     if env != "prod":
-        candidates.append(_default_limited_dsn())
+        candidates.append(_default_app_login_dsn())
     for candidate in candidates:
         if candidate:
             return candidate
@@ -73,10 +83,23 @@ class DBLearningRepo:
         if not HAVE_PSYCOPG:
             raise RuntimeError("psycopg3 is required for DBLearningRepo")
         self._dsn = dsn or _dsn()
-        user = self._dsn_username(self._dsn)
         allow_override = str(os.getenv("ALLOW_SERVICE_DSN_FOR_TESTING", "")).lower() == "true"
-        if user != "gustav_limited" and not allow_override:
-            raise RuntimeError("LearningRepo requires gustav_limited DSN")
+        if not allow_override:
+            user = self._dsn_username(self._dsn)
+            if user != "gustav_limited":
+                try:
+                    with psycopg.connect(self._dsn) as _conn:
+                        with _conn.cursor() as _cur:
+                            _cur.execute("select pg_has_role(current_user, 'gustav_limited', 'member')")
+                            ok = bool((_cur.fetchone() or [False])[0])
+                            if not ok:
+                                raise RuntimeError(
+                                    "LearningRepo requires a login that is IN ROLE gustav_limited (RLS)."
+                                )
+                except Exception as e:
+                    raise RuntimeError(
+                        f"LearningRepo DSN verification failed: {e}. Ensure your DB user is IN ROLE gustav_limited."
+                    )
 
     @staticmethod
     def _dsn_username(dsn: str) -> str:
@@ -562,28 +585,31 @@ class DBLearningRepo:
 
                     if isinstance(exc, _pg_errors.UniqueViolation):
                         conn.rollback()
-                        cur.execute(
-                            """
-                            select id::text,
-                                   attempt_nr,
-                                   kind,
-                                   text_body,
-                                   mime_type,
-                                   size_bytes,
-                               storage_key,
-                               sha256,
-                                   analysis_status,
-                                   analysis_json,
-                                   feedback_md,
-                                   error_code,
-                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                   to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                              from public.learning_submissions
-                             where course_id = %s and task_id = %s and student_sub = %s and idempotency_key = %s
-                            """,
-                            (course_uuid, task_uuid, data.student_sub, data.idempotency_key),
-                        )
-                        existing = cur.fetchone()
+                        with conn.cursor() as cur2:
+                            # Rollback clears transaction-scoped GUCs; restore RLS context before querying.
+                            self._set_current_sub(cur2, data.student_sub)
+                            cur2.execute(
+                                """
+                                select id::text,
+                                       attempt_nr,
+                                       kind,
+                                       text_body,
+                                       mime_type,
+                                       size_bytes,
+                                       storage_key,
+                                       sha256,
+                                       analysis_status,
+                                       analysis_json,
+                                       feedback_md,
+                                       error_code,
+                                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                       to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                                  from public.learning_submissions
+                                 where course_id = %s and task_id = %s and student_sub = %s and idempotency_key = %s
+                                """,
+                                (course_uuid, task_uuid, data.student_sub, data.idempotency_key),
+                            )
+                            existing = cur2.fetchone()
                         if existing:
                             row = existing
                         else:  # defensive: re-raise if we cannot recover

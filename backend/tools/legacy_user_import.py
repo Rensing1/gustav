@@ -67,12 +67,14 @@ def fetch_legacy_users(
         returned.
     """
 
+    # Order deterministically without requiring a specific column to exist
+    # across legacy variants (created_at is not guaranteed in stubs/tests).
     sql_template = """
         SELECT u.id, u.email, p.role, p.full_name, u.encrypted_password
         FROM auth.users u
         JOIN public.profiles p ON p.id = u.id
         {where}
-        ORDER BY u.created_at
+        ORDER BY u.id
     """
     where_clause = ""
     params: tuple | None = None

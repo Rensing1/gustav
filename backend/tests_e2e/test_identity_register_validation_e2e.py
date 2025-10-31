@@ -43,7 +43,9 @@ def _wait_for(url: str, expected: int = 200) -> None:
         except requests.RequestException as exc:
             last_err = exc
         time.sleep(1)
-    pytest.fail(f"E2E dependency not ready: GET {url} expected={expected} last_status={last_status} last_err={last_err}")
+    pytest.fail(
+        f"E2E dependency not ready: GET {url} expected={expected} last_status={last_status} last_err={last_err}"
+    )
 
 
 def _parse_register_form(html: str, base_url: str) -> tuple[str, dict]:

@@ -56,21 +56,15 @@ def _derive_kc_base() -> str:
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip E2E tests unless services are reachable or RUN_E2E=1 is set."""
+    """Gate E2E tests behind an explicit flag RUN_E2E=1.
+
+    Rationale: Prevent accidental hangs/flakes by only running E2E when the
+    developer intentionally enables them. No additional env toggles are used.
+    """
     pkg_dir = Path(__file__).parent.resolve()
     if os.getenv("RUN_E2E", "0") == "1":
         return
-    # Probe minimal health of services; if both healthy, run E2E without env flag
-    web_base = _derive_app_base()
-    kc_base = _derive_kc_base()
-    try:
-        r1 = requests.get(f"{web_base}/health", timeout=1)
-        r2 = requests.get(f"{kc_base}/realms/{os.getenv('KC_REALM','gustav')}/.well-known/openid-configuration", timeout=1)
-        if r1.status_code == 200 and r2.status_code == 200:
-            return
-    except Exception:
-        pass
-    skip = pytest.mark.skip(reason="E2E tests disabled; set RUN_E2E=1 or start services (web+keycloak)")
+    skip = pytest.mark.skip(reason="E2E tests disabled; set RUN_E2E=1 to enable")
     for item in items:
         try:
             if Path(str(item.fspath)).resolve().is_relative_to(pkg_dir):

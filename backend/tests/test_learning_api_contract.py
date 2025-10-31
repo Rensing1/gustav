@@ -548,7 +548,7 @@ async def test_get_released_tasks_excludes_hidden_section():
 
     dsn = (
         os.getenv("DATABASE_URL")
-        or f"postgresql://gustav_limited:gustav-limited@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
+        or f"postgresql://{os.getenv('APP_DB_USER', 'gustav_app')}:{os.getenv('APP_DB_PASSWORD', 'CHANGE_ME_DEV')}@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
     )
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
@@ -772,9 +772,9 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
         pytest.skip("psycopg not available")
 
     # Ensure both attempts share the same timestamp to test stable fallback ordering
-    dsn = os.getenv("RLS_TEST_SERVICE_DSN")
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
     if not dsn:
-        pytest.skip("RLS_TEST_SERVICE_DSN required to rewrite timestamps for ordering test")
+        pytest.skip("SERVICE_ROLE_DSN required to rewrite timestamps for ordering test")
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute(

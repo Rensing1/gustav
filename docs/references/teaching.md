@@ -16,6 +16,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - 200 `Course` oder 400/403/404
 - `DELETE /api/teaching/courses/{course_id}` (Owner only)
   - 204, entfernt auch Mitgliedschaften; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
+  - CSRF: Same‑Origin erforderlich; Cache: `Cache-Control: private, no-store`
 - `GET /api/teaching/courses/{course_id}` (Owner only)
   - 200 `Course`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
   - Cache: `Cache-Control: private, no-store`
@@ -27,6 +28,7 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - 201 neu, 204 existierend, 400/403/404
 - `DELETE /api/teaching/courses/{course_id}/members/{student_sub}` (Owner only, idempotent)
   - 204; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
+  - CSRF: Same‑Origin erforderlich; Cache: `Cache-Control: private, no-store`
 - `GET /api/users/search?q=&role=student&limit` (Users‑Namespace)
   - Nur Teacher/Admin. Mindestlänge `q ≥ 2`, Limit-Cap `≤ 50`
   - 200 `[{ sub, name }]`, 400/403
@@ -75,6 +77,9 @@ Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und ve
   - 403 wenn nicht Owner oder bei CSRF‑Verletzung (`detail=csrf_violation`); 404 wenn Abschnitt nicht zum Modul gehört
   - Cache: `Cache-Control: private, no-store`
   - Fehlerantworten (400/403/404) senden ebenfalls `Cache-Control: private, no-store`.
+ - `DELETE /api/teaching/courses/{course_id}/modules/{module_id}` (Owner only)
+   - 204; 404 wenn Modul unbekannt; 403 wenn nicht Owner
+   - CSRF: Same‑Origin erforderlich; Cache: `Cache-Control: private, no-store`
 
 #### Abschnittsfreigaben (Owner) — SSR‑UI
 - Navigation: Modulliste → Button „Abschnitte freigeben“ → `/courses/{course_id}/modules/{module_id}/sections`.
@@ -126,7 +131,7 @@ Datei‑Flow (presigned Upload)
   - 201 bei Neuerstellung, 200 wenn bereits finalisiert (idempotent)
   - 400 Fehlercodes u.a.: `invalid_title | checksum_mismatch | intent_expired | mime_not_allowed | invalid_alt_text`
 - `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url?disposition=inline|attachment`
-  - 200 `{ url, expires_at }`; `Cache-Control: no-store`; 400 `invalid_disposition`; 403/404
+  - 200 `{ url, expires_at }`; `Cache-Control: private, no-store`; 400 `invalid_disposition`; 403/404
 
 #### Aufgaben (Tasks) je Abschnitt
 - `GET /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)
@@ -240,15 +245,16 @@ Anwenden lokal:
 - `supabase migration up`
 - Rückgängig: `supabase migration down 1`
 
-DSN (Beispiel): `DATABASE_URL=postgresql://gustav_limited:gustav-limited@127.0.0.1:54322/postgres`
+DSN (Beispiel): `DATABASE_URL=postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres`
 
 ## Sicherheit & Datenschutz
 - Owner‑Policy: Nur Kurs‑Autor (teacher_id == sub) verwaltet Kurs/Mitglieder und sieht Mitgliederliste.
 - Kein PII in DTOs: Identität über `sub`; `name` wird für Mitglieder über Directory-Adapter aufgelöst.
 - Pagination mit Limit‑Cap (DoS‑Schutz). Suche: Mindestlänge `q`.
-- Responses der Auth‑abhängigen Endpunkte sind nicht cachebar (Middleware regelt 401 JSON).
- - Semantik: Nicht‑existenter Kurs → 404 (Not Found); Nicht‑Owner → 403 (Forbidden). Gilt konsistent für Members‑Endpunkte und Delete.
- - Sections/Units: Nicht‑existente Unit → 404; Nicht‑Author → 403 (über Guard mit Existenz‑Helpern). UUID‑Fehler → 400 (kein 422).
+ - Responses der Auth‑abhängigen Endpunkte sind nicht cachebar (Middleware regelt 401 JSON).
+  - Semantik: Nicht‑existenter Kurs → 404 (Not Found); Nicht‑Owner → 403 (Forbidden). Gilt konsistent für Members‑Endpunkte und Delete.
+  - Sections/Units: Nicht‑existente Unit → 404; Nicht‑Author → 403 (über Guard mit Existenz‑Helpern). UUID‑Fehler → 400 (kein 422).
+ - CSRF: Alle schreibenden Endpunkte (POST/PATCH/DELETE) erzwingen Same‑Origin; Erfolg/Fehler liefern `Cache-Control: private, no-store`, CSRF‑geschützte Antworten `Vary: Origin`.
 
 ## Architektur & Adapter
 - Web‑Adapter: `backend/web/routes/teaching.py`, `backend/web/routes/users.py`

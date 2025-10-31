@@ -1,26 +1,35 @@
 # Changelog
 
 ## Unreleased
+- security(ops): Add startup guard to prevent dummy/unset SUPABASE_SERVICE_ROLE_KEY and `sslmode=disable` in production.
+ - security(ops): Enforce HTTPS for `KC_BASE_URL`/`KC_PUBLIC_BASE_URL` in prod/stage (startup guard aborts on http).
+ - docs(openapi): Document `/health` endpoint (no auth, no-store cache header).
+- security(auth): Add `Cache-Control: no-store` to /auth/login, /auth/callback (302/400), /auth/logout, and /auth/logout/success.
+- docs(env): `.env.example` uses `DUMMY_DO_NOT_USE` for service role key; README clarifies `KC_BASE_URL` vs legacy `KC_BASE`.
+- ops(docker): Add container `HEALTHCHECK` hitting `/health`.
  - BREAKING(api/openapi): LearningSectionCore now requires `unit_id`. Update clients accordingly; older clients must ignore unknown fields or update schema.
  - security(openapi): Unify Cache-Control header descriptions to "Security — responses are private and not cacheable by shared caches." across Learning/Teaching endpoints.
  - security(api/learning): POST submissions validates `Idempotency-Key` as ASCII token (`[A-Za-z0-9_-]{1,64}`); rejects invalid/too-long tokens with 400.
  - consistency(web/ssr): Align SSR pagination clamp defaults to API (limit default 50, max 100).
 - security(api/teaching): Enforce same-origin (CSRF) for PATCH visibility endpoint; all responses include `Cache-Control: private, no-store`.
+ - security(api/teaching): Enforce same-origin (CSRF) for DELETE course/module/member; 201/204 responses include `Cache-Control: private, no-store`.
 - fix(api/teaching): Module section releases endpoint returns private, no-store cache headers for 400/403/404.
 - fix(ui/markdown): Headings rendered on student cards are emitted as block-level tags without wrapping `<p>` containers.
  - fix(api/openapi): Add 401/403/404 to GET /api/learning/courses/{course_id}/units/{unit_id}/sections; remove misplaced response blocks; align Cache-Control wording.
  - tests(contract): Add OpenAPI contract test for unit sections responses.
  - tests(learning): Add 403 (not enrolled) and 400 invalid include tests for unit sections.
  - security(db): Harden `get_released_sections_for_student_by_unit` search_path to `pg_catalog, public` (defense-in-depth).
-- security(db): Set OWNER to `gustav_limited` for all SECURITY DEFINER learning helpers
-  (`next_attempt_nr`, `check_task_visible_to_student`, section/material/task helpers,
-  `get_task_metadata_for_student`) and remove owner-swallowing DO block.
+- security(db): Learning helpers run as SECURITY INVOKER with hardened search_path; rely on
+  `gustav_limited` RLS instead of SECURITY DEFINER ownership changes. Added student-facing
+  SELECT policies on units/modules/sections/materials/tasks/releases to expose only released data.
+ - security(db): Revoke PUBLIC EXECUTE on learning helper functions; grant EXECUTE only to `gustav_limited` (idempotent migration).
 - security(container): Run web image as non-root user `app` (UID 10001).
 - docs(env): Clarify Supabase Service Role key is server-only and must never be exposed to clients.
  - docs/openapi: Align /api/learning/courses pagination defaults (limit default 50, max 100) with other Learning endpoints.
  - docs(openapi): Declare `include` query as CSV (`style: form`, `explode: false`) for Learning sections endpoints.
  - api(teaching): Mark module section releases listing as owner-only via `x-permissions.ownerOnly=true`.
-- security(db): Make `public.get_course_units_for_student` SECURITY DEFINER owned by `gustav_limited` to avoid BYPASSRLS escalation; keep EXECUTE grant.
+- security(db): `public.get_course_units_for_student` now stays SECURITY INVOKER; relies on RLS
+  while keeping EXECUTE grant for `gustav_limited`.
 - fix(db/repo): Remove duplicate `set_config('app.current_sub')` call in units listing query.
  - tests(learning): Add Cache-Control success header checks for courses and units (private, no-store).
  - tests(learning): Add pagination clamping test (limit>50, offset<0) and empty list case for student courses.
@@ -31,6 +40,7 @@
  - tests(learning): Assert `Cache-Control: private, no-store` on 201 Create Submission; ensure 404 units carry private cache header and generic error.
 - tests(learning): Add assertions for Cache-Control on 401/403 and 403 for non-student units access.
 - docs(openapi): Add `additionalProperties: false` to `LearningCourse` and `UnitPublic` schemas to constrain payloads.
+ - docs(openapi): Remove 429 rate-limit responses for `/auth/login` and `/auth/forgot` to match implementation.
 - ux(learning/ui): Align page title to “Meine Kurse” for student course list.
 - fix(openapi): Document Cache-Control on GET /api/teaching/courses (200) and remove duplicate example entry in course GET header.
 - security(cache): POST /api/teaching/courses returns 201 with Cache-Control: private, no-store (align API and contract).

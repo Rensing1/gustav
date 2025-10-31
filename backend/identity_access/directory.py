@@ -50,6 +50,10 @@ class _KC:
                 "client_secret": self.admin_client_secret,
             }
         else:
+            # Forbid password grant in production-like environments
+            env = (os.getenv("GUSTAV_ENV", "dev") or "").lower()
+            if env in {"prod", "production", "stage", "staging"}:
+                raise RuntimeError("password_grant_disabled_in_prod")
             if not self.admin_username or not self.admin_password:
                 raise RuntimeError(
                     "Keycloak admin credentials missing: set KC_ADMIN_CLIENT_SECRET or KC_ADMIN_USERNAME/PASSWORD"

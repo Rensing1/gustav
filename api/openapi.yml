@@ -884,6 +884,8 @@ paths:
       operationId: listLearningCourses
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: student
       parameters:
@@ -947,6 +949,8 @@ paths:
       operationId: listLearningSections
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1051,6 +1055,8 @@ paths:
       operationId: listLearningCourseUnits
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1139,6 +1145,8 @@ paths:
       operationId: listLearningUnitSections
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1249,6 +1257,8 @@ paths:
       operationId: listModuleSectionReleases
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -1354,6 +1364,8 @@ paths:
       operationId: listLearningSubmissions
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1459,6 +1471,8 @@ paths:
       operationId: createLearningSubmission
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: student
       parameters:
@@ -1924,6 +1938,8 @@ paths:
       operationId: getCourse
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -1964,6 +1980,8 @@ paths:
       operationId: updateCourse
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -2022,6 +2040,8 @@ paths:
       operationId: deleteCourse
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -2033,7 +2053,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204': { description: Deleted (no content) }
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -2049,6 +2076,8 @@ paths:
       operationId: listCourseMembers
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -2097,6 +2126,8 @@ paths:
       operationId: addCourseMember
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -2118,8 +2149,22 @@ paths:
                 student_sub:
                   type: string
       responses:
-        '201': { description: Added }
-        '204': { description: Already a member (no content) }
+        '201':
+          description: Added
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '204':
+          description: Already a member (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '400':
           description: |
             Invalid input. detail codes:
@@ -2148,6 +2193,8 @@ paths:
       operationId: removeCourseMember
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -2164,7 +2211,14 @@ paths:
           schema:
             type: string
       responses:
-        '204': { description: Removed or not present (no content) }
+        '204':
+          description: Removed or not present (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -2270,6 +2324,8 @@ paths:
       operationId: getUnit
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2310,6 +2366,8 @@ paths:
       operationId: updateUnit
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2378,6 +2436,8 @@ paths:
       operationId: deleteUnit
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2389,7 +2449,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204': { description: Deleted (no content) }
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '400':
           description: |
             Invalid path. detail codes:
@@ -2415,6 +2482,8 @@ paths:
       operationId: listSections
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2463,6 +2532,8 @@ paths:
       operationId: createSection
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2482,6 +2553,12 @@ paths:
       responses:
         '201':
           description: Section created at the next position
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -2498,6 +2575,8 @@ paths:
       operationId: updateSection
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2523,6 +2602,12 @@ paths:
       responses:
         '200':
           description: Updated section
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -2538,6 +2623,8 @@ paths:
       operationId: deleteSection
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2555,7 +2642,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204': { description: Deleted (no content) }
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '400':
           description: |
             Invalid path. detail codes:
@@ -2583,10 +2677,13 @@ paths:
       operationId: reorderSections
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
       x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Transactional update with row locks ensures contiguous positions without duplicates."
         - "Check author ownership before validating payload to avoid error-oracle leakage."
       parameters:
@@ -2662,6 +2759,8 @@ paths:
       operationId: listSectionTasks
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2718,6 +2817,8 @@ paths:
       operationId: createSectionTask
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2743,6 +2844,12 @@ paths:
       responses:
         '201':
           description: Task created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -2779,6 +2886,8 @@ paths:
       operationId: updateSectionTask
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2810,6 +2919,12 @@ paths:
       responses:
         '200':
           description: Updated task
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -2848,6 +2963,8 @@ paths:
       operationId: deleteSectionTask
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2871,7 +2988,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204': { description: Deleted (no content) }
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '400':
           description: |
             Invalid path. detail codes:
@@ -2898,6 +3022,8 @@ paths:
       operationId: reorderSectionTasks
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -2962,6 +3088,8 @@ paths:
       operationId: listSectionMaterials
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3022,6 +3150,8 @@ paths:
       operationId: createSectionMaterial
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3047,6 +3177,12 @@ paths:
       responses:
         '201':
           description: Material created at the next position
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3073,6 +3209,8 @@ paths:
       operationId: updateSectionMaterial
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3104,6 +3242,12 @@ paths:
       responses:
         '200':
           description: Updated material
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3147,6 +3291,8 @@ paths:
       operationId: deleteSectionMaterial
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3170,7 +3316,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204': { description: Deleted (no content) }
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '400':
           description: |
             Invalid path. detail codes:
@@ -3206,10 +3359,13 @@ paths:
       operationId: reorderSectionMaterials
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
       x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Transactional update with row locks ensures contiguous positions without duplicates."
         - "Check author ownership before validating payload to avoid error-oracle leakage."
       parameters:
@@ -3291,6 +3447,8 @@ paths:
       operationId: createSectionMaterialUploadIntent
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3316,6 +3474,12 @@ paths:
       responses:
         '200':
           description: Upload intent created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3350,6 +3514,8 @@ paths:
       operationId: finalizeSectionMaterialUpload
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -3375,12 +3541,24 @@ paths:
       responses:
         '201':
           description: File material created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Material'
         '200':
           description: Upload intent already finalized (idempotent)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3530,6 +3708,8 @@ paths:
       operationId: createCourseModule
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -3549,6 +3729,12 @@ paths:
       responses:
         '201':
           description: Course module created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:
@@ -3571,6 +3757,7 @@ paths:
         requiredRole: teacher
         ownerOnly: true
       x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Transactional update ensures no duplicate positions and preserves contiguous order."
       parameters:
         - in: path
@@ -3649,6 +3836,7 @@ paths:
         requiredRole: teacher
         ownerOnly: true
       x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Transactional delete + resequence; RLS enforces ownership via course_modules policies."
       parameters:
         - in: path
@@ -3664,7 +3852,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204': { description: Module removed }
+        '204':
+          description: Module removed
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
         '400':
           description: "Invalid identifiers (detail: invalid_course_id | invalid_module_id)"
           content:

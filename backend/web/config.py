@@ -43,6 +43,13 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: SUPABASE_SERVICE_ROLE_KEY is unset or a dummy placeholder in production."
         )
 
+    # 1b) Keycloak admin client secret must be configured (no password grant in prod)
+    kc_secret = (os.getenv("KC_ADMIN_CLIENT_SECRET", "") or "").strip()
+    if not kc_secret or kc_secret.upper().startswith("CHANGE_ME"):
+        raise SystemExit(
+            "Refusing to start: KC_ADMIN_CLIENT_SECRET is unset or a placeholder in production."
+        )
+
     # 2) Postgres TLS: basic guard to avoid explicit disable
     dsn = os.getenv("DATABASE_URL", "")
     if "sslmode=disable" in dsn:

@@ -84,3 +84,17 @@ async def test_htmx_request_without_session_redirects_to_login():
 
     assert response.status_code == 401
     assert response.headers.get("HX-Redirect") == "/auth/login"
+
+
+@pytest.mark.anyio
+async def test_courses_cache_control_private_no_store_by_default():
+    # Personalized SSR pages must not be cached by shared caches.
+    session_id = await _create_teacher_session()
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, session_id)
+        r_full = await client.get("/courses")
+        r_htmx = await client.get("/courses", headers={"HX-Request": "true"})
+
+    assert r_full.headers.get("Cache-Control") == "private, no-store"
+    assert r_htmx.headers.get("Cache-Control") == "private, no-store"

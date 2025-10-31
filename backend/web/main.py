@@ -419,6 +419,13 @@ def _layout_response(
     else:
         body = layout.render()
     response = HTMLResponse(content=body, status_code=status_code)
+    # Default cache policy for personalized SSR pages
+    try:
+        is_personalized = bool(getattr(request.state, "user", None))
+    except Exception:
+        is_personalized = False
+    if is_personalized and not (headers and "Cache-Control" in headers):
+        response.headers["Cache-Control"] = "private, no-store"
     if headers:
         for key, value in headers.items():
             response.headers[key] = value

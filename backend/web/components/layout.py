@@ -39,12 +39,13 @@ class Layout(Component):
         self.current_path = current_path
 
     def render(self) -> str:
-        """Render the complete HTML page"""
+        """Render the complete HTML document including navigation and chrome."""
 
+        breadcrumb_html = Breadcrumbs(self.current_path).render() if self.show_nav else ""
+        main_inner = self._render_main_inner(breadcrumb_html)
         # Render sub-components (Navigation includes sidebar now)
         # Pass current_path to Navigation for active link highlighting
         nav_html = Navigation(self.user, self.current_path).render() if self.show_nav else ""
-        breadcrumb_html = Breadcrumbs(self.current_path).render() if self.show_nav else ""
 
         return f"""<!DOCTYPE html>
 <html lang="de">
@@ -66,32 +67,35 @@ class Layout(Component):
 
     <!-- Main Content Area (adjusted for sidebar) -->
     <main id="main-content" class="main-content" role="main">
-        {breadcrumb_html}
-        {self.content}
-
-        <!-- Footer integrated into main content -->
-        <footer class="content-footer" role="contentinfo" aria-label="Seitenfuß">
-            <div class="footer-content">
-                <p class="text-center text-muted">
-                    &copy; 2024 GUSTAV - Open Source Lernplattform
-                    <br>
-                    <a href="/privacy" hx-get="/privacy" hx-target="#main-content">
-                        Datenschutz
-                    </a>
-                    ·
-                    <a href="/imprint" hx-get="/imprint" hx-target="#main-content">
-                        Impressum
-                    </a>
-                    ·
-                    <a href="https://github.com/yourgithub/gustav" target="_blank" rel="noopener">
-                        GitHub
-                    </a>
-                </p>
-            </div>
-        </footer>
+        {main_inner}
     </main>
 </body>
 </html>"""
+
+    def render_fragment(self) -> str:
+        """Return the HTMX fragment that keeps the sidebar toggle in sync.
+
+        Why:
+            HTMX swaps should not duplicate the sidebar container; the JS toggle
+            expects exactly one `#sidebar` element in the DOM.
+        Parameters:
+            Uses the Layout instance state (title/content/user/current_path).
+        Behavior:
+            - Renders the `<main id="main-content">` fragment identical to the
+              full-page render.
+            - Appends a single `<aside id="sidebar" hx-swap-oob="true">` when
+              navigation is enabled so the sidebar updates out-of-band.
+        Permissions:
+            None. Callers must ensure the invoking route already enforced the
+            correct access control (e.g., teacher-only dashboards).
+        """
+        breadcrumb_html = Breadcrumbs(self.current_path).render() if self.show_nav else ""
+        main_inner = self._render_main_inner(breadcrumb_html)
+        if not self.show_nav:
+            return main_inner
+        # Out-of-band sidebar swap keeps the existing toggle button and state.
+        sidebar_oob = Navigation(self.user, self.current_path).render_aside(oob=True)
+        return f"{main_inner}{sidebar_oob}"
 
     def _render_head(self) -> str:
         """Render the HTML head section"""
@@ -121,3 +125,35 @@ class Layout(Component):
 
     <!-- Minimal custom JavaScript -->
     <SCRIPT src="/static/js/gustav.js?v=5" defer></SCRIPT>"""
+
+    def _render_main_inner(self, breadcrumb_html: str) -> str:
+        """Render the inner markup of the main content column.
+
+        Returns only the children of <main> so HTMX fragment swaps can replace
+        innerHTML without nesting <main> elements.
+        """
+        return f"""
+        {breadcrumb_html}
+        {self.content}
+
+        <!-- Footer integrated into main content -->
+        <footer class="content-footer" role="contentinfo" aria-label="Seitenfuß">
+            <div class="footer-content">
+                <p class="text-center text-muted">
+                    &copy; 2024 GUSTAV - Open Source Lernplattform
+                    <br>
+                    <a href="/privacy" hx-get="/privacy" hx-target="#main-content">
+                        Datenschutz
+                    </a>
+                    ·
+                    <a href="/imprint" hx-get="/imprint" hx-target="#main-content">
+                        Impressum
+                    </a>
+                    ·
+                    <a href="https://github.com/yourgithub/gustav" target="_blank" rel="noopener">
+                        GitHub
+                    </a>
+                </p>
+            </div>
+        </footer>
+        """

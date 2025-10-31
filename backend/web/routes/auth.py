@@ -124,7 +124,11 @@ async def auth_login(request: Request, redirect: str | None = None):
     )
     oidc = OIDCClient(cfg)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
-    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store"}
+    if request.headers.get("HX-Request"):
+        headers["HX-Redirect"] = url
+        return Response(status_code=204, headers=headers)
+    return RedirectResponse(url=url, status_code=302, headers=headers)
 
 
 @auth_router.get("/auth/forgot")
@@ -191,7 +195,11 @@ async def auth_register(request: Request, login_hint: str | None = None):
         url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
         sep = '&'
     url = f"{url}{sep}kc_action=register"
-    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store"}
+    if request.headers.get("HX-Request"):
+        headers["HX-Redirect"] = url
+        return Response(status_code=204, headers=headers)
+    return RedirectResponse(url=url, status_code=302, headers=headers)
 
 
 @auth_router.get("/auth/logout")

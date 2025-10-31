@@ -82,6 +82,11 @@ Geplante Ergänzungen (separat anlegen, wenn benötigt):
 
 Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Adapter/Repo -> Response DTO -> Presenter/View.
 
+### HTMX Sidebar Fragment Contract
+- Vollständige Seitenanfragen (`HX-Request` fehlt) erhalten weiterhin das komplette Dokument inklusive Toggle-Button und Sidebar.
+- HTMX-Navigation (`HX-Request: true`) liefert ausschließlich das `<main id="main-content">`-Fragment und genau ein `<aside id="sidebar" hx-swap-oob="true">`.
+- Der Helper `_layout_response()` in `backend/web/main.py` erzwingt diese Trennung; alle SSR-Routen müssen ihn verwenden, damit der JS-Toggle-Status bestehen bleibt und keine zweite Sidebar gerendert wird.
+
 ### Identity & Auth – vereinfachte Integration (DEV/PROD)
 
 - DEV (hostbasiert, einfach & robust):
@@ -114,6 +119,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 3) IdP → Redirect zu `REDIRECT_URI` (z. B. `http://app.localhost:8100/auth/callback`).
 4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
 5) Web legt Serversession an und setzt `gustav_session` (httpOnly; in DEV SameSite=lax, in PROD strict + Secure).
+6) HTMX-Anfragen (Sidebar-Link) erhalten statt 302 ein `204` mit `HX-Redirect`, damit der Browser trotzdem voll zur IdP-URL navigiert und der PKCE-State bestehen bleibt.
 
 ## API Contract‑First (Vorgehen)
 1) API‑Änderung zuerst im Vertrag: `api/openapi.yml:1`.

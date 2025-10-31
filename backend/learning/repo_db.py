@@ -73,10 +73,23 @@ class DBLearningRepo:
         if not HAVE_PSYCOPG:
             raise RuntimeError("psycopg3 is required for DBLearningRepo")
         self._dsn = dsn or _dsn()
-        user = self._dsn_username(self._dsn)
         allow_override = str(os.getenv("ALLOW_SERVICE_DSN_FOR_TESTING", "")).lower() == "true"
-        if user != "gustav_limited" and not allow_override:
-            raise RuntimeError("LearningRepo requires gustav_limited DSN")
+        if not allow_override:
+            user = self._dsn_username(self._dsn)
+            if user != "gustav_limited":
+                try:
+                    with psycopg.connect(self._dsn) as _conn:
+                        with _conn.cursor() as _cur:
+                            _cur.execute("select pg_has_role(current_user, 'gustav_limited', 'member')")
+                            ok = bool((_cur.fetchone() or [False])[0])
+                            if not ok:
+                                raise RuntimeError(
+                                    "LearningRepo requires a login that is IN ROLE gustav_limited (RLS)."
+                                )
+                except Exception as e:
+                    raise RuntimeError(
+                        f"LearningRepo DSN verification failed: {e}. Ensure your DB user is IN ROLE gustav_limited."
+                    )
 
     @staticmethod
     def _dsn_username(dsn: str) -> str:

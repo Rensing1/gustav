@@ -156,14 +156,27 @@ class DBTeachingRepo:
         if not HAVE_PSYCOPG:
             raise RuntimeError("psycopg3 is required for DBTeachingRepo")
         self._dsn = dsn or _dsn()
-        # Enforce limited-role DSN by default. Allow override explicitly for dev/tests.
-        user = self._dsn_username(self._dsn)
+        # Enforce limited-role semantics by default. Allow override explicitly for dev/tests.
         allow_override = str(os.getenv("ALLOW_SERVICE_DSN_FOR_TESTING", "")).lower() == "true"
-        if user != "gustav_limited" and not allow_override:
-            raise RuntimeError(
-                "TeachingRepo requires limited-role DSN (gustav_limited). Set TEACHING_DATABASE_URL "
-                "to a limited DSN or export ALLOW_SERVICE_DSN_FOR_TESTING=true to override in dev."
-            )
+        if not allow_override:
+            # If the username is not literally the limited role, verify role membership at runtime.
+            user = self._dsn_username(self._dsn)
+            if user != "gustav_limited":
+                try:
+                    import psycopg  # type: ignore
+                    with psycopg.connect(self._dsn) as _conn:
+                        with _conn.cursor() as _cur:
+                            _cur.execute("select pg_has_role(current_user, 'gustav_limited', 'member')")
+                            ok = bool((_cur.fetchone() or [False])[0])
+                            if not ok:
+                                raise RuntimeError(
+                                    "TeachingRepo requires a login that is IN ROLE gustav_limited (RLS)."
+                                )
+                except Exception as e:
+                    # Re-raise with a clear message to aid developer setup
+                    raise RuntimeError(
+                        f"TeachingRepo DSN verification failed: {e}. Ensure your DB user is IN ROLE gustav_limited."
+                    )
 
     @staticmethod
     def _dsn_username(dsn: str) -> str:

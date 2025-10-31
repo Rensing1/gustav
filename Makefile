@@ -29,9 +29,10 @@ ps:
 .PHONY: db-login-user
 db-login-user:
 	@echo "Creating/ensuring role $(APP_DB_USER) IN ROLE gustav_limited ..."
-	@PGPASSWORD=$(DB_SUPERPASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_SUPERUSER) -d postgres -v ON_ERROR_STOP=1 \
-		-c "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='$(APP_DB_USER)') THEN ALTER ROLE $(APP_DB_USER) WITH LOGIN PASSWORD '$(APP_DB_PASSWORD)'; ELSE CREATE ROLE $(APP_DB_USER) WITH LOGIN PASSWORD '$(APP_DB_PASSWORD)'; END IF; END $$;" \
-		-c "GRANT gustav_limited TO $(APP_DB_USER);"
+	@APP_DB_USER=$(APP_DB_USER) APP_DB_PASSWORD=$(APP_DB_PASSWORD) \
+		PGPASSWORD=$(DB_SUPERPASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_SUPERUSER) -d postgres -v ON_ERROR_STOP=1 \
+		-v app_user="$(APP_DB_USER)" -v app_pass="$(APP_DB_PASSWORD)" \
+		-f scripts/dev/create_login_user.sql >/dev/null
 	@echo "Done. Example DSN: postgresql://$(APP_DB_USER):<secret>@$(DB_HOST):$(DB_PORT)/postgres"
 
 .PHONY: test
@@ -45,4 +46,3 @@ test-e2e:
 .PHONY: supabase-status
 supabase-status:
 	supabase status
-

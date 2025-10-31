@@ -7,8 +7,8 @@ Rationale:
     default DSN used by the app (limited role) when `DATABASE_URL` is absent.
 
 Defaults:
-    postgresql://gustav_limited:gustav-limited@127.0.0.1:54322/postgres
-    (can be overridden via TEST_DB_HOST / TEST_DB_PORT if set)
+    postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres
+    (APP_DB_USER / APP_DB_PASSWORD apply; TEST_DB_HOST / TEST_DB_PORT can override host/port)
 """
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ import pytest
 def _default_test_dsn() -> str:
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
-    return f"postgresql://gustav_limited:gustav-limited@{host}:{port}/postgres"
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    return f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
 
 def require_db_or_skip() -> None:
@@ -47,4 +49,3 @@ def require_db_or_skip() -> None:
         except Exception:
             continue
     pytest.skip("Database not reachable; ensure local DB at 127.0.0.1:54322 or set DATABASE_URL")
-

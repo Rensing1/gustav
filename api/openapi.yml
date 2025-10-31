@@ -853,6 +853,8 @@ components:
 paths:
   /health:
     get:
+      tags: [Operations]
+      operationId: getHealth
       summary: Health check
       description: Lightweight readiness probe for orchestration and tests.
       security: []

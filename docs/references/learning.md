@@ -72,6 +72,12 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Zusätzliche SELECT-Policies erlauben Schülern (über `gustav_limited`) Lesezugriff nur auf freigegebene
   Kursinhalte: Units, Course Modules, Unit Sections, Module Section Releases (sichtbare), Unit Materials
   und Unit Tasks. Die Policies prüfen Mitgliedschaft (`course_memberships`) und Freigaben (`visible`).
+- Spezifische Prüffunktionen für Schülerzugriff:
+  - `student_is_course_member(p_student_sub text, p_course_id uuid)`
+  - `student_can_access_unit(p_student_sub text, p_unit_id uuid)`
+  - `student_can_access_course_module(p_student_sub text, p_course_module_id uuid)`
+  - `student_can_access_section(p_student_sub text, p_section_id uuid)`
+  Diese Funktionen laufen als SECURITY INVOKER und besitzen nur EXECUTE für `gustav_limited`.
 
 ## Sicherheit & Datenschutz
 - Minimierte DTOs: Identität über `sub`, kein PII in API‑Antworten.

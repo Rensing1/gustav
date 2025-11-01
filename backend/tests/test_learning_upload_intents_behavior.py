@@ -78,6 +78,9 @@ async def test_upload_intent_image_png_happy_path():
     assert body.get("storage_key") and body.get("url")
     assert "image/png" in body.get("accepted_mime_types", [])
     assert int(body.get("max_size_bytes", 0)) >= 10485760
+    # Security cache header + vary
+    assert r.headers.get("Cache-Control") == "private, no-store"
+    assert r.headers.get("Vary") == "Origin"
 
 
 @pytest.mark.anyio
@@ -95,3 +98,29 @@ async def test_upload_intent_rejects_gif_and_too_large():
         )
     assert r1.status_code == 400
     assert r2.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_upload_intent_requires_authentication():
+    # No session cookie -> 401
+    async with (await _client()) as c:
+        r = await c.post(
+            f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/upload-intents",
+            json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+        )
+    assert r.status_code == 401
+    assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_upload_intent_forbidden_for_teacher():
+    # Teacher role is not allowed to create student upload intents
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r = await c.post(
+            f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/upload-intents",
+            json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+        )
+    assert r.status_code == 403

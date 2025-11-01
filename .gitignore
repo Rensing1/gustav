@@ -21,3 +21,9 @@ __pycache__/
 .vscode/
 .DS_Store
 *.swp
+# Do not commit DB dumps or archives
+docs/migration/*.tar
+docs/migration/*.tar.gz
+docs/migration/*.dump
+docs/migration/reports/
+docs/migration/.tmp/

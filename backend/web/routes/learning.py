@@ -52,12 +52,14 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB
 def _cache_headers_success() -> dict[str, str]:
     # Success responses: private and explicitly non-storable (defense-in-depth
     # against history stores and intermediary caches potentially keeping PII).
-    return {"Cache-Control": "private, no-store"}
+    # Include Vary: Origin to prevent cache confusion across origins.
+    return {"Cache-Control": "private, no-store", "Vary": "Origin"}
 
 
 def _cache_headers_error() -> dict[str, str]:
     # Error responses: must never be stored; protects PII-bearing error pages.
-    return {"Cache-Control": "private, no-store"}
+    # Include Vary: Origin for consistency with success responses.
+    return {"Cache-Control": "private, no-store", "Vary": "Origin"}
 
 
 def _current_user(request: Request) -> dict | None:
@@ -591,6 +593,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         storage_key = f"submissions/{_uuid4().hex}{ext}"
 
     # Stub presigned URL (adapter optional in MVP)
+    from datetime import datetime, timezone, timedelta
     intent = {
         "intent_id": str(_uuid4()),
         "storage_key": storage_key,
@@ -598,7 +601,8 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         "headers": {"Content-Type": mime_type},
         "accepted_mime_types": accepted,
         "max_size_bytes": MAX_UPLOAD_BYTES,
-        "expires_at": "2099-12-31T23:59:59+00:00",
+        # Short-lived expiry (defense-in-depth): 10 minutes from now (UTC)
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(timespec="seconds"),
     }
     return JSONResponse(intent, status_code=200, headers=_cache_headers_success())
 

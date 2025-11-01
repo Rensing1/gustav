@@ -1,0 +1,1168 @@
+;
+; Archive created at 2025-11-01 10:35:04 CET
+;     dbname: postgres
+;     TOC Entries: 1160
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 17.6
+;     Dumped by pg_dump version: 17.6
+;
+;
+; Selected TOC Entries:
+;
+10; 2615 16706 SCHEMA - _realtime postgres
+19; 2615 16457 SCHEMA - auth supabase_admin
+4750; 0 0 ACL - SCHEMA auth supabase_admin
+20; 2615 16394 SCHEMA - extensions postgres
+4751; 0 0 ACL - SCHEMA extensions postgres
+15; 2615 16624 SCHEMA - graphql supabase_admin
+14; 2615 16613 SCHEMA - graphql_public supabase_admin
+3; 3079 16707 EXTENSION - pg_net 
+4752; 0 0 COMMENT - EXTENSION pg_net 
+4753; 0 0 ACL - SCHEMA net supabase_admin
+12; 2615 16386 SCHEMA - pgbouncer pgbouncer
+4754; 0 0 ACL - SCHEMA public pg_database_owner
+17; 2615 16605 SCHEMA - realtime supabase_admin
+4755; 0 0 ACL - SCHEMA realtime supabase_admin
+18; 2615 16505 SCHEMA - storage supabase_admin
+4756; 0 0 ACL - SCHEMA storage supabase_admin
+22; 2615 16752 SCHEMA - supabase_functions supabase_admin
+4757; 0 0 ACL - SCHEMA supabase_functions supabase_admin
+13; 2615 17682 SCHEMA - supabase_migrations postgres
+23; 2615 16653 SCHEMA - vault supabase_admin
+4758; 0 0 ACL - SCHEMA vault supabase_admin
+2; 3079 16689 EXTENSION - pg_graphql 
+4759; 0 0 COMMENT - EXTENSION pg_graphql 
+4; 3079 16565 EXTENSION - pg_stat_statements 
+4760; 0 0 COMMENT - EXTENSION pg_stat_statements 
+5; 3079 16406 EXTENSION - pgcrypto 
+4761; 0 0 COMMENT - EXTENSION pgcrypto 
+7; 3079 16654 EXTENSION - supabase_vault 
+4762; 0 0 COMMENT - EXTENSION supabase_vault 
+6; 3079 16395 EXTENSION - uuid-ossp 
+4763; 0 0 COMMENT - EXTENSION "uuid-ossp" 
+1308; 1247 17354 TYPE auth aal_level supabase_auth_admin
+1332; 1247 17495 TYPE auth code_challenge_method supabase_auth_admin
+1305; 1247 17348 TYPE auth factor_status supabase_auth_admin
+1302; 1247 17343 TYPE auth factor_type supabase_auth_admin
+1350; 1247 17598 TYPE auth oauth_authorization_status supabase_auth_admin
+1362; 1247 17671 TYPE auth oauth_client_type supabase_auth_admin
+1344; 1247 17576 TYPE auth oauth_registration_type supabase_auth_admin
+1353; 1247 17608 TYPE auth oauth_response_type supabase_auth_admin
+1338; 1247 17537 TYPE auth one_time_token_type supabase_auth_admin
+1448; 1247 17691 TYPE public user_role postgres
+4764; 0 0 ACL public TYPE user_role postgres
+1263; 1247 16892 TYPE realtime action supabase_admin
+1254; 1247 16852 TYPE realtime equality_op supabase_admin
+1257; 1247 16867 TYPE realtime user_defined_filter supabase_admin
+1269; 1247 16934 TYPE realtime wal_column supabase_admin
+1266; 1247 16905 TYPE realtime wal_rls supabase_admin
+1287; 1247 17210 TYPE storage buckettype supabase_storage_admin
+572; 1255 16503 FUNCTION auth email() supabase_auth_admin
+4765; 0 0 COMMENT auth FUNCTION email() supabase_auth_admin
+4766; 0 0 ACL auth FUNCTION email() supabase_auth_admin
+445; 1255 17325 FUNCTION auth jwt() supabase_auth_admin
+4767; 0 0 ACL auth FUNCTION jwt() supabase_auth_admin
+563; 1255 16502 FUNCTION auth role() supabase_auth_admin
+4768; 0 0 COMMENT auth FUNCTION role() supabase_auth_admin
+4769; 0 0 ACL auth FUNCTION role() supabase_auth_admin
+555; 1255 16501 FUNCTION auth uid() supabase_auth_admin
+4770; 0 0 COMMENT auth FUNCTION uid() supabase_auth_admin
+4771; 0 0 ACL auth FUNCTION uid() supabase_auth_admin
+4772; 0 0 ACL extensions FUNCTION armor(bytea) supabase_admin
+4773; 0 0 ACL extensions FUNCTION armor(bytea, text[], text[]) supabase_admin
+4774; 0 0 ACL extensions FUNCTION crypt(text, text) supabase_admin
+4775; 0 0 ACL extensions FUNCTION dearmor(text) supabase_admin
+4776; 0 0 ACL extensions FUNCTION decrypt(bytea, bytea, text) supabase_admin
+4777; 0 0 ACL extensions FUNCTION decrypt_iv(bytea, bytea, bytea, text) supabase_admin
+4778; 0 0 ACL extensions FUNCTION digest(bytea, text) supabase_admin
+4779; 0 0 ACL extensions FUNCTION digest(text, text) supabase_admin
+4780; 0 0 ACL extensions FUNCTION encrypt(bytea, bytea, text) supabase_admin
+4781; 0 0 ACL extensions FUNCTION encrypt_iv(bytea, bytea, bytea, text) supabase_admin
+4782; 0 0 ACL extensions FUNCTION gen_random_bytes(integer) supabase_admin
+4783; 0 0 ACL extensions FUNCTION gen_random_uuid() supabase_admin
+4784; 0 0 ACL extensions FUNCTION gen_salt(text) supabase_admin
+4785; 0 0 ACL extensions FUNCTION gen_salt(text, integer) supabase_admin
+558; 1255 16560 FUNCTION extensions grant_pg_cron_access() supabase_admin
+4786; 0 0 COMMENT extensions FUNCTION grant_pg_cron_access() supabase_admin
+4787; 0 0 ACL extensions FUNCTION grant_pg_cron_access() supabase_admin
+452; 1255 16618 FUNCTION extensions grant_pg_graphql_access() supabase_admin
+4788; 0 0 COMMENT extensions FUNCTION grant_pg_graphql_access() supabase_admin
+4789; 0 0 ACL extensions FUNCTION grant_pg_graphql_access() supabase_admin
+518; 1255 16562 FUNCTION extensions grant_pg_net_access() supabase_admin
+4790; 0 0 COMMENT extensions FUNCTION grant_pg_net_access() supabase_admin
+4791; 0 0 ACL extensions FUNCTION grant_pg_net_access() supabase_admin
+4792; 0 0 ACL extensions FUNCTION hmac(bytea, bytea, text) supabase_admin
+4793; 0 0 ACL extensions FUNCTION hmac(text, text, text) supabase_admin
+4794; 0 0 ACL extensions FUNCTION pg_stat_statements(showtext boolean, OUT userid oid, OUT dbid oid, OUT toplevel boolean, OUT queryid bigint, OUT query text, OUT plans bigint, OUT total_plan_time double precision, OUT min_plan_time double precision, OUT max_plan_time double precision, OUT mean_plan_time double precision, OUT stddev_plan_time double precision, OUT calls bigint, OUT total_exec_time double precision, OUT min_exec_time double precision, OUT max_exec_time double precision, OUT mean_exec_time double precision, OUT stddev_exec_time double precision, OUT rows bigint, OUT shared_blks_hit bigint, OUT shared_blks_read bigint, OUT shared_blks_dirtied bigint, OUT shared_blks_written bigint, OUT local_blks_hit bigint, OUT local_blks_read bigint, OUT local_blks_dirtied bigint, OUT local_blks_written bigint, OUT temp_blks_read bigint, OUT temp_blks_written bigint, OUT shared_blk_read_time double precision, OUT shared_blk_write_time double precision, OUT local_blk_read_time double precision, OUT local_blk_write_time double precision, OUT temp_blk_read_time double precision, OUT temp_blk_write_time double precision, OUT wal_records bigint, OUT wal_fpi bigint, OUT wal_bytes numeric, OUT jit_functions bigint, OUT jit_generation_time double precision, OUT jit_inlining_count bigint, OUT jit_inlining_time double precision, OUT jit_optimization_count bigint, OUT jit_optimization_time double precision, OUT jit_emission_count bigint, OUT jit_emission_time double precision, OUT jit_deform_count bigint, OUT jit_deform_time double precision, OUT stats_since timestamp with time zone, OUT minmax_stats_since timestamp with time zone) supabase_admin
+4795; 0 0 ACL extensions FUNCTION pg_stat_statements_info(OUT dealloc bigint, OUT stats_reset timestamp with time zone) supabase_admin
+4796; 0 0 ACL extensions FUNCTION pg_stat_statements_reset(userid oid, dbid oid, queryid bigint, minmax_only boolean) supabase_admin
+4797; 0 0 ACL extensions FUNCTION pgp_armor_headers(text, OUT key text, OUT value text) supabase_admin
+4798; 0 0 ACL extensions FUNCTION pgp_key_id(bytea) supabase_admin
+4799; 0 0 ACL extensions FUNCTION pgp_pub_decrypt(bytea, bytea) supabase_admin
+4800; 0 0 ACL extensions FUNCTION pgp_pub_decrypt(bytea, bytea, text) supabase_admin
+4801; 0 0 ACL extensions FUNCTION pgp_pub_decrypt(bytea, bytea, text, text) supabase_admin
+4802; 0 0 ACL extensions FUNCTION pgp_pub_decrypt_bytea(bytea, bytea) supabase_admin
+4803; 0 0 ACL extensions FUNCTION pgp_pub_decrypt_bytea(bytea, bytea, text) supabase_admin
+4804; 0 0 ACL extensions FUNCTION pgp_pub_decrypt_bytea(bytea, bytea, text, text) supabase_admin
+4805; 0 0 ACL extensions FUNCTION pgp_pub_encrypt(text, bytea) supabase_admin
+4806; 0 0 ACL extensions FUNCTION pgp_pub_encrypt(text, bytea, text) supabase_admin
+4807; 0 0 ACL extensions FUNCTION pgp_pub_encrypt_bytea(bytea, bytea) supabase_admin
+4808; 0 0 ACL extensions FUNCTION pgp_pub_encrypt_bytea(bytea, bytea, text) supabase_admin
+4809; 0 0 ACL extensions FUNCTION pgp_sym_decrypt(bytea, text) supabase_admin
+4810; 0 0 ACL extensions FUNCTION pgp_sym_decrypt(bytea, text, text) supabase_admin
+4811; 0 0 ACL extensions FUNCTION pgp_sym_decrypt_bytea(bytea, text) supabase_admin
+4812; 0 0 ACL extensions FUNCTION pgp_sym_decrypt_bytea(bytea, text, text) supabase_admin
+4813; 0 0 ACL extensions FUNCTION pgp_sym_encrypt(text, text) supabase_admin
+4814; 0 0 ACL extensions FUNCTION pgp_sym_encrypt(text, text, text) supabase_admin
+4815; 0 0 ACL extensions FUNCTION pgp_sym_encrypt_bytea(bytea, text) supabase_admin
+4816; 0 0 ACL extensions FUNCTION pgp_sym_encrypt_bytea(bytea, text, text) supabase_admin
+328; 1255 16609 FUNCTION extensions pgrst_ddl_watch() supabase_admin
+4817; 0 0 ACL extensions FUNCTION pgrst_ddl_watch() supabase_admin
+509; 1255 16610 FUNCTION extensions pgrst_drop_watch() supabase_admin
+4818; 0 0 ACL extensions FUNCTION pgrst_drop_watch() supabase_admin
+354; 1255 16620 FUNCTION extensions set_graphql_placeholder() supabase_admin
+4819; 0 0 COMMENT extensions FUNCTION set_graphql_placeholder() supabase_admin
+4820; 0 0 ACL extensions FUNCTION set_graphql_placeholder() supabase_admin
+4821; 0 0 ACL extensions FUNCTION uuid_generate_v1() supabase_admin
+4822; 0 0 ACL extensions FUNCTION uuid_generate_v1mc() supabase_admin
+4823; 0 0 ACL extensions FUNCTION uuid_generate_v3(namespace uuid, name text) supabase_admin
+4824; 0 0 ACL extensions FUNCTION uuid_generate_v4() supabase_admin
+4825; 0 0 ACL extensions FUNCTION uuid_generate_v5(namespace uuid, name text) supabase_admin
+4826; 0 0 ACL extensions FUNCTION uuid_nil() supabase_admin
+4827; 0 0 ACL extensions FUNCTION uuid_ns_dns() supabase_admin
+4828; 0 0 ACL extensions FUNCTION uuid_ns_oid() supabase_admin
+4829; 0 0 ACL extensions FUNCTION uuid_ns_url() supabase_admin
+4830; 0 0 ACL extensions FUNCTION uuid_ns_x500() supabase_admin
+4831; 0 0 ACL graphql_public FUNCTION graphql("operationName" text, query text, variables jsonb, extensions jsonb) supabase_admin
+4832; 0 0 ACL net FUNCTION http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) supabase_admin
+4833; 0 0 ACL net FUNCTION http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) supabase_admin
+424; 1255 16387 FUNCTION pgbouncer get_auth(text) supabase_admin
+4834; 0 0 ACL pgbouncer FUNCTION get_auth(p_usename text) supabase_admin
+570; 1255 18754 FUNCTION public _get_submission_status_matrix_uncached(text, uuid, uuid) postgres
+4835; 0 0 ACL public FUNCTION _get_submission_status_matrix_uncached(p_session_id text, p_course_id uuid, p_unit_id uuid) postgres
+380; 1255 18586 FUNCTION public add_user_to_course(text, uuid, uuid, text) postgres
+4836; 0 0 ACL public FUNCTION add_user_to_course(p_session_id text, p_user_id uuid, p_course_id uuid, p_role text) postgres
+437; 1255 18604 FUNCTION public assign_unit_to_course(text, uuid, uuid) postgres
+4837; 0 0 ACL public FUNCTION assign_unit_to_course(p_session_id text, p_unit_id uuid, p_course_id uuid) postgres
+374; 1255 18752 FUNCTION public calculate_learning_streak(text, uuid) postgres
+4838; 0 0 ACL public FUNCTION calculate_learning_streak(p_session_id text, p_student_id uuid) postgres
+343; 1255 17998 FUNCTION public can_student_view_section(uuid) postgres
+4839; 0 0 ACL public FUNCTION can_student_view_section(section_id_to_check uuid) postgres
+421; 1255 18114 FUNCTION public can_submit_task(uuid, uuid) postgres
+4840; 0 0 ACL public FUNCTION can_submit_task(p_student_id uuid, p_task_id uuid) postgres
+337; 1255 18399 FUNCTION public cleanup_expired_sessions() postgres
+4841; 0 0 COMMENT public FUNCTION cleanup_expired_sessions() postgres
+4842; 0 0 ACL public FUNCTION cleanup_expired_sessions() postgres
+524; 1255 18434 FUNCTION public cleanup_session_rate_limits() postgres
+4843; 0 0 ACL public FUNCTION cleanup_session_rate_limits() postgres
+479; 1255 18461 FUNCTION public create_course(text, text, text) postgres
+4844; 0 0 ACL public FUNCTION create_course(p_session_id text, p_name text, p_description text) postgres
+478; 1255 18460 FUNCTION public create_learning_unit(text, text, text) postgres
+4845; 0 0 ACL public FUNCTION create_learning_unit(p_session_id text, p_title text, p_description text) postgres
+521; 1255 18763 FUNCTION public create_mastery_task(text, uuid, text, text, integer, integer, jsonb) postgres
+4846; 0 0 ACL public FUNCTION create_mastery_task(p_session_id text, p_section_id uuid, p_instruction text, p_task_type text, p_order_in_section integer, p_difficulty_level integer, p_assessment_criteria jsonb) postgres
+465; 1255 18732 FUNCTION public create_regular_task(text, uuid, text, text, integer, integer, jsonb) postgres
+4847; 0 0 ACL public FUNCTION create_regular_task(p_session_id text, p_section_id uuid, p_instruction text, p_task_type text, p_order_in_section integer, p_max_attempts integer, p_assessment_criteria jsonb) postgres
+345; 1255 18615 FUNCTION public create_section(text, uuid, text, text, jsonb) postgres
+4848; 0 0 ACL public FUNCTION create_section(p_session_id text, p_unit_id uuid, p_title text, p_description text, p_materials jsonb) postgres
+371; 1255 18435 FUNCTION public create_session(uuid, text, text, jsonb, interval, inet, text) postgres
+4849; 0 0 COMMENT public FUNCTION create_session(p_user_id uuid, p_user_email text, p_user_role text, p_data jsonb, p_expires_in interval, p_ip_address inet, p_user_agent text) postgres
+4850; 0 0 ACL public FUNCTION create_session(p_user_id uuid, p_user_email text, p_user_role text, p_data jsonb, p_expires_in interval, p_ip_address inet, p_user_agent text) postgres
+384; 1255 18446 FUNCTION public create_session_for_auth_service(uuid, text, text, jsonb, interval, inet, text) postgres
+4851; 0 0 COMMENT public FUNCTION create_session_for_auth_service(p_user_id uuid, p_user_email text, p_user_role text, p_data jsonb, p_expires_in interval, p_ip_address inet, p_user_agent text) postgres
+4852; 0 0 ACL public FUNCTION create_session_for_auth_service(p_user_id uuid, p_user_email text, p_user_role text, p_data jsonb, p_expires_in interval, p_ip_address inet, p_user_agent text) postgres
+475; 1255 18424 FUNCTION public create_session_with_api_key(text, character varying, uuid, text, text, jsonb, timestamp with time zone, inet, text) postgres
+4853; 0 0 COMMENT public FUNCTION create_session_with_api_key(p_api_key text, p_session_id character varying, p_user_id uuid, p_user_email text, p_user_role text, p_data jsonb, p_expires_at timestamp with time zone, p_ip_address inet, p_user_agent text) postgres
+4854; 0 0 ACL public FUNCTION create_session_with_api_key(p_api_key text, p_session_id character varying, p_user_id uuid, p_user_email text, p_user_role text, p_data jsonb, p_expires_at timestamp with time zone, p_ip_address inet, p_user_agent text) postgres
+362; 1255 18782 FUNCTION public create_submission(text, uuid, text) postgres
+4855; 0 0 COMMENT public FUNCTION create_submission(p_session_id text, p_task_id uuid, p_submission_text text) postgres
+4856; 0 0 ACL public FUNCTION create_submission(p_session_id text, p_task_id uuid, p_submission_text text) postgres
+325; 1255 19607 FUNCTION public create_task_in_new_structure(text, uuid, text, text, text, integer, text[], integer, text) postgres
+4857; 0 0 ACL public FUNCTION create_task_in_new_structure(p_session_id text, p_section_id uuid, p_title text, p_prompt text, p_task_type text, p_max_attempts integer, p_grading_criteria text[], p_difficulty_level integer, p_concept_explanation text) postgres
+458; 1255 19608 FUNCTION public create_task_in_new_structure(text, uuid, text, text, text, boolean, integer, integer, text[], integer, text) postgres
+4858; 0 0 ACL public FUNCTION create_task_in_new_structure(p_session_id text, p_section_id uuid, p_title text, p_prompt text, p_task_type text, p_is_mastery boolean, p_order_in_section integer, p_max_attempts integer, p_grading_criteria text[], p_difficulty_level integer, p_concept_explanation text) postgres
+350; 1255 18591 FUNCTION public delete_course(text, uuid) postgres
+4859; 0 0 ACL public FUNCTION delete_course(p_session_id text, p_course_id uuid) postgres
+340; 1255 18603 FUNCTION public delete_learning_unit(text, uuid) postgres
+4860; 0 0 ACL public FUNCTION delete_learning_unit(p_session_id text, p_unit_id uuid) postgres
+565; 1255 18439 FUNCTION public delete_session(character varying) postgres
+4861; 0 0 COMMENT public FUNCTION delete_session(p_session_id character varying) postgres
+4862; 0 0 ACL public FUNCTION delete_session(p_session_id character varying) postgres
+393; 1255 18745 FUNCTION public delete_task_in_new_structure(text, uuid) postgres
+4863; 0 0 ACL public FUNCTION delete_task_in_new_structure(p_session_id text, p_task_id uuid) postgres
+401; 1255 18401 FUNCTION public enforce_session_limit() postgres
+4864; 0 0 COMMENT public FUNCTION enforce_session_limit() postgres
+4865; 0 0 ACL public FUNCTION enforce_session_limit() postgres
+395; 1255 18796 FUNCTION public ensure_feedback_consistency() postgres
+4866; 0 0 COMMENT public FUNCTION ensure_feedback_consistency() postgres
+4867; 0 0 ACL public FUNCTION ensure_feedback_consistency() postgres
+444; 1255 18583 FUNCTION public get_all_feedback(text) postgres
+4868; 0 0 ACL public FUNCTION get_all_feedback(p_session_id text) postgres
+463; 1255 18476 FUNCTION public get_course_by_id(text, uuid) postgres
+4869; 0 0 ACL public FUNCTION get_course_by_id(p_session_id text, p_course_id uuid) postgres
+529; 1255 18593 FUNCTION public get_course_students(text, uuid) postgres
+4870; 0 0 ACL public FUNCTION get_course_students(p_session_id text, p_course_id uuid) postgres
+329; 1255 18577 FUNCTION public get_course_units(text, uuid) postgres
+4871; 0 0 ACL public FUNCTION get_course_units(p_session_id text, p_course_id uuid) postgres
+537; 1255 18578 FUNCTION public get_courses_assigned_to_unit(text, uuid) postgres
+4872; 0 0 ACL public FUNCTION get_courses_assigned_to_unit(p_session_id text, p_unit_id uuid) postgres
+332; 1255 18809 FUNCTION public get_due_tomorrow_count(text, uuid, uuid) postgres
+4873; 0 0 COMMENT public FUNCTION get_due_tomorrow_count(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+4874; 0 0 ACL public FUNCTION get_due_tomorrow_count(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+489; 1255 18465 FUNCTION public get_learning_unit(text, uuid) postgres
+4875; 0 0 ACL public FUNCTION get_learning_unit(p_session_id text, p_unit_id uuid) postgres
+534; 1255 18807 FUNCTION public get_mastery_stats_for_student(text, uuid, uuid) postgres
+4876; 0 0 COMMENT public FUNCTION get_mastery_stats_for_student(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+4877; 0 0 ACL public FUNCTION get_mastery_stats_for_student(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+381; 1255 18808 FUNCTION public get_mastery_summary(text, uuid, uuid) postgres
+4878; 0 0 COMMENT public FUNCTION get_mastery_summary(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+4879; 0 0 ACL public FUNCTION get_mastery_summary(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+471; 1255 18765 FUNCTION public get_mastery_tasks_for_course(text, uuid) postgres
+4880; 0 0 ACL public FUNCTION get_mastery_tasks_for_course(p_session_id text, p_course_id uuid) postgres
+476; 1255 18841 FUNCTION public get_mastery_tasks_for_section(text, uuid) postgres
+4881; 0 0 COMMENT public FUNCTION get_mastery_tasks_for_section(p_session_id text, p_section_id uuid) postgres
+4882; 0 0 ACL public FUNCTION get_mastery_tasks_for_section(p_session_id text, p_section_id uuid) postgres
+344; 1255 17836 FUNCTION public get_my_role() postgres
+4883; 0 0 ACL public FUNCTION get_my_role() postgres
+553; 1255 18640 FUNCTION public get_next_due_mastery_task(text, uuid) postgres
+4884; 0 0 ACL public FUNCTION get_next_due_mastery_task(p_session_id text, p_student_id uuid) postgres
+351; 1255 18712 FUNCTION public get_next_due_mastery_task(text, uuid, uuid) postgres
+4885; 0 0 COMMENT public FUNCTION get_next_due_mastery_task(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+4886; 0 0 ACL public FUNCTION get_next_due_mastery_task(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+336; 1255 18245 FUNCTION public get_next_feedback_submission() postgres
+4887; 0 0 ACL public FUNCTION get_next_feedback_submission() postgres
+568; 1255 18827 FUNCTION public get_next_mastery_task_or_unviewed_feedback(text, uuid, uuid) postgres
+4888; 0 0 COMMENT public FUNCTION get_next_mastery_task_or_unviewed_feedback(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+4889; 0 0 ACL public FUNCTION get_next_mastery_task_or_unviewed_feedback(p_session_id text, p_student_id uuid, p_course_id uuid) postgres
+355; 1255 18761 FUNCTION public get_published_section_details_for_student(text, uuid, uuid, uuid) postgres
+4890; 0 0 ACL public FUNCTION get_published_section_details_for_student(p_session_id text, p_course_id uuid, p_unit_id uuid, p_student_id uuid) postgres
+460; 1255 18840 FUNCTION public get_regular_tasks_for_section(text, uuid) postgres
+4891; 0 0 COMMENT public FUNCTION get_regular_tasks_for_section(p_session_id text, p_section_id uuid) postgres
+4892; 0 0 ACL public FUNCTION get_regular_tasks_for_section(p_session_id text, p_section_id uuid) postgres
+496; 1255 18554 FUNCTION public get_remaining_attempts(text, uuid, uuid) postgres
+4893; 0 0 COMMENT public FUNCTION get_remaining_attempts(p_session_id text, p_student_id uuid, p_task_id uuid) postgres
+4894; 0 0 ACL public FUNCTION get_remaining_attempts(p_session_id text, p_student_id uuid, p_task_id uuid) postgres
+569; 1255 18612 FUNCTION public get_section_statuses_for_unit_in_course(text, uuid, uuid) postgres
+4895; 0 0 ACL public FUNCTION get_section_statuses_for_unit_in_course(p_session_id text, p_unit_id uuid, p_course_id uuid) postgres
+327; 1255 18757 FUNCTION public get_section_tasks(text, uuid) postgres
+4896; 0 0 ACL public FUNCTION get_section_tasks(p_session_id text, p_section_id uuid) postgres
+526; 1255 18744 FUNCTION public get_section_tasks(text, uuid, uuid) postgres
+4897; 0 0 ACL public FUNCTION get_section_tasks(p_session_id text, p_section_id uuid, p_course_id uuid) postgres
+466; 1255 18436 FUNCTION public get_session(character varying) postgres
+4898; 0 0 COMMENT public FUNCTION get_session(p_session_id character varying) postgres
+4899; 0 0 ACL public FUNCTION get_session(p_session_id character varying) postgres
+559; 1255 18400 FUNCTION public get_session_with_activity_update(character varying) postgres
+4900; 0 0 COMMENT public FUNCTION get_session_with_activity_update(p_session_id character varying) postgres
+4901; 0 0 ACL public FUNCTION get_session_with_activity_update(p_session_id character varying) postgres
+348; 1255 18475 FUNCTION public get_student_courses(text, uuid) postgres
+4902; 0 0 ACL public FUNCTION get_student_courses(p_session_id text, p_student_id uuid) postgres
+510; 1255 18573 FUNCTION public get_students_in_course(text, uuid) postgres
+4903; 0 0 ACL public FUNCTION get_students_in_course(p_session_id text, p_course_id uuid) postgres
+543; 1255 18803 FUNCTION public get_submission_by_id(text, uuid) postgres
+4904; 0 0 COMMENT public FUNCTION get_submission_by_id(p_session_id text, p_submission_id uuid) postgres
+4905; 0 0 ACL public FUNCTION get_submission_by_id(p_session_id text, p_submission_id uuid) postgres
+453; 1255 18113 FUNCTION public get_submission_count(uuid, uuid) postgres
+4906; 0 0 ACL public FUNCTION get_submission_count(p_student_id uuid, p_task_id uuid) postgres
+418; 1255 19609 FUNCTION public get_submission_for_task(text, uuid) postgres
+4907; 0 0 ACL public FUNCTION get_submission_for_task(p_session_id text, p_task_id uuid) postgres
+459; 1255 18780 FUNCTION public get_submission_for_task(text, uuid, uuid) postgres
+4908; 0 0 COMMENT public FUNCTION get_submission_for_task(p_session_id text, p_student_id uuid, p_task_id uuid) postgres
+4909; 0 0 ACL public FUNCTION get_submission_for_task(p_session_id text, p_student_id uuid, p_task_id uuid) postgres
+451; 1255 18762 FUNCTION public get_submission_history(text, uuid, uuid) postgres
+4910; 0 0 ACL public FUNCTION get_submission_history(p_session_id text, p_student_id uuid, p_task_id uuid) postgres
+364; 1255 18249 FUNCTION public get_submission_queue_position(uuid) postgres
+4911; 0 0 ACL public FUNCTION get_submission_queue_position(p_submission_id uuid) postgres
+573; 1255 18641 FUNCTION public get_submission_status_matrix(text, uuid, uuid) postgres
+4912; 0 0 ACL public FUNCTION get_submission_status_matrix(p_session_id text, p_unit_id uuid, p_course_id uuid) postgres
+369; 1255 18755 FUNCTION public get_submissions_for_course_and_unit(text, uuid, uuid) postgres
+4913; 0 0 ACL public FUNCTION get_submissions_for_course_and_unit(p_session_id text, p_course_id uuid, p_unit_id uuid) postgres
+514; 1255 18835 FUNCTION public get_task_by_id(text, uuid) postgres
+4914; 0 0 COMMENT public FUNCTION get_task_by_id(p_session_id text, p_task_id uuid) postgres
+4915; 0 0 ACL public FUNCTION get_task_by_id(p_session_id text, p_task_id uuid) postgres
+530; 1255 18717 FUNCTION public get_task_details(text, uuid) postgres
+4916; 0 0 COMMENT public FUNCTION get_task_details(p_session_id text, p_task_id uuid) postgres
+4917; 0 0 ACL public FUNCTION get_task_details(p_session_id text, p_task_id uuid) postgres
+456; 1255 18714 FUNCTION public get_tasks_for_section(text, uuid) postgres
+4918; 0 0 COMMENT public FUNCTION get_tasks_for_section(p_session_id text, p_section_id uuid) postgres
+4919; 0 0 ACL public FUNCTION get_tasks_for_section(p_session_id text, p_section_id uuid) postgres
+360; 1255 18574 FUNCTION public get_teachers_in_course(text, uuid) postgres
+4920; 0 0 ACL public FUNCTION get_teachers_in_course(p_session_id text, p_course_id uuid) postgres
+562; 1255 18116 FUNCTION public get_unit_id_from_path(text) postgres
+4921; 0 0 ACL public FUNCTION get_unit_id_from_path(p_path text) postgres
+538; 1255 18836 FUNCTION public get_unit_sections(text, uuid) postgres
+4922; 0 0 ACL public FUNCTION get_unit_sections(p_session_id text, p_unit_id uuid) postgres
+488; 1255 18474 FUNCTION public get_user_course_ids(text, uuid) postgres
+4923; 0 0 ACL public FUNCTION get_user_course_ids(p_session_id text, p_student_id uuid) postgres
+409; 1255 18457 FUNCTION public get_user_courses(text) postgres
+4924; 0 0 ACL public FUNCTION get_user_courses(p_session_id text) postgres
+429; 1255 18466 FUNCTION public get_user_learning_units(text) postgres
+4925; 0 0 ACL public FUNCTION get_user_learning_units(p_session_id text) postgres
+428; 1255 18445 FUNCTION public get_user_profile_for_auth(uuid) postgres
+4926; 0 0 COMMENT public FUNCTION get_user_profile_for_auth(p_user_id uuid) postgres
+4927; 0 0 ACL public FUNCTION get_user_profile_for_auth(p_user_id uuid) postgres
+357; 1255 18440 FUNCTION public get_user_sessions(uuid) postgres
+4928; 0 0 COMMENT public FUNCTION get_user_sessions(p_user_id uuid) postgres
+4929; 0 0 ACL public FUNCTION get_user_sessions(p_user_id uuid) postgres
+386; 1255 18572 FUNCTION public get_users_by_role(text, text) postgres
+4930; 0 0 ACL public FUNCTION get_users_by_role(p_session_id text, p_role text) postgres
+442; 1255 17856 FUNCTION public handle_new_user() postgres
+4931; 0 0 ACL public FUNCTION handle_new_user() postgres
+492; 1255 18180 FUNCTION public handle_updated_at() postgres
+4932; 0 0 ACL public FUNCTION handle_updated_at() postgres
+359; 1255 18441 FUNCTION public invalidate_user_sessions(uuid) postgres
+4933; 0 0 COMMENT public FUNCTION invalidate_user_sessions(p_user_id uuid) postgres
+4934; 0 0 ACL public FUNCTION invalidate_user_sessions(p_user_id uuid) postgres
+440; 1255 18118 FUNCTION public is_creator_of_unit(uuid, uuid) postgres
+4935; 0 0 ACL public FUNCTION is_creator_of_unit(p_user_id uuid, p_unit_id uuid) postgres
+426; 1255 18117 FUNCTION public is_enrolled_in_unit(uuid, uuid) postgres
+4936; 0 0 ACL public FUNCTION is_enrolled_in_unit(p_user_id uuid, p_unit_id uuid) postgres
+416; 1255 18115 FUNCTION public is_teacher(uuid) postgres
+4937; 0 0 ACL public FUNCTION is_teacher(p_user_id uuid) postgres
+483; 1255 18592 FUNCTION public is_teacher_authorized_for_course(text, uuid) postgres
+4938; 0 0 ACL public FUNCTION is_teacher_authorized_for_course(p_session_id text, p_course_id uuid) postgres
+373; 1255 18153 FUNCTION public is_teacher_in_course(uuid, uuid) postgres
+4939; 0 0 ACL public FUNCTION is_teacher_in_course(p_teacher_id uuid, p_course_id uuid) postgres
+544; 1255 18007 FUNCTION public is_user_role(uuid, public.user_role) postgres
+4940; 0 0 ACL public FUNCTION is_user_role(user_id_to_check uuid, role_to_check public.user_role) postgres
+491; 1255 18550 FUNCTION public mark_feedback_as_viewed(text, uuid) postgres
+4941; 0 0 COMMENT public FUNCTION mark_feedback_as_viewed(p_session_id text, p_submission_id uuid) postgres
+4942; 0 0 ACL public FUNCTION mark_feedback_as_viewed(p_session_id text, p_submission_id uuid) postgres
+542; 1255 18526 FUNCTION public mark_feedback_as_viewed_safe(text, uuid) postgres
+4943; 0 0 ACL public FUNCTION mark_feedback_as_viewed_safe(p_session_id text, p_submission_id uuid) postgres
+473; 1255 18246 FUNCTION public mark_feedback_completed(uuid, text, jsonb, jsonb) postgres
+4944; 0 0 ACL public FUNCTION mark_feedback_completed(p_submission_id uuid, p_feedback text, p_insights jsonb, p_mastery_scores jsonb) postgres
+455; 1255 18247 FUNCTION public mark_feedback_failed(uuid, text) postgres
+4945; 0 0 ACL public FUNCTION mark_feedback_failed(p_submission_id uuid, p_error_message text) postgres
+372; 1255 18632 FUNCTION public move_task_down(text, uuid) postgres
+4946; 0 0 ACL public FUNCTION move_task_down(p_session_id text, p_task_id uuid) postgres
+404; 1255 18631 FUNCTION public move_task_up(text, uuid) postgres
+4947; 0 0 ACL public FUNCTION move_task_up(p_session_id text, p_task_id uuid) postgres
+449; 1255 18624 FUNCTION public publish_section_for_course(text, uuid, uuid) postgres
+4948; 0 0 ACL public FUNCTION publish_section_for_course(p_session_id text, p_course_id uuid, p_section_id uuid) postgres
+557; 1255 18442 FUNCTION public refresh_session(character varying, interval) postgres
+4949; 0 0 COMMENT public FUNCTION refresh_session(p_session_id character varying, p_extend_by interval) postgres
+4950; 0 0 ACL public FUNCTION refresh_session(p_session_id character varying, p_extend_by interval) postgres
+324; 1255 18587 FUNCTION public remove_user_from_course(text, uuid, uuid, text) postgres
+4951; 0 0 ACL public FUNCTION remove_user_from_course(p_session_id text, p_user_id uuid, p_course_id uuid, p_role text) postgres
+554; 1255 18248 FUNCTION public reset_stuck_feedback_jobs() postgres
+4952; 0 0 ACL public FUNCTION reset_stuck_feedback_jobs() postgres
+541; 1255 18527 FUNCTION public save_mastery_submission(text, uuid, uuid, boolean, integer) postgres
+4953; 0 0 ACL public FUNCTION save_mastery_submission(p_session_id text, p_task_id uuid, p_submission_id uuid, p_is_correct boolean, p_time_spent_seconds integer) postgres
+503; 1255 18799 FUNCTION public session_user_id(text) postgres
+4954; 0 0 COMMENT public FUNCTION session_user_id(p_session_id text) postgres
+4955; 0 0 ACL public FUNCTION session_user_id(p_session_id text) postgres
+342; 1255 18528 FUNCTION public submit_feedback(text, text, text, text, text, jsonb) postgres
+4956; 0 0 ACL public FUNCTION submit_feedback(p_session_id text, p_page_identifier text, p_feedback_type text, p_feedback_text text, p_sentiment text, p_metadata jsonb) postgres
+461; 1255 18819 FUNCTION public submit_mastery_answer_complete(text, uuid, text, jsonb, jsonb) postgres
+4957; 0 0 COMMENT public FUNCTION submit_mastery_answer_complete(p_session_id text, p_task_id uuid, p_submission_text text, p_ai_assessment jsonb, p_q_vec jsonb) postgres
+4958; 0 0 ACL public FUNCTION submit_mastery_answer_complete(p_session_id text, p_task_id uuid, p_submission_text text, p_ai_assessment jsonb, p_q_vec jsonb) postgres
+487; 1255 18605 FUNCTION public unassign_unit_from_course(text, uuid, uuid) postgres
+4959; 0 0 ACL public FUNCTION unassign_unit_from_course(p_session_id text, p_unit_id uuid, p_course_id uuid) postgres
+391; 1255 18599 FUNCTION public unpublish_section_for_course(text, uuid, uuid) postgres
+4960; 0 0 ACL public FUNCTION unpublish_section_for_course(p_session_id text, p_section_id uuid, p_course_id uuid) postgres
+413; 1255 18590 FUNCTION public update_course(text, uuid, text) postgres
+4961; 0 0 ACL public FUNCTION update_course(p_session_id text, p_course_id uuid, p_name text) postgres
+347; 1255 18403 FUNCTION public update_last_activity() postgres
+4962; 0 0 ACL public FUNCTION update_last_activity() postgres
+434; 1255 18602 FUNCTION public update_learning_unit(text, uuid, text) postgres
+4963; 0 0 ACL public FUNCTION update_learning_unit(p_session_id text, p_unit_id uuid, p_title text) postgres
+484; 1255 18792 FUNCTION public update_mastery_progress(text, uuid, uuid, jsonb) postgres
+4964; 0 0 COMMENT public FUNCTION update_mastery_progress(p_session_id text, p_student_id uuid, p_task_id uuid, p_q_vec jsonb) postgres
+4965; 0 0 ACL public FUNCTION update_mastery_progress(p_session_id text, p_student_id uuid, p_task_id uuid, p_q_vec jsonb) postgres
+485; 1255 18818 FUNCTION public update_mastery_progress_service(uuid, uuid, jsonb) postgres
+4966; 0 0 COMMENT public FUNCTION update_mastery_progress_service(p_student_id uuid, p_task_id uuid, p_q_vec jsonb) postgres
+4967; 0 0 ACL public FUNCTION update_mastery_progress_service(p_student_id uuid, p_task_id uuid, p_q_vec jsonb) postgres
+436; 1255 18839 FUNCTION public update_section_materials(text, uuid, jsonb) postgres
+4968; 0 0 COMMENT public FUNCTION update_section_materials(p_session_id text, p_section_id uuid, p_materials jsonb) postgres
+4969; 0 0 ACL public FUNCTION update_section_materials(p_session_id text, p_section_id uuid, p_materials jsonb) postgres
+567; 1255 18438 FUNCTION public update_session(character varying, jsonb) postgres
+4970; 0 0 COMMENT public FUNCTION update_session(p_session_id character varying, p_data jsonb) postgres
+4971; 0 0 ACL public FUNCTION update_session(p_session_id character varying, p_data jsonb) postgres
+468; 1255 18524 FUNCTION public update_submission_ai_results(text, uuid, boolean, text) postgres
+4972; 0 0 ACL public FUNCTION update_submission_ai_results(p_session_id text, p_submission_id uuid, p_is_correct boolean, p_ai_feedback text) postgres
+438; 1255 18549 FUNCTION public update_submission_ai_results_extended(text, uuid, boolean, text, text, text, text, text) postgres
+4973; 0 0 COMMENT public FUNCTION update_submission_ai_results_extended(p_session_id text, p_submission_id uuid, p_is_correct boolean, p_ai_feedback text, p_criteria_analysis text, p_ai_grade text, p_feed_back_text text, p_feed_forward_text text) postgres
+4974; 0 0 ACL public FUNCTION update_submission_ai_results_extended(p_session_id text, p_submission_id uuid, p_is_correct boolean, p_ai_feedback text, p_criteria_analysis text, p_ai_grade text, p_feed_back_text text, p_feed_forward_text text) postgres
+433; 1255 18196 FUNCTION public update_submission_by_teacher(uuid, text, text) postgres
+4975; 0 0 ACL public FUNCTION update_submission_by_teacher(submission_id_in uuid, teacher_feedback_in text, teacher_grade_in text) postgres
+378; 1255 18195 FUNCTION public update_submission_from_ai(uuid, jsonb, text, text, text, text) postgres
+4976; 0 0 ACL public FUNCTION update_submission_from_ai(submission_id_in uuid, criteria_analysis_in jsonb, feedback_in text, rating_suggestion_in text, feed_back_text_in text, feed_forward_text_in text) postgres
+515; 1255 18525 FUNCTION public update_submission_teacher_override(text, uuid, boolean, text) postgres
+4977; 0 0 ACL public FUNCTION update_submission_teacher_override(p_session_id text, p_submission_id uuid, p_override_grade boolean, p_teacher_feedback text) postgres
+427; 1255 18837 FUNCTION public update_task_in_new_structure(text, uuid, text, text, text, integer, integer, text[], text, integer, text) postgres
+4978; 0 0 COMMENT public FUNCTION update_task_in_new_structure(p_session_id text, p_task_id uuid, p_title text, p_prompt text, p_task_type text, p_order_in_section integer, p_max_attempts integer, p_grading_criteria text[], p_solution_hints text, p_difficulty_level integer, p_concept_explanation text) postgres
+4979; 0 0 ACL public FUNCTION update_task_in_new_structure(p_session_id text, p_task_id uuid, p_title text, p_prompt text, p_task_type text, p_order_in_section integer, p_max_attempts integer, p_grading_criteria text[], p_solution_hints text, p_difficulty_level integer, p_concept_explanation text) postgres
+339; 1255 18070 FUNCTION public update_updated_at_column() postgres
+4980; 0 0 ACL public FUNCTION update_updated_at_column() postgres
+560; 1255 18423 FUNCTION public validate_auth_service_key(text) postgres
+4981; 0 0 ACL public FUNCTION validate_auth_service_key(api_key text) postgres
+498; 1255 18437 FUNCTION public validate_session(character varying) postgres
+4982; 0 0 COMMENT public FUNCTION validate_session(p_session_id character varying) postgres
+4983; 0 0 ACL public FUNCTION validate_session(p_session_id character varying) postgres
+545; 1255 18447 FUNCTION public validate_session_and_get_user(text) postgres
+4984; 0 0 ACL public FUNCTION validate_session_and_get_user(p_session_id text) postgres
+396; 1255 18766 FUNCTION public validate_storage_session_user(text) postgres
+4985; 0 0 ACL public FUNCTION validate_storage_session_user(path text) postgres
+520; 1255 16927 FUNCTION realtime apply_rls(jsonb, integer) supabase_admin
+4986; 0 0 ACL realtime FUNCTION apply_rls(wal jsonb, max_record_bytes integer) supabase_admin
+502; 1255 17006 FUNCTION realtime broadcast_changes(text, text, text, text, text, record, record, text) supabase_admin
+4987; 0 0 ACL realtime FUNCTION broadcast_changes(topic_name text, event_name text, operation text, table_name text, table_schema text, new record, old record, level text) supabase_admin
+402; 1255 16939 FUNCTION realtime build_prepared_statement_sql(text, regclass, realtime.wal_column[]) supabase_admin
+4988; 0 0 ACL realtime FUNCTION build_prepared_statement_sql(prepared_statement_name text, entity regclass, columns realtime.wal_column[]) supabase_admin
+546; 1255 16889 FUNCTION realtime cast(text, regtype) supabase_admin
+4989; 0 0 ACL realtime FUNCTION "cast"(val text, type_ regtype) supabase_admin
+390; 1255 16884 FUNCTION realtime check_equality_op(realtime.equality_op, regtype, text, text) supabase_admin
+4990; 0 0 ACL realtime FUNCTION check_equality_op(op realtime.equality_op, type_ regtype, val_1 text, val_2 text) supabase_admin
+368; 1255 16935 FUNCTION realtime is_visible_through_filters(realtime.wal_column[], realtime.user_defined_filter[]) supabase_admin
+4991; 0 0 ACL realtime FUNCTION is_visible_through_filters(columns realtime.wal_column[], filters realtime.user_defined_filter[]) supabase_admin
+377; 1255 16946 FUNCTION realtime list_changes(name, name, integer, integer) supabase_admin
+4992; 0 0 ACL realtime FUNCTION list_changes(publication name, slot_name name, max_changes integer, max_record_bytes integer) supabase_admin
+548; 1255 16883 FUNCTION realtime quote_wal2json(regclass) supabase_admin
+4993; 0 0 ACL realtime FUNCTION quote_wal2json(entity regclass) supabase_admin
+525; 1255 17005 FUNCTION realtime send(jsonb, text, text, boolean) supabase_admin
+4994; 0 0 ACL realtime FUNCTION send(payload jsonb, event text, topic text, private boolean) supabase_admin
+499; 1255 16881 FUNCTION realtime subscription_check_filters() supabase_admin
+4995; 0 0 ACL realtime FUNCTION subscription_check_filters() supabase_admin
+388; 1255 16916 FUNCTION realtime to_regrole(text) supabase_admin
+4996; 0 0 ACL realtime FUNCTION to_regrole(role_name text) supabase_admin
+431; 1255 16999 FUNCTION realtime topic() supabase_realtime_admin
+4997; 0 0 ACL realtime FUNCTION topic() supabase_realtime_admin
+423; 1255 17188 FUNCTION storage add_prefixes(text, text) supabase_storage_admin
+528; 1255 17114 FUNCTION storage can_insert_object(text, text, uuid, jsonb) supabase_storage_admin
+540; 1255 17266 FUNCTION storage delete_leaf_prefixes(text[], text[]) supabase_storage_admin
+523; 1255 17189 FUNCTION storage delete_prefix(text, text) supabase_storage_admin
+366; 1255 17192 FUNCTION storage delete_prefix_hierarchy_trigger() supabase_storage_admin
+532; 1255 17207 FUNCTION storage enforce_bucket_name_length() supabase_storage_admin
+335; 1255 17088 FUNCTION storage extension(text) supabase_storage_admin
+367; 1255 17087 FUNCTION storage filename(text) supabase_storage_admin
+330; 1255 17086 FUNCTION storage foldername(text) supabase_storage_admin
+474; 1255 17170 FUNCTION storage get_level(text) supabase_storage_admin
+430; 1255 17186 FUNCTION storage get_prefix(text) supabase_storage_admin
+527; 1255 17187 FUNCTION storage get_prefixes(text) supabase_storage_admin
+382; 1255 17205 FUNCTION storage get_size_by_bucket() supabase_storage_admin
+531; 1255 17153 FUNCTION storage list_multipart_uploads_with_delimiter(text, text, text, integer, text, text) supabase_storage_admin
+326; 1255 17116 FUNCTION storage list_objects_with_delimiter(text, text, text, integer, text, text) supabase_storage_admin
+539; 1255 17265 FUNCTION storage lock_top_prefixes(text[], text[]) supabase_storage_admin
+443; 1255 17267 FUNCTION storage objects_delete_cleanup() supabase_storage_admin
+400; 1255 17191 FUNCTION storage objects_insert_prefix_trigger() supabase_storage_admin
+435; 1255 17268 FUNCTION storage objects_update_cleanup() supabase_storage_admin
+361; 1255 17273 FUNCTION storage objects_update_level_trigger() supabase_storage_admin
+399; 1255 17206 FUNCTION storage objects_update_prefix_trigger() supabase_storage_admin
+358; 1255 17169 FUNCTION storage operation() supabase_storage_admin
+495; 1255 17269 FUNCTION storage prefixes_delete_cleanup() supabase_storage_admin
+467; 1255 17190 FUNCTION storage prefixes_insert_trigger() supabase_storage_admin
+504; 1255 17103 FUNCTION storage search(text, text, integer, integer, integer, text, text, text) supabase_storage_admin
+511; 1255 17203 FUNCTION storage search_legacy_v1(text, text, integer, integer, integer, text, text, text) supabase_storage_admin
+448; 1255 17202 FUNCTION storage search_v1_optimised(text, text, integer, integer, integer, text, text, text) supabase_storage_admin
+481; 1255 17264 FUNCTION storage search_v2(text, text, integer, integer, text, text, text, text) supabase_storage_admin
+394; 1255 17104 FUNCTION storage update_updated_at_column() supabase_storage_admin
+379; 1255 16776 FUNCTION supabase_functions http_request() supabase_functions_admin
+4998; 0 0 ACL supabase_functions FUNCTION http_request() supabase_functions_admin
+4999; 0 0 ACL vault FUNCTION _crypto_aead_det_decrypt(message bytea, additional bytea, key_id bigint, context bytea, nonce bytea) supabase_admin
+5000; 0 0 ACL vault FUNCTION create_secret(new_secret text, new_name text, new_description text, new_key_id uuid) supabase_admin
+5001; 0 0 ACL vault FUNCTION update_secret(secret_id uuid, new_secret text, new_name text, new_description text, new_key_id uuid) supabase_admin
+259; 1259 16795 TABLE _realtime extensions supabase_admin
+257; 1259 16781 TABLE _realtime schema_migrations supabase_admin
+258; 1259 16786 TABLE _realtime tenants supabase_admin
+239; 1259 16488 TABLE auth audit_log_entries supabase_auth_admin
+5002; 0 0 COMMENT auth TABLE audit_log_entries supabase_auth_admin
+5003; 0 0 ACL auth TABLE audit_log_entries supabase_auth_admin
+282; 1259 17499 TABLE auth flow_state supabase_auth_admin
+5004; 0 0 COMMENT auth TABLE flow_state supabase_auth_admin
+5005; 0 0 ACL auth TABLE flow_state supabase_auth_admin
+273; 1259 17297 TABLE auth identities supabase_auth_admin
+5006; 0 0 COMMENT auth TABLE identities supabase_auth_admin
+5007; 0 0 COMMENT auth COLUMN identities.email supabase_auth_admin
+5008; 0 0 ACL auth TABLE identities supabase_auth_admin
+238; 1259 16481 TABLE auth instances supabase_auth_admin
+5009; 0 0 COMMENT auth TABLE instances supabase_auth_admin
+5010; 0 0 ACL auth TABLE instances supabase_auth_admin
+277; 1259 17386 TABLE auth mfa_amr_claims supabase_auth_admin
+5011; 0 0 COMMENT auth TABLE mfa_amr_claims supabase_auth_admin
+5012; 0 0 ACL auth TABLE mfa_amr_claims supabase_auth_admin
+276; 1259 17374 TABLE auth mfa_challenges supabase_auth_admin
+5013; 0 0 COMMENT auth TABLE mfa_challenges supabase_auth_admin
+5014; 0 0 ACL auth TABLE mfa_challenges supabase_auth_admin
+275; 1259 17361 TABLE auth mfa_factors supabase_auth_admin
+5015; 0 0 COMMENT auth TABLE mfa_factors supabase_auth_admin
+5016; 0 0 ACL auth TABLE mfa_factors supabase_auth_admin
+285; 1259 17611 TABLE auth oauth_authorizations supabase_auth_admin
+5017; 0 0 ACL auth TABLE oauth_authorizations supabase_auth_admin
+284; 1259 17581 TABLE auth oauth_clients supabase_auth_admin
+5018; 0 0 ACL auth TABLE oauth_clients supabase_auth_admin
+286; 1259 17644 TABLE auth oauth_consents supabase_auth_admin
+5019; 0 0 ACL auth TABLE oauth_consents supabase_auth_admin
+283; 1259 17549 TABLE auth one_time_tokens supabase_auth_admin
+5020; 0 0 ACL auth TABLE one_time_tokens supabase_auth_admin
+237; 1259 16470 TABLE auth refresh_tokens supabase_auth_admin
+5021; 0 0 COMMENT auth TABLE refresh_tokens supabase_auth_admin
+5022; 0 0 ACL auth TABLE refresh_tokens supabase_auth_admin
+236; 1259 16469 SEQUENCE auth refresh_tokens_id_seq supabase_auth_admin
+5023; 0 0 SEQUENCE OWNED BY auth refresh_tokens_id_seq supabase_auth_admin
+5024; 0 0 ACL auth SEQUENCE refresh_tokens_id_seq supabase_auth_admin
+280; 1259 17428 TABLE auth saml_providers supabase_auth_admin
+5025; 0 0 COMMENT auth TABLE saml_providers supabase_auth_admin
+5026; 0 0 ACL auth TABLE saml_providers supabase_auth_admin
+281; 1259 17446 TABLE auth saml_relay_states supabase_auth_admin
+5027; 0 0 COMMENT auth TABLE saml_relay_states supabase_auth_admin
+5028; 0 0 ACL auth TABLE saml_relay_states supabase_auth_admin
+240; 1259 16496 TABLE auth schema_migrations supabase_auth_admin
+5029; 0 0 COMMENT auth TABLE schema_migrations supabase_auth_admin
+5030; 0 0 ACL auth TABLE schema_migrations supabase_auth_admin
+274; 1259 17327 TABLE auth sessions supabase_auth_admin
+5031; 0 0 COMMENT auth TABLE sessions supabase_auth_admin
+5032; 0 0 COMMENT auth COLUMN sessions.not_after supabase_auth_admin
+5033; 0 0 ACL auth TABLE sessions supabase_auth_admin
+279; 1259 17413 TABLE auth sso_domains supabase_auth_admin
+5034; 0 0 COMMENT auth TABLE sso_domains supabase_auth_admin
+5035; 0 0 ACL auth TABLE sso_domains supabase_auth_admin
+278; 1259 17404 TABLE auth sso_providers supabase_auth_admin
+5036; 0 0 COMMENT auth TABLE sso_providers supabase_auth_admin
+5037; 0 0 COMMENT auth COLUMN sso_providers.resource_id supabase_auth_admin
+5038; 0 0 ACL auth TABLE sso_providers supabase_auth_admin
+235; 1259 16458 TABLE auth users supabase_auth_admin
+5039; 0 0 COMMENT auth TABLE users supabase_auth_admin
+5040; 0 0 COMMENT auth COLUMN users.is_sso_user supabase_auth_admin
+5041; 0 0 ACL auth TABLE users supabase_auth_admin
+5042; 0 0 ACL extensions TABLE pg_stat_statements supabase_admin
+5043; 0 0 ACL extensions TABLE pg_stat_statements_info supabase_admin
+309; 1259 18320 TABLE public mastery_tasks postgres
+5044; 0 0 COMMENT public TABLE mastery_tasks postgres
+5045; 0 0 COMMENT public COLUMN mastery_tasks.difficulty_level postgres
+5046; 0 0 ACL public TABLE mastery_tasks postgres
+307; 1259 18293 TABLE public task_base postgres
+5047; 0 0 COMMENT public TABLE task_base postgres
+5048; 0 0 COMMENT public COLUMN task_base.instruction postgres
+5049; 0 0 COMMENT public COLUMN task_base.order_in_section postgres
+5050; 0 0 ACL public TABLE task_base postgres
+316; 1259 18724 VIEW public all_mastery_tasks postgres
+5051; 0 0 ACL public TABLE all_mastery_tasks postgres
+308; 1259 18308 TABLE public regular_tasks postgres
+5052; 0 0 COMMENT public TABLE regular_tasks postgres
+5053; 0 0 COMMENT public COLUMN regular_tasks.prompt postgres
+5054; 0 0 COMMENT public COLUMN regular_tasks.grading_criteria postgres
+5055; 0 0 ACL public TABLE regular_tasks postgres
+315; 1259 18719 VIEW public all_regular_tasks postgres
+5056; 0 0 ACL public TABLE all_regular_tasks postgres
+299; 1259 18091 TABLE public allowed_email_domains postgres
+5057; 0 0 ACL public TABLE allowed_email_domains postgres
+312; 1259 18409 TABLE public auth_service_keys postgres
+5058; 0 0 ACL public TABLE auth_service_keys postgres
+311; 1259 18373 TABLE public auth_sessions postgres
+5059; 0 0 COMMENT public TABLE auth_sessions postgres
+5060; 0 0 COMMENT public COLUMN auth_sessions.session_id postgres
+5061; 0 0 COMMENT public COLUMN auth_sessions.user_role postgres
+5062; 0 0 COMMENT public COLUMN auth_sessions.data postgres
+5063; 0 0 COMMENT public COLUMN auth_sessions.expires_at postgres
+5064; 0 0 COMMENT public COLUMN auth_sessions.last_activity postgres
+5065; 0 0 COMMENT public COLUMN auth_sessions.ip_address postgres
+5066; 0 0 COMMENT public COLUMN auth_sessions.user_agent postgres
+5067; 0 0 ACL public TABLE auth_sessions postgres
+289; 1259 17710 TABLE public course postgres
+5068; 0 0 ACL public TABLE course postgres
+297; 1259 17954 TABLE public course_learning_unit_assignment postgres
+5069; 0 0 ACL public TABLE course_learning_unit_assignment postgres
+291; 1259 17743 TABLE public course_student postgres
+5070; 0 0 ACL public TABLE course_student postgres
+290; 1259 17726 TABLE public course_teacher postgres
+5071; 0 0 ACL public TABLE course_teacher postgres
+296; 1259 17936 TABLE public course_unit_section_status postgres
+5072; 0 0 ACL public TABLE course_unit_section_status postgres
+298; 1259 18077 TABLE public feedback postgres
+5073; 0 0 COMMENT public COLUMN feedback.feedback_type postgres
+5074; 0 0 ACL public TABLE feedback postgres
+292; 1259 17760 TABLE public learning_unit postgres
+5075; 0 0 ACL public TABLE learning_unit postgres
+301; 1259 18155 TABLE public mastery_log postgres
+5076; 0 0 ACL public TABLE mastery_log postgres
+300; 1259 18154 SEQUENCE public mastery_log_log_id_seq postgres
+5077; 0 0 SEQUENCE OWNED BY public mastery_log_log_id_seq postgres
+5078; 0 0 ACL public SEQUENCE mastery_log_log_id_seq postgres
+306; 1259 18219 TABLE public mastery_submission postgres
+5079; 0 0 COMMENT public TABLE mastery_submission postgres
+5080; 0 0 COMMENT public COLUMN mastery_submission.answer_text postgres
+5081; 0 0 COMMENT public COLUMN mastery_submission.korrektheit postgres
+5082; 0 0 COMMENT public COLUMN mastery_submission.vollstaendigkeit postgres
+5083; 0 0 COMMENT public COLUMN mastery_submission.praegnanz postgres
+5084; 0 0 COMMENT public COLUMN mastery_submission.reasoning postgres
+5085; 0 0 ACL public TABLE mastery_submission postgres
+305; 1259 18218 SEQUENCE public mastery_submission_id_seq postgres
+5086; 0 0 ACL public SEQUENCE mastery_submission_id_seq postgres
+288; 1259 17695 TABLE public profiles postgres
+5087; 0 0 ACL public TABLE profiles postgres
+314; 1259 18555 VIEW public profiles_display postgres
+5088; 0 0 ACL public TABLE profiles_display postgres
+313; 1259 18425 TABLE public session_rate_limits postgres
+5089; 0 0 ACL public TABLE session_rate_limits postgres
+304; 1259 18198 TABLE public student_mastery_progress postgres
+5090; 0 0 COMMENT public TABLE student_mastery_progress postgres
+5091; 0 0 COMMENT public COLUMN student_mastery_progress.stability postgres
+5092; 0 0 COMMENT public COLUMN student_mastery_progress.difficulty postgres
+5093; 0 0 COMMENT public COLUMN student_mastery_progress.last_reviewed_at postgres
+5094; 0 0 COMMENT public COLUMN student_mastery_progress.next_due_date postgres
+5095; 0 0 ACL public TABLE student_mastery_progress postgres
+303; 1259 18197 SEQUENCE public student_mastery_progress_id_seq postgres
+5096; 0 0 ACL public SEQUENCE student_mastery_progress_id_seq postgres
+294; 1259 17810 TABLE public submission postgres
+5097; 0 0 COMMENT public COLUMN submission.ai_grade postgres
+5098; 0 0 COMMENT public COLUMN submission.ai_criteria_analysis postgres
+5099; 0 0 COMMENT public COLUMN submission.feed_back_text postgres
+5100; 0 0 COMMENT public COLUMN submission.feed_forward_text postgres
+5101; 0 0 COMMENT public COLUMN submission.attempt_number postgres
+5102; 0 0 COMMENT public COLUMN submission.feedback_status postgres
+5103; 0 0 COMMENT public COLUMN submission.retry_count postgres
+5104; 0 0 COMMENT public COLUMN submission.last_retry_at postgres
+5105; 0 0 COMMENT public COLUMN submission.processing_started_at postgres
+5106; 0 0 COMMENT public COLUMN submission.ai_insights postgres
+5107; 0 0 COMMENT public COLUMN submission.feedback_viewed_at postgres
+5108; 0 0 ACL public TABLE submission postgres
+293; 1259 17794 TABLE public task postgres
+5109; 0 0 COMMENT public TABLE task postgres
+5110; 0 0 COMMENT public COLUMN task.criteria postgres
+5111; 0 0 COMMENT public COLUMN task.assessment_criteria postgres
+5112; 0 0 COMMENT public COLUMN task.solution_hints postgres
+5113; 0 0 ACL public TABLE task postgres
+310; 1259 18344 TABLE public task_backup_phase4 postgres
+5114; 0 0 COMMENT public TABLE task_backup_phase4 postgres
+5115; 0 0 ACL public TABLE task_backup_phase4 postgres
+295; 1259 17911 TABLE public unit_section postgres
+5116; 0 0 ACL public TABLE unit_section postgres
+302; 1259 18181 TABLE public user_model_weights postgres
+5117; 0 0 ACL public TABLE user_model_weights postgres
+266; 1259 17009 TABLE realtime messages supabase_realtime_admin
+5118; 0 0 ACL realtime TABLE messages supabase_realtime_admin
+317; 1259 82317 TABLE realtime messages_2025_10_27 supabase_admin
+5119; 0 0 ACL realtime TABLE messages_2025_10_27 supabase_admin
+318; 1259 90509 TABLE realtime messages_2025_10_28 supabase_admin
+5120; 0 0 ACL realtime TABLE messages_2025_10_28 supabase_admin
+319; 1259 90521 TABLE realtime messages_2025_10_29 supabase_admin
+5121; 0 0 ACL realtime TABLE messages_2025_10_29 supabase_admin
+320; 1259 90533 TABLE realtime messages_2025_10_30 supabase_admin
+5122; 0 0 ACL realtime TABLE messages_2025_10_30 supabase_admin
+321; 1259 90545 TABLE realtime messages_2025_10_31 supabase_admin
+5123; 0 0 ACL realtime TABLE messages_2025_10_31 supabase_admin
+322; 1259 90557 TABLE realtime messages_2025_11_01 supabase_admin
+5124; 0 0 ACL realtime TABLE messages_2025_11_01 supabase_admin
+323; 1259 98701 TABLE realtime messages_2025_11_02 supabase_admin
+5125; 0 0 ACL realtime TABLE messages_2025_11_02 supabase_admin
+260; 1259 16846 TABLE realtime schema_migrations supabase_admin
+5126; 0 0 ACL realtime TABLE schema_migrations supabase_admin
+263; 1259 16869 TABLE realtime subscription supabase_admin
+5127; 0 0 ACL realtime TABLE subscription supabase_admin
+262; 1259 16868 SEQUENCE realtime subscription_id_seq supabase_admin
+5128; 0 0 ACL realtime SEQUENCE subscription_id_seq supabase_admin
+241; 1259 16509 TABLE storage buckets supabase_storage_admin
+5129; 0 0 COMMENT storage COLUMN buckets.owner supabase_storage_admin
+5130; 0 0 ACL storage TABLE buckets supabase_storage_admin
+270; 1259 17216 TABLE storage buckets_analytics supabase_storage_admin
+5131; 0 0 ACL storage TABLE buckets_analytics supabase_storage_admin
+271; 1259 17227 TABLE storage iceberg_namespaces supabase_storage_admin
+5132; 0 0 ACL storage TABLE iceberg_namespaces supabase_storage_admin
+272; 1259 17243 TABLE storage iceberg_tables supabase_storage_admin
+5133; 0 0 ACL storage TABLE iceberg_tables supabase_storage_admin
+243; 1259 16551 TABLE storage migrations supabase_storage_admin
+242; 1259 16524 TABLE storage objects supabase_storage_admin
+5134; 0 0 COMMENT storage COLUMN objects.owner supabase_storage_admin
+5135; 0 0 ACL storage TABLE objects supabase_storage_admin
+269; 1259 17171 TABLE storage prefixes supabase_storage_admin
+5136; 0 0 ACL storage TABLE prefixes supabase_storage_admin
+267; 1259 17118 TABLE storage s3_multipart_uploads supabase_storage_admin
+5137; 0 0 ACL storage TABLE s3_multipart_uploads supabase_storage_admin
+268; 1259 17132 TABLE storage s3_multipart_uploads_parts supabase_storage_admin
+5138; 0 0 ACL storage TABLE s3_multipart_uploads_parts supabase_storage_admin
+256; 1259 16765 TABLE supabase_functions hooks supabase_functions_admin
+5139; 0 0 COMMENT supabase_functions TABLE hooks supabase_functions_admin
+5140; 0 0 ACL supabase_functions TABLE hooks supabase_functions_admin
+255; 1259 16764 SEQUENCE supabase_functions hooks_id_seq supabase_functions_admin
+5141; 0 0 SEQUENCE OWNED BY supabase_functions hooks_id_seq supabase_functions_admin
+5142; 0 0 ACL supabase_functions SEQUENCE hooks_id_seq supabase_functions_admin
+254; 1259 16756 TABLE supabase_functions migrations supabase_functions_admin
+5143; 0 0 ACL supabase_functions TABLE migrations supabase_functions_admin
+287; 1259 17683 TABLE supabase_migrations schema_migrations postgres
+5144; 0 0 ACL vault TABLE secrets supabase_admin
+5145; 0 0 ACL vault TABLE decrypted_secrets supabase_admin
+3866; 0 0 TABLE ATTACH realtime messages_2025_10_27 supabase_admin
+3867; 0 0 TABLE ATTACH realtime messages_2025_10_28 supabase_admin
+3868; 0 0 TABLE ATTACH realtime messages_2025_10_29 supabase_admin
+3869; 0 0 TABLE ATTACH realtime messages_2025_10_30 supabase_admin
+3870; 0 0 TABLE ATTACH realtime messages_2025_10_31 supabase_admin
+3871; 0 0 TABLE ATTACH realtime messages_2025_11_01 supabase_admin
+3872; 0 0 TABLE ATTACH realtime messages_2025_11_02 supabase_admin
+3882; 2604 16473 DEFAULT auth refresh_tokens id supabase_auth_admin
+3988; 2604 19954 DEFAULT public mastery_log log_id postgres
+3902; 2604 19955 DEFAULT supabase_functions hooks id supabase_functions_admin
+4683; 0 16795 TABLE DATA _realtime extensions supabase_admin
+4681; 0 16781 TABLE DATA _realtime schema_migrations supabase_admin
+4682; 0 16786 TABLE DATA _realtime tenants supabase_admin
+4673; 0 16488 TABLE DATA auth audit_log_entries supabase_auth_admin
+4702; 0 17499 TABLE DATA auth flow_state supabase_auth_admin
+4693; 0 17297 TABLE DATA auth identities supabase_auth_admin
+4672; 0 16481 TABLE DATA auth instances supabase_auth_admin
+4697; 0 17386 TABLE DATA auth mfa_amr_claims supabase_auth_admin
+4696; 0 17374 TABLE DATA auth mfa_challenges supabase_auth_admin
+4695; 0 17361 TABLE DATA auth mfa_factors supabase_auth_admin
+4705; 0 17611 TABLE DATA auth oauth_authorizations supabase_auth_admin
+4704; 0 17581 TABLE DATA auth oauth_clients supabase_auth_admin
+4706; 0 17644 TABLE DATA auth oauth_consents supabase_auth_admin
+4703; 0 17549 TABLE DATA auth one_time_tokens supabase_auth_admin
+4671; 0 16470 TABLE DATA auth refresh_tokens supabase_auth_admin
+4700; 0 17428 TABLE DATA auth saml_providers supabase_auth_admin
+4701; 0 17446 TABLE DATA auth saml_relay_states supabase_auth_admin
+4674; 0 16496 TABLE DATA auth schema_migrations supabase_auth_admin
+4694; 0 17327 TABLE DATA auth sessions supabase_auth_admin
+4699; 0 17413 TABLE DATA auth sso_domains supabase_auth_admin
+4698; 0 17404 TABLE DATA auth sso_providers supabase_auth_admin
+4669; 0 16458 TABLE DATA auth users supabase_auth_admin
+4719; 0 18091 TABLE DATA public allowed_email_domains postgres
+4732; 0 18409 TABLE DATA public auth_service_keys postgres
+4731; 0 18373 TABLE DATA public auth_sessions postgres
+4709; 0 17710 TABLE DATA public course postgres
+4717; 0 17954 TABLE DATA public course_learning_unit_assignment postgres
+4711; 0 17743 TABLE DATA public course_student postgres
+4710; 0 17726 TABLE DATA public course_teacher postgres
+4716; 0 17936 TABLE DATA public course_unit_section_status postgres
+4718; 0 18077 TABLE DATA public feedback postgres
+4712; 0 17760 TABLE DATA public learning_unit postgres
+4721; 0 18155 TABLE DATA public mastery_log postgres
+4726; 0 18219 TABLE DATA public mastery_submission postgres
+4729; 0 18320 TABLE DATA public mastery_tasks postgres
+4708; 0 17695 TABLE DATA public profiles postgres
+4728; 0 18308 TABLE DATA public regular_tasks postgres
+4733; 0 18425 TABLE DATA public session_rate_limits postgres
+4724; 0 18198 TABLE DATA public student_mastery_progress postgres
+4714; 0 17810 TABLE DATA public submission postgres
+4713; 0 17794 TABLE DATA public task postgres
+4730; 0 18344 TABLE DATA public task_backup_phase4 postgres
+4727; 0 18293 TABLE DATA public task_base postgres
+4715; 0 17911 TABLE DATA public unit_section postgres
+4722; 0 18181 TABLE DATA public user_model_weights postgres
+4734; 0 82317 TABLE DATA realtime messages_2025_10_27 supabase_admin
+4735; 0 90509 TABLE DATA realtime messages_2025_10_28 supabase_admin
+4736; 0 90521 TABLE DATA realtime messages_2025_10_29 supabase_admin
+4737; 0 90533 TABLE DATA realtime messages_2025_10_30 supabase_admin
+4738; 0 90545 TABLE DATA realtime messages_2025_10_31 supabase_admin
+4739; 0 90557 TABLE DATA realtime messages_2025_11_01 supabase_admin
+4740; 0 98701 TABLE DATA realtime messages_2025_11_02 supabase_admin
+4684; 0 16846 TABLE DATA realtime schema_migrations supabase_admin
+4686; 0 16869 TABLE DATA realtime subscription supabase_admin
+4675; 0 16509 TABLE DATA storage buckets supabase_storage_admin
+4690; 0 17216 TABLE DATA storage buckets_analytics supabase_storage_admin
+4691; 0 17227 TABLE DATA storage iceberg_namespaces supabase_storage_admin
+4692; 0 17243 TABLE DATA storage iceberg_tables supabase_storage_admin
+4677; 0 16551 TABLE DATA storage migrations supabase_storage_admin
+4676; 0 16524 TABLE DATA storage objects supabase_storage_admin
+4689; 0 17171 TABLE DATA storage prefixes supabase_storage_admin
+4687; 0 17118 TABLE DATA storage s3_multipart_uploads supabase_storage_admin
+4688; 0 17132 TABLE DATA storage s3_multipart_uploads_parts supabase_storage_admin
+4680; 0 16765 TABLE DATA supabase_functions hooks supabase_functions_admin
+4678; 0 16756 TABLE DATA supabase_functions migrations supabase_functions_admin
+4707; 0 17683 TABLE DATA supabase_migrations schema_migrations postgres
+3865; 0 16658 TABLE DATA vault secrets supabase_admin
+5146; 0 0 SEQUENCE SET auth refresh_tokens_id_seq supabase_auth_admin
+5147; 0 0 SEQUENCE SET public mastery_log_log_id_seq postgres
+5148; 0 0 SEQUENCE SET public mastery_submission_id_seq postgres
+5149; 0 0 SEQUENCE SET public student_mastery_progress_id_seq postgres
+5150; 0 0 SEQUENCE SET realtime subscription_id_seq supabase_admin
+5151; 0 0 SEQUENCE SET supabase_functions hooks_id_seq supabase_functions_admin
+4130; 2606 16801 CONSTRAINT _realtime extensions extensions_pkey supabase_admin
+4125; 2606 16785 CONSTRAINT _realtime schema_migrations schema_migrations_pkey supabase_admin
+4128; 2606 16793 CONSTRAINT _realtime tenants tenants_pkey supabase_admin
+4182; 2606 17399 CONSTRAINT auth mfa_amr_claims amr_id_pk supabase_auth_admin
+4096; 2606 16494 CONSTRAINT auth audit_log_entries audit_log_entries_pkey supabase_auth_admin
+4205; 2606 17505 CONSTRAINT auth flow_state flow_state_pkey supabase_auth_admin
+4160; 2606 17523 CONSTRAINT auth identities identities_pkey supabase_auth_admin
+4162; 2606 17533 CONSTRAINT auth identities identities_provider_id_provider_unique supabase_auth_admin
+4094; 2606 16487 CONSTRAINT auth instances instances_pkey supabase_auth_admin
+4184; 2606 17392 CONSTRAINT auth mfa_amr_claims mfa_amr_claims_session_id_authentication_method_pkey supabase_auth_admin
+4180; 2606 17380 CONSTRAINT auth mfa_challenges mfa_challenges_pkey supabase_auth_admin
+4172; 2606 17573 CONSTRAINT auth mfa_factors mfa_factors_last_challenged_at_key supabase_auth_admin
+4174; 2606 17367 CONSTRAINT auth mfa_factors mfa_factors_pkey supabase_auth_admin
+4218; 2606 17632 CONSTRAINT auth oauth_authorizations oauth_authorizations_authorization_code_key supabase_auth_admin
+4220; 2606 17630 CONSTRAINT auth oauth_authorizations oauth_authorizations_authorization_id_key supabase_auth_admin
+4222; 2606 17628 CONSTRAINT auth oauth_authorizations oauth_authorizations_pkey supabase_auth_admin
+4215; 2606 17592 CONSTRAINT auth oauth_clients oauth_clients_pkey supabase_auth_admin
+4226; 2606 17654 CONSTRAINT auth oauth_consents oauth_consents_pkey supabase_auth_admin
+4228; 2606 17656 CONSTRAINT auth oauth_consents oauth_consents_user_client_unique supabase_auth_admin
+4209; 2606 17558 CONSTRAINT auth one_time_tokens one_time_tokens_pkey supabase_auth_admin
+4088; 2606 16477 CONSTRAINT auth refresh_tokens refresh_tokens_pkey supabase_auth_admin
+4091; 2606 17310 CONSTRAINT auth refresh_tokens refresh_tokens_token_unique supabase_auth_admin
+4194; 2606 17439 CONSTRAINT auth saml_providers saml_providers_entity_id_key supabase_auth_admin
+4196; 2606 17437 CONSTRAINT auth saml_providers saml_providers_pkey supabase_auth_admin
+4201; 2606 17453 CONSTRAINT auth saml_relay_states saml_relay_states_pkey supabase_auth_admin
+4099; 2606 16500 CONSTRAINT auth schema_migrations schema_migrations_pkey supabase_auth_admin
+4167; 2606 17331 CONSTRAINT auth sessions sessions_pkey supabase_auth_admin
+4191; 2606 17420 CONSTRAINT auth sso_domains sso_domains_pkey supabase_auth_admin
+4186; 2606 17411 CONSTRAINT auth sso_providers sso_providers_pkey supabase_auth_admin
+4081; 2606 17493 CONSTRAINT auth users users_phone_key supabase_auth_admin
+4083; 2606 16464 CONSTRAINT auth users users_pkey supabase_auth_admin
+4279; 2606 18103 CONSTRAINT public allowed_email_domains allowed_email_domains_domain_key postgres
+4281; 2606 18101 CONSTRAINT public allowed_email_domains allowed_email_domains_pkey postgres
+4311; 2606 18421 CONSTRAINT public auth_service_keys auth_service_keys_key_hash_key postgres
+4313; 2606 18419 CONSTRAINT public auth_service_keys auth_service_keys_pkey postgres
+4303; 2606 18385 CONSTRAINT public auth_sessions auth_sessions_pkey postgres
+4305; 2606 18387 CONSTRAINT public auth_sessions auth_sessions_session_id_key postgres
+4272; 2606 17959 CONSTRAINT public course_learning_unit_assignment course_learning_unit_assignment_pkey postgres
+4238; 2606 17719 CONSTRAINT public course course_pkey postgres
+4245; 2606 17748 CONSTRAINT public course_student course_student_pkey postgres
+4242; 2606 17731 CONSTRAINT public course_teacher course_teacher_pkey postgres
+4268; 2606 17941 CONSTRAINT public course_unit_section_status course_unit_section_status_pkey postgres
+4275; 2606 18086 CONSTRAINT public feedback feedback_pkey postgres
+4249; 2606 17769 CONSTRAINT public learning_unit learning_unit_pkey postgres
+4284; 2606 18163 CONSTRAINT public mastery_log mastery_log_pkey postgres
+4292; 2606 18226 CONSTRAINT public mastery_submission mastery_submission_pkey postgres
+4301; 2606 18324 CONSTRAINT public mastery_tasks mastery_tasks_pkey postgres
+4236; 2606 17703 CONSTRAINT public profiles profiles_pkey postgres
+4299; 2606 18314 CONSTRAINT public regular_tasks regular_tasks_pkey postgres
+4316; 2606 18432 CONSTRAINT public session_rate_limits session_rate_limits_pkey postgres
+4288; 2606 18205 CONSTRAINT public student_mastery_progress student_mastery_progress_pkey postgres
+4290; 2606 18207 CONSTRAINT public student_mastery_progress student_mastery_progress_student_id_task_id_key postgres
+4260; 2606 17820 CONSTRAINT public submission submission_pkey postgres
+4262; 2606 18111 CONSTRAINT public submission submission_student_task_attempt_unique postgres
+4296; 2606 18302 CONSTRAINT public task_base task_base_pkey postgres
+4252; 2606 17803 CONSTRAINT public task task_pkey postgres
+4266; 2606 17921 CONSTRAINT public unit_section unit_section_pkey postgres
+4286; 2606 18187 CONSTRAINT public user_model_weights user_model_weights_pkey postgres
+4141; 2606 17023 CONSTRAINT realtime messages messages_pkey supabase_realtime_admin
+4319; 2606 82325 CONSTRAINT realtime messages_2025_10_27 messages_2025_10_27_pkey supabase_admin
+4322; 2606 90517 CONSTRAINT realtime messages_2025_10_28 messages_2025_10_28_pkey supabase_admin
+4325; 2606 90529 CONSTRAINT realtime messages_2025_10_29 messages_2025_10_29_pkey supabase_admin
+4328; 2606 90541 CONSTRAINT realtime messages_2025_10_30 messages_2025_10_30_pkey supabase_admin
+4331; 2606 90553 CONSTRAINT realtime messages_2025_10_31 messages_2025_10_31_pkey supabase_admin
+4334; 2606 90565 CONSTRAINT realtime messages_2025_11_01 messages_2025_11_01_pkey supabase_admin
+4337; 2606 98709 CONSTRAINT realtime messages_2025_11_02 messages_2025_11_02_pkey supabase_admin
+4137; 2606 16877 CONSTRAINT realtime subscription pk_subscription supabase_admin
+4134; 2606 16850 CONSTRAINT realtime schema_migrations schema_migrations_pkey supabase_admin
+4151; 2606 17226 CONSTRAINT storage buckets_analytics buckets_analytics_pkey supabase_storage_admin
+4102; 2606 16517 CONSTRAINT storage buckets buckets_pkey supabase_storage_admin
+4153; 2606 17236 CONSTRAINT storage iceberg_namespaces iceberg_namespaces_pkey supabase_storage_admin
+4156; 2606 17252 CONSTRAINT storage iceberg_tables iceberg_tables_pkey supabase_storage_admin
+4112; 2606 16558 CONSTRAINT storage migrations migrations_name_key supabase_storage_admin
+4114; 2606 16556 CONSTRAINT storage migrations migrations_pkey supabase_storage_admin
+4110; 2606 16534 CONSTRAINT storage objects objects_pkey supabase_storage_admin
+4149; 2606 17180 CONSTRAINT storage prefixes prefixes_pkey supabase_storage_admin
+4146; 2606 17141 CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_pkey supabase_storage_admin
+4144; 2606 17126 CONSTRAINT storage s3_multipart_uploads s3_multipart_uploads_pkey supabase_storage_admin
+4121; 2606 16773 CONSTRAINT supabase_functions hooks hooks_pkey supabase_functions_admin
+4119; 2606 16763 CONSTRAINT supabase_functions migrations migrations_pkey supabase_functions_admin
+4231; 2606 17689 CONSTRAINT supabase_migrations schema_migrations schema_migrations_pkey postgres
+4131; 1259 16838 INDEX _realtime extensions_tenant_external_id_index supabase_admin
+4132; 1259 16829 INDEX _realtime extensions_tenant_external_id_type_index supabase_admin
+4126; 1259 16822 INDEX _realtime tenants_external_id_index supabase_admin
+4097; 1259 16495 INDEX auth audit_logs_instance_id_idx supabase_auth_admin
+4071; 1259 17320 INDEX auth confirmation_token_idx supabase_auth_admin
+4072; 1259 17322 INDEX auth email_change_token_current_idx supabase_auth_admin
+4073; 1259 17323 INDEX auth email_change_token_new_idx supabase_auth_admin
+4170; 1259 17401 INDEX auth factor_id_created_at_idx supabase_auth_admin
+4203; 1259 17509 INDEX auth flow_state_created_at_idx supabase_auth_admin
+4158; 1259 17489 INDEX auth identities_email_idx supabase_auth_admin
+5152; 0 0 COMMENT auth INDEX identities_email_idx supabase_auth_admin
+4163; 1259 17317 INDEX auth identities_user_id_idx supabase_auth_admin
+4206; 1259 17506 INDEX auth idx_auth_code supabase_auth_admin
+4207; 1259 17507 INDEX auth idx_user_id_auth_method supabase_auth_admin
+4178; 1259 17512 INDEX auth mfa_challenge_created_at_idx supabase_auth_admin
+4175; 1259 17373 INDEX auth mfa_factors_user_friendly_name_unique supabase_auth_admin
+4176; 1259 17518 INDEX auth mfa_factors_user_id_idx supabase_auth_admin
+4216; 1259 17643 INDEX auth oauth_auth_pending_exp_idx supabase_auth_admin
+4213; 1259 17596 INDEX auth oauth_clients_deleted_at_idx supabase_auth_admin
+4223; 1259 17669 INDEX auth oauth_consents_active_client_idx supabase_auth_admin
+4224; 1259 17667 INDEX auth oauth_consents_active_user_client_idx supabase_auth_admin
+4229; 1259 17668 INDEX auth oauth_consents_user_order_idx supabase_auth_admin
+4210; 1259 17565 INDEX auth one_time_tokens_relates_to_hash_idx supabase_auth_admin
+4211; 1259 17564 INDEX auth one_time_tokens_token_hash_hash_idx supabase_auth_admin
+4212; 1259 17566 INDEX auth one_time_tokens_user_id_token_type_key supabase_auth_admin
+4074; 1259 17324 INDEX auth reauthentication_token_idx supabase_auth_admin
+4075; 1259 17321 INDEX auth recovery_token_idx supabase_auth_admin
+4084; 1259 16478 INDEX auth refresh_tokens_instance_id_idx supabase_auth_admin
+4085; 1259 16479 INDEX auth refresh_tokens_instance_id_user_id_idx supabase_auth_admin
+4086; 1259 17316 INDEX auth refresh_tokens_parent_idx supabase_auth_admin
+4089; 1259 17403 INDEX auth refresh_tokens_session_id_revoked_idx supabase_auth_admin
+4092; 1259 17508 INDEX auth refresh_tokens_updated_at_idx supabase_auth_admin
+4197; 1259 17445 INDEX auth saml_providers_sso_provider_id_idx supabase_auth_admin
+4198; 1259 17510 INDEX auth saml_relay_states_created_at_idx supabase_auth_admin
+4199; 1259 17460 INDEX auth saml_relay_states_for_email_idx supabase_auth_admin
+4202; 1259 17459 INDEX auth saml_relay_states_sso_provider_id_idx supabase_auth_admin
+4164; 1259 17511 INDEX auth sessions_not_after_idx supabase_auth_admin
+4165; 1259 17681 INDEX auth sessions_oauth_client_id_idx supabase_auth_admin
+4168; 1259 17402 INDEX auth sessions_user_id_idx supabase_auth_admin
+4189; 1259 17427 INDEX auth sso_domains_domain_idx supabase_auth_admin
+4192; 1259 17426 INDEX auth sso_domains_sso_provider_id_idx supabase_auth_admin
+4187; 1259 17412 INDEX auth sso_providers_resource_id_idx supabase_auth_admin
+4188; 1259 17574 INDEX auth sso_providers_resource_id_pattern_idx supabase_auth_admin
+4177; 1259 17571 INDEX auth unique_phone_factor_per_user supabase_auth_admin
+4169; 1259 17400 INDEX auth user_id_created_at_idx supabase_auth_admin
+4076; 1259 17480 INDEX auth users_email_partial_key supabase_auth_admin
+5153; 0 0 COMMENT auth INDEX users_email_partial_key supabase_auth_admin
+4077; 1259 17318 INDEX auth users_instance_id_email_idx supabase_auth_admin
+4078; 1259 16468 INDEX auth users_instance_id_idx supabase_auth_admin
+4079; 1259 17535 INDEX auth users_is_anonymous_idx supabase_auth_admin
+4282; 1259 18104 INDEX public idx_allowed_email_domains_domain postgres
+4306; 1259 18394 INDEX public idx_auth_sessions_expires_at postgres
+4307; 1259 18396 INDEX public idx_auth_sessions_last_activity postgres
+4308; 1259 18393 INDEX public idx_auth_sessions_session_id postgres
+4309; 1259 18395 INDEX public idx_auth_sessions_user_id postgres
+4239; 1259 18570 INDEX public idx_course_created_by postgres
+4240; 1259 17725 INDEX public idx_course_creator_id postgres
+4273; 1259 17970 INDEX public idx_course_learning_unit_assignment_unit_id postgres
+4246; 1259 17759 INDEX public idx_course_student_student_id postgres
+4243; 1259 17742 INDEX public idx_course_teacher_teacher_id postgres
+4269; 1259 17953 INDEX public idx_course_unit_section_status_published postgres
+4270; 1259 17952 INDEX public idx_course_unit_section_status_section_id postgres
+4276; 1259 18089 INDEX public idx_feedback_created_at postgres
+4277; 1259 18090 INDEX public idx_feedback_type postgres
+4247; 1259 17775 INDEX public idx_learning_unit_creator_id postgres
+4232; 1259 18020 INDEX public idx_profiles_email postgres
+4233; 1259 17709 INDEX public idx_profiles_role postgres
+4234; 1259 18559 INDEX public idx_profiles_role_email postgres
+4297; 1259 18500 INDEX public idx_regular_tasks_order postgres
+4314; 1259 18433 INDEX public idx_session_rate_limits_window postgres
+4253; 1259 18243 INDEX public idx_submission_feedback_queue postgres
+4254; 1259 18795 INDEX public idx_submission_feedback_status postgres
+4255; 1259 18244 INDEX public idx_submission_processing_timeout postgres
+4256; 1259 17833 INDEX public idx_submission_student_id postgres
+4257; 1259 18112 INDEX public idx_submission_student_task_attempt postgres
+4258; 1259 17834 INDEX public idx_submission_task_id postgres
+4293; 1259 18499 INDEX public idx_task_base_order_in_section postgres
+4294; 1259 18498 INDEX public idx_task_base_section_id postgres
+4250; 1259 17934 INDEX public idx_task_section_id postgres
+4263; 1259 17928 INDEX public idx_unit_section_order postgres
+4264; 1259 17927 INDEX public idx_unit_section_unit_id postgres
+4135; 1259 17024 INDEX realtime ix_realtime_subscription_entity supabase_admin
+4139; 1259 17025 INDEX realtime messages_inserted_at_topic_index supabase_realtime_admin
+4317; 1259 82326 INDEX realtime messages_2025_10_27_inserted_at_topic_idx supabase_admin
+4320; 1259 90518 INDEX realtime messages_2025_10_28_inserted_at_topic_idx supabase_admin
+4323; 1259 90530 INDEX realtime messages_2025_10_29_inserted_at_topic_idx supabase_admin
+4326; 1259 90542 INDEX realtime messages_2025_10_30_inserted_at_topic_idx supabase_admin
+4329; 1259 90554 INDEX realtime messages_2025_10_31_inserted_at_topic_idx supabase_admin
+4332; 1259 90566 INDEX realtime messages_2025_11_01_inserted_at_topic_idx supabase_admin
+4335; 1259 98710 INDEX realtime messages_2025_11_02_inserted_at_topic_idx supabase_admin
+4138; 1259 16926 INDEX realtime subscription_subscription_id_entity_filters_key supabase_admin
+4100; 1259 16523 INDEX storage bname supabase_storage_admin
+4103; 1259 16545 INDEX storage bucketid_objname supabase_storage_admin
+4154; 1259 17242 INDEX storage idx_iceberg_namespaces_bucket_id supabase_storage_admin
+4157; 1259 17263 INDEX storage idx_iceberg_tables_namespace_id supabase_storage_admin
+4142; 1259 17152 INDEX storage idx_multipart_uploads_list supabase_storage_admin
+4104; 1259 17198 INDEX storage idx_name_bucket_level_unique supabase_storage_admin
+4105; 1259 17117 INDEX storage idx_objects_bucket_id_name supabase_storage_admin
+4106; 1259 17200 INDEX storage idx_objects_lower_name supabase_storage_admin
+4147; 1259 17201 INDEX storage idx_prefixes_lower_name supabase_storage_admin
+4107; 1259 16546 INDEX storage name_prefix_search supabase_storage_admin
+4108; 1259 17199 INDEX storage objects_bucket_id_level_idx supabase_storage_admin
+4122; 1259 16775 INDEX supabase_functions supabase_functions_hooks_h_table_id_h_name_idx supabase_functions_admin
+4123; 1259 16774 INDEX supabase_functions supabase_functions_hooks_request_id_idx supabase_functions_admin
+4338; 0 0 INDEX ATTACH realtime messages_2025_10_27_inserted_at_topic_idx supabase_realtime_admin
+4339; 0 0 INDEX ATTACH realtime messages_2025_10_27_pkey supabase_realtime_admin
+4340; 0 0 INDEX ATTACH realtime messages_2025_10_28_inserted_at_topic_idx supabase_realtime_admin
+4341; 0 0 INDEX ATTACH realtime messages_2025_10_28_pkey supabase_realtime_admin
+4342; 0 0 INDEX ATTACH realtime messages_2025_10_29_inserted_at_topic_idx supabase_realtime_admin
+4343; 0 0 INDEX ATTACH realtime messages_2025_10_29_pkey supabase_realtime_admin
+4344; 0 0 INDEX ATTACH realtime messages_2025_10_30_inserted_at_topic_idx supabase_realtime_admin
+4345; 0 0 INDEX ATTACH realtime messages_2025_10_30_pkey supabase_realtime_admin
+4346; 0 0 INDEX ATTACH realtime messages_2025_10_31_inserted_at_topic_idx supabase_realtime_admin
+4347; 0 0 INDEX ATTACH realtime messages_2025_10_31_pkey supabase_realtime_admin
+4348; 0 0 INDEX ATTACH realtime messages_2025_11_01_inserted_at_topic_idx supabase_realtime_admin
+4349; 0 0 INDEX ATTACH realtime messages_2025_11_01_pkey supabase_realtime_admin
+4350; 0 0 INDEX ATTACH realtime messages_2025_11_02_inserted_at_topic_idx supabase_realtime_admin
+4351; 0 0 INDEX ATTACH realtime messages_2025_11_02_pkey supabase_realtime_admin
+4404; 2620 17857 TRIGGER auth users on_auth_user_created supabase_auth_admin
+4415; 2620 18402 TRIGGER public auth_sessions enforce_auth_session_limit postgres
+4413; 2620 18797 TRIGGER public submission ensure_feedback_consistency_trigger postgres
+4414; 2620 18194 TRIGGER public user_model_weights on_user_model_weights_updated postgres
+4416; 2620 18404 TRIGGER public auth_sessions update_auth_sessions_last_activity postgres
+4410; 2620 16882 TRIGGER realtime subscription tr_check_filters supabase_admin
+4405; 2620 17208 TRIGGER storage buckets enforce_bucket_name_length_trigger supabase_storage_admin
+4406; 2620 17276 TRIGGER storage objects objects_delete_delete_prefix supabase_storage_admin
+4407; 2620 17194 TRIGGER storage objects objects_insert_create_prefix supabase_storage_admin
+4408; 2620 17275 TRIGGER storage objects objects_update_create_prefix supabase_storage_admin
+4411; 2620 17204 TRIGGER storage prefixes prefixes_create_hierarchy supabase_storage_admin
+4412; 2620 17277 TRIGGER storage prefixes prefixes_delete_hierarchy supabase_storage_admin
+4409; 2620 17105 TRIGGER storage objects update_objects_updated_at supabase_storage_admin
+4354; 2606 16830 FK CONSTRAINT _realtime extensions extensions_tenant_external_id_fkey supabase_admin
+4362; 2606 17304 FK CONSTRAINT auth identities identities_user_id_fkey supabase_auth_admin
+4367; 2606 17393 FK CONSTRAINT auth mfa_amr_claims mfa_amr_claims_session_id_fkey supabase_auth_admin
+4366; 2606 17381 FK CONSTRAINT auth mfa_challenges mfa_challenges_auth_factor_id_fkey supabase_auth_admin
+4365; 2606 17368 FK CONSTRAINT auth mfa_factors mfa_factors_user_id_fkey supabase_auth_admin
+4373; 2606 17633 FK CONSTRAINT auth oauth_authorizations oauth_authorizations_client_id_fkey supabase_auth_admin
+4374; 2606 17638 FK CONSTRAINT auth oauth_authorizations oauth_authorizations_user_id_fkey supabase_auth_admin
+4375; 2606 17662 FK CONSTRAINT auth oauth_consents oauth_consents_client_id_fkey supabase_auth_admin
+4376; 2606 17657 FK CONSTRAINT auth oauth_consents oauth_consents_user_id_fkey supabase_auth_admin
+4372; 2606 17559 FK CONSTRAINT auth one_time_tokens one_time_tokens_user_id_fkey supabase_auth_admin
+4352; 2606 17337 FK CONSTRAINT auth refresh_tokens refresh_tokens_session_id_fkey supabase_auth_admin
+4369; 2606 17440 FK CONSTRAINT auth saml_providers saml_providers_sso_provider_id_fkey supabase_auth_admin
+4370; 2606 17513 FK CONSTRAINT auth saml_relay_states saml_relay_states_flow_state_id_fkey supabase_auth_admin
+4371; 2606 17454 FK CONSTRAINT auth saml_relay_states saml_relay_states_sso_provider_id_fkey supabase_auth_admin
+4363; 2606 17676 FK CONSTRAINT auth sessions sessions_oauth_client_id_fkey supabase_auth_admin
+4364; 2606 17332 FK CONSTRAINT auth sessions sessions_user_id_fkey supabase_auth_admin
+4368; 2606 17421 FK CONSTRAINT auth sso_domains sso_domains_sso_provider_id_fkey supabase_auth_admin
+4403; 2606 18388 FK CONSTRAINT public auth_sessions auth_sessions_user_id_fkey postgres
+4378; 2606 18565 FK CONSTRAINT public course course_created_by_fkey postgres
+4379; 2606 17720 FK CONSTRAINT public course course_creator_id_fkey postgres
+4391; 2606 17960 FK CONSTRAINT public course_learning_unit_assignment course_learning_unit_assignment_course_id_fkey postgres
+4392; 2606 17965 FK CONSTRAINT public course_learning_unit_assignment course_learning_unit_assignment_unit_id_fkey postgres
+4382; 2606 17749 FK CONSTRAINT public course_student course_student_course_id_fkey postgres
+4383; 2606 18021 FK CONSTRAINT public course_student course_student_student_id_fkey postgres
+4380; 2606 17732 FK CONSTRAINT public course_teacher course_teacher_course_id_fkey postgres
+4381; 2606 18026 FK CONSTRAINT public course_teacher course_teacher_teacher_id_fkey postgres
+4389; 2606 17942 FK CONSTRAINT public course_unit_section_status course_unit_section_status_course_id_fkey postgres
+4390; 2606 17947 FK CONSTRAINT public course_unit_section_status course_unit_section_status_section_id_fkey postgres
+4384; 2606 17770 FK CONSTRAINT public learning_unit learning_unit_creator_id_fkey postgres
+4393; 2606 18356 FK CONSTRAINT public mastery_log mastery_log_task_id_fkey postgres
+4394; 2606 18164 FK CONSTRAINT public mastery_log mastery_log_user_id_fkey postgres
+4398; 2606 18227 FK CONSTRAINT public mastery_submission mastery_submission_student_id_fkey postgres
+4399; 2606 18366 FK CONSTRAINT public mastery_submission mastery_submission_task_id_fkey postgres
+4402; 2606 18325 FK CONSTRAINT public mastery_tasks mastery_tasks_task_id_fkey postgres
+4377; 2606 17704 FK CONSTRAINT public profiles profiles_id_fkey postgres
+4401; 2606 18315 FK CONSTRAINT public regular_tasks regular_tasks_task_id_fkey postgres
+4396; 2606 18208 FK CONSTRAINT public student_mastery_progress student_mastery_progress_student_id_fkey postgres
+4397; 2606 18361 FK CONSTRAINT public student_mastery_progress student_mastery_progress_task_id_fkey postgres
+4386; 2606 17823 FK CONSTRAINT public submission submission_student_id_fkey postgres
+4387; 2606 18351 FK CONSTRAINT public submission submission_task_id_fkey postgres
+4400; 2606 18303 FK CONSTRAINT public task_base task_base_section_id_fkey postgres
+4385; 2606 17929 FK CONSTRAINT public task task_section_id_fkey postgres
+4388; 2606 17922 FK CONSTRAINT public unit_section unit_section_unit_id_fkey postgres
+4395; 2606 18188 FK CONSTRAINT public user_model_weights user_model_weights_user_id_fkey postgres
+4359; 2606 17237 FK CONSTRAINT storage iceberg_namespaces iceberg_namespaces_bucket_id_fkey supabase_storage_admin
+4360; 2606 17258 FK CONSTRAINT storage iceberg_tables iceberg_tables_bucket_id_fkey supabase_storage_admin
+4361; 2606 17253 FK CONSTRAINT storage iceberg_tables iceberg_tables_namespace_id_fkey supabase_storage_admin
+4353; 2606 16535 FK CONSTRAINT storage objects objects_bucketId_fkey supabase_storage_admin
+4358; 2606 17181 FK CONSTRAINT storage prefixes prefixes_bucketId_fkey supabase_storage_admin
+4355; 2606 17127 FK CONSTRAINT storage s3_multipart_uploads s3_multipart_uploads_bucket_id_fkey supabase_storage_admin
+4356; 2606 17147 FK CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_bucket_id_fkey supabase_storage_admin
+4357; 2606 17142 FK CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_upload_id_fkey supabase_storage_admin
+4571; 0 16488 ROW SECURITY auth audit_log_entries supabase_auth_admin
+4592; 0 17499 ROW SECURITY auth flow_state supabase_auth_admin
+4583; 0 17297 ROW SECURITY auth identities supabase_auth_admin
+4570; 0 16481 ROW SECURITY auth instances supabase_auth_admin
+4587; 0 17386 ROW SECURITY auth mfa_amr_claims supabase_auth_admin
+4586; 0 17374 ROW SECURITY auth mfa_challenges supabase_auth_admin
+4585; 0 17361 ROW SECURITY auth mfa_factors supabase_auth_admin
+4593; 0 17549 ROW SECURITY auth one_time_tokens supabase_auth_admin
+4569; 0 16470 ROW SECURITY auth refresh_tokens supabase_auth_admin
+4590; 0 17428 ROW SECURITY auth saml_providers supabase_auth_admin
+4591; 0 17446 ROW SECURITY auth saml_relay_states supabase_auth_admin
+4572; 0 16496 ROW SECURITY auth schema_migrations supabase_auth_admin
+4584; 0 17327 ROW SECURITY auth sessions supabase_auth_admin
+4589; 0 17413 ROW SECURITY auth sso_domains supabase_auth_admin
+4588; 0 17404 ROW SECURITY auth sso_providers supabase_auth_admin
+4568; 0 16458 ROW SECURITY auth users supabase_auth_admin
+4652; 3256 18334 POLICY public mastery_tasks Access mastery tasks via task_base postgres
+4651; 3256 18333 POLICY public regular_tasks Access regular tasks via task_base postgres
+4614; 3256 17838 POLICY public profiles Allow individual user update to own profile postgres
+4646; 3256 18237 POLICY public student_mastery_progress Allow student to access their own mastery progress postgres
+4647; 3256 18238 POLICY public mastery_submission Allow student to access their own mastery submissions postgres
+4653; 3256 18349 POLICY public submission Allow students to insert submission for visible tasks once postgres
+4623; 3256 17978 POLICY public course_learning_unit_assignment Allow students to view assignments for their courses postgres
+4615; 3256 17840 POLICY public course Allow students to view enrolled courses postgres
+4618; 3256 17843 POLICY public course_student Allow students to view own enrollments postgres
+4633; 3256 17999 POLICY public unit_section Allow students to view published sections via helper postgres
+4620; 3256 17851 POLICY public submission Allow students to view their own submissions postgres
+4617; 3256 17842 POLICY public course_student Allow teachers full access to course_student postgres
+4616; 3256 17841 POLICY public course_teacher Allow teachers full access to course_teacher postgres
+4639; 3256 18032 POLICY public course Allow teachers full access to courses postgres
+4619; 3256 17844 POLICY public learning_unit Allow teachers full access to learning units postgres
+4632; 3256 17996 POLICY public unit_section Allow teachers full access to sections in their units postgres
+4625; 3256 17980 POLICY public task Allow teachers full access to tasks in their units postgres
+4622; 3256 17977 POLICY public course_learning_unit_assignment Allow teachers to assign units to courses postgres
+4621; 3256 17974 POLICY public course_unit_section_status Allow teachers to manage section status in their units postgres
+4638; 3256 18031 POLICY public profiles Allow users to view profiles based on role postgres
+4631; 3256 18105 POLICY public allowed_email_domains Authenticated users can view active allowed domains postgres
+4642; 3256 18174 POLICY public mastery_log Benutzer können ihre eigenen Log-Einträge sehen postgres
+4645; 3256 18193 POLICY public user_model_weights Deny all access to user model weights postgres
+4644; 3256 18177 POLICY public mastery_log Keine direkten Schreib-Operationen auf Logs erlaubt postgres
+4654; 3256 18371 POLICY public mastery_log Lehrer koennen die Log-Eintraege ihrer Schueler sehen postgres
+4643; 3256 18175 POLICY public mastery_log Lehrer können die Log-Einträge ihrer Schüler sehen postgres
+4655; 3256 18397 POLICY public auth_sessions Service role full access postgres
+4658; 3256 18422 POLICY public auth_service_keys Service role manages API keys postgres
+4657; 3256 18408 POLICY public auth_sessions Session manager full access postgres
+4634; 3256 18250 POLICY public submission Students can see their own submission feedback status postgres
+4629; 3256 18087 POLICY public feedback Students can submit feedback postgres
+4641; 3256 18034 POLICY public course_unit_section_status Students can view their section statuses postgres
+4649; 3256 18330 POLICY public task_base Students view tasks in published sections postgres
+4624; 3256 17979 POLICY public task Students view tasks in published sections in their courses postgres
+4640; 3256 18033 POLICY public learning_unit Students view units assigned to their courses postgres
+4630; 3256 18088 POLICY public feedback Teachers can view feedback postgres
+4628; 3256 17988 POLICY public submission Teachers delete submissions for tasks in their units postgres
+4650; 3256 18331 POLICY public task_base Teachers manage tasks in their units postgres
+4627; 3256 17986 POLICY public submission Teachers update submissions for tasks in their units postgres
+4626; 3256 17984 POLICY public submission Teachers view submissions for tasks in their units postgres
+4656; 3256 18398 POLICY public auth_sessions Users can read own sessions postgres
+4604; 0 18091 ROW SECURITY public allowed_email_domains postgres
+4613; 0 18409 ROW SECURITY public auth_service_keys postgres
+4612; 0 18373 ROW SECURITY public auth_sessions postgres
+4595; 0 17710 ROW SECURITY public course postgres
+4603; 0 17954 ROW SECURITY public course_learning_unit_assignment postgres
+4597; 0 17743 ROW SECURITY public course_student postgres
+4596; 0 17726 ROW SECURITY public course_teacher postgres
+4602; 0 17936 ROW SECURITY public course_unit_section_status postgres
+4598; 0 17760 ROW SECURITY public learning_unit postgres
+4605; 0 18155 ROW SECURITY public mastery_log postgres
+4608; 0 18219 ROW SECURITY public mastery_submission postgres
+4611; 0 18320 ROW SECURITY public mastery_tasks postgres
+4594; 0 17695 ROW SECURITY public profiles postgres
+4610; 0 18308 ROW SECURITY public regular_tasks postgres
+4607; 0 18198 ROW SECURITY public student_mastery_progress postgres
+4600; 0 17810 ROW SECURITY public submission postgres
+4599; 0 17794 ROW SECURITY public task postgres
+4609; 0 18293 ROW SECURITY public task_base postgres
+4601; 0 17911 ROW SECURITY public unit_section postgres
+4606; 0 18181 ROW SECURITY public user_model_weights postgres
+4576; 0 17009 ROW SECURITY realtime messages supabase_realtime_admin
+4636; 3256 18018 POLICY storage objects Allow public insert to materials bucket supabase_storage_admin
+4637; 3256 18019 POLICY storage objects Allow public select from materials bucket supabase_storage_admin
+4635; 3256 18017 POLICY storage objects TEMP DEBUG Allow any insert into materials bucket supabase_storage_admin
+4573; 0 16509 ROW SECURITY storage buckets supabase_storage_admin
+4580; 0 17216 ROW SECURITY storage buckets_analytics supabase_storage_admin
+4581; 0 17227 ROW SECURITY storage iceberg_namespaces supabase_storage_admin
+4582; 0 17243 ROW SECURITY storage iceberg_tables supabase_storage_admin
+4664; 3256 18774 POLICY storage objects materials_delete_session_policy supabase_storage_admin
+4662; 3256 18771 POLICY storage objects materials_insert_session_policy supabase_storage_admin
+4663; 3256 18772 POLICY storage objects materials_update_session_policy supabase_storage_admin
+4575; 0 16551 ROW SECURITY storage migrations supabase_storage_admin
+4574; 0 16524 ROW SECURITY storage objects supabase_storage_admin
+4579; 0 17171 ROW SECURITY storage prefixes supabase_storage_admin
+4648; 3256 18262 POLICY storage objects public_read_section_materials supabase_storage_admin
+4577; 0 17118 ROW SECURITY storage s3_multipart_uploads supabase_storage_admin
+4578; 0 17132 ROW SECURITY storage s3_multipart_uploads_parts supabase_storage_admin
+4667; 3256 18778 POLICY storage objects section_materials_delete_session_policy supabase_storage_admin
+4665; 3256 18775 POLICY storage objects section_materials_insert_session_policy supabase_storage_admin
+4666; 3256 18776 POLICY storage objects section_materials_update_session_policy supabase_storage_admin
+4661; 3256 18770 POLICY storage objects submissions_delete_session_policy supabase_storage_admin
+4659; 3256 18767 POLICY storage objects submissions_insert_session_policy supabase_storage_admin
+4660; 3256 18768 POLICY storage objects submissions_select_session_policy supabase_storage_admin
+4668; 6104 16388 PUBLICATION - supabase_realtime postgres
+2668; 826 16603 DEFAULT ACL auth DEFAULT PRIVILEGES FOR SEQUENCES supabase_auth_admin
+2669; 826 16604 DEFAULT ACL auth DEFAULT PRIVILEGES FOR FUNCTIONS supabase_auth_admin
+2667; 826 16602 DEFAULT ACL auth DEFAULT PRIVILEGES FOR TABLES supabase_auth_admin
+2678; 826 16682 DEFAULT ACL extensions DEFAULT PRIVILEGES FOR SEQUENCES supabase_admin
+2677; 826 16681 DEFAULT ACL extensions DEFAULT PRIVILEGES FOR FUNCTIONS supabase_admin
+2676; 826 16680 DEFAULT ACL extensions DEFAULT PRIVILEGES FOR TABLES supabase_admin
+2681; 826 16637 DEFAULT ACL graphql DEFAULT PRIVILEGES FOR SEQUENCES supabase_admin
+2680; 826 16636 DEFAULT ACL graphql DEFAULT PRIVILEGES FOR FUNCTIONS supabase_admin
+2679; 826 16635 DEFAULT ACL graphql DEFAULT PRIVILEGES FOR TABLES supabase_admin
+2673; 826 16617 DEFAULT ACL graphql_public DEFAULT PRIVILEGES FOR SEQUENCES supabase_admin
+2675; 826 16616 DEFAULT ACL graphql_public DEFAULT PRIVILEGES FOR FUNCTIONS supabase_admin
+2674; 826 16615 DEFAULT ACL graphql_public DEFAULT PRIVILEGES FOR TABLES supabase_admin
+2685; 826 16453 DEFAULT ACL public DEFAULT PRIVILEGES FOR SEQUENCES postgres
+2664; 826 16454 DEFAULT ACL public DEFAULT PRIVILEGES FOR SEQUENCES supabase_admin
+2686; 826 16452 DEFAULT ACL public DEFAULT PRIVILEGES FOR FUNCTIONS postgres
+2666; 826 16456 DEFAULT ACL public DEFAULT PRIVILEGES FOR FUNCTIONS supabase_admin
+2687; 826 16451 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES postgres
+2665; 826 16455 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES supabase_admin
+2671; 826 16607 DEFAULT ACL realtime DEFAULT PRIVILEGES FOR SEQUENCES supabase_admin
+2672; 826 16608 DEFAULT ACL realtime DEFAULT PRIVILEGES FOR FUNCTIONS supabase_admin
+2670; 826 16606 DEFAULT ACL realtime DEFAULT PRIVILEGES FOR TABLES supabase_admin
+2688; 826 16508 DEFAULT ACL storage DEFAULT PRIVILEGES FOR SEQUENCES postgres
+2689; 826 16507 DEFAULT ACL storage DEFAULT PRIVILEGES FOR FUNCTIONS postgres
+2690; 826 16506 DEFAULT ACL storage DEFAULT PRIVILEGES FOR TABLES postgres
+2684; 826 16755 DEFAULT ACL supabase_functions DEFAULT PRIVILEGES FOR SEQUENCES supabase_admin
+2683; 826 16754 DEFAULT ACL supabase_functions DEFAULT PRIVILEGES FOR FUNCTIONS supabase_admin
+2682; 826 16753 DEFAULT ACL supabase_functions DEFAULT PRIVILEGES FOR TABLES supabase_admin
+3858; 3466 16621 EVENT TRIGGER - issue_graphql_placeholder supabase_admin
+3863; 3466 16700 EVENT TRIGGER - issue_pg_cron_access supabase_admin
+3857; 3466 16619 EVENT TRIGGER - issue_pg_graphql_access supabase_admin
+3864; 3466 16703 EVENT TRIGGER - issue_pg_net_access supabase_admin
+3859; 3466 16622 EVENT TRIGGER - pgrst_ddl_watch supabase_admin
+3860; 3466 16623 EVENT TRIGGER - pgrst_drop_watch supabase_admin

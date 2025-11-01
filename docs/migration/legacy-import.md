@@ -1,6 +1,12 @@
 # Legacy Backup Import Guide (Alpha2)
 
-Dieses Handbuch erklärt, wie du den aktuellen Legacy-Datenstand aus dem Archiv `docs/migration/supabase_backup_20251101_103457.tar.gz` in eine lokale Alpha2-Supabase-Instanz überführst. Es richtet sich an alle, die Tests mit realistischen Daten fahren oder einen kompletten Datenstand für Entwicklung/QA benötigen.
+Dieses Handbuch erklärt, wie du einen Legacy-Datenstand aus einem lokalen Archiv in eine
+lokale Alpha2-Supabase-Instanz überführst. Es richtet sich an alle, die Tests mit
+realistischen Daten fahren oder einen kompletten Datenstand für Entwicklung/QA benötigen.
+
+> Wichtig (Security & Compliance): Committe niemals echte Dumps ins Repository. Lege
+> Dumps außerhalb des Repos oder unter `docs/migration/storage_raw/` ab. `.gitignore`
+> schließt `docs/migration/*.tar`, `*.tar.gz` und `*.dump` aus. Behandle Dumps als PII.
 
 ## 1. Voraussetzungen prüfen
 - `supabase` CLI installiert und im PATH.
@@ -37,12 +43,12 @@ Dieses Handbuch erklärt, wie du den aktuellen Legacy-Datenstand aus dem Archiv 
    ```
 
 ## 4. Legacy-Backup entpacken
-1. Navigiere in den Migrationsordner und entpacke das Archiv:
+1. Navigiere in den Migrationsordner und entpacke dein Archiv (Beispiel):
    ```bash
    cd docs/migration
-   tar -xzf supabase_backup_20251101_103457.tar.gz
+   tar -xzf /pfad/zu/deinem_dump.tar.gz
    ```
-2. Nach dem Entpacken findest du entweder eine `.tar`-Datei (Custom-Format) oder eine `.sql`. Notiere den Pfad, z. B. `/home/felix/gustav-alpha2/docs/migration/supabase_backup_20251101_103457.tar`.
+2. Nach dem Entpacken findest du entweder eine `.tar`-Datei (Custom-Format) oder eine `.sql`. Notiere den Pfad, z. B. `/secure/dumps/legacy_2025-11-01.tar`.
 
 ## 5. Legacy-Schema in separatem Namespace einspielen
 Wir laden den Dump in ein eigenes Schema `legacy_raw`, damit wir die Legacy-Struktur parallel zum Alpha2-Schema auswerten können.
@@ -115,6 +121,23 @@ Wir laden den Dump in ein eigenes Schema `legacy_raw`, damit wir die Legacy-Stru
   ```bash
   psql "$SERVICE_ROLE_DSN" -f docs/migration/sql/import_releases_from_legacy.sql
   ```
+
+## 7. Makefile-Shortcuts (empfohlen)
+
+Für den lokalen Import gibt es zwei Abkürzungen, die die oben beschriebenen
+Schritte bündeln:
+
+```bash
+# Trockendurchlauf (keine Schreibzugriffe)
+make import-legacy-dry DUMP=/secure/dumps/legacy_2025-11-01.tar.gz
+
+# Realer Import (führt Writes aus)
+make import-legacy DUMP=/secure/dumps/legacy_2025-11-01.tar.gz
+```
+
+Die Targets verwenden `scripts/import_legacy_backup.py` und erzeugen einen JSON‑Report
+unter `docs/migration/reports/`. Achte darauf, dass sensible Rohdaten nicht
+in das Repository gelangen.
 - Setze `released_by`, falls im Legacy-Datensatz kein eindeutiger Lehrer vorhanden ist. Nutze dafür den Kurs-Owner oder den Fallback `system`.
 
 ## 6a. Legacy ↔ Alpha2 Schema Mapping (Überblick)

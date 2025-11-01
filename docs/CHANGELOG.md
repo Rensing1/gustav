@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- ui(learning): Ersetzt Radiogruppe (Text/Bild/Datei) durch Choice Cards mit zwei Optionen „Text“ und „Upload“; Upload akzeptiert JPG/PNG/PDF (bis 10 MB). Kein Preview, klarer Erfolgshinweis.
+- web(learning): PRG nach Abgabe enthält `open_attempt_id`; Unit‑Seite und History‑Fragment öffnen deterministisch genau diesen Versuch (Fallback: neuester).
+- tests(learning/ui): UI‑Tests auf Choice Cards und `mode=upload` angepasst; neuer Test prüft `open_attempt_id` in der PRG‑Weiterleitung.
 - api(learning): Support PDF submissions (`kind=file`) with strict validation (MIME `application/pdf`, size ≤ 10 MiB, sha256, storage_key). Add POST `/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents` (same‑origin) to presign client uploads (dev stub).
 - openapi(learning): Extend `LearningSubmission.kind` with `file`; document PDF constraints. Add `StudentUploadIntent{Request,Response}` schemas and the `POST /upload-intents` path.
 - ui(learning): SSR Task‑Formular mit Umschalter (Text/Bild/PDF). Neues `learning_upload.js` für Toggle, Upload‑Intent, PUT‑Upload und Ausfüllen der Hidden‑Felder. PRG zurück mit Erfolgshinweis; keine Bild‑/PDF‑Vorschau.

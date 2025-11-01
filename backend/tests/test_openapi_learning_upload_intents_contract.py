@@ -36,3 +36,10 @@ def test_openapi_upload_intents_includes_403_forbidden():
     assert "/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents:" in yml
     # A minimal heuristic: after the path the '403' status code should appear
     assert "'403':" in yml or "403:" in yml
+
+
+def test_openapi_submission_errors_include_invalid_file_payload():
+    yml = _load_openapi()
+    # Submissions 400 should document invalid_file_payload alongside image case
+    assert "Create a new submission" in yml
+    assert "invalid_file_payload" in yml

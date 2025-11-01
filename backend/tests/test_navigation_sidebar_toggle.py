@@ -84,6 +84,8 @@ async def test_htmx_request_without_session_redirects_to_login():
 
     assert response.status_code == 401
     assert response.headers.get("HX-Redirect") == "/auth/login"
+    # Security: HTMX unauthenticated responses must not be cached
+    assert response.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

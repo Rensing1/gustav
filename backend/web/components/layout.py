@@ -117,14 +117,14 @@ class Layout(Component):
     <link rel="stylesheet" href="/static/css/gustav.css?v=5">
 
     <!-- HTMX for interactivity (local copy) -->
-    <SCRIPT src="/static/js/vendor/htmx.min.js"></SCRIPT>
+    <script src="/static/js/vendor/htmx.min.js"></script>
     <!-- Sortable.js for drag-and-drop -->
-    <SCRIPT src="/static/js/vendor/Sortable.min.js?v=4"></SCRIPT>
+    <script src="/static/js/vendor/Sortable.min.js?v=4"></script>
     <!-- HTMX Sortable Extension (local integration) -->
-    <SCRIPT src="/static/js/vendor/sortable.js?v=4"></SCRIPT>
+    <script src="/static/js/vendor/sortable.js?v=4"></script>
 
     <!-- Minimal custom JavaScript -->
-    <SCRIPT src="/static/js/gustav.js?v=5" defer></SCRIPT>"""
+    <script src="/static/js/gustav.js?v=5" defer></script>"""
 
     def _render_main_inner(self, breadcrumb_html: str) -> str:
         """Render the inner markup of the main content column.

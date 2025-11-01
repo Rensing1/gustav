@@ -13,6 +13,7 @@ Dieses Dokument beschreibt die aktuelle Architektur von GUSTAV (Stand: alpha‑2
 - Web‑Adapter (`backend/web/`): FastAPI mit serverseitigem Rendern (SSR) und HTMX für progressive Interaktivität. Enthält aktuell Routen, UI‑Komponenten und statische Assets.
   - HTMX‑Kontrakt (Navigation): Bei HTMX‑Navigation liefern Routen ausschließlich das Haupt‑Fragment (Inhalt von `#main-content`) und genau eine Sidebar als Out‑of‑Band‑Swap (`<aside id="sidebar" hx-swap-oob="true">`). Dadurch bleibt der Toggle‑State stabil und es entstehen keine doppelten Container. Die Hilfsfunktion `_layout_response` kapselt dieses Verhalten.
   - Auth‑Redirects (HTMX): Für `/auth/login` und `/auth/register` antwortet der Server bei HTMX‑Requests mit `204 No Content` und setzt `HX-Redirect` auf die Ziel‑URL (statt 302). Header: `Cache-Control: private, no-store`, `Vary: HX-Request`.
+  - Unauth‑HTMX (401): Bei fehlender Session antwortet die Middleware mit `401` und `HX-Redirect: /auth/login`. Sicherheit: `Cache-Control: private, no-store` und `Vary: HX-Request` werden gesetzt, um Caching‑Anomalien zu vermeiden.
 - API‑Vertrag (`api/openapi.yml:1`): Quelle der Wahrheit für öffentliche Endpunkte. Tests validieren Verhalten gegen den Vertrag.
 - Datenbank: PostgreSQL via Supabase; Migrationen unter `supabase/migrations/` verwaltet. RLS aktiviert;
   der Teaching‑Kontext nutzt standardmäßig eine Limited‑Role‑DSN (`gustav_limited`).

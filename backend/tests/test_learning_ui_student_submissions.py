@@ -64,20 +64,22 @@ async def _prepare_learning_fixture():
 
 
 @pytest.mark.anyio
-async def test_ui_renders_task_form_with_toggle():
+async def test_ui_renders_task_choice_cards():
     sid, course_id, unit_id, _task_id = await _prepare_learning_fixture()
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
         r = await c.get(f"/learning/courses/{course_id}/units/{unit_id}")
     assert r.status_code == 200
     html = r.text
-    # Umschalter (Radio) für drei Modi
+    # Zwei Optionen: Text | Upload (Choice Cards, Radios unter der Haube)
     assert re.search(r'name=\"mode\"[^>]*value=\"text\"', html)
-    assert re.search(r'name=\"mode\"[^>]*value=\"image\"', html)
-    assert re.search(r'name=\"mode\"[^>]*value=\"file\"', html)
+    assert re.search(r'name=\"mode\"[^>]*value=\"upload\"', html)
     # Textfeld vorhanden
     assert 'textarea' in html and 'name="text_body"' in html
-    # Keine Bildvorschau erforderlich (UI-Entscheidung), also prüfen wir nicht darauf
+    # Upload-Input mit erlaubten Typen + Hinweis (kein Preview nötig)
+    assert re.search(r'name=\"upload_file\"', html)
+    assert 'accept="image/png,image/jpeg,application/pdf"' in html
+    assert ('10 MB' in html) or ('10&nbsp;MB' in html)
 
 
 @pytest.mark.anyio
@@ -99,7 +101,26 @@ async def test_ui_submit_text_prg_and_history_shows_latest_open():
         html = follow.text
         assert ("Erfolgreich eingereicht" in html) or ("role=\"alert\"" in html)
         # details open beim neuesten Eintrag
-        assert re.search(r'<details[^>]*open[^>]*class=\"task-panel__history-entry\"', html)
+    assert re.search(r'<details[^>]*open[^>]*class=\"task-panel__history-entry\"', html)
+
+
+@pytest.mark.anyio
+async def test_ui_prg_redirect_includes_open_attempt_id():
+    """PRG-Redirect enthält open_attempt_id für deterministisches Öffnen."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        post = await c.post(
+            f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+            data={"mode": "text", "text_body": "Meine Lösung"},
+            follow_redirects=False,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert post.status_code in (302, 303)
+        loc = post.headers.get("location", "")
+    assert "open_attempt_id=" in loc
+    # UUID v4 format (basic check)
+    assert re.search(r"open_attempt_id=[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}", loc)
 
 
 @pytest.mark.anyio
@@ -166,7 +187,7 @@ async def test_ui_history_fragment_shows_text_when_analysis_missing():
 
 
 @pytest.mark.anyio
-async def test_ui_submit_image_prg_and_history_shows_latest_open():
+async def test_ui_submit_upload_png_prg_and_history_shows_latest_open():
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
@@ -174,7 +195,7 @@ async def test_ui_submit_image_prg_and_history_shows_latest_open():
         post = await c.post(
             f"/learning/courses/{course_id}/tasks/{task_id}/submit",
             data={
-                "mode": "image",
+                "mode": "upload",
                 "storage_key": "submissions/test/path/image.png",
                 "mime_type": "image/png",
                 "size_bytes": "2048",
@@ -193,7 +214,7 @@ async def test_ui_submit_image_prg_and_history_shows_latest_open():
 
 
 @pytest.mark.anyio
-async def test_ui_submit_pdf_prg_and_history_shows_latest_open():
+async def test_ui_submit_upload_pdf_prg_and_history_shows_latest_open():
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
@@ -201,7 +222,7 @@ async def test_ui_submit_pdf_prg_and_history_shows_latest_open():
         post = await c.post(
             f"/learning/courses/{course_id}/tasks/{task_id}/submit",
             data={
-                "mode": "file",
+                "mode": "upload",
                 "storage_key": "submissions/test/path/doc.pdf",
                 "mime_type": "application/pdf",
                 "size_bytes": "4096",

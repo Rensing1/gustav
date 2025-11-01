@@ -462,10 +462,11 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     if error:
         return error
 
-    # CSRF defense: configurable strict mode. When STRICT_CSRF_SUBMISSIONS=true,
-    # require Origin/Referer presence and same-origin; otherwise only reject when
-    # a non-matching Origin/Referer is present.
-    strict = (os.getenv("STRICT_CSRF_SUBMISSIONS", "false") or "").lower() == "true"
+    # CSRF defense: In production, always require Origin/Referer presence and
+    # same-origin. In non-prod, STRICT_CSRF_SUBMISSIONS=true enforces the same.
+    prod_env = (os.getenv("GUSTAV_ENV", "dev") or "").lower() == "prod"
+    strict_toggle = (os.getenv("STRICT_CSRF_SUBMISSIONS", "false") or "").lower() == "true"
+    strict = prod_env or strict_toggle
     check_ok = _require_strict_same_origin(request) if strict else _is_same_origin(request)
     if not check_ok:
         return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())

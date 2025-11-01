@@ -288,3 +288,8 @@ Optional:
 - `--kc-base-url`, `--kc-host-header`, `--kc-admin-user` (optional) erlauben das automatische Nachziehen der echten Keycloak-`sub`-IDs anhand der Benutzer-E-Mail. Das Admin-Passwort wird ausschließlich über die Umgebungsvariable `KEYCLOAK_ADMIN_PASSWORD` übergeben (keine CLI‑Übergabe). Ohne diese Parameter vergibt das Skript Platzhalter vom Typ `legacy-email:<adresse>`.
 
 > Hinweis: Mastery-Daten bleiben bewusst außen vor. Das Skript protokolliert fehlende Zuordnungen (z. B. wenn ein Submission keinem Kurs zugeordnet werden kann) im Report.
+
+### Security-Hinweise (Wichtig)
+- Das Import-Skript loggt den Datenbank‑DSN nicht mehr und schreibt ihn auch nicht in den JSON‑Report, um Credentials zu schützen (DSGVO/Least‑Privilege).
+- Übergib Passwörter ausschließlich über Umgebungsvariablen (z. B. `KEYCLOAK_ADMIN_PASSWORD`). Vermeide Flags/CLI‑Historie.
+- Behandle `docs/migration/reports/*.json` als vertraulich (kann Zählwerte und Dateipfade enthalten).

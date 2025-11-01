@@ -131,6 +131,23 @@ async def test_upload_intent_forbidden_for_teacher():
 
 
 @pytest.mark.anyio
+async def test_upload_intent_pdf_happy_path_includes_pdf_mime():
+    """File kind (PDF) returns intent with accepted_mime_types including application/pdf."""
+    student_sid, course_id, task_id = await _prepare_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+        r = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+            json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 4096},
+            headers={"Origin": "http://test"},
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("storage_key") and body.get("url")
+    assert "application/pdf" in body.get("accepted_mime_types", [])
+
+
+@pytest.mark.anyio
 async def test_upload_intent_requires_membership():
     """Student must be course member; otherwise 403 before presign."""
     # Prepare teacher-created resources without enrolling the student

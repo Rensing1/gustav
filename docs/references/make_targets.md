@@ -11,6 +11,6 @@ Status: Stable
 - `make supabase-status` – Supabase Status/URLs
 
 ## ENV
-- `APP_DB_USER`/`APP_DB_PASSWORD` – für DSNs/`db-login-user`
+- `APP_DB_USER`/`APP_DB_PASSWORD` – für DSNs/`db-login-user` (werden vom SQL‑Skript aus der Umgebung gelesen; keine Passwort‑Übergabe per CLI)
 - `DB_HOST`/`DB_PORT` – für psql im Make‑Target
-
+- `KEYCLOAK_ADMIN_PASSWORD` – für `make import-legacy*` (nicht als Flag übergeben)

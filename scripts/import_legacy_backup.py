@@ -272,7 +272,11 @@ def ensure_app_login_role(dry_run: bool) -> PhaseResult:
         )
 
     env = os.environ.copy()
+    # Provide secrets via environment rather than command-line arguments to
+    # avoid leaking in process listings.
     env["PGPASSWORD"] = db_superpassword
+    env["APP_DB_USER"] = app_user
+    env["APP_DB_PASSWORD"] = app_password
     cmd = [
         "psql",
         "-h",
@@ -284,9 +288,7 @@ def ensure_app_login_role(dry_run: bool) -> PhaseResult:
         "-d",
         database_name,
         "-v",
-        f"app_user={app_user}",
-        "-v",
-        f"app_pass={app_password}",
+        "ON_ERROR_STOP=1",
         "-f",
         str(script_path),
     ]

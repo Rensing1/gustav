@@ -169,7 +169,8 @@ async def auth_enforcement(request: Request, call_next):
             headers = {"Cache-Control": "private, no-store"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:
-            return Response(status_code=401, headers={"HX-Redirect": "/auth/login"})
+            # Security: prevent intermediaries from caching unauthenticated HTMX responses
+            return Response(status_code=401, headers={"HX-Redirect": "/auth/login", "Cache-Control": "private, no-store", "Vary": "HX-Request"})
         return RedirectResponse(url="/auth/login", status_code=302)
 
     request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles}

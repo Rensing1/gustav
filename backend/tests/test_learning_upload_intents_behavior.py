@@ -72,6 +72,7 @@ async def test_upload_intent_image_png_happy_path():
         r = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
             json={"kind": "image", "filename": "foto.png", "mime_type": "image/png", "size_bytes": 2048},
+            headers={"Origin": "http://test"},
         )
     assert r.status_code == 200
     body = r.json()
@@ -91,10 +92,12 @@ async def test_upload_intent_rejects_gif_and_too_large():
         r1 = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
             json={"kind": "image", "filename": "anim.gif", "mime_type": "image/gif", "size_bytes": 1024},
+            headers={"Origin": "http://test"},
         )
         r2 = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
             json={"kind": "file", "filename": "zu_gross.pdf", "mime_type": "application/pdf", "size_bytes": 20_000_000},
+            headers={"Origin": "http://test"},
         )
     assert r1.status_code == 400
     assert r2.status_code == 400
@@ -107,6 +110,7 @@ async def test_upload_intent_requires_authentication():
         r = await c.post(
             f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/upload-intents",
             json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+            headers={"Origin": "http://test"},
         )
     assert r.status_code == 401
     assert r.headers.get("Cache-Control") == "private, no-store"
@@ -158,6 +162,7 @@ async def test_upload_intent_requires_membership():
         r = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
             json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+            headers={"Origin": "http://test"},
         )
     assert r.status_code == 403
 
@@ -188,6 +193,7 @@ async def test_upload_intent_task_not_visible_returns_404():
         r = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
             json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+            headers={"Origin": "http://test"},
         )
     assert r.status_code == 404
 
@@ -200,6 +206,20 @@ async def test_upload_intent_csrf_violation_sets_detail():
         r = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
             headers={"Origin": "https://evil.example"},
+            json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+        )
+    assert r.status_code == 403
+    assert r.json().get("detail") == "csrf_violation"
+
+
+@pytest.mark.anyio
+async def test_upload_intent_requires_origin_or_referer_header():
+    """POST without Origin/Referer must be rejected with 403 (strict CSRF)."""
+    student_sid, course_id, task_id = await _prepare_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+        r = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
             json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
         )
     assert r.status_code == 403

@@ -1565,7 +1565,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '400':
-          description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid)
+          description: Bad request (invalid_input | invalid_image_payload | invalid_file_payload | max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -4314,18 +4314,27 @@ paths:
                 $ref: '#/components/schemas/StudentUploadIntentResponse'
         '400':
           description: Bad request (invalid_input | mime_not_allowed | size_exceeded | invalid_uuid)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Forbidden (not enrolled or CSRF check failed)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:

@@ -62,6 +62,21 @@ def _cache_headers_error() -> dict[str, str]:
     return {"Cache-Control": "private, no-store", "Vary": "Origin"}
 
 
+def _require_strict_same_origin(request: Request) -> bool:
+    """Return True only when a same-origin indicator is present and matches.
+
+    Why:
+        For browser-triggered POSTs (e.g., upload-intents), we require either an
+        `Origin` or `Referer` header to be present and same-origin to reduce
+        the CSRF attack surface. Server-to-server calls (no headers) should use
+        other routes and remain unaffected.
+    """
+    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
+    if not origin_present:
+        return False
+    return _is_same_origin(request)
+
+
 def _current_user(request: Request) -> dict | None:
     user = getattr(request.state, "user", None)
     return user if isinstance(user, dict) else None
@@ -486,6 +501,22 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         detail = str(exc) if str(exc) else "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
 
+    # Optional storage integrity verification for image/PDF submissions.
+    # Enabled when STORAGE_VERIFY_ROOT is set; can be enforced with
+    # REQUIRE_STORAGE_VERIFY=true. Protects against mismatched size/hash.
+    if kind in ("image", "file"):
+        storage_key = clean_payload.get("storage_key")
+        sha256 = clean_payload.get("sha256")
+        size_bytes = clean_payload.get("size_bytes")
+        mime_type = clean_payload.get("mime_type")
+        try:
+            ok, reason = _verify_storage_object(str(storage_key), str(sha256), int(size_bytes), str(mime_type))
+        except Exception:
+            ok, reason = (False, "verification_error")
+        if not ok:
+            detail = "invalid_image_payload" if kind == "image" else "invalid_file_payload"
+            return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
+
     submission_input = CreateSubmissionInput(
         course_id=course_id,
         task_id=task_id,
@@ -545,7 +576,9 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     user, error = _require_student(request)
     if error:
         return error
-    if not _is_same_origin(request):
+    # Strict CSRF for browser-triggered POSTs: require Origin/Referer presence
+    # and same-origin (server-to-server calls should not use this endpoint).
+    if not _require_strict_same_origin(request):
         return JSONResponse(
             {"error": "forbidden", "detail": "csrf_violation"},
             status_code=403,
@@ -629,6 +662,54 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(timespec="seconds"),
     }
     return JSONResponse(intent, status_code=200, headers=_cache_headers_success())
+
+
+def _verify_storage_object(storage_key: str, sha256: str, size_bytes: int, mime_type: str) -> tuple[bool, str]:
+    """Verify object integrity against a local storage root if configured.
+
+    Why:
+        Clients may report incorrect metadata (size/hash). To keep the MVP
+        simple and offline-friendly, we verify against a local directory when
+        `STORAGE_VERIFY_ROOT` is set. In production this should use the storage
+        provider's HEAD/etag and/or a trusted hash pipeline.
+
+    Behavior:
+        - If no `STORAGE_VERIFY_ROOT` is set, return (True, 'skipped') unless
+          REQUIRE_STORAGE_VERIFY=true mandates verification.
+        - Ensures the resolved path stays within the configured root.
+        - Compares actual size and sha256 of the file with the payload.
+    """
+    import os
+    from hashlib import sha256 as _sha256
+    from pathlib import Path
+
+    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    require = (os.getenv("REQUIRE_STORAGE_VERIFY", "false") or "").lower() == "true"
+    if not root:
+        return (not require, "skipped")
+    if not storage_key or not sha256 or size_bytes is None:
+        return (False, "missing_fields")
+    base = Path(root).resolve()
+    target = (base / storage_key).resolve()
+    try:
+        common = os.path.commonpath([str(base), str(target)])
+    except Exception:
+        return (False, "path_error")
+    if common != str(base):
+        return (False, "path_escape")
+    if not target.exists() or not target.is_file():
+        return (False, "missing_file")
+    actual_size = target.stat().st_size
+    if int(actual_size) != int(size_bytes):
+        return (False, "size_mismatch")
+    h = _sha256()
+    with target.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    actual_hash = h.hexdigest()
+    if actual_hash.lower() != str(sha256).lower():
+        return (False, "hash_mismatch")
+    return (True, "ok")
 
 @learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
 async def list_submissions(

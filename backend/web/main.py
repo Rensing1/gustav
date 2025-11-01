@@ -687,7 +687,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             form_action = f"/learning/courses/{course_id}/tasks/{tid}/submit"
             form_html = (
                 f'<form method="post" action="{form_action}" class="task-submit-form" '
-                f'data-course-id="{Component.escape(course_id)}" data-task-id="{Component.escape(tid)}">'
+                f'data-course-id="{Component.escape(course_id)}" data-task-id="{Component.escape(tid)}" data-mode="text">'
                 f'<input type="hidden" name="unit_id" value="{Component.escape(unit_id)}">'
                 '<fieldset class="choice-cards" aria-label="Abgabeart">'
                 '<label class="choice-card choice-card--text">'

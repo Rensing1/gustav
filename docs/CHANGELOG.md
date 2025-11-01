@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- security(api/learning): Upload‑Intent prüft Kurs‑Mitgliedschaft und Task‑Sichtbarkeit (403/404) und setzt `detail=csrf_violation` bei CSRF.
+- openapi(learning): 403 Forbidden für Upload‑Intent dokumentiert.
+- consistency(learning): Feedback‑Text für PDF‑Abgaben („PDF submission received.“).
  - security(web/ssr): Enforce same-origin on student submit route; respond 403 with private, no-store and Vary: Origin.
  - security(api/learning): Add Vary: Origin to Learning responses; shorten upload-intent TTL to 10 minutes.
  - repo(migration): Remove committed legacy DB dump; add .gitignore rules for dumps under docs/migration/.

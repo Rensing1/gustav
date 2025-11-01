@@ -124,3 +124,83 @@ async def test_upload_intent_forbidden_for_teacher():
             json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
         )
     assert r.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_upload_intent_requires_membership():
+    """Student must be course member; otherwise 403 before presign."""
+    # Prepare teacher-created resources without enrolling the student
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"})
+        course_id = r_course.json()["id"]
+        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"})
+        unit_id = r_unit.json()["id"]
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"})
+        section_id = r_section.json()["id"]
+        r_task = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"], "max_attempts": 3},
+        )
+        task_id = r_task.json()["id"]
+        # Section is made visible, but student is not a member
+        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+        module_id = r_module.json()["id"]
+        await c.patch(
+            f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
+            json={"visible": True},
+        )
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+            json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+        )
+    assert r.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_upload_intent_task_not_visible_returns_404():
+    """If task not visible to student (section not released), respond 404."""
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"})
+        course_id = r_course.json()["id"]
+        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"})
+        unit_id = r_unit.json()["id"]
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"})
+        section_id = r_section.json()["id"]
+        r_task = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"], "max_attempts": 3},
+        )
+        task_id = r_task.json()["id"]
+        # Add student membership but do NOT release section
+        await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name})  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+            json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+        )
+    assert r.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_upload_intent_csrf_violation_sets_detail():
+    student_sid, course_id, task_id = await _prepare_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+        r = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+            headers={"Origin": "https://evil.example"},
+            json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+        )
+    assert r.status_code == 403
+    assert r.json().get("detail") == "csrf_violation"

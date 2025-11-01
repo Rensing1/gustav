@@ -35,7 +35,7 @@ def make_auth_only_app() -> FastAPI:
     return app
 
 
-def install_main_stub(cfg: OIDCConfig):
+def install_main_stub(cfg: OIDCConfig, monkeypatch: pytest.MonkeyPatch):
     import types
     stub = types.ModuleType("main")
     stub.OIDC_CFG = cfg
@@ -44,7 +44,7 @@ def install_main_stub(cfg: OIDCConfig):
     class _Settings:
         environment = "dev"
     stub.SETTINGS = _Settings()
-    sys.modules["main"] = stub
+    monkeypatch.setitem(sys.modules, "main", stub)
     return stub
 
 
@@ -59,7 +59,7 @@ async def test_login_redirect_302_has_location_and_cache_headers(monkeypatch: py
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg)
+    install_main_stub(cfg, monkeypatch)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     test_app = make_auth_only_app()
@@ -85,7 +85,7 @@ async def test_register_redirect_302_has_location_and_kc_action(monkeypatch: pyt
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg)
+    install_main_stub(cfg, monkeypatch)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     test_app = make_auth_only_app()

@@ -546,7 +546,11 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     if error:
         return error
     if not _is_same_origin(request):
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+        return JSONResponse(
+            {"error": "forbidden", "detail": "csrf_violation"},
+            status_code=403,
+            headers=_cache_headers_error(),
+        )
 
     # Basic path validation
     try:
@@ -580,6 +584,26 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         accepted = sorted(list(ALLOWED_FILE_MIME))
     else:
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+
+    # Authorization/visibility: ensure the caller is a member and the task is
+    # visible to the student. We reuse the submissions listing use case which
+    # already enforces membership and task visibility at the DB boundary.
+    try:
+        # Any positive limit triggers the underlying checks; results are ignored.
+        _ = LIST_SUBMISSIONS_USECASE.execute(
+            ListSubmissionsInput(
+                course_id=str(course_id),
+                task_id=str(task_id),
+                student_sub=str(user.get("sub", "")),
+                limit=1,
+                offset=0,
+            )
+        )
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+    except LookupError:
+        # Task not visible (or course/unit mismatch) should not leak existence
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
     # Build a storage key (lowercase path, no traversal) — the value is later
     # validated again at submission time with a strict regex.

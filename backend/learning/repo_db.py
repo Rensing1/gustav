@@ -701,6 +701,8 @@ class DBLearningRepo:
     def _render_feedback(kind: str, attempt: int) -> str:
         if kind == "text":
             return f"Attempt {attempt}: Thanks for your explanation."
+        if kind == "file":
+            return f"Attempt {attempt}: PDF submission received."
         return f"Attempt {attempt}: Image submission received."
 
     def _build_analysis_payload(

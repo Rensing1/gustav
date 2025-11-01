@@ -28,11 +28,28 @@
 
   function showFields(form, mode) {
     const text = form.querySelector('.fields-text');
+    const upload = form.querySelector('.fields-upload');
+    // Legacy containers (pre-Choice-Cards); keep them hidden by default
     const img = form.querySelector('.fields-image');
     const pdf = form.querySelector('.fields-file');
     if (text) text.hidden = (mode !== 'text');
-    if (img) img.hidden = (mode !== 'image');
-    if (pdf) pdf.hidden = (mode !== 'file');
+    if (upload) upload.hidden = (mode !== 'upload');
+    // Reflect current mode for CSS to enforce visibility as well
+    try { form.setAttribute('data-mode', mode); } catch (_) {}
+    if (img) img.hidden = true;
+    if (pdf) pdf.hidden = true;
+  }
+
+  function updateChoiceCardState(form) {
+    form.querySelectorAll('.choice-card').forEach(function (label) {
+      const input = label.querySelector('input[name="mode"]');
+      if (!input) return;
+      if (input.checked) {
+        label.classList.add('is-active');
+      } else {
+        label.classList.remove('is-active');
+      }
+    });
   }
 
   async function handleSubmitWithUpload(e, form, mode) {
@@ -45,10 +62,15 @@
       return true; // allow native submit
     }
 
-    // Pick file input based on mode
-    const fileInput = mode === 'image'
-      ? form.querySelector('input[name="image_file"]')
-      : form.querySelector('input[name="doc_file"]');
+    // Pick file input based on mode (Choice-Cards use unified upload_file)
+    let fileInput = null;
+    if (mode === 'upload') {
+      fileInput = form.querySelector('input[name="upload_file"]');
+    } else if (mode === 'image') {
+      fileInput = form.querySelector('input[name="image_file"]');
+    } else if (mode === 'file') {
+      fileInput = form.querySelector('input[name="doc_file"]');
+    }
     if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
       // No file selected: block submit and focus input
       e.preventDefault();
@@ -61,7 +83,7 @@
     if (!courseId || !taskId) return true; // fall back to native submit
 
     // Validate client-side (non-authoritative)
-    const isImage = mode === 'image';
+    const isImage = (mode === 'image') || (mode === 'upload' && file.type.startsWith('image/'));
     const allowedImage = ['image/png', 'image/jpeg'];
     const allowedPdf = ['application/pdf'];
     if ((isImage && allowedImage.indexOf(file.type) === -1) || (!isImage && allowedPdf.indexOf(file.type) === -1)) {
@@ -113,11 +135,13 @@
       radios.forEach(function (r) {
         r.addEventListener('change', function () {
           showFields(form, r.value);
+          updateChoiceCardState(form);
         });
       });
       // Initialize visibility
       const checked = form.querySelector('input[name="mode"]:checked');
       showFields(form, checked ? checked.value : 'text');
+      updateChoiceCardState(form);
 
       // Intercept submit for image/file
       form.addEventListener('submit', async function (e) {
@@ -130,4 +154,3 @@
     });
   });
 })();
-

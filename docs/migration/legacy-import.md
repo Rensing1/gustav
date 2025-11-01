@@ -268,7 +268,7 @@ Wenn du alle Schritte oben nicht einzeln ausführen möchtest, kannst du den ges
 - Restore des Dumps in ein isoliertes Schema (Standard `legacy_raw`).
 - Aufbau der `legacy_user_map` inklusive Fallback-Subs für Legacy-Benutzer.
 - ETL sämtlicher relevanter Tabellen (Kurse, Units, Materialien, Aufgaben, Abgaben, Releases) unter Beachtung der Mapping-Regeln.
-- Provisionierung des lokalen App-Logins (`make db-login-user`), sofern dieser noch fehlt. Das Skript nutzt dafür die Variablen `DB_HOST`, `DB_PORT`, `DB_SUPERUSER`, `DB_SUPERPASSWORD`, `APP_DB_USER` und `APP_DB_PASSWORD`. Stelle sicher, dass diese Werte vor dem Lauf gesetzt sind (Standard: `postgres`/`postgres` auf 127.0.0.1:54322).
+- Provisionierung des lokalen App-Logins (`make db-login-user`), sofern dieser noch fehlt. Das Skript liest `APP_DB_USER`/`APP_DB_PASSWORD` aus der Umgebung (keine Übergabe von Passwörtern auf der CLI). Zusätzlich werden `DB_HOST`, `DB_PORT`, `DB_SUPERUSER`, `DB_SUPERPASSWORD` genutzt. Stelle sicher, dass diese Werte vor dem Lauf gesetzt sind (Standard: `postgres`/`postgres` auf 127.0.0.1:54322).
 - Erstellung eines detaillierten JSON-Reports mit Zählwerten und eventuellen Warnungen (`docs/migration/reports/legacy_import_<timestamp>.json`).
 
 Beispielaufruf:
@@ -285,6 +285,6 @@ Optional:
 - `--dry-run` zeigt die Statistiken an, ohne Inserts zu schreiben.
 - `--report` legt den Report-Pfad fest.
 - `--keep-temp` lässt entpackte Dumps im Workdir.
-- `--kc-base-url`, `--kc-host-header`, `--kc-admin-user`, `--kc-admin-pass` (optional) erlauben das automatische Nachziehen der echten Keycloak-`sub`-IDs anhand der Benutzer-E-Mail. Ohne diese Parameter vergibt das Skript wie bisher Platzhalter vom Typ `legacy-email:<adresse>`.
+- `--kc-base-url`, `--kc-host-header`, `--kc-admin-user` (optional) erlauben das automatische Nachziehen der echten Keycloak-`sub`-IDs anhand der Benutzer-E-Mail. Das Admin-Passwort wird ausschließlich über die Umgebungsvariable `KEYCLOAK_ADMIN_PASSWORD` übergeben (keine CLI‑Übergabe). Ohne diese Parameter vergibt das Skript Platzhalter vom Typ `legacy-email:<adresse>`.
 
 > Hinweis: Mastery-Daten bleiben bewusst außen vor. Das Skript protokolliert fehlende Zuordnungen (z. B. wenn ein Submission keinem Kurs zugeordnet werden kann) im Report.

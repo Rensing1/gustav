@@ -18,6 +18,10 @@ __pycache__/
 *.pyc
 .env*
 !.env.example
+.pgpass
+.pg_service.conf
+.pg_service
+.pgpass.conf
 .vscode/
 .DS_Store
 *.swp

@@ -1463,7 +1463,8 @@ paths:
       tags: [Learning]
       summary: Create a new submission for a task within a course
       description: >-
-        Accepts text submissions directly or stores metadata for an already uploaded image.
+        Accepts text submissions directly or stores metadata for an already uploaded
+        image or PDF file.
         Duplicate requests can be avoided using the optional Idempotency-Key header.
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is

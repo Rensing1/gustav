@@ -33,7 +33,6 @@ db-login-user:
 	@echo "Creating/ensuring role $(APP_DB_USER) IN ROLE gustav_limited ..."
 	@APP_DB_USER=$(APP_DB_USER) APP_DB_PASSWORD=$(APP_DB_PASSWORD) \
 		PGPASSWORD=$(DB_SUPERPASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_SUPERUSER) -d postgres -v ON_ERROR_STOP=1 \
-		-v app_user="$(APP_DB_USER)" -v app_pass="$(APP_DB_PASSWORD)" \
 		-f scripts/dev/create_login_user.sql >/dev/null
 	@echo "Done. Example DSN: postgresql://$(APP_DB_USER):<secret>@$(DB_HOST):$(DB_PORT)/postgres"
 
@@ -65,6 +64,7 @@ KC_ADMIN_PASS ?= admin
 .PHONY: import-legacy
 import-legacy:
 	. ./.venv/bin/activate; \
+	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
 	python scripts/import_legacy_backup.py \
 	  --dump $(DUMP) \
 	  --dsn $(DSN) \
@@ -74,12 +74,12 @@ import-legacy:
 	  --kc-host-header $(KC_HOST_HEADER) \
 	  --kc-realm $(KC_REALM) \
 	  --kc-admin-user $(KC_ADMIN_USER) \
-	  --kc-admin-pass $(KC_ADMIN_PASS) \
 	  --verbose
 
 .PHONY: import-legacy-dry
 import-legacy-dry:
 	. ./.venv/bin/activate; \
+	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
 	python scripts/import_legacy_backup.py \
 	  --dump $(DUMP) \
 	  --dsn $(DSN) \
@@ -89,6 +89,5 @@ import-legacy-dry:
 	  --kc-host-header $(KC_HOST_HEADER) \
 	  --kc-realm $(KC_REALM) \
 	  --kc-admin-user $(KC_ADMIN_USER) \
-	  --kc-admin-pass $(KC_ADMIN_PASS) \
 	  --dry-run \
 	  --verbose

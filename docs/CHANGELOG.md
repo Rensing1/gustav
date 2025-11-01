@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- api(learning): Support PDF submissions (`kind=file`) with strict validation (MIME `application/pdf`, size ≤ 10 MiB, sha256, storage_key). Add POST `/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents` (same‑origin) to presign client uploads (dev stub).
+- openapi(learning): Extend `LearningSubmission.kind` with `file`; document PDF constraints. Add `StudentUploadIntent{Request,Response}` schemas and the `POST /upload-intents` path.
+- ui(learning): SSR Task‑Formular mit Umschalter (Text/Bild/PDF). Neues `learning_upload.js` für Toggle, Upload‑Intent, PUT‑Upload und Ausfüllen der Hidden‑Felder. PRG zurück mit Erfolgshinweis; keine Bild‑/PDF‑Vorschau.
+- ui(learning): Aufgaben‑Historie lazy‑load via HTMX‑Platzhalter pro Task; beim PRG wird die Historie serverseitig vorab geladen und der neueste Eintrag geöffnet. Korrigierte Attributreihenfolge im `<details>`‑Tag (`open` vor `class`).
+- repo(learning): Fallback‑Analyse für Legacy‑Submissions ohne `analysis_json`: nutzt `text_body` (Text) bzw. Platzhalter („OCR…“/„PDF…“) für Bild/PDF, damit die Historie stets sinnvollen Text anzeigt.
+- db(migration): `learning_submissions.kind` um `file` erweitert; Größen‑Constraint `size_bytes` ≤ 10 MiB ergänzt.
+- api(teaching): Mitglieder‑Endpoint akzeptiert neben `student_sub` nun auch Legacy‑Schlüssel `sub` (Kompatibilität) — Ownership/RLS unverändert.
+- tests(learning): Upload‑Intent‑Verhalten (image/PDF), PDF‑Submission (happy/whitelist), UI‑Tests für Lazy‑Loader und Fallback‑Text in Historie.
+- tests(auth): Stubs für `main` via `monkeypatch` in `sys.modules`, um Leaks zwischen Tests zu vermeiden.
 - security(ops): Add startup guard to prevent dummy/unset SUPABASE_SERVICE_ROLE_KEY and `sslmode=disable` in production.
  - security(ops): Enforce HTTPS for `KC_BASE_URL`/`KC_PUBLIC_BASE_URL` in prod/stage (startup guard aborts on http).
  - docs(openapi): Document `/health` endpoint (no auth, no-store cache header).

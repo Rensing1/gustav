@@ -586,6 +586,81 @@ async def test_create_submission_image_mime_type_whitelist():
 
 
 @pytest.mark.anyio
+async def test_create_submission_file_pdf_happy_path():
+    """PDF submissions (kind=file, application/pdf) create a new attempt with analysis stub."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={
+                "kind": "file",
+                "storage_key": "submissions/arbeit1.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 2048,
+                "sha256": "b" * 64,
+            },
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["kind"] == "file"
+    assert body["attempt_nr"] == 1
+    assert body["analysis_status"] == "completed"
+    # Analysis stub must include some text derived from the file reference
+    assert isinstance(body["analysis_json"]["text"], str)
+    assert "arbeit1.pdf" in body["analysis_json"]["text"]
+
+
+@pytest.mark.anyio
+async def test_create_submission_file_mime_type_whitelist():
+    """Reject file uploads with non-whitelisted MIME type (only application/pdf)."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={
+                "kind": "file",
+                "storage_key": "submissions/abc.docx",
+                "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "size_bytes": 4096,
+                "sha256": "c" * 64,
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json().get("detail") == "invalid_file_payload"
+
+
+@pytest.mark.anyio
+async def test_create_submission_file_size_limit_10mb():
+    """Reject file uploads larger than 10 MiB."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={
+                "kind": "file",
+                "storage_key": "submissions/zu_gross.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 10485761,  # 10 MiB + 1 byte
+                "sha256": "d" * 64,
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json().get("detail") == "invalid_file_payload"
+
+
+@pytest.mark.anyio
 async def test_create_submission_text_body_blank_returns_invalid_input():
     """Blank text submissions must yield 400 invalid_input with private cache header."""
 

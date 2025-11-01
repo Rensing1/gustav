@@ -210,7 +210,29 @@ async def test_ui_submit_upload_png_prg_and_history_shows_latest_open():
         html = follow.text
         assert ("Erfolgreich eingereicht" in html) or ("role=\"alert\"" in html)
         # details open beim neuesten Eintrag
-        assert re.search(r'<details[^>]*open[^>]*class=\"task-panel__history-entry\"', html)
+    assert re.search(r'<details[^>]*open[^>]*class=\"task-panel__history-entry\"', html)
+
+
+@pytest.mark.anyio
+async def test_ssr_submit_csrf_guard():
+    """Cross-site POST to SSR submit must be rejected with 403.
+
+    We simulate a mismatched Origin header; the handler must block before any
+    DB access is needed, so no course/task setup is required.
+    """
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.post(
+            f"/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/submit",
+            data={"mode": "text", "text_body": "CSRF"},
+            headers={"Content-Type": "application/x-www-form-urlencoded", "Origin": "http://evil.local"},
+            follow_redirects=False,
+        )
+    assert r.status_code == 403
+    assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

@@ -88,6 +88,7 @@ from routes.auth import auth_router
 from routes.learning import learning_router
 from routes.teaching import teaching_router
 from routes.users import users_router
+from routes.security import _is_same_origin
 
 # --- OIDC & Storage Setup ------------------------------------------------------
 
@@ -810,6 +811,10 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         Caller must be a student and a course member; API enforces RLS and
         visibility. Same-origin protection is applied at the API boundary.
     """
+    # CSRF: enforce same-origin for browser form POSTs before touching inputs.
+    if not _is_same_origin(request):
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)

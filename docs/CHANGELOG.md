@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+ - security(web/ssr): Enforce same-origin on student submit route; respond 403 with private, no-store and Vary: Origin.
+ - security(api/learning): Add Vary: Origin to Learning responses; shorten upload-intent TTL to 10 minutes.
+ - repo(migration): Remove committed legacy DB dump; add .gitignore rules for dumps under docs/migration/.
+ - tests(learning): Add 401/403 cases for upload-intents; add SSR CSRF guard test for submit route.
 - ui(learning): Ersetzt Radiogruppe (Text/Bild/Datei) durch Choice Cards mit zwei Optionen „Text“ und „Upload“; Upload akzeptiert JPG/PNG/PDF (bis 10 MB). Kein Preview, klarer Erfolgshinweis.
 - web(learning): PRG nach Abgabe enthält `open_attempt_id`; Unit‑Seite und History‑Fragment öffnen deterministisch genau diesen Versuch (Fallback: neuester).
 - tests(learning/ui): UI‑Tests auf Choice Cards und `mode=upload` angepasst; neuer Test prüft `open_attempt_id` in der PRG‑Weiterleitung.

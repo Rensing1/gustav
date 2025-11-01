@@ -4297,6 +4297,11 @@ paths:
               schema:
                 type: string
                 example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
           content:
             application/json:
               schema:

@@ -17,14 +17,27 @@
 -- - Never commit real secrets. For staging/production, provision the login
 --   role out-of-band via your secret management process.
 
+-- Accept variables via psql -v OR fallback to environment variables.
+-- This avoids passing secrets on the process command line by allowing
+-- APP_DB_USER/APP_DB_PASSWORD from the environment.
 \if :{?app_user}
 \else
-  \echo 'ERROR: app_user variable not set. Provide via -v app_user=...'
+  \set app_user :ENV.APP_DB_USER
+\endif
+\if :{?app_pass}
+\else
+  \set app_pass :ENV.APP_DB_PASSWORD
+\endif
+
+-- Final guard: require both values to be present after fallback.
+\if :{?app_user}
+\else
+  \echo 'ERROR: app_user not provided. Set APP_DB_USER env or pass -v app_user=...'
   \quit 1
 \endif
 \if :{?app_pass}
 \else
-  \echo 'ERROR: app_pass variable not set. Provide via -v app_pass=...'
+  \echo 'ERROR: app_pass not provided. Set APP_DB_PASSWORD env or pass -v app_pass=...'
   \quit 1
 \endif
 

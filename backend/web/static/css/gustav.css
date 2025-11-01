@@ -1160,6 +1160,65 @@ pre {
   gap: var(--space-4);
 }
 
+/* Choice Cards (Text | Upload) */
+fieldset.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+label.choice-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  cursor: pointer;
+  user-select: none;
+}
+
+label.choice-card input[type="radio"] {
+  accent-color: var(--color-accent);
+}
+
+label.choice-card:is(:hover, :focus-within) {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 30%, transparent);
+}
+
+/* Selected state via JS class for broad support; :has() as progressive enhancement */
+label.choice-card.is-active,
+fieldset.choice-cards:has(input[name="mode"]:checked) label.choice-card:has(input[name="mode"]:checked) {
+  background-color: var(--color-bg-muted);
+  border-color: var(--color-accent);
+}
+
+.choice-card__title {
+  font-weight: 600;
+}
+
+.choice-card__hint {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* Form fields under the choice cards */
+.task-form-fields {
+  display: block;
+}
+
+/* Ensure only one field group is visible depending on current mode */
+form.task-submit-form[data-mode="text"] .fields-upload { display: none; }
+form.task-submit-form[data-mode="text"] .fields-text { display: block; }
+form.task-submit-form[data-mode="upload"] .fields-text { display: none; }
+form.task-submit-form[data-mode="upload"] .fields-upload { display: block; }
+
 .form-actions {
   display: flex;
   flex-wrap: wrap;

@@ -58,6 +58,7 @@ class TaskCard(Component):
         attempts_info: Optional[str] = None,
         meta_items: Optional[Sequence[TaskMetaItem]] = None,
         history_entries: Optional[Iterable[HistoryEntry]] = None,
+        history_placeholder_html: Optional[str] = None,
         feedback_banner_html: Optional[str] = None,
         form_html: str = "",
         form_actions_html: Optional[str] = None,
@@ -69,6 +70,7 @@ class TaskCard(Component):
         self.attempts_info = attempts_info
         self.meta_items = list(meta_items) if meta_items else []
         self.history_entries = list(history_entries) if history_entries else []
+        self.history_placeholder_html = history_placeholder_html or ""
         self.feedback_banner_html = feedback_banner_html
         self.form_html = form_html
         self.form_actions_html = form_actions_html
@@ -128,10 +130,14 @@ class TaskCard(Component):
 
     def _render_history(self) -> str:
         if not self.history_entries:
-            return ""
+            # Render a placeholder container to enable lazy-loading via HTMX
+            # when a pre-populated history is not provided.
+            return self.history_placeholder_html or ""
 
         entries_html: List[str] = []
         for index, entry in enumerate(self.history_entries):
+            # Ensure the boolean attribute `open` is placed before `class` to
+            # keep test selectors stable and HTML readable.
             open_attr = " open" if entry.expanded else ""
             content_parts = [
                 entry.content_html,
@@ -140,8 +146,10 @@ class TaskCard(Component):
             ]
             inner_html = "".join(part for part in content_parts if part)
 
+            # Place the boolean `open` attribute before `class` to satisfy tests
+            # that search for `open` preceding the class attribute in the tag.
             entries_html.append(
-                f'<details class="task-panel__history-entry"{open_attr}>'
+                f'<details{open_attr} class="task-panel__history-entry">'
                 f'<summary class="task-panel__history-summary">'
                 f'<span class="task-panel__history-label">{self.escape(entry.label)}</span>'
                 f'<span class="task-panel__history-timestamp">{self.escape(entry.timestamp)}</span>'

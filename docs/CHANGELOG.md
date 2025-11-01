@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+### Security
+- mask(import): DSN is no longer logged or persisted in migration reports; prevents credential leakage.
+- csrf(submissions): In production, POST /submissions always requires Origin/Referer (strict same-origin), independent of STRICT_CSRF_SUBMISSIONS.
+
+### API
+- openapi(learning): Document 404 for POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents (task not found/not released).
+
+### Tests
+- add(learning): Idempotency-Key header regex negative/positive tests.
+- add(learning): Production CSRF strictness test for /submissions.
 - security(api/learning): Upload-Intents verlangen nun zwingend `Origin`/`Referer` (strict same-origin). Fehlende Header führen zu 403 `detail=csrf_violation`.
 - security(api/learning): Submissions unterstützen optional strikte CSRF-Policy: `STRICT_CSRF_SUBMISSIONS=true` verlangt `Origin`/`Referer` (ohne Header → 403 `csrf_violation`). Dev-Default bleibt tolerant.
  - security(api/learning): Optionale Integritätsprüfung bei Abgaben (Größe + sha256) gegen `STORAGE_VERIFY_ROOT`; erzwingbar via `REQUIRE_STORAGE_VERIFY=true`.

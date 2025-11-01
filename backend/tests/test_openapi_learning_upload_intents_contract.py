@@ -43,3 +43,10 @@ def test_openapi_submission_errors_include_invalid_file_payload():
     # Submissions 400 should document invalid_file_payload alongside image case
     assert "Create a new submission" in yml
     assert "invalid_file_payload" in yml
+
+
+def test_openapi_upload_intents_includes_404_not_found():
+    yml = _load_openapi()
+    # Upload intents must document 404 when task not visible or not found
+    assert "/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents:" in yml
+    assert "'404':" in yml or "404:" in yml

@@ -1728,8 +1728,13 @@ def main() -> None:
         if not kc_config.host_header:
             LOG.warning("Keycloak host header missing; requests may fail")
 
-    LOG.info("Ready to restore legacy dump: path=%s format=%s size=%.2f MB", dump_info.path, dump_info.format, dump_info.size_bytes / (1024 * 1024))
-    LOG.info("DSN: %s", dsn)
+    LOG.info(
+        "Ready to restore legacy dump: path=%s format=%s size=%.2f MB",
+        dump_info.path,
+        dump_info.format,
+        dump_info.size_bytes / (1024 * 1024),
+    )
+    # Security: Do not log the DSN to avoid leaking credentials in logs.
     LOG.info("Legacy schema: %s", args.legacy_schema)
     LOG.info("Storage root: %s", args.storage_root)
 
@@ -1737,7 +1742,7 @@ def main() -> None:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report = {
         "started_at": datetime.now(timezone.utc).isoformat(),
-        "dsn": dsn,
+        # Intentionally omit DSN to prevent credential leaks in reports.
         "legacy_schema": args.legacy_schema,
         "dump": {
             "path": str(dump_info.path),

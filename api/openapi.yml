@@ -1474,6 +1474,7 @@ paths:
         - cookieAuth: []
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Strict mode: When STRICT_CSRF_SUBMISSIONS=true, Origin or Referer must be present; requests without either are rejected."
         - "RLS: student ownership and course membership enforced via policies and helpers."
       x-permissions:
         requiredRole: student

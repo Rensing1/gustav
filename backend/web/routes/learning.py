@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+import os
 from uuid import UUID
 
 from fastapi import APIRouter, Request
@@ -461,13 +462,13 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     if error:
         return error
 
-    # CSRF defense-in-depth: if Origin header is present and not same-origin -> 403
-    if not _is_same_origin(request):
-        return JSONResponse(
-            {"error": "forbidden", "detail": "csrf_violation"},
-            status_code=403,
-            headers=_cache_headers_error(),
-        )
+    # CSRF defense: configurable strict mode. When STRICT_CSRF_SUBMISSIONS=true,
+    # require Origin/Referer presence and same-origin; otherwise only reject when
+    # a non-matching Origin/Referer is present.
+    strict = (os.getenv("STRICT_CSRF_SUBMISSIONS", "false") or "").lower() == "true"
+    check_ok = _require_strict_same_origin(request) if strict else _is_same_origin(request)
+    if not check_ok:
+        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
 
     try:
         UUID(course_id)

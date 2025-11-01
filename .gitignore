@@ -18,6 +18,15 @@ __pycache__/
 *.pyc
 .env*
 !.env.example
+.envrc
+.direnv/
+secrets/
+.secrets/
+.keys/
+*.pem
+*.key
+*.p12
+*.pfx
 .pgpass
 .pg_service.conf
 .pg_service

@@ -1,7 +1,8 @@
 # Changelog
 
 ## Unreleased
- - security(api/learning): Upload-Intents verlangen nun zwingend `Origin`/`Referer` (strict same-origin). Fehlende Header führen zu 403 `detail=csrf_violation`.
+- security(api/learning): Upload-Intents verlangen nun zwingend `Origin`/`Referer` (strict same-origin). Fehlende Header führen zu 403 `detail=csrf_violation`.
+- security(api/learning): Submissions unterstützen optional strikte CSRF-Policy: `STRICT_CSRF_SUBMISSIONS=true` verlangt `Origin`/`Referer` (ohne Header → 403 `csrf_violation`). Dev-Default bleibt tolerant.
  - security(api/learning): Optionale Integritätsprüfung bei Abgaben (Größe + sha256) gegen `STORAGE_VERIFY_ROOT`; erzwingbar via `REQUIRE_STORAGE_VERIFY=true`.
  - openapi(learning): 400-Fehler für Abgaben dokumentieren zusätzlich `invalid_file_payload`; Upload-Intents 400/401/403 enthalten Cache/Vary-Header.
 - security(api/learning): Upload‑Intent prüft Kurs‑Mitgliedschaft und Task‑Sichtbarkeit (403/404) und setzt `detail=csrf_violation` bei CSRF.

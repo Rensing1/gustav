@@ -27,3 +27,6 @@ docs/migration/*.tar.gz
 docs/migration/*.dump
 docs/migration/reports/
 docs/migration/.tmp/
+.tmp/
+docs/migration/tmp/
+docs/migration/storage_raw/

@@ -17,6 +17,8 @@ help:
 	@echo "  test               - Run test suite (unit/integration)"
 	@echo "  test-e2e           - Run E2E tests (requires running services)"
 	@echo "  supabase-status    - Show local Supabase status"
+	@echo "  import-legacy      - Import legacy Supabase dump with Keycloak mapping"
+	@echo "  import-legacy-dry  - Dry-run for the legacy import (no writes)"
 
 .PHONY: up
 up:
@@ -46,3 +48,47 @@ test-e2e:
 .PHONY: supabase-status
 supabase-status:
 	supabase status
+
+# --- Legacy data import shortcuts -------------------------------------------
+# Defaults (overridable):
+DUMP ?= docs/migration/supabase_backup_20251101_103457.tar.gz
+DSN ?= postgresql://postgres:postgres@127.0.0.1:54322/postgres
+LEGACY_SCHEMA ?= legacy_raw
+WORKDIR ?= .tmp/migration_run
+
+KC_BASE_URL ?= http://127.0.0.1:8100
+KC_HOST_HEADER ?= id.localhost
+KC_REALM ?= gustav
+KC_ADMIN_USER ?= admin
+KC_ADMIN_PASS ?= admin
+
+.PHONY: import-legacy
+import-legacy:
+	. ./.venv/bin/activate; \
+	python scripts/import_legacy_backup.py \
+	  --dump $(DUMP) \
+	  --dsn $(DSN) \
+	  --legacy-schema $(LEGACY_SCHEMA) \
+	  --workdir $(WORKDIR) \
+	  --kc-base-url $(KC_BASE_URL) \
+	  --kc-host-header $(KC_HOST_HEADER) \
+	  --kc-realm $(KC_REALM) \
+	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --kc-admin-pass $(KC_ADMIN_PASS) \
+	  --verbose
+
+.PHONY: import-legacy-dry
+import-legacy-dry:
+	. ./.venv/bin/activate; \
+	python scripts/import_legacy_backup.py \
+	  --dump $(DUMP) \
+	  --dsn $(DSN) \
+	  --legacy-schema $(LEGACY_SCHEMA) \
+	  --workdir $(WORKDIR) \
+	  --kc-base-url $(KC_BASE_URL) \
+	  --kc-host-header $(KC_HOST_HEADER) \
+	  --kc-realm $(KC_REALM) \
+	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --kc-admin-pass $(KC_ADMIN_PASS) \
+	  --dry-run \
+	  --verbose

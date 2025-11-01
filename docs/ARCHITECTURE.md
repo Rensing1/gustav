@@ -11,6 +11,9 @@ Dieses Dokument beschreibt die aktuelle Architektur von GUSTAV (Stand: alpha‑2
 
 ## High‑Level Komponenten
 - Web‑Adapter (`backend/web/`): FastAPI mit serverseitigem Rendern (SSR) und HTMX für progressive Interaktivität. Enthält aktuell Routen, UI‑Komponenten und statische Assets.
+  - HTMX‑Kontrakt (Navigation): Bei HTMX‑Navigation liefern Routen ausschließlich das Haupt‑Fragment (Inhalt von `#main-content`) und genau eine Sidebar als Out‑of‑Band‑Swap (`<aside id="sidebar" hx-swap-oob="true">`). Dadurch bleibt der Toggle‑State stabil und es entstehen keine doppelten Container. Die Hilfsfunktion `_layout_response` kapselt dieses Verhalten.
+  - Auth‑Redirects (HTMX): Für `/auth/login` und `/auth/register` antwortet der Server bei HTMX‑Requests mit `204 No Content` und setzt `HX-Redirect` auf die Ziel‑URL (statt 302). Header: `Cache-Control: private, no-store`, `Vary: HX-Request`.
+  - Unauth‑HTMX (401): Bei fehlender Session antwortet die Middleware mit `401` und `HX-Redirect: /auth/login`. Sicherheit: `Cache-Control: private, no-store` und `Vary: HX-Request` werden gesetzt, um Caching‑Anomalien zu vermeiden.
 - API‑Vertrag (`api/openapi.yml:1`): Quelle der Wahrheit für öffentliche Endpunkte. Tests validieren Verhalten gegen den Vertrag.
 - Datenbank: PostgreSQL via Supabase; Migrationen unter `supabase/migrations/` verwaltet. RLS aktiviert;
   der Teaching‑Kontext nutzt standardmäßig eine Limited‑Role‑DSN (`gustav_limited`).
@@ -51,7 +54,11 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
    - Pfadparameter werden früh validiert; ungültige UUIDs führen zu `400 bad_request` mit `invalid_unit_id`, `invalid_section_id` oder `invalid_task_id`.
    - `criteria`-Einträge müssen nicht-leere Strings sein (`minLength: 1`).
    - `due_at` akzeptiert ISO-8601 mit Zeitzone, inkl. `Z` (UTC), und wird zu `+00:00` normalisiert.
-   - DELETE-Endpunkte liefern `204 No Content` ohne Body.
+  - DELETE-Endpunkte liefern `204 No Content` ohne Body.
+
+## Sicherheits- und Caching‑Leitlinien (Web)
+- Personalisierte SSR‑Antworten (Nutzer im `request.state.user`) setzen standardmäßig `Cache-Control: private, no-store` (siehe `_layout_response`).
+- Auth‑Start und -Register: `Vary: HX-Request` wird gesetzt, um Caches zwischen 204‑HTMX und 302‑Redirect zu unterscheiden.
 
 ## Ordnerstruktur (aktuell)
 - `api/openapi.yml` – API‑Vertrag (Contract‑First)
@@ -81,6 +88,11 @@ Geplante Ergänzungen (separat anlegen, wenn benötigt):
 3) HTMX nutzt Teilaktualisierungen, bleibt aber servergetrieben (kein volles SPA‑Bundle nötig).
 
 Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Adapter/Repo -> Response DTO -> Presenter/View.
+
+### HTMX Sidebar Fragment Contract
+- Vollständige Seitenanfragen (`HX-Request` fehlt) erhalten weiterhin das komplette Dokument inklusive Toggle-Button und Sidebar.
+- HTMX-Navigation (`HX-Request: true`) liefert ausschließlich das `<main id="main-content">`-Fragment und genau ein `<aside id="sidebar" hx-swap-oob="true">`.
+- Der Helper `_layout_response()` in `backend/web/main.py` erzwingt diese Trennung; alle SSR-Routen müssen ihn verwenden, damit der JS-Toggle-Status bestehen bleibt und keine zweite Sidebar gerendert wird.
 
 ### Identity & Auth – vereinfachte Integration (DEV/PROD)
 
@@ -114,6 +126,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 3) IdP → Redirect zu `REDIRECT_URI` (z. B. `http://app.localhost:8100/auth/callback`).
 4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
 5) Web legt Serversession an und setzt `gustav_session` (httpOnly; in DEV SameSite=lax, in PROD strict + Secure).
+6) HTMX-Anfragen (Sidebar-Link) erhalten statt 302 ein `204` mit `HX-Redirect`, damit der Browser trotzdem voll zur IdP-URL navigiert und der PKCE-State bestehen bleibt.
 
 ## API Contract‑First (Vorgehen)
 1) API‑Änderung zuerst im Vertrag: `api/openapi.yml:1`.

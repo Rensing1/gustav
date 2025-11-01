@@ -109,9 +109,9 @@ async def auth_login(request: Request, redirect: str | None = None):
     # the allowed app host (from WEB_BASE or configured redirect_uri).
     current_base = _request_app_base(request).rstrip("/")
     dynamic_redirect_uri = f"{current_base}/auth/callback"
-    import os as _os
+    import os
 
-    allowed_base = (_os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    allowed_base = (os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
     same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
 
     redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
@@ -124,7 +124,11 @@ async def auth_login(request: Request, redirect: str | None = None):
     )
     oidc = OIDCClient(cfg)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
-    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
+    if request.headers.get("HX-Request"):
+        headers["HX-Redirect"] = url
+        return Response(status_code=204, headers=headers)
+    return RedirectResponse(url=url, status_code=302, headers=headers)
 
 
 @auth_router.get("/auth/forgot")
@@ -170,8 +174,8 @@ async def auth_register(request: Request, login_hint: str | None = None):
     # Use dynamic redirect_uri only for allowed hosts, else fallback to configured
     current_base = _request_app_base(request).rstrip("/")
     dynamic_redirect_uri = f"{current_base}/auth/callback"
-    import os as _os
-    allowed_base = (_os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    import os
+    allowed_base = (os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
     same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
     redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
     cfg = OIDCConfig(
@@ -191,7 +195,11 @@ async def auth_register(request: Request, login_hint: str | None = None):
         url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
         sep = '&'
     url = f"{url}{sep}kc_action=register"
-    return RedirectResponse(url=url, status_code=302, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
+    if request.headers.get("HX-Request"):
+        headers["HX-Redirect"] = url
+        return Response(status_code=204, headers=headers)
+    return RedirectResponse(url=url, status_code=302, headers=headers)
 
 
 @auth_router.get("/auth/logout")

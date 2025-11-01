@@ -3172,7 +3172,10 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
 
 class AddMember(BaseModel):
     # Keep optional to return 400 (not FastAPI 422) when missing/empty
+    # Accept both contract key `student_sub` (preferred) and legacy/test key `sub`.
     student_sub: str | None = None
+    sub: str | None = None
+    name: str | None = None  # ignored by API, accepted for compatibility
 
 
 @teaching_router.post("/api/teaching/courses/{course_id}/members")
@@ -3194,7 +3197,8 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    student_sub = getattr(payload, "student_sub", None)
+    # Prefer the contract key; fall back to legacy `sub` for compatibility with older callers/tests.
+    student_sub = getattr(payload, "student_sub", None) or getattr(payload, "sub", None)
     if not isinstance(student_sub, str) or not student_sub.strip():
         return JSONResponse({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
     try:

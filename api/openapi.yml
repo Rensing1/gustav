@@ -737,7 +737,7 @@ components:
           minimum: 1
         kind:
           type: string
-          enum: [text, image]
+          enum: [text, image, file]
         text_body:
           type: string
           nullable: true
@@ -1463,7 +1463,8 @@ paths:
       tags: [Learning]
       summary: Create a new submission for a task within a course
       description: >-
-        Accepts text submissions directly or stores metadata for an already uploaded image.
+        Accepts text submissions directly or stores metadata for an already uploaded
+        image or PDF file.
         Duplicate requests can be avoided using the optional Idempotency-Key header.
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is
@@ -1473,6 +1474,7 @@ paths:
         - cookieAuth: []
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Strict mode: When STRICT_CSRF_SUBMISSIONS=true, Origin or Referer must be present; requests without either are rejected."
         - "RLS: student ownership and course membership enforced via policies and helpers."
       x-permissions:
         requiredRole: student
@@ -1528,6 +1530,26 @@ paths:
                     size_bytes:
                       type: integer
                       minimum: 1
+                      maximum: 10485760
+                    sha256:
+                      type: string
+                      pattern: '^[0-9a-f]{64}$'
+                - type: object
+                  required: [kind, storage_key, mime_type, size_bytes, sha256]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [file]
+                    storage_key:
+                      type: string
+                      minLength: 1
+                    mime_type:
+                      type: string
+                      enum: ['application/pdf']
+                    size_bytes:
+                      type: integer
+                      minimum: 1
+                      maximum: 10485760
                     sha256:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
@@ -1545,7 +1567,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '400':
-          description: Bad request (invalid_input | invalid_image_payload | max_attempts_exceeded | invalid_uuid)
+          description: Bad request (invalid_input | invalid_image_payload | invalid_file_payload | max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -1935,6 +1957,12 @@ paths:
                   $ref: '#/components/schemas/Course'
         '401':
           description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -4186,3 +4214,145 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    StudentUploadIntentRequest:
+      type: object
+      required: [kind, filename, mime_type, size_bytes]
+      properties:
+        kind:
+          type: string
+          enum: [image, file]
+          description: Upload kind for the submission asset.
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        mime_type:
+          type: string
+          description: Expected MIME type (image/jpeg, image/png, application/pdf)
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+          description: Declared file size in bytes (max 10 MiB)
+    StudentUploadIntentResponse:
+      type: object
+      required: [intent_id, storage_key, url, headers, accepted_mime_types, max_size_bytes, expires_at]
+      properties:
+        intent_id:
+          type: string
+          format: uuid
+        storage_key:
+          type: string
+        url:
+          type: string
+          format: uri
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        accepted_mime_types:
+          type: array
+          items:
+            type: string
+        max_size_bytes:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+  /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents:
+    post:
+      tags: [Learning]
+      summary: Create a presigned upload intent for a student submission asset
+      description: >-
+        Returns a short-lived presigned URL to upload an image or PDF asset
+        for a task submission. The client must later call the submissions
+        endpoint with storage metadata (storage_key, mime_type, size_bytes,
+        sha256) to finalize the submission.
+      operationId: createLearningSubmissionUploadIntent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "RLS: course membership and visibility enforced via helpers."
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentUploadIntentRequest'
+      responses:
+        '200':
+          description: Upload intent created
+          headers:
+            Cache-Control:
+              description: Security — private, no-store
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentUploadIntentResponse'
+        '400':
+          description: Bad request (invalid_input | mime_not_allowed | size_exceeded | invalid_uuid)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (not enrolled or CSRF check failed)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or task not found, or not released to the student
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Storage unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

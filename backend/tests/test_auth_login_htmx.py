@@ -34,7 +34,7 @@ def make_auth_only_app() -> FastAPI:
     return app
 
 
-def install_main_stub(cfg: OIDCConfig) -> ModuleType:
+def install_main_stub(cfg: OIDCConfig, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Install a stub 'main' module to satisfy routes.auth late import.
 
     Provides OIDC_CFG and STATE_STORE compatible with production main.py.
@@ -47,7 +47,8 @@ def install_main_stub(cfg: OIDCConfig) -> ModuleType:
     class _Settings:
         environment = "dev"
     stub.SETTINGS = _Settings()
-    sys.modules["main"] = stub
+    # Install stub in sys.modules in a reversible way
+    monkeypatch.setitem(sys.modules, "main", stub)
     return stub
 
 
@@ -63,7 +64,7 @@ async def test_login_htmx_sets_hx_redirect_and_keeps_state(monkeypatch: pytest.M
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    stub = install_main_stub(cfg)
+    stub = install_main_stub(cfg, monkeypatch)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     # Ensure the store starts empty for assertion clarity
@@ -107,7 +108,7 @@ async def test_register_htmx_sets_hx_redirect(monkeypatch: pytest.MonkeyPatch):
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg)
+    install_main_stub(cfg, monkeypatch)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     test_app = make_auth_only_app()
@@ -135,7 +136,7 @@ async def test_login_dynamic_redirect_host_guard(monkeypatch: pytest.MonkeyPatch
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg)
+    install_main_stub(cfg, monkeypatch)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     test_app = make_auth_only_app()

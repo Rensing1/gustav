@@ -1,6 +1,39 @@
 # Changelog
 
 ## Unreleased
+### Security
+- mask(import): DSN is no longer logged or persisted in migration reports; prevents credential leakage.
+- csrf(submissions): In production, POST /submissions always requires Origin/Referer (strict same-origin), independent of STRICT_CSRF_SUBMISSIONS.
+
+### API
+- openapi(learning): Document 404 for POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents (task not found/not released).
+
+### Tests
+- add(learning): Idempotency-Key header regex negative/positive tests.
+- add(learning): Production CSRF strictness test for /submissions.
+- security(api/learning): Upload-Intents verlangen nun zwingend `Origin`/`Referer` (strict same-origin). Fehlende Header führen zu 403 `detail=csrf_violation`.
+- security(api/learning): Submissions unterstützen optional strikte CSRF-Policy: `STRICT_CSRF_SUBMISSIONS=true` verlangt `Origin`/`Referer` (ohne Header → 403 `csrf_violation`). Dev-Default bleibt tolerant.
+ - security(api/learning): Optionale Integritätsprüfung bei Abgaben (Größe + sha256) gegen `STORAGE_VERIFY_ROOT`; erzwingbar via `REQUIRE_STORAGE_VERIFY=true`.
+ - openapi(learning): 400-Fehler für Abgaben dokumentieren zusätzlich `invalid_file_payload`; Upload-Intents 400/401/403 enthalten Cache/Vary-Header.
+- security(api/learning): Upload‑Intent prüft Kurs‑Mitgliedschaft und Task‑Sichtbarkeit (403/404) und setzt `detail=csrf_violation` bei CSRF.
+- openapi(learning): 403 Forbidden für Upload‑Intent dokumentiert.
+- consistency(learning): Feedback‑Text für PDF‑Abgaben („PDF submission received.“).
+ - security(web/ssr): Enforce same-origin on student submit route; respond 403 with private, no-store and Vary: Origin.
+ - security(api/learning): Add Vary: Origin to Learning responses; shorten upload-intent TTL to 10 minutes.
+ - repo(migration): Remove committed legacy DB dump; add .gitignore rules for dumps under docs/migration/.
+ - tests(learning): Add 401/403 cases for upload-intents; add SSR CSRF guard test for submit route.
+- ui(learning): Ersetzt Radiogruppe (Text/Bild/Datei) durch Choice Cards mit zwei Optionen „Text“ und „Upload“; Upload akzeptiert JPG/PNG/PDF (bis 10 MB). Kein Preview, klarer Erfolgshinweis.
+- web(learning): PRG nach Abgabe enthält `open_attempt_id`; Unit‑Seite und History‑Fragment öffnen deterministisch genau diesen Versuch (Fallback: neuester).
+- tests(learning/ui): UI‑Tests auf Choice Cards und `mode=upload` angepasst; neuer Test prüft `open_attempt_id` in der PRG‑Weiterleitung.
+- api(learning): Support PDF submissions (`kind=file`) with strict validation (MIME `application/pdf`, size ≤ 10 MiB, sha256, storage_key). Add POST `/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents` (same‑origin) to presign client uploads (dev stub).
+- openapi(learning): Extend `LearningSubmission.kind` with `file`; document PDF constraints. Add `StudentUploadIntent{Request,Response}` schemas and the `POST /upload-intents` path.
+- ui(learning): SSR Task‑Formular mit Umschalter (Text/Bild/PDF). Neues `learning_upload.js` für Toggle, Upload‑Intent, PUT‑Upload und Ausfüllen der Hidden‑Felder. PRG zurück mit Erfolgshinweis; keine Bild‑/PDF‑Vorschau.
+- ui(learning): Aufgaben‑Historie lazy‑load via HTMX‑Platzhalter pro Task; beim PRG wird die Historie serverseitig vorab geladen und der neueste Eintrag geöffnet. Korrigierte Attributreihenfolge im `<details>`‑Tag (`open` vor `class`).
+- repo(learning): Fallback‑Analyse für Legacy‑Submissions ohne `analysis_json`: nutzt `text_body` (Text) bzw. Platzhalter („OCR…“/„PDF…“) für Bild/PDF, damit die Historie stets sinnvollen Text anzeigt.
+- db(migration): `learning_submissions.kind` um `file` erweitert; Größen‑Constraint `size_bytes` ≤ 10 MiB ergänzt.
+- api(teaching): Mitglieder‑Endpoint akzeptiert neben `student_sub` nun auch Legacy‑Schlüssel `sub` (Kompatibilität) — Ownership/RLS unverändert.
+- tests(learning): Upload‑Intent‑Verhalten (image/PDF), PDF‑Submission (happy/whitelist), UI‑Tests für Lazy‑Loader und Fallback‑Text in Historie.
+- tests(auth): Stubs für `main` via `monkeypatch` in `sys.modules`, um Leaks zwischen Tests zu vermeiden.
 - security(ops): Add startup guard to prevent dummy/unset SUPABASE_SERVICE_ROLE_KEY and `sslmode=disable` in production.
  - security(ops): Enforce HTTPS for `KC_BASE_URL`/`KC_PUBLIC_BASE_URL` in prod/stage (startup guard aborts on http).
  - docs(openapi): Document `/health` endpoint (no auth, no-store cache header).

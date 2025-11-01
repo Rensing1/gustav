@@ -17,6 +17,8 @@ help:
 	@echo "  test               - Run test suite (unit/integration)"
 	@echo "  test-e2e           - Run E2E tests (requires running services)"
 	@echo "  supabase-status    - Show local Supabase status"
+	@echo "  import-legacy      - Import legacy Supabase dump with Keycloak mapping"
+	@echo "  import-legacy-dry  - Dry-run for the legacy import (no writes)"
 
 .PHONY: up
 up:
@@ -31,7 +33,6 @@ db-login-user:
 	@echo "Creating/ensuring role $(APP_DB_USER) IN ROLE gustav_limited ..."
 	@APP_DB_USER=$(APP_DB_USER) APP_DB_PASSWORD=$(APP_DB_PASSWORD) \
 		PGPASSWORD=$(DB_SUPERPASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_SUPERUSER) -d postgres -v ON_ERROR_STOP=1 \
-		-v app_user="$(APP_DB_USER)" -v app_pass="$(APP_DB_PASSWORD)" \
 		-f scripts/dev/create_login_user.sql >/dev/null
 	@echo "Done. Example DSN: postgresql://$(APP_DB_USER):<secret>@$(DB_HOST):$(DB_PORT)/postgres"
 
@@ -46,3 +47,47 @@ test-e2e:
 .PHONY: supabase-status
 supabase-status:
 	supabase status
+
+# --- Legacy data import shortcuts -------------------------------------------
+# Defaults (overridable):
+DUMP ?= docs/migration/supabase_backup_20251101_103457.tar.gz
+DSN ?= postgresql://postgres:postgres@127.0.0.1:54322/postgres
+LEGACY_SCHEMA ?= legacy_raw
+WORKDIR ?= .tmp/migration_run
+
+KC_BASE_URL ?= http://127.0.0.1:8100
+KC_HOST_HEADER ?= id.localhost
+KC_REALM ?= gustav
+KC_ADMIN_USER ?= admin
+KC_ADMIN_PASS ?= admin
+
+.PHONY: import-legacy
+import-legacy:
+	. ./.venv/bin/activate; \
+	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	python scripts/import_legacy_backup.py \
+	  --dump $(DUMP) \
+	  --dsn $(DSN) \
+	  --legacy-schema $(LEGACY_SCHEMA) \
+	  --workdir $(WORKDIR) \
+	  --kc-base-url $(KC_BASE_URL) \
+	  --kc-host-header $(KC_HOST_HEADER) \
+	  --kc-realm $(KC_REALM) \
+	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --verbose
+
+.PHONY: import-legacy-dry
+import-legacy-dry:
+	. ./.venv/bin/activate; \
+	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	python scripts/import_legacy_backup.py \
+	  --dump $(DUMP) \
+	  --dsn $(DSN) \
+	  --legacy-schema $(LEGACY_SCHEMA) \
+	  --workdir $(WORKDIR) \
+	  --kc-base-url $(KC_BASE_URL) \
+	  --kc-host-header $(KC_HOST_HEADER) \
+	  --kc-realm $(KC_REALM) \
+	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --dry-run \
+	  --verbose

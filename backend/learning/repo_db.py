@@ -712,9 +712,24 @@ class DBLearningRepo:
         sha256: Optional[str],
         criteria: Sequence[str],
     ) -> dict:
-        """Produce the synchronous analysis stub used until ML integration."""
+        """Produce the synchronous analysis stub used until ML integration.
+
+        Why:
+            MVP returns immediate formative feedback to help Lernende reflektieren,
+            bevor echte Modelle (OCR, Scoring) angeschlossen werden. Wir liefern
+            deterministische, leicht nachvollziehbare Inhalte:
+            - text: Originaltext (getrimmt)
+            - image: "OCR placeholder for <basename|hash>"
+            - file (PDF): "PDF text placeholder for <basename|hash>"
+
+        Security:
+            Keine Dateiinhalte werden zurückgegeben; nur Platzhaltertexte.
+        """
         if kind == "text":
             text = (text_body or "").strip()
+        elif kind == "file":
+            # MVP: show placeholder that mimics extracted PDF text for history
+            text = self._pdf_text_stub(storage_key, sha256)
         else:
             text = self._image_text_stub(storage_key, sha256)
         length = len(text)
@@ -756,13 +771,50 @@ class DBLearningRepo:
         return f"OCR placeholder for {token}"
 
     @staticmethod
+    def _pdf_text_stub(storage_key: Optional[str], sha256: Optional[str]) -> str:
+        """Produce a stable placeholder for PDF-derived text.
+
+        Intention: In der Historie zeigen wir den extrahierten Text (später OCR),
+        jetzt ein Platzhalter mit Dateinamen/Hash für Lernzwecke.
+        """
+        if storage_key:
+            token = storage_key.split("/")[-1]
+        elif sha256:
+            token = sha256[:12]
+        else:
+            token = "document.pdf"
+        return f"PDF text placeholder for {token}"
+
+    @staticmethod
     def _row_to_submission(row: Iterable[Any]) -> dict:
+        """Map a DB row to an API submission dict with safe fallbacks.
+
+        Why:
+            Historical records may have a null/empty `analysis_json`. For
+            learnability, we synthesize a minimal analysis payload so the UI
+            can always display a meaningful text snippet in the history.
+        """
         analysis = row[9]
         if isinstance(analysis, str):
             try:
                 analysis = json.loads(analysis)
             except Exception:  # pragma: no cover - defensive
                 pass
+        # Synthesize fallback analysis text when missing/empty
+        kind = row[2]
+        text_body = row[3]
+        storage_key = row[6]
+        sha256 = row[7]
+        if not isinstance(analysis, dict):
+            analysis = {}
+        existing_text = str((analysis.get("text") if isinstance(analysis, dict) else "") or "")
+        if not existing_text.strip():
+            if kind == "text":
+                analysis["text"] = (text_body or "").strip()
+            elif kind == "file":
+                analysis["text"] = DBLearningRepo._pdf_text_stub(storage_key, sha256)
+            else:
+                analysis["text"] = DBLearningRepo._image_text_stub(storage_key, sha256)
         return {
             "id": row[0],
             "attempt_nr": int(row[1]),

@@ -19,6 +19,7 @@ from components import (
     SectionCreateForm,
     MaterialCard,
     TaskCard,
+    HistoryEntry,
 )
 from components.markdown import render_markdown_safe
 from components.forms.unit_edit_form import UnitEditForm
@@ -595,6 +596,8 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
         return RedirectResponse(url=f"/learning/courses/{course_id}", status_code=303)
     unit_title = "Lerneinheit"
     sections: list[dict] = []
+    show_history_for = request.query_params.get("show_history_for") or ""
+    success_banner = request.query_params.get("ok") == "submitted"
     try:
         import httpx
         from httpx import ASGITransport
@@ -679,7 +682,90 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             title = str(t.get("title") or "Aufgabe")
             # Instruction text also benefits from Markdown (e.g., emphasis)
             instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
-            tcard = TaskCard(task_id=tid, title=title, instruction_html=instruction_html)
+            # Build form HTML with toggle (text/image/file). Default: text.
+            form_action = f"/learning/courses/{course_id}/tasks/{tid}/submit"
+            form_html = (
+                f'<form method="post" action="{form_action}" class="task-submit-form" '
+                f'data-course-id="{Component.escape(course_id)}" data-task-id="{Component.escape(tid)}">'
+                f'<input type="hidden" name="unit_id" value="{Component.escape(unit_id)}">'
+                '<fieldset class="segmented-control" aria-label="Abgabeart">'
+                '<label><input type="radio" name="mode" value="text" checked> Text</label>'
+                '<label><input type="radio" name="mode" value="image"> Bild</label>'
+                '<label><input type="radio" name="mode" value="file"> Dokument (PDF)</label>'
+                '</fieldset>'
+                # Text fields (default visible)
+                '<div class="task-form-fields fields-text">'
+                '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000" required></textarea></label>'
+                '</div>'
+                # Image upload fields (hidden by default; shown via JS)
+                '<div class="task-form-fields fields-image" hidden>'
+                '<label>Bild auswählen <input type="file" name="image_file" accept="image/png,image/jpeg"></label>'
+                '<p class="text-muted">Erlaubt: PNG/JPEG, max. 10&nbsp;MiB</p>'
+                '<input type="hidden" name="storage_key" value="">'
+                '<input type="hidden" name="mime_type" value="">'
+                '<input type="hidden" name="size_bytes" value="">'
+                '<input type="hidden" name="sha256" value="">'
+                '</div>'
+                # PDF upload fields (hidden by default; shown via JS)
+                '<div class="task-form-fields fields-file" hidden>'
+                '<label>PDF auswählen <input type="file" name="doc_file" accept="application/pdf"></label>'
+                '<p class="text-muted">Nur PDF, max. 10&nbsp;MiB</p>'
+                '<input type="hidden" name="storage_key" value="">'
+                '<input type="hidden" name="mime_type" value="">'
+                '<input type="hidden" name="size_bytes" value="">'
+                '<input type="hidden" name="sha256" value="">'
+                '</div>'
+                '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
+                '</form>'
+            )
+
+            # Optionally load submission history for this task only (latest open)
+            history_entries = []
+            history_placeholder_html = ''
+            if show_history_for and show_history_for == tid:
+                try:
+                    import httpx
+                    from httpx import ASGITransport
+                    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                        sid = _get_session_id(request) or ""
+                        if sid:
+                            client.cookies.set(SESSION_COOKIE_NAME, sid)
+                        r_hist = await client.get(
+                            f"/api/learning/courses/{course_id}/tasks/{tid}/submissions",
+                            params={"limit": 10, "offset": 0},
+                        )
+                        if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
+                            records = r_hist.json()
+                            for index, rec in enumerate(records):
+                                label = f"Versuch #{rec.get('attempt_nr','')}"
+                                ts = str(rec.get("created_at") or "")
+                                analysis = (rec.get("analysis_json") or {}) if isinstance(rec, dict) else {}
+                                text = Component.escape(str(analysis.get("text") or ""))
+                                content_html = f'<div class="analysis-text">{text}</div>'
+                                history_entries.append(HistoryEntry(label=label, timestamp=ts, content_html=content_html, expanded=(index == 0)))
+                except Exception:
+                    history_entries = []
+            else:
+                # Lazy-load the history via HTMX; we include a placeholder section
+                # that fetches and swaps itself on load.
+                history_placeholder_html = (
+                    f'<section class="task-panel__history" '
+                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+                    f'hx-trigger="load" hx-target="this" hx-swap="outerHTML">'
+                    f'<div class="text-muted">Lade Verlauf …</div>'
+                    f'</section>'
+                )
+
+            banner_html = '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>' if (success_banner and show_history_for == tid) else None
+            tcard = TaskCard(
+                task_id=tid,
+                title=title,
+                instruction_html=instruction_html,
+                history_entries=history_entries,
+                history_placeholder_html=history_placeholder_html,
+                feedback_banner_html=banner_html,
+                form_html=form_html,
+            )
             parts.append(tcard.render())
         # Separator between sections, but not after the last group
         if idx < len(sections) - 1:
@@ -695,6 +781,146 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     )
     layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/learning/courses/{course_id}/tasks/{task_id}/submit", response_class=HTMLResponse)
+async def learning_submit_task(request: Request, course_id: str, task_id: str):
+    """Handle student form submission and PRG back to the unit page.
+
+    Why:
+        Students submit solutions directly from the unit page. This SSR route
+        collects minimal form fields and forwards them to the Learning API,
+        keeping the web layer thin and framework-agnostic at the domain level.
+
+    Behavior:
+        - Supports mode=text (textarea) and mode=image|file (uploaded asset
+          metadata: storage_key, mime_type, size_bytes, sha256). The SSR form
+          is progressively enhanced by JS which performs the upload first and
+          then fills hidden fields; tests may submit those fields directly.
+        - Sends a short Idempotency-Key to the API to guard against double
+          clicks.
+        - PRG (Post-Redirect-Get) back to the unit page with a success banner
+          and the newest history entry expanded.
+
+    Permissions:
+        Caller must be a student and a course member; API enforces RLS and
+        visibility. Same-origin protection is applied at the API boundary.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    mode = str(form.get("mode") or "text").strip()
+    unit_id = str(form.get("unit_id") or "").strip()
+    text_body = str(form.get("text_body") or "")
+    # Prepare payload for text/image/file
+    if mode == "text":
+        payload = {"kind": "text", "text_body": text_body}
+    elif mode in ("image", "file"):
+        # For uploads, the client (Phase B JS) prepares these fields after the
+        # actual file transfer (Upload Intent + PUT). Tests provide them via
+        # form POST directly to exercise API validation without JS.
+        storage_key = str(form.get("storage_key") or "").strip()
+        mime_type = str(form.get("mime_type") or "").strip()
+        try:
+            size_bytes = int(str(form.get("size_bytes") or "0"))
+        except Exception:
+            size_bytes = 0
+        sha256 = str(form.get("sha256") or "").strip()
+        payload = {
+            "kind": mode,
+            "storage_key": storage_key,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "sha256": sha256,
+        }
+    else:
+        # Fallback to text for unknown modes
+        payload = {"kind": "text", "text_body": text_body}
+    # Call internal API
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = _get_session_id(request)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            headers = {"Idempotency-Key": f"ui-{uuid.uuid4().hex[:16]}"}
+            # Delegate to the Learning API to enforce RLS, membership,
+            # visibility and attempt limits.
+            await client.post(
+                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                json=payload,
+                headers=headers,
+            )
+    except Exception:
+        pass
+    # Resolve unit_id from API if not provided (robustness for direct POST tests)
+    if not unit_id:
+        try:
+            import httpx
+            from httpx import ASGITransport
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                sid2 = _get_session_id(request)
+                if sid2:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid2)
+                r_sections = await client.get(
+                    f"/api/learning/courses/{course_id}/sections",
+                    params={"include": "tasks", "limit": 100, "offset": 0},
+                )
+                if r_sections.status_code == 200 and isinstance(r_sections.json(), list):
+                    for entry in r_sections.json():
+                        sec = entry.get("section", {}) if isinstance(entry, dict) else {}
+                        for task in (entry.get("tasks") or []):
+                            if str(task.get("id")) == str(task_id):
+                                unit_id = str(sec.get("unit_id") or "")
+                                break
+                        if unit_id:
+                            break
+        except Exception:
+            pass
+    # PRG to the unit page with a success banner and history focused on task_id
+    loc = f"/learning/courses/{course_id}/units/{unit_id}?ok=submitted&show_history_for={task_id}"
+    return RedirectResponse(url=loc, status_code=303)
+
+
+@app.get("/learning/courses/{course_id}/tasks/{task_id}/history", response_class=HTMLResponse)
+async def learning_task_history_fragment(request: Request, course_id: str, task_id: str):
+    """Return HTML fragment with the student's submission history for a task.
+
+    Used by HTMX to lazy-load the history section of a TaskCard.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return HTMLResponse("", status_code=403)
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = _get_session_id(request)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions", params={"limit": 10, "offset": 0})
+            items = r.json() if r.status_code == 200 else []
+    except Exception:
+        items = []
+    # Build minimal fragment matching TaskCard._render_history structure
+    entries_html: list[str] = []
+    for index, rec in enumerate(items):
+        label = f"Versuch #{rec.get('attempt_nr','')}"
+        ts = Component.escape(str(rec.get("created_at") or ""))
+        analysis = rec.get("analysis_json") or {}
+        text = Component.escape(str(analysis.get("text") or ""))
+        open_attr = " open" if index == 0 else ""
+        # Keep `open` attribute before class to match test selector expectations
+        entries_html.append(
+            f'<details{open_attr} class="task-panel__history-entry"><summary class="task-panel__history-summary">'
+            f'<span class="task-panel__history-label">{Component.escape(label)}</span>'
+            f'<span class="task-panel__history-timestamp">{ts}</span>'
+            f"</summary><div class=\"task-panel__history-body\"><div class=\"analysis-text\">{text}</div></div></details>"
+        )
+    html = '<section class="task-panel__history">' + "".join(entries_html) + "</section>"
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)
 async def courses_edit_submit(request: Request, course_id: str):

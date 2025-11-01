@@ -42,6 +42,11 @@ STORAGE_KEY_RE = re.compile(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}")
 
 # Whitelist for image MIME types accepted by the submissions endpoint.
 ALLOWED_IMAGE_MIME: set[str] = {"image/jpeg", "image/png"}
+# Allow PDF as document submission type in MVP.
+# Rationale: Simpler security model (no macro-enabled formats) and reliable preview pipeline.
+ALLOWED_FILE_MIME: set[str] = {"application/pdf"}
+# Upper bound for binary submissions (defense-in-depth; API also constrains contractually).
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB
 
 
 def _cache_headers_success() -> dict[str, str]:
@@ -321,10 +326,26 @@ async def list_unit_sections(
 
 
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Validate and normalize the submission payload (text/image/file).
+
+    Why:
+        Keep FastAPI layer thin, but ensure inputs are sane before invoking
+        use cases/repo and touching the database. Enforces MIME allowlists,
+        size bounds, and storage key/sha256 formats. Error detail strings match
+        the OpenAPI contract for precise client handling.
+
+    Returns:
+        (kind, clean_payload) where kind in {text,image,file} and
+        clean_payload contains the normalized fields for the given kind.
+
+    Errors:
+        Raises ValueError with one of: 'invalid_input', 'invalid_image_payload',
+        'invalid_file_payload'.
+    """
     if not isinstance(payload, dict):
         raise ValueError("invalid_input")
     kind = payload.get("kind")
-    if kind not in ("text", "image"):
+    if kind not in ("text", "image", "file"):
         raise ValueError("invalid_input")
     if kind == "text":
         text_body = payload.get("text_body")
@@ -335,7 +356,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         if len(text_body) > 10_000:
             raise ValueError("invalid_input")
         return kind, {"text_body": text_body.strip()}
-    else:
+    elif kind == "image":
         # Image submissions require finalized storage metadata
         required = {"storage_key", "mime_type", "size_bytes", "sha256"}
         if not required.issubset(payload.keys()):
@@ -345,7 +366,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
             size_int = int(size_bytes)
         except (TypeError, ValueError):
             raise ValueError("invalid_image_payload") from None
-        if size_int <= 0:
+        if size_int <= 0 or size_int > MAX_UPLOAD_BYTES:
             raise ValueError("invalid_image_payload")
         mime_type = payload.get("mime_type")
         if not isinstance(mime_type, str) or not mime_type:
@@ -367,6 +388,40 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         sha256_normalized = sha256.strip().lower()
         if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
             raise ValueError("invalid_image_payload")
+        return kind, {
+            "storage_key": storage_key,
+            "mime_type": mime_type,
+            "size_bytes": size_int,
+            "sha256": sha256_normalized,
+        }
+    else:  # kind == "file"
+        # PDF submissions (MVP) with finalized storage metadata
+        required = {"storage_key", "mime_type", "size_bytes", "sha256"}
+        if not required.issubset(payload.keys()):
+            raise ValueError("invalid_file_payload")
+        size_bytes = payload.get("size_bytes")
+        try:
+            size_int = int(size_bytes)
+        except (TypeError, ValueError):
+            raise ValueError("invalid_file_payload") from None
+        if size_int <= 0 or size_int > MAX_UPLOAD_BYTES:
+            raise ValueError("invalid_file_payload")
+        mime_type = payload.get("mime_type")
+        if not isinstance(mime_type, str) or not mime_type:
+            raise ValueError("invalid_file_payload")
+        if mime_type not in ALLOWED_FILE_MIME:
+            raise ValueError("invalid_file_payload")
+        storage_key = payload.get("storage_key")
+        if not isinstance(storage_key, str) or not storage_key:
+            raise ValueError("invalid_file_payload")
+        if not STORAGE_KEY_RE.fullmatch(storage_key):
+            raise ValueError("invalid_file_payload")
+        sha256 = payload.get("sha256")
+        if not isinstance(sha256, str):
+            raise ValueError("invalid_file_payload")
+        sha256_normalized = sha256.strip().lower()
+        if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
+            raise ValueError("invalid_file_payload")
         return kind, {
             "storage_key": storage_key,
             "mime_type": mime_type,
@@ -454,6 +509,98 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
 
     return JSONResponse(submission, status_code=201, headers=_cache_headers_success())
 
+
+@learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents")
+async def create_upload_intent(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
+    """Create a short-lived upload intent for a submission asset (image/PDF).
+
+    Why:
+        Client-side uploads avoid sending large binaries through our API server.
+        We return a presigned target (stub in dev) and storage_key metadata;
+        the client PUTs the file there, then submits the finalized metadata via
+        the standard submissions endpoint.
+
+    Parameters:
+        request: FastAPI request with the caller's session.
+        course_id: UUID string of the course context (path).
+        task_id: UUID string of the task (path).
+        payload: JSON object with keys:
+            - kind: "image" | "file" (PDF)
+            - filename: original filename for intent construction
+            - mime_type: declared content-type (validated against allowlist)
+            - size_bytes: integer size of the upload in bytes (≤ 10 MiB)
+
+    Returns:
+        200 JSON with fields: intent_id, storage_key, url, headers,
+        accepted_mime_types, max_size_bytes, expires_at. Clients must still
+        finish by POSTing to /submissions with storage metadata and sha256.
+
+    Security:
+        Same-origin required. Caller must have role "student". In the MVP,
+        membership/visibility checks are enforced when creating the submission
+        (defense at the DB boundary, RLS). We may move guards earlier later.
+    """
+    user, error = _require_student(request)
+    if error:
+        return error
+    if not _is_same_origin(request):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+
+    # Basic path validation
+    try:
+        UUID(course_id)
+        UUID(task_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    # Input validation
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+    kind = payload.get("kind")
+    filename = str(payload.get("filename") or "").strip()
+    mime_type = str(payload.get("mime_type") or "").strip()
+    size_bytes = payload.get("size_bytes")
+    try:
+        size_int = int(size_bytes)
+    except Exception:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+    if not filename or len(filename) > 255:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+    if size_int <= 0 or size_int > MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "bad_request", "detail": "size_exceeded"}, status_code=400, headers=_cache_headers_error())
+    if kind == "image":
+        if mime_type not in ALLOWED_IMAGE_MIME:
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        accepted = sorted(list(ALLOWED_IMAGE_MIME))
+    elif kind == "file":
+        if mime_type not in ALLOWED_FILE_MIME:
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        accepted = sorted(list(ALLOWED_FILE_MIME))
+    else:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+
+    # Build a storage key (lowercase path, no traversal) — the value is later
+    # validated again at submission time with a strict regex.
+    import time as _time
+    from uuid import uuid4 as _uuid4
+    student_sub = str(user.get("sub", "student")).lower()
+    ts = int(_time.time())
+    ext = ".png" if mime_type == "image/png" else (".jpg" if mime_type == "image/jpeg" else ".pdf")
+    storage_key = f"submissions/{course_id}/{task_id}/{student_sub}/{ts}-{_uuid4().hex}{ext}"
+    if not STORAGE_KEY_RE.fullmatch(storage_key):
+        storage_key = f"submissions/{_uuid4().hex}{ext}"
+
+    # Stub presigned URL (adapter optional in MVP)
+    intent = {
+        "intent_id": str(_uuid4()),
+        "storage_key": storage_key,
+        "url": "http://upload.local/stub",
+        "headers": {"Content-Type": mime_type},
+        "accepted_mime_types": accepted,
+        "max_size_bytes": MAX_UPLOAD_BYTES,
+        "expires_at": "2099-12-31T23:59:59+00:00",
+    }
+    return JSONResponse(intent, status_code=200, headers=_cache_headers_success())
 
 @learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
 async def list_submissions(

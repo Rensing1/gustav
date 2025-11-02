@@ -268,6 +268,7 @@ components:
           description: Target visibility state for the section within the course module.
     TeachingModuleSection:
       type: object
+      additionalProperties: false
       description: Section of a unit as seen in a specific course module, enriched with visibility state.
       required: [id, unit_id, title, position, visible]
       properties:
@@ -290,6 +291,7 @@ components:
           description: Whether this section is currently released for students of the course.
         released_at:
           type: string
+          format: date-time
           nullable: true
           description: RFC3339 UTC timestamp when last released; null when hidden.
     Material:
@@ -826,6 +828,7 @@ components:
                 explanation: "Stubbed analysis."
     TeachingLatestSubmission:
       type: object
+      additionalProperties: false
       required: [id, task_id, student_sub, created_at, kind]
       properties:
         id:
@@ -4734,6 +4737,9 @@ paths:
                 $ref: '#/components/schemas/TeachingLatestSubmission'
         '204':
           description: No submission found
+          headers:
+            Cache-Control: { schema: { type: string, example: 'private, no-store' } }
+            Vary: { schema: { type: string, example: 'Origin' } }
         '400':
           description: Invalid identifiers
           content:

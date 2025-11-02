@@ -240,3 +240,9 @@
   - Migration: `courses`, `course_memberships`, `pgcrypto`, `updated_at`‑Trigger, RLS
   - DB‑Repo (psycopg3) implementiert; Router standardmäßig DB bzw. Fallback In‑Memory in Tests
   - Tests: API‑Coverage und optionaler Repo‑Test (skip bei fehlender DB)
+- 2025-11-02 — Security hardening for Teaching Live detail
+  - Enforce strict task∈unit∈course checks in latest submission detail endpoint (owner-only)
+  - Remove unsafe DB fallback; rely on SECURITY DEFINER helper only
+  - Update helper signature to include unit_id and validate relation in SQL
+  - OpenAPI: add date-time format for TeachingModuleSection.released_at; set additionalProperties: false; 204 headers
+  - Makefile: silence legacy import commands to avoid logging secrets

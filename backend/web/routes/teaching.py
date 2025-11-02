@@ -3901,7 +3901,7 @@ async def get_latest_submission_detail(
             return guard
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
-    # Best-effort verification that unit and task relate to the course
+    # Strict verification that task belongs to unit and unit is attached to course
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         modules = []
@@ -3927,19 +3927,35 @@ async def get_latest_submission_detail(
                 with psycopg.connect(dsn) as conn:
                     with conn.cursor() as cur:
                         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                        # Enforce task ∈ unit via explicit relation check (DB)
+                        cur.execute(
+                            """
+                            select 1
+                              from public.unit_tasks t
+                              join public.unit_sections s on s.id = t.section_id
+                              join public.course_modules m on m.unit_id = s.unit_id
+                             where m.course_id = %s
+                               and s.unit_id = %s::uuid
+                               and t.id = %s::uuid
+                             limit 1
+                            """,
+                            (course_id, unit_id, task_id),
+                        )
+                        if cur.fetchone() is None:
+                            return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
                         helper_ok = True
                         try:
                             cur.execute(
                                 """
                                 select id::text, task_id::text, student_sub::text, created_at, completed_at, kind, text_body, mime_type, size_bytes, storage_key
-                                  from public.get_latest_submission_for_owner(%s, %s, %s, %s)
+                                  from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s)
                                 """,
-                                (sub, course_id, task_id, student_sub),
+                                (sub, course_id, unit_id, task_id, student_sub),
                             )
                         except Exception as exc:
                             logger.warning("latest submission helper unavailable — %s", exc)
                             helper_ok = False
-                            # Fallback to direct read (may be blocked by RLS for teachers)
+                            # Safe fallback under RLS with strict relation + owner scope
                             cur.execute(
                                 """
                                 select id::text, task_id::text, student_sub::text, created_at, completed_at, kind, text_body, mime_type, size_bytes, storage_key

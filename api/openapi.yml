@@ -266,6 +266,32 @@ components:
         visible:
           type: boolean
           description: Target visibility state for the section within the course module.
+    TeachingModuleSection:
+      type: object
+      description: Section of a unit as seen in a specific course module, enriched with visibility state.
+      required: [id, unit_id, title, position, visible]
+      properties:
+        id:
+          type: string
+          format: uuid
+        unit_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        position:
+          type: integer
+          minimum: 1
+          description: 1-based ordering within the learning unit
+        visible:
+          type: boolean
+          description: Whether this section is currently released for students of the course.
+        released_at:
+          type: string
+          nullable: true
+          description: RFC3339 UTC timestamp when last released; null when hidden.
     Material:
       type: object
       required: [id, unit_id, section_id, title, body_md, position, kind, created_at, updated_at]
@@ -798,16 +824,18 @@ components:
               - criterion: "Graph korrekt"
                 score: 8
                 explanation: "Stubbed analysis."
-              - criterion: "Steigung erläutert"
-                score: 9
-                explanation: "Stubbed analysis."
-        feedback:
+    TeachingLatestSubmission:
+      type: object
+      required: [id, task_id, student_sub, created_at, kind]
+      properties:
+        id:
           type: string
-          nullable: true
-          description: Human-readable formative feedback for the learner.
-        error_code:
+          format: uuid
+        task_id:
           type: string
-          nullable: true
+          format: uuid
+        student_sub:
+          type: string
         created_at:
           type: string
           format: date-time
@@ -815,6 +843,22 @@ components:
           type: string
           format: date-time
           nullable: true
+        kind:
+          type: string
+          enum: [text, image, pdf, file]
+        text_body:
+          type: string
+          description: Optional; may be truncated to protect bandwidth.
+          nullable: true
+        files:
+          type: array
+          items:
+            type: object
+            required: [mime, size, url]
+            properties:
+              mime: { type: string }
+              size: { type: integer }
+              url: { type: string, format: uri }
 
     LearningCourse:
       type: object
@@ -849,6 +893,62 @@ components:
         summary:
           type: string
           nullable: true
+
+    # Teaching — Live unit view (teacher-only)
+    TeachingStudentRef:
+      type: object
+      required: [sub, name]
+      additionalProperties: false
+      properties:
+        sub:
+          type: string
+          description: Subject identifier (OIDC sub) of the student
+        name:
+          type: string
+          description: Display name for teacher-facing views
+    TeachingUnitTaskCell:
+      type: object
+      required: [task_id, has_submission]
+      additionalProperties: false
+      properties:
+        task_id:
+          type: string
+          format: uuid
+          description: Task identifier within the unit
+        has_submission:
+          type: boolean
+          description: True if at least one submission exists for this student and task
+    TeachingUnitLiveRow:
+      type: object
+      required: [student, tasks]
+      additionalProperties: false
+      properties:
+        student:
+          $ref: '#/components/schemas/TeachingStudentRef'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeachingUnitTaskCell'
+    TeachingUnitDeltaCell:
+      type: object
+      description: Single cell change in the live overview matrix.
+      required: [student_sub, task_id, has_submission, changed_at]
+      additionalProperties: false
+      properties:
+        student_sub:
+          type: string
+          description: Student identifier (OIDC sub).
+        task_id:
+          type: string
+          format: uuid
+          description: Task identifier within the unit.
+        has_submission:
+          type: boolean
+          description: True if at least one submission exists after the change; false when none exist.
+        changed_at:
+          type: string
+          format: date-time
+          description: Timestamp (ISO8601 UTC) of the most recent submission status change.
 
 paths:
   /health:
@@ -1319,42 +1419,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /api/teaching/courses/{course_id}/modules/{module_id}/sections:
+    get:
+      tags: [Teaching]
+      summary: List sections for a module with visibility (owner only)
+      description: |
+        Returns the ordered list of sections for the unit attached to the given
+        course module, enriched with the current visibility state for the course.
+        Missing release rows imply hidden sections.
+      operationId: listModuleSectionsWithVisibility
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      x-security-notes:
+        - "RLS: joins verify module ownership; responses are private and non-cacheable."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ordered section list with visibility for this module.
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema: { type: string, example: private, no-store }
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeachingModuleSection'
+        '400':
+          description: "Invalid identifiers (detail: invalid_course_id | invalid_module_id)"
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema: { type: string, example: private, no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '401':
           description: Unauthenticated
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-                example: private, no-store
+              schema: { type: string, example: private, no-store }
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+              schema: { $ref: '#/components/schemas/Error' }
         '403':
           description: Forbidden (caller is not the course owner)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-                example: private, no-store
+              schema: { type: string, example: private, no-store }
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+              schema: { $ref: '#/components/schemas/Error' }
         '404':
-          description: Course/module not found or not visible to the owner
+          description: Module not found for the course
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-                example: private, no-store
+              schema: { type: string, example: private, no-store }
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions:
     get:
@@ -4356,3 +4499,254 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  # Teaching — Live unit view (teacher-only)
+  /api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary:
+    get:
+      tags: [Teaching]
+      summary: Live overview per unit (owner)
+      description: Returns unit tasks and student rows with minimal per-cell status `has_submission` (true/false). No content previews.
+      operationId: getTeachingUnitLiveSummary
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      x-security-notes:
+        - "RLS: ownership enforced; unit must be assigned to the course."
+        - "Cache: private, no-store; Vary: Origin."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: updated_since
+          required: false
+          schema: { type: string, format: date-time }
+          description: Optional ISO timestamp; reserved for future incremental behaviour (use `/submissions/delta` for polling).
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+          description: Maximum number of student rows.
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: Offset into the course members list.
+        - in: query
+          name: include_students
+          required: false
+          schema: { type: boolean, default: true }
+          description: Optional; when false, omit `rows` and return only the task list.
+      responses:
+        '200':
+          description: OK
+          headers:
+            Cache-Control:
+              description: Security — responses are private and must not be stored.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tasks, rows]
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, instruction_md, position]
+                      additionalProperties: false
+                      properties:
+                        id: { type: string, format: uuid }
+                        instruction_md: { type: string, description: Task instruction (Markdown) }
+                        position: { type: integer }
+                  rows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeachingUnitLiveRow'
+        '400':
+          description: Invalid identifiers or timestamp
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (not owner)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found (course or unit not found, or unit does not belong to the course)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta:
+    get:
+      tags: [Teaching]
+      summary: Live overview delta per unit (owner)
+      description: Returns changed submission cells since the provided timestamp. Designed for polling in the classroom view.
+      operationId: getTeachingUnitLiveDelta
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      x-security-notes:
+        - "RLS: ownership enforced; unit must belong to the course."
+        - "Cache: private, no-store; Vary: Origin."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: updated_since
+          required: true
+          schema: { type: string, format: date-time }
+          description: ISO timestamp (exclusive). Only cells changed after this instant are returned.
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+          description: Maximum number of cells returned.
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: Offset into the changeset; primarily for pagination in large classes.
+      responses:
+        '200':
+          description: OK
+          headers:
+            Cache-Control:
+              description: Security — responses are private and must not be stored.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cells]
+                properties:
+                  cells:
+                    type: array
+                    description: Changed submission cells since the provided timestamp.
+                    items:
+                      $ref: '#/components/schemas/TeachingUnitDeltaCell'
+        '204':
+          description: No changes since `updated_since`
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+        '400':
+          description: Invalid identifiers or timestamp
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (not owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found (course or unit not found, or unit ist nicht Teil des Kurses), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest:
+    get:
+      summary: Latest submission for a student and task (owner)
+      description: Returns the latest submission meta and optional content preview. Owner-only.
+      tags: [Teaching]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: student_sub
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          headers:
+            Cache-Control: { schema: { type: string, example: 'private, no-store' } }
+            Vary: { schema: { type: string, example: 'Origin' } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeachingLatestSubmission'
+        '204':
+          description: No submission found
+        '400':
+          description: Invalid identifiers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden (not owner)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Not found (course/unit/task relation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }

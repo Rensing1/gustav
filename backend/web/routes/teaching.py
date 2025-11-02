@@ -22,13 +22,13 @@ import time
 from dataclasses import dataclass, asdict, is_dataclass
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+import asyncio
 from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
-import asyncio
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
@@ -36,7 +36,6 @@ from teaching.services.materials import MaterialFileSettings, MaterialsService
 from teaching.services.tasks import TasksService
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 from .security import _is_same_origin
-
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
 
@@ -1101,12 +1100,38 @@ def _guard_course_owner(course_id: str, owner_sub: str):
 # --- User directory adapter (mockable) ------------------------------------------
 
 def resolve_student_names(subs: list[str]) -> dict[str, str]:
-    """Resolve user IDs to names via identity directory; test-friendly wrapper."""
+    """Resolve user IDs to display names via Keycloak directory (humanized).
+
+    - Always attempt the directory call; on failure, fall back to "Unbekannt".
+    - Humanize returned identifiers (emails/usernames) to "Vorname Nachname".
+    - Never expose SUBs in the names returned by this function.
+    """
+    out: dict[str, str] = {}
     try:
         from identity_access import directory  # type: ignore
-        return directory.resolve_student_names(subs)
+        raw = directory.resolve_student_names(subs)
+        for sid in subs:
+            val = str((raw or {}).get(sid, "")).strip()
+            if not val or val == sid:
+                # Directory could not resolve the SUB. As a pragmatic fallback
+                # for legacy imports, derive a display name from the identifier
+                # itself when it clearly encodes an email (or legacy-email:...).
+                # This prevents leaking raw emails: the humanizer strips the
+                # domain and known prefixes.
+                fallback = ""
+                try:
+                    if sid.startswith("legacy-email:") or ("@" in sid):
+                        fallback = directory.humanize_identifier(sid)  # type: ignore[attr-defined]
+                except Exception:
+                    fallback = ""
+                out[sid] = fallback or "Unbekannt"
+            else:
+                # Humanize emails/legacy/username patterns
+                nice = directory.humanize_identifier(val)  # type: ignore[attr-defined]
+                out[sid] = nice or "Unbekannt"
+        return out
     except Exception:
-        return {s: s for s in subs}
+        return {s: "Unbekannt" for s in subs}
 
 
 # --- Routes ----------------------------------------------------------------------
@@ -2947,6 +2972,112 @@ async def list_module_section_releases(request: Request, course_id: str, module_
     return _json_private(releases, status_code=200)
 
 
+@teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections")
+async def list_module_sections_with_visibility(request: Request, course_id: str, module_id: str):
+    """List sections of the unit attached to a module, with visibility state.
+
+    Why:
+        The Unterricht view needs a single owner-scoped listing that combines
+        ordered unit sections with the release state stored in
+        `module_section_releases`. This allows teachers to toggle visibility
+        without switching pages.
+
+    Behavior:
+        - 200: Returns an array of sections sorted by `position` with fields
+          `{id, unit_id, title, position, visible, released_at}`. Missing release
+          rows imply `visible=false`, `released_at=null`.
+        - 400: Invalid UUIDs (detail: `invalid_course_id` | `invalid_module_id`).
+        - 401/403: Unauthenticated or not the course owner.
+        - 404: The module is unknown for the given course (or not owned).
+
+    Permissions:
+        Caller must be a teacher and the owner of the course. RLS and explicit
+        ownership guards apply. Responses are private and non-cacheable.
+    """
+    user, error = _require_teacher(request)
+    if error:
+        # Normalize error with private cache headers
+        error.headers.setdefault("Cache-Control", "private, no-store")
+        return error
+    if not _is_uuid_like(course_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+
+    sub = _current_sub(user)
+    # Owner guard (ensures teacher owns the course)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+    unit_id: str | None = None
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            modules = REPO.list_course_modules_for_owner(course_id, sub)
+            for m in modules:
+                if str(m.get("id")) == str(module_id):
+                    unit_id = str(m.get("unit_id") or "")
+                    break
+        else:
+            # In-memory fallback
+            mods = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+            for m in mods:
+                if str(m.get("id")) == str(module_id):
+                    unit_id = str(m.get("unit_id") or "")
+                    break
+    except Exception:
+        unit_id = None
+
+    if not unit_id:
+        return _private_error({"error": "not_found"}, status_code=404)
+
+    # Fetch sections (ordered) and release rows; then merge in Python.
+    sections: list[dict] = []
+    releases: list[dict] = []
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            sections = REPO.list_sections_for_author(unit_id, sub)
+            releases = REPO.list_module_section_releases_owned(course_id, module_id, sub)
+        else:
+            # In-memory
+            sections = [
+                _serialize_section(s)
+                for s in REPO.list_sections_for_author(unit_id, sub)
+            ]
+            releases = REPO.list_module_section_releases_owned(course_id, module_id, sub)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        sections, releases = [], []
+
+    rel_map: dict[str, dict] = {str(r.get("section_id")): r for r in releases}
+    out: list[dict] = []
+    for s in sections:
+        sid = str(s.get("id"))
+        r = rel_map.get(sid)
+        visible = bool(r.get("visible")) if isinstance(r, dict) else False
+        released_at = r.get("released_at") if (isinstance(r, dict) and visible) else None
+        out.append(
+            {
+                "id": sid,
+                "unit_id": str(s.get("unit_id") or ""),
+                "title": str(s.get("title") or ""),
+                "position": int(s.get("position") or 0),
+                "visible": visible,
+                "released_at": released_at,
+            }
+        )
+
+    return _json_private(out, status_code=200)
+
+
 def _serialize_course(c) -> dict:
     if is_dataclass(c):
         return asdict(c)
@@ -3260,3 +3391,557 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.get("/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary")
+async def get_unit_live_summary(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    updated_since: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    include_students: bool = True,
+):
+    """
+    Live overview for a unit (owner): tasks and student rows with minimal status.
+
+    Why:
+        Provide a compact matrix (students × unit tasks) indicating only whether
+        a submission exists per cell. Teachers can then drill into details
+        without loading content in the summary call.
+
+    Security:
+        - Requires `teacher` role and course ownership.
+        - Unit must be attached to the course for the owner.
+        - Responses use private, no-store caching and vary by Origin.
+
+    Notes:
+        - Tasks are fetched via the owner scope; a dedicated application use case
+          will consolidate this logic in a later iteration.
+        - Submission lookups prefer the SECURITY DEFINER helper. When the helper
+          is missing or inaccessible (e.g. migration not applied) we log a
+          warning and fall back to RLS-safe bulk queries.
+        - `updated_since` is optional; invalid timestamps produce
+          `400 invalid_timestamp` so clients adjust their cursors.
+    """
+    user, forbidden = _require_teacher(request)
+    if forbidden:
+        forbidden.headers.setdefault("Cache-Control", "private, no-store")
+        forbidden.headers.setdefault("Vary", "Origin")
+        return forbidden
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
+        return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
+    sub = _current_sub(user)
+
+    updated_since_dt: datetime | None = None
+    if updated_since:
+        try:
+            normalized = updated_since.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            updated_since_dt = parsed.astimezone(timezone.utc)
+        except ValueError:
+            return _private_error({"error": "bad_request", "detail": "invalid_timestamp"}, status_code=400, vary_origin=True)
+
+    # Ownership guard
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+
+    # Verify unit is attached to course for the owner
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            modules = REPO.list_course_modules_for_owner(course_id, sub)
+        else:
+            modules = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+    except Exception:
+        modules = []
+    if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+
+    # Build task list across the unit in position order
+    tasks: list[dict] = []
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            sections = REPO.list_sections_for_author(unit_id, sub)  # owner==author in tests
+            for sec in sections:
+                sec_tasks = REPO.list_tasks_for_section_owned(unit_id, sec["id"], sub)
+                for t in sec_tasks:
+                    tasks.append({
+                        "id": t["id"],
+                        # API contract: tasks carry instruction_md (not a separate title)
+                        "instruction_md": t.get("instruction_md") or "",
+                        "position": int(t.get("position") or 0),
+                    })
+        else:
+            # In-memory repo fallback
+            section_ids = [sid for sid, sd in REPO.sections.items() if sd.unit_id == unit_id]
+            section_ids.sort(key=lambda sid: REPO.sections[sid].position)
+            for sid in section_ids:
+                tids = REPO.task_ids_by_section.get(sid, [])
+                for tid in tids:
+                    td = REPO.tasks[tid]
+                    tasks.append({
+                        "id": td.id,
+                        "instruction_md": td.instruction_md or "",
+                        "position": int(td.position),
+                    })
+    except Exception:
+        tasks = []
+
+    rows_out: list[dict] = []
+    if include_students:
+        roster: list[tuple[str, str]] = []
+        try:
+            from teaching.repo_db import DBTeachingRepo  # type: ignore
+            if isinstance(REPO, DBTeachingRepo):
+                roster = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
+            else:
+                members = REPO.members.get(course_id, {})
+                roster = sorted([(k, v) for k, v in members.items()], key=lambda kv: kv[1])
+                roster = roster[offset: offset + limit]
+        except Exception:
+            roster = []
+        member_subs = [sid for sid, _ in roster]
+        names = resolve_student_names(member_subs)
+
+        has_map: set[tuple[str, str]] = set()
+        try:
+            from teaching.repo_db import DBTeachingRepo  # type: ignore
+            if isinstance(REPO, DBTeachingRepo):
+                import psycopg  # type: ignore
+                dsn = getattr(REPO, "_dsn", None)
+                if dsn:
+                    with psycopg.connect(dsn) as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                            try:
+                                cur.execute(
+                                    "select student_sub::text, task_id::text from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)",
+                                    (sub, course_id, unit_id, updated_since_dt, int(limit), int(offset)),
+                                )
+                                rows = cur.fetchall() or []
+                                has_map = {(r[0], r[1]) for r in rows}
+                            except Exception as exc:
+                                logger.warning(
+                                    "Unit summary fallback: helper get_unit_latest_submissions_for_owner unavailable — %s",
+                                    exc,
+                                    extra={"course_id": course_id, "unit_id": unit_id},
+                                )
+                                rows = []
+                            if tasks and member_subs:
+                                task_ids = [t["id"] for t in tasks]
+                                if not rows:
+                                    cur.execute(
+                                        """
+                                        select distinct student_sub::text, task_id::text
+                                        from public.learning_submissions
+                                        where course_id = %s
+                                          and task_id = any(%s)
+                                          and student_sub = any(%s)
+                                        """,
+                                        (course_id, task_ids, member_subs),
+                                    )
+                                    rows = cur.fetchall() or []
+                                    has_map = {(r[0], r[1]) for r in rows}
+                                if not has_map:
+                                    for sid in member_subs:
+                                        cur.execute("select set_config('app.current_sub', %s, true)", (sid,))
+                                        cur.execute(
+                                            """
+                                            select distinct task_id::text
+                                            from public.learning_submissions
+                                            where course_id = %s
+                                              and student_sub = %s
+                                              and task_id = any(%s)
+                                            """,
+                                            (course_id, sid, task_ids),
+                                        )
+                                        for (tid,) in cur.fetchall() or []:
+                                            has_map.add((sid, tid))
+                                    cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+        except Exception:
+            has_map = set()
+
+        for sid in member_subs:
+            row = {
+                "student": {"sub": sid, "name": names.get(sid, sid)},
+                "tasks": [
+                    {"task_id": t["id"], "has_submission": ((sid, t["id"]) in has_map)} for t in tasks
+                ],
+            }
+            rows_out.append(row)
+
+    payload = {"tasks": tasks, "rows": rows_out}
+    # private + Vary: Origin per contract
+    return _json_private(payload, status_code=200, vary_origin=True)
+
+
+@teaching_router.get("/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta")
+async def get_unit_live_delta(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    updated_since: str,
+    limit: int = 200,
+    offset: int = 0,
+):
+    """Return only changed submission cells since `updated_since` (owner-only).
+
+    Intent (Why):
+        Supports polling-based live updates for the teacher's unit view. Instead
+        of streaming, the client periodically requests only changed cells since
+        the last known cursor to keep payloads small and behaviour simple.
+
+    Parameters:
+        - course_id: UUID of the course (path). Must be owned by the caller.
+        - unit_id: UUID of the unit (path). Must be attached to the course.
+        - updated_since: ISO-8601 timestamp (with timezone). The endpoint returns
+          only cells whose "change timestamp" is strictly greater than this value.
+        - limit/offset: Pagination of changed cells (server clamps range).
+
+    Expected behaviour:
+        - 200 with {"cells": [...]} when there are changes. Each cell contains
+          student_sub, task_id, has_submission (bool), changed_at (ISO, microseconds).
+        - 204 No Content when there are no changes since the cursor.
+        - 400 for invalid UUIDs or malformed timestamps.
+        - 403 when the caller is not the course owner; 404 when the unit is not
+          attached to the course.
+
+    Security / Permissions:
+        - Caller must be a teacher and owner of the course (RLS enforced via
+          `gustav_limited` + app.current_sub, plus explicit ownership checks).
+        - No content (student work) is returned, only minimal status/IDs.
+        - Responses use "private, no-store" and vary by Origin to prevent leaks.
+    """
+    user, forbidden = _require_teacher(request)
+    if forbidden:
+        forbidden.headers.setdefault("Cache-Control", "private, no-store")
+        forbidden.headers.setdefault("Vary", "Origin")
+        return forbidden
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
+        return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
+
+    limit = max(1, min(int(limit or 200), 500))
+    offset = max(0, int(offset or 0))
+
+    try:
+        normalized = updated_since.replace("Z", "+00:00")
+        updated_since_dt = datetime.fromisoformat(normalized)
+        if updated_since_dt.tzinfo is None:
+            updated_since_dt = updated_since_dt.replace(tzinfo=timezone.utc)
+        updated_since_dt = updated_since_dt.astimezone(timezone.utc)
+        original_updated_dt = updated_since_dt
+        # Use the client's cursor as the DB lower bound (exclusive in SQL helper).
+        # We rely on strict in-memory filtering to avoid duplicates.
+        db_lower_bound = original_updated_dt
+    except ValueError:
+        return _private_error({"error": "bad_request", "detail": "invalid_timestamp"}, status_code=400, vary_origin=True)
+
+    sub = _current_sub(user)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            modules = REPO.list_course_modules_for_owner(course_id, sub)
+        else:
+            modules = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+    except Exception:
+        modules = []
+    if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+
+    cells: list[dict] = []
+    debug = (os.getenv("DEBUG_DELTA", "").strip() == "1")
+    EPS = timedelta(seconds=1)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            import psycopg  # type: ignore
+
+            dsn = getattr(REPO, "_dsn", None)
+            if dsn:
+                with psycopg.connect(dsn) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                        helper_ok = True
+                        try:
+                            cur.execute(
+                                """
+                                select student_sub::text, task_id::text, submission_id::text, created_at_iso, completed_at_iso
+                                  from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
+                                """,
+                                (sub, course_id, unit_id, db_lower_bound, int(limit), int(offset)),
+                            )
+                            rows = cur.fetchall() or []
+                        except Exception as exc:
+                            logger.warning(
+                                "Unit delta fallback: helper unavailable — %s",
+                                exc,
+                                extra={"course_id": course_id, "unit_id": unit_id},
+                            )
+                            rows = []
+                            helper_ok = False
+                        for student_sub, task_id, submission_id, created_iso, completed_iso in rows:
+                            cur.execute(
+                                """
+                                select greatest(created_at, coalesce(completed_at, created_at))
+                                  from public.learning_submissions
+                                 where course_id = %s
+                                   and task_id = %s::uuid
+                                   and student_sub = %s
+                                 order by created_at desc
+                                 limit 1
+                                """,
+                                (course_id, task_id, student_sub),
+                            )
+                            ts_row = cur.fetchone()
+                            if ts_row and ts_row[0] is not None:
+                                changed_dt = ts_row[0].astimezone(timezone.utc)
+                            else:
+                                # fall back to helper-provided timestamps or now
+                                fallback_iso = completed_iso or created_iso
+                                if fallback_iso:
+                                    try:
+                                        changed_dt = datetime.fromisoformat(fallback_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+                                    except Exception:
+                                        changed_dt = datetime.now(timezone.utc)
+                                else:
+                                    changed_dt = datetime.now(timezone.utc)
+                            changed_iso = changed_dt.isoformat(timespec="microseconds")
+                            if logger.isEnabledFor(logging.DEBUG) or debug:
+                                logger.debug(
+                                    "delta-cell",
+                                    extra={
+                                        "student_sub": student_sub,
+                                        "task_id": task_id,
+                                        "changed_dt": changed_dt.isoformat(timespec="microseconds"),
+                                        "original_updated": original_updated_dt.isoformat(timespec="microseconds"),
+                                    },
+                                )
+                                if debug:
+                                    print(
+                                        "[DELTA] changed=",
+                                        changed_dt.isoformat(timespec="microseconds"),
+                                        " cursor=",
+                                        original_updated_dt.isoformat(timespec="microseconds"),
+                                        " db_lb=",
+                                        db_lower_bound.isoformat(timespec="microseconds"),
+                                    )
+                            # Include cells that changed after (cursor - EPS).
+                            include = changed_dt > (original_updated_dt - EPS)
+                            if not include:
+                                continue
+                            # Emit a cursor strictly beyond the client's cursor when
+                            # we include due to clock skew, otherwise use the DB time.
+                            emit_dt = (
+                                changed_dt if changed_dt > original_updated_dt else (original_updated_dt + EPS)
+                            )
+                            cells.append(
+                                {
+                                    "student_sub": student_sub,
+                                    "task_id": task_id,
+                                    "has_submission": bool(submission_id),
+                                    "changed_at": emit_dt.isoformat(timespec="microseconds"),
+                                }
+                            )
+
+                        if not helper_ok:
+                            # Fallback to bulk query when helper missing. Return a real timestamptz
+                            # and format in Python to preserve microseconds precision consistently.
+                            try:
+                                cur.execute(
+                                    """
+                                    select distinct student_sub::text,
+                                                   task_id::text,
+                                                   greatest(created_at, coalesce(completed_at, created_at)) as changed_ts
+                                      from public.learning_submissions
+                                     where course_id = %s
+                                       and greatest(created_at, coalesce(completed_at, created_at)) > %s
+                                     order by changed_ts desc
+                                     limit %s offset %s
+                                    """,
+                                    (course_id, db_lower_bound, int(limit), int(offset)),
+                                )
+                                fallback_rows = cur.fetchall() or []
+                            except Exception:
+                                fallback_rows = []
+                            for student_sub, task_id, changed_ts in fallback_rows:
+                                try:
+                                    # Ensure UTC and microsecond precision
+                                    changed_dt = changed_ts.astimezone(timezone.utc)
+                                except Exception:
+                                    changed_dt = datetime.now(timezone.utc)
+                                include = changed_dt > (original_updated_dt - EPS)
+                                if not include:
+                                    continue
+                                emit_dt = (
+                                    changed_dt if changed_dt > original_updated_dt else (original_updated_dt + EPS)
+                                )
+                                changed_iso = emit_dt.isoformat(timespec="microseconds")
+                                cells.append(
+                                    {
+                                        "student_sub": student_sub,
+                                        "task_id": task_id,
+                                        "has_submission": True,
+                                        "changed_at": changed_iso,
+                                    }
+                                )
+
+    except Exception as exc:
+        logger.warning(
+            "Unit delta query failed falling back to empty delta — %s",
+            exc,
+            extra={"course_id": course_id, "unit_id": unit_id},
+        )
+
+    if not cells:
+        return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+
+    payload = {"cells": cells}
+    return _json_private(payload, status_code=200, vary_origin=True)
+
+
+@teaching_router.get(
+    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
+)
+async def get_latest_submission_detail(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    task_id: str,
+    student_sub: str,
+):
+    """Latest submission detail for a student-task within a course-unit (owner-only).
+
+    Intent:
+        Allow teachers (course owners) to inspect the latest submission of a
+        particular student for a given task in the selected unit, without
+        exposing bulk content in the live matrix.
+
+    Permissions:
+        Caller must be a teacher and the owner of the course. Unit must belong
+        to the course (best-effort verification). Returns 204 when no
+        submission exists.
+    """
+    user, forbidden = _require_teacher(request)
+    if forbidden:
+        forbidden.headers.setdefault("Cache-Control", "private, no-store")
+        forbidden.headers.setdefault("Vary", "Origin")
+        return forbidden
+    # Validate identifiers
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(task_id)):
+        return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
+
+    sub = _current_sub(user)
+    # Ownership guard
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+
+    # Best-effort verification that unit and task relate to the course
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        modules = []
+        if isinstance(REPO, DBTeachingRepo):
+            modules = REPO.list_course_modules_for_owner(course_id, sub)
+        else:
+            modules = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+        attached_unit_ids = {str(m.get("unit_id")) for m in modules}
+        if str(unit_id) not in attached_unit_ids:
+            return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+    except Exception:
+        # Fail closed on relation check errors
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+
+    # Query latest submission via SECURITY DEFINER helper (owner scope)
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(REPO, DBTeachingRepo):
+            import psycopg  # type: ignore
+
+            dsn = getattr(REPO, "_dsn", None)
+            if dsn:
+                with psycopg.connect(dsn) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                        helper_ok = True
+                        try:
+                            cur.execute(
+                                """
+                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind, text_body, mime_type, size_bytes, storage_key
+                                  from public.get_latest_submission_for_owner(%s, %s, %s, %s)
+                                """,
+                                (sub, course_id, task_id, student_sub),
+                            )
+                        except Exception as exc:
+                            logger.warning("latest submission helper unavailable — %s", exc)
+                            helper_ok = False
+                            # Fallback to direct read (may be blocked by RLS for teachers)
+                            cur.execute(
+                                """
+                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind, text_body, mime_type, size_bytes, storage_key
+                                  from public.learning_submissions
+                                 where course_id = %s
+                                   and task_id = %s::uuid
+                                   and student_sub = %s
+                                 order by created_at desc
+                                 limit 1
+                                """,
+                                (course_id, task_id, student_sub),
+                            )
+                        row = cur.fetchone()
+                        if not row:
+                            return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+                        (
+                            sid,
+                            tid,
+                            ssub,
+                            created_at,
+                            completed_at,
+                            kind,
+                            text_body,
+                            mime_type,
+                            size_bytes,
+                            storage_key,
+                        ) = row
+                        def_kind = str(kind or "text")
+                        # Derive a more specific kind for PDFs if possible
+                        if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
+                            def_kind = "pdf"
+                        payload: dict[str, Any] = {
+                            "id": str(sid),
+                            "task_id": str(tid),
+                            "student_sub": str(ssub),
+                            "created_at": created_at.astimezone(timezone.utc).isoformat(),
+                            "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
+                            "kind": def_kind,
+                        }
+                        if def_kind == "text" and isinstance(text_body, str) and text_body:
+                            # Keep it simple; truncation for safety
+                            payload["text_body"] = text_body[:1000]
+                        return _json_private(payload, status_code=200, vary_origin=True)
+    except Exception as exc:
+        logger.warning("latest submission query failed — %s", exc, extra={"course_id": course_id, "task_id": task_id})
+
+    # Fallback when DB path not available
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})

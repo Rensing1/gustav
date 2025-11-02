@@ -170,7 +170,7 @@ async def auth_enforcement(request: Request, call_next):
 
     if not rec:
         if path.startswith("/api/"):
-            headers = {"Cache-Control": "private, no-store"}
+            headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:
             # Security: prevent intermediaries from caching unauthenticated HTMX responses

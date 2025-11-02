@@ -861,7 +861,10 @@ components:
             properties:
               mime: { type: string }
               size: { type: integer }
-              url: { type: string, format: uri }
+              url:
+                type: string
+                format: uri
+                description: Signed, short-lived URL (do not cache beyond TTL)
 
     LearningCourse:
       type: object
@@ -1387,6 +1390,11 @@ paths:
               schema:
                 type: string
                 example: private, no-store
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
           content:
             application/json:
               schema:
@@ -1418,6 +1426,11 @@ paths:
               schema:
                 type: string
                 example: private, no-store
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
           content:
             application/json:
               schema:
@@ -1474,6 +1487,11 @@ paths:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
               schema: { type: string, example: private, no-store }
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1483,6 +1501,11 @@ paths:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
               schema: { type: string, example: private, no-store }
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1492,6 +1515,11 @@ paths:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
               schema: { type: string, example: private, no-store }
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1501,6 +1529,11 @@ paths:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
               schema: { type: string, example: private, no-store }
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

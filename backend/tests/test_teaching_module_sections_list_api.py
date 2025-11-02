@@ -149,6 +149,7 @@ async def test_list_sections_requires_owner_and_valid_ids():
         # Unauthenticated → 401
         resp401 = await client.get(_list_path("00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000"))
         assert resp401.status_code == 401
+        assert resp401.headers.get("Vary") == "Origin"
 
         # Set up real module
         client.cookies.set("gustav_session", owner.session_id)
@@ -160,22 +161,27 @@ async def test_list_sections_requires_owner_and_valid_ids():
         # Invalid UUIDs → 400
         bad_course = await client.get(_list_path("not-a-uuid", module["id"]))
         assert bad_course.status_code == 400
+        assert bad_course.headers.get("Vary") == "Origin"
         assert bad_course.json().get("detail") == "invalid_course_id"
         bad_module = await client.get(_list_path(course_id, "not-a-uuid"))
         assert bad_module.status_code == 400
+        assert bad_module.headers.get("Vary") == "Origin"
         assert bad_module.json().get("detail") == "invalid_module_id"
 
         # Non-owner teacher → 403
         client.cookies.set("gustav_session", other_teacher.session_id)
         resp403 = await client.get(_list_path(course_id, module["id"]))
         assert resp403.status_code == 403
+        assert resp403.headers.get("Vary") == "Origin"
 
         # Student → 403
         client.cookies.set("gustav_session", student.session_id)
         resp403b = await client.get(_list_path(course_id, module["id"]))
         assert resp403b.status_code == 403
+        assert resp403b.headers.get("Vary") == "Origin"
 
         # Unknown module id (well-formed) → 404
         client.cookies.set("gustav_session", owner.session_id)
         resp404 = await client.get(_list_path(course_id, "00000000-0000-0000-0000-000000000001"))
         assert resp404.status_code == 404
+        assert resp404.headers.get("Vary") == "Origin"

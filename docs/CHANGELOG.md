@@ -2,13 +2,22 @@
 
 ## Unreleased
 ### Security
+- security(api/teaching): PATCH /api/teaching/.../sections/{section_id}/visibility now strictly requires
+  Origin/Referer and same-origin. Missing or foreign headers → 403 `detail=csrf_violation`. SSR helper forwards
+  an Origin header to remain compatible.
 - mask(import): DSN is no longer logged or persisted in migration reports; prevents credential leakage.
 - csrf(submissions): In production, POST /submissions always requires Origin/Referer (strict same-origin), independent of STRICT_CSRF_SUBMISSIONS.
 
 ### API
+- api(teaching): GET /api/teaching/courses/{course_id}/modules/{module_id}/sections responds with `Vary: Origin` and
+  clamps `position` to a minimum of 1 (schema compliance).
+- api(teaching/live): Neue Delta‑Route `GET /api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta` für Polling‑basierte Live‑Aktualisierung auf Einheitenebene. Antwort `200 { cells: [...] }` oder `204` bei keinen Änderungen. `changed_at` ist UTC/ISO mit Mikrosekunden.
+- api(teaching/live): `GET /…/submissions/summary` akzeptiert `include_students=false`, um nur die Aufgabenliste zu laden (UI‑Optimierung beim Start).
+- docs(teaching/live): Referenzdokumentation unter `docs/references/teaching_live.md` hinzugefügt (Cursor‑Semantik mit EPS‑Fenster, Client‑Polling‑Empfehlung).
 - openapi(learning): Document 404 for POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents (task not found/not released).
 
 ### Tests
+- tests(teaching/live): Delta‑Tests prüfen 401/403/404/400 sowie den Happy‑Path „200 dann 204“ mit Cursor‑Fortschreibung.
 - add(learning): Idempotency-Key header regex negative/positive tests.
 - add(learning): Production CSRF strictness test for /submissions.
 - security(api/learning): Upload-Intents verlangen nun zwingend `Origin`/`Referer` (strict same-origin). Fehlende Header führen zu 403 `detail=csrf_violation`.

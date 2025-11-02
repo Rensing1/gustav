@@ -1067,13 +1067,42 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
 def _csrf_guard(request: Request) -> JSONResponse | None:
     """Enforce same-origin for browser write requests.
 
-    Returns a JSONResponse 403 with detail=csrf_violation and private cache headers
-    when the Origin/Referer does not match the server origin. When headers are
-    absent (e.g., non-browser clients), allow the request.
+    Behavior:
+        - In production or when STRICT_CSRF_TEACHING=true, require that either
+          Origin or Referer is present AND same-origin. Missing or foreign
+          headers result in 403 with detail=csrf_violation.
+        - In non-strict modes, fall back to best-effort `_is_same_origin`,
+          which permits requests without these headers (server-to-server calls).
     """
+    import os
+
+    prod_env = (os.getenv("GUSTAV_ENV", "dev") or "").lower() == "prod"
+    strict_toggle = (os.getenv("STRICT_CSRF_TEACHING", "false") or "").lower() == "true"
+    strict = prod_env or strict_toggle
+
+    if strict:
+        origin_present = (request.headers.get("origin") or request.headers.get("referer"))
+        if not origin_present or (not _is_same_origin(request)):
+            return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+        return None
+
     if not _is_same_origin(request):
         return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
     return None
+
+
+def _require_strict_same_origin(request: Request) -> bool:
+    """Return True only when a same-origin indicator is present and matches.
+
+    Why:
+        Owner-scoped write APIs must not accept cross-site browser requests.
+        Requiring Origin/Referer eliminates the "no-header" ambiguity that
+        `_is_same_origin` deliberately allows for non-browser clients.
+    """
+    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
+    if not origin_present:
+        return False
+    return _is_same_origin(request)
 
 
 """CSRF helper imported from .security"""
@@ -2866,13 +2895,25 @@ async def update_module_section_visibility(
     if error:
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
-    # CSRF defense-in-depth: block cross-site PATCH attempts
-    if not _is_same_origin(request):
-        return _private_error(
-            {"error": "forbidden", "detail": "csrf_violation"},
-            status_code=403,
-            vary_origin=True,
-        )
+    # CSRF: In production or STRICT_CSRF_TEACHING=true, require explicit Origin/Referer
+    # and same-origin; otherwise fall back to best-effort check.
+    import os as _os
+    _prod = (_os.getenv("GUSTAV_ENV", "dev") or "").lower() == "prod"
+    _strict = _prod or ((_os.getenv("STRICT_CSRF_TEACHING", "false") or "").lower() == "true")
+    if _strict:
+        if not _require_strict_same_origin(request):
+            return _private_error(
+                {"error": "forbidden", "detail": "csrf_violation"},
+                status_code=403,
+                vary_origin=True,
+            )
+    else:
+        if not _is_same_origin(request):
+            return _private_error(
+                {"error": "forbidden", "detail": "csrf_violation"},
+                status_code=403,
+                vary_origin=True,
+            )
 
     if not _is_uuid_like(course_id):
         return _private_error(
@@ -3069,13 +3110,14 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
                 "id": sid,
                 "unit_id": str(s.get("unit_id") or ""),
                 "title": str(s.get("title") or ""),
-                "position": int(s.get("position") or 0),
+                # Contract: position is 1-based; clamp to minimum 1 for safety.
+                "position": max(1, int(s.get("position") or 1)),
                 "visible": visible,
                 "released_at": released_at,
             }
         )
 
-    return _json_private(out, status_code=200)
+    return _json_private(out, status_code=200, vary_origin=True)
 
 
 def _serialize_course(c) -> dict:
@@ -3743,14 +3785,15 @@ async def get_unit_live_delta(
                                         " db_lb=",
                                         db_lower_bound.isoformat(timespec="microseconds"),
                                     )
-                            # Include cells that changed after (cursor - EPS).
+                            # Include changes after (cursor - EPS) to account for clock skew
                             include = changed_dt > (original_updated_dt - EPS)
                             if not include:
                                 continue
                             # Emit a cursor strictly beyond the client's cursor when
                             # we include due to clock skew, otherwise use the DB time.
+                            # Move the emitted cursor forward to avoid duplicates on the next poll.
                             emit_dt = (
-                                changed_dt if changed_dt > original_updated_dt else (original_updated_dt + EPS)
+                                (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
                             )
                             cells.append(
                                 {
@@ -3791,7 +3834,7 @@ async def get_unit_live_delta(
                                 if not include:
                                     continue
                                 emit_dt = (
-                                    changed_dt if changed_dt > original_updated_dt else (original_updated_dt + EPS)
+                                    (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
                                 )
                                 changed_iso = emit_dt.isoformat(timespec="microseconds")
                                 cells.append(

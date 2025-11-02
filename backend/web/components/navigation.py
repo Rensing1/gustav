@@ -229,6 +229,7 @@ class Navigation(Component):
                 ("/", "Startseite", "🏠"),
                 ("/courses", "Kurse", "📚"),
                 ("/units", "Lerneinheiten", "🧭"),
+                ("/teaching/live", "Unterricht", "🔴"),
                 ("/about", "Über GUSTAV", "ℹ️"),
             ],
             # Administrators currently share the minimal fallback menu. We can

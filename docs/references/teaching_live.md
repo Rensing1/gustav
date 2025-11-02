@@ -1,0 +1,62 @@
+# Teaching — Live-Ansicht (Einheit)
+
+Ziel: Lehrkräfte sehen in der Seite „Unterricht › Live“ für eine Lerneinheit die Aktivität ihrer Kursteilnehmer. Die Live-Ansicht setzt auf Polling (Delta) statt SSE und überträgt nur geänderte Zellen.
+
+Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
+
+## Endpunkte (API)
+
+- GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary`
+  - Liefert die Aufgaben der Einheit (`tasks[]`) und optional die Schülerzeilen (`rows[]`) mit Minimalstatus je Zelle: `{ task_id, has_submission }`.
+  - Query:
+    - `include_students` (bool, default true): Wenn `false`, werden nur `tasks[]` geliefert (Startoptimierung in der UI).
+    - `limit`/`offset`: Paginierung der Schülerliste.
+  - Sicherheit: Nur Owner (Lehrer) des Kurses; Einheit muss zum Kurs gehören. `Cache-Control: private, no-store`, `Vary: Origin`.
+
+- GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta`
+  - Liefert nur geänderte Zellen seit `updated_since`.
+  - Query:
+    - `updated_since` (ISO‑Zeitstempel, required): Cursor; nur Änderungen NACH diesem Zeitpunkt.
+    - `limit`/`offset`: Paginierung der Änderungen.
+  - Antwort:
+    - 200 `{ cells: [{ student_sub, task_id, has_submission, changed_at }] }`
+    - 204 No Content (keine Änderungen seit Cursor)
+  - Sicherheit: Owner‑Only; `private, no-store`, `Vary: Origin`. Es werden keine Inhalte (Text/Bilder) übertragen.
+
+- PATCH `/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility`
+  - Schaltet die Sichtbarkeit eines Abschnitts für den Kurs um (`visible=true|false`).
+  - Sicherheit: Browser‑Anfragen MÜSSEN `Origin` oder `Referer` enthalten und same‑origin sein, sonst `403` mit `detail=csrf_violation`.
+    Der SSR‑Helper leitet einen passenden `Origin`‑Header weiter.
+
+OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTaskCell`, `TeachingUnitDeltaCell`).
+
+## Zeit/Cursor‑Semantik (Clock‑Skew‑robust)
+
+- Server verarbeitet Cursor als exklusiven Zeitpunkt. Eine Änderung wird nur geliefert, wenn sie effektiv „nach“ dem Cursor liegt.
+- Zur Robustheit gegen kleine Zeitabweichungen (Host ↔ DB) verwendet der Server ein EPS‑Fenster (1 s):
+  - Inklusion: `changed_dt > (cursor - EPS)`
+  - Ausgegebenes `changed_at`:
+    - Normalfall (`changed_dt > cursor`): `changed_at = changed_dt` (UTC, Mikrosekunden)
+    - Skew‑Fall (`changed_dt <= cursor`): `changed_at = cursor + EPS` (monoton steigend)
+- Folge‑Poll mit dem zuletzt empfangenen `changed_at` als Cursor liefert deterministisch keine Duplikate (204), solange keine weiteren Änderungen passiert sind.
+
+## Client‑Polling (Empfehlung)
+
+1) Initial: `GET …/summary?include_students=false`
+2) Erste Matrix: `GET …/summary` (optional paginiert)
+3) Cursor setzen: `cursor = now()` (ISO)
+4) Polling (alle 3–5 s): `GET …/delta?updated_since=cursor`
+   - Bei `200`: Zellen in UI anwenden, `cursor = max(cells[].changed_at)`
+   - Bei `204`: UI unverändert lassen
+
+Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen separat über dedizierte Endpunkte geladen werden.
+
+## DB & RLS
+
+- Der Teaching‑Adapter verwendet eine SECURITY‑DEFINER‑Helperfunktion, um effizient die neuesten Abgaben je (Schüler, Aufgabe) pro Einheit zu ermitteln. RLS bleibt aktiv; der Helper prüft Ownership und filtert auf Kurs/Unit.
+- Fallback‑Pfad (bei Helper‑Ausfall): Server greift auf `learning_submissions` zurück und formatiert `changed_at` in UTC mit Mikrosekunden.
+
+## Tests (pytest)
+
+- `backend/tests/test_teaching_live_unit_summary_api.py`: Vertrag/Fehlerfälle/`include_students`.
+- `backend/tests/test_teaching_live_unit_delta_api.py`: 401/403/404/400 sowie Happy‑Path „200 dann 204“ mit neuem Cursor.

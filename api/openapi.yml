@@ -1456,6 +1456,9 @@ paths:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
               schema: { type: string, example: private, no-store }
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema: { type: string, example: Origin }
           content:
             application/json:
               schema:
@@ -4104,8 +4107,9 @@ paths:
       summary: Update section visibility within a course module (owner only)
       description: |
         Sets whether a section is released to students enrolled in the course.
-        Security: When called from a browser, requests must be same-origin; a foreign
-        `Origin` or `Referer` results in 403 with `detail=csrf_violation`.
+        Security: Browser requests MUST include `Origin` or `Referer` and be
+        same-origin. Missing or foreign headers result in 403 with
+        `detail=csrf_violation`.
       operationId: updateModuleSectionVisibility
       security:
         - cookieAuth: []
@@ -4114,7 +4118,7 @@ paths:
         ownerOnly: true
       x-security-notes:
         - "RLS: module_section_releases table joins course_modules to enforce owner checks."
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CSRF: Origin/Referer presence required; must match server origin."
       parameters:
         - in: path
           name: course_id

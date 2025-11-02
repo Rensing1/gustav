@@ -2319,6 +2319,7 @@ async def teaching_live_toggle_section_visibility(
             r = await client.patch(
                 f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
                 json={"visible": bool(visible_val)},
+                headers={"Origin": "http://local"},
             )
             if r.status_code not in (200, 204):
                 # Render minimal error card

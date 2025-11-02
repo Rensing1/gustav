@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### Security
+- security(identity): Disable HTTP redirects for Keycloak admin POST/GET calls (prevent token leakage via 3xx).
+- security(teaching): Owner-scoped GETs for module sections/releases set `Vary: Origin` across 200/4xx.
 - security(api/teaching): PATCH /api/teaching/.../sections/{section_id}/visibility now strictly requires
   Origin/Referer and same-origin. Missing or foreign headers → 403 `detail=csrf_violation`. SSR helper forwards
   an Origin header to remain compatible.
@@ -11,12 +13,14 @@
 ### API
 - api(teaching): GET /api/teaching/courses/{course_id}/modules/{module_id}/sections responds with `Vary: Origin` and
   clamps `position` to a minimum of 1 (schema compliance).
+- api(teaching): GET /api/teaching/courses/{course_id}/modules/{module_id}/sections/releases documents `Vary: Origin`.
 - api(teaching/live): Neue Delta‑Route `GET /api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta` für Polling‑basierte Live‑Aktualisierung auf Einheitenebene. Antwort `200 { cells: [...] }` oder `204` bei keinen Änderungen. `changed_at` ist UTC/ISO mit Mikrosekunden.
 - api(teaching/live): `GET /…/submissions/summary` akzeptiert `include_students=false`, um nur die Aufgabenliste zu laden (UI‑Optimierung beim Start).
 - docs(teaching/live): Referenzdokumentation unter `docs/references/teaching_live.md` hinzugefügt (Cursor‑Semantik mit EPS‑Fenster, Client‑Polling‑Empfehlung).
 - openapi(learning): Document 404 for POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents (task not found/not released).
 
 ### Tests
+- tests(teaching): Header tests ensure `Vary: Origin` for 200/400/403/404 on module sections and releases listings.
 - tests(teaching/live): Delta‑Tests prüfen 401/403/404/400 sowie den Happy‑Path „200 dann 204“ mit Cursor‑Fortschreibung.
 - add(learning): Idempotency-Key header regex negative/positive tests.
 - add(learning): Production CSRF strictness test for /submissions.

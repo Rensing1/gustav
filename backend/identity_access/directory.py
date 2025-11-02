@@ -32,7 +32,8 @@ class _KC:
         self.admin_client_secret = os.getenv("KC_ADMIN_CLIENT_SECRET")
         # Legacy fallback (password grant) — discouraged; retained for dev only
         self.admin_username = os.getenv("KC_ADMIN_USERNAME")
-        self.admin_password = os.getenv("KC_ADMIN_PASSWORD")
+        # Accept both KC_ADMIN_PASSWORD and KC_ADMIN_PASS (Makefile uses KC_ADMIN_PASS)
+        self.admin_password = os.getenv("KC_ADMIN_PASSWORD") or os.getenv("KC_ADMIN_PASS")
 
     def token(self) -> str:
         """Obtain an admin bearer token.
@@ -68,7 +69,8 @@ class _KC:
         # Honor CA bundle in production environments; default to system CAs
         ca = os.getenv("KEYCLOAK_CA_BUNDLE")
         verify_opt = ca if ca else True
-        r = requests.post(url, data=data, timeout=10, verify=verify_opt)
+        # Disallow redirects to avoid leaking tokens over 3xx chains
+        r = requests.post(url, data=data, timeout=10, verify=verify_opt, allow_redirects=False)
         r.raise_for_status()
         tok = (r.json() or {}).get("access_token")
         if not tok:
@@ -159,7 +161,7 @@ def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
     params = {"first": 0, "max": max(1, min(200, int(limit) * 2))}
     ca = os.getenv("KEYCLOAK_CA_BUNDLE")
     verify_opt = ca if ca else True
-    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt)
+    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt, allow_redirects=False)
     r.raise_for_status()
     arr = r.json() or []
     ql = (q or "").lower()
@@ -188,7 +190,7 @@ def resolve_student_names(subs: List[str]) -> Dict[str, str]:
     for sid in subs:
         try:
             url = f"{kc.base_url}/admin/realms/{kc.realm}/users/{sid}"
-            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt)
+            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt, allow_redirects=False)
             if r.status_code == 404:
                 out[sid] = sid
                 continue
@@ -214,7 +216,7 @@ def list_users_by_role(*, role: str, limit: int, offset: int) -> List[dict]:
     params = {"first": max(0, int(offset or 0)), "max": max(1, min(200, int(limit or 50)))}
     ca = os.getenv("KEYCLOAK_CA_BUNDLE")
     verify_opt = ca if ca else True
-    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt)
+    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt, allow_redirects=False)
     r.raise_for_status()
     arr = r.json() or []
     results: List[dict] = []

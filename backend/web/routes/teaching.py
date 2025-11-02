@@ -2979,18 +2979,19 @@ async def list_module_section_releases(request: Request, course_id: str, module_
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
     if not _is_uuid_like(course_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400, vary_origin=True)
     if not _is_uuid_like(module_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400, vary_origin=True)
     # Guard ownership (403/404 semantics handled by helper)
     guard = _guard_course_owner(course_id, sub)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
             return guard
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(REPO, DBTeachingRepo):
@@ -3001,16 +3002,16 @@ async def list_module_section_releases(request: Request, course_id: str, module_
             # Sections for module's unit
             module = REPO.course_modules.get(module_id)
             if not module or module.course_id != course_id:
-                return _private_error({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
             for (mid, sid), rec in REPO.module_section_releases.items():
                 if mid == module_id:
                     entries.append(rec)
             releases = entries
     except LookupError:
-        return _private_error({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
     except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(releases, status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+    return _json_private(releases, status_code=200, vary_origin=True)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections")
@@ -3037,13 +3038,14 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
     """
     user, error = _require_teacher(request)
     if error:
-        # Normalize error with private cache headers
+        # Normalize error with private cache headers and Origin variance
         error.headers.setdefault("Cache-Control", "private, no-store")
+        error.headers.setdefault("Vary", "Origin")
         return error
     if not _is_uuid_like(course_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400, vary_origin=True)
     if not _is_uuid_like(module_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400, vary_origin=True)
 
     sub = _current_sub(user)
     # Owner guard (ensures teacher owns the course)
@@ -3051,8 +3053,9 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
             return guard
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
     unit_id: str | None = None
     try:
@@ -3074,7 +3077,7 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
         unit_id = None
 
     if not unit_id:
-        return _private_error({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
 
     # Fetch sections (ordered) and release rows; then merge in Python.
     sections: list[dict] = []
@@ -3092,9 +3095,9 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
             ]
             releases = REPO.list_module_section_releases_owned(course_id, module_id, sub)
     except LookupError:
-        return _private_error({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
     except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
     except Exception:
         sections, releases = [], []
 

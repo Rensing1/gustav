@@ -21,7 +21,7 @@ def _fallback_login_dsn() -> str:
 def _probe_dsn(dsn: str) -> bool:
     try:
         import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=1) as _:
+        with psycopg.connect(dsn, connect_timeout=5) as _:
             return True
     except Exception:
         return False

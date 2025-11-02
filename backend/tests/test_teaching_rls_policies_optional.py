@@ -14,7 +14,7 @@ import pytest
 def _probe(dsn: str) -> bool:
     try:
         import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=1):
+        with psycopg.connect(dsn, connect_timeout=5):
             return True
     except Exception:
         return False

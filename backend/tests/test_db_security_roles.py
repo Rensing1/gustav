@@ -21,7 +21,7 @@ import pytest
 def _probe(dsn: str) -> bool:
     try:
         import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=1):
+        with psycopg.connect(dsn, connect_timeout=5):
             return True
     except Exception:
         return False
@@ -50,4 +50,3 @@ async def test_app_role_is_nologin():
             assert row is not None, "gustav_limited role must exist"
             can_login = bool(row[0])
             assert can_login is False, "gustav_limited must be NOLOGIN (rolcanlogin=false)"
-

@@ -34,13 +34,26 @@ def _ensure_db_env_defaults() -> None:
         )
     login_dsn = f"postgresql://{app_user}:{app_password}@{host}:{port}/postgres"
 
+    def _with_connect_timeout(dsn: str, seconds: int = 5) -> str:
+        """Ensure the DSN enforces a connect timeout for robust tests.
+
+        Simple, dependency-free manipulation: append `connect_timeout` unless
+        already present. This bounds hangs when DB is slow/unreachable.
+        """
+        if not isinstance(dsn, str) or not dsn:
+            return dsn
+        if "connect_timeout=" in dsn:
+            return dsn
+        sep = "&" if "?" in dsn else "?"
+        return f"{dsn}{sep}connect_timeout={seconds}"
+
     def _probe(dsn: str) -> bool:
         try:
             import psycopg  # type: ignore
         except Exception:
             return False
         try:
-            with psycopg.connect(dsn, connect_timeout=1):  # type: ignore[arg-type]
+            with psycopg.connect(dsn, connect_timeout=5):  # type: ignore[arg-type]
                 return True
         except Exception:
             return False
@@ -53,14 +66,14 @@ def _ensure_db_env_defaults() -> None:
 
     # Prefer the app login DSN (IN ROLE gustav_limited) for application traffic so every query is RLS-protected.
     # Respect pre-configured env (e.g., a CI-provided login).
-    _assign_or_override("RLS_TEST_DSN", login_dsn)
-    _assign_or_override("DATABASE_URL", login_dsn)
+    _assign_or_override("RLS_TEST_DSN", _with_connect_timeout(login_dsn))
+    _assign_or_override("DATABASE_URL", _with_connect_timeout(login_dsn))
 
     # Still expose service DSNs for dedicated tests when the host DB is reachable.
     if _probe(service_dsn):
-        _assign_or_override("SESSION_TEST_DSN", service_dsn)
-        _assign_or_override("RLS_TEST_SERVICE_DSN", service_dsn)
-        _assign_or_override("SERVICE_ROLE_DSN", service_dsn)
+        _assign_or_override("SESSION_TEST_DSN", _with_connect_timeout(service_dsn))
+        _assign_or_override("RLS_TEST_SERVICE_DSN", _with_connect_timeout(service_dsn))
+        _assign_or_override("SERVICE_ROLE_DSN", _with_connect_timeout(service_dsn))
     else:
         os.environ.pop("SESSION_TEST_DSN", None)
         os.environ.pop("RLS_TEST_SERVICE_DSN", None)

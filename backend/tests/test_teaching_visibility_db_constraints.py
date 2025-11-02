@@ -37,7 +37,7 @@ def _require_db_or_skip() -> None:
         pytest.skip("psycopg not available")
     dsn = _pick_dsn()
     try:
-        with psycopg.connect(dsn, connect_timeout=1):
+        with psycopg.connect(dsn, connect_timeout=5):
             return
     except Exception:
         pytest.skip("Database not reachable for DB constraint tests")

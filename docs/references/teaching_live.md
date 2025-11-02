@@ -28,7 +28,7 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
   - Sicherheit: Browser‑Anfragen MÜSSEN `Origin` oder `Referer` enthalten und same‑origin sein, sonst `403` mit `detail=csrf_violation`.
     Der SSR‑Helper leitet einen passenden `Origin`‑Header weiter.
 
-OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTaskCell`, `TeachingUnitDeltaCell`).
+OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTaskCell`, `TeachingUnitDeltaCell`, `TeachingLatestSubmission`).
 
 ## Zeit/Cursor‑Semantik (Clock‑Skew‑robust)
 
@@ -51,10 +51,18 @@ OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTa
 
 Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen separat über dedizierte Endpunkte geladen werden.
 
+## Detailansicht: letzte Abgabe (Owner)
+
+- Endpoint: `GET /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest`
+- Antworten: `200` (Schema `TeachingLatestSubmission`), `204` (keine Abgabe), `404` (Relation ungültig), `403/401` (Auth).
+- Sicherheit: Kurs‑Ownership erforderlich; die Einheit muss am Kurs hängen; die Aufgabe muss zur Einheit gehören. `Cache-Control: private, no-store`, `Vary: Origin`.
+
 ## DB & RLS
 
-- Der Teaching‑Adapter verwendet eine SECURITY‑DEFINER‑Helperfunktion, um effizient die neuesten Abgaben je (Schüler, Aufgabe) pro Einheit zu ermitteln. RLS bleibt aktiv; der Helper prüft Ownership und filtert auf Kurs/Unit.
-- Fallback‑Pfad (bei Helper‑Ausfall): Server greift auf `learning_submissions` zurück und formatiert `changed_at` in UTC mit Mikrosekunden.
+- Der Teaching‑Adapter verwendet SECURITY‑DEFINER‑Helper:
+  - `get_unit_latest_submissions_for_owner(…)` (Matrix/Delta)
+  - `get_latest_submission_for_owner(p_owner_sub, p_course_id, p_unit_id, p_task_id, p_student_sub)` (Detail)
+- RLS bleibt aktiv; die Helper prüfen Ownership und Kurs/Unit/Task‑Relationen. Kein direkter Tabellen‑Fallback.
 
 ## Tests (pytest)
 

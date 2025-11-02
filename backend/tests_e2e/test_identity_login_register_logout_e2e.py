@@ -84,7 +84,7 @@ ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
 pytestmark = pytest.mark.e2e
 
 
-def _wait_for(url: str, *, expected=200, timeout_s: int = 60) -> None:
+def _wait_for(url: str, *, expected=200, timeout_s: int = 5) -> None:
     """Poll a URL until it responds with the expected status or skip the test.
 
     Keeps E2E deterministic by failing fast if services are not ready.
@@ -92,7 +92,7 @@ def _wait_for(url: str, *, expected=200, timeout_s: int = 60) -> None:
     # Fast-fail: if service is not reachable at all, fail immediately with a
     # clear message so CI/local runs surface unmet dependencies.
     try:
-        r0 = requests.get(url, timeout=1)
+        r0 = requests.get(url, timeout=5)
         if r0.status_code == expected or (
             isinstance(expected, (tuple, list)) and r0.status_code in expected
         ):
@@ -107,7 +107,7 @@ def _wait_for(url: str, *, expected=200, timeout_s: int = 60) -> None:
     last_err = None
     while time.time() < deadline:
         try:
-            r = requests.get(url, timeout=3)
+            r = requests.get(url, timeout=5)
             if r.status_code == expected or (isinstance(expected, (tuple, list)) and r.status_code in expected):
                 return
         except requests.RequestException as exc:
@@ -129,7 +129,7 @@ def _kc_admin_token() -> str:
         "username": ADMIN_USER,
         "password": ADMIN_PASSWORD,
     }
-    r = requests.post(url, data=data, timeout=10)
+    r = requests.post(url, data=data, timeout=5)
     r.raise_for_status()
     payload = r.json()
     return payload["access_token"]
@@ -141,7 +141,7 @@ def _kc_headers(token: str) -> dict:
 
 def _kc_find_user(token: str, email: str) -> str | None:
     url = f"{KC_BASE}/admin/realms/{REALM}/users?email={email}&exact=true"
-    r = requests.get(url, headers=_kc_headers(token), timeout=10)
+    r = requests.get(url, headers=_kc_headers(token), timeout=5)
     r.raise_for_status()
     arr = r.json()
     if isinstance(arr, list) and arr:
@@ -166,7 +166,7 @@ def _kc_create_user(token: str, email: str, password: str) -> str:
             "emailVerified": True,
             "requiredActions": [],
         }
-        r = requests.post(url, headers=_kc_headers(token), json=payload, timeout=10)
+        r = requests.post(url, headers=_kc_headers(token), json=payload, timeout=5)
         # 201 Created or 409 Conflict (already exists)
         if r.status_code not in (201, 409):
             r.raise_for_status()
@@ -176,7 +176,7 @@ def _kc_create_user(token: str, email: str, password: str) -> str:
     # Set password
     pw_url = f"{KC_BASE}/admin/realms/{REALM}/users/{user_id}/reset-password"
     pw_payload = {"type": "password", "value": password, "temporary": False}
-    r = requests.put(pw_url, headers=_kc_headers(token), json=pw_payload, timeout=10)
+    r = requests.put(pw_url, headers=_kc_headers(token), json=pw_payload, timeout=5)
     # 204 No Content on success
     assert r.status_code in (204, 200), f"Failed to set password: {r.status_code} {r.text}"
     return user_id
@@ -214,7 +214,7 @@ def test_register_login_logout_flow():
     # 3) Start the OIDC login flow
     sess = requests.Session()
     # Begin at our app – follow redirects to reach Keycloak login page
-    r = sess.get(f"{WEB_BASE}/auth/login", allow_redirects=True, timeout=20)
+    r = sess.get(f"{WEB_BASE}/auth/login", allow_redirects=True, timeout=5)
     assert r.status_code == 200
     assert "kc-form-login" in r.text
     # Ensure our Keycloak theme is applied (stylesheet reference must be present)
@@ -230,7 +230,7 @@ def test_register_login_logout_flow():
     action_url, fields = _parse_login_form(r.text, r.url)
     fields.update({"username": email, "password": password})
     # Do not auto-follow; we want to catch the callback 302 that sets our cookie
-    r2 = sess.post(action_url, data=fields, allow_redirects=False, timeout=20)
+    r2 = sess.post(action_url, data=fields, allow_redirects=False, timeout=5)
     assert r2.status_code in (302, 303)
 
     # Follow redirects step-by-step until we hit our app's callback and home
@@ -243,7 +243,7 @@ def test_register_login_logout_flow():
         if not loc:
             break
         next_url = urljoin(resp.url, loc)
-        resp = sess.get(next_url, allow_redirects=False, timeout=20)
+        resp = sess.get(next_url, allow_redirects=False, timeout=5)
         last_url = next_url
         last_status = resp.status_code
         # Break if we reached our app root page (200) or non-redirect
@@ -255,7 +255,7 @@ def test_register_login_logout_flow():
     )
 
     # Verify authenticated state via API (cookie handling is implied by success)
-    r_me = sess.get(f"{WEB_BASE}/api/me", timeout=10)
+    r_me = sess.get(f"{WEB_BASE}/api/me", timeout=5)
     assert r_me.status_code == 200, f"/api/me failed: {r_me.status_code} {r_me.text}"
     body = r_me.json()
     # New contract: sub, roles, name
@@ -268,14 +268,14 @@ def test_register_login_logout_flow():
     assert any(c.name == "gustav_session" for c in sess.cookies), "Session cookie not set"
 
     # 6) Logout (unified: App + IdP) and ensure /api/me requires auth afterwards
-    r_lo = sess.get(f"{WEB_BASE}/auth/logout", allow_redirects=False, timeout=15)
+    r_lo = sess.get(f"{WEB_BASE}/auth/logout", allow_redirects=False, timeout=5)
     assert r_lo.status_code in (301, 302, 303)
     # Follow the IdP end-session redirect back to the app (best-effort)
     steps = 0
     resp = r_lo
     while steps < 10 and 300 <= resp.status_code < 400 and resp.headers.get("Location"):
         next_url = urljoin(resp.url, resp.headers["Location"])
-        resp = sess.get(next_url, allow_redirects=False, timeout=15)
+        resp = sess.get(next_url, allow_redirects=False, timeout=5)
         steps += 1
 
     # After logout, /api/me should return 401
@@ -283,5 +283,5 @@ def test_register_login_logout_flow():
     for c in list(sess.cookies):
         if c.name == "gustav_session":
             sess.cookies.clear(domain=c.domain or urlparse(WEB_BASE).hostname, path=c.path or "/", name=c.name)
-    r_me2 = sess.get(f"{WEB_BASE}/api/me", timeout=10)
+    r_me2 = sess.get(f"{WEB_BASE}/api/me", timeout=5)
     assert r_me2.status_code == 401, f"Expected 401 after logout, got {r_me2.status_code}"

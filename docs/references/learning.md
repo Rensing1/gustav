@@ -1,6 +1,8 @@
 # Lernen (Learning) — Referenz
 
-Ziel: Schülerzugriff auf freigegebene Inhalte, Abgaben (Text/Bild) mit Versuchszähler und sofortigem (Stub‑)Feedback. Dokumentiert API, Schema, RLS und Teststrategie.
+Ziel: Schülerzugriff auf freigegebene Inhalte und Abgaben (Text/Bild/PDF) mit Versuchszähler und KI-gestützter Auswertung. Dokumentiert API, Schema, RLS und Teststrategie für den Learning-Bounded-Context.
+
+**Hinweis**: Details zur KI-Architektur, Adapter-Schnittstellen, Worker-Workflow und Monitoring stehen in `docs/references/learning_ai.md`.
 
 Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Feld `unit_id`. Aktualisiere ggf. generierte Client‑Modelle.
 
@@ -24,28 +26,42 @@ Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Fel
 - `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
   - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).
-  - 200 `[{ id, attempt_nr, kind, storage_key?, analysis_status, analysis_json, feedback, created_at, completed_at, ... }]`, 400/401/403/404.
+  - 200 `[{ id, attempt_nr, kind, storage_key?, analysis_status, error_code?, analysis_json, feedback, created_at, completed_at, ... }]`.
+    - `analysis_status ∈ {pending, completed, failed}`
+    - `error_code ∈ {ocr_failed, analysis_failed, ocr_retrying}` (nur gesetzt bei `failed` oder laufenden Retries).
+  - 400/401/403/404.
+
+- `POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents`
+  - Request: `{ kind: 'image' | 'file', mime_type, size_bytes }`
+  - Response: `200 { storage_key, upload_url, headers, expires_at }`
+    - `storage_key` Namespaces: `submissions/{course_id}/{task_id}/{student_sub}/{timestamp}-{uuid}.{ext}`
+    - `mime_type` whitelist: `image/jpeg`, `image/png`, `application/pdf`
+    - Gültigkeit der Presign-URL ≤ 10 Minuten
+  - Fehler: 400 (`mime_not_allowed`, `size_exceeded`), 403 (CSRF/RLS), 404 (Task nicht sichtbar)
 
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`
-  - Text‑Abgabe: `{ kind: 'text', text_body }`
-  - Bild‑Abgabe: `{ kind: 'image', storage_key, mime_type, size_bytes, sha256 }`
-  - Validierung: Leerer `text_body` führt zu `400 detail=invalid_input`; maximale Länge `10000` Zeichen; MIME‑Typen nur `image/jpeg` und `image/png`.
-  - Optionaler Header: `Idempotency-Key` (≤ 64 Zeichen; Dup‑Vermeidung bei Retries; gleiche Antwort, keine Doppelanlage)
-  - Prüft: Mitgliedschaft, Release, `max_attempts`, CSRF (Same-Origin bei Browsern). 201 `Submission` (MVP synchron), 400/401/403/404.
+  - Text-Abgabe: `{ kind: 'text', text_body }` → Response `201` mit `analysis_status='completed'`.
+  - Bild-/PDF-Abgabe: `{ kind: 'image'|'file', storage_key, mime_type, size_bytes, sha256 }` → Response `202` mit `analysis_status='pending'`, `text_body` leer, `analysis_json` leer.
+  - Aufrufe mit `Idempotency-Key` (≤ 64 Zeichen) sind idempotent.
+  - Server prüft Mitgliedschaft, Release, `max_attempts`, CSRF (Same-Origin), Dateigrößen, Hash, Storage-Key-Regex.
+  - Sobald der Worker OCR/Feedback abgeschlossen hat, wird die Submission auf `analysis_status='completed'` aktualisiert (oder `failed` bei Fehlern). Client kann via `GET` pollend den Status abfragen.
 
 Fehlercodes (Beispiele):
-- 400: `invalid_input | invalid_image_payload | invalid_uuid | max_attempts_exceeded`
+- 400: `invalid_input | invalid_image_payload | invalid_file_payload | invalid_uuid | max_attempts_exceeded`
 - 403: `forbidden`
 - 404: `not_found`
+- 409: `conflict` (bei mehrfacher Idempotency-Verwendung mit nicht übereinstimmendem Payload)
 
 ### Ausblick
-- Async Feedback & Upload-Intent-Flow sind geplant, aber nicht Bestandteil des aktuellen MVP-Vertrags.
+- WebSocket/Push-Benachrichtigungen für `analysis_status` sind geplant. Bis dahin erfolgt Polling durch den Client.
 
 ## Schema & Migrationen (Supabase/PostgreSQL)
-- Submissions: `supabase/migrations/20251023093409_learning_submissions.sql`
+- Submissions: `supabase/migrations/20251023093409_learning_submissions.sql` + Folge-Migration (siehe Plan 2025‑11‑01)
   - Tabelle `public.learning_submissions` (immutable Entries, Attempt-Zähler, optionale Storage-Metadaten)
+  - Seit 2025‑11: Spalten `ocr_attempts`, `ocr_last_error`, `ocr_last_attempt_at`; `analysis_status`-Check auf `pending|completed|failed`
   - Indizes: `(course_id, task_id, student_sub)`, `created_at desc`, `student_sub/task_id/created_at desc`
   - JSON-Feld `analysis_json` enthält MVP-Stubs `{ text, length, scores[] }`; Spalte `feedback_md` bleibt im Schema, wird im API-Layer als `feedback` ausgeliefert.
+- Queue-Tabelle: `public.learning_submission_ocr_jobs` für Worker (siehe AI-Referenz), Index auf `visible_at`.
 - Helper-Funktionen: `supabase/migrations/20251023093417_learning_helpers.sql`
   - `hash_course_task_student`, `next_attempt_nr`, `check_task_visible_to_student`
   - `get_released_sections/materials/tasks_for_student`, `get_task_metadata_for_student`
@@ -54,6 +70,7 @@ Fehlercodes (Beispiele):
   - SELECT limitiert auf eigene `student_sub`; INSERT prüft Sichtbarkeit via `check_task_visible_to_student`
 - Hardening-Fix: `supabase/migrations/20251023111657_learning_tasks_rls_fix.sql`
   - Stellt sicher, dass `get_released_tasks_for_student` nur freigegebene Sectionen liefert (`module_section_releases.visible = true`)
+- Worker-Updates: erfolgen über `SECURITY DEFINER`-Funktion `learning_submission_ocr_process_job` (nicht Bestandteil des ursprünglichen MVP, siehe AI-Referenz).
 
 Bezüge zu Unterrichten (bestehende Tabellen):
 - `public.units`, `public.unit_sections`, `public.unit_materials`, `public.unit_tasks`

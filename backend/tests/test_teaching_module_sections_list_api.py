@@ -97,12 +97,18 @@ async def test_list_sections_with_visibility_owner_happy_path():
         module = await _attach_unit_to_course(client, course_id, unit["id"], context_notes="Unterricht")
 
         # Toggle visibility for s2 to true; others remain hidden
-        vr = await client.patch(_visibility_path(course_id, module["id"], s2["id"]), json={"visible": True})
+        vr = await client.patch(
+            _visibility_path(course_id, module["id"], s2["id"]),
+            json={"visible": True},
+            headers={"Origin": "http://test"},
+        )
         assert vr.status_code == 200
 
         # Act: list sections for module with visibility
         resp = await client.get(_list_path(course_id, module["id"]))
         assert resp.status_code == 200
+        # Owner-scoped GET varies by Origin to avoid cache confusion
+        assert resp.headers.get("Vary") == "Origin"
         data = resp.json()
         assert isinstance(data, list)
         assert [item["title"] for item in data] == ["Einführung", "Ohmsches Gesetz", "Schaltkreise"]
@@ -173,4 +179,3 @@ async def test_list_sections_requires_owner_and_valid_ids():
         client.cookies.set("gustav_session", owner.session_id)
         resp404 = await client.get(_list_path(course_id, "00000000-0000-0000-0000-000000000001"))
         assert resp404.status_code == 404
-

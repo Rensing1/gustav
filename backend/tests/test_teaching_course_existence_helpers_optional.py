@@ -37,7 +37,7 @@ def _probe_db_and_helpers() -> bool:
             if not dsn:
                 continue
             try:
-                with psycopg.connect(dsn, connect_timeout=1) as conn:
+                with psycopg.connect(dsn, connect_timeout=5) as conn:
                     with conn.cursor() as cur:
                         cur.execute("select public.course_exists(%s)", (uuid.uuid4(),))
                         _ = cur.fetchone()

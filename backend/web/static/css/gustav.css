@@ -582,6 +582,52 @@ pre {
    5. UI COMPONENTS
    ============================================================================ */
 
+/* Tables — minimal, readable, accessible */
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.table th { text-align: left; }
+.table td { text-align: center; }
+
+.table-compact th,
+.table-compact td {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* Zebra stripes for readability */
+.table tbody tr:nth-child(odd) td,
+.table tbody tr:nth-child(odd) th {
+  background-color: color-mix(in oklab, var(--color-bg-surface) 85%, black 0%);
+}
+
+/* Sticky header + first column for wide matrices */
+#live-section { overflow: auto; }
+
+#live-matrix thead th {
+  position: sticky;
+  top: 0;
+  background-color: var(--color-bg-surface);
+  z-index: 2;
+}
+
+#live-matrix .student-name {
+  position: sticky;
+  left: 0;
+  background-color: var(--color-bg-surface);
+  z-index: 1;
+}
+
 /* Buttons - Minimal and functional */
 .btn {
   display: inline-flex;

@@ -1,4 +1,6 @@
 "GUSTAV alpha-2"
+from __future__ import annotations
+
 from pathlib import Path
 import os
 import logging
@@ -168,7 +170,7 @@ async def auth_enforcement(request: Request, call_next):
 
     if not rec:
         if path.startswith("/api/"):
-            headers = {"Cache-Control": "private, no-store"}
+            headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:
             # Security: prevent intermediaries from caching unauthenticated HTMX responses
@@ -1839,6 +1841,710 @@ async def home(request: Request):
     """
     layout = Layout(title="Startseite", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout)
+
+@app.get("/teaching/live", response_class=HTMLResponse)
+async def teaching_live_home(request: Request):
+    """Unterricht – Live (Startseite, Lehrer-only).
+
+    Intent:
+        Provide a simple entry point reachable from the sidebar. The page
+        explains how to open the per-unit Live-Ansicht and will evolve to a
+        course+unit picker. For now, we avoid DB calls to keep the page fast
+        and reliable in dev.
+
+    Permissions:
+        Caller must be a teacher. Unauthenticated users are redirected to login.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+
+    # Build a simple course -> unit picker using internal API calls.
+    # Courses: GET /api/teaching/courses (owned by teacher)
+    courses: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rc = await client.get("/api/teaching/courses", params={"limit": 100, "offset": 0})
+            if rc.status_code == 200 and isinstance(rc.json(), list):
+                courses = rc.json()
+    except Exception:
+        courses = []
+
+    # Render selects: course selector triggers HTMX load of units into container
+    def _render_course_select(options: list[dict]) -> str:
+        opts = []
+        opts.append('<option value="">— Kurs wählen —</option>')
+        for c in options:
+            cid = str(c.get("id") or "")
+            title = Component.escape(str(c.get("title") or "Unbenannter Kurs"))
+            opts.append(f'<option value="{cid}">{title}</option>')
+        options_html = "\n".join(opts)
+        return (
+            '<label class="form-label" for="course-select">Kurs</label>'
+            f'<select id="course-select" name="course_id" class="form-select" '
+            'hx-get="/teaching/live/units" hx-trigger="change" '
+            'hx-target="#unit-select-container" hx-include="#course-select">'
+            f'{options_html}'
+            '</select>'
+        )
+
+    course_select_html = _render_course_select(courses)
+    unit_placeholder_html = (
+        '<div id="unit-select-container">'
+        '<label class="form-label" for="unit-select">Lerneinheit</label>'
+        '<select id="unit-select" name="unit_id" class="form-select" disabled>'
+        '<option>— erst Kurs wählen —</option>'
+        '</select>'
+        '</div>'
+    )
+
+    # Wrap selects in a GET form with an "Öffnen" button to continue.
+    form_open = (
+        '<form id="live-picker-form" method="get" action="/teaching/live/open" class="form-vertical">'
+        f'{course_select_html}{unit_placeholder_html}'
+        '<div class="form-actions"><button type="submit" class="btn btn-primary">Öffnen</button></div>'
+        '</form>'
+    )
+
+    content = (
+        '<div class="container">'
+        '<h1>Unterricht</h1>'
+        '<section class="card" aria-labelledby="teaching-live-intro">'
+        '<h2 id="teaching-live-intro">Live-Ansicht pro Lerneinheit</h2>'
+        '<p>Wähle einen Kurs und danach eine Lerneinheit, um die Live-Übersicht zu öffnen. '
+        'Die Übersicht zeigt pro Schüler × Aufgabe, wer bereits eingereicht hat.</p>'
+        f'{form_open}'
+        '</section>'
+        '</div>'
+    )
+    layout = Layout(title="Unterricht – Live", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/teaching/live/units", response_class=HTMLResponse)
+async def teaching_live_units_partial(request: Request, course_id: str):
+    """Return a unit select for the chosen course (teacher-only).
+
+    Security:
+        Same role checks as the page. Uses internal API calls so DB/RLS checks
+        stay consistent with the public contract.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return HTMLResponse("", status_code=401)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return HTMLResponse("", status_code=403)
+
+    # Fetch modules for course, then render unit options by fetching unit titles
+    modules: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if rm.status_code == 200 and isinstance(rm.json(), list):
+                modules = rm.json()
+            # Build unit title map
+            unit_titles: dict[str, str] = {}
+            for m in modules:
+                uid = str(m.get("unit_id") or "")
+                if not uid or uid in unit_titles:
+                    continue
+                ru = await client.get(f"/api/teaching/units/{uid}")
+                if ru.status_code == 200:
+                    payload = ru.json()
+                    unit_titles[uid] = str(payload.get("title") or "Unbenannte Lerneinheit")
+            # Render select
+            opts = []
+            opts.append('<option value="">— Lerneinheit wählen —</option>')
+            for m in modules:
+                uid = str(m.get("unit_id") or "")
+                if not uid:
+                    continue
+                title = unit_titles.get(uid) or "Unbenannte Lerneinheit"
+                opts.append(f'<option value="{uid}">{Component.escape(title)}</option>')
+            options_html = "\n".join(opts)
+            select_html = (
+                '<label class="form-label" for="unit-select">Lerneinheit</label>'
+                '<select id="unit-select" name="unit_id" class="form-select">'
+                f'{options_html}'
+                '</select>'
+            )
+            return HTMLResponse(select_html, status_code=200)
+    except Exception:
+        pass
+    return HTMLResponse('<label class="form-label" for="unit-select">Lerneinheit</label><select id="unit-select" name="unit_id" class="form-select" disabled><option>— keine Einheiten —</option></select>', status_code=200)
+
+
+@app.get("/teaching/live/open")
+async def teaching_live_open(request: Request, course_id: str | None = None, unit_id: str | None = None):
+    """Redirect to the unit Live page when both selectors are filled (teacher-only).
+
+    Behavior:
+        - Validates teacher role; requires both identifiers to be present.
+        - Verifies the unit belongs to the selected course for the owner.
+        - On success, PRG to `/teaching/courses/{course_id}/units/{unit_id}/live`.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+    if not course_id or not unit_id:
+        return RedirectResponse(url="/teaching/live", status_code=303)
+    # Verify relation via API
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if rm.status_code != 200:
+                return RedirectResponse(url="/teaching/live", status_code=303)
+            module_unit_ids = {str(m.get("unit_id") or "") for m in (rm.json() or []) if isinstance(m, dict)}
+            if str(unit_id) not in module_unit_ids:
+                return RedirectResponse(url="/teaching/live", status_code=303)
+    except Exception:
+        return RedirectResponse(url="/teaching/live", status_code=303)
+    return RedirectResponse(url=f"/teaching/courses/{course_id}/units/{unit_id}/live", status_code=303)
+
+
+def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: list[dict]) -> str:
+    """Render the Live matrix table (students × tasks) with deterministic IDs.
+
+    Why:
+        Keep HTML generation simple and testable without a template engine.
+        Cells receive stable IDs: `cell-{student_sub}-{task_id}` to allow
+        out-of-band (OOB) HTMX updates from the delta route.
+
+    Behavior:
+        - Columns are ordered as provided by `tasks` (already position-sorted).
+        - Header uses short labels A1, A2, … for compactness.
+        - A cell renders '✅' when `has_submission` is true, else '—'.
+    """
+    # Header
+    header_cells = ["<th scope=\"col\">Schüler</th>"]
+    for idx, t in enumerate(tasks):
+        label = f"A{idx+1}"
+        header_cells.append(f"<th scope=\"col\" title=\"Aufgabe {idx+1}\">{label}</th>")
+    thead = f"<thead><tr>{''.join(header_cells)}</tr></thead>"
+
+    # Body
+    body_rows: list[str] = []
+    for r in rows:
+        student = r.get("student") or {}
+        sub = str(student.get("sub") or "")
+        raw_name = str(student.get("name") or "")
+        # Fallback: when no display name set, prefer email prefix over exposing full email
+        disp = raw_name
+        if "@" in disp:
+            disp = disp.split("@", 1)[0]
+        name = Component.escape(disp or "Unbekannt")
+        # map tasks by id for deterministic lookup
+        cells_by_task = {str(c.get("task_id")): c for c in (r.get("tasks") or []) if isinstance(c, dict)}
+        row_cells = [f"<th scope=\"row\" class=\"student-name\">{name}</th>"]
+        for t in tasks:
+            tid = str(t.get("id") or "")
+            cell = cells_by_task.get(tid) or {}
+            has = bool(cell.get("has_submission"))
+            content = "✅" if has else "—"
+            cell_id = f"cell-{sub}-{tid}"
+            # Clicking a cell loads the detail pane below the matrix
+            hx_href = (
+                f"/teaching/courses/{course_id}/units/{unit_id}/live/detail?student_sub={Component.escape(sub)}&task_id={Component.escape(tid)}"
+            )
+            row_cells.append(
+                f"<td id=\"{cell_id}\" data-sub=\"{Component.escape(sub)}\" data-task=\"{Component.escape(tid)}\" "
+                f"hx-get=\"{hx_href}\" hx-target=\"#live-detail\" hx-swap=\"innerHTML\">{content}</td>"
+            )
+        body_rows.append(f"<tr>{''.join(row_cells)}</tr>")
+    tbody = f"<tbody>{''.join(body_rows)}</tbody>"
+    return f"<table id=\"live-matrix\" class=\"table table-compact\" aria-describedby=\"live-status\">{thead}{tbody}</table>"
+
+
+@app.get("/teaching/courses/{course_id}/units/{unit_id}/live", response_class=HTMLResponse)
+async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str):
+    """SSR per-unit Live view (teacher-only): initial matrix and status.
+
+    Intent:
+        Render a compact matrix of students × tasks for the selected unit.
+        Uses the JSON API `summary` endpoint to obtain the initial state.
+
+    Permissions:
+        Caller must be a teacher. The unit must belong to the course of the
+        requesting owner (verified via API call to modules list).
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+
+    # Resolve titles (best effort)
+    course_title = "Kurs"
+    unit_title = "Lerneinheit"
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rc = await client.get("/api/teaching/courses", params={"limit": 100, "offset": 0})
+            if rc.status_code == 200 and isinstance(rc.json(), list):
+                for c in rc.json():
+                    if str(c.get("id")) == str(course_id):
+                        course_title = str(c.get("title") or course_title)
+                        break
+            ru = await client.get(f"/api/teaching/units/{unit_id}")
+            if ru.status_code == 200 and isinstance(ru.json(), dict):
+                unit_title = str(ru.json().get("title") or unit_title)
+    except Exception:
+        pass
+
+    # Resolve module_id for this course × unit (owner-only list)
+    module_id = None
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if rm.status_code == 200:
+                for m in rm.json() or []:
+                    if str(m.get("unit_id")) == str(unit_id):
+                        module_id = str(m.get("id"))
+                        break
+    except Exception:
+        module_id = None
+
+    # Fetch initial summary for matrix
+    tasks: list[dict] = []
+    rows: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rs = await client.get(
+                f"/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary",
+                params={"limit": 200, "offset": 0},
+            )
+            if rs.status_code == 200 and isinstance(rs.json(), dict):
+                payload = rs.json()
+                tasks = [t for t in (payload.get("tasks") or []) if isinstance(t, dict)]
+                rows = [r for r in (payload.get("rows") or []) if isinstance(r, dict)]
+    except Exception:
+        tasks, rows = [], []
+
+    matrix_html = _render_live_matrix(course_id, unit_id, tasks, rows) if tasks else (
+        '<div class="card"><p class="text-muted">Keine Aufgaben in dieser Lerneinheit.</p></div>'
+    )
+    # Render sections release panel
+    sections_panel_html = await _render_sections_release_panel(request, course_id, unit_id, module_id)
+
+    content = (
+        '<div class="container">'
+        f'<h1>Unterricht – Live</h1>'
+        f'<p class="text-muted">{Component.escape(course_title)} · {Component.escape(unit_title)}</p>'
+        f'{sections_panel_html}'
+        f'<section class="card" id="live-section"><div id="live-status" class="text-muted">Letzte Aktualisierung: jetzt</div>{matrix_html}</section>'
+        '<div id="live-detail"></div>'
+        '</div>'
+    )
+    layout = Layout(title="Unterricht – Live", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+async def _render_sections_release_panel(request: Request, course_id: str, unit_id: str, module_id: str | None) -> str:
+    """Render the panel listing sections for this module with visibility toggles.
+
+    Why:
+        Teachers need to control which sections are visible during class without
+        leaving the Live view.
+
+    Behavior:
+        - Shows an informational card when no module is attached.
+        - Otherwise calls the Teaching JSON API to list sections with visibility
+          and renders a list with HTMX-enabled toggle buttons.
+    """
+    if not module_id:
+        return (
+            '<section id="section-releases-panel" class="card">'
+            '<h2>Abschnitte freigeben</h2>'
+            '<p class="text-muted">Diese Lerneinheit ist dem Kurs noch nicht zugeordnet.</p>'
+            '</section>'
+        )
+    items: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(f"/api/teaching/courses/{course_id}/modules/{module_id}/sections")
+            if r.status_code == 200 and isinstance(r.json(), list):
+                items = r.json() or []
+    except Exception:
+        items = []
+
+    rows_html: list[str] = []
+    for it in items:
+        sid = str(it.get("id") or "")
+        title = Component.escape(str(it.get("title") or ""))
+        visible = bool(it.get("visible"))
+        # Toggle target: SSR helper that delegates to JSON API and re-renders panel
+        toggle_path = (
+            f"/teaching/courses/{course_id}/modules/{str(module_id)}/sections/{sid}/visibility"
+        )
+        next_visible = not visible
+        toggle_label = "Sperren" if visible else "Freigeben"
+        state_label = "Freigegeben" if visible else "Versteckt"
+        rows_html.append(
+            "<li>"
+            f"<span class=\"sec-title\">{title}</span> "
+            f"<span class=\"badge\" data-visible=\"{'true' if visible else 'false'}\">{state_label}</span> "
+            # Use a minimal form with hidden fields instead of hx-vals to avoid quoting issues
+            f"<form hx-post=\"{toggle_path}\" hx-target=\"#section-releases-panel\" hx-swap=\"outerHTML\" style=\"display:inline\">"
+            f"<input type=\"hidden\" name=\"visible\" value=\"{'true' if next_visible else 'false'}\">"
+            f"<input type=\"hidden\" name=\"unit_id\" value=\"{Component.escape(unit_id)}\">"
+            f"<button type=\"submit\" class=\"btn btn-sm\">{toggle_label}</button>"
+            "</form>"
+            "</li>"
+        )
+
+    list_html = "<ul class=\"unstyled\">" + "".join(rows_html) + "</ul>" if rows_html else (
+        '<p class="text-muted">Keine Abschnitte vorhanden.</p>'
+    )
+    return (
+        '<section id="section-releases-panel" class="card">'
+        '<h2>Abschnitte freigeben</h2>'
+        f'{list_html}'
+        '</section>'
+    )
+
+
+@app.get("/teaching/courses/{course_id}/units/{unit_id}/live/sections-panel", response_class=HTMLResponse)
+async def teaching_live_sections_panel_partial(request: Request, course_id: str, unit_id: str):
+    """SSR fragment: re-render the sections release panel for Live page (teacher-only)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+    # Derive module_id like in the main page
+    module_id = None
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            if rm.status_code == 200:
+                for m in rm.json() or []:
+                    if str(m.get("unit_id")) == str(unit_id):
+                        module_id = str(m.get("id"))
+                        break
+    except Exception:
+        module_id = None
+    html = await _render_sections_release_panel(request, course_id, unit_id, module_id)
+    return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility", response_class=HTMLResponse)
+async def teaching_live_toggle_section_visibility(
+    request: Request, course_id: str, module_id: str, section_id: str
+):
+    """SSR: Toggle section visibility via JSON API and re-render the panel.
+
+    Why:
+        HTMX in the SSR page posts to this helper route with simple form values
+        (`visible=true|false`). This route forwards the request to the JSON API
+        with a proper JSON body and returns the updated panel HTML.
+
+    Permissions:
+        Teacher-only (same as main page); reuses session cookie for API call.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+
+    # Read form values
+    form = await request.form()
+    visible_val = str(form.get("visible") or "").lower() in ("1", "true", "yes", "on")
+    # unit_id is passed to allow panel re-render without additional lookups
+    unit_id = str(form.get("unit_id") or "")
+
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            # Delegate to JSON API with proper body
+            r = await client.patch(
+                f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
+                json={"visible": bool(visible_val)},
+                headers={"Origin": "http://local"},
+            )
+            if r.status_code not in (200, 204):
+                # Render minimal error card
+                return HTMLResponse(
+                    "<div class=\"card alert alert-error\">Fehler beim Umschalten der Sichtbarkeit.</div>",
+                    status_code=200,
+                )
+    except Exception:
+        return HTMLResponse(
+            "<div class=\"card alert alert-error\">Fehler beim Umschalten der Sichtbarkeit.</div>",
+            status_code=200,
+        )
+
+    # Re-render panel
+    html = await _render_sections_release_panel(request, course_id, unit_id, module_id)
+    return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/teaching/courses/{course_id}/units/{unit_id}/live/matrix", response_class=HTMLResponse)
+async def teaching_unit_live_matrix_partial(request: Request, course_id: str, unit_id: str):
+    """SSR fragment: the full Live matrix table for the current unit (teacher-only).
+
+    Behavior:
+        Calls the JSON `summary` endpoint and renders a <table id="live-matrix">.
+        Intended for HTMX partial updates or progressive enhancement.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+
+    tasks: list[dict] = []
+    rows: list[dict] = []
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rs = await client.get(
+                f"/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary",
+                params={"limit": 200, "offset": 0},
+            )
+            if rs.status_code == 200 and isinstance(rs.json(), dict):
+                payload = rs.json()
+                tasks = [t for t in (payload.get("tasks") or []) if isinstance(t, dict)]
+                rows = [r for r in (payload.get("rows") or []) if isinstance(r, dict)]
+    except Exception:
+        tasks, rows = [], []
+
+    html = _render_live_matrix(course_id, unit_id, tasks, rows) if tasks else (
+        '<div class="card"><p class="text-muted">Keine Aufgaben in dieser Lerneinheit.</p></div>'
+    )
+    return HTMLResponse(content=html, status_code=200, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/teaching/courses/{course_id}/units/{unit_id}/live/detail", response_class=HTMLResponse)
+async def teaching_unit_live_detail_partial(
+    request: Request, course_id: str, unit_id: str, student_sub: str | None = None, task_id: str | None = None
+):
+    """SSR fragment for the detail pane below the live matrix (teacher-only).
+
+    Behavior:
+        Calls the teaching JSON endpoint for the latest submission. Renders a
+        small card with metadata and optional text excerpt. When no submission
+        exists, renders a friendly empty state.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+    if not student_sub or not task_id:
+        return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Bitte Zelle wählen…</p></div>", status_code=200)
+
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(
+                f"/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
+            )
+            if r.status_code == 204:
+                # Fallback: query SECURITY DEFINER helper to verify existence
+                try:
+                    from routes import teaching as teaching_routes  # type: ignore
+                    from teaching.repo_db import DBTeachingRepo  # type: ignore
+                    REPO = getattr(teaching_routes, "REPO", None)
+                    if isinstance(REPO, DBTeachingRepo):
+                        import psycopg  # type: ignore
+                        dsn = getattr(REPO, "_dsn", None)
+                        if dsn:
+                            with psycopg.connect(dsn) as conn:
+                                with conn.cursor() as cur:
+                                    cur.execute("select set_config('app.current_sub', %s, true)", (str(user.get("sub", "")),))
+                                    cur.execute(
+                                        """
+                                        select created_at_iso, completed_at_iso
+                                          from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
+                                         where student_sub = %s and task_id = %s::uuid
+                                         limit 1
+                                        """,
+                                        (str(user.get("sub", "")), course_id, unit_id, None, 1, 0, student_sub, task_id),
+                                    )
+                                    helper_row = cur.fetchone()
+                                    if helper_row:
+                                        created_iso = helper_row[0] or ""
+                                        # Resolve display name with email-prefix fallback
+                                        dn = ""
+                                        try:
+                                            names = teaching_routes.resolve_student_names([str(student_sub)])  # type: ignore
+                                            n = str(names.get(str(student_sub), ""))
+                                            if "@" in n:
+                                                n = n.split("@", 1)[0]
+                                            dn = Component.escape(n or str(student_sub))
+                                        except Exception:
+                                            dn = Component.escape(str(student_sub))
+                                        html = (
+                                            "<div class=\"card\">"
+                                            f"<h3>Einreichung von {dn}</h3>"
+                                            f"<p class=\"text-muted\">Vorhanden · erstellt: {Component.escape(created_iso)}</p>"
+                                            "</div>"
+                                        )
+                                        return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
+                except Exception:
+                    pass
+                html = "<div class=\"card\"><p class=\"text-muted\">Keine Einreichung vorhanden.</p></div>"
+                return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
+            if r.status_code != 200:
+                return HTMLResponse("<div class=\"card alert alert-error\">Fehler beim Laden der Details.</div>", status_code=200)
+            data = r.json()
+    except Exception:
+        data = None
+
+    if not isinstance(data, dict):
+        return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Keine Einreichung vorhanden.</p></div>", status_code=200)
+
+    created = Component.escape(str(data.get("created_at") or ""))
+    kind = Component.escape(str(data.get("kind") or ""))
+    body = Component.escape(str(data.get("text_body") or ""))
+    # Resolve student display name (dir → name; fallback email prefix when username is email)
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+        names = teaching_routes.resolve_student_names([str(student_sub)])  # type: ignore
+        n = str(names.get(str(student_sub), ""))
+        if "@" in n:
+            n = n.split("@", 1)[0]
+        display_name = Component.escape(n or str(student_sub))
+    except Exception:
+        display_name = Component.escape(str(student_sub))
+    snippet = f"<pre class=\"text-sm\">{body}</pre>" if body else ""
+    detail_html = (
+        f"<div class=\"card\">"
+        f"<h3>Einreichung von {display_name}</h3>"
+        f"<p class=\"text-muted\">Typ: {kind} · erstellt: {created}</p>"
+        f"{snippet}"
+        f"</div>"
+    )
+    return HTMLResponse(detail_html, status_code=200, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/teaching/courses/{course_id}/units/{unit_id}/live/matrix/delta", response_class=HTMLResponse)
+async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: str, unit_id: str, updated_since: str):
+    """SSR fragment: out-of-band <td> updates for changed cells since a timestamp.
+
+    Behavior:
+        - Calls the JSON `delta` endpoint with `updated_since`.
+        - When no changes: returns 204 No Content.
+        - When there are changes: returns a concatenation of
+          `<td id="cell-{sub}-{task}" hx-swap-oob="true">…</td>` snippets.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    role = str(user.get("role", "")).lower()
+    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    if not (role == "teacher" or "teacher" in roles):
+        return RedirectResponse(url="/", status_code=303)
+
+    # Fast-path validation of timestamp; delegate canonical validation to API
+    if not isinstance(updated_since, str) or not updated_since:
+        return Response(status_code=400)
+
+    try:
+        import httpx
+        from httpx import ASGITransport
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            rd = await client.get(
+                f"/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta",
+                params={"updated_since": updated_since, "limit": 200, "offset": 0},
+            )
+            if rd.status_code == 204:
+                return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+            if rd.status_code != 200:
+                return Response(status_code=rd.status_code)
+            data = rd.json() if isinstance(rd.json(), dict) else {}
+            cells = [c for c in (data.get("cells") or []) if isinstance(c, dict)]
+    except Exception:
+        cells = []
+
+    if not cells:
+        return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+
+    parts: list[str] = []
+    for c in cells:
+        sub = Component.escape(str(c.get("student_sub") or ""))
+        task_id = Component.escape(str(c.get("task_id") or ""))
+        has = bool(c.get("has_submission"))
+        content = "✅" if has else "—"
+        cell_id = f"cell-{sub}-{task_id}"
+        parts.append(f'<td id="{cell_id}" hx-swap-oob="true">{content}</td>')
+    html = "".join(parts)
+    return HTMLResponse(content=html, status_code=200, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
 @app.get("/courses", response_class=HTMLResponse)
 async def courses_index(request: Request):

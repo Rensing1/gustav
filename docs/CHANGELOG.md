@@ -2,13 +2,26 @@
 
 ## Unreleased
 ### Security
+- security(identity): Disable HTTP redirects for Keycloak admin POST/GET calls (prevent token leakage via 3xx).
+- security(teaching): Owner-scoped GETs for module sections/releases set `Vary: Origin` across 200/4xx.
+- security(api/teaching): PATCH /api/teaching/.../sections/{section_id}/visibility now strictly requires
+  Origin/Referer and same-origin. Missing or foreign headers → 403 `detail=csrf_violation`. SSR helper forwards
+  an Origin header to remain compatible.
 - mask(import): DSN is no longer logged or persisted in migration reports; prevents credential leakage.
 - csrf(submissions): In production, POST /submissions always requires Origin/Referer (strict same-origin), independent of STRICT_CSRF_SUBMISSIONS.
 
 ### API
+- api(teaching): GET /api/teaching/courses/{course_id}/modules/{module_id}/sections responds with `Vary: Origin` and
+  clamps `position` to a minimum of 1 (schema compliance).
+- api(teaching): GET /api/teaching/courses/{course_id}/modules/{module_id}/sections/releases documents `Vary: Origin`.
+- api(teaching/live): Neue Delta‑Route `GET /api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta` für Polling‑basierte Live‑Aktualisierung auf Einheitenebene. Antwort `200 { cells: [...] }` oder `204` bei keinen Änderungen. `changed_at` ist UTC/ISO mit Mikrosekunden.
+- api(teaching/live): `GET /…/submissions/summary` akzeptiert `include_students=false`, um nur die Aufgabenliste zu laden (UI‑Optimierung beim Start).
+- docs(teaching/live): Referenzdokumentation unter `docs/references/teaching_live.md` hinzugefügt (Cursor‑Semantik mit EPS‑Fenster, Client‑Polling‑Empfehlung).
 - openapi(learning): Document 404 for POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents (task not found/not released).
 
 ### Tests
+- tests(teaching): Header tests ensure `Vary: Origin` for 200/400/403/404 on module sections and releases listings.
+- tests(teaching/live): Delta‑Tests prüfen 401/403/404/400 sowie den Happy‑Path „200 dann 204“ mit Cursor‑Fortschreibung.
 - add(learning): Idempotency-Key header regex negative/positive tests.
 - add(learning): Production CSRF strictness test for /submissions.
 - security(api/learning): Upload-Intents verlangen nun zwingend `Origin`/`Referer` (strict same-origin). Fehlende Header führen zu 403 `detail=csrf_violation`.
@@ -231,3 +244,9 @@
   - Migration: `courses`, `course_memberships`, `pgcrypto`, `updated_at`‑Trigger, RLS
   - DB‑Repo (psycopg3) implementiert; Router standardmäßig DB bzw. Fallback In‑Memory in Tests
   - Tests: API‑Coverage und optionaler Repo‑Test (skip bei fehlender DB)
+- 2025-11-02 — Security hardening for Teaching Live detail
+  - Enforce strict task∈unit∈course checks in latest submission detail endpoint (owner-only)
+  - Remove unsafe DB fallback; rely on SECURITY DEFINER helper only
+  - Update helper signature to include unit_id and validate relation in SQL
+  - OpenAPI: add date-time format for TeachingModuleSection.released_at; set additionalProperties: false; 204 headers
+  - Makefile: silence legacy import commands to avoid logging secrets

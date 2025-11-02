@@ -15,6 +15,7 @@ Security:
 from __future__ import annotations
 
 from typing import List, Dict
+import re
 import os
 import requests
 from identity_access.domain import ALLOWED_ROLES
@@ -31,7 +32,8 @@ class _KC:
         self.admin_client_secret = os.getenv("KC_ADMIN_CLIENT_SECRET")
         # Legacy fallback (password grant) — discouraged; retained for dev only
         self.admin_username = os.getenv("KC_ADMIN_USERNAME")
-        self.admin_password = os.getenv("KC_ADMIN_PASSWORD")
+        # Accept both KC_ADMIN_PASSWORD and KC_ADMIN_PASS (Makefile uses KC_ADMIN_PASS)
+        self.admin_password = os.getenv("KC_ADMIN_PASSWORD") or os.getenv("KC_ADMIN_PASS")
 
     def token(self) -> str:
         """Obtain an admin bearer token.
@@ -67,7 +69,8 @@ class _KC:
         # Honor CA bundle in production environments; default to system CAs
         ca = os.getenv("KEYCLOAK_CA_BUNDLE")
         verify_opt = ca if ca else True
-        r = requests.post(url, data=data, timeout=10, verify=verify_opt)
+        # Disallow redirects to avoid leaking tokens over 3xx chains
+        r = requests.post(url, data=data, timeout=10, verify=verify_opt, allow_redirects=False)
         r.raise_for_status()
         tok = (r.json() or {}).get("access_token")
         if not tok:
@@ -78,13 +81,70 @@ class _KC:
         return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 
+def _get_attr(u: dict, key: str) -> str:
+    """Fetch a single-valued Keycloak user attribute from `attributes`.
+
+    Keycloak exposes attributes as { key: [values...] }. We return the first string.
+    """
+    try:
+        attrs = u.get("attributes") or {}
+        vals = attrs.get(key)
+        if isinstance(vals, list) and vals:
+            return str(vals[0] or "").strip()
+    except Exception:
+        pass
+    return ""
+
+
+_splitter = re.compile(r"[^A-Za-z0-9]+")
+
+
+def humanize_identifier(s: str) -> str:
+    """Turn an email/username into a human display name.
+
+    Rules:
+    - Strip known prefixes like "legacy-email:".
+    - For emails, use the part before '@'.
+    - Split on non-alphanumeric separators (._- etc.).
+    - Title-case each token and join with a single space.
+    - Return single word title-cased if nothing to split.
+    """
+    if not s:
+        return ""
+    s = str(s)
+    if s.startswith("legacy-email:"):
+        s = s.split(":", 1)[1]
+    if "@" in s:
+        s = s.split("@", 1)[0]
+    parts = [p for p in _splitter.split(s) if p]
+    if not parts:
+        return ""
+    return " ".join(p[:1].upper() + p[1:].lower() for p in parts)
+
+
 def _display_name(u: dict) -> str:
+    # 1) explicit display_name attribute
+    dn = _get_attr(u, "display_name")
+    if dn:
+        return dn
+    # 2) first + last names
     first = (u.get("firstName") or "").strip()
     last = (u.get("lastName") or "").strip()
     if first or last:
         return " ".join([p for p in (first, last) if p]).strip()
-    uname = u.get("username")
-    return str(uname) if uname else ""
+    # 3) email or username humanized
+    email = (u.get("email") or "").strip()
+    if email:
+        h = humanize_identifier(email)
+        if h:
+            return h
+    uname = (u.get("username") or "").strip()
+    if uname:
+        h = humanize_identifier(uname)
+        if h:
+            return h
+    # 4) final fallback
+    return "Unbekannt"
 
 
 def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
@@ -101,7 +161,7 @@ def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
     params = {"first": 0, "max": max(1, min(200, int(limit) * 2))}
     ca = os.getenv("KEYCLOAK_CA_BUNDLE")
     verify_opt = ca if ca else True
-    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt)
+    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt, allow_redirects=False)
     r.raise_for_status()
     arr = r.json() or []
     ql = (q or "").lower()
@@ -130,7 +190,7 @@ def resolve_student_names(subs: List[str]) -> Dict[str, str]:
     for sid in subs:
         try:
             url = f"{kc.base_url}/admin/realms/{kc.realm}/users/{sid}"
-            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt)
+            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt, allow_redirects=False)
             if r.status_code == 404:
                 out[sid] = sid
                 continue
@@ -156,7 +216,7 @@ def list_users_by_role(*, role: str, limit: int, offset: int) -> List[dict]:
     params = {"first": max(0, int(offset or 0)), "max": max(1, min(200, int(limit or 50)))}
     ca = os.getenv("KEYCLOAK_CA_BUNDLE")
     verify_opt = ca if ca else True
-    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt)
+    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt, allow_redirects=False)
     r.raise_for_status()
     arr = r.json() or []
     results: List[dict] = []

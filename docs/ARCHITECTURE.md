@@ -18,6 +18,7 @@ Dieses Dokument beschreibt die aktuelle Architektur von GUSTAV (Stand: alpha‑2
 - Datenbank: PostgreSQL via Supabase; Migrationen unter `supabase/migrations/` verwaltet. RLS aktiviert;
   der Teaching‑Kontext nutzt standardmäßig eine Limited‑Role‑DSN (`gustav_limited`).
 - Legacy‑Code: `legacy-code-alpha1/` bleibt Referenz, wird aber nicht direkt erweitert.
+ - Live‑Ansicht (Unterricht): Realtime via leichtgewichtigem Polling‑Delta statt SSE. Siehe `docs/references/teaching_live.md`. Delta überträgt nur Minimalstatus (IDs/Flags), keine Inhalte. Cursor‑Semantik ist robust gegenüber kleiner Clock‑Skew.
 
 ## Schichten (Clean Architecture)
 1) Domain (geplant)

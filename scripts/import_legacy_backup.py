@@ -289,6 +289,10 @@ def ensure_app_login_role(dry_run: bool) -> PhaseResult:
         database_name,
         "-v",
         "ON_ERROR_STOP=1",
+        "-v",
+        f"app_user={app_user}",
+        "-v",
+        f"app_pass={app_password}",
         "-f",
         str(script_path),
     ]

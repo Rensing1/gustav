@@ -29,12 +29,13 @@ KC_BASE = os.getenv("KC_BASE", "http://id.localhost:8100")
 REALM = os.getenv("KC_REALM", "gustav")
 
 
-def _wait_for(url: str, expected: int = 200) -> None:
+def _wait_for(url: str, expected: int = 200, timeout_s: int = 5) -> None:
     last_err = None
     last_status = None
-    for _ in range(60):
+    # Poll up to `timeout_s` seconds; keep tests snappy when deps are missing
+    for _ in range(timeout_s):
         try:
-            r = requests.get(url, timeout=2)
+            r = requests.get(url, timeout=5)
             last_status = r.status_code
             if r.status_code == expected or (
                 isinstance(expected, (tuple, list)) and r.status_code in expected
@@ -44,7 +45,7 @@ def _wait_for(url: str, expected: int = 200) -> None:
             last_err = exc
         time.sleep(1)
     pytest.fail(
-        f"E2E dependency not ready: GET {url} expected={expected} last_status={last_status} last_err={last_err}"
+        f"E2E dependency not ready in {timeout_s}s: GET {url} expected={expected} last_status={last_status} last_err={last_err}"
     )
 
 
@@ -71,7 +72,7 @@ def _kc_admin_token() -> str:
         "username": ADMIN_USER,
         "password": ADMIN_PASSWORD,
     }
-    r = requests.post(url, data=data, timeout=10)
+    r = requests.post(url, data=data, timeout=5)
     r.raise_for_status()
     return r.json()["access_token"]
 
@@ -79,7 +80,7 @@ def _kc_admin_token() -> str:
 def _kc_set_password_policy(policy: str) -> None:
     token = _kc_admin_token()
     # Read realm representation
-    r = requests.get(f"{KC_BASE}/admin/realms/{REALM}", headers={"Authorization": f"Bearer {token}"}, timeout=10)
+    r = requests.get(f"{KC_BASE}/admin/realms/{REALM}", headers={"Authorization": f"Bearer {token}"}, timeout=5)
     r.raise_for_status()
     rep = r.json()
     rep["passwordPolicy"] = policy
@@ -87,7 +88,7 @@ def _kc_set_password_policy(policy: str) -> None:
         f"{KC_BASE}/admin/realms/{REALM}",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         json=rep,
-        timeout=10,
+        timeout=5,
     )
     r2.raise_for_status()
 
@@ -101,7 +102,7 @@ def test_register_invalid_shows_error():
 
     sess = requests.Session()
     # Go to our login page and follow redirects to IdP
-    r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=20)
+    r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=5)
     assert r.status_code == 200
     assert "gustav/css/gustav.css" in r.text
     # Either we land directly on the register page or on the login page with a register link.
@@ -109,7 +110,7 @@ def test_register_invalid_shows_error():
         m = re.search(r"href=\"([^\"]*login-actions/registration[^\"]*)\"", r.text)
         assert m, "Expected a registration link on login page"
         reg_url = urljoin(r.url, m.group(1))
-        r = sess.get(reg_url, allow_redirects=True, timeout=20)
+        r = sess.get(reg_url, allow_redirects=True, timeout=5)
         assert r.status_code == 200
         assert "kc-register-form" in r.text
 
@@ -123,7 +124,7 @@ def test_register_invalid_shows_error():
         "lastName": "Test",
         # Intentionally omit email/password to trigger validation error
     })
-    r2 = sess.post(action, data=fields, allow_redirects=True, timeout=20)
+    r2 = sess.post(action, data=fields, allow_redirects=True, timeout=5)
     # Expect to remain on registration page with an error message
     assert r2.status_code == 200
     assert "kc-register-form" in r2.text
@@ -139,12 +140,12 @@ def test_register_invalid_email_and_weak_password_show_error():
     _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
 
     sess = requests.Session()
-    r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=20)
+    r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=5)
     assert r.status_code == 200
     if "kc-register-form" not in r.text:
         m = re.search(r"href=\"([^\"]*login-actions/registration[^\"]*)\"", r.text)
         assert m, "Expected a registration link on login page"
-        r = sess.get(urljoin(r.url, m.group(1)), allow_redirects=True, timeout=20)
+        r = sess.get(urljoin(r.url, m.group(1)), allow_redirects=True, timeout=5)
         assert r.status_code == 200
         assert "kc-register-form" in r.text
 
@@ -157,7 +158,7 @@ def test_register_invalid_email_and_weak_password_show_error():
         "password": "Passw0rd!e2e",  # strong enough
         "password-confirm": "Passw0rd!e2e",
     })
-    r_bad_email = sess.post(action, data=fields, allow_redirects=True, timeout=20)
+    r_bad_email = sess.post(action, data=fields, allow_redirects=True, timeout=5)
     assert r_bad_email.status_code == 200
     assert "kc-register-form" in r_bad_email.text
     assert "kc-message" in r_bad_email.text or "alert-error" in r_bad_email.text or "pf-m-danger" in r_bad_email.text
@@ -174,7 +175,7 @@ def test_register_invalid_email_and_weak_password_show_error():
         "password": "abc",
         "password-confirm": "abc",
     })
-    r_weak_pw = sess.post(action2, data=fields2, allow_redirects=True, timeout=20)
+    r_weak_pw = sess.post(action2, data=fields2, allow_redirects=True, timeout=5)
     assert r_weak_pw.status_code == 200
     assert "kc-register-form" in r_weak_pw.text
     assert "kc-message" in r_weak_pw.text or "alert-error" in r_weak_pw.text or "pf-m-danger" in r_weak_pw.text
@@ -187,12 +188,12 @@ def test_register_password_mismatch_and_duplicate_email():
     _kc_set_password_policy("length(8) and digits(1) and lowerCase(1) and upperCase(1)")
 
     sess = requests.Session()
-    r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=20)
+    r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=5)
     assert r.status_code == 200
     if "kc-register-form" not in r.text:
         m = re.search(r"href=\"([^\"]*login-actions/registration[^\"]*)\"", r.text)
         assert m
-        r = sess.get(urljoin(r.url, m.group(1)), allow_redirects=True, timeout=20)
+        r = sess.get(urljoin(r.url, m.group(1)), allow_redirects=True, timeout=5)
         assert r.status_code == 200
         assert "kc-register-form" in r.text
 
@@ -208,7 +209,7 @@ def test_register_password_mismatch_and_duplicate_email():
     })
     if re.search(r'name=\"username\"', r.text):
         fields["username"] = f"bob_{int(time.time())}"
-    r_mis = sess.post(action, data=fields, allow_redirects=True, timeout=20)
+    r_mis = sess.post(action, data=fields, allow_redirects=True, timeout=5)
     assert r_mis.status_code == 200 and "kc-register-form" in r_mis.text
     assert "kc-message" in r_mis.text or "alert-error" in r_mis.text or "pf-m-danger" in r_mis.text
 
@@ -222,11 +223,11 @@ def test_register_password_mismatch_and_duplicate_email():
         "enabled": True,
         "emailVerified": True,
     }
-    r_create = requests.post(create_url, headers={"Authorization": f"Bearer {token}"}, json=payload, timeout=10)
+    r_create = requests.post(create_url, headers={"Authorization": f"Bearer {token}"}, json=payload, timeout=5)
     # 201 or 409 are both fine for setup
     assert r_create.status_code in (201, 409)
 
     # Try to register again with same email
-    r_dupe = sess.post(action, data=fields | {"password": "StrongPass1", "password-confirm": "StrongPass1"}, allow_redirects=True, timeout=20)
+    r_dupe = sess.post(action, data=fields | {"password": "StrongPass1", "password-confirm": "StrongPass1"}, allow_redirects=True, timeout=5)
     assert r_dupe.status_code == 200 and "kc-register-form" in r_dupe.text
     assert "kc-message" in r_dupe.text or "alert-error" in r_dupe.text or "pf-m-danger" in r_dupe.text

@@ -44,7 +44,7 @@ def require_db_or_skip() -> None:
 
     for dsn in candidates:
         try:
-            with psycopg.connect(dsn, connect_timeout=1):
+            with psycopg.connect(dsn, connect_timeout=5):
                 return
         except Exception:
             continue

@@ -57,6 +57,34 @@ components:
           type: string
         detail:
           type: string
+    LearningWorkerHealthCheck:
+      type: object
+      required: [check, status]
+      properties:
+        check:
+          type: string
+          enum: [db_role, queue_visibility]
+        status:
+          type: string
+          enum: [ok, failed]
+        detail:
+          type: string
+          nullable: true
+    LearningWorkerHealth:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        currentRole:
+          type: string
+          nullable: true
+          description: Current Postgres role observed while executing the probe.
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningWorkerHealthCheck'
     Course:
       type: object
       required: [id, title, teacher_id, created_at, updated_at]
@@ -753,6 +781,77 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LearningTask'
+    AnalysisJsonCriteriaV1:
+      type: object
+      additionalProperties: false
+      required: [schema, score, criteria_results]
+      properties:
+        schema:
+          type: string
+          enum: ["criteria.v1"]
+          description: Version tag for the analysis payload structure.
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Overall formative score derived from the criteria.
+        criteria_results:
+          type: array
+          description: Per-criterion scoring result shown to learners.
+          items:
+            type: object
+            required: [criterion, score, explanation_md]
+            additionalProperties: false
+            properties:
+              criterion:
+                type: string
+                description: Display name of the rubric criterion.
+              score:
+                type: integer
+                minimum: 0
+                maximum: 10
+                description: Criterion score between 0 and 10.
+              explanation_md:
+                type: string
+                description: Markdown explanation tying the score back to the criterion.
+    AnalysisJsonCriteriaV2:
+      type: object
+      additionalProperties: false
+      required: [schema]
+      properties:
+        schema:
+          type: string
+          enum: ["criteria.v2"]
+          description: Version tag for the analysis payload structure (criteria v2).
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Overall formative score derived from the criteria (0..5, retained for backwards compatibility).
+        criteria_results:
+          type: array
+          description: Per-criterion scoring result shown to learners.
+          items:
+            type: object
+            required: [criterion]
+            additionalProperties: false
+            properties:
+              criterion:
+                type: string
+                description: Display name of the rubric criterion.
+              score:
+                type: integer
+                minimum: 0
+                maximum: 10
+                description: Criterion score between 0 and max_score (default 10).
+              max_score:
+                type: integer
+                minimum: 1
+                default: 10
+                description: Maximum achievable score for the criterion (defaults to 10).
+              explanation_md:
+                type: string
+                description: Objective analysis in Markdown (rendered safely on the UI).
     LearningSubmission:
       type: object
       required: [id, attempt_nr, kind, analysis_status, created_at]
@@ -769,6 +868,7 @@ components:
         text_body:
           type: string
           nullable: true
+          description: Unified text representation; empty while analysis is pending or when OCR/analysis failed.
         mime_type:
           type: string
           nullable: true
@@ -784,48 +884,49 @@ components:
           pattern: '^[0-9a-f]{64}$'
         analysis_status:
           type: string
-          enum: [pending, completed, error]
-        analysis_json:
-          type: object
+          enum: [pending, completed, failed]
+          description: >-
+            Analysis lifecycle: pending (queued or running), completed (text/feedback available),
+            failed (analysis halted; see error_code for details).
+        error_code:
+          type: string
           nullable: true
-          description: Synthetic or model-provided analysis payload; null while analysis is pending.
-          required: [text, scores]
-          additionalProperties: false
-          properties:
-            text:
-              type: string
-              description: Text that was analysed (submitted content or OCR output).
-            length:
-              type: integer
-              minimum: 0
-              description: Optional character count of the analysed text.
-            scores:
-              type: array
-              description: Per-criterion scoring result shown to learners.
-              items:
-                type: object
-                required: [criterion, score]
-                additionalProperties: false
-                properties:
-                  criterion:
-                    type: string
-                    description: Display name of the rubric criterion.
-                  score:
-                    type: integer
-                    minimum: 0
-                    maximum: 10
-                    description: Score between 0 and 10.
-                  explanation:
-                    type: string
-                    nullable: true
-                    description: Short explanation helping students understand the score.
-          example:
-            text: "Antwort 1"
-            length: 9
-            scores:
-              - criterion: "Graph korrekt"
-                score: 8
-                explanation: "Stubbed analysis."
+          enum:
+            - vision_retrying
+            - vision_failed
+            - feedback_retrying
+            - feedback_failed
+          description: >-
+            Normalized error indicator for AI processing. `*_retrying` marks in-flight retries,
+            `*_failed` indicates that processing stopped and the submission remains without feedback.
+        analysis_json:
+          oneOf:
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
+          nullable: true
+          description: Structured criteria-based feedback payload (criteria.v1 or criteria.v2); null while analysis is pending.
+        feedback_md:
+          type: string
+          nullable: true
+          description: Markdown feedback for the learner; null until the analysis has completed.
+        vision_attempts:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Number of vision adapter attempts performed for this submission.
+        vision_last_error:
+          type: string
+          nullable: true
+          description: Latest sanitized error message reported by the vision adapter.
+        feedback_last_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last feedback adapter invocation.
+        feedback_last_error:
+          type: string
+          nullable: true
+          description: Latest sanitized error message reported by the feedback adapter.
     TeachingLatestSubmission:
       type: object
       additionalProperties: false
@@ -982,6 +1083,102 @@ paths:
                   status:
                     type: string
                     example: healthy
+  /internal/health/learning-worker:
+    get:
+      tags: [Operations]
+      summary: Learning worker health probe
+      description: |
+        Returns diagnostics for the async learning worker (DB role and queue visibility).
+        Requires a teacher/operator session cookie.
+      operationId: getLearningWorkerHealth
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Worker dependencies satisfied
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningWorkerHealth'
+              examples:
+                healthy:
+                  summary: Worker healthy
+                  value:
+                    status: healthy
+                    currentRole: gustav_worker
+                    checks:
+                      - { check: db_role, status: ok, detail: null }
+                      - { check: queue_visibility, status: ok, detail: null }
+        '401':
+          description: Missing or invalid session
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller lacks teacher/operator role
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Worker prerequisites missing or failing checks
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningWorkerHealth'
+              examples:
+                degraded:
+                  summary: Worker degraded (missing role)
+                  value:
+                    status: degraded
+                    currentRole: null
+                    checks:
+                      - { check: db_role, status: failed, detail: 'gustav_worker role not available' }
   /api/learning/courses:
     get:
       tags: [Learning]
@@ -1646,8 +1843,9 @@ paths:
       summary: Create a new submission for a task within a course
       description: >-
         Accepts text submissions directly or stores metadata for an already uploaded
-        image or PDF file.
-        Duplicate requests can be avoided using the optional Idempotency-Key header.
+        image or PDF file. All submissions enter an asynchronous analysis pipeline; clients
+        poll submission detail endpoints to observe status changes. Duplicate requests can
+        be avoided using the optional Idempotency-Key header.
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is
         absent (some browsers), the server falls back to validating the `Referer` origin.
@@ -1736,8 +1934,20 @@ paths:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
       responses:
+        '202':
+          description: Submission accepted; analysis scheduled asynchronously (default response).
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningSubmission'
         '201':
-          description: Submission created with synchronous feedback (MVP default).
+          description: Submission analysed synchronously (opportunistic Fast-Path).
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -1796,6 +2006,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-gustav-notes:
+        - Default response is 202 pending; 201 is best-effort and MUST NOT be relied upon by clients.
 
   /auth/login:
     get:
@@ -2115,7 +2327,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 50
-            default: 20
+            default: 10
         - in: query
           name: offset
           schema:
@@ -2371,7 +2583,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 50
-            default: 20
+            default: 10
         - in: query
           name: offset
           schema:

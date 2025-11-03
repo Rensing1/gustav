@@ -1,22 +1,22 @@
-# Plan: KI-Integration (OCR + Feedback) — Lernen
+# Plan: KI-Integration (Vision/Handwriting Analysis + Feedback) — Lernen
 
 Ziel: Zwei KI-Funktionen sauber, testgetrieben und DSGVO‑konform integrieren:
-1) OCR: Extrahiert Text aus Bild- und PDF‑Abgaben (image/file) und speichert ihn in `text_body` der Submission.
+1) Vision/Handwriting Analysis: Extrahiert nutzbaren Text aus handschriftlichen Einreichungen, Diagrammen und gescannten PDFs (image/file) und schreibt ihn als Markdown in `text_body` (kanonische Textquelle für die Bewertung).
 2) Feedback: Generiert formatives Feedback zu jeder Submission (text/image/file) auf Basis der Aufgaben‑Kriterien (`criteria`).
 
 Leitplanken: KISS, Security first, FOSS, Clean Architecture, Contract‑First (OpenAPI), Test‑First (TDD, Red‑Green‑Refactor), Glossar‑Konsistenz (`docs/glossary.md`).
 
-Begriffe (Glossar-konsistent): Submission, Task, Criteria, OCR, Analysis, Feedback, `student_sub` (OIDC sub, ohne PII).
+Begriffe (Glossar-konsistent): Submission, Task, Criteria, Vision (Handschrift/Diagramme/OCR), Analysis, Feedback, `student_sub` (OIDC sub, ohne PII).
 
 ---
 
 ## Scope & Nicht‑Ziele
 
 In Scope (Iteration 1, asynchron, lokal):
-- OCR (Bild: JPEG/PNG; Datei: PDF) mit lokalem Backend (Ollama/DSPy) — keine Cloud.
+- Vision/Handwriting Analysis (Bild: JPEG/PNG; Datei: PDF) inkl. OCR, Diagramm-/Form-Erkennung und Layout-Hinweisen mit lokalem Backend (Ollama/DSPy) — keine Cloud.
 - Feedback-Generierung über denselben lokalen Stack (Stub zunächst, später DSPy/Ollama), deterministisch testbar.
-- `text_body` ist die kanonische Quelle für alle Arten von Submissions (auch nach OCR).
-- Asynchroner Verarbeitungs-Flow: HTTP-Endpunkt speichert Submission mit `analysis_status=pending`, Worker verarbeitet OCR + Feedback und markiert Submission als `completed` oder `failed`.
+- `text_body` ist die kanonische Quelle (Markdown) für alle Arten von Submissions: Schülertext oder Vision‑Extrakt.
+- Asynchroner Verarbeitungs-Flow: HTTP-Endpunkt speichert Submission mit `analysis_status=pending`, Worker verarbeitet Vision‑Analyse + Feedback und markiert Submission als `completed` oder `failed`.
 
 Nicht in Scope (Iteration 1):
 - Externe KI-Dienste, Cloud-APIs oder Datentransfer außerhalb der lokalen Infrastruktur.
@@ -25,74 +25,104 @@ Nicht in Scope (Iteration 1):
 ---
 
 ## User Stories (validiert)
-- Als Schüler reiche ich Bild/PDF ein; das System extrahiert Text (OCR) und speichert ihn so, als hätte ich Text eingetippt, damit Feedback einheitlich möglich ist.
+- Als Schüler reiche ich Bild/PDF ein; das System extrahiert verwertbaren Text (Markdown) aus Vision/Handschrift/Diagrammen und speichert ihn so, als hätte ich Text eingetippt, damit Feedback einheitlich möglich ist.
 - Als Schüler reiche ich Text ein; das System analysiert nach Kriterien und gibt mir formative Rückmeldung.
-- Als Schüler sehe ich pro Abgabe Status, verwendeten Text (getippt oder OCR) und Feedback zur Selbstreflexion.
-- Als Lehrer will ich, dass OCR/Feedback lokal (Ollama/DSPy), DSGVO‑konform, mit Zeitlimits und minimalen Logs laufen.
+- Als Schüler sehe ich pro Abgabe Status, verwendeten Text (getippt oder Vision‑Extrakt) und Feedback zur Selbstreflexion.
+- Als Lehrer will ich, dass Vision‑Analyse/Feedback lokal (Ollama/DSPy), DSGVO‑konform, mit Zeitlimits und minimalen Logs laufen.
 
 ---
 
 ## BDD‑Szenarien (Given‑When‑Then)
 
 Happy Path
-1) Text‑Submission erzeugt sofort Feedback
+1) Text‑Submission läuft standardmäßig asynchron durch Feedback-Worker
 - Given: Aufgabe ist freigegeben, Schüler ist Mitglied, `max_attempts` erlaubt neuen Versuch
 - When: POST Submissions mit `{ kind: 'text', text_body: '...' }`
-- Then: 201, `analysis_status='completed'`, `text_body`=übergebener Text, `feedback` gesetzt, `attempt_nr` korrekt
+- Then: 202, `analysis_status='pending'`, `text_body`=übergebener Text, Worker-Job existiert
+- And: Wenn der Worker erfolgreich abschließt, `analysis_status`→`completed`, `feedback` gesetzt, `attempt_nr` korrekt
 
-2) Bild‑Submission (JPEG/PNG) mit asynchronem OCR
+2) Bild‑Submission (JPEG/PNG) mit asynchroner Vision‑Analyse (OCR/Diagramme)
 - Given: Gültige Metadaten (`mime_type`, `size_bytes` ≤ 10 MiB, `sha256`), Abschnitt freigegeben
 - When: POST Submissions mit `{ kind: 'image', storage_key, mime_type, size_bytes, sha256 }`
 - Then: 202, `analysis_status='pending'`, `text_body` leer, `analysis_json` leer, Worker-Job existiert
-- And: Wenn der Worker erfolgreich abschließt, `analysis_status`→`completed`, `text_body`=OCR‑Ergebnis, `feedback` gesetzt
+- And: Wenn der Worker erfolgreich abschließt, `analysis_status`→`completed`, `text_body`=Vision‑Extrakt (Markdown) oder Schülertext, `analysis_json` (criteria.v1) gesetzt, `feedback` gesetzt
 
-3) PDF‑Submission mit asynchronem OCR
+3) PDF‑Submission mit asynchroner Vision‑Analyse
 - Given: Gültige Metadaten (`mime_type='application/pdf'`, ≤ 10 MiB)
 - When: POST Submissions mit `{ kind: 'file', ... }`
 - Then: 202, `analysis_status='pending'`, Worker-Job geplant
-- And: Nach Worker-Lauf wie oben `completed` mit OCR‑Text und Feedback
+- And: Nach Worker-Lauf wie oben `completed` mit Vision‑Extrakt (Text) und Feedback
+
+4) (Optional, später) Opportunistischer Fast‑Path
+- Hinweis: Für eine spätere Iteration denkbar. In Iteration 1 bewusst deaktiviert.
+- Der Contract listet 201 lediglich informativ; Standard bleibt 202/pending für alle Submission‑Typen.
 
 Edge Cases
-4) Maximalversuche
+5) Maximalversuche
 - Given: `max_attempts = 2`, Schüler hat 2 Abgaben
 - When: POST dritte Abgabe
 - Then: 400, `detail: max_attempts_exceeded`
 
-5) Idempotency
+6) Idempotency
 - Given: Wiederholung mit gleichem `Idempotency-Key`
 - When: POST erneut
-- Then: 201/200 äquivalent mit identischer Submission (keine Duplikate)
+- Then: Response entspricht der bereits existierenden Submission (202 pending oder 201 completed), keine Duplikate
 
-6) Größe/MIME invalid
+7) Größe/MIME invalid
 - Given: Datei > 10 MiB oder `mime_type` nicht erlaubt
 - When: POST
 - Then: 400, `detail: invalid_image_payload | invalid_file_payload`
 
 Fehlerfälle
-7) Nicht Mitglied
+8) Nicht Mitglied
 - Given: Schüler ist nicht Mitglied
 - When: POST Submission
 - Then: 403
 
-8) Abschnitt/Task nicht freigegeben
+9) Abschnitt/Task nicht freigegeben
 - Given: Mitglied, aber Task nicht sichtbar
 - When: POST Submission
 - Then: 404
 
-9) Worker markiert OCR‑Fehler
-- Given: OCR-Adapter wirft dauerhaften Fehler (nach Retries)
+10) Worker markiert Vision‑Analyse‑Fehler
+- Given: Vision‑Adapter wirft dauerhaften Fehler (nach Retries)
 - When: Worker verarbeitet Submission
-- Then: Submission `analysis_status='failed'`, `error_code='ocr_failed'`, `ocr_last_error` befüllt, `text_body` bleibt leer
+- Then: Submission `analysis_status='failed'`, `error_code='vision_failed'`, `vision_last_error` befüllt, `text_body` bleibt leer
 
-10) Worker markiert Analyse‑Fehler
+11) Worker markiert Feedback‑Fehler
 - Given: Feedback-Adapter schlägt fehl
 - When: Worker verarbeitet Submission
-- Then: Submission `analysis_status='failed'`, `error_code='analysis_failed'`, Audit-Log geschrieben
+- Then: Submission `analysis_status='failed'`, `error_code='feedback_failed'`, Audit-Log geschrieben
 
-11) Retry bis Erfolg
-- Given: OCR-Adapter ist beim ersten Versuch nicht erreichbar
+12) Retry bis Erfolg
+- Given: Vision‑Adapter ist beim ersten Versuch nicht erreichbar
 - When: Worker führt den Job aus, erster Versuch scheitert (transient)
-- Then: Job wird erneut eingeplant; beim zweiten Versuch gelingt OCR → Submission `analysis_status='completed'`
+- Then: Job wird erneut eingeplant; beim zweiten Versuch gelingt die Vision‑Analyse → Submission `analysis_status='completed'`
+
+---
+
+## Update 2025‑11‑01 — Worker Umsetzung (Felix & Lehrteam)
+
+- **User Story (Worker)**  
+  Als Betreiber möchte ich, dass der `learning-worker` jede Pending‑Submission zuverlässig verarbeitet: Job leasen, Vision-/Feedback‑Adapter ausführen, Submission auf `completed` oder `failed` setzen und den Job entweder ack’n oder mit Backoff erneut freischalten.
+
+- **Worker-BDD-Vertiefung**  
+  - Happy Path: Pending Submission → Vision liefert Markdown → Feedback erzeugt Analyse → Submission `completed`, `text_body`, `analysis_json` und `feedback_md` gesetzt, Job ge-acked.  
+  - Vision-Fehler: Adapter scheitert dreimal → Submission `failed`, `error_code=vision_failed`, `vision_last_error` ausgefüllt.  
+  - Feedback-Fehler: Vision erfolgreich, Feedback scheitert → Submission `failed`, `error_code=feedback_failed`, Vision-Felder bleiben bestehen.  
+  - Transient Fehler: erster Versuch schlägt fehl → `retry_count` + `visible_at` werden angepasst, nächster Worker-Lauf schließt den Job erfolgreich ab.  
+  - Leasing-Sicherheit: Jobs besitzen `lease_key` und `leased_until`; nach Timeout erscheinen sie erneut in der Queue (at-least-once).
+
+- **API/OpenAPI Ergänzungen**  
+  - `LearningSubmission.error_code` akzeptiert `vision_failed`, `feedback_failed`, `vision_retrying`.  
+  - `analysis_json` verweist auf `AnalysisJsonCriteriaV1` mit `schema`, `score`, `criteria_results[].explanation_md`.  
+  - `POST /api/learning/.../submissions`: Beschreibung hebt 202 + Worker-Queue hervor; 201 bleibt optionaler Fast-Path (derzeit deaktiviert).
+
+- **Migration-/Schema-Notizen**  
+  - Spalten in `learning_submissions` heißen zukünftig `vision_attempts`, `vision_last_error`, `vision_last_attempt_at` (ersetzen `ocr_*`).  
+  - Queue-Tabelle `learning_submission_jobs` mit Leasing-Feldern (`lease_key`, `leased_until`, `retry_count`, `visible_at`); Status `queued`/`leased`/`failed`, erfolgreiche Jobs werden gelöscht. Legacy-Tabellen (`learning_submission_ocr_jobs`) werden bei Migration automatisch umbenannt und alle Constraints angepasst.  
+  - Grants bleiben bei `gustav_limited`; Statuswechsel `pending → completed|failed` laufen über SECURITY-DEFINER-Funktionen für den Worker.
+
 ---
 
 ## Architektur & Adapter
@@ -100,25 +130,35 @@ Fehlerfälle
 Prinzip: Clean Architecture. Use Cases kennen keine Web‑ oder Modell‑Details. KI wird über Ports injiziert.
 
 Ports (Domain‑nah):
-- `SubmissionStoragePort` (Presign, Verify, optional Download-Stream für lokalen OCR-Dienst)
-- `LearningSubmissionQueuePort` (enqueue, lease, ack, retry Jobs)
-- `OcrAdapterProtocol` (`extract_text(storage_key, mime_type, *, sha256) -> str`)
-- `FeedbackAdapterProtocol` (`analyze(criteria, text_body) -> dict`)
+- `SubmissionStoragePort` (Presign, Verify, optional Download-Stream für lokalen Vision‑Dienst)
+- `LearningSubmissionQueuePort` (enqueue, lease_one, ack_success, nack_retry)
+- `VisionAdapterProtocol` (`extract(submission) -> VisionResult`), wobei `VisionResult.text_md` den Markdown‑Extrakt für `text_body` liefert
+- `FeedbackAdapterProtocol` (`analyze(criteria, text_body_md) -> FeedbackResult`), wobei `FeedbackResult.feedback_md` und `FeedbackResult.analysis_json` (criteria.v1) enthält
+- Hilfs‑Abstraktion `TextSource.get_text(submission) -> str` (liefert Schüler‑Markdown oder ruft Vision‑Extraktion auf)
 
 Flow:
 1. HTTP-Layer validiert Request, ruft Use Case `IngestLearningSubmission`.
-2. Use Case führt Autorisierungs-Checks aus, verifiziert Upload, persistiert Submission mit `analysis_status='pending'` und legt den Job über `LearningSubmissionQueuePort` an.
-3. Worker `process_learning_submission_ocr_jobs` leased Jobs, streamt Datei lokal zu Ollama-OCR, holt Text, ruft Feedback-Adapter, aktualisiert Submission (`analysis_status='completed'`, `text_body`, `analysis_json`, `feedback_md`) oder markiert `failed`.
-4. Fehlerbehandlung: Retries (max. 3, exponential backoff). Bei dauerhaften Fehlern setzt Worker `error_code` (`ocr_failed`, `analysis_failed`) und persistiert `ocr_last_error`.
+2. Use Case führt Autorisierungs-Checks aus, verifiziert Upload, persistiert Submission mit `analysis_status='pending'` und legt den Job über `LearningSubmissionQueuePort` an (Enqueue muss erfolgreich sein; andernfalls 500/501).
+3. Worker `process_learning_submission_jobs` leased Jobs, bezieht Text über `TextSource` (direkter Schülertext oder Vision‑Extraktion), ruft immer den Feedback‑Adapter auf, aktualisiert Submission (`analysis_status='completed'`, `text_body`, `analysis_json`, `feedback_md`) und ack’t den Job (löscht ihn) oder markiert `failed`.
+4. Fehlerbehandlung: Retries (max. 3, exponential backoff). Bei dauerhaften Fehlern setzt Worker `error_code` (`vision_failed`, `feedback_failed`) und persistiert `vision_last_error`.
+
+Fast-Path (später):
+- Nice-to-have für eine spätere Iteration. In Iteration 1 nicht umgesetzt. Standard bleibt 202/pending für alle Submission-Typen; 201 ist derzeit nur vertraglich als optional dokumentiert, aber technisch nicht aktiviert.
 
 Implementierungen:
-- `StubOcrAdapter` und `StubFeedbackAdapter` für Tests/Entwicklung (deterministisch, schnell).
-- `LocalOcrAdapter` (Ollama Vision über DSPy) und `LocalFeedbackAdapter` (Ollama Textmodell) für Produktion; beide laufen auf demselben Server (keine Cloud).
-- Queue-Port kann initial auf PostgreSQL-gestützte Tabelle (`learning_submission_ocr_jobs`) oder Supabase-Queue abbilden.
+- `StubVisionAdapter` und `StubFeedbackAdapter` für Tests/Entwicklung (deterministisch, schnell).
+- `LocalVisionAdapter` (Ollama Vision über DSPy) und `LocalFeedbackAdapter` (Ollama Textmodell) für Produktion; beide laufen auf demselben Server (keine Cloud).
+- Queue-Port bildet auf eine PostgreSQL‑gestützte Tabelle (`learning_submission_jobs`) ab.
+
+Konfiguration (.env):
+- `AI_FEEDBACK_MODEL` legt das Text-/Feedback‑Modell fest (z. B. `ollama:qwen2.5-instruct:7b`).
+- `AI_VISION_MODEL` bestimmt das Vision‑/Handwriting‑Modell (z. B. `ollama:qwen2.5-vl:7b`); Worker lädt das Modell erst bei Job‑Bearbeitung.
+- Standardwerte zeigen auf Stub-Modelle (`stub-feedback`, `stub-vision`), damit Tests und lokale Entwicklung deterministisch bleiben.
+- Konfigurationswechsel erfolgen über `.env` und werden vom Dependency-Injection-Layer beim Bootstrapping gelesen.
 
 Security/Privacy:
 - KI läuft lokal via Ollama; Kommunikation passiert ausschließlich über Unix-Socket/localhost.
-- Timeouts (z. B. 30s OCR, 15s Feedback) und Ressourcen-Limits verhindern Hänger; Job wird andernfalls als `failed` protokolliert.
+- Timeouts (z. B. 30s Vision, 15s Feedback) und Ressourcen‑Limits verhindern Hänger; Job wird andernfalls als `failed` protokolliert.
 - Minimale Logs: keine Rohbilder/Texte in Logfiles, nur Hash/IDs/Timing. Audit-Log speichert Fehlercodes ohne personenbezogene Daten.
 - RLS unverändert (Insert-Guard; kein Datenleck über Fehlermeldungen/IDs).
 
@@ -127,44 +167,76 @@ Security/Privacy:
 ## API Contract‑Änderungen (OpenAPI Entwurf)
 
 Aktueller Contract deckt Submissions bereits ab. Anpassungen:
-- `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`: Beschreibung + Responses ergänzen (`201` für Text, `202` für image/file mit Pending-Status).
+  - `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`: Beschreibung + Responses ergänzen (`202` als Standard für alle Submission‑Typen; `201` bleibt optionaler Fast‑Path‑Hinweis, derzeit nicht verwendet).
 - Schema `LearningSubmission.analysis_status`: erlaubte Werte `pending`, `completed`, `failed`.
-- Schema `LearningSubmission.error_code`: optional, Werte `ocr_failed`, `analysis_failed`, `ocr_retrying` (für Monitoring).
+- Schema `LearningSubmission.error_code`: optional, Werte `vision_failed`, `feedback_failed`, `vision_retrying` (für Monitoring).
 - `GET /api/learning/submissions/{id}` dokumentiert Polling auf dem gleichen Statusmodell (kein neues Flag nötig).
 
 Beispiel‑Snippet:
 ```yaml
 components:
   schemas:
+    AnalysisJsonCriteriaV1:
+      type: object
+      additionalProperties: false
+      properties:
+        schema:
+          type: string
+          enum: ["criteria.v1"]
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        criteria_results:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              criterion:
+                type: string
+              explanation_md:
+                type: string
+              score:
+                type: integer
+                minimum: 0
+                maximum: 10
     LearningSubmission:
       properties:
         analysis_status:
           type: string
           enum: [pending, completed, failed]
-          description: Pending bedeutet OCR/Feedback läuft im Hintergrund.
+          description: Pending bedeutet Vision/Feedback läuft im Hintergrund.
         error_code:
           type: string
           nullable: true
-          description: One of: ocr_failed, analysis_failed, ocr_retrying.
+          description: One of: vision_failed, feedback_failed, vision_retrying.
         text_body:
           type: string
           nullable: true
-          description: Schülertext oder OCR-Text; bei pending/failed kann leer sein.
+          description: Markdown-Text (Schülertext oder Vision‑Extrakt); bei pending/failed kann leer sein.
+        analysis_json:
+          allOf:
+            - $ref: "#/components/schemas/AnalysisJsonCriteriaV1"
+          nullable: true
+          description: Ergebnis der kriterien‑orientierten Auswertung (Version criteria.v1).
 paths:
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions:
     post:
       responses:
-        '201':
-          description: Submission erstellt (kind=text), Analyse abgeschlossen.
         '202':
-          description: Submission angenommen (kind=image|file), Analyse pending.
+          description: Submission angenommen, Analyse läuft asynchron (alle Submission-Typen).
+        '201':
+          description: Submission analysiert (Fast-Path); nur wenn Feedback sofort erstellt werden konnte.
+      x-gustav-notes:
+        - Standard-Response ist 202; 201 ist opportunistisch und darf nicht garantiert werden.
 ```
 
 ---
 
 ## Datenbank‑Änderungen (SQL‑Migration Entwurf)
 
-Problem: Bisherige Constraints verhindern gefülltes `text_body` für Bilder und es fehlen Felder für Pending-/Failed-States sowie die Job-Queue.
+Problem: Bisherige Constraints verhindern gefülltes `text_body` für Bilder und es fehlen Felder für Pending-/Failed‑States sowie eine robuste Job‑Queue (Lease/Ack statt doppeltem Finalstatus).
 
 Migration (Skizze):
 ```sql
@@ -198,50 +270,60 @@ alter table public.learning_submissions drop constraint if exists learning_submi
 alter table public.learning_submissions add constraint learning_submissions_analysis_status_check
   check (analysis_status in ('pending','completed','failed'));
 
--- 3) OCR-Metadaten für Worker-Retries
+-- 3) Vision‑Analyse Metadaten für Worker‑Retries
 alter table public.learning_submissions
-  add column if not exists ocr_attempts integer not null default 0,
-  add column if not exists ocr_last_error text,
-  add column if not exists ocr_last_attempt_at timestamptz;
+  add column if not exists vision_attempts integer not null default 0,
+  add column if not exists vision_last_error text,
+  add column if not exists vision_last_attempt_at timestamptz;
 
 -- 4) Job-Queue für Worker (FIFO, lokal)
-create table if not exists public.learning_submission_ocr_jobs (
+-- KISS: Jobs sind transient; Erfolg → Ack (Delete). Kein 'completed' Status auf Job‑Ebene.
+create table if not exists public.learning_submission_jobs (
   id uuid primary key default gen_random_uuid(),
   submission_id uuid not null references public.learning_submissions(id) on delete cascade,
-  payload jsonb not null,
-  status text not null default 'queued' check (status in ('queued','processing','completed','failed')),
+  status text not null default 'queued' check (status in ('queued','leased','failed')),
   retry_count integer not null default 0,
   visible_at timestamptz not null default now(),
+  lease_key uuid,
+  leased_until timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index if not exists learning_submission_ocr_jobs_visible_idx
-  on public.learning_submission_ocr_jobs (visible_at) where status = 'queued';
+create index if not exists learning_submission_jobs_visible_idx
+  on public.learning_submission_jobs (status, visible_at);
 ```
 
-RLS/Grants: Insert/Select bleiben; Worker-Updates erfolgen über `SECURITY DEFINER`-Function, die nur Pending→Completed/Failed erlaubt.
+Leasing & Acks:
+- Lease: atomare Aktualisierung auf `leased` mit `lease_key` und `leased_until` (z. B. 30s) via `for update skip locked`.
+- Ack Success: löscht den Job; Ack Retry: setzt `status='queued'`, erhöht `retry_count`, verschiebt `visible_at` (Exponential Backoff).
+
+RLS/Grants: Insert/Select bleiben; Worker‑Updates an Submission erfolgen über `SECURITY DEFINER`‑Funktionen, die nur Pending→Completed/Failed erlauben.
 
 ---
 
 ## Teststrategie (TDD)
 
-Kontext: `pytest` gegen echte Test‑DB; externe Abhängigkeiten (OCR/Feedback) werden gemockt.
+Kontext: `pytest` gegen echte Test‑DB; externe Abhängigkeiten (Vision/Feedback) werden gemockt.
 
 Tests (erste rote Tests):
-1) `test_post_text_submission_returns_completed_feedback`
-   - Erwartet 201, `analysis_status='completed'`, deterministisches Feedback.
-2) `test_post_image_submission_returns_pending_and_enqueues_job`
+1) `test_post_text_submission_returns_pending_and_enqueues_job`
    - Erwartet 202, `analysis_status='pending'`, Queue enthält Job mit Submission-ID.
-3) `test_worker_processes_pending_submission_to_completed`
-   - Worker holt Job, OCR/Feedback-Adapter (gemockt) liefern Ergebnis → Submission `analysis_status='completed'`, `text_body`/`analysis_json`/`feedback_md` gesetzt.
-4) `test_worker_marks_submission_failed_after_retry_limit`
-   - OCR-Adapter wirft Fehler, Worker versucht dreimal, danach `analysis_status='failed'`, `error_code='ocr_failed'`, `ocr_last_error` gesetzt.
-5) `test_invalid_mime_or_size_rejected`
+2) `test_post_text_submission_fast_path_returns_completed_feedback`
+   - Simuliert konfigurierte Fast-Path-Kapazität, erwartet 201 und `analysis_status='completed'`.
+3) `test_post_image_submission_returns_pending_and_enqueues_job`
+   - Erwartet 202, `analysis_status='pending'`, Queue enthält Job mit Submission-ID.
+4) `test_worker_processes_pending_submission_to_completed`
+   - Worker holt Job, Vision-/Feedback‑Adapter (gemockt) liefern Ergebnis → Submission `analysis_status='completed'`, `text_body` (Markdown) / `analysis_json` (criteria.v1) / `feedback_md` gesetzt.
+5) `test_worker_marks_submission_failed_after_retry_limit`
+   - Vision‑Adapter wirft Fehler, Worker versucht dreimal, danach `analysis_status='failed'`, `error_code='vision_failed'`, `vision_last_error` gesetzt.
+6) `test_invalid_mime_or_size_rejected`
    - 400, dokumentierte Fehlerdetails.
-6) `test_max_attempts_enforced`
+7) `test_max_attempts_enforced`
    - 400, `detail='max_attempts_exceeded'`.
-7) `test_idempotent_submission_returns_existing_row`
+8) `test_idempotent_submission_returns_existing_row`
    - Wiederholter POST (gleiches Idempotency-Key) liefert die vorhandene Submission (Status unverändert).
+9) `test_analysis_json_scores_within_ranges`
+   - Validiert: `analysis_json.score` ∈ [0,5] und alle `criteria_results[].score` ∈ [0,10].
 
 Muster: Red → minimale Implementierung → Green → Refactor (Ports klar trennen, Worker entkoppeln).
 
@@ -250,16 +332,70 @@ Muster: Red → minimale Implementierung → Green → Refactor (Ports klar tren
 ## Schrittweiser Umbau (Implementierungsskizze)
 
 Iteration 1 (asynchron, lokal):
-1) OpenAPI-Beschreibung aktualisieren (201/202, Pending-Status, Fehlercodes).
-2) Migration fahren (Constraints, Status-Enum, OCR-Metadaten, Job-Tabelle).
+1) OpenAPI-Beschreibung aktualisieren (202 als Standard; 201 nur optional dokumentiert), Pending-Status, Fehlercodes.
+2) Migration fahren (Constraints, Status-Enum, Vision-Metadaten, Job-Tabelle).
 3) Use Case `IngestLearningSubmission` implementieren (Ports injizieren, Pending persistieren, Job enqueuen).
-4) Worker-Service `process_learning_submission_ocr_jobs` erstellen (Stub-Adapter, Retry-Strategie, Completed/Failed-Updates).
-5) Repository-Schicht anpassen (Pending-Insert, Status-Updates, Queue-Operationen, Audit-Logging).
+4) Worker-Service `process_learning_submission_jobs` erstellen (Stub-Adapter, Lease/Ack, Retry-Strategie, Completed/Failed-Updates).
+5) Repository-Schicht anpassen (Pending-Insert, striktes Enqueue ohne „best-effort“, Status-Updates, Queue-Operationen, Audit-Logging).
 6) Tests grün machen (API + Worker + Repo) mit Stub-Adaptern und echter Test-DB.
 
 Iteration 1b:
 7) Lokale Ollama/DSPy-Adapter produktiv schalten (konfigurierbar via `AI_BACKEND=stub|local`), Ressourcen-Limits dokumentieren.
-8) Monitoring & Observability (Metriken `ocr_jobs_inflight`, `ai_worker_retry_total`, strukturierte Logs).
+8) Monitoring & Observability (Metriken `analysis_jobs_inflight`, `ai_worker_retry_total`/`vision_worker_retry_total`, strukturierte Logs).
+
+---
+
+## Deployment (docker-compose) – Worker-Dienst
+
+Architektur: Der Worker läuft als separater Dienst neben `web`. Er nutzt die gleiche Codebasis, aber einen anderen Entry-Point und kann unabhängig skaliert werden.
+
+docker-compose (Beispiel):
+
+```yaml
+  learning-worker:
+    build: .
+    container_name: gustav-learning-worker
+    command: ["python", "-m", "backend.learning.workers.process_learning_submission_jobs"]
+    volumes:
+      - ./backend/learning:/app/backend/learning:z
+      - ./backend/__init__.py:/app/backend/__init__.py:z
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=${WORKER_LOG_LEVEL:-info}
+      # Default to the application login DSN; override with a dedicated
+      # worker login via LEARNING_DATABASE_URL in production deployments.
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
+      - LEARNING_VISION_ADAPTER=${LEARNING_VISION_ADAPTER:-backend.learning.adapters.stub_vision}
+      - LEARNING_FEEDBACK_ADAPTER=${LEARNING_FEEDBACK_ADAPTER:-backend.learning.adapters.stub_feedback}
+      - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
+      - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
+      - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
+      - WORKER_POLL_INTERVAL=${WORKER_POLL_INTERVAL:-0.5}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys; from backend.learning.workers.health import LearningWorkerHealthService; status = LearningWorkerHealthService()._probe_sync().status; sys.exit(0 if status == 'healthy' else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - gustav-alpha2-network
+      - supabase_network_gustav-alpha2
+```
+
+Hinweise:
+- Entry-Point: `backend.learning.workers.process_learning_submission_jobs` pollt die Queue `public.learning_submission_jobs`, leased Jobs, führt Vision/Feedback aus und schreibt Status zurück.
+- Skalierung: Horizontal via `docker compose up --scale learning-worker=N`, vertikal über `WORKER_POLL_INTERVAL`/`WORKER_MAX_RETRIES`.
+- Netzwerk/Secrets: In PROD optional dedizierter DB-User `gustav_worker` (DSN via `LEARNING_DATABASE_URL`, Passwort out-of-band setzen). Standard-Default nutzt den App‑Login (IN ROLE `gustav_limited`). Service‑Role bleibt exklusiv im Web/API‑Layer.
+- Observability: Jeder Worker schreibt strukturierte Logs; Metriken wie `ai_worker_retry_total` für Alerting.
 
 ---
 
@@ -270,29 +406,385 @@ Iteration 1b:
 - Timeouts, Ressourcen-Limits (10 MiB, MIME-Whitelist, CPU/GPU-Limits) verhindern Missbrauch und DoS.
 - RLS bleibt Dreh- und Angelpunkt (Insert-Guard, `app.current_sub`), Worker authentifiziert sich über Service Key.
 - CSRF-Check wie im Contract dokumentiert (same-origin Pflicht bei POST); Idempotency-Key Pflicht für wiederholte Requests.
+ - Sanitizing: `text_body` wird serverseitig vor dem Rendern HTML‑saniert (XSS‑Schutz).
 
 ---
 
 ## Observability
-- Strukturierte Statuswechsel (`pending` → `completed|failed`) mit `error_code` (`ocr_failed`, `analysis_failed`, `ocr_retrying`).
-- Metriken: `ocr_jobs_inflight`, `ai_worker_duration_seconds`, `ai_worker_retry_total`, `ai_worker_failed_total`.
+- Strukturierte Statuswechsel (`pending` → `completed|failed`) mit `error_code` (`vision_failed`, `feedback_failed`, `vision_retrying`).
+- Metriken: `analysis_jobs_inflight`, `ai_worker_duration_seconds`, `ai_worker_retry_total`, `ai_worker_failed_total`.
 - Logs: Jeder Jobwechsel (enqueue, lease, success, retry, fail) als strukturierter Eintrag ohne Rohdaten.
-- Alerts: `ai_worker_failed_total` und `ocr_jobs_inflight` > Threshold.
+- Alerts: `ai_worker_failed_total` und `analysis_jobs_inflight` > Threshold.
 
 ---
 
 ## Risiken & Gegenmaßnahmen
 - Worker-Stau: Monitoring + Auto-Scaling (mehr Worker-Instanzen) oder Priorisierung.
 - Ressourcen (GPU/CPU): Fallback auf Stub/leichteres Modell; Feature-Flag `AI_BACKEND`.
-- Konsistenz: Pending→Completed-Updates ausschließlich über Repository-Funktionen mit Transaktionen.
+- Konsistenz: Pending→Completed-Updates ausschließlich über Repository-Funktionen mit Transaktionen; Jobs sind transient (Ack löscht Job).
 - Fehlerhafte Modelle: Retries + `failed`-Status mit Audit-Log; Operator kann Submission erneut triggern.
+
+---
+
+## Statusupdate (aktueller Stand)
+
+- Entscheidung: Vollständig asynchron für alle Submission‑Typen (text/image/file). Kein Feature‑Flag, kein Fast‑Path in Iteration 1.
+- API: POST Submissions gibt `202` zurück und liefert `analysis_status='pending'`; `analysis_json`/`feedback` sind bei pending leer. Health-Route `/internal/health/learning-worker` ist im Contract verankert.
+- Repository/Worker: Queue `learning_submission_jobs` wird strikt benutzt; der Worker leased Jobs, setzt vor Updates `app.current_sub` und räumt verwaiste Jobs auf. Vision-/Feedback‑Adapter werfen differenzierte Exceptions (`VisionTransientError`, `VisionPermanentError`, `FeedbackTransientError`, `FeedbackPermanentError`). Retry-Pfad setzt `error_code='vision_retrying'` bzw. `feedback_retrying`, Backoff basiert auf `WORKER_BACKOFF_SECONDS`, finale Fehler markieren Submission + Job mit `*_failed`.
+- Monitoring: Worker emittiert strukturierte Warn-/Fehler-Logs und Metriken (`analysis_jobs_inflight`, `ai_worker_processed_total`, `ai_worker_retry_total`, `ai_worker_failed_total`). Telemetrie wird in pytest verifiziert.
+- DSN/Harness‑Härtung: Die DSN‑Auflösung des Learning‑Repos respektiert `RLS_TEST_DSN`/`LEARNING_DATABASE_URL`/`DATABASE_URL`. Der Worker authentifiziert sich als `gustav_worker` und besitzt nur EXECUTE/DML-Grants auf Queue und Security-Helfer.
+- Contract/OpenAPI: `analysis_status`=`pending|completed|failed`, `error_code` umfasst `vision_retrying`, `vision_failed`, `feedback_retrying`, `feedback_failed`. Neuer Pfad `/internal/health/learning-worker` liefert `LearningWorkerHealth`.
+- Migrationen (angewendet via `supabase migration up`):
+  - `20251103124000_learning_worker_role.sql` erstellt `gustav_worker` und hinterlegt minimale Queue-Grants.
+  - `20251103124548_learning_worker_retry.sql`, `20251103131517_learning_worker_retry_patch.sql`, `20251103131552_learning_worker_json_param.sql` liefern Retry-Spalten und die Security-Definer-Helfer (`learning_worker_update_*`, `learning_worker_mark_retry`).
+  - `20251103135028_learning_worker_health_probe.sql` erstellt bei Bedarf `gustav_web`/`gustav_operator` (NOLOGIN) und definiert `learning_worker_health_probe()`.
+- Tests: Worker-Suite (`backend/tests/test_learning_worker_jobs.py`) deckt Pending→Completed, Vision-/Feedback-Retry, Retry-Limit/Failed, Metrik-Emission und strukturierte Logs ab. Health-Endpunkt-Tests (`backend/tests/test_learning_worker_health_endpoint.py`) prüfen Auth, 200/503-Payloads. Security-Tests (`backend/tests/test_learning_worker_security.py`) verifizieren die Security-Definer-Funktionen inkl. Pending-Guards und Retry-Helfer.
+- UI/SSR: Weiterhin pending → Anzeige „Analyse läuft“. Text-Fallback nutzt `text_body`, das jetzt Vision-Extrakte enthalten kann.
+
+## Observability (Iteration 1 Follow-up)
+
+Ziele (KISS & Security first):
+- Lehrkräfte und Operatoren erkennen Staus oder Fehlkonfigurationen ohne Zugriff auf personenbezogene Daten.
+- Alerts schlagen nur an, wenn Handlungsbedarf besteht (keine Alert-Fatigue).
+- Alle Dashboards und Logs anonymisieren Submission-Daten (nur IDs, keine Schülernamen).
+
+Metriken & Grenzwerte:
+- `analysis_jobs_inflight`: Warnung ab >10 Jobs für länger als 5 Minuten, Critical ab >25 Jobs (Hinweis auf Worker-Stau).
+- `ai_worker_failed_total`: Delta >0 innerhalb 15 Minuten → Warnung; Delta >3 → Critical (erfordert Untersuchung).
+- `ai_worker_retry_total`: Anteil Retries >30 % der Jobs innerhalb 15 Minuten → Warnung (Vision-/Feedback-Dienst prüfen).
+- `learning_worker_health_probe_duration_seconds` (Histogramm): 95. Perzentil >1 s → Warnung, >3 s → Critical.
+
+Alerting-Skizze (Prometheus + Alertmanager):
+- Regel `LearningWorkerBacklogWarning`: `analysis_jobs_inflight > 10` für 5 Minuten → Slack-Kanal `#gustav-ops`.
+- Regel `LearningWorkerFailuresCritical`: `increase(ai_worker_failed_total[15m]) > 3` → Pager für Bereitschaft.
+- Regel `LearningWorkerRetriesWarning`: `increase(ai_worker_retry_total[15m]) > increase(ai_worker_processed_total[15m]) * 0.3` → Hinweis auf adapterseitige Probleme.
+- Regel `LearningWorkerProbeSlow`: `histogram_quantile(0.95, rate(learning_worker_health_probe_duration_seconds_bucket[5m])) > 1` → Slack-Info; Critical-Schwelle bei >3 s.
+
+Dashboard (Grafana-Board „Learning Worker“):
+- Panel „Queue Size“ (graph): `analysis_jobs_inflight` + Annotationen bei Deployments.
+- Panel „Job Outcomes“ (stacked bar): `increase(ai_worker_processed_total[1h])`, `ai_worker_retry_total`, `ai_worker_failed_total`.
+- Panel „Health Probe Dauer“ (heatmap oder single stat) für `learning_worker_health_probe_duration_seconds`.
+- Panel „Adapter Logs“ (Loki-Query: `{service="learning-worker"} |= "vision_retrying" OR |= "feedback_retrying"`), rote Hervorhebung bei Fehlercodes.
+- Drilldown-Link zur Runbook-Sektion „Fehlerbehebung“.
+
+Log-Standards:
+- Strukturierte Logs enthalten `submission_id`, `job_id`, `error_code`, niemals `text_body` oder Vision-Ausgaben.
+- Für DSGVO-Konformität: Logs werden nach 30 Tagen rotiert, Zugriff nur für Rolle `gustav_operator`.
+
+Instrumentierung:
+- Worker meldet Metriken via Prometheus-Python-Client, Exporter läuft im gleichen Container, Port 9464 (nur lokal/binnen Netz erreichbar).
+- Health-Endpunkt ruft `learning_worker_health_probe()` und liefert zusätzlich `metrics_url` (localhost) zur leichteren Einbindung ins Monitoring.
+
+Offene Punkte (Observability):
+- Alertmanager-Receivers mit Felix abstimmen.
+- Dashboard-JSON im Repo ablegen (`docs/observability/learning-worker.json`).
+- End-to-End-Test für Prometheus-Endpoint vorbereiten (Smoke-Test, nicht-blockierend).
+
+Nächste Schritte (Operations & UX):
+- Compose-Service finalisieren (`learning-worker` inkl. Env-Variablen, Ressourcenlimits, Restart-Policy, Prometheus-Port).
+- Healthchecks dokumentieren (HTTP `/internal/health/learning-worker` + DB-Probe) und automatisierten Smoke-Test ergänzen.
+- Manuelle End-to-End-Prüfung planen: Submission → Pending → Completed/Failed → UI-Anzeige der Retry-/Fehlerzustände.
+
+---
+
+## Detailplan: Worker-Retry & Failure Handling
+
+Ziel: Retry-Mechanismen deterministisch, nachvollziehbar und RLS-konform ausgestalten, damit Lernende und Lehrkräfte stabile Statusmeldungen bekommen.
+
+- **Konfigurierbare Parameter**
+  - `WORKER_MAX_RETRIES` (Default 3) begrenzt zusätzliche Versuche nach dem initialen Run. Effektive maximale Versuche = `WORKER_MAX_RETRIES + 1`.
+  - `WORKER_BACKOFF_SECONDS` (Default 10) liefert die Basis für Exponential Backoff: `delay = WORKER_BACKOFF_SECONDS * (2 ** retry_count)`.
+  - `WORKER_LEASE_SECONDS` (Default 30) legt die Lease-Dauer fest; Timeout führt zu automatischem Retry.
+
+- **Job-Lifecycle**
+  1. `_lease_next_job` wählt ältesten `queued`-Job (`visible_at <= now()`) via `FOR UPDATE SKIP LOCKED`, setzt `status='leased'`, `lease_key`, `leased_until = now() + WORKER_LEASE_SECONDS`.
+  2. `_process_job` lädt Submission im selben TX-Kontext; falls Submission nicht mehr `pending`, löscht `_ack_success` den Job (idempotent).
+  3. Vision-Phase nur bei `kind in ('image','file')`:
+     - Erfolg: `vision_attempts += 1`, `vision_last_attempt_at = now()`, `vision_last_error = NULL`.
+     - Transienter Fehler (`VisionTransientError`): `vision_attempts += 1`, `vision_last_attempt_at = now()`, `vision_last_error` kurze, PII-freie Meldung, `error_code='vision_retrying'`.
+     - Permanenter Fehler (`VisionPermanentError`): direkt `_mark_failed('vision_failed', last_error)`.
+  4. Feedback-Phase läuft immer:
+     - Erfolg: `feedback_last_attempt_at = now()`, `feedback_last_error = NULL`.
+     - Transienter Fehler (`FeedbackTransientError`): Retry analog Vision (ohne `error_code`-Wechsel, da Feedback-Fehler erst beim finalen Fail sichtbar wird).
+     - Permanenter Fehler: `_mark_failed('feedback_failed', last_error)`.
+  5. Erfolgspfad: `_update_submission_completed` setzt `analysis_status='completed'`, `text_body`, `analysis_json`, `feedback_md`, löscht `error_code`.
+  6. Retrypfad: `_nack_retry` setzt `status='queued'`, `retry_count += 1`, `visible_at = now() + delay`, `lease_key=NULL`, `leased_until=NULL`.
+  7. Finales Fail (Retry-Limit erreicht oder permanenter Fehler): `_update_submission_failed` setzt `analysis_status='failed'`, `error_code`, `vision_last_error`/`feedback_last_error`, Job `status='failed'`, `leased_until=NULL`.
+
+- **Observability & Logging**
+  - Metriken: `analysis_jobs_inflight` (gauge), `ai_worker_processed_total{status}`, `ai_worker_retry_total{phase}`, `ai_worker_failed_total{error_code}`.
+  - Logs (Structured): Retry → Level WARN (`submission_id`, `retry_count`, `next_visible_at`), finaler Fail → Level ERROR (ohne PII).
+  - Audit-Log-Einträge dokumentieren Statuswechsel (`pending→completed`, `pending→failed`) inkl. `job_id`, `lease_key`.
+
+- **Tests (pytest)**
+  - `test_worker_retries_vision_transient_error`: Erwartet Requeue mit exponentiellem Backoff, `retry_count` steigt, Submission bleibt `pending`.
+  - `test_worker_marks_failed_after_max_retries`: Nach Überschreiten des Limits → Submission `analysis_status='failed'`, `error_code='vision_failed'`, Job `status='failed'`.
+  - `test_worker_handles_feedback_transient_then_success`: Erster Durchlauf wirft `FeedbackTransientError`, zweiter Lauf erfolgreich → final `completed`.
+  - `test_worker_ignores_non_pending_submission`: Worker erkennt `analysis_status!='pending'` und entfernt Job ohne Adapter-Aufruf.
+
+## Detailplan: Security-Definer-Funktionen & Grants
+
+Ziel: Worker agiert mit minimalen Rechten, hält RLS ein und aktualisiert nur definierte Felder.
+
+- **Rollenmodell**
+  - Neue DB-Rolle `gustav_worker`, Mitglied von `gustav_runtime`, aber ohne direkten DML-Zugriff auf `learning_submissions`.
+  - Verbindungen setzen `set_config('app.current_sub', 'gustav_worker', true)` zu Beginn jeder Session.
+
+- **Funktionen (alle `SECURITY DEFINER`, Eigentümer `gustav_owner`)**
+  1. `learning_worker_update_completed(submission_id uuid, p_text_body text, p_feedback_md text, p_analysis_json jsonb)`  
+     - Guard: `where id = submission_id and analysis_status = 'pending'`.  
+     - Aktionen: `analysis_status='completed'`, `text_body=p_text_body`, `feedback_md=p_feedback_md`, `analysis_json=p_analysis_json`, `error_code=NULL`, `vision_attempts += 1`, Retry-Metadaten zurücksetzen.
+  2. `learning_worker_update_failed(submission_id uuid, p_error_code text, p_last_error text)`  
+     - Guard: `p_error_code in ('vision_failed','feedback_failed')`.  
+     - Aktionen: `analysis_status='failed'`, `error_code=p_error_code`, zuständiges `_last_error`-Feld aktualisieren, Versuchsmetadaten für die jeweilige Phase hochzählen.
+  3. `learning_worker_mark_retry(submission_id uuid, p_phase text, p_message text, p_attempted_at timestamptz)`  
+     - Unterstützt `p_phase in ('vision','feedback')`, aktualisiert die zugehörigen Attempt-/Fehlerfelder und setzt `error_code` auf `*_retrying`.
+  4. `learning_worker_ack_job(job_id uuid, p_lease_key uuid)`  
+     - Löscht Job, wenn `lease_key` noch passt. Verhindert unautorisierte Acks.
+  5. `learning_worker_nack_job(job_id uuid, p_visible_at timestamptz, p_retry_count integer)`  
+     - Setzt `status='queued'`, `visible_at=p_visible_at`, `retry_count=p_retry_count`, `lease_key=NULL`.
+
+- **Schema-Erweiterung**
+  - Felder ergänzen: `feedback_last_attempt_at timestamptz`, `feedback_last_error text`.
+  - Indizes prüfen (`learning_submission_jobs(status, visible_at)` reicht).
+  - Audit-Trigger (`moddatetime`) erweitern, damit Funktionsaufrufe `updated_at` setzen.
+
+- **Grants & Policies**
+  - `grant execute on function learning_worker_* to gustav_worker;`
+  - `grant select, insert, update on learning_submission_jobs to gustav_worker;`
+  - RLS auf `learning_submission_jobs`: Policy `using (true)` für `gustav_worker`, `with check (true)` (Jobs sind nicht personenbezogen).
+  - Keine direkten `UPDATE`/`DELETE`-Grants auf `learning_submissions`; ausschließlich Funktionspfad zulässig.
+
+- **Tests & Governance**
+  - RLS-Test: Direkter `UPDATE learning_submissions` als `gustav_worker` failt (`permission denied`), Funktionsaufruf succeeds.
+  - Funktionstest: Aufruf von `learning_worker_update_completed` aktualisiert nur erwartete Felder (kein `student_sub` etc.).
+  - Dokumentation: Ergänzung in `docs/operations/runbook_learning_worker.md` inkl. Rotationshinweis für `gustav_worker`-Passwort.
+
+---
+
+## Detailplan: DSN-Verifikation & Testkonfiguration
+
+Ziel: Sicherstellen, dass alle Codepfade korrekt zwischen Runtime-, Test- und Service-Rollen unterscheiden und RLS weiterhin greift.
+
+- **Konfigurations-Variablen**
+  - `DATABASE_URL` (Runtime, Service-Role für Web).
+  - `LEARNING_DATABASE_URL` (optional, überschreibt `DATABASE_URL` für Learning-Komponenten im Worker).
+  - `RLS_TEST_DSN` (Testpfad, nutzt Test-Rolle mit RLS aktiv für pytest).
+
+- **Initialisierungslogik**
+  - Repository-Layer liest DSN lazy via `get_learning_repo(dsn=None)`; Worker übergibt explizit `LEARNING_DATABASE_URL`.
+  - Tests patchen `RLS_TEST_DSN`, um echte RLS-Rollen zu erzwingen (keine Fake-RLS).
+  - Fallback: wenn `LEARNING_DATABASE_URL` fehlt, greift `DATABASE_URL` (Warn-Log, damit Betreiber informiert sind).
+
+- **Verifikation**
+  - pytest-Fixture `learning_repo` prüft beim Setup, ob `current_user` innerhalb einer Session `gustav_student` oder `gustav_teacher` analog RLS agieren muss.
+  - Integrationstest `test_repo_raises_without_current_sub`: Erwartet `PermissionError`, wenn `app.current_sub` nicht gesetzt ist (defensiv).
+  - CLI-Check (z. B. `scripts/check_dsn.py`) validiert, dass `LEARNING_DATABASE_URL` auf Rolle `gustav_worker` zeigt, bevor Worker startet.
+  - In CI: Matrix-Lauf mit `LEARNING_DATABASE_URL` gesetzt und ungesetzt, um beide Pfade abzudecken.
+
+- **Monitoring**
+  - Beim Start loggt Worker die verwendete DSN-Quelle (`LEARNING_DATABASE_URL` vs. `DATABASE_URL`) ohne Credentials.
+  - Healthcheck-Endpunkt (`/internal/health/learning-worker`) ruft `select current_user, current_setting('app.current_sub', true)` ab; Deployment überprüft, ob `gustav_worker` aktiv ist.
+
+---
+
+## Operations & Deployment (Compose, Healthchecks, Runbook-Verknüpfung)
+
+Compose-Service (Entwurf):
+```yaml
+  learning-worker:
+    build:
+      context: .
+      dockerfile: docker/learning-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL}
+      - WORKER_MAX_RETRIES=3
+      - WORKER_BACKOFF_SECONDS=10
+      - AI_VISION_ADAPTER=${AI_VISION_ADAPTER:-stub}
+      - AI_FEEDBACK_ADAPTER=${AI_FEEDBACK_ADAPTER:-stub}
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://web:8000/internal/health/learning-worker | jq -e '.status == \"healthy\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    ports:
+      - "9464:9464" # Prometheus /metrics (nur lokal freigeben)
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "1g"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+```
+
+Healthchecks:
+- HTTP: `/internal/health/learning-worker` (verlangt Auth; im Compose-Healthcheck nutzt der Container-Service-Account `gustav_operator`).
+- DB-Probe: `learning_worker_health_probe()` prüft Rolle (`gustav_worker`) + `current_setting('app.current_sub', true) IS NULL` (Worker setzt Sub erst während Job).
+- Prometheus: `/metrics` → Eigencheck (Scrape-Job `learning-worker` in `prometheus.yml` ergänzen).
+
+Runbook-Verknüpfung:
+- Plan verlinkt auf `docs/operations/runbook_learning_worker.md` (Abschnitt 2 „Routineprüfungen“) für tägliche Checks.
+- Fehlerbehebungsschritte (Neu-Enqueue etc.) bleiben im Runbook; Plan referenziert die Kapitelnummern.
+- Update-Task: Runbook aktualisieren, sodass Healthcheck-Interpretationen (Status `healthy/degraded`) beschrieben sind.
+
+Deployment-Schritte (CI/CD):
+1. `supabase migration up` im CI, sicherstellen, dass Rollen (gustav_worker/web/operator) existieren.
+2. Docker-Build für `learning-worker`, Push in Registry.
+3. Compose-Stack deployen (`docker compose up -d learning-worker`), Healthcheck abwarten.
+4. Prometheus/Grafana Reload (falls Dashboard-JSON aktualisiert wurde).
+5. Smoke-Test: `curl -u operator:... http://localhost:8000/internal/health/learning-worker`.
+
+Sicherheitsaspekte:
+- Worker-Container nutzt `read-only` Root-FS außer `/tmp`.
+- `.env` enthält keine Klartext-Passwörter im Repo; Secrets via `.env.local` oder Orchestrierungs-Secret-Store.
+- Netzwerk: `learning-worker` kommuniziert nur mit `db`, `web` (健康check), optional `ollama`.
+- Logging-Rotation im Compose verhindert Datenablage von PII über lange Zeit.
+
+Offene Aufgaben (Operations):
+- Dockerfile härten (non-root user, Drop von Capabilities).
+- Dokumentation von Resource-Limits (CPU/GPU) für Vision-Modelle ergänzen.
+- Automatisierten Smoke-Test für Healthcheck in CI-Stage integrieren.
 
 ---
 
 ## Offene Fragen
 - Welche lokalen Modelle bevorzugen wir initial (z. B. qwen2.5‑vl vs. gemma3 vision)?
 - Gewünschte maximale Wartezeit (Timeout) aus UX‑Sicht?
-- Benötigen Lehrkräfte Einsicht in OCR‑Qualität (z. B. Konfidenz)?
+- Benötigen Lehrkräfte Einsicht in Vision‑Qualität (z. B. Konfidenz)?
+
+---
+
+## KI-Adapter (Ollama/DSPy) – Fahrplan Iteration 1 → 2
+
+Ziele (KISS, Security first):
+- Produktionsfähige Vision-/Feedback-Pipelines auf lokalen Modellen; Stub bleibt Standard für Tests.
+- Eval-Prozess dokumentiert und reproduzierbar, ohne personenbezogene Daten.
+- Adapter trennen Prompting/Parsing von Infrastruktur (Ollama/DSPy) klar, um Wartbarkeit zu sichern.
+
+Roadmap:
+1. **Eval vorbereiten (Week 1)**
+   - Anonymisierte Stichprobe zusammenstellen (≈20 Vision-, ≈20 Text-Submissions).
+   - Metriken definieren: OCR-Recall, Markdown-Qualität, Rubric-Abdeckung.
+   - Skript `scripts/ai/eval_prepare.py` erzeugt Eval-Pakete (Hashes statt IDs).
+
+2. **Vision-Adapter umsetzen (Week 2)**
+   - Modellvergleich: `qwen2.5-vl` vs. `gemma3-vision` (Leistung, Lizenz, VRAM).
+   - Implementierung `LocalVisionAdapter`: DSPy-Pipeline, Timeout 30 s, Unix-Socket-Verbindung zu Ollama.
+   - Tests: Integration mit Ollama-Mock (HTTP) → prüft Markdown-Extrakt & Fehlerpfade.
+   - Security: Fehlertexte maskieren PII, Logs enthalten nur Submission-/Job-IDs.
+
+3. **Feedback-Adapter umsetzen (Week 3)**
+   - Modell: `qwen2.5-instruct:7b` (Fallback `llama3.2:8b`), Prompt in `backend/learning/ai/prompts/feedback.md`.
+   - Implementierung `LocalFeedbackAdapter`: strukturiertes Ergebnis (`feedback_md`, `analysis_json`).
+   - Tests: Snapshot-Vergleich, Schema-Validierung (`criteria.v1`), Timeout 15 s.
+   - Safety: Guardrail „no personal data“, Response-Länge begrenzen.
+
+4. **Gemeinsame Validierung (Week 4)**
+   - Eval-Suite (`scripts/ai/eval_run.py`) → Report `docs/ai/eval_report.md`.
+   - Acceptance: ≥85 % OCR-Recall, Feedback deckt alle Kriterien (manuelles Review durch Felix).
+   - Feature-Flag `AI_BACKEND=local` schaltet produktive Adapter ein; Default bleibt `stub`.
+
+5. **Betrieb & Härten**
+   - Observability: Eigene Metriken (`ai_vision_latency_seconds`, `ai_feedback_latency_seconds`), Alerts auf Timeout.
+   - Rate-Limiting: Max. 1 Vision-Job pro Submission gleichzeitig, Puffer gegen Überlast.
+   - Failover: Bei Modellfehler → Stub aktivieren, Alert auslösen.
+
+Dokumentation:
+- `docs/references/learning_ai.md` aktualisieren (Architektur, Config, Sicherheitsnotizen).
+- `docs/operations/runbook_learning_worker.md` bekommt Abschnitt „Ollama neu starten“.
+- Schülergerechte Erklärung in `docs/science/vision_adapter.md` (Transparenz, Bias-Hinweise).
+
+Offene Tasks:
+- GPU-Bedarf evaluieren (Compose-Update mit `deploy.resources.reservations.devices`).
+- Datenschutz-Freigabe für Eval-Dataset einholen.
+- Prompt-Auditing automatisieren (DSPy Logging, Review durch Lehrkräfte).
+
+---
+
+## Manueller UI-E2E-Test: Submission → Feedback
+
+### Voraussetzungen
+- Dienste hochfahren: `docker compose up -d db supabase web learning-worker`. Vor Start `supabase status` kontrollieren.
+- Testnutzer: Lehrer (`test2@test.de`) und Schüler (`test1@test.de`), Passwort jeweils `123456`; falls Accounts fehlen, via `scripts/dev/create_login_user.sql` anlegen.
+- Browser-Setup: Zwei Profile oder getrennte Tabs (Privatmodus für Lehrer, normaler Tab für Schüler), damit parallele Sessions möglich sind.
+- Seed-Daten: Sicherstellen, dass mindestens eine Aufgabe im Kurs verfügbar ist (`scripts/import_legacy_backup.py --minimal` oder manuelle Task-Erstellung).
+- Monitoring: 
+  - Worker-Logs (`docker compose logs -f learning-worker`).
+  - Healthcheck beobachten (`watch -n 15 curl -s http://localhost:8000/internal/health/learning-worker`).
+  - Optional: Grafana-Dashboard „Learning Worker“ für `analysis_jobs_inflight`, `ai_worker_failed_total`.
+- Aufräumen: Nach dem Test Submission/Kurse entfernen oder `supabase db reset`, damit Folge-Tests sauber starten.
+
+Die folgenden Teilabschnitte beschreiben den manuellen Flow Schritt für Schritt (Lehrer → Schüler → Lehrer).
+
+---
+
+### Schritt 1: Lehrer richtet Kurs & Abschnitt ein
+
+1. Lehrer im Browser anmelden (`test2@test.de` / `123456`).
+2. Dashboard → „Kurs erstellen“:
+   - Kursname „KI-E2E Testkurs“ setzen.
+   - Schuljahr wählen, Kurs speichern.
+3. Kursdetail öffnen → „Lerneinheit hinzufügen“:
+   - Titel „Integrationstest Vision/Feedback“.
+   - Kurzbeschreibung (Ziel des Tests) eintragen.
+4. Einheit öffnen → Abschnitt anlegen:
+   - Abschnittstitel „Handschrift-Aufgabe“.
+   - Aufgabe hinzufügen (Text oder Bild). Kriterien definieren (mindestens zwei).
+5. Abschnitt freigeben:
+   - „Für Kurs freischalten“ wählen, Kurs „KI-E2E Testkurs“ markieren.
+   - Sichtbarkeit prüfen (Status „freigegeben“ im Kurs).
+6. Aufgaben-ID notieren (URL `.../tasks/<task_id>` oder Entwicklertools) für spätere Kontrolle.
+7. Worker-Log im Terminal offen lassen (`docker compose logs -f learning-worker`).
+
+Checkpoint: Kurs sichtbar, Abschnitt freigegeben, Aufgabe bereit.
+
+---
+
+### Schritt 2: Schüler reicht Submission ein
+
+1. Schüler in separatem Browser/Tab anmelden (`test1@test.de` / `123456`).
+2. Kursübersicht → Kurs „KI-E2E Testkurs“ öffnen; Abschnitt „Handschrift-Aufgabe“ sollte sichtbar sein.
+3. Aufgabe öffnen:
+   - Variante A (Text): Markdown-Text eingeben (z. B. „Experimenteller Testtext…“).
+   - Variante B (Bild): Beispielbild hochladen (≤10 MiB, akzeptiertes Format). SHA/Dateigröße prüfen, falls Upload-Fehler auftreten.
+4. Submission absenden → System zeigt Status „Analyse läuft“ (pending).
+5. Backend prüfen:
+   - Worker-Log sollte neue Job-ID anzeigen (`lease job ...`).
+   - `analysis_jobs_inflight` im Dashboard kurz >0.
+   - In Supabase (`supabase db remote run "select analysis_status, error_code from learning_submissions where id='<submission_id>';"`) kontrollieren, dass `analysis_status='pending'` gesetzt ist.
+6. Warten, bis Worker Job verarbeitet:
+   - Erwartet: Logeintrag „completed submission=<id>“.
+   - Bei Störung: Retry-Log (`vision_retrying`/`feedback_retrying`) beobachten.
+
+Checkpoint: Submission `completed` oder `failed` (letzteres mit `error_code`), Feedback-Daten verfügbar.
+
+---
+
+### Schritt 3: Lehrer prüft Live-Darstellung & Nachbereitung
+
+1. Zur Lehrer-Sitzung zurückkehren (oder erneut anmelden).
+2. Kurs „KI-E2E Testkurs“ → Live-Ansicht öffnen.
+   - Erwartet: Neue Submission mit Status „Abgeschlossen“ (oder „Fehlgeschlagen“) und Feedback-Text.
+   - Prüfen, ob Retry-/Fehlerstatus konsistent angezeigt werden (`vision_retrying` → Hinweis „Analyse wiederholt“).
+3. Wenn Feedback fehlt:
+   - Backend-Logs checken (Worker-Log, `ai_worker_failed_total`).
+   - Health-Endpunkt auf `degraded`? Dann Rolle prüfen (`gustav_worker`).
+4. Ergebnisse dokumentieren:
+   - Submission-ID, Zeitstempel, Status/Feedback notieren.
+   - Screenshots aufnehmen (für QA-Archiv).
+5. Nachbereitung:
+   - Aufräumen: Kurs/Submission löschen oder `supabase db reset`.
+   - Erkenntnisse / Bugs im Ticket-System erfassen (inkl. Logs, IDs).
+   - Optional: Alerting-Metriken exportieren (Prometheus Query speichern).
+
+Finaler Check: UI zeigt korrekte Daten, Worker-/Monitoring-Signale im erwarteten Bereich.
 
 ---
 
@@ -308,3 +800,47 @@ Iteration 1b:
 - Alpha2 Stub: `backend/learning/repo_db.py` (Analyse‑Platzhalter)
 - Legacy (Alpha1) Vision: `legacy-code-alpha1/app/ai/vision_processor.py` (DSPy+Ollama)
 - Glossar: `docs/glossary.md`
+
+---
+
+## Architektur‑Reflexion zum Worker (KISS, Konsistenz, Wartbarkeit, Robustheit, Sicherheit)
+
+Kurzer Überblick: Fundament ist der einzelne Prozess `backend.learning.workers.process_learning_submission_jobs`. Er bindet die Ports `VisionAdapterProtocol` und `FeedbackAdapterProtocol`, orchestriert Retries über Postgres-Funktionen und hält sich strikt an die Glossar-Begriffe.
+
+- **KISS (Keep it simple)**
+  - Single responsibility: Der Worker macht ausschließlich Leasing → Vision → Feedback → Persistieren; kein Mischmasch mit API/DI-Frameworks.
+  - Prozesskontrolle bleibt minimal (`run_once`, `run_forever`), Backoff wird über eine einzige Hilfsfunktion `_backoff_seconds` gesteuert.
+  - Dataclasses (`QueuedJob`, `VisionResult`, `FeedbackResult`) transportieren nur zwingend notwendige Felder. Keine verschachtelten Nebenobjekte → einfach zu testen.
+
+- **Konsistenz**
+  - Glossar- und Domain-Sprache taucht 1:1 auf (`analysis_status`, `vision_retrying`, `feedback_failed`).
+  - SQL-Funktionen heißen wie im Code: `_update_submission_completed` ruft `learning_worker_update_completed`; keine Abkürzungen, keine Dopplungen.
+  - Migrationen und Code verwenden identische Feldnamen (`visible_at`, `retry_count`, `error_code`), wodurch Tests und Doku übereinstimmen.
+
+- **Wartbarkeit**
+  - Konfigurierbare Werte (`LEASE_SECONDS`, `MAX_RETRIES`, `WORKER_BACKOFF_SECONDS`, `LEARNING_*_ADAPTER`) stehen gebündelt am Datei-Anfang; Defaults sind konservativ.
+  - Tests decken die Hauptpfade (Happy/Retries/Failed/Security) ab; Fehlerfälle spiegeln sich in klar benannten Exceptions (`VisionTransientError`, `FeedbackPermanentError`).
+  - Hilfsfunktionen sind kurz (<40 Zeilen) und beschreiben ihr Ziel über Docstrings (Intent + Permissions), wodurch neue Kollegen zügig einsteigen.
+
+- **Robustheit**
+  - Leasing via `FOR UPDATE SKIP LOCKED` und `lease_key` schützt vor Doppeltverarbeitung; `_nack_retry` setzt Sichtbarkeit sauber zurück.
+  - Terminale Fehler landen in Submission (`learning_worker_update_failed`) und Queue (`_mark_job_failed`), somit vollständige Auditspur.
+  - `_truncate_error_message` verhindert Log-/DB-Overflow; Backoff ist exponentiell und deckelt so Dauerschleifen.
+
+- **Sicherheit**
+  - `_set_current_sub` erzwingt RLS-Kontext bevor gelesen/geschrieben wird; Sub stammt aus Job-Payload bzw. Submission.
+  - Security-Definer-Funktionen isolieren DML auf `learning_submissions`; Worker-Rolle (`gustav_worker`) hat keine direkten UPDATE-Rechte.
+  - Logs enthalten ausschließlich IDs, Retry-Zähler und Fehlercodes. Keine Modellantworten oder Rohtexte.
+
+- **Benennungen & Lesbarkeit**
+  - Funktionsnamen verwenden klare Verben (`_mark_feedback_retry`, `_handle_vision_error`). Bei Dopplungen (Vision/Feedback) sorgt die Phase im Namen für Orientierung.
+  - Variablen bleiben sprechend (`next_visible`, `lease_until`, `truncated`). UUIDs werden als Strings behandelt, was die JSON-Serialisierung vereinfacht.
+  - Exceptions spiegeln Domain-Ereignisse wider und erleichtern das Mapping auf `error_code`.
+
+**Verbesserungspotenzial / Beobachtungen**
+- Logging-Level für Retries steht derzeit auf `warning`; evtl. auf `info` reduzieren, um Alert-Fatigue zu vermeiden (Alerting übernimmt Monitoring).
+- `_mark_submission_retry` und `_mark_feedback_retry` sind thin wrappers; belassen sie wegen Lesbarkeit. Bei Bedarf könnte ein Param-Enum eingeführt werden.
+- `QueuedJob.id` und `.submission_id` sind `str`; langfristig könnte eine kleine Value-Object-Schicht (`UUID`) Tippfehler verhindern, ist aktuell aber nicht zwingend.
+- Tests prüfen bereits Security-Definer-Aufrufe; ergänzend könnten wir eine Smoke-Regel einführen, die `gustav_worker`-Rolle ohne Funktionszugriff scheitern lässt (Defense in depth).
+
+Unterm Strich bleibt die Implementation KISS-konform, konsistent benannt und sicher verschlossen. Die genannten kleinen Nacharbeiten würden vor allem die Developer Experience schärfen, ohne das Grunddesign zu verändern.

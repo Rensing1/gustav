@@ -163,7 +163,24 @@ def _prepare_tables(conn: psycopg.Connection) -> None:
         """,
         # cleanup
         "truncate table staging.submissions",
-        "truncate table public.learning_submissions",
+        # Include async queues to avoid FK truncate errors
+        """
+        do $$
+        begin
+            execute 'truncate table public.learning_submission_jobs cascade';
+        exception when undefined_table then
+            null;
+        end $$;
+        """,
+        """
+        do $$
+        begin
+            execute 'truncate table public.learning_submission_ocr_jobs cascade';
+        exception when undefined_table then
+            null;
+        end $$;
+        """,
+        "truncate table public.learning_submissions cascade",
         "truncate table public.module_section_releases, public.course_modules cascade",
         "truncate table public.course_memberships, public.courses cascade",
         "truncate table public.unit_tasks, public.unit_sections, public.units cascade",

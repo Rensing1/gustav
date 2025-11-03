@@ -2,6 +2,11 @@
 
 ## Unreleased
 ### Security
+ - security(operations): Internal health responses set `Vary: Origin` and `Cache-Control: private, no-store` consistently.
+ - security(db): Avoid committing DB passwords — create `gustav_worker` without password/login; deployments set credentials out-of-band.
+- security(teaching): Bind `remove_course_membership` authorization to session (`app.current_sub`) and ignore `p_owner` for auth to prevent spoofing. Adds regression test.
+- security(teaching): Harden service‑DSN fallback for membership delete — requires ALLOW_SERVICE_DSN_FOR_TESTING=true and non‑prod GUSTAV_ENV (dev/test/local). Adds guard unit test and warning logs.
+ - security(teaching): Enforce `FORCE ROW LEVEL SECURITY` on `course_memberships` and keep a single delete policy to avoid permissive combinations.
 - security(identity): Disable HTTP redirects for Keycloak admin POST/GET calls (prevent token leakage via 3xx).
 - security(teaching): Owner-scoped GETs for module sections/releases set `Vary: Origin` across 200/4xx.
 - security(api/teaching): PATCH /api/teaching/.../sections/{section_id}/visibility now strictly requires
@@ -11,6 +16,14 @@
 - csrf(submissions): In production, POST /submissions always requires Origin/Referer (strict same-origin), independent of STRICT_CSRF_SUBMISSIONS.
 
 ### API
+- api(operations): Clarify LearningWorker health checks schema; remove unused `metrics_scope` value from `LearningWorkerHealthCheck` enum.
+ - api(learning): Submissions endpoint consistently returns 202 Accepted (async) including idempotent retries.
+- api(operations): Add `GET /internal/health/learning-worker` returning private, no-store health diagnostics (200 healthy / 503 degraded). Requires teacher or operator role.
+ - api(operations): Health endpoint description clarified (no metrics scope); add healthy/degraded response examples.
+- api(teaching/members): Apply sensible default paging limits and improve search/roster endpoints; SSR adjusted accordingly.
+- api(teaching/live): Align detail/unit endpoints and SSR rendering with stricter semantics and improved payloads.
+- api(learning): Align submission handlers with contract (request/response shape and headers) for student submissions UI.
+- openapi: Update Learning and Operations endpoints in `api/openapi.yml` (schemas and paths).
 - api(teaching): GET /api/teaching/courses/{course_id}/modules/{module_id}/sections responds with `Vary: Origin` and
   clamps `position` to a minimum of 1 (schema compliance).
 - api(teaching): GET /api/teaching/courses/{course_id}/modules/{module_id}/sections/releases documents `Vary: Origin`.
@@ -19,7 +32,30 @@
 - docs(teaching/live): Referenzdokumentation unter `docs/references/teaching_live.md` hinzugefügt (Cursor‑Semantik mit EPS‑Fenster, Client‑Polling‑Empfehlung).
 - openapi(learning): Document 404 for POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents (task not found/not released).
 
+### Database
+- db(learning-worker): Introduce async job queue with leasing/status checks and retry semantics (Supabase migrations).
+- db(learning-worker): Add dedicated worker role and health‑probe columns.
+- db(learning): Enforce submissions idempotency (unique constraint) to avoid duplicate processing.
+ - db(roles): Health probe function now `REVOKE ALL` from PUBLIC and grants EXECUTE to `gustav_limited`/`gustav_operator`/`gustav_web`.
+
+### Tooling & Dev
+- dev(ops): Add worker modules and operations route, wire up in `docker-compose.yml` and `Makefile`.
+- dev(sql): Update `scripts/dev/create_login_user.sql` for local bootstrap.
+ - dev(compose): Worker defaults to application DSN; override via `LEARNING_DATABASE_URL` for dedicated worker login.
+ - dev(make): Makefile silence for import targets is now toggleable via `VERBOSE=1`.
+
+### Docs
+- docs(plan): Add security plan for membership removal + health probe hardening.
+- docs(learning): Update references for Learning and AI modules; add planning note for course member search fix.
+
 ### Tests
+- tests(learning-worker): Add health endpoint coverage, job execution flow, and security role checks.
+- tests(teaching/members): Add default limit, candidates limit, roster limit, remove‑persistence, and global search tests.
+- tests(teaching/live): Update/extend live detail and unit SSR/API tests.
+- tests(learning): Add API contract alignment tests and student submissions UI coverage; add idempotency header cases and storage verification.
+- tests(migration): Adjust legacy submissions migration test after tooling updates.
+ - tests(migration): Add RLS delete policy test for course_memberships (owner can delete; others cannot).
+ - tests(teaching): Unit test for service‑DSN fallback guard matrix.
 - tests(teaching): Header tests ensure `Vary: Origin` for 200/400/403/404 on module sections and releases listings.
 - tests(teaching/live): Delta‑Tests prüfen 401/403/404/400 sowie den Happy‑Path „200 dann 204“ mit Cursor‑Fortschreibung.
 - add(learning): Idempotency-Key header regex negative/positive tests.

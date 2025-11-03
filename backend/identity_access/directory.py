@@ -148,7 +148,13 @@ def _display_name(u: dict) -> str:
 
 
 def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
-    """Search users by role and display name fragment.
+    """Search users by role and display name fragment (pages through role members).
+
+    Why:
+        Keycloak's role users endpoint is paginated. Filtering only the first
+        page can miss matches outside that window. We iterate over pages until
+        we collect `limit` matches or exhaust available pages, capping the scan
+        to a reasonable upper bound.
 
     Returns: list of { sub, name } where `sub` is the Keycloak user ID.
     """
@@ -156,23 +162,36 @@ def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
     token = kc.token()
     if role not in ALLOWED_ROLES:
         raise ValueError("invalid role")
-    # Role-based listing (avoids mapping calls per user)
     url = f"{kc.base_url}/admin/realms/{kc.realm}/roles/{role}/users"
-    params = {"first": 0, "max": max(1, min(200, int(limit) * 2))}
     ca = os.getenv("KEYCLOAK_CA_BUNDLE")
     verify_opt = ca if ca else True
-    r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt, allow_redirects=False)
-    r.raise_for_status()
-    arr = r.json() or []
-    ql = (q or "").lower()
+    ql = (q or "").strip().lower()
     results: List[dict] = []
-    for u in arr:
-        name = _display_name(u)
-        if ql in name.lower() or ql in str(u.get("username", "")).lower():
-            sub = u.get("id")
-            if sub and name:
-                results.append({"sub": str(sub), "name": name})
-        if len(results) >= limit:
+    # Page across role members; KC caps max to ~200; we use batch=200
+    batch = 200
+    first = 0
+    scanned = 0
+    scan_cap = 2000  # do not scan unboundedly
+    while len(results) < max(1, int(limit)) and scanned < scan_cap:
+        params = {"first": first, "max": batch}
+        r = requests.get(url, headers=kc.hdr(token), params=params, timeout=10, verify=verify_opt, allow_redirects=False)
+        r.raise_for_status()
+        arr = r.json() or []
+        if not arr:
+            break
+        scanned += len(arr)
+        for u in arr:
+            name = _display_name(u)
+            uname = str(u.get("username", ""))
+            if ql in name.lower() or (ql and ql in uname.lower()):
+                sub = u.get("id")
+                if sub and name:
+                    results.append({"sub": str(sub), "name": name})
+                    if len(results) >= limit:
+                        break
+        # Advance to next page
+        first += batch
+        if len(arr) < batch:  # last page
             break
     return results
 

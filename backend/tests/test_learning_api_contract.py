@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Sequence
 from uuid import uuid4
@@ -360,6 +361,70 @@ async def test_sections_not_released_returns_404():
 
 
 @pytest.mark.anyio
+async def test_create_text_submission_returns_pending_and_enqueues_job():
+    """Text submissions enter the async analysis pipeline and enqueue a worker job."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        prev = os.environ.get("ASYNC_LEARNING_ANALYSIS")
+        os.environ["ASYNC_LEARNING_ANALYSIS"] = "true"
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "Analyse pending"},
+        )
+        # restore env
+        if prev is None:
+            os.environ.pop("ASYNC_LEARNING_ANALYSIS", None)
+        else:
+            os.environ["ASYNC_LEARNING_ANALYSIS"] = prev
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["analysis_status"] == "pending"
+    assert body["text_body"] == "Analyse pending"
+    assert body.get("analysis_json") is None
+    assert body.get("error_code") is None
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover - safety for environments without psycopg
+        pytest.skip("psycopg not available")
+
+    dsn = (
+        os.getenv("DATABASE_URL")
+        or f"postgresql://{os.getenv('APP_DB_USER', 'gustav_app')}:{os.getenv('APP_DB_PASSWORD', 'CHANGE_ME_DEV')}@{os.getenv('TEST_DB_HOST', '127.0.0.1')}:{os.getenv('TEST_DB_PORT', '54322')}/postgres"
+    )
+    submission_id = body["id"]
+    job_count: int | None = None
+    with psycopg.connect(dsn) as conn:  # type: ignore
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select count(*) from public.learning_submission_jobs where submission_id = %s",
+                    (submission_id,),
+                )
+                job_count = int(cur.fetchone()[0])
+        except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):  # type: ignore[attr-defined]
+            conn.rollback()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "select count(*) from public.learning_submission_ocr_jobs where submission_id = %s",
+                        (submission_id,),
+                    )
+                    job_count = int(cur.fetchone()[0])
+            except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):  # type: ignore[attr-defined]
+                pytest.skip(
+                    "Queue table missing or no privileges; migration/grants not applied in this environment."
+                )
+
+    assert job_count == 1
+
+
+@pytest.mark.anyio
 async def test_create_submission_respects_attempt_limit_and_idempotency():
     """Creating submissions enforces attempt limit and honours Idempotency-Key."""
 
@@ -367,50 +432,43 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
-        # First attempt
+        # First attempt → pending analysis
         resp1 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key"},
             json={"kind": "text", "text_body": "Versuch 1"},
         )
-        assert resp1.status_code == 201
+        assert resp1.status_code == 202
         first_payload = resp1.json()
         assert first_payload["attempt_nr"] == 1
-        assert first_payload["analysis_status"] == "completed"
-        assert first_payload["feedback"]
-        analysis = first_payload["analysis_json"]
-        assert isinstance(analysis, dict)
-        assert analysis["text"] == "Versuch 1"
-        assert analysis.get("length") == len("Versuch 1")
-        assert isinstance(analysis.get("scores"), list)
-        assert analysis["scores"], "Expected at least one rubric score"
-        first_score = analysis["scores"][0]
-        assert first_score["criterion"]
-        assert isinstance(first_score["score"], int)
-        assert 0 <= first_score["score"] <= 10
-        assert "explanation" in first_score
+        assert first_payload["analysis_status"] == "pending"
+        assert first_payload.get("analysis_json") is None
+        assert first_payload.get("feedback") is None
+        assert first_payload["text_body"] == "Versuch 1"
         submission_id = first_payload["id"]
 
-        # Idempotent retry must not create a second attempt
+        # Idempotent retry must not create a second attempt or alter payload
         resp_retry = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key"},
             json={"kind": "text", "text_body": "Versuch 1"},
         )
-        assert resp_retry.status_code == 201
+        assert resp_retry.status_code == 202
         retry_payload = resp_retry.json()
         assert retry_payload["id"] == submission_id
         assert retry_payload["attempt_nr"] == 1
+        assert retry_payload["analysis_status"] == "pending"
 
-        # Second attempt (new key) should succeed
+        # Second attempt (new key) should succeed and remain pending
         resp2 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key-2"},
             json={"kind": "text", "text_body": "Versuch 2"},
         )
-        assert resp2.status_code == 201
+        assert resp2.status_code == 202
         second_payload = resp2.json()
         assert second_payload["attempt_nr"] == 2
+        assert second_payload["analysis_status"] == "pending"
 
         # Third attempt exceeds max_attempts → 400
         resp3 = await client.post(
@@ -434,9 +492,11 @@ async def test_create_submission_uses_teacher_defined_criteria_names():
             json={"kind": "text", "text_body": "Lineare Funktionen analysiert"},
         )
 
-    assert response.status_code == 201
-    scores = response.json()["analysis_json"]["scores"]
-    assert [score["criterion"] for score in scores][:2] == ["Graph korrekt", "Steigung erläutert"]
+    # Async model: immediate response is pending; analysis with scores happens later.
+    assert response.status_code == 202
+    body = response.json()
+    assert body["analysis_status"] == "pending"
+    assert body.get("analysis_json") is None
 
 
 @pytest.mark.anyio
@@ -587,7 +647,7 @@ async def test_create_submission_image_mime_type_whitelist():
 
 @pytest.mark.anyio
 async def test_create_submission_file_pdf_happy_path():
-    """PDF submissions (kind=file, application/pdf) create a new attempt with analysis stub."""
+    """PDF submissions (kind=file, application/pdf) enter the async analysis pipeline."""
 
     fixture = await _prepare_learning_fixture()
 
@@ -604,14 +664,13 @@ async def test_create_submission_file_pdf_happy_path():
             },
         )
 
-    assert response.status_code == 201
+    # Async model: accept and process later
+    assert response.status_code == 202
     body = response.json()
     assert body["kind"] == "file"
     assert body["attempt_nr"] == 1
-    assert body["analysis_status"] == "completed"
-    # Analysis stub must include some text derived from the file reference
-    assert isinstance(body["analysis_json"]["text"], str)
-    assert "arbeit1.pdf" in body["analysis_json"]["text"]
+    assert body["analysis_status"] == "pending"
+    assert body.get("analysis_json") is None
 
 
 @pytest.mark.anyio
@@ -700,7 +759,7 @@ async def test_create_submission_text_body_too_long_returns_invalid_input():
 
 @pytest.mark.anyio
 async def test_list_submissions_history_happy_path():
-    """GET submissions must return the student's attempts newest-first with analysis + feedback."""
+    """GET submissions must return the student's attempts newest-first with pending status."""
 
     fixture = await _prepare_learning_fixture()
 
@@ -713,7 +772,7 @@ async def test_list_submissions_history_happy_path():
                 headers={"Idempotency-Key": f"attempt-{idx}"},
                 json={"kind": "text", "text_body": f"Antwort {idx}"},
             )
-            assert resp.status_code == 201
+            assert resp.status_code == 202
 
         history_resp = await client.get(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
@@ -729,12 +788,12 @@ async def test_list_submissions_history_happy_path():
 
     latest, earliest = payload[0], payload[-1]
     assert latest["attempt_nr"] == 2
-    assert latest["analysis_status"] == "completed"
-    assert latest["feedback"]
-    assert latest["analysis_json"]["text"] == "Antwort 2"
-    assert latest["analysis_json"]["scores"]
+    # Async: pending status until worker completes; payloads may be empty
+    assert latest["analysis_status"] == "pending"
+    assert latest.get("feedback") in (None, "", {})
+    assert latest.get("analysis_json") in (None, {})
     assert earliest["attempt_nr"] == 1
-    assert earliest["analysis_json"]["text"] == "Antwort 1"
+    assert earliest.get("analysis_json") in (None, {})
 
 
 @pytest.mark.anyio
@@ -838,7 +897,7 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
                 headers={"Idempotency-Key": f"stable-{idx}"},
                 json={"kind": "text", "text_body": f"Gleichzeit {idx}"},
             )
-            assert resp.status_code == 201
+            assert resp.status_code == 202
 
     _require_db_or_skip()
     try:
@@ -923,12 +982,12 @@ async def test_create_submission_allows_same_origin_via_forwarded_when_trust_pro
         else:
             os.environ["GUSTAV_TRUST_PROXY"] = prev
 
-    assert resp.status_code == 201
+        assert resp.status_code == 202
 
 
 @pytest.mark.anyio
 async def test_analysis_json_shape_has_expected_keys_only():
-    """analysis_json must only contain keys defined by the contract."""
+    """Pending submissions must not expose analysis_json payloads."""
 
     fixture = await _prepare_learning_fixture()
 
@@ -940,17 +999,15 @@ async def test_analysis_json_shape_has_expected_keys_only():
             json={"kind": "text", "text_body": "Antwort"},
         )
 
-    assert resp.status_code == 201
+    assert resp.status_code == 202
     payload = resp.json()
-    analysis = payload.get("analysis_json")
-    assert isinstance(analysis, dict)
-    allowed = {"text", "length", "scores"}
-    assert set(analysis.keys()).issubset(allowed)
+    assert payload["analysis_status"] == "pending"
+    assert payload.get("analysis_json") is None
 
 
 @pytest.mark.anyio
 async def test_create_submission_image_includes_text_and_scores_in_analysis_json():
-    """Image submissions should include OCR text and rubric scores in the analysis payload."""
+    """Image submissions should enqueue analysis jobs and stay pending until processed."""
 
     fixture = await _prepare_learning_fixture()
 
@@ -967,15 +1024,13 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
             },
         )
 
-    assert resp.status_code == 201
+    assert resp.status_code == 202
     payload = resp.json()
     assert payload["kind"] == "image"
-    assert payload["analysis_status"] == "completed"
+    assert payload["analysis_status"] == "pending"
     assert payload["storage_key"] == "uploads/student123/solution.png"
-    analysis = payload["analysis_json"]
-    assert analysis["text"]
-    assert isinstance(analysis["scores"], list) and analysis["scores"]
-    assert payload["feedback"]
+    assert payload.get("analysis_json") is None
+    assert payload.get("feedback") is None
 
 
     # History should include the image submission with storage_key
@@ -1101,7 +1156,7 @@ async def test_create_submission_allows_same_origin_header():
             json={"kind": "text", "text_body": "ok"},
         )
 
-    assert res.status_code == 201
+    assert res.status_code == 202
 
 
 @pytest.mark.anyio
@@ -1117,7 +1172,7 @@ async def test_create_submission_allows_missing_origin():
             json={"kind": "text", "text_body": "ok"},
         )
 
-    assert res.status_code == 201
+    assert res.status_code == 202
 
 
 @pytest.mark.anyio
@@ -1208,7 +1263,7 @@ async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
                 headers={"Idempotency-Key": f"clamp-{idx}"},
                 json={"kind": "text", "text_body": f"Seite {idx}"},
             )
-            assert resp.status_code == 201
+            assert resp.status_code == 202
 
         # Negative offset should behave like 0 and return the latest
         resp1 = await client.get(
@@ -1245,7 +1300,7 @@ async def test_submission_created_at_is_rfc3339_and_present():
             headers={"Idempotency-Key": "created-at-check"},
             json={"kind": "text", "text_body": "Zeitstempel"},
         )
-        assert resp.status_code == 201
+        assert resp.status_code == 202
 
         history = await client.get(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
@@ -1263,8 +1318,8 @@ async def test_submission_created_at_is_rfc3339_and_present():
 
 
 @pytest.mark.anyio
-async def test_create_submission_201_has_private_no_store_cache_header():
-    """201 Create Submission must include Cache-Control: private, no-store."""
+async def test_create_submission_202_has_private_no_store_cache_header():
+    """202 Create Submission must include Cache-Control: private, no-store (async)."""
 
     fixture = await _prepare_learning_fixture()
 
@@ -1275,5 +1330,5 @@ async def test_create_submission_201_has_private_no_store_cache_header():
             json={"kind": "text", "text_body": "Header-Test"},
         )
 
-    assert resp.status_code == 201
+    assert resp.status_code == 202
     assert resp.headers.get("Cache-Control") == "private, no-store"

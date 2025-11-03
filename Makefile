@@ -62,12 +62,14 @@ KC_ADMIN_USER ?= admin
 KC_ADMIN_PASS ?= admin
 
 .PHONY: import-legacy
+ifeq ($(VERBOSE),)
 .SILENT: import-legacy import-legacy-dry
+endif
 import-legacy:
 	# Auto-load .env into the environment for this target (export all)
-	set -a; [ -f .env ] && . ./.env; set +a; \
+	@set -a; [ -f .env ] && . ./.env; set +a; \
 	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
-	@./.venv/bin/python scripts/import_legacy_backup.py \
+	./.venv/bin/python scripts/import_legacy_backup.py \
 	  --dump $(DUMP) \
 	  --dsn $(DSN) \
 	  --legacy-schema $(LEGACY_SCHEMA) \
@@ -81,9 +83,9 @@ import-legacy:
 .PHONY: import-legacy-dry
 import-legacy-dry:
 	# Auto-load .env into the environment for this target (export all)
-	set -a; [ -f .env ] && . ./.env; set +a; \
+	@set -a; [ -f .env ] && . ./.env; set +a; \
 	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
-	@./.venv/bin/python scripts/import_legacy_backup.py \
+	./.venv/bin/python scripts/import_legacy_backup.py \
 	  --dump $(DUMP) \
 	  --dsn $(DSN) \
 	  --legacy-schema $(LEGACY_SCHEMA) \

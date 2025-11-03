@@ -7,6 +7,7 @@ dem neuesten Eintrag geöffnet ist. Solange UI‑Routen fehlen, schlagen diese T
 """
 from __future__ import annotations
 
+import json
 import re
 import uuid
 import pytest
@@ -162,7 +163,7 @@ async def test_ui_history_fragment_shows_text_when_analysis_missing():
             f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
             json={"kind": "text", "text_body": "Meine Lösung"},
         )
-        assert resp.status_code == 201
+        assert resp.status_code == 202
         sub_id = resp.json().get("id")
 
     # Set analysis_json to NULL for this submission (simulate legacy row)
@@ -184,6 +185,156 @@ async def test_ui_history_fragment_shows_text_when_analysis_missing():
     html = r.text
     assert 'class="task-panel__history"' in html
     assert "Meine Lösung" in html
+
+
+@pytest.mark.anyio
+async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
+    """Completed submissions should surface feedback markdown and status details."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    # Create submission via API
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Feedback Test"},
+        )
+        assert resp.status_code == 202
+        submission = resp.json()
+        sub_id = submission.get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate worker completion")
+
+    feedback_md = "### Feedback\n\n- Gut gemacht!"
+    analysis = {
+        "schema": "criteria.v1",
+        "score": 4,
+        "criteria_results": [{"criterion": "Kriterium 1", "score": 8}],
+    }
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id,
+                    "Feedback Test",
+                    feedback_md,
+                    json.dumps(analysis),
+                ),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(f"/learning/courses/{course_id}/tasks/{task_id}/history", params={"open_attempt_id": sub_id})
+    assert r.status_code == 200
+    html = r.text
+    assert "Gut gemacht" in html
+    assert "Status: completed" not in html
+    assert "Score:" not in html
+
+
+@pytest.mark.anyio
+async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
+    """Criteria.v2 payloads must render badges with clamped scores and accessible labels."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    # Create submission via API
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Criteria Feedback"},
+        )
+        assert resp.status_code == 202
+        submission = resp.json()
+        sub_id = submission.get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate worker completion")
+
+    feedback_md = "### Formatives Feedback\n\n- Weiter so!"
+    analysis = {
+        "schema": "criteria.v2",
+        "score": 3,
+        "criteria_results": [
+            {
+                "criterion": "Struktur",
+                "score": 12,  # will be clamped to 10
+                "max_score": 10,
+                "explanation_md": "Klare Gliederung.",
+            },
+            {
+                "criterion": "Quellenarbeit",
+                "score": 2,
+                "explanation_md": "Quellenangaben fehlen.",
+            },
+            {
+                "criterion": "Sprache",
+                "explanation_md": "Lesefluss überwiegend flüssig.",
+            },
+        ],
+    }
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id,
+                    "Criteria Feedback",
+                    feedback_md,
+                    json.dumps(analysis),
+                ),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": sub_id},
+        )
+    assert r.status_code == 200
+    html = r.text
+
+    # Criteria container is rendered with an accessible heading
+    assert '<section class="analysis-criteria"' in html
+    assert "<strong>Auswertung</strong>" in html
+
+    # First criterion: clamped score to 10/10 with success badge and aria-label
+    assert "Struktur" in html
+    assert 'class="badge badge-success"' in html
+    assert "10/10" in html
+    assert 'aria-label="Punkte 10 von 10"' in html
+
+    # Second criterion: low score uses error badge and textual label
+    assert "Quellenarbeit" in html
+    assert 'class="badge badge-error"' in html
+    assert "2/10" in html
+    assert 'aria-label="Punkte 2 von 10"' in html
+
+    # Third criterion: missing score omits badge entirely
+    assert "Sprache" in html
+    assert re.search(r"Sprache</span>\s*</header>", html)
+
+    # Rückmeldung section is present (heading renamed)
+    assert "Rückmeldung" in html
+    assert "Weiter so!" in html
 
 
 @pytest.mark.anyio

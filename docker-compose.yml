@@ -50,6 +50,7 @@ services:
       - APP_DB_USER=${APP_DB_USER:-gustav_app}
       - APP_DB_PASSWORD=${APP_DB_PASSWORD:-CHANGE_ME_DEV}
       - DATABASE_URL=postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Teaching repo DSN uses same credentials/host unless overridden.
       - TEACHING_DATABASE_URL=${TEACHING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Sessions DSN (service role; app_sessions policies allow server-side access)
@@ -57,6 +58,42 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - gustav-alpha2-network
+      - supabase_network_gustav-alpha2
+
+  learning-worker:
+    build: .
+    container_name: gustav-learning-worker
+    command: ["python", "-m", "backend.learning.workers.process_learning_submission_jobs"]
+    volumes:
+      - ./backend/learning:/app/backend/learning:z
+      - ./backend/__init__.py:/app/backend/__init__.py:z
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://gustav_worker:gustav-worker@supabase_db_gustav-alpha2:5432/postgres}
+      - LEARNING_VISION_ADAPTER=${LEARNING_VISION_ADAPTER:-backend.learning.adapters.stub_vision}
+      - LEARNING_FEEDBACK_ADAPTER=${LEARNING_FEEDBACK_ADAPTER:-backend.learning.adapters.stub_feedback}
+      - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
+      - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
+      - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
+      - WORKER_POLL_INTERVAL=${WORKER_POLL_INTERVAL:-0.5}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys; from backend.learning.workers.health import LearningWorkerHealthService; status = LearningWorkerHealthService()._probe_sync().status; sys.exit(0 if status == 'healthy' else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2

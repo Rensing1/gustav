@@ -1088,7 +1088,7 @@ paths:
       tags: [Operations]
       summary: Learning worker health probe
       description: |
-        Returns diagnostics for the async learning worker (DB role, queue visibility, metrics scope).
+        Returns diagnostics for the async learning worker (DB role and queue visibility).
         Requires a teacher/operator session cookie.
       operationId: getLearningWorkerHealth
       security:
@@ -1111,6 +1111,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LearningWorkerHealth'
+              examples:
+                healthy:
+                  summary: Worker healthy
+                  value:
+                    status: healthy
+                    currentRole: gustav_worker
+                    checks:
+                      - { check: db_role, status: ok, detail: null }
+                      - { check: queue_visibility, status: ok, detail: null }
         '401':
           description: Missing or invalid session
           headers:
@@ -1162,6 +1171,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LearningWorkerHealth'
+              examples:
+                degraded:
+                  summary: Worker degraded (missing role)
+                  value:
+                    status: degraded
+                    currentRole: null
+                    checks:
+                      - { check: db_role, status: failed, detail: 'gustav_worker role not available' }
   /api/learning/courses:
     get:
       tags: [Learning]

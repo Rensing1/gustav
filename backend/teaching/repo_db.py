@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any, List, Tuple, Optional, Dict
 import os
 import re
+import logging
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import UUID
@@ -29,6 +30,8 @@ else:  # pragma: no cover - import errors handled above
         from psycopg.errors import UniqueViolation  # type: ignore
     except Exception:  # pragma: no cover - fallback when errors module unavailable
         UniqueViolation = None  # type: ignore
+
+LOG = logging.getLogger(__name__)
 
 
 def _default_app_login_dsn() -> str:
@@ -196,6 +199,26 @@ class DBTeachingRepo:
                     raise RuntimeError(
                         f"TeachingRepo DSN verification failed: {e}. Ensure your DB user is IN ROLE gustav_limited."
                     )
+
+    @staticmethod
+    def _service_fallback_allowed() -> bool:
+        """Return True iff a service-role fallback is explicitly allowed in a non-prod env.
+
+        Rules:
+            - Requires ALLOW_SERVICE_DSN_FOR_TESTING=true
+            - And environment must be test/dev/local (GUSTAV_ENV in {test, dev, development, local, ci})
+              or running under pytest (PYTEST_CURRENT_TEST present).
+        """
+        allow_flag = (os.getenv("ALLOW_SERVICE_DSN_FOR_TESTING", "").lower() == "true")
+        if not allow_flag:
+            return False
+        env = (os.getenv("GUSTAV_ENV", "").strip().lower())
+        if env in {"test", "dev", "development", "local", "ci"}:
+            return True
+        # Heuristic for test context
+        if os.getenv("PYTEST_CURRENT_TEST"):
+            return True
+        return False
 
     @staticmethod
     def _dsn_username(dsn: str) -> str:
@@ -2416,11 +2439,15 @@ class DBTeachingRepo:
                         affected = 0
                 conn.commit()
         # Final fallback (dev/test only): allow service-role DSN when explicitly enabled.
-        if (
-            affected == 0
-            and self._service_dsn
-            and (os.getenv("ALLOW_SERVICE_DSN_FOR_TESTING", "").lower() == "true")
-        ):
+        if affected == 0 and self._service_dsn:
+            if not self._service_fallback_allowed():
+                # Deny fallback in prod/stage even if the flag is set; log once per call-site.
+                LOG.warning(
+                    "Service-DSN fallback blocked (env not allowed). Set GUSTAV_ENV in {dev,test,local} to enable for testing."
+                )
+                return
+            # Explicitly allowed in test/dev; log to make audits easier.
+            LOG.warning("Using service-DSN fallback for membership delete (test/dev only)")
             try:
                 with psycopg.connect(self._service_dsn) as conn2:  # type: ignore[arg-type]
                     with conn2.cursor() as cur2:

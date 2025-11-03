@@ -12,8 +12,9 @@ User Story:
 
 BDD Scenarios:
 - Given attacker session, When calling remove helper with real owner as arg,
-  Then membership remains.
-- Given owner session, When calling helper with any owner arg, Then membership is removed.
+  Then membership remains (p_owner != session sub).
+- Given owner session, When calling helper with any owner arg,
+  Then membership is removed (p_owner == session sub and owns course).
 - Given DB error, When GET /internal/health/learning-worker, Then 503 with detail=db_connect_failed.
 
 API Contract (OpenAPI):
@@ -26,4 +27,3 @@ Migration:
 Tests:
 - New DB test: membership removal binds to session owner.
 - Endpoint tests remain valid; no error leaks.
-

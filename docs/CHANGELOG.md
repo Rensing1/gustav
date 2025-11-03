@@ -2,8 +2,9 @@
 
 ## Unreleased
 ### Security
-- security(teaching): Bind `remove_course_membership` authorization to session (`app.current_sub`) instead of function parameter to prevent owner spoofing.
-  Function keeps signature but ignores `p_owner` for auth. Adds regression test.
+ - security(teaching): Bind `remove_course_membership` authorization to session (`app.current_sub`).
+   Requires `p_owner` to equal the session subject and to own the course; prevents owner spoofing.
+   Adds regression test.
 - security(identity): Disable HTTP redirects for Keycloak admin POST/GET calls (prevent token leakage via 3xx).
 - security(teaching): Owner-scoped GETs for module sections/releases set `Vary: Origin` across 200/4xx.
 - security(api/teaching): PATCH /api/teaching/.../sections/{section_id}/visibility now strictly requires

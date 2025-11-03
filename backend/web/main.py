@@ -302,7 +302,7 @@ def _build_history_entry_from_record(
         open_attempt_id: Submission ID that should render with `<details open>`.
 
     Returns:
-        HistoryEntry containing escaped HTML fragments for content, feedback, and status.
+        HistoryEntry containing escaped HTML fragments for content and feedback (status column left blank for learners).
 
     Permissions:
         Caller must ensure the current session may view this submission (student ownership or teacher course access). This helper performs no authorisation checks.
@@ -329,26 +329,10 @@ def _build_history_entry_from_record(
     feedback_src = record.get("feedback_md") or record.get("feedback")
     analysis = record.get("analysis_json")
 
-    status_text = str(record.get("analysis_status") or "pending")
-    error_code = record.get("error_code")
-    status_label = status_text
-    if error_code:
-        status_label = f"{status_text} · {error_code}"
-    status_html = f'<p class="analysis-status text-muted">Status: {Component.escape(status_label)}</p>'
-
-    # Collect metrics for the status sidebar and render criteria cards in a dedicated helper.
-    metric_items: List[str] = []
+    # Render criteria cards (criteria.v1/v2) via helper for clarity.
     criteria_html = ""
     if isinstance(analysis, dict):
-        score = analysis.get("score")
-        if score is not None:
-            metric_items.append(f"<li>Score: {Component.escape(str(score))}</li>")
-        criteria_html, criteria_metrics = _render_analysis_criteria_section(analysis)
-        metric_items.extend(criteria_metrics)
-
-    metrics_html = ""
-    if metric_items:
-        metrics_html = '<ul class="analysis-metrics">' + "".join(metric_items) + "</ul>"
+        criteria_html = _render_analysis_criteria_section(analysis)
 
     feedback_sections: List[str] = []
     if criteria_html:
@@ -356,36 +340,33 @@ def _build_history_entry_from_record(
     if feedback_src:
         feedback_sections.append(
             '<section class="analysis-feedback">'
-            '<h3 class="analysis-feedback__title">Formatives Feedback</h3>'
+            '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
             f'{render_markdown_safe(str(feedback_src))}'
             "</section>"
         )
     feedback_html = "".join(feedback_sections)
-
-    status_block_html = status_html + metrics_html
 
     return HistoryEntry(
         label=label,
         timestamp=timestamp,
         content_html=content_html,
         feedback_html=feedback_html,
-        status_html=status_block_html,
+        status_html="",
         expanded=expanded,
     )
 
 
-def _render_analysis_criteria_section(analysis: Mapping[str, object]) -> tuple[str, List[str]]:
-    """Render the per-criterion block for criteria.v1/v2 payloads and return metric items."""
+def _render_analysis_criteria_section(analysis: Mapping[str, object]) -> str:
+    """Render the per-criterion block for criteria.v1/v2 payloads."""
     schema_tag = analysis.get("schema")
     if schema_tag not in {"criteria.v1", "criteria.v2"}:
-        return "", []
+        return ""
 
     criteria_list = analysis.get("criteria_results")
     if not isinstance(criteria_list, list):
-        return "", []
+        return ""
 
     cards: List[str] = []
-    metric_items: List[str] = []
     for item in criteria_list:
         if not isinstance(item, dict):
             continue
@@ -402,7 +383,6 @@ def _render_analysis_criteria_section(analysis: Mapping[str, object]) -> tuple[s
 
         badge_html = ""
         raw_score = item.get("score")
-        score_metric_added = False
         if raw_score is not None:
             score_clamped, max_score, badge_variant = _normalise_criterion_score(raw_score, item.get("max_score"))
             if score_clamped is not None:
@@ -413,10 +393,6 @@ def _render_analysis_criteria_section(analysis: Mapping[str, object]) -> tuple[s
                     f'<span class="sr-only"> Punkte {score_clamped} von {max_score}</span>'
                     "</span>"
                 )
-                metric_items.append(f"<li>{title}: {Component.escape(str(score_clamped))}</li>")
-                score_metric_added = True
-        if not score_metric_added:
-            metric_items.append(f"<li>{title}</li>")
 
         header_parts = [f'<span class="analysis-criterion__title">{title}</span>']
         if badge_html:
@@ -425,15 +401,15 @@ def _render_analysis_criteria_section(analysis: Mapping[str, object]) -> tuple[s
         cards.append(f'<article class="analysis-criterion">{header_html}{explanation_html}</article>')
 
     if not cards:
-        return "", metric_items
+        return ""
 
     section_html = (
         '<section class="analysis-criteria">'
-        '<h3 class="sr-only">Auswertung</h3>'
+        '<p class="analysis-criteria__heading"><strong>Auswertung</strong></p>'
         + "".join(cards)
         + "</section>"
     )
-    return section_html, metric_items
+    return section_html
 
 
 def _normalise_criterion_score(raw_score: object, raw_max_score: object) -> tuple[int | None, int, str]:

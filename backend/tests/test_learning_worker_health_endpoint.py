@@ -141,6 +141,40 @@ async def test_learning_worker_health_returns_503_when_role_missing(monkeypatch:
 
 
 @pytest.mark.anyio
+async def test_learning_worker_health_returns_503_on_db_failure(monkeypatch: pytest.MonkeyPatch):
+    """DB connection failures degrade the probe and return 503 with private headers.
+
+    We simulate psycopg being available but raising on connect, to exercise the
+    `db_connect_failed` branch in the health service.
+    """
+    store = _install_session_store()
+    teacher = store.create(sub="teacher-health-db-fail", roles=["teacher"], name="Lehrkraft")
+
+    # Force the service into the DB path and make connect() raise
+    class _BadPsy:
+        def connect(*args, **kwargs):  # noqa: ANN001 - test stub
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(worker_health, "HAVE_PSYCOPG", True, raising=False)
+    monkeypatch.setattr(worker_health, "psycopg", _BadPsy, raising=False)
+    monkeypatch.setattr(worker_health, "dict_row", object(), raising=False)
+
+    async with await _client() as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        resp = await client.get("/internal/health/learning-worker")
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body.get("status") == "degraded"
+    # db_connect_failed detail is acceptable to expose and non-sensitive
+    assert body.get("checks") == [
+        {"check": "db_role", "status": "failed", "detail": "db_connect_failed"}
+    ]
+    assert resp.headers.get("Cache-Control") == "private, no-store"
+    assert resp.headers.get("Vary") == "Origin"
+
+
+@pytest.mark.anyio
 async def test_learning_worker_health_requires_authentication(monkeypatch: pytest.MonkeyPatch):
     """Unauthenticated callers must receive 401 without hitting the probe."""
     _install_session_store()

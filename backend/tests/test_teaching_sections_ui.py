@@ -52,6 +52,20 @@ async def _create_unit_via_api(client: httpx.AsyncClient, *, title: str) -> str:
     return body["id"]
 
 
+_SECTION_CARD_RE = re.compile(
+    r'<div class="card section-card" id="section_([a-f0-9\-]+)"[^>]*>.*?<h4 class="card-title"><a[^>]*>(.*?)</a>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _iter_section_cards(html_doc: str):
+    """Yield (section_id, title) tuples for section cards in rendered HTML."""
+    for match in _SECTION_CARD_RE.finditer(html_doc):
+        section_id = match.group(1)
+        raw_title = html.unescape(match.group(2)).strip()
+        yield section_id, raw_title
+
+
 async def _create_section_via_ui(client: httpx.AsyncClient, *, unit_id: str, title: str, csrf_token: str) -> str:
     resp = await client.post(
         f"/units/{unit_id}/sections",
@@ -61,25 +75,16 @@ async def _create_section_via_ui(client: httpx.AsyncClient, *, unit_id: str, tit
     assert resp.status_code == 200
     # Der Handler liefert das aktualisierte List-Fragment zurück.
     # Finde die section-ID, die zum gerade angelegten Titel gehört.
-    # Robust extraction: scan cards by id and check local block for title
-    for m in re.finditer(r'id=\"section_([a-f0-9\-]+)\"', resp.text):
-        start = m.start()
-        next_m = re.search(r'id=\"section_[a-f0-9\-]+\"', resp.text[start + 1 :])
-        end = start + 1 + next_m.start() if next_m else len(resp.text)
-        block = resp.text[start:end]
-        if title in block:
-            return m.group(1)
+    for section_id, card_title in _iter_section_cards(resp.text):
+        if card_title == title:
+            return section_id
     assert False, f"no section id found for title {title!r} in: {resp.text[:500]}"
 
 
 def _find_section_id_by_title(html: str, title: str) -> str | None:
-    for m in re.finditer(r'id=\"section_([a-f0-9\-]+)\"', html):
-        start = m.start()
-        next_m = re.search(r'id=\"section_[a-f0-9\-]+\"', html[start + 1 :])
-        end = start + 1 + next_m.start() if next_m else len(html)
-        block = html[start:end]
-        if title in block:
-            return m.group(1)
+    for section_id, card_title in _iter_section_cards(html):
+        if card_title == title:
+            return section_id
     return None
 
 

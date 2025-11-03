@@ -47,25 +47,26 @@ async def test_remove_course_membership_binds_to_session_owner() -> None:
     repo.add_member_owned(course["id"], real_owner, student)
 
     dsn = _dsn()
+    # Case 1: Session is attacker; passing real_owner as arg must NOT delete
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
-        # Case 1: Session is attacker; passing real_owner as arg must NOT delete
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, true)", (attacker,))
             cur.execute(
                 "select public.remove_course_membership(%s, %s::uuid, %s)",
                 (real_owner, course["id"], student),
             )
-            # Verify membership still exists (owner-scoped list through repo)
-        roster_still = repo.list_members_for_owner(course["id"], real_owner, limit=50, offset=0)
-        assert any(sid == student for sid, _ in roster_still)
+        conn.commit()
+    roster_still = repo.list_members_for_owner(course["id"], real_owner, limit=50, offset=0)
+    assert any(sid == student for sid, _ in roster_still)
 
-        # Case 2: Session is real_owner; passing attacker as arg MUST delete
+    # Case 2: Session is real_owner; passing attacker as arg MUST delete
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, true)", (real_owner,))
             cur.execute(
                 "select public.remove_course_membership(%s, %s::uuid, %s)",
                 (attacker, course["id"], student),
             )
-        roster_after = repo.list_members_for_owner(course["id"], real_owner, limit=50, offset=0)
-        assert all(sid != student for sid, _ in roster_after)
-
+        conn.commit()
+    roster_after = repo.list_members_for_owner(course["id"], real_owner, limit=50, offset=0)
+    assert all(sid != student for sid, _ in roster_after)

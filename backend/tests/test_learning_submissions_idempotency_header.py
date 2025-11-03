@@ -117,7 +117,7 @@ async def test_accepts_valid_idempotency_key_token():
             headers={"Idempotency-Key": token},
             json={"kind": "text", "text_body": "Meine Antwort"},
         )
-        assert r.status_code == 201
+        assert r.status_code == 202
         assert r.headers.get("Cache-Control") == "private, no-store"
         body = r.json()
         assert body.get("id") and body.get("attempt_nr") == 1
@@ -135,14 +135,14 @@ async def test_idempotent_retry_returns_existing_submission():
             headers={"Idempotency-Key": token},
             json=payload,
         )
-        assert first.status_code == 201
+        assert first.status_code == 202
         first_body = first.json()
         second = await c.post(
             f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
             headers={"Idempotency-Key": token},
             json=payload,
         )
-        assert second.status_code == 201
+        assert second.status_code == 202
         second_body = second.json()
         assert second_body["id"] == first_body["id"]
         assert second_body["attempt_nr"] == first_body["attempt_nr"]

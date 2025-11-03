@@ -6,7 +6,7 @@ import os
 import logging
 import uuid
 import secrets
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Mapping
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
@@ -292,7 +292,21 @@ def _build_history_entry_from_record(
     index: int,
     open_attempt_id: str,
 ) -> HistoryEntry:
-    """Convert a submission API record into a HistoryEntry with formatted content."""
+    """Render a submission record into a HistoryEntry for the learner history accordion.
+
+    Why: keeps the SSR fragment deterministic so our tests (and screen readers) can rely on a stable structure.
+
+    Args:
+        record: Submission payload fetched from the API (dict-like).
+        index: Position within the history list; newest item at index 0.
+        open_attempt_id: Submission ID that should render with `<details open>`.
+
+    Returns:
+        HistoryEntry containing escaped HTML fragments for content, feedback, and status.
+
+    Permissions:
+        Caller must ensure the current session may view this submission (student ownership or teacher course access). This helper performs no authorisation checks.
+    """
     if not isinstance(record, dict):
         return HistoryEntry(
             label=f"Versuch #{index + 1}",
@@ -322,74 +336,19 @@ def _build_history_entry_from_record(
         status_label = f"{status_text} · {error_code}"
     status_html = f'<p class="analysis-status text-muted">Status: {Component.escape(status_label)}</p>'
 
-    metrics_html = ""
+    # Collect metrics for the status sidebar and render criteria cards in a dedicated helper.
+    metric_items: List[str] = []
     criteria_html = ""
     if isinstance(analysis, dict):
-        metric_items: List[str] = []
         score = analysis.get("score")
         if score is not None:
             metric_items.append(f"<li>Score: {Component.escape(str(score))}</li>")
-        schema_tag = analysis.get("schema")
-        criteria_list = analysis.get("criteria_results") if schema_tag in {"criteria.v1", "criteria.v2"} else None
-        if isinstance(criteria_list, list):
-            cards: List[str] = []
-            for item in criteria_list:
-                if not isinstance(item, dict):
-                    continue
-                raw_title = item.get("criterion")
-                if not raw_title:
-                    continue
-                title = Component.escape(str(raw_title))
-                explanation_html = ""
-                if item.get("explanation_md"):
-                    explanation_html = render_markdown_safe(str(item["explanation_md"]))
-                    if explanation_html:
-                        explanation_html = f'<div class="analysis-criterion__body">{explanation_html}</div>'
-                badge_html = ""
-                raw_score = item.get("score")
-                score_clamped = None
-                if raw_score is not None:
-                    try:
-                        score_int = int(raw_score)
-                    except (TypeError, ValueError):
-                        score_int = None
-                    if score_int is not None:
-                        score_clamped = max(0, min(10, score_int))
-                        max_score = item.get("max_score")
-                        if not isinstance(max_score, int) or max_score < 1:
-                            max_score = 10
-                        if score_clamped <= 3:
-                            badge_variant = "badge-error"
-                        elif score_clamped <= 7:
-                            badge_variant = "badge-warning"
-                        else:
-                            badge_variant = "badge-success"
-                        badge_html = (
-                            f'<span class="badge {badge_variant}" aria-label="Punkte {score_clamped} von {max_score}">'
-                            f"{score_clamped}/{max_score}"
-                            f'<span class="sr-only"> Punkte {score_clamped} von {max_score}</span>'
-                            "</span>"
-                        )
-                        metric_items.append(
-                            f"<li>{title}: {Component.escape(str(score_clamped))}</li>"
-                        )
-                else:
-                    metric_items.append(f"<li>{title}</li>")
+        criteria_html, criteria_metrics = _render_analysis_criteria_section(analysis)
+        metric_items.extend(criteria_metrics)
 
-                header_parts = [f'<span class="analysis-criterion__title">{title}</span>']
-                if badge_html:
-                    header_parts.append(badge_html)
-                header_html = '<header class="analysis-criterion__header">' + "".join(header_parts) + "</header>"
-                cards.append(f'<article class="analysis-criterion">{header_html}{explanation_html}</article>')
-            if cards:
-                criteria_html = (
-                    '<section class="analysis-criteria">'
-                    '<h3 class="sr-only">Auswertung</h3>'
-                    + "".join(cards)
-                    + "</section>"
-                )
-        if metric_items:
-            metrics_html = '<ul class="analysis-metrics">' + "".join(metric_items) + "</ul>"
+    metrics_html = ""
+    if metric_items:
+        metrics_html = '<ul class="analysis-metrics">' + "".join(metric_items) + "</ul>"
 
     feedback_sections: List[str] = []
     if criteria_html:
@@ -413,6 +372,89 @@ def _build_history_entry_from_record(
         status_html=status_block_html,
         expanded=expanded,
     )
+
+
+def _render_analysis_criteria_section(analysis: Mapping[str, object]) -> tuple[str, List[str]]:
+    """Render the per-criterion block for criteria.v1/v2 payloads and return metric items."""
+    schema_tag = analysis.get("schema")
+    if schema_tag not in {"criteria.v1", "criteria.v2"}:
+        return "", []
+
+    criteria_list = analysis.get("criteria_results")
+    if not isinstance(criteria_list, list):
+        return "", []
+
+    cards: List[str] = []
+    metric_items: List[str] = []
+    for item in criteria_list:
+        if not isinstance(item, dict):
+            continue
+        raw_title = item.get("criterion")
+        if not raw_title:
+            continue
+
+        title = Component.escape(str(raw_title))
+        explanation_html = ""
+        if item.get("explanation_md"):
+            explanation_html = render_markdown_safe(str(item["explanation_md"]))
+            if explanation_html:
+                explanation_html = f'<div class="analysis-criterion__body">{explanation_html}</div>'
+
+        badge_html = ""
+        raw_score = item.get("score")
+        score_metric_added = False
+        if raw_score is not None:
+            score_clamped, max_score, badge_variant = _normalise_criterion_score(raw_score, item.get("max_score"))
+            if score_clamped is not None:
+                # Provide both colour and text information so screen readers announce the score.
+                badge_html = (
+                    f'<span class="badge {badge_variant}" aria-label="Punkte {score_clamped} von {max_score}">'
+                    f"{score_clamped}/{max_score}"
+                    f'<span class="sr-only"> Punkte {score_clamped} von {max_score}</span>'
+                    "</span>"
+                )
+                metric_items.append(f"<li>{title}: {Component.escape(str(score_clamped))}</li>")
+                score_metric_added = True
+        if not score_metric_added:
+            metric_items.append(f"<li>{title}</li>")
+
+        header_parts = [f'<span class="analysis-criterion__title">{title}</span>']
+        if badge_html:
+            header_parts.append(badge_html)
+        header_html = '<header class="analysis-criterion__header">' + "".join(header_parts) + "</header>"
+        cards.append(f'<article class="analysis-criterion">{header_html}{explanation_html}</article>')
+
+    if not cards:
+        return "", metric_items
+
+    section_html = (
+        '<section class="analysis-criteria">'
+        '<h3 class="sr-only">Auswertung</h3>'
+        + "".join(cards)
+        + "</section>"
+    )
+    return section_html, metric_items
+
+
+def _normalise_criterion_score(raw_score: object, raw_max_score: object) -> tuple[int | None, int, str]:
+    """Clamp scores to 0..10 and choose a badge variant; returns None when score is invalid."""
+    try:
+        score_int = int(raw_score)
+    except (TypeError, ValueError):
+        return None, 10, "badge-warning"
+
+    score_clamped = max(0, min(10, score_int))
+    max_score = raw_max_score if isinstance(raw_max_score, int) and raw_max_score >= 1 else 10
+
+    # Semantic colouring by performance bands keeps alignment with UI design tokens.
+    if score_clamped <= 3:
+        badge_variant = "badge-error"
+    elif score_clamped <= 7:
+        badge_variant = "badge-warning"
+    else:
+        badge_variant = "badge-success"
+
+    return score_clamped, max_score, badge_variant
 
 
 def _render_history_entries_html(entries: List[HistoryEntry]) -> str:

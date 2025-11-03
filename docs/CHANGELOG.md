@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### Security
+- security(teaching): Bind `remove_course_membership` authorization to session (`app.current_sub`) instead of function parameter to prevent owner spoofing.
+  Function keeps signature but ignores `p_owner` for auth. Adds regression test.
 - security(identity): Disable HTTP redirects for Keycloak admin POST/GET calls (prevent token leakage via 3xx).
 - security(teaching): Owner-scoped GETs for module sections/releases set `Vary: Origin` across 200/4xx.
 - security(api/teaching): PATCH /api/teaching/.../sections/{section_id}/visibility now strictly requires
@@ -11,6 +13,7 @@
 - csrf(submissions): In production, POST /submissions always requires Origin/Referer (strict same-origin), independent of STRICT_CSRF_SUBMISSIONS.
 
 ### API
+- api(operations): Clarify LearningWorker health checks schema; remove unused `metrics_scope` value from `LearningWorkerHealthCheck` enum.
 - api(operations): Add `GET /internal/health/learning-worker` returning private, no-store health diagnostics (200 healthy / 503 degraded). Requires teacher or operator role.
 - api(teaching/members): Apply sensible default paging limits and improve search/roster endpoints; SSR adjusted accordingly.
 - api(teaching/live): Align detail/unit endpoints and SSR rendering with stricter semantics and improved payloads.
@@ -34,6 +37,7 @@
 - dev(sql): Update `scripts/dev/create_login_user.sql` for local bootstrap.
 
 ### Docs
+- docs(plan): Add security plan for membership removal + health probe hardening.
 - docs(learning): Update references for Learning and AI modules; add planning note for course member search fix.
 
 ### Tests

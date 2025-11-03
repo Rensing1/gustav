@@ -7,6 +7,7 @@ dem neuesten Eintrag geöffnet ist. Solange UI‑Routen fehlen, schlagen diese T
 """
 from __future__ import annotations
 
+import json
 import re
 import uuid
 import pytest
@@ -162,7 +163,7 @@ async def test_ui_history_fragment_shows_text_when_analysis_missing():
             f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
             json={"kind": "text", "text_body": "Meine Lösung"},
         )
-        assert resp.status_code == 201
+        assert resp.status_code == 202
         sub_id = resp.json().get("id")
 
     # Set analysis_json to NULL for this submission (simulate legacy row)
@@ -184,6 +185,61 @@ async def test_ui_history_fragment_shows_text_when_analysis_missing():
     html = r.text
     assert 'class="task-panel__history"' in html
     assert "Meine Lösung" in html
+
+
+@pytest.mark.anyio
+async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
+    """Completed submissions should surface feedback markdown and status details."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    # Create submission via API
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Feedback Test"},
+        )
+        assert resp.status_code == 202
+        submission = resp.json()
+        sub_id = submission.get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate worker completion")
+
+    feedback_md = "### Feedback\n\n- Gut gemacht!"
+    analysis = {
+        "schema": "criteria.v1",
+        "score": 4,
+        "criteria_results": [{"criterion": "Kriterium 1", "score": 8}],
+    }
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id,
+                    "Feedback Test",
+                    feedback_md,
+                    json.dumps(analysis),
+                ),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(f"/learning/courses/{course_id}/tasks/{task_id}/history", params={"open_attempt_id": sub_id})
+    assert r.status_code == 200
+    html = r.text
+    assert "Gut gemacht" in html
+    assert "Status: completed" in html
+    assert "Score: 4" in html
 
 
 @pytest.mark.anyio

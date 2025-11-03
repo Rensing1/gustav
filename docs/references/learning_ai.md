@@ -18,7 +18,7 @@ Out of scope here: Teaching-side workflows, UI specifics, detailed task modellin
 
 ## 2. Architecture Overview
 1. **HTTP Layer** validates request & permissions, calls the use case `IngestLearningSubmission`.
-2. **Use Case** stores the submission (`analysis_status=pending` for image/file) and enqueues a job via the queue port. Text submissions bypass the queue (status `completed` directly).
+2. **Use Case** stores the submission with `analysis_status=pending` (für text/image/file) und enqueued einen Job über den Queue‑Port. Ein späterer optionaler Fast‑Path (201) ist vertraglich dokumentiert, aktuell aber deaktiviert.
 3. **Worker** (`process_learning_submission_ocr_jobs`) leases jobs FIFO, streams the file to the local OCR adapter, runs feedback analysis, persists results, and emits follow-up events.
 4. **Persistence** is guarded by repository functions and RLS. Worker updates go through a `SECURITY DEFINER` function to mutate `analysis_status`, `analysis_json`, `feedback_md`.
 5. **Observability**: Structured logs, metrics (`ocr_jobs_inflight`, `ai_worker_failed_total`), alerts (OCR failures, queue backlog).
@@ -90,13 +90,14 @@ Refer to the latest migration plan in `docs/plan/2025-11-01-ki-integration.md` f
 
 ## 7. Observability & Operations
 - **Metrics**
-  - `ocr_jobs_inflight` (gauge)
-  - `ai_worker_duration_seconds` (histogram per step)
-  - `ai_worker_retry_total`, `ai_worker_failed_total` (counters)
-  - `ocr_text_length` (histogram) for anomaly detection
+  - `analysis_jobs_inflight` (gauge)
+  - `ai_worker_processed_total{status}` (counter)
+  - `ai_worker_retry_total{phase}` (counter)
+  - `ai_worker_failed_total{error_code}` (counter)
+  - `ai_worker_duration_seconds` (histogram per step, follow-up)
 - **Logs**
-  - Structured JSON: `{submission_id, job_id, status_from, status_to, attempts, duration_ms}`
-  - Error logs include truncated stack traces, not student content.
+  - Strukturierte Warn-/Error-Logs bei Retries/Failures (`submission_id`, `job_id`, `next_visible_at`, `error_code`).
+  - Keine Rohinhalte in Logs; nur IDs und gekürzte Fehlermeldungen.
 - **Alerts**
   - `ai_worker_failed_total` spike within 5 minutes.
   - Queue backlog (> N jobs pending).

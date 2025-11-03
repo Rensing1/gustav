@@ -40,8 +40,8 @@ Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Fel
   - Fehler: 400 (`mime_not_allowed`, `size_exceeded`), 403 (CSRF/RLS), 404 (Task nicht sichtbar)
 
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions`
-  - Text-Abgabe: `{ kind: 'text', text_body }` → Response `201` mit `analysis_status='completed'`.
-  - Bild-/PDF-Abgabe: `{ kind: 'image'|'file', storage_key, mime_type, size_bytes, sha256 }` → Response `202` mit `analysis_status='pending'`, `text_body` leer, `analysis_json` leer.
+  - Alle Submission‑Typen (text/image/file) sind standardmäßig asynchron → Response `202` mit `analysis_status='pending'`.
+  - Optionaler 201‑Fast‑Path für Text ist vertraglich dokumentiert, derzeit aber deaktiviert.
   - Aufrufe mit `Idempotency-Key` (≤ 64 Zeichen) sind idempotent.
   - Server prüft Mitgliedschaft, Release, `max_attempts`, CSRF (Same-Origin), Dateigrößen, Hash, Storage-Key-Regex.
   - Sobald der Worker OCR/Feedback abgeschlossen hat, wird die Submission auf `analysis_status='completed'` aktualisiert (oder `failed` bei Fehlern). Client kann via `GET` pollend den Status abfragen.

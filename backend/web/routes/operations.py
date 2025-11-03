@@ -11,7 +11,16 @@ operations_router = APIRouter(tags=["Operations"])
 
 
 def _private_response(body: dict, *, status_code: int) -> JSONResponse:
-    return JSONResponse(body, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+    """Return JSON with private cache headers and CSRF-aware Vary.
+
+    Security: Internal tooling must not be cached by shared caches and should
+    vary by Origin for CSRF-aware intermediaries.
+    """
+    return JSONResponse(
+        body,
+        status_code=status_code,
+        headers={"Cache-Control": "private, no-store", "Vary": "Origin"},
+    )
 
 
 def _require_teacher_or_operator(request: Request):

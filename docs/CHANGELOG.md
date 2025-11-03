@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### Security
+ - security(operations): Internal health responses set `Vary: Origin` and `Cache-Control: private, no-store` consistently.
+ - security(db): Avoid committing DB passwords — create `gustav_worker` without password/login; deployments set credentials out-of-band.
  - security(teaching): Bind `remove_course_membership` authorization to session (`app.current_sub`) and ignore `p_owner` for auth to prevent spoofing. Adds regression test.
 - security(identity): Disable HTTP redirects for Keycloak admin POST/GET calls (prevent token leakage via 3xx).
 - security(teaching): Owner-scoped GETs for module sections/releases set `Vary: Origin` across 200/4xx.
@@ -31,10 +33,12 @@
 - db(learning-worker): Introduce async job queue with leasing/status checks and retry semantics (Supabase migrations).
 - db(learning-worker): Add dedicated worker role and health‑probe columns.
 - db(learning): Enforce submissions idempotency (unique constraint) to avoid duplicate processing.
+ - db(roles): Health probe function now `REVOKE ALL` from PUBLIC and grants EXECUTE to `gustav_limited`/`gustav_operator`/`gustav_web`.
 
 ### Tooling & Dev
 - dev(ops): Add worker modules and operations route, wire up in `docker-compose.yml` and `Makefile`.
 - dev(sql): Update `scripts/dev/create_login_user.sql` for local bootstrap.
+ - dev(compose): Worker defaults to application DSN; override via `LEARNING_DATABASE_URL` for dedicated worker login.
 
 ### Docs
 - docs(plan): Add security plan for membership removal + health probe hardening.

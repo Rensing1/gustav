@@ -814,6 +814,44 @@ components:
               explanation_md:
                 type: string
                 description: Markdown explanation tying the score back to the criterion.
+    AnalysisJsonCriteriaV2:
+      type: object
+      additionalProperties: false
+      required: [schema]
+      properties:
+        schema:
+          type: string
+          enum: ["criteria.v2"]
+          description: Version tag for the analysis payload structure (criteria v2).
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Overall formative score derived from the criteria (0..5, retained for backwards compatibility).
+        criteria_results:
+          type: array
+          description: Per-criterion scoring result shown to learners.
+          items:
+            type: object
+            required: [criterion]
+            additionalProperties: false
+            properties:
+              criterion:
+                type: string
+                description: Display name of the rubric criterion.
+              score:
+                type: integer
+                minimum: 0
+                maximum: 10
+                description: Criterion score between 0 and max_score (default 10).
+              max_score:
+                type: integer
+                minimum: 1
+                default: 10
+                description: Maximum achievable score for the criterion (defaults to 10).
+              explanation_md:
+                type: string
+                description: Objective analysis in Markdown (rendered safely on the UI).
     LearningSubmission:
       type: object
       required: [id, attempt_nr, kind, analysis_status, created_at]
@@ -862,9 +900,11 @@ components:
             Normalized error indicator for AI processing. `*_retrying` marks in-flight retries,
             `*_failed` indicates that processing stopped and the submission remains without feedback.
         analysis_json:
-          $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
+          oneOf:
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
           nullable: true
-          description: Structured criteria-based feedback payload; null while analysis is pending.
+          description: Structured criteria-based feedback payload (criteria.v1 or criteria.v2); null while analysis is pending.
         feedback_md:
           type: string
           nullable: true

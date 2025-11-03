@@ -45,4 +45,6 @@ $$;
 comment on function public.learning_worker_health_probe() is
     'Returns diagnostic info for the learning worker health endpoint';
 
-grant execute on function public.learning_worker_health_probe() to gustav_web, gustav_operator;
+-- Lock down EXECUTE and grant to application/operator roles explicitly.
+revoke all on function public.learning_worker_health_probe() from public;
+grant execute on function public.learning_worker_health_probe() to gustav_web, gustav_operator, gustav_limited;

@@ -229,7 +229,7 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
             f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
             json={"kind": "text", "text_body": "Lösung"},
         )
-        assert r_sub.status_code in (200, 201)
+        assert r_sub.status_code in (200, 201, 202)
 
         # Delta should now include OOB cell update
         r_delta = await c_owner.get(

@@ -1382,7 +1382,7 @@ def transfer_submissions(dsn: str, legacy_schema: str, dry_run: bool) -> PhaseRe
                 if status in ("completed", "done"):
                     analysis_status = "completed"
                 elif status in ("failed", "error"):
-                    analysis_status = "error"
+                    analysis_status = "failed"
                 else:
                     analysis_status = "pending"
 

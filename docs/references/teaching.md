@@ -223,11 +223,12 @@ RLS Policies & DSN
 - Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`
 - Folgeanpassungen:
   - `supabase/migrations/20251020155746_teaching_rls_fix_and_sessions.sql` (Rekursion fix, Sessions‑RLS)
-  - `supabase/migrations/20251020174347_memberships_select_self_only_and_fn.sql` (SELECT Self‑Only + Helper‑Funktion)
+  - `supabase/migrations/20251020174347_memberships_select_self_only_and_fn.sql` (SELECT Self‑Only + Helper‑Funktion; durch spätere Migration ersetzt)
   - `supabase/migrations/20251020174657_memberships_insert_any_policy_restore.sql` (INSERT‑Policy für App‑Rolle)
   - `supabase/migrations/20251020181043_memberships_select_any_restore.sql` (Zwischenstand – volle Leserechte; durch nächste Migration gehärtet)
-  - `supabase/migrations/20251020182801_memberships_owner_or_self_restore.sql` (Re-harden self-only SELECT + Helper reapply)
-  - `supabase/migrations/20251020183625_memberships_self_only_fix.sql` (Final self-only SELECT + helper bounds refresh; INSERT bleibt App-gesteuert)
+  - `supabase/migrations/20251020182801_memberships_owner_or_self_restore.sql` (Re-harden owner-or-self SELECT + Helper reapply)
+  - `supabase/migrations/20251020183625_memberships_self_only_fix.sql` (Owner-or-self SELECT finalisiert; INSERT bleibt App-gesteuert)
+  - `supabase/migrations/20251103170012_memberships_delete_force_rls.sql` (FORCE RLS + aktuelle Policies `memberships_select_owner_or_self` und `memberships_delete_owner_only`)
   - `supabase/migrations/20251020184810_app_sessions_rls_restrict.sql` (Entzieht `gustav_limited` den Zugriff auf Sessions)
 - App-Runtime: Eine DSN mit Limited‑Role (z. B. `gustav_limited`). RLS greift immer.
 - Backend setzt je Query `SET LOCAL app.current_sub = '<sub>'`, damit Policies wissen, „wer“ handelt.

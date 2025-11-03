@@ -14,31 +14,35 @@
 -- Notes:
 -- - Run as a superuser (e.g., postgres) on your local dev database.
 -- - Re-running is safe; the script updates the password if the role exists.
--- - Never commit real secrets. For staging/production, provision the login
---   role out-of-band via your secret management process.
-
--- Accept variables via psql -v OR fallback to environment variables.
--- This avoids passing secrets on the process command line by allowing
--- APP_DB_USER/APP_DB_PASSWORD from the environment.
+-- Credential resolution: prefer -v overrides from the CLI, otherwise pull
+-- APP_DB_USER/APP_DB_PASSWORD from the environment via \getenv. Track missing
+-- configuration so we can raise a clear error before touching the database.
+\set app_config_missing false
 \if :{?app_user}
 \else
-  \set app_user :ENV.APP_DB_USER
+  \getenv app_user APP_DB_USER
 \endif
 \if :{?app_pass}
 \else
-  \set app_pass :ENV.APP_DB_PASSWORD
+  \getenv app_pass APP_DB_PASSWORD
 \endif
 
 -- Final guard: require both values to be present after fallback.
 \if :{?app_user}
 \else
   \echo 'ERROR: app_user not provided. Set APP_DB_USER env or pass -v app_user=...'
-  \quit 1
+  \set app_config_missing true
 \endif
 \if :{?app_pass}
 \else
   \echo 'ERROR: app_pass not provided. Set APP_DB_PASSWORD env or pass -v app_pass=...'
-  \quit 1
+  \set app_config_missing true
+\endif
+\if :app_config_missing
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'APP_DB_USER/APP_DB_PASSWORD environment variables must be set before running create_login_user.sql';
+  END$$;
 \endif
 
 select set_config('app.bootstrap_user', :'app_user', false);
@@ -51,7 +55,7 @@ declare
 begin
   -- Validate inputs
   if coalesce(v_user, '') = '' or coalesce(v_pass, '') = '' then
-    raise exception 'APP_DB_USER/APP_DB_PASSWORD must be set in the environment';
+    raise exception 'APP_DB_USER/APP_DB_PASSWORD environment variables were not resolved. export them before running this script.';
   end if;
 
   if exists (select 1 from pg_roles where rolname = v_user) then

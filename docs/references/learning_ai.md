@@ -10,7 +10,7 @@ This document complements `docs/references/learning.md`. It describes the AI-spe
 - **OCR**: Extract handwritten or printed text from image/PDF submissions and populate `text_body`.
 - **Feedback**: Generate formative feedback based on task criteria using the same `text_body` (typed or OCR).
 - **Local only**: All inference happens on self-managed Ollama/DSPy instances; no third-party cloud calls.
-- **Async-first**: Submissions with `kind=image|file` return `202` with `analysis_status=pending`. A worker processes OCR + feedback and updates the submission to `completed` or `failed`.
+- **Async-first**: Submissions with `kind=image|file` return `202` with `analysis_status=pending`. A worker processes vision (OCR) + feedback and updates the submission to `completed` or `failed`.
 
 Out of scope here: Teaching-side workflows, UI specifics, detailed task modelling.
 
@@ -18,10 +18,10 @@ Out of scope here: Teaching-side workflows, UI specifics, detailed task modellin
 
 ## 2. Architecture Overview
 1. **HTTP Layer** validates request & permissions, calls the use case `IngestLearningSubmission`.
-2. **Use Case** stores the submission (`analysis_status=pending` for image/file) and enqueues a job via the queue port. Text submissions bypass the queue (status `completed` directly).
+2. **Use Case** stores the submission with `analysis_status=pending` (für text/image/file) und enqueued einen Job über den Queue‑Port. Ein späterer optionaler Fast‑Path (201) ist vertraglich dokumentiert, aktuell aber deaktiviert.
 3. **Worker** (`process_learning_submission_ocr_jobs`) leases jobs FIFO, streams the file to the local OCR adapter, runs feedback analysis, persists results, and emits follow-up events.
 4. **Persistence** is guarded by repository functions and RLS. Worker updates go through a `SECURITY DEFINER` function to mutate `analysis_status`, `analysis_json`, `feedback_md`.
-5. **Observability**: Structured logs, metrics (`ocr_jobs_inflight`, `ai_worker_failed_total`), alerts (OCR failures, queue backlog).
+5. **Observability**: Structured logs, metrics (`analysis_jobs_inflight`, `ai_worker_failed_total`), alerts (adapter failures, queue backlog).
 
 ---
 
@@ -43,7 +43,7 @@ Stub implementations exist for tests (`StubOcrAdapter`, `StubFeedbackAdapter`, i
 
 ### Job Table
 - `public.learning_submission_ocr_jobs` columns:
-  - `status`: `queued` → `processing` → `completed|failed`
+- `status`: `queued` → `leased` → (`failed` | delete on success)
   - `retry_count`, `visible_at`: used for exponential backoff (e.g. 5s, 15s, 45s)
   - `payload`: JSON with `submission_id`, `storage_key`, `mime_type`, `sha256`, `student_sub`
 
@@ -52,14 +52,14 @@ Stub implementations exist for tests (`StubOcrAdapter`, `StubFeedbackAdapter`, i
 2. Sets `status=processing`, increments `retry_count`, updates `visible_at=now + lease_timeout`.
 3. Streams file via storage port, runs OCR adapter to obtain text.
 4. Runs feedback adapter with criteria + text.
-5. Writes results via repository: update submission to `analysis_status='completed'`, set `text_body`, `analysis_json.text`, `feedback_md`, `ocr_attempts`, `ocr_last_attempt_at`.
+5. Writes results via helper: update submission to `analysis_status='completed'`, set `text_body`, `analysis_json (criteria.v1)`, `feedback_md`, `vision_attempts`, `vision_last_attempt_at`.
 6. Emits event (`LearningSubmissionAnalysisRequested`) to keep dashboard harmonised.
 7. Acknowledges job (`status=completed`).
 
 If OCR or feedback fails:
 - Record error in `ocr_last_error`, increment `ocr_attempts`.
 - When `retry_count < 3`, schedule retry with exponential backoff.
-- Else mark submission `analysis_status='failed'`, set `error_code` (`ocr_failed` or `analysis_failed`), persist final job `status=failed`, and log audit entry.
+- Else mark submission `analysis_status='failed'`, set `error_code` (`vision_failed` or `feedback_failed`), persist final job `status=failed`, and log audit entry.
 
 **Status semantics** (Learning submission table):
 - `pending`: waiting for worker; `text_body` may be empty.
@@ -90,13 +90,14 @@ Refer to the latest migration plan in `docs/plan/2025-11-01-ki-integration.md` f
 
 ## 7. Observability & Operations
 - **Metrics**
-  - `ocr_jobs_inflight` (gauge)
-  - `ai_worker_duration_seconds` (histogram per step)
-  - `ai_worker_retry_total`, `ai_worker_failed_total` (counters)
-  - `ocr_text_length` (histogram) for anomaly detection
+  - `analysis_jobs_inflight` (gauge)
+  - `ai_worker_processed_total{status}` (counter)
+  - `ai_worker_retry_total{phase}` (counter)
+  - `ai_worker_failed_total{error_code}` (counter)
+  - `ai_worker_duration_seconds` (histogram per step, follow-up)
 - **Logs**
-  - Structured JSON: `{submission_id, job_id, status_from, status_to, attempts, duration_ms}`
-  - Error logs include truncated stack traces, not student content.
+  - Strukturierte Warn-/Error-Logs bei Retries/Failures (`submission_id`, `job_id`, `next_visible_at`, `error_code`).
+  - Keine Rohinhalte in Logs; nur IDs und gekürzte Fehlermeldungen.
 - **Alerts**
   - `ai_worker_failed_total` spike within 5 minutes.
   - Queue backlog (> N jobs pending).
@@ -122,8 +123,7 @@ Refer to the latest migration plan in `docs/plan/2025-11-01-ki-integration.md` f
 - Environment variables:
   - `AI_BACKEND=stub|local`
   - `LOCAL_OLLAMA_URL` (e.g. `http://127.0.0.1:11434`)
-  - `OCR_MAX_RETRIES=3`, `OCR_BACKOFF_BASE=5s`, `OCR_TIMEOUT=30s`
-  - `FEEDBACK_TIMEOUT=15s`
+  - `WORKER_MAX_RETRIES=3`, `WORKER_BACKOFF_SECONDS=10`, `WORKER_LEASE_SECONDS=45`, `WORKER_POLL_INTERVAL=0.5`
 - Worker process:
   - Run via `poetry run python -m backend.learning.worker` or container `learning-ai-worker`.
   - Horizontal scaling allowed; locking is handled via queue `status` update with optimistic concurrency.

@@ -179,7 +179,8 @@ async def test_summary_happy_path_minimal_status_matrix_and_headers():
             f"/api/learning/courses/{cid}/tasks/{t1['id']}/submissions",
             json={"kind": "text", "text_body": "Meine Lösung"},
         )
-        assert r_sub.status_code in (201, 200)
+        # Submissions are now async → 202 Accepted when enqueued/pending
+        assert r_sub.status_code in (202, 201, 200)
 
         # Owner fetches summary
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -302,7 +303,7 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
             f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
             json={"kind": "text", "text_body": "Fallback submission"},
         )
-        assert r_sub.status_code in (200, 201)
+        assert r_sub.status_code in (200, 201, 202)
 
         original_connect = psycopg.connect
 

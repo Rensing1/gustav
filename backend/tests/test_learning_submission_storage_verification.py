@@ -144,5 +144,6 @@ async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch
                     "sha256": good_hash,
                 },
             )
-        assert r.status_code == 201
+        # Async accept with pending analysis
+        assert r.status_code == 202
         assert r.headers.get("Cache-Control") == "private, no-store"

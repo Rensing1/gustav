@@ -110,13 +110,20 @@ def _parse_include(value: str | None) -> tuple[bool, bool]:
 # adapter thin and framework-agnostic.
 
 
-REPO = DBLearningRepo()
-LIST_SECTIONS_USECASE = ListSectionsUseCase(REPO)
-LIST_UNIT_SECTIONS_USECASE = ListUnitSectionsUseCase(REPO)
-LIST_COURSES_USECASE = ListCoursesUseCase(REPO)
-LIST_COURSE_UNITS_USECASE = ListCourseUnitsUseCase(REPO)
-CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(REPO)
-LIST_SUBMISSIONS_USECASE = ListSubmissionsUseCase(REPO)
+# Lazily construct the repository to ensure environment (.env, pytest) is loaded
+# before establishing DB connections. This avoids import-time failures and keeps
+# the adapter thin. Tests can override via set_repo().
+_REPO: _LearningRepoCombined | None = None
+
+def _get_repo() -> _LearningRepoCombined:
+    global _REPO
+    if _REPO is None:
+        _REPO = DBLearningRepo()
+    return _REPO
+
+# Back-compat: expose a concrete instance for tests that check `learning.REPO`.
+# Mirrors the Teaching routes pattern so DB-backed contract tests don't skip.
+REPO = _get_repo()
 
 # Narrow typing for test helpers without pulling framework types into use cases
 try:
@@ -154,14 +161,8 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
 
 
 def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
-    global REPO, LIST_SECTIONS_USECASE, LIST_UNIT_SECTIONS_USECASE, LIST_COURSES_USECASE, LIST_COURSE_UNITS_USECASE, CREATE_SUBMISSION_USECASE, LIST_SUBMISSIONS_USECASE
-    REPO = repo
-    LIST_SECTIONS_USECASE = ListSectionsUseCase(repo)
-    LIST_UNIT_SECTIONS_USECASE = ListUnitSectionsUseCase(repo)
-    LIST_COURSES_USECASE = ListCoursesUseCase(repo)
-    LIST_COURSE_UNITS_USECASE = ListCourseUnitsUseCase(repo)
-    CREATE_SUBMISSION_USECASE = CreateSubmissionUseCase(repo)
-    LIST_SUBMISSIONS_USECASE = ListSubmissionsUseCase(repo)
+    global _REPO
+    _REPO = repo
 
 
 @learning_router.get("/api/learning/courses/{course_id}/sections")
@@ -205,7 +206,7 @@ async def list_sections(
     )
 
     try:
-        sections = LIST_SECTIONS_USECASE.execute(input_data)
+        sections = ListSectionsUseCase(_get_repo()).execute(input_data)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
@@ -242,7 +243,7 @@ async def list_my_courses(request: Request, limit: int = 50, offset: int = 0):
     user, error = _require_student(request)
     if error:
         return error
-    items = LIST_COURSES_USECASE.execute(
+    items = ListCoursesUseCase(_get_repo()).execute(
         ListCoursesInput(student_sub=str(user.get("sub", "")), limit=int(limit or 50), offset=int(offset or 0))
     )
     return JSONResponse(items, headers=_cache_headers_success())
@@ -279,7 +280,7 @@ async def list_course_units(request: Request, course_id: str):
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
     try:
-        rows = LIST_COURSE_UNITS_USECASE.execute(
+        rows = ListCourseUnitsUseCase(_get_repo()).execute(
             ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=str(course_id))
         )
     except LookupError:
@@ -333,7 +334,7 @@ async def list_unit_sections(
         offset=offset,
     )
     try:
-        sections = LIST_UNIT_SECTIONS_USECASE.execute(input_data)
+        sections = ListUnitSectionsUseCase(_get_repo()).execute(input_data)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
@@ -533,7 +534,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     )
 
     try:
-        submission = CREATE_SUBMISSION_USECASE.execute(submission_input)
+        submission = CreateSubmissionUseCase(_get_repo()).execute(submission_input)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
@@ -542,7 +543,9 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         detail = str(exc) or "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
 
-    return JSONResponse(submission, status_code=201, headers=_cache_headers_success())
+    # Always return 202 Accepted for async processing semantics, including
+    # idempotent retries reusing an existing pending submission.
+    return JSONResponse(submission, status_code=202, headers=_cache_headers_success())
 
 
 @learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents")
@@ -625,7 +628,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     # already enforces membership and task visibility at the DB boundary.
     try:
         # Any positive limit triggers the underlying checks; results are ignored.
-        _ = LIST_SUBMISSIONS_USECASE.execute(
+        _ = ListSubmissionsUseCase(_get_repo()).execute(
             ListSubmissionsInput(
                 course_id=str(course_id),
                 task_id=str(task_id),
@@ -745,7 +748,7 @@ async def list_submissions(
     )
 
     try:
-        submissions = LIST_SUBMISSIONS_USECASE.execute(input_data)
+        submissions = ListSubmissionsUseCase(_get_repo()).execute(input_data)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:

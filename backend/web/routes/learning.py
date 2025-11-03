@@ -543,8 +543,9 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         detail = str(exc) or "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
 
-    status_code = 202 if submission.get("analysis_status") == "pending" else 201
-    return JSONResponse(submission, status_code=status_code, headers=_cache_headers_success())
+    # Always return 202 Accepted for async processing semantics, including
+    # idempotent retries reusing an existing pending submission.
+    return JSONResponse(submission, status_code=202, headers=_cache_headers_success())
 
 
 @learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents")

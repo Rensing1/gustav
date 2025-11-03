@@ -15,6 +15,7 @@
 
 ### API
 - api(operations): Clarify LearningWorker health checks schema; remove unused `metrics_scope` value from `LearningWorkerHealthCheck` enum.
+ - api(learning): Submissions endpoint consistently returns 202 Accepted (async) including idempotent retries.
 - api(operations): Add `GET /internal/health/learning-worker` returning private, no-store health diagnostics (200 healthy / 503 degraded). Requires teacher or operator role.
 - api(teaching/members): Apply sensible default paging limits and improve search/roster endpoints; SSR adjusted accordingly.
 - api(teaching/live): Align detail/unit endpoints and SSR rendering with stricter semantics and improved payloads.

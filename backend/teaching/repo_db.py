@@ -2415,7 +2415,12 @@ class DBTeachingRepo:
                     except Exception:
                         affected = 0
                 conn.commit()
-        if affected == 0 and self._service_dsn:
+        # Final fallback (dev/test only): allow service-role DSN when explicitly enabled.
+        if (
+            affected == 0
+            and self._service_dsn
+            and (os.getenv("ALLOW_SERVICE_DSN_FOR_TESTING", "").lower() == "true")
+        ):
             try:
                 with psycopg.connect(self._service_dsn) as conn2:  # type: ignore[arg-type]
                     with conn2.cursor() as cur2:
@@ -2425,6 +2430,7 @@ class DBTeachingRepo:
                         )
                         conn2.commit()
             except Exception:
+                # Intentionally swallow errors in the test-only branch
                 pass
 
     def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Optional[dict]:

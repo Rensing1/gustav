@@ -312,10 +312,8 @@ def _build_history_entry_from_record(
         text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
     content_html = f'<div class="analysis-text">{text_html}</div>'
 
-    feedback_html = ""
     feedback_src = record.get("feedback_md") or record.get("feedback")
-    if feedback_src:
-        feedback_html = f'<div class="analysis-feedback">{render_markdown_safe(str(feedback_src))}</div>'
+    analysis = record.get("analysis_json")
 
     status_text = str(record.get("analysis_status") or "pending")
     error_code = record.get("error_code")
@@ -325,25 +323,85 @@ def _build_history_entry_from_record(
     status_html = f'<p class="analysis-status text-muted">Status: {Component.escape(status_label)}</p>'
 
     metrics_html = ""
-    analysis = record.get("analysis_json")
+    criteria_html = ""
     if isinstance(analysis, dict):
         metric_items: List[str] = []
         score = analysis.get("score")
         if score is not None:
             metric_items.append(f"<li>Score: {Component.escape(str(score))}</li>")
-        criteria = analysis.get("criteria_results")
-        if isinstance(criteria, list):
-            for item in criteria:
+        schema_tag = analysis.get("schema")
+        criteria_list = analysis.get("criteria_results") if schema_tag in {"criteria.v1", "criteria.v2"} else None
+        if isinstance(criteria_list, list):
+            cards: List[str] = []
+            for item in criteria_list:
                 if not isinstance(item, dict):
                     continue
-                criterion = Component.escape(str(item.get("criterion") or ""))
-                criterion_score = item.get("score")
-                if criterion_score is None:
-                    metric_items.append(f"<li>{criterion}</li>")
+                raw_title = item.get("criterion")
+                if not raw_title:
+                    continue
+                title = Component.escape(str(raw_title))
+                explanation_html = ""
+                if item.get("explanation_md"):
+                    explanation_html = render_markdown_safe(str(item["explanation_md"]))
+                    if explanation_html:
+                        explanation_html = f'<div class="analysis-criterion__body">{explanation_html}</div>'
+                badge_html = ""
+                raw_score = item.get("score")
+                score_clamped = None
+                if raw_score is not None:
+                    try:
+                        score_int = int(raw_score)
+                    except (TypeError, ValueError):
+                        score_int = None
+                    if score_int is not None:
+                        score_clamped = max(0, min(10, score_int))
+                        max_score = item.get("max_score")
+                        if not isinstance(max_score, int) or max_score < 1:
+                            max_score = 10
+                        if score_clamped <= 3:
+                            badge_variant = "badge-error"
+                        elif score_clamped <= 7:
+                            badge_variant = "badge-warning"
+                        else:
+                            badge_variant = "badge-success"
+                        badge_html = (
+                            f'<span class="badge {badge_variant}" aria-label="Punkte {score_clamped} von {max_score}">'
+                            f"{score_clamped}/{max_score}"
+                            f'<span class="sr-only"> Punkte {score_clamped} von {max_score}</span>'
+                            "</span>"
+                        )
+                        metric_items.append(
+                            f"<li>{title}: {Component.escape(str(score_clamped))}</li>"
+                        )
                 else:
-                    metric_items.append(f"<li>{criterion}: {Component.escape(str(criterion_score))}</li>")
+                    metric_items.append(f"<li>{title}</li>")
+
+                header_parts = [f'<span class="analysis-criterion__title">{title}</span>']
+                if badge_html:
+                    header_parts.append(badge_html)
+                header_html = '<header class="analysis-criterion__header">' + "".join(header_parts) + "</header>"
+                cards.append(f'<article class="analysis-criterion">{header_html}{explanation_html}</article>')
+            if cards:
+                criteria_html = (
+                    '<section class="analysis-criteria">'
+                    '<h3 class="sr-only">Auswertung</h3>'
+                    + "".join(cards)
+                    + "</section>"
+                )
         if metric_items:
             metrics_html = '<ul class="analysis-metrics">' + "".join(metric_items) + "</ul>"
+
+    feedback_sections: List[str] = []
+    if criteria_html:
+        feedback_sections.append(criteria_html)
+    if feedback_src:
+        feedback_sections.append(
+            '<section class="analysis-feedback">'
+            '<h3 class="analysis-feedback__title">Formatives Feedback</h3>'
+            f'{render_markdown_safe(str(feedback_src))}'
+            "</section>"
+        )
+    feedback_html = "".join(feedback_sections)
 
     status_block_html = status_html + metrics_html
 

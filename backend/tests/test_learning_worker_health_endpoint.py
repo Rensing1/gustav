@@ -96,6 +96,9 @@ async def test_learning_worker_health_returns_healthy(monkeypatch: pytest.Monkey
             {"check": "queue_visibility", "status": "ok", "detail": None},
         ],
     }
+    # Security headers
+    assert resp.headers.get("Cache-Control") == "private, no-store"
+    assert resp.headers.get("Vary") == "Origin"
 
 
 @pytest.mark.anyio
@@ -133,6 +136,8 @@ async def test_learning_worker_health_returns_503_when_role_missing(monkeypatch:
             }
         ],
     }
+    assert resp.headers.get("Cache-Control") == "private, no-store"
+    assert resp.headers.get("Vary") == "Origin"
 
 
 @pytest.mark.anyio
@@ -153,3 +158,5 @@ async def test_learning_worker_health_requires_authentication(monkeypatch: pytes
 
     assert resp.status_code == 401
     assert fake_service.probe_calls == 0
+    assert resp.headers.get("Cache-Control") == "private, no-store"
+    assert resp.headers.get("Vary") == "Origin"

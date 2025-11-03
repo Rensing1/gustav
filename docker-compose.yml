@@ -73,7 +73,8 @@ services:
       - .env
     environment:
       - LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
-      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://gustav_worker:gustav-worker@supabase_db_gustav-alpha2:5432/postgres}
+      # Use application DSN by default; a dedicated worker user can be configured via LEARNING_DATABASE_URL
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       - LEARNING_VISION_ADAPTER=${LEARNING_VISION_ADAPTER:-backend.learning.adapters.stub_vision}
       - LEARNING_FEEDBACK_ADAPTER=${LEARNING_FEEDBACK_ADAPTER:-backend.learning.adapters.stub_feedback}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}

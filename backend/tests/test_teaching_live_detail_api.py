@@ -130,7 +130,8 @@ async def test_latest_detail_happy_path_and_no_content_cases():
             f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
             json={"kind": "text", "text_body": "Das ist eine Antwort."},
         )
-        assert r_sub.status_code in (200, 201)
+        # Async submission acceptance
+        assert r_sub.status_code in (200, 201, 202)
 
         r_detail = await c_owner.get(
             f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"

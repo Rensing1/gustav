@@ -944,21 +944,34 @@ def _build_default_repo():
         return _Repo()
 
 
-REPO = _build_default_repo()
+"""Lazy repo accessor to avoid import-time DB checks in tests."""
+_REPO = None
+
+def _get_repo():  # pragma: no cover - simple accessor
+    global _REPO
+    if _REPO is None:
+        _REPO = _build_default_repo()
+    return _REPO
+
+# Back-compat symbol used in tests: expose the actual instance for isinstance checks
+REPO = _get_repo()
+
 # Allow overriding the storage bucket via environment for deployments
 _bucket = os.getenv("SUPABASE_STORAGE_BUCKET") or MaterialFileSettings().storage_bucket
 MATERIAL_FILE_SETTINGS = MaterialFileSettings(storage_bucket=_bucket)
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
-MATERIALS_SERVICE = MaterialsService(REPO, settings=MATERIAL_FILE_SETTINGS)
-TASKS_SERVICE = TasksService(REPO)
+
+def _get_materials_service() -> MaterialsService:
+    return MaterialsService(_get_repo(), settings=MATERIAL_FILE_SETTINGS)
+
+def _get_tasks_service() -> TasksService:
+    return TasksService(_get_repo())
 
 
 def set_repo(repo) -> None:
     """Allow tests to swap the teaching repository implementation."""
-    global REPO, MATERIALS_SERVICE, TASKS_SERVICE
-    REPO = repo
-    MATERIALS_SERVICE = MaterialsService(repo, settings=MATERIAL_FILE_SETTINGS)
-    TASKS_SERVICE = TasksService(repo)
+    global _REPO
+    _REPO = repo
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
@@ -1023,19 +1036,21 @@ def _guard_unit_author(unit_id: str, author_sub: str):
         return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            if REPO.unit_exists_for_author(unit_id, author_sub):
+        repo = _get_repo()
+        if isinstance(repo, DBTeachingRepo):
+            if repo.unit_exists_for_author(unit_id, author_sub):
                 return None
-            exists = REPO.unit_exists(unit_id)
+            exists = repo.unit_exists(unit_id)
             if exists is False:
                 return _private_error({"error": "not_found"}, status_code=404)
             return _private_error({"error": "forbidden"}, status_code=403)
     except Exception:
         return _private_error({"error": "forbidden"}, status_code=403)
     # Fallback for in-memory repo
-    if hasattr(REPO, "unit_exists_for_author") and REPO.unit_exists_for_author(unit_id, author_sub):
+    repo = _get_repo()
+    if hasattr(repo, "unit_exists_for_author") and repo.unit_exists_for_author(unit_id, author_sub):
         return None
-    if hasattr(REPO, "unit_exists") and not REPO.unit_exists(unit_id):
+    if hasattr(repo, "unit_exists") and not repo.unit_exists(unit_id):
         return _private_error({"error": "not_found"}, status_code=404)
     return _private_error({"error": "forbidden"}, status_code=403)
 
@@ -1112,13 +1127,15 @@ def _guard_course_owner(course_id: str, owner_sub: str):
     """Ensure caller owns the course, mapping to 404/403 appropriately."""
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            if REPO.course_exists_for_owner(course_id, owner_sub):
+        repo = _get_repo()
+        if isinstance(repo, DBTeachingRepo):
+            if repo.course_exists_for_owner(course_id, owner_sub):
                 return None
             return _resp_non_owner_or_unknown(course_id, owner_sub)
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    course = REPO.get_course(course_id)
+    repo = _get_repo()
+    course = repo.get_course(course_id)
     if not course:
         return JSONResponse({"error": "not_found"}, status_code=404)
     if _teacher_id_of(course) != owner_sub:
@@ -1178,10 +1195,11 @@ async def list_courses(request: Request, limit: int = 20, offset: int = 0):
     sub = _current_sub(user)
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
+    repo = _get_repo()
     if _role_in(user, "teacher"):
-        items = REPO.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
+        items = repo.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
     else:
-        items = REPO.list_courses_for_student(student_id=sub, limit=limit, offset=offset)
+        items = repo.list_courses_for_student(student_id=sub, limit=limit, offset=offset)
     return _json_private([_serialize_course(c) for c in items], status_code=200)
 
 
@@ -1209,7 +1227,7 @@ async def create_course(request: Request, payload: CourseCreate):
         return csrf
     sub = _current_sub(user)
     try:
-        course = REPO.create_course(
+        course = _get_repo().create_course(
             title=payload.title.strip(),
             subject=payload.subject,
             grade_level=payload.grade_level,
@@ -1239,6 +1257,7 @@ async def get_course(request: Request, course_id: str):
     Permissions:
         Caller must be a teacher AND owner of the course.
     """
+    repo = _get_repo()
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -1255,13 +1274,13 @@ async def get_course(request: Request, course_id: str):
     # Owner confirmed; fetch course and return
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
+        if isinstance(repo, DBTeachingRepo):
             # Use owner-scoped helper under RLS
-            c = REPO.get_course_for_owner(course_id, sub)
+            c = repo.get_course_for_owner(course_id, sub)
         else:
-            c = REPO.get_course(course_id)
+            c = repo.get_course(course_id)
     except Exception:
-        c = REPO.get_course(course_id)
+        c = repo.get_course(course_id)
     if not c:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_course(c), status_code=200)
@@ -1510,6 +1529,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     Permissions:
         Caller must be a teacher AND owner of the course.
     """
+    repo = _get_repo()
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -1517,26 +1537,26 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     updates = payload.model_dump(mode="python", exclude_unset=True)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
+        if isinstance(repo, DBTeachingRepo):
             # Contract-aligned semantics: disambiguate 404 vs 403 prior to mutation
-            if not REPO.course_exists_for_owner(course_id, sub):
-                ex = REPO.course_exists(course_id)
+            if not repo.course_exists_for_owner(course_id, sub):
+                ex = repo.course_exists(course_id)
                 if ex is False:
                     return JSONResponse({"error": "not_found"}, status_code=404)
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            updated = REPO.update_course_owned(
+            updated = repo.update_course_owned(
                 course_id,
                 sub,
                 **updates,
             )
         else:
-            course = REPO.get_course(course_id)
+            course = repo.get_course(course_id)
             if not course:
                 return JSONResponse({"error": "not_found"}, status_code=404)
             owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
             if sub != owner_id:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            updated = REPO.update_course(
+            updated = repo.update_course(
                 course_id,
                 **updates,
             )
@@ -1564,6 +1584,7 @@ async def delete_course(request: Request, course_id: str):
     Permissions:
         Caller must be a teacher AND owner of the course.
     """
+    repo = _get_repo()
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -1574,24 +1595,24 @@ async def delete_course(request: Request, course_id: str):
         return csrf
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
+        if isinstance(repo, DBTeachingRepo):
             # Owner check with ability to disambiguate 404 vs 403
-            if not REPO.course_exists_for_owner(course_id, sub):
-                ex = REPO.course_exists(course_id)
+            if not repo.course_exists_for_owner(course_id, sub):
+                ex = repo.course_exists(course_id)
                 if ex is False:
                     return JSONResponse({"error": "not_found"}, status_code=404)
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            REPO.delete_course_owned(course_id, sub)
+            repo.delete_course_owned(course_id, sub)
             _mark_recently_deleted(sub, course_id)
             return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
         else:
-            course = REPO.get_course(course_id)
+            course = repo.get_course(course_id)
             if not course:
                 return JSONResponse({"error": "not_found"}, status_code=404)
             owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
             if sub != owner_id:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            REPO.delete_course(course_id)
+            repo.delete_course(course_id)
             _mark_recently_deleted(sub, course_id)
             return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
     except Exception:
@@ -1625,7 +1646,7 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     offset = max(0, int(offset or 0))
     sub = _current_sub(user)
     try:
-        units = REPO.list_units_for_author(author_id=sub, limit=limit, offset=offset)
+        units = _get_repo().list_units_for_author(author_id=sub, limit=limit, offset=offset)
     except Exception as exc:
         logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -1658,7 +1679,7 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     sub = _current_sub(user)
     try:
         title = payload.title or ""
-        unit = REPO.create_unit(title=title, summary=payload.summary, author_id=sub)
+        unit = _get_repo().create_unit(title=title, summary=payload.summary, author_id=sub)
     except ValueError as exc:
         detail = str(exc)
         if detail in {"invalid_title", "invalid_summary"}:
@@ -1687,6 +1708,7 @@ async def get_unit(request: Request, unit_id: str):
     Permissions:
         Caller must be a teacher and the author of the unit.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -1702,12 +1724,12 @@ async def get_unit(request: Request, unit_id: str):
     # Author confirmed; fetch the unit via repo (DB or in-memory)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            u = REPO.get_unit_for_author(unit_id, sub)
+        if isinstance(repo, DBTeachingRepo):
+            u = repo.get_unit_for_author(unit_id, sub)
         else:
-            u = REPO.get_unit_for_author(unit_id, sub)
+            u = repo.get_unit_for_author(unit_id, sub)
     except Exception:
-        u = REPO.get_unit_for_author(unit_id, sub)
+        u = repo.get_unit_for_author(unit_id, sub)
     if not u:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_unit(u), status_code=200)
@@ -1732,6 +1754,7 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     Permissions:
         Caller must be a teacher and the author of the unit.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -1746,7 +1769,7 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     if not updates:
         return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     try:
-        updated = REPO.update_unit_owned(unit_id, sub, **updates)
+        updated = repo.update_unit_owned(unit_id, sub, **updates)
     except ValueError as exc:
         detail = str(exc)
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
@@ -1768,6 +1791,7 @@ async def delete_unit(request: Request, unit_id: str):
     Permissions:
         Caller must be a teacher and the author of the unit.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -1779,7 +1803,7 @@ async def delete_unit(request: Request, unit_id: str):
     if guard:
         return guard
     try:
-        deleted = REPO.delete_unit_owned(unit_id, sub)
+        deleted = repo.delete_unit_owned(unit_id, sub)
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     if not deleted:
@@ -1810,7 +1834,7 @@ async def list_sections(request: Request, unit_id: str):
     if guard:
         return guard
     try:
-        items = REPO.list_sections_for_author(unit_id, sub)
+        items = _get_repo().list_sections_for_author(unit_id, sub)
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return _json_private([_serialize_section(s) for s in items], status_code=200)
@@ -1842,7 +1866,7 @@ async def create_section(request: Request, unit_id: str, payload: SectionCreateP
         return guard
     title = payload.title or ""
     try:
-        sec = REPO.create_section(unit_id, title, sub)
+        sec = _get_repo().create_section(unit_id, title, sub)
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
     except PermissionError:
@@ -1863,6 +1887,7 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
         - 400 when payload is empty or identifiers invalid.
         - 403/404 on ownership/unknown semantics based on unit guard and visibility.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -1879,7 +1904,7 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
     if not updates:
         return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     try:
-        updated = REPO.update_section_title(unit_id, section_id, updates.get("title"), sub)
+        updated = repo.update_section_title(unit_id, section_id, updates.get("title"), sub)
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
     if not updated:
@@ -1900,6 +1925,7 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
         - 400 when identifiers are invalid UUIDs.
         - 403/404 based on ownership and existence.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -1912,7 +1938,7 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
-    deleted = REPO.delete_section(unit_id, section_id, sub)
+    deleted = repo.delete_section(unit_id, section_id, sub)
     if not deleted:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
@@ -1931,6 +1957,7 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
         - 400 on invalid payload (empty, non-array, duplicates, invalid UUIDs, mismatch).
         - 403/404 based on ownership and existence semantics.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -1954,7 +1981,7 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     if any(not _is_uuid_like(sid) for sid in ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_ids"}, status_code=400)
     try:
-        ordered = REPO.reorder_unit_sections_owned(unit_id, sub, ids)
+        ordered = repo.reorder_unit_sections_owned(unit_id, sub, ids)
     except ValueError as exc:
         return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
     except LookupError:
@@ -1984,7 +2011,7 @@ async def list_section_tasks(request: Request, unit_id: str, section_id: str):
     if guard:
         return guard
     try:
-        items = TASKS_SERVICE.list_tasks(unit_id, section_id, sub)
+        items = _get_tasks_service().list_tasks(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return _json_private([_serialize_task(t) for t in items], status_code=200)
@@ -2009,7 +2036,7 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
     if guard:
         return guard
     try:
-        task = TASKS_SERVICE.create_task(
+        task = _get_tasks_service().create_task(
             unit_id,
             section_id,
             sub,
@@ -2078,7 +2105,7 @@ async def update_section_task(
     if "max_attempts" in raw_updates:
         kwargs["max_attempts"] = raw_updates["max_attempts"]
     try:
-        updated = TASKS_SERVICE.update_task(
+        updated = _get_tasks_service().update_task(
             unit_id,
             section_id,
             task_id,
@@ -2124,7 +2151,7 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     if guard:
         return guard
     try:
-        TASKS_SERVICE.delete_task(unit_id, section_id, task_id, sub)
+        _get_tasks_service().delete_task(unit_id, section_id, task_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
@@ -2165,11 +2192,11 @@ async def reorder_section_tasks(
     if any(not _is_uuid_like(tid) for tid in ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid_task_ids"}, status_code=400)
     try:
-        TASKS_SERVICE.list_tasks(unit_id, section_id, sub)
+        _get_tasks_service().list_tasks(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     try:
-        ordered = TASKS_SERVICE.reorder_tasks(unit_id, section_id, sub, ids)
+        ordered = _get_tasks_service().reorder_tasks(unit_id, section_id, sub, ids)
     except ValueError as exc:
         detail = str(exc) or "task_mismatch"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
@@ -2214,7 +2241,7 @@ async def list_section_materials(request: Request, unit_id: str, section_id: str
     if guard:
         return guard
     try:
-        items = MATERIALS_SERVICE.list_markdown_materials(unit_id, section_id, sub)
+        items = _get_materials_service().list_markdown_materials(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return _json_private([_serialize_material(m) for m in items], status_code=200)
@@ -2260,7 +2287,7 @@ async def create_section_material(
     if guard:
         return guard
     try:
-        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     title = payload.title or ""
@@ -2270,7 +2297,7 @@ async def create_section_material(
     if body is None or not isinstance(body, str):
         return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
     try:
-        material = MATERIALS_SERVICE.create_markdown_material(
+        material = _get_materials_service().create_markdown_material(
             unit_id,
             section_id,
             sub,
@@ -2332,10 +2359,10 @@ async def update_section_material(
     if guard:
         return guard
     try:
-        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    if MATERIALS_SERVICE.get_material_owned(unit_id, section_id, material_id, sub) is None:
+    if _get_materials_service().get_material_owned(unit_id, section_id, material_id, sub) is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
     # Include None for provided fields to detect intentionally empty values (e.g., title="")
     raw_updates = payload.model_dump(mode="python", exclude_unset=True)
@@ -2364,7 +2391,7 @@ async def update_section_material(
         normalized_alt = (alt_val or "").strip() if isinstance(alt_val, str) else None
         kwargs["alt_text"] = normalized_alt or None
     try:
-        updated = MATERIALS_SERVICE.update_material(
+        updated = _get_materials_service().update_material(
             unit_id,
             section_id,
             material_id,
@@ -2422,10 +2449,10 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     if guard:
         return guard
     try:
-        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    material_obj = MATERIALS_SERVICE.get_material_owned(unit_id, section_id, material_id, sub)
+    material_obj = _get_materials_service().get_material_owned(unit_id, section_id, material_id, sub)
     if material_obj is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
     material_snapshot = _serialize_material(material_obj)
@@ -2453,7 +2480,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
             )
     # After storage deletion succeeded (or not required), remove DB record and resequence.
     try:
-        MATERIALS_SERVICE.delete_material(unit_id, section_id, material_id, sub)
+        _get_materials_service().delete_material(unit_id, section_id, material_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
@@ -2485,7 +2512,7 @@ async def create_section_material_upload_intent(
     if guard:
         return guard
     try:
-        intent = MATERIALS_SERVICE.create_file_upload_intent(
+        intent = _get_materials_service().create_file_upload_intent(
             unit_id,
             section_id,
             sub,
@@ -2538,7 +2565,7 @@ async def finalize_section_material_upload(
     if guard:
         return guard
     try:
-        material, created = MATERIALS_SERVICE.finalize_file_material(
+        material, created = _get_materials_service().finalize_file_material(
             unit_id,
             section_id,
             sub,
@@ -2599,7 +2626,7 @@ async def get_section_material_download_url(
     if normalized_disposition not in {"inline", "attachment"}:
         return JSONResponse({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400)
     try:
-        payload = MATERIALS_SERVICE.generate_file_download_url(
+        payload = _get_materials_service().generate_file_download_url(
             unit_id,
             section_id,
             material_id,
@@ -2670,11 +2697,11 @@ async def reorder_section_materials(
     if any(not _is_uuid_like(mid) for mid in ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid_material_ids"}, status_code=400)
     try:
-        MATERIALS_SERVICE.ensure_section_owned(unit_id, section_id, sub)
+        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     try:
-        ordered = MATERIALS_SERVICE.reorder_markdown_materials(unit_id, section_id, sub, ids)
+        ordered = _get_materials_service().reorder_markdown_materials(unit_id, section_id, sub, ids)
     except ValueError as exc:
         return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
     except LookupError:
@@ -2709,7 +2736,7 @@ async def list_course_modules(request: Request, course_id: str):
     if guard:
         return guard
     try:
-        modules = REPO.list_course_modules_for_owner(course_id, sub)
+        modules = _get_repo().list_course_modules_for_owner(course_id, sub)
     except Exception as exc:
         logger.warning("list_course_modules failed cid=%s err=%s", course_id[-6:], exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -2750,7 +2777,7 @@ async def create_course_module(request: Request, course_id: str, payload: Course
         guard_unit = _guard_unit_author(unit_id, sub)
         if guard_unit:
             return guard_unit
-        module = REPO.create_course_module_owned(
+        module = _get_repo().create_course_module_owned(
             course_id,
             sub,
             unit_id=unit_id,
@@ -2787,6 +2814,7 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     Permissions:
         Caller must be a teacher and the owner of the course.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -2808,7 +2836,7 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     if any(not _is_uuid_like(mid) for mid in module_ids):
         return JSONResponse({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
     try:
-        modules = REPO.reorder_course_modules_owned(course_id, sub, module_ids)
+        modules = repo.reorder_course_modules_owned(course_id, sub, module_ids)
     except ValueError as exc:
         detail = str(exc)
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
@@ -2852,7 +2880,7 @@ async def delete_course_module(request: Request, course_id: str, module_id: str)
         csrf = _csrf_guard(request)
         if csrf:
             return csrf
-        deleted = REPO.delete_course_module_owned(course_id, module_id, sub)
+        deleted = _get_repo().delete_course_module_owned(course_id, module_id, sub)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     if not deleted:
@@ -2957,7 +2985,7 @@ async def update_module_section_visibility(
         )
     try:
         # Repository applies transactional upsert with RLS enforcement.
-        record = REPO.set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
+        record = _get_repo().set_module_section_visibility(course_id, module_id, section_id, sub, visible_value)
     except LookupError as exc:
         detail = str(exc) or None
         body = {"error": "not_found"}
@@ -2994,16 +3022,17 @@ async def list_module_section_releases(request: Request, course_id: str, module_
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            releases = REPO.list_module_section_releases_owned(course_id, module_id, sub)
+        repo = _get_repo()
+        if isinstance(repo, DBTeachingRepo):
+            releases = repo.list_module_section_releases_owned(course_id, module_id, sub)
         else:
             # In-memory: derive from internal state
             entries = []
             # Sections for module's unit
-            module = REPO.course_modules.get(module_id)
+            module = repo.course_modules.get(module_id)
             if not module or module.course_id != course_id:
                 return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
-            for (mid, sid), rec in REPO.module_section_releases.items():
+            for (mid, sid), rec in repo.module_section_releases.items():
                 if mid == module_id:
                     entries.append(rec)
             releases = entries
@@ -3036,6 +3065,7 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
         Caller must be a teacher and the owner of the course. RLS and explicit
         ownership guards apply. Responses are private and non-cacheable.
     """
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         # Normalize error with private cache headers and Origin variance
@@ -3060,15 +3090,15 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
     unit_id: str | None = None
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            modules = REPO.list_course_modules_for_owner(course_id, sub)
+        if isinstance(repo, DBTeachingRepo):
+            modules = repo.list_course_modules_for_owner(course_id, sub)
             for m in modules:
                 if str(m.get("id")) == str(module_id):
                     unit_id = str(m.get("unit_id") or "")
                     break
         else:
             # In-memory fallback
-            mods = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+            mods = [asdict(m) if is_dataclass(m) else m for m in repo.list_course_modules_for_owner(course_id, sub)]
             for m in mods:
                 if str(m.get("id")) == str(module_id):
                     unit_id = str(m.get("unit_id") or "")
@@ -3084,16 +3114,17 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
     releases: list[dict] = []
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            sections = REPO.list_sections_for_author(unit_id, sub)
-            releases = REPO.list_module_section_releases_owned(course_id, module_id, sub)
+        repo = _get_repo()
+        if isinstance(repo, DBTeachingRepo):
+            sections = repo.list_sections_for_author(unit_id, sub)
+            releases = repo.list_module_section_releases_owned(course_id, module_id, sub)
         else:
             # In-memory
             sections = [
                 _serialize_section(s)
-                for s in REPO.list_sections_for_author(unit_id, sub)
+                for s in repo.list_sections_for_author(unit_id, sub)
             ]
-            releases = REPO.list_module_section_releases_owned(course_id, module_id, sub)
+            releases = repo.list_module_section_releases_owned(course_id, module_id, sub)
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
     except PermissionError:
@@ -3279,14 +3310,15 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
 
     Behavior:
         - If the same owner recently deleted the course: 404.
-        - If `REPO.course_exists` deterministically returns False: 404.
+        - If `repo.course_exists` deterministically returns False: 404.
         - Otherwise: 403 to avoid leaking information.
     """
+    repo = _get_repo()
     # Owner just deleted? Prefer 404 for immediate follow-ups
     if _was_recently_deleted(owner_sub, course_id):
         return JSONResponse({"error": "not_found"}, status_code=404)
     try:
-        ex = REPO.course_exists(course_id)
+        ex = repo.course_exists(course_id)
     except Exception:
         ex = None
     if ex is False:
@@ -3296,7 +3328,7 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
-async def list_members(request: Request, course_id: str, limit: int = 20, offset: int = 0):
+async def list_members(request: Request, course_id: str, limit: int = 10, offset: int = 0):
     """List members for a course — owner-only, with names resolved via directory adapter.
 
     Why:
@@ -3306,7 +3338,7 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
     Behavior:
         - 200 with [{ sub, name, joined_at }]
         - 403 when caller is not owner; 404 when the course does not exist
-        - Pagination via limit (1..50) and offset (>=0)
+        - Pagination via limit (1..50) and offset (>=0); default limit = 10
 
     Permissions:
         Caller must be a teacher AND owner of the course.
@@ -3319,18 +3351,19 @@ async def list_members(request: Request, course_id: str, limit: int = 20, offset
     offset = max(0, int(offset or 0))
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            if not REPO.course_exists_for_owner(course_id, sub):
+        repo = _get_repo()
+        if isinstance(repo, DBTeachingRepo):
+            if not repo.course_exists_for_owner(course_id, sub):
                 return _resp_non_owner_or_unknown(course_id, sub)
-            pairs = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
+            pairs = repo.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
         else:
             # Fallback in-memory owner check
-            course = REPO.get_course(course_id)
+            course = repo.get_course(course_id)
             if not course:
                 return JSONResponse({"error": "not_found"}, status_code=404)
             if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            pairs = REPO.list_members(course_id, limit=limit, offset=offset)
+            pairs = repo.list_members(course_id, limit=limit, offset=offset)
     except Exception as exc:
         # Defensive default: if DB helper path fails, do not risk information leakage.
         # Log for observability, avoid logging full identifiers to minimize PII exposure.
@@ -3379,19 +3412,20 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
         return JSONResponse({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
+        repo = _get_repo()
+        if isinstance(repo, DBTeachingRepo):
             # Ensure caller owns the course; otherwise decide 404/403 via helper
-            if not REPO.course_exists_for_owner(course_id, sub):
+            if not repo.course_exists_for_owner(course_id, sub):
                 return _resp_non_owner_or_unknown(course_id, sub)
-            created = REPO.add_member_owned(course_id, sub, student_sub.strip())
+            created = repo.add_member_owned(course_id, sub, student_sub.strip())
         else:
             # Fallback owner check
-            course = REPO.get_course(course_id)
+            course = repo.get_course(course_id)
             if not course:
                 return JSONResponse({"error": "not_found"}, status_code=404)
             if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            created = REPO.add_member(course_id, student_sub.strip())
+            created = repo.add_member(course_id, student_sub.strip())
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
@@ -3411,6 +3445,7 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     Permissions:
         Caller must be a teacher AND owner of the course.
     """
+    repo = _get_repo()
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
@@ -3421,17 +3456,17 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
         return csrf
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            if not REPO.course_exists_for_owner(course_id, sub):
+        if isinstance(repo, DBTeachingRepo):
+            if not repo.course_exists_for_owner(course_id, sub):
                 return _resp_non_owner_or_unknown(course_id, sub)
-            REPO.remove_member_owned(course_id, sub, str(student_sub))
+            repo.remove_member_owned(course_id, sub, str(student_sub))
         else:
-            course = REPO.get_course(course_id)
+            course = repo.get_course(course_id)
             if not course:
                 return JSONResponse({"error": "not_found"}, status_code=404)
             if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            REPO.remove_member(course_id, str(student_sub))
+            repo.remove_member(course_id, str(student_sub))
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
@@ -3470,6 +3505,7 @@ async def get_unit_live_summary(
         - `updated_since` is optional; invalid timestamps produce
           `400 invalid_timestamp` so clients adjust their cursors.
     """
+    repo = _get_repo()
     user, forbidden = _require_teacher(request)
     if forbidden:
         forbidden.headers.setdefault("Cache-Control", "private, no-store")
@@ -3502,10 +3538,11 @@ async def get_unit_live_summary(
     # Verify unit is attached to course for the owner
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            modules = REPO.list_course_modules_for_owner(course_id, sub)
+        repo = _get_repo()
+        if isinstance(repo, DBTeachingRepo):
+            modules = repo.list_course_modules_for_owner(course_id, sub)
         else:
-            modules = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+            modules = [asdict(m) if is_dataclass(m) else m for m in repo.list_course_modules_for_owner(course_id, sub)]
     except Exception:
         modules = []
     if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
@@ -3515,10 +3552,10 @@ async def get_unit_live_summary(
     tasks: list[dict] = []
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            sections = REPO.list_sections_for_author(unit_id, sub)  # owner==author in tests
+        if isinstance(repo, DBTeachingRepo):
+            sections = repo.list_sections_for_author(unit_id, sub)  # owner==author in tests
             for sec in sections:
-                sec_tasks = REPO.list_tasks_for_section_owned(unit_id, sec["id"], sub)
+                sec_tasks = repo.list_tasks_for_section_owned(unit_id, sec["id"], sub)
                 for t in sec_tasks:
                     tasks.append({
                         "id": t["id"],
@@ -3528,12 +3565,12 @@ async def get_unit_live_summary(
                     })
         else:
             # In-memory repo fallback
-            section_ids = [sid for sid, sd in REPO.sections.items() if sd.unit_id == unit_id]
-            section_ids.sort(key=lambda sid: REPO.sections[sid].position)
+            section_ids = [sid for sid, sd in repo.sections.items() if sd.unit_id == unit_id]
+            section_ids.sort(key=lambda sid: repo.sections[sid].position)
             for sid in section_ids:
-                tids = REPO.task_ids_by_section.get(sid, [])
+                tids = repo.task_ids_by_section.get(sid, [])
                 for tid in tids:
-                    td = REPO.tasks[tid]
+                    td = repo.tasks[tid]
                     tasks.append({
                         "id": td.id,
                         "instruction_md": td.instruction_md or "",
@@ -3547,10 +3584,10 @@ async def get_unit_live_summary(
         roster: list[tuple[str, str]] = []
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
-            if isinstance(REPO, DBTeachingRepo):
-                roster = REPO.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
+            if isinstance(repo, DBTeachingRepo):
+                roster = repo.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
             else:
-                members = REPO.members.get(course_id, {})
+                members = repo.members.get(course_id, {})
                 roster = sorted([(k, v) for k, v in members.items()], key=lambda kv: kv[1])
                 roster = roster[offset: offset + limit]
         except Exception:
@@ -3561,9 +3598,9 @@ async def get_unit_live_summary(
         has_map: set[tuple[str, str]] = set()
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
-            if isinstance(REPO, DBTeachingRepo):
+            if isinstance(repo, DBTeachingRepo):
                 import psycopg  # type: ignore
-                dsn = getattr(REPO, "_dsn", None)
+                dsn = getattr(repo, "_dsn", None)
                 if dsn:
                     with psycopg.connect(dsn) as conn:
                         with conn.cursor() as cur:
@@ -3667,6 +3704,7 @@ async def get_unit_live_delta(
         - No content (student work) is returned, only minimal status/IDs.
         - Responses use "private, no-store" and vary by Origin to prevent leaks.
     """
+    repo = _get_repo()
     user, forbidden = _require_teacher(request)
     if forbidden:
         forbidden.headers.setdefault("Cache-Control", "private, no-store")
@@ -3702,10 +3740,10 @@ async def get_unit_live_delta(
 
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
-            modules = REPO.list_course_modules_for_owner(course_id, sub)
+        if isinstance(repo, DBTeachingRepo):
+            modules = repo.list_course_modules_for_owner(course_id, sub)
         else:
-            modules = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+            modules = [asdict(m) if is_dataclass(m) else m for m in repo.list_course_modules_for_owner(course_id, sub)]
     except Exception:
         modules = []
     if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
@@ -3716,10 +3754,10 @@ async def get_unit_live_delta(
     EPS = timedelta(seconds=1)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
+        if isinstance(repo, DBTeachingRepo):
             import psycopg  # type: ignore
 
-            dsn = getattr(REPO, "_dsn", None)
+            dsn = getattr(repo, "_dsn", None)
             if dsn:
                 with psycopg.connect(dsn) as conn:
                     with conn.cursor() as cur:
@@ -3885,6 +3923,7 @@ async def get_latest_submission_detail(
         to the course (best-effort verification). Returns 204 when no
         submission exists.
     """
+    repo = _get_repo()
     user, forbidden = _require_teacher(request)
     if forbidden:
         forbidden.headers.setdefault("Cache-Control", "private, no-store")
@@ -3908,10 +3947,10 @@ async def get_latest_submission_detail(
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         modules = []
-        if isinstance(REPO, DBTeachingRepo):
-            modules = REPO.list_course_modules_for_owner(course_id, sub)
+        if isinstance(repo, DBTeachingRepo):
+            modules = repo.list_course_modules_for_owner(course_id, sub)
         else:
-            modules = [asdict(m) if is_dataclass(m) else m for m in REPO.list_course_modules_for_owner(course_id, sub)]
+            modules = [asdict(m) if is_dataclass(m) else m for m in repo.list_course_modules_for_owner(course_id, sub)]
         attached_unit_ids = {str(m.get("unit_id")) for m in modules}
         if str(unit_id) not in attached_unit_ids:
             return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
@@ -3922,10 +3961,10 @@ async def get_latest_submission_detail(
     # Query latest submission via SECURITY DEFINER helper (owner scope)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(REPO, DBTeachingRepo):
+        if isinstance(repo, DBTeachingRepo):
             import psycopg  # type: ignore
 
-            dsn = getattr(REPO, "_dsn", None)
+            dsn = getattr(repo, "_dsn", None)
             if dsn:
                 with psycopg.connect(dsn) as conn:
                     with conn.cursor() as cur:

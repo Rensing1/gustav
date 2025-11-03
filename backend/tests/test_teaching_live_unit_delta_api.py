@@ -175,7 +175,7 @@ async def test_delta_returns_cells_after_submission():
             f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
             json={"kind": "text", "text_body": "Meine Lösung"},
         )
-        assert student_response.status_code in (200, 201)
+        assert student_response.status_code in (200, 201, 202)
 
         # Owner fetches delta again
         r_delta = await owner_client.get(

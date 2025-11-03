@@ -63,7 +63,7 @@ components:
       properties:
         check:
           type: string
-          enum: [db_role, queue_visibility, metrics_scope]
+          enum: [db_role, queue_visibility]
         status:
           type: string
           enum: [ok, failed]

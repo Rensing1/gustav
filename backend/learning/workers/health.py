@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import logging
 import os
 from typing import Callable, List, Optional
 
@@ -22,6 +23,8 @@ except Exception:  # pragma: no cover
     psycopg = None  # type: ignore
     HAVE_PSYCOPG = False
 
+
+LOG = logging.getLogger(__name__)
 
 def _default_dsn() -> str:
     env = os.getenv("LEARNING_DATABASE_URL") or os.getenv("DATABASE_URL")
@@ -101,11 +104,14 @@ class LearningWorkerHealthService:
                     )
                     rows = cur.fetchall()
         except Exception as exc:  # pragma: no cover - defensive
+            # Do not leak connection/DSN details to the caller. Log server-side and
+            # respond with a generic failure detail.
+            LOG.warning("Learning worker health probe DB connection failed: %s", exc.__class__.__name__)
             checks.append(
                 HealthCheckResult(
                     check="db_role",
                     status="failed",
-                    detail=f"probe_error: {exc}",
+                    detail="db_connect_failed",
                 )
             )
             return HealthProbeResult(status="degraded", current_role=current_role, checks=checks)

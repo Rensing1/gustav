@@ -238,8 +238,8 @@ async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
     assert r.status_code == 200
     html = r.text
     assert "Gut gemacht" in html
-    assert "Status: completed" in html
-    assert "Score: 4" in html
+    assert "Status: completed" not in html
+    assert "Score:" not in html
 
 
 @pytest.mark.anyio
@@ -314,7 +314,7 @@ async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
 
     # Criteria container is rendered with an accessible heading
     assert '<section class="analysis-criteria"' in html
-    assert "Auswertung" in html
+    assert "<strong>Auswertung</strong>" in html
 
     # First criterion: clamped score to 10/10 with success badge and aria-label
     assert "Struktur" in html
@@ -332,8 +332,8 @@ async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
     assert "Sprache" in html
     assert re.search(r"Sprache</span>\s*</header>", html)
 
-    # Formatives Feedback section is present
-    assert "Formatives Feedback" in html
+    # Rückmeldung section is present (heading renamed)
+    assert "Rückmeldung" in html
     assert "Weiter so!" in html
 
 

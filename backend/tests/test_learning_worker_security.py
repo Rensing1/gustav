@@ -9,6 +9,7 @@ Why:
 from __future__ import annotations
 
 import os
+import uuid
 
 import pytest
 
@@ -42,6 +43,7 @@ async def _create_pending_submission(*, idempotency_key: str) -> tuple[str, str,
     fixture = await _prepare_learning_fixture()
     repo = DBLearningRepo(dsn=_dsn())
     usecase = CreateSubmissionUseCase(repo)
+    unique_key = f"{idempotency_key}-{uuid.uuid4()}"
     submission = usecase.execute(
         CreateSubmissionInput(
             course_id=fixture.course_id,
@@ -53,7 +55,7 @@ async def _create_pending_submission(*, idempotency_key: str) -> tuple[str, str,
             mime_type=None,
             size_bytes=None,
             sha256=None,
-            idempotency_key=idempotency_key,
+            idempotency_key=unique_key,
         )
     )
     return submission["id"], fixture.student_sub, fixture.course_id

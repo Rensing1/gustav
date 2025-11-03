@@ -26,9 +26,9 @@ Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Fel
 - `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
   - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).
-  - 200 `[{ id, attempt_nr, kind, storage_key?, analysis_status, error_code?, analysis_json, feedback, created_at, completed_at, ... }]`.
+  - 200 `[{ id, attempt_nr, kind, storage_key?, analysis_status, error_code?, analysis_json, feedback_md, created_at, completed_at, ... }]`.
     - `analysis_status ∈ {pending, completed, failed}`
-    - `error_code ∈ {ocr_failed, analysis_failed, ocr_retrying}` (nur gesetzt bei `failed` oder laufenden Retries).
+    - `error_code ∈ {vision_retrying, vision_failed, feedback_retrying, feedback_failed}` (nur gesetzt bei Retries oder `failed`).
   - 400/401/403/404.
 
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents`
@@ -58,10 +58,12 @@ Fehlercodes (Beispiele):
 ## Schema & Migrationen (Supabase/PostgreSQL)
 - Submissions: `supabase/migrations/20251023093409_learning_submissions.sql` + Folge-Migration (siehe Plan 2025‑11‑01)
   - Tabelle `public.learning_submissions` (immutable Entries, Attempt-Zähler, optionale Storage-Metadaten)
-  - Seit 2025‑11: Spalten `ocr_attempts`, `ocr_last_error`, `ocr_last_attempt_at`; `analysis_status`-Check auf `pending|completed|failed`
+  - Seit 2025‑11: Spalten `vision_attempts`, `vision_last_error`, `vision_last_attempt_at`; `analysis_status`-Check auf `pending|completed|failed`
   - Indizes: `(course_id, task_id, student_sub)`, `created_at desc`, `student_sub/task_id/created_at desc`
-  - JSON-Feld `analysis_json` enthält MVP-Stubs `{ text, length, scores[] }`; Spalte `feedback_md` bleibt im Schema, wird im API-Layer als `feedback` ausgeliefert.
-- Queue-Tabelle: `public.learning_submission_ocr_jobs` für Worker (siehe AI-Referenz), Index auf `visible_at`.
+  - JSON-Feld `analysis_json` folgt dem Schema `criteria.v1`:
+    `{ schema: "criteria.v1", score: 0..5, criteria_results: [{ criterion, score: 0..10, explanation_md }] }`.
+    `feedback_md` enthält das Markdown‑Feedback für Lernende.
+- Queue-Tabelle: `public.learning_submission_jobs` mit Leasingfeldern (`lease_key`, `leased_until`), Status `queued|leased|failed` und Index auf `(status, visible_at)`.
 - Helper-Funktionen: `supabase/migrations/20251023093417_learning_helpers.sql`
   - `hash_course_task_student`, `next_attempt_nr`, `check_task_visible_to_student`
   - `get_released_sections/materials/tasks_for_student`, `get_task_metadata_for_student`
@@ -84,7 +86,7 @@ Bezüge zu Unterrichten (bestehende Tabellen):
   - Submissions INSERT: nur wenn `check_task_visible_to_student` true und `max_attempts` nicht überschritten.
   - Keine UPDATE/DELETE im MVP (Abgaben sind unveränderlich).
 - Rollbacks löschen Transaktions-GUCs. Nach `conn.rollback()` muss der Repo-Code `set_config('app.current_sub', student_sub, true)` neu setzen, bevor weitere Statements laufen (siehe `DBLearningRepo.create_submission`).
-- DSN‑Auflösung (Learning‑Repo): `LEARNING_DATABASE_URL` > `LEARNING_DB_URL` > `DATABASE_URL` > Fallback (dev/test): `postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres`. In PROD ist ein expliziter DSN erforderlich.
+- DSN‑Auflösung (Learning‑Repo): `LEARNING_DATABASE_URL` > `LEARNING_DB_URL` > `RLS_TEST_DSN` > `DATABASE_URL` > Fallback (dev/test): `postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres`. In PROD ist ein expliziter DSN erforderlich.
 - Helper laufen als SECURITY INVOKER mit gehärtetem `search_path`; zusätzliche Grants für
   `supabase_admin` sind nicht erforderlich, solange Migrationen mit Standard-Supabase-Rollen laufen.
 - Zusätzliche SELECT-Policies erlauben Schülern (über `gustav_limited`) Lesezugriff nur auf freigegebene
@@ -111,7 +113,7 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 
 ### `LearningSubmission` (API)
 - `analysis_status`: `pending | completed | error` — MVP liefert immer `completed`.
-- `analysis_json`: Struktur `{ text: string, length: number, scores: [{ criterion, score (0..10), explanation }] }`. Für Bildabgaben liefert der OCR-Stub ein Platzhalter-Transkript. Hinweis: Im MVP ist dieses Feld nie `null` (da synchrones Stub‑Scoring), auch wenn das Schema `nullable: true` für spätere asynchrone Varianten zulässt.
+- `analysis_json`: Struktur nach `criteria.v1` (siehe oben). Hinweis: In der Async‑Pipeline ist dieses Feld während `pending` `null` und wird erst nach Abschluss gesetzt.
 - `feedback`: Kurztext für formatives Feedback (Stub). Später ersetzt durch echte KI-Ausgabe.
 – `created_at`: RFC3339‑Zeitstempel in UTC mit explizitem `+00:00`‑Offset (z. B. `2025-10-23T09:45:00+00:00`).
 

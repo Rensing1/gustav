@@ -363,7 +363,9 @@ docker-compose (Beispiel):
       - .env
     environment:
       - LOG_LEVEL=${WORKER_LOG_LEVEL:-info}
-      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://gustav_worker:gustav-worker@supabase_db_gustav-alpha2:5432/postgres}
+      # Default to the application login DSN; override with a dedicated
+      # worker login via LEARNING_DATABASE_URL in production deployments.
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       - LEARNING_VISION_ADAPTER=${LEARNING_VISION_ADAPTER:-backend.learning.adapters.stub_vision}
       - LEARNING_FEEDBACK_ADAPTER=${LEARNING_FEEDBACK_ADAPTER:-backend.learning.adapters.stub_feedback}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
@@ -392,7 +394,7 @@ docker-compose (Beispiel):
 Hinweise:
 - Entry-Point: `backend.learning.workers.process_learning_submission_jobs` pollt die Queue `public.learning_submission_jobs`, leased Jobs, führt Vision/Feedback aus und schreibt Status zurück.
 - Skalierung: Horizontal via `docker compose up --scale learning-worker=N`, vertikal über `WORKER_POLL_INTERVAL`/`WORKER_MAX_RETRIES`.
-- Netzwerk/Secrets: Nutzt dedizierten DB-User `gustav_worker` (DSN per `LEARNING_DATABASE_URL`). Service-Role bleibt exklusiv im Web/API-Layer.
+- Netzwerk/Secrets: In PROD optional dedizierter DB-User `gustav_worker` (DSN via `LEARNING_DATABASE_URL`, Passwort out-of-band setzen). Standard-Default nutzt den App‑Login (IN ROLE `gustav_limited`). Service‑Role bleibt exklusiv im Web/API‑Layer.
 - Observability: Jeder Worker schreibt strukturierte Logs; Metriken wie `ai_worker_retry_total` für Alerting.
 
 ---

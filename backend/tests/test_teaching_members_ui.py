@@ -69,16 +69,17 @@ async def test_members_search_uses_api_and_excludes_existing(monkeypatch: pytest
         assert add.status_code in (200, 201, 204)
 
         # Monkeypatch directory search to return three students (one already a member)
-        def fake_list_users_by_role(*, role: str, limit: int, offset: int) -> list[dict]:
+        def fake_search_users_by_name(*, role: str, q: str, limit: int) -> list[dict]:
             assert role == "student"
             data = [
                 {"sub": "student-1", "name": "Max Musterschüler"},
                 {"sub": "student-2", "name": "Erika Mustermann"},
                 {"sub": "student-3", "name": "Peter Pan"},
             ]
-            return data[offset: offset + limit]
+            # Return at most `limit` to emulate API pagination
+            return data[:limit]
 
-        monkeypatch.setattr(users_routes, "list_users_by_role", fake_list_users_by_role)
+        monkeypatch.setattr(users_routes, "search_users_by_name", fake_search_users_by_name)
 
         # Get members page for CSRF token
         r_page = await c.get(f"/courses/{cid}/members")

@@ -90,6 +90,7 @@ from routes.auth import auth_router
 from routes.learning import learning_router
 from routes.teaching import teaching_router
 from routes.users import users_router
+from routes.operations import operations_router
 from routes.security import _is_same_origin
 
 # --- OIDC & Storage Setup ------------------------------------------------------
@@ -169,7 +170,7 @@ async def auth_enforcement(request: Request, call_next):
             logger.warning("Session store get failed: %s", exc.__class__.__name__)
 
     if not rec:
-        if path.startswith("/api/"):
+        if path.startswith("/api/") or path.startswith("/internal/"):
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:
@@ -283,6 +284,96 @@ def _is_uuid_like(value: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _build_history_entry_from_record(
+    record: Dict[str, Any],
+    *,
+    index: int,
+    open_attempt_id: str,
+) -> HistoryEntry:
+    """Convert a submission API record into a HistoryEntry with formatted content."""
+    if not isinstance(record, dict):
+        return HistoryEntry(
+            label=f"Versuch #{index + 1}",
+            timestamp="",
+            content_html='<div class="analysis-text"><p class="text-muted">Keine Daten vorhanden.</p></div>',
+            expanded=(index == 0),
+        )
+
+    label = f"Versuch #{record.get('attempt_nr', '')}"
+    timestamp = str(record.get("created_at") or "")
+    submission_id = str(record.get("id") or "")
+    expanded = bool(open_attempt_id and submission_id == open_attempt_id) or (not open_attempt_id and index == 0)
+
+    text_src = str(record.get("text_body") or "")
+    text_html = render_markdown_safe(text_src)
+    if not text_html:
+        text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
+    content_html = f'<div class="analysis-text">{text_html}</div>'
+
+    feedback_html = ""
+    feedback_src = record.get("feedback_md") or record.get("feedback")
+    if feedback_src:
+        feedback_html = f'<div class="analysis-feedback">{render_markdown_safe(str(feedback_src))}</div>'
+
+    status_text = str(record.get("analysis_status") or "pending")
+    error_code = record.get("error_code")
+    status_label = status_text
+    if error_code:
+        status_label = f"{status_text} · {error_code}"
+    status_html = f'<p class="analysis-status text-muted">Status: {Component.escape(status_label)}</p>'
+
+    metrics_html = ""
+    analysis = record.get("analysis_json")
+    if isinstance(analysis, dict):
+        metric_items: List[str] = []
+        score = analysis.get("score")
+        if score is not None:
+            metric_items.append(f"<li>Score: {Component.escape(str(score))}</li>")
+        criteria = analysis.get("criteria_results")
+        if isinstance(criteria, list):
+            for item in criteria:
+                if not isinstance(item, dict):
+                    continue
+                criterion = Component.escape(str(item.get("criterion") or ""))
+                criterion_score = item.get("score")
+                if criterion_score is None:
+                    metric_items.append(f"<li>{criterion}</li>")
+                else:
+                    metric_items.append(f"<li>{criterion}: {Component.escape(str(criterion_score))}</li>")
+        if metric_items:
+            metrics_html = '<ul class="analysis-metrics">' + "".join(metric_items) + "</ul>"
+
+    status_block_html = status_html + metrics_html
+
+    return HistoryEntry(
+        label=label,
+        timestamp=timestamp,
+        content_html=content_html,
+        feedback_html=feedback_html,
+        status_html=status_block_html,
+        expanded=expanded,
+    )
+
+
+def _render_history_entries_html(entries: List[HistoryEntry]) -> str:
+    """Render history entries into the accordion HTML fragment."""
+    parts: List[str] = []
+    for entry in entries:
+        open_attr = " open" if entry.expanded else ""
+        inner_segments = [entry.content_html, entry.feedback_html, entry.status_html]
+        inner_html = "".join(segment for segment in inner_segments if segment)
+        parts.append(
+            f'<details{open_attr} class="task-panel__history-entry">'
+            f'<summary class="task-panel__history-summary">'
+            f'<span class="task-panel__history-label">{Component.escape(entry.label)}</span>'
+            f'<span class="task-panel__history-timestamp">{Component.escape(entry.timestamp)}</span>'
+            "</summary>"
+            f'<div class="task-panel__history-body">{inner_html}</div>'
+            "</details>"
+        )
+    return '<section class="task-panel__history">' + "".join(parts) + "</section>"
 
 # --- Page Rendering Helpers -----------------------------------------------------
 
@@ -600,7 +691,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     unit_title = "Lerneinheit"
     sections: list[dict] = []
     show_history_for = request.query_params.get("show_history_for") or ""
-    open_attempt_id_qp = request.query_params.get("open_attempt_id") or ""
+    open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
     success_banner = request.query_params.get("ok") == "submitted"
     try:
         import httpx
@@ -642,6 +733,51 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     sections = [
                         row for row in r_all.json() if str((row.get("section") or {}).get("unit_id")) == str(unit_id)
                     ]
+            # If API returned nothing, attempt an SSR-only fallback using the
+            # in-memory Teaching repo (used in tests/dev when DB is unavailable).
+            if not sections:
+                try:
+                    from .routes import teaching as _teaching
+                    trepo = _teaching._get_repo()
+                    # Find the module for this unit within the course
+                    entries: list[dict] = []
+                    for sid, s in (getattr(trepo, "sections", {}) or {}).items():
+                        if str(getattr(s, "unit_id", "")) != str(unit_id):
+                            continue
+                        task_ids = list((getattr(trepo, "task_ids_by_section", {}) or {}).get(sid, []) or [])
+                        tasks = []
+                        for tid in task_ids:
+                            td = (getattr(trepo, "tasks", {}) or {}).get(tid)
+                            if not td:
+                                continue
+                            tasks.append(
+                                {
+                                    "id": getattr(td, "id", tid),
+                                    "instruction_md": getattr(td, "instruction_md", ""),
+                                    "criteria": list(getattr(td, "criteria", []) or []),
+                                    "hints_md": getattr(td, "hints_md", None),
+                                    "due_at": getattr(td, "due_at", None),
+                                    "max_attempts": getattr(td, "max_attempts", None),
+                                    "position": getattr(td, "position", None),
+                                    "created_at": getattr(td, "created_at", None),
+                                    "updated_at": getattr(td, "updated_at", None),
+                                }
+                            )
+                        entries.append(
+                            {
+                                "section": {
+                                    "id": sid,
+                                    "title": getattr(s, "title", "Abschnitt"),
+                                    "position": getattr(s, "position", 1),
+                                    "unit_id": getattr(s, "unit_id", str(unit_id)),
+                                },
+                                "materials": [],
+                                "tasks": tasks,
+                            }
+                        )
+                    sections = entries
+                except Exception:
+                    sections = []
             # Render neutral message when none are released
             if not sections:
                 return HTMLResponse(
@@ -739,15 +875,12 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
                             records = r_hist.json()
                             for index, rec in enumerate(records):
-                                label = f"Versuch #{rec.get('attempt_nr','')}"
-                                ts = str(rec.get("created_at") or "")
-                                analysis = (rec.get("analysis_json") or {}) if isinstance(rec, dict) else {}
-                                text = Component.escape(str(analysis.get("text") or ""))
-                                content_html = f'<div class="analysis-text">{text}</div>'
-                                # Expand the explicitly referenced attempt if present, else newest-first (index 0)
-                                rec_id = str(rec.get("id") or "")
-                                expand = bool(open_attempt_id_qp and rec_id == open_attempt_id_qp) or (not open_attempt_id_qp and index == 0)
-                                history_entries.append(HistoryEntry(label=label, timestamp=ts, content_html=content_html, expanded=expand))
+                                entry = _build_history_entry_from_record(
+                                    rec if isinstance(rec, dict) else {},
+                                    index=index,
+                                    open_attempt_id=open_attempt_id_qp,
+                                )
+                                history_entries.append(entry)
                 except Exception:
                     history_entries = []
             else:
@@ -897,7 +1030,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
     # Determine created submission id for deterministic opening in history
     open_attempt_id = ""
     try:
-        if api_resp is not None and getattr(api_resp, "status_code", 500) in (200, 201):
+        if api_resp is not None and getattr(api_resp, "status_code", 500) in (200, 201, 202):
             body = api_resp.json()
             cand = str((body or {}).get("id") or "")
             if _is_uuid_like(cand):
@@ -934,24 +1067,11 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
         items = []
     # Build minimal fragment matching TaskCard._render_history structure
     open_attempt_id = str(request.query_params.get("open_attempt_id") or "")
-    entries_html: list[str] = []
-    for index, rec in enumerate(items):
-        label = f"Versuch #{rec.get('attempt_nr','')}"
-        ts = Component.escape(str(rec.get("created_at") or ""))
-        analysis = rec.get("analysis_json") or {}
-        text = Component.escape(str(analysis.get("text") or ""))
-        # Prefer explicit open_attempt_id when provided and matches this record; otherwise open newest (index 0)
-        rec_id = str(rec.get("id") or "")
-        open_by_id = open_attempt_id and rec_id == open_attempt_id
-        open_attr = " open" if (open_by_id or (not open_attempt_id and index == 0)) else ""
-        # Keep `open` attribute before class to match test selector expectations
-        entries_html.append(
-            f'<details{open_attr} class="task-panel__history-entry"><summary class="task-panel__history-summary">'
-            f'<span class="task-panel__history-label">{Component.escape(label)}</span>'
-            f'<span class="task-panel__history-timestamp">{ts}</span>'
-            f"</summary><div class=\"task-panel__history-body\"><div class=\"analysis-text\">{text}</div></div></details>"
-        )
-    html = '<section class="task-panel__history">' + "".join(entries_html) + "</section>"
+    entries = [
+        _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
+        for index, rec in enumerate(items if isinstance(items, list) else [])
+    ]
+    html = _render_history_entries_html(entries)
     return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)
@@ -1775,7 +1895,7 @@ def _render_candidate_list(course_id: str, current_members: list[dict], candidat
     - csrf_token: Synchronizer token required for POST
 
     Behavior:
-    - Renders up to 50 candidate results with an add form each
+    - Renders up to 10 candidate results with an add form each
     - Excludes candidates that are already members
     """
     member_subs = {m['sub'] for m in current_members}
@@ -1813,9 +1933,9 @@ def _render_add_student_wrapper(course_id: str, *, csrf_token: str) -> str:
         f'<input type="search" name="q" class="form-input" placeholder="Schüler suchen..." '
         f'hx-get="/courses/{course_id}/members/search" hx-trigger="keyup changed delay:300ms" hx-target="#search-results">'
     )
-    # Auto-load candidate list on initial render
+    # Auto-load candidate list on initial render (limit 10)
     results_div = (
-        f'<div id="search-results" hx-get="/courses/{course_id}/members/search?limit=50&offset=0" '
+        f'<div id="search-results" hx-get="/courses/{course_id}/members/search?limit=10&offset=0" '
         f'hx-trigger="load" hx-swap="innerHTML">'
         f'<ul class="member-list"><li class="member-item text-muted">Lade Kandidaten…</li></ul></div>'
     )
@@ -2721,7 +2841,7 @@ async def units_index(request: Request):
     items: list[dict] | list = []
     try:
         from routes import teaching as teaching_routes  # type: ignore
-        items = teaching_routes.REPO.list_units_for_author(
+        items = teaching_routes._get_repo().list_units_for_author(
             author_id=str((user or {}).get("sub") or ""), limit=limit, offset=offset
         )
         vm = [
@@ -2776,14 +2896,14 @@ async def units_create(request: Request):
 
     try:
         from routes import teaching as teaching_routes  # type: ignore
-        teaching_routes.REPO.create_unit(title=title, summary=summary or None, author_id=str((user or {}).get("sub") or ""))
+        teaching_routes._get_repo().create_unit(title=title, summary=summary or None, author_id=str((user or {}).get("sub") or ""))
     except Exception:
         pass
 
     if "HX-Request" in request.headers:
         try:
             from routes import teaching as teaching_routes  # type: ignore
-            items = teaching_routes.REPO.list_units_for_author(author_id=str((user or {}).get("sub") or ""), limit=50, offset=0)
+            items = teaching_routes._get_repo().list_units_for_author(author_id=str((user or {}).get("sub") or ""), limit=50, offset=0)
             vm = [
                 {
                     "id": getattr(u, "id", None) if not isinstance(u, dict) else u.get("id"),
@@ -3941,7 +4061,8 @@ async def members_index(request: Request, course_id: str):
         from httpx import ASGITransport
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
-            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 50, "offset": 0})
+            # Reduce visible roster to 10 for compact UI
+            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 10, "offset": 0})
             if m.status_code == 200 and isinstance(m.json(), list):
                 members = m.json()
             # Course title via direct GET
@@ -3960,6 +4081,26 @@ async def members_index(request: Request, course_id: str):
 
 @app.get("/courses/{course_id}/members/search", response_class=HTMLResponse)
 async def search_students_for_course(request: Request, course_id: str):
+    """Return the candidate list <ul> for the members page search box (HTMX).
+
+    Why:
+        Owners need to locate students across the entire directory. The server
+        should not restrict search to a pre-fetched list; instead it must call
+        the Users Search API for q-length >= 2.
+
+    Parameters:
+        - q: case-insensitive search string. When len(q) < 2 we avoid server-side
+             search and show an empty state to reduce noise and load.
+
+    Behavior:
+        - Uses GET /api/users/search when q has length >= 2 (global directory).
+        - Falls back to GET /api/users/list for initial suggestions when q is empty.
+        - Excludes users already in the course (queried via the Teaching API).
+
+    Permissions:
+        Caller must be a teacher and owner of the course (enforced by the API
+        endpoints used here). This SSR route simply orchestrates the UI.
+    """
     q = request.query_params.get("q", "")
     # Read sid/token
     sid = _get_session_id(request) or ""
@@ -3973,22 +4114,30 @@ async def search_students_for_course(request: Request, course_id: str):
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 50, "offset": 0})
+            # Fetch a subset of current members to exclude from candidates (not displayed here)
+            # After mutation, refresh compact roster (10)
+            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 10, "offset": 0})
             if m.status_code == 200 and isinstance(m.json(), list):
                 members = m.json()
-            # Always list students (pagination), then filter by q locally
-            limit = int(request.query_params.get("limit", 50) or 50)
+            # Global search across all students when q is provided (>=2)
+            limit = int(request.query_params.get("limit", 10) or 10)
+            limit = max(1, min(10, limit))
             offset = int(request.query_params.get("offset", 0) or 0)
-            u = await client.get("/api/users/list", params={"role": "student", "limit": limit, "offset": offset})
-            if u.status_code == 200 and isinstance(u.json(), list):
-                candidates = u.json()
+            q_norm = (q or "").strip()
+            if len(q_norm) >= 2:
+                u = await client.get("/api/users/search", params={"role": "student", "q": q_norm, "limit": limit})
+                if u.status_code == 200 and isinstance(u.json(), list):
+                    candidates = u.json()
+            else:
+                # No query: show first page as initial suggestions
+                u = await client.get("/api/users/list", params={"role": "student", "limit": limit, "offset": offset})
+                if u.status_code == 200 and isinstance(u.json(), list):
+                    candidates = u.json()
     except Exception:
         members = []
         candidates = []
-    # Filter candidates by q (case-insensitive)
+    # No local filtering when search endpoint already applied q; retain server-provided order
     q_norm = (q or "").strip().lower()
-    if q_norm:
-        candidates = [c for c in candidates if q_norm in str(c.get("name", "")).lower()]
     # Return only the list portion for injection into #search-results
     return HTMLResponse(content=_render_candidate_list(course_id, members, candidates, csrf_token=token))
 
@@ -4005,6 +4154,7 @@ async def add_member_htmx(request: Request, course_id: str):
         return HTMLResponse(content="CSRF Error", status_code=403)
     student_sub = str(form.get("student_sub"))
     error_msg: str | None = None
+    success = False
     try:
         import httpx
         from httpx import ASGITransport
@@ -4015,6 +4165,8 @@ async def add_member_htmx(request: Request, course_id: str):
                 resp = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub})
                 if resp.status_code not in (200, 201, 204):
                     error_msg = f"Hinzufügen fehlgeschlagen ({resp.status_code})."
+                else:
+                    success = True
     except Exception:
         error_msg = "Hinzufügen fehlgeschlagen (Netzwerkfehler)."
     # Re-render layout
@@ -4030,6 +4182,7 @@ async def remove_member_htmx(request: Request, course_id: str, student_sub: str)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse(content="CSRF Error", status_code=403)
     error_msg: str | None = None
+    success = False
     try:
         import httpx
         from httpx import ASGITransport
@@ -4039,10 +4192,12 @@ async def remove_member_htmx(request: Request, course_id: str, student_sub: str)
             resp = await client.delete(f"/api/teaching/courses/{course_id}/members/{student_sub}")
             if resp.status_code not in (200, 204):
                 error_msg = f"Entfernen fehlgeschlagen ({resp.status_code})."
+            else:
+                success = True
     except Exception:
         error_msg = "Entfernen fehlgeschlagen (Netzwerkfehler)."
     # Ensure UI consistency even with eventual consistency: filter removed sub locally
-    return await _handle_member_change_api(course_id, sid, error=error_msg, removed_sub=student_sub)
+    return await _handle_member_change_api(course_id, sid, error=error_msg, removed_sub=(student_sub if success else None))
 
 async def _handle_member_change_api(course_id: str, sid: str | None, *, error: str | None = None, removed_sub: str | None = None) -> HTMLResponse:
     members: list[dict] = []
@@ -4054,7 +4209,8 @@ async def _handle_member_change_api(course_id: str, sid: str | None, *, error: s
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 50, "offset": 0})
+            # Compact roster after mutation (default page-size 10)
+            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 10, "offset": 0})
             if m.status_code == 200 and isinstance(m.json(), list):
                 members = m.json()
             c = await client.get(f"/api/teaching/courses/{course_id}")
@@ -4065,9 +4221,7 @@ async def _handle_member_change_api(course_id: str, sid: str | None, *, error: s
                     title = t
     except Exception:
         members = []
-    # Fallback filter if backend is not yet consistent
-    if removed_sub:
-        members = [m for m in members if str(m.get("sub")) != str(removed_sub)]
+    # Do not hide locally: rely on the roster fetched from API.
     members_list_html = _render_members_list_partial(course_id, members, csrf_token=token)
     # Refresh candidates from list endpoint so removed users reappear
     candidates: list[dict] = []
@@ -4092,6 +4246,7 @@ app.include_router(auth_router)
 app.include_router(learning_router)
 app.include_router(teaching_router)
 app.include_router(users_router)
+app.include_router(operations_router)
 
 @app.get("/health")
 async def health_check():

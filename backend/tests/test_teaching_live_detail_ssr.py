@@ -112,7 +112,7 @@ async def test_detail_partial_empty_and_then_text_excerpt():
             f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
             json={"kind": "text", "text_body": "Das ist eine Antwort."},
         )
-        assert r_sub.status_code in (200, 201)
+        assert r_sub.status_code in (200, 201, 202)
 
         r_detail = await c_owner.get(
             f"/teaching/courses/{cid}/units/{unit['id']}/live/detail",
@@ -121,4 +121,3 @@ async def test_detail_partial_empty_and_then_text_excerpt():
         assert r_detail.status_code == 200
         assert "Einreichung" in r_detail.text
         assert "Antwort" in r_detail.text
-

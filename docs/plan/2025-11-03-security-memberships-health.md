@@ -14,7 +14,7 @@ BDD Scenarios:
 - Given attacker session, When calling remove helper with real owner as arg,
   Then membership remains (p_owner != session sub).
 - Given owner session, When calling helper with any owner arg,
-  Then membership is removed (p_owner == session sub and owns course).
+  Then membership is removed (authorization bound to session; p_owner ignored).
 - Given DB error, When GET /internal/health/learning-worker, Then 503 with detail=db_connect_failed.
 
 API Contract (OpenAPI):

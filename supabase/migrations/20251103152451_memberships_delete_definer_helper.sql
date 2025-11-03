@@ -10,17 +10,16 @@ security definer
 set search_path = public
 as $$
   -- SECURITY NOTE:
-  -- Bind authorization to the session: require that the provided `p_owner`
-  -- matches the current session subject, and that this subject owns the
-  -- course. This prevents spoofing by passing an arbitrary `p_owner`.
+  -- Authorize strictly via the session subject (app.current_sub). The `p_owner`
+  -- parameter is kept for compatibility but ignored for authorization, so callers
+  -- cannot escalate by spoofing a different owner identity.
   delete from public.course_memberships m
   where m.course_id = p_course
     and m.student_id = p_student
-    and p_owner = coalesce(current_setting('app.current_sub', true), '')
     and exists (
       select 1 from public.courses c
       where c.id = p_course
-        and c.teacher_id = p_owner
+        and c.teacher_id = coalesce(current_setting('app.current_sub', true), '')
     );
 $$;
 

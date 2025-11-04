@@ -75,8 +75,16 @@ services:
       - LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
       # Use application DSN by default; a dedicated worker user can be configured via LEARNING_DATABASE_URL
       - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
+      # Adapter selection: default to deterministic stubs; switch to local with AI_BACKEND=local
+      - AI_BACKEND=${AI_BACKEND:-stub}
       - LEARNING_VISION_ADAPTER=${LEARNING_VISION_ADAPTER:-backend.learning.adapters.stub_vision}
       - LEARNING_FEEDBACK_ADAPTER=${LEARNING_FEEDBACK_ADAPTER:-backend.learning.adapters.stub_feedback}
+      # Local AI (Ollama/DSPy) configuration for AI_BACKEND=local
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - AI_VISION_MODEL=${AI_VISION_MODEL:-llama3.2-vision}
+      - AI_FEEDBACK_MODEL=${AI_FEEDBACK_MODEL:-llama3.1}
+      - AI_TIMEOUT_VISION=${AI_TIMEOUT_VISION:-30}
+      - AI_TIMEOUT_FEEDBACK=${AI_TIMEOUT_FEEDBACK:-30}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
@@ -98,6 +106,8 @@ services:
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2
+    depends_on:
+      - ollama
 
   keycloak:
     build:
@@ -145,6 +155,33 @@ services:
     networks:
       - gustav-alpha2-network
 
+  ollama:
+    image: ollama/ollama:rocm
+    container_name: gustav-ollama
+    # Internal service only; no host port mapping required
+    # Exposes 11434 inside the compose network; worker uses OLLAMA_BASE_URL
+    volumes:
+      - ollama_models:/root/.ollama
+    group_add:
+      - "video"
+      - "render"
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    environment:
+      # Optional ROCm tuning. Leave empty by default to auto-detect.
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
+      # Select which GPUs are visible to the container; default 'all'
+      - HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-all}
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 networks:
   gustav-alpha2-network:
     driver: bridge
@@ -152,4 +189,6 @@ networks:
     external: true
 volumes:
   keycloak_pg_data:
+    driver: local
+  ollama_models:
     driver: local

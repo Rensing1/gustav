@@ -24,7 +24,7 @@ Purpose: Operate and troubleshoot the asynchronous learning worker (vision + fee
 ## Retries & Failures
 - Transient adapter errors → `_nack_retry` with exponential backoff; submission stays `pending` and `error_code` is `vision_retrying|feedback_retrying`.
 - Permanent errors → submission `failed` via `public.learning_worker_update_failed(...)` and job `status=failed`.
-- Completed → `public.learning_worker_update_completed(...)` sets `text_body`, `feedback_md`, and `analysis_json (criteria.v1)`.
+- Completed → `public.learning_worker_update_completed(...)` sets `text_body`, `feedback_md`, and `analysis_json` (schema `criteria.v1` oder `criteria.v2`, abhängig vom Adapter).
 
 ## Observability
 - Gauges/Counters: `analysis_jobs_inflight`, `ai_worker_retry_total{phase}`, `ai_worker_failed_total{error_code}`.
@@ -39,3 +39,27 @@ Purpose: Operate and troubleshoot the asynchronous learning worker (vision + fee
 - Start: `docker compose up -d --build` (worker auto-starts).
 - Migrations: `supabase migration up`.
 - Tests: `.venv/bin/pytest -q`.
+
+## Lokale KI (Ollama/DSPy)
+
+Ziel: Lokale Inferenz ohne Cloud‑Egress. Standard ist `AI_BACKEND=stub`.
+
+- Compose bringt den Service `ollama` mit (interner Port `11434`).
+- Modelle bereitstellen (dev/staging):
+  - `docker compose exec ollama ollama pull ${AI_VISION_MODEL}`
+  - `docker compose exec ollama ollama pull ${AI_FEEDBACK_MODEL}`
+- Umschalten auf lokale Adapter:
+  - In `.env`: `AI_BACKEND=local`
+  - Neustarten: `docker compose up -d --build`
+- Health/Verifikation:
+  - Worker‑Logs prüfen (keine PII, nur IDs/Fehlercodes/Timings)
+  - Interner Check auf `ollama list` (Container‑Healthcheck)
+- Neustart Ollama (z. B. nach Modell‑Updates):
+  - `docker compose restart ollama`
+
+### ROCm (AMD‑GPU)
+- Das Compose nutzt `ollama/ollama:rocm` mit Gerätemappings `/dev/kfd`, `/dev/dri` und Gruppen `video`, `render`.
+- Optionale Umgebungsvariablen:
+  - `HIP_VISIBLE_DEVICES` (Default `all`) zur Auswahl der GPU
+  - `HSA_OVERRIDE_GFX_VERSION` nur bei Bedarf setzen (Hardware/Stack‑abhängig)
+- Bei GPU‑Zugriffsproblemen Host‑Kernel‑Module und Gruppenrechte prüfen; Logs des Containers (`docker compose logs -f ollama`).

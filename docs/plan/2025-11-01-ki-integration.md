@@ -339,9 +339,9 @@ Iteration 1 (asynchron, lokal):
 5) Repository-Schicht anpassen (Pending-Insert, striktes Enqueue ohne „best-effort“, Status-Updates, Queue-Operationen, Audit-Logging).
 6) Tests grün machen (API + Worker + Repo) mit Stub-Adaptern und echter Test-DB.
 
-Iteration 1b:
-7) Lokale Ollama/DSPy-Adapter produktiv schalten (konfigurierbar via `AI_BACKEND=stub|local`), Ressourcen-Limits dokumentieren.
-8) Monitoring & Observability (Metriken `analysis_jobs_inflight`, `ai_worker_retry_total`/`vision_worker_retry_total`, strukturierte Logs).
+Iteration 1b (vorgezogen – jetzt umsetzen):
+7) Lokale Ollama/DSPy-Adapter produktiv schalten (umschaltbar via `AI_BACKEND=stub|local`, Default weiterhin `stub`), Ressourcen‑Limits und Timeouts dokumentieren.
+8) Monitoring & Observability (Metriken `analysis_jobs_inflight`, `ai_worker_retry_total`/`vision_worker_retry_total`, strukturierte Logs) beibehalten; keine Änderung am Contract notwendig.
 
 ---
 
@@ -440,6 +440,148 @@ Hinweise:
   - `20251103135028_learning_worker_health_probe.sql` erstellt bei Bedarf `gustav_web`/`gustav_operator` (NOLOGIN) und definiert `learning_worker_health_probe()`.
 - Tests: Worker-Suite (`backend/tests/test_learning_worker_jobs.py`) deckt Pending→Completed, Vision-/Feedback-Retry, Retry-Limit/Failed, Metrik-Emission und strukturierte Logs ab. Health-Endpunkt-Tests (`backend/tests/test_learning_worker_health_endpoint.py`) prüfen Auth, 200/503-Payloads. Security-Tests (`backend/tests/test_learning_worker_security.py`) verifizieren die Security-Definer-Funktionen inkl. Pending-Guards und Retry-Helfer.
 - UI/SSR: Weiterhin pending → Anzeige „Analyse läuft“. Text-Fallback nutzt `text_body`, das jetzt Vision-Extrakte enthalten kann.
+
+---
+
+## Repriorisierung: KI-Integration (Ollama/DSPy) jetzt
+
+Motivation: Die asynchrone Architektur (Queue, Worker, Security‑Definer, Tests) steht stabil. Wir ziehen deshalb die produktive Anbindung der lokalen Modelle vor, behalten aber Stub als Default bei, um Determinismus in Tests sicherzustellen.
+
+Leitplanken (unverändert): KISS, Security first (keine Cloud), Contract‑First (kein API‑Change nötig), TDD (Tests vor Implementierung), Clean Architecture (Adapter über Ports).
+
+Ziele (Iteration 1b → jetzt):
+- „Local“‑Adapter für Vision und Feedback implementieren (Ollama/DSPy), austauschbar zu Stubs über Env‑Schalter.
+- Timeouts/Fehlerklassifikation sauber integrieren (Transient/Permanent) und an bestehenden Retry‑Flow anbinden.
+- Keine PII in Logs; nur IDs/Timing/Fehlercodes.
+
+### Criteria‑Schema v2 (Analyse‑Payload)
+
+Motivation:
+- `criteria.v2` erweitert `criteria.v1` um Flexibilität pro Kriterium:
+  - `criterion` bleibt der Schlüssel (Pflichtfeld).
+  - `max_score` erlaubt pro Kriterium unterschiedliche Skalen (Default 10).
+  - `score` wird relativ zu `max_score` bewertet (0..max_score).
+  - `explanation_md` bleibt die objektive Begründung (Markdown).
+- API‑Vertrag unterstützt bereits `criteria.v2` (siehe `api/openapi.yml`). Kein Contract‑Change nötig; nur Erzeugung/Verarbeitung.
+
+Entwurf (Adapter/Worker/UI):
+- Feedback‑Adapter (local + später cloud) liefert standardmäßig `criteria.v2`.
+- Worker speichert `analysis_json` unverändert; UI rendert v1 und v2 gleichwertig (Backward Compatibility).
+- Stub‑Adapter kann kurzfristig v1 beibehalten; später vereinheitlichen auf v2.
+
+Beispieleintrag (v2):
+```
+{
+  "schema": "criteria.v2",
+  "score": 3,
+  "criteria_results": [
+    {"criterion": "Inhalt", "score": 7, "max_score": 10, "explanation_md": "…"},
+    {"criterion": "Struktur", "score": 6, "max_score": 10, "explanation_md": "…"}
+  ]
+}
+```
+
+BDD‑Szenarien (ergänzt für v2):
+- Given `AI_BACKEND=local` and `dspy` importierbar, When Feedback läuft, Then `analysis_json.schema == 'criteria.v2'` und jeder Eintrag hat `criterion`, optional `max_score` (Default 10), `score ∈ [0, max_score]`.
+- Given `AI_BACKEND=local` and `dspy` nicht importierbar, When Feedback läuft (Ollama), Then analog `criteria.v2`.
+- Given vorhandene Alt‑Daten mit `criteria.v1`, When UI rendert, Then Darstellung bleibt korrekt (Abwärtskompatibilität; keine Fehlermeldung).
+
+Tests (TDD):
+- Unit: `backend/tests/learning_adapters/test_local_feedback.py` anpassen/ergänzen: Erwartet `schema='criteria.v2'`, prüft `criterion`, `score`, `max_score` Default.
+- Unit (DSPy‑Bevorzugung): `backend/tests/learning_adapters/test_local_feedback_dspy.py` bleibt gültig, erweitert um `schema='criteria.v2'`.
+- Integration: Worker‑Pfad akzeptiert v1 und v2 (oneOf). Neuer Testfall prüft, dass lokale Adapter v2 schreiben und UI/SSR sauber rendert.
+
+Migration:
+- Keine Schema‑Änderungen erforderlich (JSON‑Payload bleibt in `analysis_json`).
+
+Adapter‑APIs (Ports bleiben gleich):
+- `VisionAdapterProtocol.extract(submission) -> VisionResult` mit `text_md: str`, `meta: dict`.
+- `FeedbackAdapterProtocol.analyze(criteria, text_body_md) -> FeedbackResult` mit `feedback_md: str`, `analysis_json: json` (Schema `criteria.v1`).
+- Fehlerklassen: `VisionTransientError`, `VisionPermanentError`, `FeedbackTransientError`, `FeedbackPermanentError`.
+
+Organisatorische Struktur:
+- Protokolle und Result‑Typen werden nach `backend/learning/adapters/ports.py` extrahiert, um den Worker von Port‑Verträgen zu entkoppeln.
+
+Konfiguration/Feature‑Flag:
+- Primär werden die bestehenden Adapter‑Schalter verwendet:
+  - `LEARNING_VISION_ADAPTER` (Default: `backend.learning.adapters.stub_vision`)
+  - `LEARNING_FEEDBACK_ADAPTER` (Default: `backend.learning.adapters.stub_feedback`)
+- Optionaler Alias: `AI_BACKEND=stub|local` mappt auf obige Pfade:
+  - `stub` ⇒ `LEARNING_VISION_ADAPTER=backend.learning.adapters.stub_vision`, `LEARNING_FEEDBACK_ADAPTER=backend.learning.adapters.stub_feedback`
+  - `local` ⇒ `LEARNING_VISION_ADAPTER=backend.learning.adapters.local_vision`, `LEARNING_FEEDBACK_ADAPTER=backend.learning.adapters.local_feedback`
+- Modelle: `AI_VISION_MODEL`, `AI_FEEDBACK_MODEL`.
+- Timeouts: `AI_TIMEOUT_VISION` (z. B. 30s), `AI_TIMEOUT_FEEDBACK` (z. B. 15s).
+- `OLLAMA_BASE_URL` muss auf eine lokale/Service‑Netz‑Adresse zeigen (z. B. `http://ollama:11434`); keine externen Endpunkte.
+ - Keine weiteren Feature‑Flags einführen (KISS): DSPy wird automatisch genutzt, wenn `import dspy` erfolgreich ist; andernfalls greift der Adapter auf Ollama zurück.
+
+BDD‑Szenarien (KI‑Integration):
+1) Given `AI_BACKEND=local` und gültiges JPEG; When Worker verarbeitet pending Submission; Then `text_body` enthält Vision‑Extrakt (Markdown), `feedback_md`/`analysis_json` gesetzt, Status `completed`.
+2) Given `AI_BACKEND=local` und Vision‑Timeout; When Worker verarbeitet Submission; Then Retry bis Limit, final `failed` mit `error_code='vision_failed'` (PII‑freie Fehlermeldung).
+3) Given `AI_BACKEND=local` und Feedback‑Transient‑Error; When erster Lauf scheitert, zweiter Lauf erfolgreich; Then final `completed`, Retry‑Zähler erhöht, strukturierte Logs vorhanden.
+4) Given `AI_BACKEND=stub`; When Worker verarbeitet; Then es gibt keine Aufrufe an Ollama/DSPy, Verhalten entspricht den bestehenden Stub‑Tests (Determinismus).
+5) Given `AI_BACKEND=local` und gültiges PDF; When Worker verarbeitet pending Submission; Then `text_body` enthält OCR‑Extrakt (Markdown), `feedback_md`/`analysis_json` gesetzt, Status `completed`.
+6) Given `AI_BACKEND=local` und `dspy` ist importierbar; When Feedback läuft; Then wird der DSPy‑Pfad verwendet (kein Ollama‑Aufruf), Ergebnis `criteria.v1`.
+7) Given `AI_BACKEND=local` und `dspy` ist nicht importierbar; When Feedback läuft; Then wird der Ollama‑Pfad verwendet, Ergebnis `criteria.v1`.
+
+Testentwurf (vor Implementierung):
+- Unit (Adapter‑Fassade, gemockte Libs):
+  - Vision/local: mappt DSPy/Ollama‑Antwort → `text_md`; Timeout wirft `VisionTransientError`; ungültiger MIME → bewusster `VisionPermanentError`.
+  - Feedback/local: erzeugt `feedback_md` und `analysis_json` mit `schema: criteria.v1`, Wertebereiche geprüft; Timeout → `FeedbackTransientError`.
+- Integration (Worker + DI):
+  - `AI_BACKEND` bestimmt Adapterwahl; bei `local` werden Ollama/DSPy‑Clients gemockt, Pfad setzt Felder gemäß Port‑Verträgen.
+  - Logs enthalten keine PII (Snapshot‑Test von Log‑Zeilen auf IDs/Fehlercodes).
+ - Privacy‑Logging: Sicherstellen, dass weder `text_body` noch Bild/PDF‑Inhalte in Logs auftauchen (Regex‑Negativ‑Assertion auf Beispieltexte/Byte‑Signaturen).
+
+Implementierung (minimal, nur Test‑Grün):
+- `backend/learning/adapters/local_vision.py`: DSPy‑Kontext wenn verfügbar, sonst direkter Ollama‑Client; akzeptiert JPEG/PNG/PDF; Timeout; Fehlerklassifikation; Rückgabe Markdown.
+- `backend/learning/adapters/local_feedback.py`: DSPy‑Modul oder Ollama‑Prompt; konstruiert minimal gültiges `analysis_json` (Schema `criteria.v1`), `feedback_md` aus zwei Abschnitten.
+- DI‑Schicht respektiert `AI_BACKEND`; Default `stub`, „local“ nur bei expliziter Env.
+
+Status (2025‑11‑03):
+- Implementiert: lokale Adapter (Vision/Feedback) mit Minimal‑Logik.
+  - Dateien: `backend/learning/adapters/local_vision.py`, `backend/learning/adapters/local_feedback.py`.
+- Implementiert: DI‑Alias in Worker `main()`; `AI_BACKEND=local|stub` setzt `LEARNING_*_ADAPTER` vor dem Import.
+  - Datei: `backend/learning/workers/process_learning_submission_jobs.py:671`.
+- Tests grün für Adapter + DI:
+  - `backend/tests/learning_adapters/test_local_vision.py`
+  - `backend/tests/learning_adapters/test_local_feedback.py`
+  - `backend/tests/test_learning_worker_di_switch.py`
+  - Neu (auto-detect): `backend/tests/learning_adapters/test_local_feedback_dspy.py` validiert, dass bei importierbarem `dspy` kein Ollama-Aufruf erfolgt.
+
+Nächste Schritte:
+- Optional: Ports (`VisionResult`, `FeedbackResult`, Protokolle) nach `backend/learning/adapters/ports.py` extrahieren und Worker/Testränder anpassen (sauberere Entkopplung).
+- Integrationstests (End‑to‑End) mit gemockten Clients für `AI_BACKEND=local`: Pending → Completed inkl. Retry‑Pfad bei Transient‑Fehlern.
+- Privacy‑Logging‑Checks erweitern (Negativ‑Assertions auf bekannte Inhalte/Bytes in Logs).
+
+Ops‑Notizen (parallel, no‑regrets):
+- Compose: `AI_BACKEND`, Modell‑Env‑Vars, `OLLAMA_BASE_URL` ergänzen; Ressourcenlimits/Timeouts dokumentieren.
+- Health: bestehender Worker‑Health bleibt maßgeblich; „Model readiness“ nur intern loggen, kein externes Fail‑Kriterium.
+ - Modelle vorbereiten (dev/staging): Beispiel
+   - `docker exec gustav-ollama ollama pull ${AI_VISION_MODEL}`
+   - `docker exec gustav-ollama ollama pull ${AI_FEEDBACK_MODEL}`
+   - Hinweis: Nur in lokalen Netzen verwenden; keine Cloud‑Egress.
+
+Konkrete Schritte (Compose & Ops — Stand jetzt):
+- Compose enthält Service `ollama` (Image `ollama/ollama:latest`), interner Port 11434, Volume `ollama_models` für Persistenz.
+- `learning-worker` exportiert bereits:
+  - `AI_BACKEND` (`stub`|`local`, Default `stub`)
+  - `OLLAMA_BASE_URL` (Default `http://ollama:11434`)
+  - `AI_VISION_MODEL` (Default `llama3.2-vision`), `AI_FEEDBACK_MODEL` (Default `llama3.1`)
+  - `AI_TIMEOUT_VISION`/`AI_TIMEOUT_FEEDBACK` (Default `30`)
+- Modelle ziehen (einmalig pro Umgebung):
+  - `docker compose exec ollama ollama pull ${AI_VISION_MODEL}`
+  - `docker compose exec ollama ollama pull ${AI_FEEDBACK_MODEL}`
+- Lokale KI aktivieren:
+  - `.env` → `AI_BACKEND=local`
+  - `docker compose up -d --build`
+- Rückbau auf Stub (deterministische Tests/CI):
+  - `.env` → `AI_BACKEND=stub`
+  - `docker compose up -d`
+
+Risiken & Gegenmaßnahmen (KI‑spezifisch):
+- „Leere“ Modellantworten → behandeln wie Transient‑Error mit Retry (bis Limit), Logs ohne PII.
+- Performance‑Outlier → harte Timeouts, Backoff; Hinweis im Runbook.
+- Modelldrift → Default weiter `stub` in CI; „local“ nur in dev/staging manuell aktivieren.
 
 ## Observability (Iteration 1 Follow-up)
 
@@ -807,8 +949,45 @@ Finaler Check: UI zeigt korrekte Daten, Worker-/Monitoring-Signale im erwarteten
 
 Kurzer Überblick: Fundament ist der einzelne Prozess `backend.learning.workers.process_learning_submission_jobs`. Er bindet die Ports `VisionAdapterProtocol` und `FeedbackAdapterProtocol`, orchestriert Retries über Postgres-Funktionen und hält sich strikt an die Glossar-Begriffe.
 
+---
+
+## TDD‑Fortschritt: Adapter‑ und DI‑Tests (heute)
+
+Geschrieben (rote Tests, sollen aktuell fehlschlagen bis Implementierung folgt):
+- Unit‑Tests Vision‑Adapter lokal: `backend/tests/learning_adapters/test_local_vision.py`
+  - JPEG/PNG/PDF Happy‑Path liefert Markdown (`VisionResult.text_md`) und `raw_metadata.adapter in {local, local_vision}`.
+  - Timeout → `VisionTransientError`.
+  - Unsupported MIME (z. B. `application/zip`) → `VisionPermanentError`.
+- Unit‑Tests Feedback‑Adapter lokal: `backend/tests/learning_adapters/test_local_feedback.py`
+  - Happy‑Path liefert `feedback_md` und `analysis_json` gemäß `criteria.v1` mit Score‑Grenzen (0..5, 0..10).
+  - Timeout → `FeedbackTransientError`.
+- DI‑Switch im Worker: `backend/tests/test_learning_worker_di_switch.py`
+  - Default: ohne Env werden Stub‑Adapter geladen (Pfad‑Asserts auf Import‑Module).
+  - `AI_BACKEND=local`: erwartet Import der Module `backend.learning.adapters.local_vision` und `...local_feedback`.
+
+Nächste Schritte (grün machen):
+- Minimal‑Implementierung `backend/learning/adapters/local_vision.py` und `local_feedback.py` mit `build()`‑Fabriken und Exceptions gemäß Ports.
+- DI‑Alias in Worker ergänzen: `AI_BACKEND=stub|local` → setzt `LEARNING_*_ADAPTER` vor `import_module`.
+- Unit‑Tests ausführen und iterativ Fehler beheben (Timeout‑Mapping, MIME‑Filter, Metadaten, Score‑Bounds).
+
 - **KISS (Keep it simple)**
   - Single responsibility: Der Worker macht ausschließlich Leasing → Vision → Feedback → Persistieren; kein Mischmasch mit API/DI-Frameworks.
+
+### Ports extrahiert: Motivation & Auswirkungen (heute)
+- Motivation: Clean Architecture. Ports (Ergebnis‑Typen, Protokolle, Fehler) gehören nicht in den Worker, sondern in ein dediziertes, framework‑freies Modul, damit Adapter unabhängig sind und zyklische Abhängigkeiten vermieden werden.
+- Umsetzung:
+  - Neu: `backend/learning/adapters/ports.py` mit `VisionResult`, `FeedbackResult`, `VisionAdapterProtocol`, `FeedbackAdapterProtocol`, Fehlerklassen (`VisionTransientError`, `VisionPermanentError`, `FeedbackTransientError`, `FeedbackPermanentError`).
+  - Worker und Adapter importieren jetzt aus `backend.learning.adapters.ports`.
+  - Kompatibilität: Der Worker re‑exportiert die Ports‑Namen via `__all__`, damit existierende Tests/Imports (z.B. `from ...process_learning_submission_jobs import VisionResult`) weiterhin funktionieren.
+- Auswirkungen auf Tests/Code:
+  - Adapter‑Tests grün mit neuen Imports; DI‑Switch‑Test bleibt unverändert.
+  - Keine API/DB‑Änderungen nötig; nur interne Python‑Modulstruktur.
+- Sicherheit/Wartbarkeit:
+  - Klare Grenze zwischen Use‑Case (Worker) und Infrastruktur (Adapter). Fehler‑Taxonomie an zentraler Stelle.
+- Nächste Schritte:
+  - E2E‑Tests mit `AI_BACKEND=local` (gemockte Clients) für Pending → Completed inkl. Retry‑Pfad spezifizieren und implementieren.
+  - Privacy‑Logging‑Negativtests ergänzen (Logs dürfen keine Textauszüge/Binary enthalten; nur IDs/Fehlercodes/Timings).
+  - Optional: Weitere Adapters (z.B. cloud_*) können nun konsistent gegen dieselben Ports implementiert werden.
   - Prozesskontrolle bleibt minimal (`run_once`, `run_forever`), Backoff wird über eine einzige Hilfsfunktion `_backoff_seconds` gesteuert.
   - Dataclasses (`QueuedJob`, `VisionResult`, `FeedbackResult`) transportieren nur zwingend notwendige Felder. Keine verschachtelten Nebenobjekte → einfach zu testen.
 

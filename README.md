@@ -25,6 +25,26 @@ gustav-alpha2/
 
 - Ausführen: `.venv/bin/pytest -q`
 
+## Lokale KI (Ollama/DSPy)
+
+- Standard ist `AI_BACKEND=stub` (deterministisch, keine Modelle nötig).
+- Für lokale Inferenz (nur dev/staging):
+  - Compose stellt `ollama` bereit (interner Port 11434). Env in `learning-worker` bereits verdrahtet (`OLLAMA_BASE_URL=http://ollama:11434`).
+  - Modelle ziehen:
+    - `docker compose exec ollama ollama pull ${AI_VISION_MODEL}`
+    - `docker compose exec ollama ollama pull ${AI_FEEDBACK_MODEL}`
+  - Worker auf „local“ umschalten (nur wenn Modelle vorhanden):
+    - In `.env`: `AI_BACKEND=local`
+    - Neustart: `docker compose up -d --build`
+  - Sicherheit: Keine Cloud‑Egress. Logs enthalten keine PII; nur IDs/Fehlercodes/Timings.
+
+### ROCm (AMD‑GPU) Hinweise
+- Das Compose‑Setup nutzt `ollama/ollama:rocm` und mapped `/dev/kfd` und `/dev/dri` in den Container.
+- Gruppen: `video`, `render` werden hinzugefügt; stelle sicher, dass der Host‑User GPU‑Zugriff hat.
+- Optionale Env‑Tuning:
+  - `HIP_VISIBLE_DEVICES=all` (Default) oder z. B. `0`
+  - `HSA_OVERRIDE_GFX_VERSION` nur setzen, wenn dein Stack es erfordert (sonst leer lassen)
+
 ## Contributing
 
 - Arbeitsweise: Contract‑First, TDD (Red‑Green‑Refactor)

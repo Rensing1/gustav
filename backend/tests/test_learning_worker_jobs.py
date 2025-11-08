@@ -66,20 +66,21 @@ class _StubFeedbackAdapter:
     base_score: int = 4
 
     def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
-        """Return deterministic feedback+analysis shaped like criteria.v1."""
+        """Return deterministic feedback+analysis shaped like criteria.v2."""
         results = []
         for index, criterion in enumerate(criteria):
             results.append(
                 {
                     "criterion": criterion,
                     "score": min(10, self.base_score + index),
+                    "max_score": 10,
                     "explanation_md": f"Stub feedback for {criterion}",
                 }
             )
         return FeedbackResult(
             feedback_md=self.feedback_md,
             analysis_json={
-                "schema": "criteria.v1",
+                "schema": "criteria.v2",
                 "score": self.base_score,
                 "criteria_results": results,
             },
@@ -306,7 +307,7 @@ async def test_worker_processes_pending_submission_to_completed():
     assert remaining_jobs == 0
 
     assert isinstance(analysis_json, dict)
-    assert analysis_json["schema"] == "criteria.v1"
+    assert analysis_json["schema"] == "criteria.v2"
     assert analysis_json["score"] == _StubFeedbackAdapter.base_score
 
 

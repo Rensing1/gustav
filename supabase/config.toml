@@ -113,6 +113,15 @@ file_size_limit = "20MiB"
 allowed_mime_types = ["application/pdf", "image/png", "image/jpeg"]
 objects_path = "./storage/materials"
 
+# Learning submissions bucket for local dev/testing
+[storage.buckets.submissions]
+public = false
+# Keep generous limit for mixed media uploads in dev
+file_size_limit = "50MiB"
+# Accept common image and PDF types used in tests
+allowed_mime_types = ["application/pdf", "image/png", "image/jpeg"]
+objects_path = "./storage/submissions"
+
 [auth]
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used

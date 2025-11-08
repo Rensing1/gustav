@@ -26,10 +26,18 @@ services:
       - ./backend/teaching:/app/teaching:z
       # Learning bounded context
       - ./backend/learning:/app/backend/learning:z
+      # Shared storage helpers (learning upload policy, verification)
+      - ./backend/storage:/app/backend/storage:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
+      # Shared dev uploads directory for vision to access uploaded files
+      - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
     env_file:
       - .env
     environment:
+      # Force container to talk to host Supabase API
+      - SUPABASE_URL=http://host.docker.internal:54321
+      # Same-origin proxy for Storage uploads to avoid browser CORS issues
+      - ENABLE_STORAGE_UPLOAD_PROXY=true
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       - KC_BASE_URL=${KC_BASE_URL:-http://keycloak:8080}
@@ -46,6 +54,9 @@ services:
       - GUSTAV_TRUST_PROXY=true
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
       - SESSIONS_BACKEND=db
+      - AUTO_CREATE_STORAGE_BUCKETS=true
+      # Allow storage3 fallback in container even when using host.docker.internal
+      - SUPABASE_FALLBACK_STORAGE3=true
       # App runtime DSN: build from app login user/pass and container DB host.
       - APP_DB_USER=${APP_DB_USER:-gustav_app}
       - APP_DB_PASSWORD=${APP_DB_PASSWORD:-CHANGE_ME_DEV}
@@ -55,6 +66,9 @@ services:
       - TEACHING_DATABASE_URL=${TEACHING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Sessions DSN (service role; app_sessions policies allow server-side access)
       - SESSION_DATABASE_URL=${SESSION_DATABASE_URL:-postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres}
+      # Share dev upload root with worker so Vision can read image bytes
+      - STORAGE_VERIFY_ROOT=${STORAGE_VERIFY_ROOT:-/app/.tmp/dev_uploads}
+      - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -69,12 +83,16 @@ services:
     volumes:
       - ./backend/learning:/app/backend/learning:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
+      # Shared dev uploads directory (same path as in web)
+      - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
     env_file:
       - .env
     environment:
+      # Force container to talk to host Supabase API
+      - SUPABASE_URL=http://host.docker.internal:54321
       - LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
-      # Use application DSN by default; a dedicated worker user can be configured via LEARNING_DATABASE_URL
-      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
+      # Worker DSN: default to service role inside the network to execute SECURITY DEFINER helpers
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres}
       # Adapter selection: default to deterministic stubs; switch to local with AI_BACKEND=local
       - AI_BACKEND=${AI_BACKEND:-stub}
       - LEARNING_VISION_ADAPTER=${LEARNING_VISION_ADAPTER:-backend.learning.adapters.stub_vision}
@@ -89,6 +107,12 @@ services:
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
       - WORKER_POLL_INTERVAL=${WORKER_POLL_INTERVAL:-0.5}
+      - AUTO_CREATE_STORAGE_BUCKETS=true
+      # Allow storage3 fallback in container even when using host.docker.internal
+      - SUPABASE_FALLBACK_STORAGE3=true
+      # Share dev upload root to enable Vision to read uploaded files in dev
+      - STORAGE_VERIFY_ROOT=${STORAGE_VERIFY_ROOT:-/app/.tmp/dev_uploads}
+      - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -158,16 +182,15 @@ services:
   ollama:
     image: ollama/ollama:rocm
     container_name: gustav-ollama
-    # Internal service only; no host port mapping required
-    # Exposes 11434 inside the compose network; worker uses OLLAMA_BASE_URL
+    # Expose API port for host-based integration tests
+    # - Compose-internal: http://ollama:11434
+    # - Host-accessible:  http://localhost:11434
+    ports:
+      - "11434:11434"
     volumes:
       - ollama_models:/root/.ollama
-    group_add:
-      - "video"
-      - "render"
-    devices:
-      - "/dev/kfd:/dev/kfd"
-      - "/dev/dri:/dev/dri"
+    # GPU device/group wiring is optional. Remove group_add/devices by default
+    # to improve portability; add them locally when ROCm is available.
     environment:
       # Optional ROCm tuning. Leave empty by default to auto-detect.
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
@@ -177,10 +200,12 @@ services:
     networks:
       - gustav-alpha2-network
     healthcheck:
+      # Probe the local daemon via CLI; allow generous startup time on cold boots.
       test: ["CMD", "ollama", "list"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 30s
+      start_period: 90s
+      retries: 10
 
 networks:
   gustav-alpha2-network:

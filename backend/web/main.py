@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import os
 import logging
 import uuid
 import secrets
+import mimetypes
 from typing import Optional, Dict, Any, List, Mapping
 from datetime import datetime, timezone
 
@@ -139,10 +141,6 @@ def load_oidc_config() -> OIDCConfig:
 OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
-# Test/dev aid: last issued id_token from /auth/callback (not persisted).
-# Used only as a non-prod fallback for /auth/logout when a flaky test/client
-# fails to attach the session cookie. Never relied upon in production.
-LAST_ISSUED_ID_TOKEN: str | None = None
 
 def _under_pytest() -> bool:
     import sys
@@ -358,6 +356,168 @@ def _is_uuid_like(value: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _is_analysis_in_progress(status: Any) -> bool:
+    """Return True while the worker is still processing the submission."""
+    return str(status or "").lower() in ("pending", "extracted")
+
+
+def _resolve_storage_root() -> Path | None:
+    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    if not root:
+        root = os.path.abspath(".tmp/dev_uploads")
+    try:
+        return Path(root).resolve()
+    except Exception:
+        return None
+
+
+def _compute_local_sha256(storage_key: str, expected_size: int) -> str | None:
+    """Best-effort compute sha256 for a stored object under STORAGE_VERIFY_ROOT."""
+    if not storage_key:
+        return None
+    base = _resolve_storage_root()
+    if base is None:
+        return None
+    target = (base / storage_key).resolve()
+    try:
+        common = os.path.commonpath([str(base), str(target)])
+    except Exception:
+        return None
+    if str(base) != common:
+        return None
+    if not target.exists() or not target.is_file():
+        return None
+    try:
+        data = target.read_bytes()
+    except Exception:
+        return None
+    if expected_size > 0 and len(data) != expected_size:
+        # Prefer matching sizes; still hash the bytes to avoid blocking submissions.
+        pass
+    h = hashlib.sha256(); h.update(data)
+    return h.hexdigest()
+
+
+async def _server_side_prepare_submission_upload(
+    *,
+    client,
+    request: Request,
+    course_id: str,
+    task_id: str,
+    internal_origin: str,
+    upload_file: Any,
+) -> dict[str, Any]:
+    """Upload the student's file server-side when JS cannot prepare metadata.
+
+    Why:
+        Progressive enhancement requires a no-JS path. The server mimics the
+        client flow: request an upload intent, PUT the bytes to the returned
+        URL (stub/proxy/Supabase) and derive checksum + metadata.
+
+    Returns:
+        Dict with storage_key, mime_type, size_bytes, sha256, api_kind.
+
+    Raises:
+        RuntimeError with a short code (e.g., upload_intent_failed) when any
+        step fails so the caller can surface diagnostics in tests/dev tools.
+    """
+    if upload_file is None:
+        raise RuntimeError("missing_upload_file")
+    filename = str(getattr(upload_file, "filename", "") or "").strip() or "upload.bin"
+    declared_mime = str(getattr(upload_file, "content_type", "") or "").strip()
+    mime_type = declared_mime or (mimetypes.guess_type(filename)[0] or "application/octet-stream")
+    try:
+        file_bytes = await upload_file.read()  # type: ignore[attr-defined]
+    except AttributeError:
+        body = getattr(upload_file, "body", None)
+        file_bytes = body if isinstance(body, (bytes, bytearray)) else b""
+    if not file_bytes:
+        raise RuntimeError("empty_upload_body")
+    size_bytes = len(file_bytes)
+    api_kind = "image" if mime_type.startswith("image/") else "file"
+    intent_payload = {
+        "kind": api_kind,
+        "filename": filename,
+        "mime_type": mime_type,
+        "size_bytes": size_bytes,
+    }
+    intent_headers = {"Origin": internal_origin, "Referer": str(request.url)}
+    intent_resp = await client.post(
+        f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+        json=intent_payload,
+        headers=intent_headers,
+    )
+    if intent_resp.status_code != 200:
+        detail = _extract_api_error_detail(intent_resp)
+        raise RuntimeError(f"upload_intent_failed:{detail or intent_resp.status_code}")
+    try:
+        intent = intent_resp.json()
+    except Exception:
+        raise RuntimeError("upload_intent_parse_failed")
+    storage_key = str(intent.get("storage_key") or "").strip()
+    upload_url = str(intent.get("url") or "").strip()
+    if not storage_key or not upload_url:
+        raise RuntimeError("upload_intent_missing_payload")
+    method = str(intent.get("method") or "PUT").upper()
+    headers_raw = intent.get("headers") or {}
+    if isinstance(headers_raw, Mapping):
+        upload_headers = {str(k): str(v) for k, v in headers_raw.items()}
+    else:
+        upload_headers = {}
+    if not upload_headers.get("Content-Type"):
+        upload_headers["Content-Type"] = mime_type
+    upload_headers.setdefault("Origin", internal_origin)
+    upload_headers.setdefault("Referer", str(request.url))
+
+    def _is_internal_url(url: str) -> bool:
+        return url.startswith("/")
+
+    try:
+        if _is_internal_url(upload_url):
+            upload_resp = await client.request(
+                method or "PUT",
+                upload_url,
+                content=file_bytes,
+                headers=upload_headers,
+            )
+        else:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=20.0) as upstream:
+                upload_resp = await upstream.request(
+                    method or "PUT",
+                    upload_url,
+                    content=file_bytes,
+                    headers=upload_headers,
+                )
+    except Exception as exc:  # pragma: no cover - network failures
+        raise RuntimeError(f"upload_forward_failed:{exc}") from exc
+
+    if getattr(upload_resp, "status_code", 500) >= 300:
+        detail = _extract_api_error_detail(upload_resp)
+        raise RuntimeError(f"upload_forward_failed:{detail or upload_resp.status_code}")
+
+    try:
+        upload_info = upload_resp.json()
+    except Exception:
+        upload_info = {}
+    sha256 = str((upload_info or {}).get("sha256") or "").strip()
+    if not sha256:
+        h = hashlib.sha256(); h.update(file_bytes); sha256 = h.hexdigest()
+    size_reported = upload_info.get("size_bytes")
+    try:
+        final_size = int(size_reported)
+    except (TypeError, ValueError):
+        final_size = size_bytes
+    return {
+        "storage_key": storage_key,
+        "mime_type": mime_type,
+        "size_bytes": final_size,
+        "sha256": sha256,
+        "api_kind": api_kind,
+    }
 
 
 def _build_history_entry_from_record(
@@ -1074,14 +1234,14 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         )
                         if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
                             records = r_hist.json()
-                            # If latest attempt is pending, prefer a polling placeholder to auto-refresh
-                            latest_pending = False
-                            try:
-                                if records:
-                                    latest_pending = (records[0] or {}).get("analysis_status") == "pending"
-                            except Exception:
-                                latest_pending = False
-                            if latest_pending:
+                            # If latest attempt is still in progress, prefer a polling placeholder to auto-refresh
+                            latest_status = None
+                            if records:
+                                try:
+                                    latest_status = (records[0] or {}).get("analysis_status")
+                                except Exception:
+                                    latest_status = None
+                            if _is_analysis_in_progress(latest_status):
                                 qp = f"?open_attempt_id={open_attempt_id_qp}" if open_attempt_id_qp else ""
                                 history_placeholder_html = (
                                     f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
@@ -1179,36 +1339,56 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
     mode = str(form.get("mode") or "text").strip()
     unit_id = str(form.get("unit_id") or "").strip()
     text_body = str(form.get("text_body") or "")
-    # Prepare payload for text or upload (image/pdf)
+    upload_file_field = form.get("upload_file")
+
+    payload: dict[str, Any] | None = None
+    upload_meta: dict[str, Any] | None = None
+
     if mode == "text":
         payload = {"kind": "text", "text_body": text_body}
     elif mode in ("image", "file", "upload"):
-        # For uploads, the client (Phase B JS) prepares these fields after the
-        # actual file transfer (Upload Intent + PUT). Tests provide them via
-        # form POST directly to exercise API validation without JS.
+        # For uploads, the client JS normally fills these fields after PUT.
         storage_key = str(form.get("storage_key") or "").strip()
         mime_type = str(form.get("mime_type") or "").strip()
         try:
             size_bytes = int(str(form.get("size_bytes") or "0"))
         except Exception:
             size_bytes = 0
-        sha256 = str(form.get("sha256") or "").strip()
-        # Map unified UI mode 'upload' to concrete API kind using mime_type
-        api_kind = "image" if mime_type.startswith("image/") else ("file" if mime_type == "application/pdf" else "file")
+        sha256 = str(form.get("sha256") or "").strip().lower()
+        if not sha256 and storage_key:
+            computed_sha = _compute_local_sha256(storage_key, size_bytes)
+            if computed_sha:
+                sha256 = computed_sha
+        api_kind = "image" if mime_type.startswith("image/") else "file"
+        if mime_type == "application/pdf":
+            api_kind = "file"
         if mode in ("image", "file"):
             api_kind = mode
-        payload = {
-            "kind": api_kind,
-            "storage_key": storage_key,
-            "mime_type": mime_type,
-            "size_bytes": size_bytes,
-            "sha256": sha256,
-        }
+        needs_server_upload = bool(not storage_key and getattr(upload_file_field, "filename", ""))
+        if needs_server_upload:
+            upload_meta = {
+                "api_kind": api_kind,
+                "storage_key": storage_key,
+                "mime_type": mime_type,
+                "size_bytes": size_bytes,
+                "sha256": sha256,
+                "upload_file": upload_file_field,
+            }
+        else:
+            payload = {
+                "kind": api_kind,
+                "storage_key": storage_key,
+                "mime_type": mime_type,
+                "size_bytes": size_bytes,
+                "sha256": sha256,
+            }
     else:
-        # Fallback to text for unknown modes
         payload = {"kind": "text", "text_body": text_body}
-    # Call internal API
+
     internal_base, internal_origin = _learning_internal_base()
+    api_resp = None
+    api_error = ""
+    server_upload_error = ""
     try:
         import httpx
         from httpx import ASGITransport
@@ -1221,16 +1401,44 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 "Origin": internal_origin,
                 "Referer": str(request.url),
             }
-            # Delegate to the Learning API to enforce RLS, membership,
-            # visibility and attempt limits.
-            api_resp = await client.post(
-                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
-                json=payload,
-                headers=headers,
-            )
+            if upload_meta:
+                upload_file_obj = upload_meta.pop("upload_file", None)
+                try:
+                    prepared = await _server_side_prepare_submission_upload(
+                        client=client,
+                        request=request,
+                        course_id=course_id,
+                        task_id=task_id,
+                        internal_origin=internal_origin,
+                        upload_file=upload_file_obj,
+                    )
+                except RuntimeError as exc:
+                    server_upload_error = str(exc)
+                else:
+                    upload_meta.update(prepared)
+                    upload_meta["sha256"] = str(upload_meta.get("sha256") or "").lower()
+                    payload = {
+                        "kind": str(upload_meta.get("api_kind") or "file"),
+                        "storage_key": str(upload_meta.get("storage_key") or ""),
+                        "mime_type": str(upload_meta.get("mime_type") or ""),
+                        "size_bytes": int(upload_meta.get("size_bytes") or 0),
+                        "sha256": str(upload_meta.get("sha256") or ""),
+                    }
+            if payload is None and not upload_meta:
+                payload = {"kind": "text", "text_body": text_body}
+            if server_upload_error:
+                api_resp = None
+            else:
+                api_resp = await client.post(
+                    f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                    json=payload,
+                    headers=headers,
+                )
     except Exception as exc:
         api_resp = None  # type: ignore
         api_error = str(exc)
+    if server_upload_error and not api_error:
+        api_error = server_upload_error
     # Resolve unit_id from API if not provided (robustness for direct POST tests)
     if not unit_id:
         try:
@@ -1312,11 +1520,13 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 for index, rec in enumerate(items if isinstance(items, list) else [])
             ]
             pending_latest = False
-            try:
-                if isinstance(items, list) and items:
-                    pending_latest = (items[0] or {}).get("analysis_status") == "pending"
-            except Exception:
-                pending_latest = False
+            latest_status = None
+            if isinstance(items, list) and items:
+                try:
+                    latest_status = (items[0] or {}).get("analysis_status")
+                except Exception:
+                    latest_status = None
+            pending_latest = _is_analysis_in_progress(latest_status)
             hx_attrs = (
                 f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history?open_attempt_id={Component.escape(open_attempt_id)}"'
                 f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
@@ -1359,9 +1569,10 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
 
     Why:
         HTMX loads this fragment into the TaskCard on demand and, when the
-        latest attempt is still pending, polls it (every 2s) until analysis
-        completes. This enables the UI to update automatically as soon as the
-        vision text or feedback becomes available — without full page reloads.
+        latest attempt is still in progress (pending or extracted), polls it
+        (every 2s) until analysis completes. This enables the UI to update
+        automatically as soon as the vision text or feedback becomes
+        available — without full page reloads.
 
     Parameters:
         course_id: Course UUID in path.
@@ -1369,10 +1580,12 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
 
     Behavior:
         - Returns a <section class="task-panel__history"> wrapper containing
-          <details> entries. While the newest attempt has analysis_status
-          "pending", the wrapper includes hx-get + hx-trigger attributes so
-          HTMX auto-refreshes the fragment every 2 seconds.
-        - Includes data-pending="true|false" for progressive enhancement/tests.
+          <details> entries. While the newest attempt is in progress
+          (analysis_status ∈ {pending, extracted}), the wrapper includes
+          hx-get + hx-trigger attributes so HTMX auto-refreshes the fragment
+          every 2 seconds.
+        - Includes data-pending="true|false" (true signals auto-refresh) for
+          progressive enhancement/tests.
 
     Permissions:
         Caller must be authenticated and have role "student" for this view.
@@ -1402,15 +1615,15 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
         _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
         for index, rec in enumerate(items if isinstance(items, list) else [])
     ]
-    # Determine whether the newest attempt is still pending to decide polling
-    pending_latest = False
-    try:
-        if isinstance(items, list) and items:
-            status = (items[0] or {}).get("analysis_status")
-            pending_latest = (status == "pending")
-    except Exception:
-        pending_latest = False
-    # Build wrapper with optional HX polling attributes (every 2s) while pending
+    # Determine whether the newest attempt is still being processed to decide polling
+    latest_status = None
+    if isinstance(items, list) and items:
+        try:
+            latest_status = (items[0] or {}).get("analysis_status")
+        except Exception:
+            latest_status = None
+    pending_latest = _is_analysis_in_progress(latest_status)
+    # Build wrapper with optional HX polling attributes (every 2s) while in progress
     hx_attrs = (
         f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history?open_attempt_id={Component.escape(open_attempt_id)}"'
         f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
@@ -4665,14 +4878,6 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     display_name = claims.get("gustav_display_name") or claims.get("name") or (email.split("@")[0] if email else "Benutzer")
 
     sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
-    try:
-        # Record last token for dev/tests to aid logout hinting when cookies
-        # are not forwarded (non-prod only; cleared on process restart).
-        if SETTINGS.environment != "prod":
-            global LAST_ISSUED_ID_TOKEN
-            LAST_ISSUED_ID_TOKEN = id_token
-    except Exception:
-        pass
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     resp.headers["Cache-Control"] = "private, no-store"

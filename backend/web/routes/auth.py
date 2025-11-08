@@ -290,20 +290,7 @@ async def auth_logout(request: Request, redirect: str | None = None):
         if id_tok:
             params["id_token_hint"] = id_tok
         else:
-            # Non-prod fallback: provide the most recently issued id_token
-            # when available to stabilize tests that occasionally lose the
-            # session cookie between callback and logout.
-            try:
-                if getattr(getattr(mod, "SETTINGS", object()), "environment", "dev") != "prod":
-                    last = getattr(mod, "LAST_ISSUED_ID_TOKEN", None)
-                    if last:
-                        params["id_token_hint"] = last
-                    else:
-                        params["client_id"] = getattr(cfg, "client_id", "gustav-web")
-                else:
-                    params["client_id"] = getattr(cfg, "client_id", "gustav-web")
-            except Exception:
-                params["client_id"] = getattr(cfg, "client_id", "gustav-web")
+            params["client_id"] = getattr(cfg, "client_id", "gustav-web")
         end_session = (
             f"{base}/realms/{getattr(cfg, 'realm', 'gustav')}/protocol/openid-connect/logout?" + urlencode(params)
         )

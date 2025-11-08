@@ -8,6 +8,7 @@ dem neuesten Eintrag geöffnet ist. Solange UI‑Routen fehlen, schlagen diese T
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import uuid
 import pytest
@@ -16,6 +17,7 @@ from httpx import ASGITransport
 from pathlib import Path
 import os
 import psycopg  # type: ignore
+from datetime import datetime, timezone
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -29,6 +31,7 @@ if str(REPO_ROOT) not in os.sys.path:
 
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+import routes.learning as learning_routes  # type: ignore  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -594,3 +597,127 @@ async def test_ui_submit_upload_pdf_prg_and_history_shows_latest_open():
         placeholder_id = f'task-history-{task_id}'
         assert placeholder_id in html
         # Wrapper vorhanden; Inhalte werden asynchron nachgeladen oder direkt gerendert
+
+
+@pytest.mark.anyio
+async def test_ui_submit_upload_png_without_js_uses_server_fallback(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """JS-disabled browsers must still upload files via server-side fallback."""
+    storage_root = tmp_path / "dev_uploads"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "true")
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
+
+    class _StubLearningRepo:
+        def __init__(self):
+            self._items: list[dict] = []
+
+        def _public(self, entry: dict) -> dict:
+            return {
+                "id": entry["id"],
+                "attempt_nr": entry["attempt_nr"],
+                "kind": entry["kind"],
+                "text_body": entry["text_body"],
+                "mime_type": entry["mime_type"],
+                "size_bytes": entry["size_bytes"],
+                "storage_key": entry["storage_key"],
+                "sha256": entry["sha256"],
+                "analysis_status": entry["analysis_status"],
+                "analysis_json": entry["analysis_json"],
+                "feedback": entry["feedback"],
+                "error_code": entry["error_code"],
+                "vision_last_error": entry["vision_last_error"],
+                "feedback_last_error": entry["feedback_last_error"],
+                "created_at": entry["created_at"],
+                "completed_at": entry["completed_at"],
+            }
+
+        def list_submissions(self, *, student_sub: str, course_id: str, task_id: str, limit: int, offset: int) -> list[dict]:
+            filtered = [
+                self._public(item)
+                for item in self._items
+                if item["course_id"] == course_id and item["task_id"] == task_id and item["student_sub"] == student_sub
+            ]
+            return filtered[offset : offset + limit]
+
+        def create_submission(self, data):
+            attempts = 1 + sum(
+                1
+                for item in self._items
+                if item["task_id"] == data.task_id and item["student_sub"] == data.student_sub
+            )
+            entry = {
+                "id": str(uuid.uuid4()),
+                "course_id": data.course_id,
+                "task_id": data.task_id,
+                "student_sub": data.student_sub,
+                "attempt_nr": attempts,
+                "kind": data.kind,
+                "text_body": data.text_body,
+                "mime_type": str(data.mime_type or ""),
+                "size_bytes": int(data.size_bytes or 0),
+                "storage_key": str(data.storage_key or ""),
+                "sha256": str(data.sha256 or ""),
+                "analysis_status": "pending",
+                "analysis_json": None,
+                "feedback": None,
+                "error_code": None,
+                "vision_last_error": None,
+                "feedback_last_error": None,
+                "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "completed_at": None,
+            }
+            self._items.insert(0, entry)
+            return self._public(entry)
+
+    original_adapter = learning_routes.STORAGE_ADAPTER
+    original_repo = getattr(learning_routes, "REPO", None)
+    stub_repo = _StubLearningRepo()
+    learning_routes.set_repo(stub_repo)
+    learning_routes.REPO = stub_repo
+    learning_routes.set_storage_adapter(learning_routes.NullStorageAdapter())
+    try:
+        sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+        file_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        expected_sha = hashlib.sha256(file_bytes).hexdigest()
+        form_data = {
+            "mode": "upload",
+            "unit_id": unit_id,
+            "text_body": "",
+            "storage_key": "",
+            "mime_type": "",
+            "size_bytes": "",
+            "sha256": "",
+        }
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+            resp = await c.post(
+                f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+                data=form_data,
+                files={"upload_file": ("beweis.png", file_bytes, "image/png")},
+                follow_redirects=False,
+            )
+            assert resp.status_code in (302, 303)
+            location = resp.headers.get("location", "")
+            diag = resp.headers.get("X-Submissions-Diag", "")
+            assert "ok=submitted" in location, f"upload redirect missing ok flag (diag={diag})"
+            follow = await c.get(location or f"/learning/courses/{course_id}/units/{unit_id}")
+            assert follow.status_code == 200
+            api_resp = await c.get(f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
+        assert api_resp.status_code == 200
+        items = api_resp.json()
+        assert isinstance(items, list) and items, "submission list must include newest entry"
+        latest = items[0]
+        assert latest.get("kind") == "image"
+        assert latest.get("mime_type") == "image/png"
+        assert latest.get("sha256") == expected_sha
+        storage_key = str(latest.get("storage_key") or "")
+        assert storage_key, "server fallback must persist a storage_key"
+        stored_file = storage_root / storage_key
+        assert stored_file.exists(), "server fallback must upload file via dev stub"
+        assert stored_file.read_bytes() == file_bytes
+    finally:
+        learning_routes.set_storage_adapter(original_adapter)
+        if original_repo is not None:
+            learning_routes.set_repo(original_repo)
+            learning_routes.REPO = original_repo

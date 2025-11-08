@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import logging
 import os
+import re
 from typing import Optional, Sequence
 from dataclasses import dataclass
 from uuid import UUID, uuid4
@@ -638,15 +639,58 @@ def run_forever(
             time.sleep(poll_interval)
 
 
-def _default_dsn() -> str:
-    env = os.getenv("LEARNING_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if env:
-        return env
-    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
-    port = os.getenv("TEST_DB_PORT", "54322")
-    user = os.getenv("APP_DB_USER", "gustav_app")
-    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
-    return f"postgresql://{user}:{password}@{host}:{port}/postgres"
+def _dsn_username(dsn: str) -> str:
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(dsn)
+        if parsed.username:
+            return parsed.username
+    except Exception:
+        pass
+    match = re.match(r"^[a-z]+://(?P<user>[^:@/]+)", dsn or "")
+    return match.group("user") if match else ""
+
+
+def _resolve_worker_dsn() -> str:
+    """
+    Resolve the Postgres DSN for the learning worker with least-privilege guards.
+
+    Behavior:
+        - Favors explicit overrides (LEARNING_DATABASE_URL/LEARNING_DB_URL/DATABASE_URL).
+        - Falls back to the app login role derived from APP_DB_USER/APP_DB_PASSWORD.
+        - Rejects service-role/superuser accounts (postgres, service_role) unless
+          ALLOW_SERVICE_DSN_FOR_TESTING=true (opt-in for local debugging).
+    """
+
+    def _truthy(env_name: str) -> bool:
+        return (os.getenv(env_name, "") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    candidates = [
+        os.getenv("LEARNING_DATABASE_URL"),
+        os.getenv("LEARNING_DB_URL"),
+        os.getenv("DATABASE_URL"),
+    ]
+    for candidate in candidates:
+        if candidate:
+            dsn = candidate
+            break
+    else:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        dsn = f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    allow_service = _truthy("ALLOW_SERVICE_DSN_FOR_TESTING") or _truthy("RUN_E2E") or _truthy("RUN_SUPABASE_E2E")
+    user = _dsn_username(dsn)
+    if user in {"postgres", "service_role", "supabase_admin"} and not allow_service:
+        raise RuntimeError(
+            "Learning worker requires the gustav_app (or gustav_worker) login role. "
+            "Override LEARNING_DATABASE_URL with a limited account or set "
+            "ALLOW_SERVICE_DSN_FOR_TESTING=true for temporary local debugging."
+        )
+    return dsn
 
 
 def main() -> None:
@@ -654,7 +698,7 @@ def main() -> None:
     level_name = os.getenv("LOG_LEVEL", "INFO")
     normalized_level = level_name.strip().upper() or "INFO"
     logging.basicConfig(level=normalized_level)
-    dsn = _default_dsn()
+    dsn = _resolve_worker_dsn()
 
     # Centralised config load (keeps behaviour identical to the previous env logic).
     from backend.learning.config import load_ai_config

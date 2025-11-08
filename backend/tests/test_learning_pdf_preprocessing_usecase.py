@@ -133,13 +133,13 @@ def _seed_pdf_submission(*, size_bytes: int) -> SeededSubmission:
     )
 
 
-def _fetch_status(submission_id: str) -> tuple[str, str | None, dict | None]:
+def _fetch_status(submission_id: str) -> tuple[str, str | None, dict | None, dict]:
     dsn = _service_dsn()
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select analysis_status, error_code, analysis_json
+                select analysis_status, error_code, analysis_json, internal_metadata
                   from public.learning_submissions
                  where id = %s::uuid
                 """,
@@ -147,7 +147,7 @@ def _fetch_status(submission_id: str) -> tuple[str, str | None, dict | None]:
             )
             row = cur.fetchone()
     assert row is not None, "expected submission row"
-    return row[0], row[1], row[2]
+    return row[0], row[1], row[2], row[3]
 
 
 class _MemoryStorage:
@@ -213,12 +213,13 @@ def test_pdf_preprocessing_marks_extracted(monkeypatch):
     pdf_bytes = b"%PDF-1.4\nHappy Path\n"
     usecase.execute(context=_build_context(seed), pdf_bytes=pdf_bytes)
 
-    status, error_code, analysis_json = _fetch_status(seed.submission_id)
+    status, error_code, analysis_json, internal_metadata = _fetch_status(seed.submission_id)
     assert status == "extracted"
     assert error_code is None
-    assert isinstance(analysis_json, dict)
-    assert "page_keys" in analysis_json
-    assert len(analysis_json["page_keys"]) == 2
+    assert analysis_json in (None, {})
+    assert isinstance(internal_metadata, dict)
+    assert "page_keys" in internal_metadata
+    assert len(internal_metadata["page_keys"]) == 2
     assert len(storage.objects) == 2
 
 
@@ -248,7 +249,7 @@ def test_pdf_preprocessing_marks_failed_for_corrupt_pdf(monkeypatch):
 
     usecase.execute(context=_build_context(seed), pdf_bytes=b"%PDF-corrupt")
 
-    status, error_code, _ = _fetch_status(seed.submission_id)
+    status, error_code, *_ = _fetch_status(seed.submission_id)
     assert status == "failed"
     assert error_code == "input_corrupt"
 
@@ -284,7 +285,7 @@ def test_pdf_preprocessing_rejects_oversized_submission(monkeypatch):
 
     usecase.execute(context=_build_context(seed), pdf_bytes=b"%PDF-oversize")
 
-    status, error_code, _ = _fetch_status(seed.submission_id)
+    status, error_code, *_ = _fetch_status(seed.submission_id)
     assert status == "failed"
     assert error_code == "input_too_large"
     assert called["n"] == 0, "renderer should not be invoked for oversize submissions"

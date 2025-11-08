@@ -147,6 +147,7 @@ class PreprocessPdfSubmissionUseCase:
                     """
                     update public.learning_submissions
                        set analysis_status = 'failed',
+                           analysis_json = null,
                            error_code = %s,
                            vision_last_error = %s,
                            vision_last_attempt_at = now()

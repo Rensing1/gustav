@@ -1036,17 +1036,65 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
     assert payload.get("feedback") is None
 
 
-    # History should include the image submission with storage_key
+@pytest.mark.anyio
+async def test_extracted_submission_response_hides_analysis_json_payload():
+    """Intermediate 'extracted' rows must not expose raw analysis payloads."""
+
+    fixture = await _prepare_learning_fixture()
+
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
-        history = await client.get(
+        create = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "PDF pending"},
+        )
+    assert create.status_code == 202
+    submission = create.json()
+    submission_id = submission["id"]
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+    from psycopg.types.json import Json  # type: ignore[attr-defined]
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to tweak submission state")
+
+    fake_page_keys = [
+        f"submissions/{fixture.course_id}/{fixture.task['id']}/{fixture.student_sub}/derived/{submission_id}/page_0001.png"
+    ]
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'extracted',
+                       analysis_json = null,
+                       internal_metadata = coalesce(internal_metadata, '{}'::jsonb)
+                                          || jsonb_build_object('page_keys', %s::jsonb)
+                 where id = %s::uuid
+                """,
+                (Json(fake_page_keys), submission_id),
+            )
+        conn.commit()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.get(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             params={"limit": 5, "offset": 0},
         )
-    assert history.status_code == 200
-    items = history.json()
-    assert isinstance(items, list) and items
-    assert items[0]["storage_key"] == "uploads/student123/solution.png"
+
+    assert resp.status_code == 200
+    payloads = resp.json()
+    extracted = next((item for item in payloads if item["id"] == submission_id), None)
+    assert extracted is not None
+    assert extracted["analysis_status"] == "extracted"
+    assert extracted.get("analysis_json") is None
 @pytest.mark.anyio
 async def test_create_submission_image_storage_key_sane_pattern():
     """Reject image uploads with suspicious storage_key (defense-in-depth)."""

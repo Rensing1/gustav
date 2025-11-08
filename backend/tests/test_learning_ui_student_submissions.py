@@ -408,6 +408,7 @@ async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
                   attempt_nr,
                   analysis_status,
                   analysis_json,
+                  internal_metadata,
                   feedback_md
                 ) values (
                   %s::uuid,
@@ -423,9 +424,9 @@ async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
                   'completed',
                   jsonb_build_object(
                     'schema', 'criteria.v2',
-                    'text', '## OCR Ergebnis',
-                    'page_keys', %s::jsonb
+                    'text', '## OCR Ergebnis'
                   ),
+                  jsonb_build_object('page_keys', %s::jsonb),
                   '### Gut gemacht\n\nWeiter so!'
                 )
                 """,
@@ -453,10 +454,10 @@ async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
     # Feedback heading rendered
     assert '<section class="analysis-feedback">' in html
     assert "Weiter so!" in html
-    # PDF page previews rendered as sanitized list entries
-    assert 'class="analysis-artifacts__list"' in html
-    assert "page_0001.png" in html
-    assert "page_0002.png" in html
+    # PDF page previews stay hidden (page_keys remain internal)
+    assert 'class="analysis-artifacts__list"' not in html
+    assert "page_0001.png" not in html
+    assert "page_0002.png" not in html
 
 
 @pytest.mark.anyio

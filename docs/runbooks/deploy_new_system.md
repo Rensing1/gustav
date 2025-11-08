@@ -150,6 +150,17 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
    .venv/bin/pytest -q
    ```
 
+### Tests & Qualitätssicherung
+
+Nach jedem erfolgreichen Container-Start führt die verantwortliche Lehrkraft bzw. der IT-Admin die folgenden Prüfungen durch und dokumentiert das Ergebnis (Runbook-Log oder `docs/runbooks/preflight_checklist.md`). Deployments ohne grünes Testergebnis gelten als fehlgeschlagen:
+
+- `scripts/preflight.sh` bündelt Healthchecks (`supabase status`, API-/Keycloak-Health, Storage) und verweist auf die detailliertere Checkliste. Abweichungen sofort untersuchen, bevor Nutzer sich anmelden.
+- `make test` (alias `.venv/bin/pytest -q`) führt alle automatisierten Regressionstests gegen die frisch migrierte Datenbank aus. Der Test-Lauf garantiert, dass Use-Cases, Policies und RLS-Regeln mit dem aktuellen Schema funktionieren.
+- `make test-e2e` validiert die zentralen Login- und Kursfreigabe-Flows per End-to-End-Suite (`RUN_E2E=1 pytest -m e2e`). Dieser Schritt ist Pflicht vor dem ersten produktiven Einsatz sowie nach Änderungen an Auth oder Kursverwaltung.
+- Manueller Smoke-Test: Als Lehrkraft in Keycloak anmelden, Kursübersicht öffnen, einen Abschnitt aktivieren und sicherstellen, dass die Lernenden-Ansicht geladen werden kann. Fehler direkt in `docs/runbooks/preflight_checklist.md` notieren.
+
+Werden Tests rot, Stack per `docker compose logs` analysieren, die Ursache beheben (z. B. fehlende Migration, Secrets, RLS-Policy) und den kompletten Testblock erneut ausführen. Erst wenn alle Prüfungen grün sind, wird der Zugang für die Klasse freigegeben.
+
 ---
 
 ## 5. Firewall und Netzwerk-Freigaben

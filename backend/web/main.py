@@ -569,31 +569,6 @@ def _build_history_entry_from_record(
         text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
     content_html = f'<div class="analysis-text">{text_html}</div>'
 
-    # Render PDF page previews when the analysis contains derived page keys.
-    if isinstance(analysis, dict):
-        page_keys = analysis.get("page_keys")
-        if isinstance(page_keys, list):
-            preview_items: List[str] = []
-            for idx, key in enumerate(page_keys, start=1):
-                if not isinstance(key, str) or not key:
-                    continue
-                safe_key = Component.escape(key)
-                preview_items.append(
-                    f'<li class="analysis-artifacts__item">'
-                    f'<span class="analysis-artifacts__label">Seite {idx}</span>'
-                    f'<code class="analysis-artifacts__path">{safe_key}</code>'
-                    "</li>"
-                )
-            if preview_items:
-                previews_html = (
-                    '<section class="analysis-artifacts">'
-                    '<p class="analysis-artifacts__heading"><strong>PDF-Seiten</strong></p>'
-                    '<ul class="analysis-artifacts__list">'
-                    + "".join(preview_items)
-                    + "</ul></section>"
-                )
-                content_html = f"{content_html}{previews_html}"
-
     feedback_src = record.get("feedback_md") or record.get("feedback")
 
     # Render criteria cards (criteria.v1/v2) via helper for clarity.

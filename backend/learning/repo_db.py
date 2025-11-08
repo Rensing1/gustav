@@ -903,13 +903,13 @@ class DBLearningRepo:
         """Map a DB row to an API submission dict with safe fallbacks.
 
         Why:
-            Historical records may have a null/empty `analysis_json`. For
-            learnability, we synthesize a minimal analysis payload so the UI
-            can always display a meaningful text snippet in the history.
+            Only completed submissions expose `analysis_json`. Historical rows
+            may still miss optional fields, so for completed states we
+            synthesize a minimal payload to keep learner history readable.
         """
         status = row[8]
         analysis_raw = row[9]
-        if status == "pending":
+        if status != "completed":
             analysis_payload = None
         else:
             analysis_payload = analysis_raw
@@ -957,18 +957,18 @@ class DBLearningRepo:
 
     # ------------------------------------------------------------------
     def mark_extracted(self, *, submission_id: str, page_keys: List[str]) -> None:
-        """Set analysis_status to 'extracted' and persist page key metadata.
+        """Set analysis_status to 'extracted' and persist page key metadata internally.
 
         Why:
             After rendering a PDF to page images, we record their storage keys
-            to enable downstream OCR/vision steps. We keep `completed_at` null,
-            because this is an intermediate state before OCR/feedback.
+            to enable downstream OCR/vision steps. The artifacts remain private
+            (`internal_metadata`) so the public API stays schema-compliant.
 
         Behavior:
             - Updates only the targeted submission id.
             - Sets `analysis_status = 'extracted'`.
-            - Merges `{"page_keys": [...]} ` into `analysis_json` (preserves any
-              existing keys by JSONB concatenation).
+            - Stores `page_keys` inside `internal_metadata` while keeping
+              `analysis_json` null until feedback is generated.
 
         Permissions:
             The repo executes with the limited application role under RLS. The
@@ -984,9 +984,10 @@ class DBLearningRepo:
                     """
                     update public.learning_submissions
                        set analysis_status = 'extracted',
-                           analysis_json = coalesce(analysis_json, '{}'::jsonb)
-                                            || jsonb_build_object('page_keys', %s::jsonb)
-                     where id = %s::uuid
+                           analysis_json = null,
+                           internal_metadata = coalesce(internal_metadata, '{}'::jsonb)
+                                              || jsonb_build_object('page_keys', %s::jsonb)
+                 where id = %s::uuid
                     returning id
                     """,
                     (Json(list(page_keys)), str(UUID(submission_id))),

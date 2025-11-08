@@ -904,11 +904,16 @@ components:
             `*_retrying` marks in-flight retries, `*_failed` indicates that analysis stopped,
             and `input_*` values signal validation/pre-processing failures before AI execution.
         analysis_json:
+          nullable: true
+          description: |-
+            Structured criteria-based feedback payload (criteria.v1 or criteria.v2).
+            Remains `null` for `pending` and `extracted` submissions; the payload
+            is only populated once feedback has been issued. Internal extraction
+            metadata such as page keys is stored separately and never exposed.
           oneOf:
+            - type: 'null'
             - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
             - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
-          nullable: true
-          description: Structured criteria-based feedback payload (criteria.v1 or criteria.v2); null while analysis is pending.
         feedback_md:
           type: string
           nullable: true

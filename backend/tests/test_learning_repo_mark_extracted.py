@@ -1,9 +1,10 @@
 """
-DB repo: mark_extracted transitions status and stores page keys.
+DB repo: mark_extracted transitions status, stores page keys internally.
 
 Given a minimal seeded submission in 'pending' state, calling
-DBLearningRepo.mark_extracted records the derived page keys in analysis_json
-and sets analysis_status='extracted' without completing the submission.
+DBLearningRepo.mark_extracted records the derived page keys in
+`internal_metadata` (jsonb), keeps `analysis_json` null, and sets
+analysis_status='extracted' without completing the submission.
 """
 from __future__ import annotations
 
@@ -94,19 +95,28 @@ async def test_mark_extracted_updates_status_and_analysis_json():
     ]
     repo.mark_extracted(submission_id=str(sub_id), page_keys=keys)
 
-    # Assert: row reflects extracted status and JSON contains page_keys
+    # Assert: row reflects extracted status, public analysis_json stays null,
+    # internal_metadata contains the derived page keys
     with psycopg.connect(dsn) as conn:  # type: ignore
         with conn.cursor() as cur:
             cur.execute(
-                "select analysis_status, analysis_json::text, completed_at is not null from public.learning_submissions where id=%s::uuid",
+                """
+                select analysis_status,
+                       analysis_json::text,
+                       internal_metadata::text,
+                       completed_at is not null
+                  from public.learning_submissions
+                 where id=%s::uuid
+                """,
                 (str(sub_id),),
             )
             row = cur.fetchone()
     assert row is not None
-    status, analysis_json_text, completed = row
+    status, analysis_json_text, internal_metadata_text, completed = row
     assert status == "extracted"
-    assert '"page_keys"' in (analysis_json_text or "{}")
+    assert analysis_json_text in (None, "null")
+    assert internal_metadata_text and '"page_keys"' in internal_metadata_text
     for k in keys:
-        assert k in (analysis_json_text or "")
+        assert k in (internal_metadata_text or "")
     # Not completed yet at this stage
     assert completed is False

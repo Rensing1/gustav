@@ -128,8 +128,11 @@ async def test_worker_completes_pdf_from_extracted(monkeypatch: pytest.MonkeyPat
                 """
                 update public.learning_submissions
                    set analysis_status = 'extracted',
-                       analysis_json = jsonb_build_object('page_keys',
-                           to_jsonb(ARRAY['k/page_0001.png','k/page_0002.png']))
+                       internal_metadata = coalesce(internal_metadata, '{}'::jsonb)
+                                            || jsonb_build_object(
+                                                'page_keys',
+                                                to_jsonb(ARRAY['k/page_0001.png','k/page_0002.png'])
+                                              )
                  where id = %s::uuid
                 """,
                 (str(submission_id),),

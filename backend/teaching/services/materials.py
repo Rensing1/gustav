@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 from uuid import uuid4
 
 from teaching.storage import StorageAdapterProtocol
+from backend.storage.config import get_materials_bucket, get_materials_max_upload_bytes
+from backend.storage.keys import make_materials_key
+from backend.storage.config import get_materials_bucket
 
 
 class MaterialsRepoProtocol(Protocol):
@@ -92,10 +95,11 @@ class MaterialFileSettings:
         "image/png",
         "image/jpeg",
     )
-    max_size_bytes: int = 20 * 1024 * 1024
+    max_size_bytes: int = field(default_factory=get_materials_max_upload_bytes)
     upload_intent_ttl_seconds: int = 3 * 60
     download_url_ttl_seconds: int = 45
-    storage_bucket: str = "materials"
+    # Use centralized config to determine the default bucket name.
+    storage_bucket: str = field(default_factory=get_materials_bucket)
 
 
 _SANITIZE_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -245,13 +249,14 @@ class MaterialsService:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=self.settings.upload_intent_ttl_seconds)
         intent_id = str(uuid4())
-        material_id = str(uuid4())
-        sanitized_author = _sanitize_segment(author_id, fallback="author")
-        sanitized_unit = _sanitize_segment(unit_id, fallback="unit")
-        sanitized_section = _sanitize_segment(section_id, fallback="section")
-        sanitized_material = _sanitize_segment(material_id, fallback="material")
-        storage_key = (
-            f"{self.settings.storage_bucket}/{sanitized_author}/{sanitized_unit}/{sanitized_section}/{sanitized_material}/{sanitized}"
+        material_uuid = uuid4()
+        material_id = str(material_uuid)
+        storage_key = make_materials_key(
+            unit_id=str(unit_id),
+            section_id=str(section_id),
+            material_id=str(material_id),
+            filename=sanitized,
+            uuid_hex=material_uuid.hex,
         )
         original_name = filename.strip() or sanitized
         record = self.repo.create_file_upload_intent(
@@ -272,12 +277,19 @@ class MaterialsService:
             expires_in=self.settings.upload_intent_ttl_seconds,
             headers={"content-type": normalized_mime},
         )
+        # Normalize header keys to lowercase for clients/tests that expect
+        # canonical casing regardless of underlying provider conventions.
+        headers: Dict[str, Any] = {}
+        try:
+            headers = {str(k).lower(): v for k, v in dict(presign.get("headers", {})).items()}
+        except Exception:
+            headers = dict(presign.get("headers", {})) if isinstance(presign, dict) else {}
         return {
             "intent_id": record["intent_id"],
             "material_id": record["material_id"],
             "storage_key": record["storage_key"],
             "url": presign["url"],
-            "headers": presign.get("headers", {}),
+            "headers": headers,
             "accepted_mime_types": list(self.settings.accepted_mime_types),
             "max_size_bytes": self.settings.max_size_bytes,
             "expires_at": record["expires_at"].isoformat(),
@@ -317,15 +329,28 @@ class MaterialsService:
         normalized_sha = (sha256 or "").strip().lower()
         if not re.fullmatch(r"[0-9a-f]{64}", normalized_sha):
             raise ValueError("checksum_mismatch")
-        head = storage.head_object(
-            bucket=self.settings.storage_bucket,
-            key=intent["storage_key"],
-        )
-        content_length = head.get("content_length")
-        try:
-            actual_length = int(content_length) if content_length is not None else None
-        except Exception:  # pragma: no cover - defensive fallback
-            actual_length = None
+        # Best-effort self-check: HEAD may briefly return stale/unknown size right after upload.
+        # Retry a few times with short sleeps before deciding on mismatch.
+        attempts = 3
+        actual_length: Optional[int] = None
+        for idx in range(attempts):
+            head = storage.head_object(
+                bucket=self.settings.storage_bucket,
+                key=intent["storage_key"],
+            )
+            content_length = head.get("content_length")
+            try:
+                actual_length = int(content_length) if content_length is not None else None
+            except Exception:  # pragma: no cover - defensive fallback
+                actual_length = None
+            if actual_length is None or actual_length == intent["size_bytes"]:
+                break
+            # Small, bounded wait to allow storage metadata consistency
+            try:
+                import time as _t
+                _t.sleep(0.2 if idx == 0 else 0.5)
+            except Exception:
+                pass
         if actual_length is not None and actual_length != intent["size_bytes"]:
             storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
             raise ValueError("checksum_mismatch")

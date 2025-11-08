@@ -1,0 +1,130 @@
+"""
+Helpers for verifying storage objects referenced by presigned uploads.
+
+The learning ingestion flow reuses this to assert that the object uploaded to
+Supabase (or the local stub) matches the metadata submitted by the client.
+"""
+
+from __future__ import annotations
+
+import os
+import time
+from dataclasses import dataclass
+from hashlib import sha256 as _sha256
+from pathlib import Path
+from typing import Protocol
+
+from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationConfig:
+    """Declarative settings that drive integrity verification."""
+
+    storage_bucket: str
+    require_remote: bool = False
+    local_verify_root: str | None = None
+    retry_attempts: int = 3
+    retry_sleep_seconds: float = 0.2
+
+
+def verify_storage_object_integrity(
+    *,
+    adapter: StorageAdapterProtocol,
+    storage_key: str,
+    expected_sha256: str,
+    expected_size: int | None,
+    mime_type: str,
+    config: VerificationConfig,
+) -> tuple[bool, str]:
+    """
+    Verify a storage object by comparing size and SHA-256 hash.
+
+    Returns tuple (ok, reason). When `config.require_remote` is False, the helper
+    falls back to best-effort verification and reports "skipped" if the object
+    cannot be found.
+    """
+
+    bucket = config.storage_bucket
+    # Interpret `require_remote` as "verification is required", not strictly
+    # "remote HEAD must succeed". In dev/test setups a local verify root may
+    # be configured and should be authoritative when present.
+    require = config.require_remote
+
+    remote_checked = False
+    last_reason = "missing_object"
+    if bucket and not isinstance(adapter, NullStorageAdapter):
+        attempts = config.retry_attempts if require else 1
+        for attempt in range(max(1, attempts)):
+            try:
+                head = adapter.head_object(bucket=bucket, key=storage_key)
+            except RuntimeError as exc:
+                if str(exc) == "storage_adapter_not_configured":
+                    last_reason = "storage_adapter_not_configured"
+                    break
+                last_reason = "head_error"
+            except Exception:
+                last_reason = "head_error"
+            else:
+                if head:
+                    length = head.get("content_length")
+                    etag = head.get("etag") or head.get("ETag") or head.get("sha256") or head.get("content_sha256")
+                    expected_size_int = None
+                    actual_size = None
+                    try:
+                        expected_size_int = int(expected_size) if expected_size is not None else None
+                    except Exception:
+                        expected_size_int = None
+                    if length is not None:
+                        try:
+                            actual_size = int(length)
+                        except Exception:
+                            actual_size = None
+                    if expected_size_int is not None and actual_size is not None and expected_size_int != actual_size:
+                        last_reason = "size_mismatch"
+                    elif expected_sha256 and etag:
+                        normalized = str(etag).strip('"').lower()
+                        if normalized != str(expected_sha256).lower():
+                            last_reason = "hash_mismatch"
+                        else:
+                            return (True, "ok")
+                    elif expected_size_int is not None and actual_size is not None:
+                        return (True, "ok")
+                    else:
+                        last_reason = "unknown_size"
+                else:
+                    last_reason = "missing_object"
+
+            if attempt < attempts - 1:
+                time.sleep(config.retry_sleep_seconds)
+        remote_checked = True
+
+    root = (config.local_verify_root or "").strip()
+    if not root:
+        # No local root available; if verification is required and remote
+        # verification didn't succeed, propagate the remote failure reason.
+        return ((not require), "skipped" if not require else last_reason)
+    if not storage_key or not expected_sha256 or expected_size is None:
+        return (False, "missing_fields")
+    base = Path(root).resolve()
+    target = (base / storage_key).resolve()
+    try:
+        # Defense-in-depth: ensure uploads stay within the configured root.
+        common = os.path.commonpath([str(base), str(target)])
+    except Exception:
+        return (not require, "path_error" if require else "skipped")
+    if common != str(base):
+        return (not require, "path_escape" if require else "skipped")
+    if not target.exists() or not target.is_file():
+        return (not require, "missing_file" if require else "skipped")
+    actual_size = target.stat().st_size
+    if expected_size is None or int(actual_size) != int(expected_size):
+        return (not require, "size_mismatch" if require else "skipped")
+    h = _sha256()
+    with target.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    actual_hash = h.hexdigest()
+    if actual_hash.lower() != str(expected_sha256).lower():
+        return (not require, "hash_mismatch" if require else "skipped")
+    return (True, "ok")

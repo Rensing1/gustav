@@ -510,6 +510,8 @@ class DBLearningRepo:
                                analysis_json,
                                feedback_md,
                                error_code,
+                               vision_last_error,
+                               feedback_last_error,
                                to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                           from public.learning_submissions
@@ -604,6 +606,8 @@ class DBLearningRepo:
                                   analysis_json,
                                   feedback_md,
                                   error_code,
+                                  vision_last_error,
+                                  feedback_last_error,
                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                   to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                         """,
@@ -639,6 +643,8 @@ class DBLearningRepo:
                                    analysis_json,
                                    feedback_md,
                                    error_code,
+                                   vision_last_error,
+                                   feedback_last_error,
                                    to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                    to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                               from public.learning_submissions
@@ -693,6 +699,8 @@ class DBLearningRepo:
                                        analysis_json,
                                        feedback_md,
                                        error_code,
+                                       vision_last_error,
+                                       feedback_last_error,
                                        to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                        to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                                   from public.learning_submissions
@@ -767,12 +775,14 @@ class DBLearningRepo:
                            text_body,
                            mime_type,
                            size_bytes,
-                               storage_key,
-                               sha256,
+                           storage_key,
+                           sha256,
                            analysis_status,
                            analysis_json,
                            feedback_md,
                            error_code,
+                           vision_last_error,
+                           feedback_last_error,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                       from public.learning_submissions
@@ -938,7 +948,50 @@ class DBLearningRepo:
             "analysis_json": analysis_payload,
             "feedback": row[10] if status != "pending" else None,
             "error_code": row[11],
-            # created_at is returned by SQL as ISO string in column index 12
-            "created_at": row[12],
-            "completed_at": row[13],
+            "vision_last_error": row[12],
+            "feedback_last_error": row[13],
+            # created_at is returned by SQL as ISO string in column index 14
+            "created_at": row[14],
+            "completed_at": row[15],
         }
+
+    # ------------------------------------------------------------------
+    def mark_extracted(self, *, submission_id: str, page_keys: List[str]) -> None:
+        """Set analysis_status to 'extracted' and persist page key metadata.
+
+        Why:
+            After rendering a PDF to page images, we record their storage keys
+            to enable downstream OCR/vision steps. We keep `completed_at` null,
+            because this is an intermediate state before OCR/feedback.
+
+        Behavior:
+            - Updates only the targeted submission id.
+            - Sets `analysis_status = 'extracted'`.
+            - Merges `{"page_keys": [...]} ` into `analysis_json` (preserves any
+              existing keys by JSONB concatenation).
+
+        Permissions:
+            The repo executes with the limited application role under RLS. The
+            caller must only pass submission ids that belong to the current
+            student/flow per surrounding use case.
+        """
+        if not submission_id:
+            raise ValueError("submission_id is required")
+        with psycopg.connect(self._dsn) as conn:  # type: ignore[arg-type]
+            with conn.cursor() as cur:
+                # We do not change completed_at here; 'extracted' is intermediate
+                cur.execute(
+                    """
+                    update public.learning_submissions
+                       set analysis_status = 'extracted',
+                           analysis_json = coalesce(analysis_json, '{}'::jsonb)
+                                            || jsonb_build_object('page_keys', %s::jsonb)
+                     where id = %s::uuid
+                    returning id
+                    """,
+                    (Json(list(page_keys)), str(UUID(submission_id))),
+                )
+                updated = cur.fetchone()
+                if not updated:
+                    raise LookupError("submission_not_found")
+            conn.commit()

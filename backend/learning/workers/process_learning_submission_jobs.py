@@ -14,14 +14,25 @@ Intent:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import logging
 import os
-from typing import Optional, Protocol, Sequence
+from typing import Optional, Sequence
+from dataclasses import dataclass
 from uuid import UUID, uuid4
+from importlib import import_module
 
 from . import telemetry
+from backend.learning.adapters.ports import (
+    FeedbackAdapterProtocol,
+    FeedbackPermanentError,
+    FeedbackResult,
+    FeedbackTransientError,
+    VisionAdapterProtocol,
+    VisionPermanentError,
+    VisionResult,
+    VisionTransientError,
+)
 
 try:  # pragma: no cover - optional dependency in some environments
     import psycopg
@@ -41,34 +52,18 @@ def _require_psycopg() -> None:
         raise RuntimeError("psycopg3 is required for the learning worker")
 
 
-@dataclass
-class VisionResult:
-    """Vision adapter response."""
-
-    text_md: str
-    raw_metadata: Optional[dict] = None
-
-
-@dataclass
-class FeedbackResult:
-    """Feedback adapter response."""
-
-    feedback_md: str
-    analysis_json: dict
-
-
-class VisionAdapterProtocol(Protocol):
-    """Vision adapter turns submissions into Markdown text."""
-
-    def extract(self, *, submission: dict, job_payload: dict) -> VisionResult:
-        ...
-
-
-class FeedbackAdapterProtocol(Protocol):
-    """Feedback adapter generates formative feedback for Markdown text."""
-
-    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
-        ...
+# Re-export ports for backwards-compatible imports in tests and adapters.
+# This allows `from backend.learning.workers.process_learning_submission_jobs import VisionResult` to keep working.
+__all__ = [
+    "VisionResult",
+    "FeedbackResult",
+    "VisionAdapterProtocol",
+    "FeedbackAdapterProtocol",
+    "VisionTransientError",
+    "VisionPermanentError",
+    "FeedbackTransientError",
+    "FeedbackPermanentError",
+]
 
 
 @dataclass
@@ -85,28 +80,7 @@ LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "45"))
 MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
 
 
-class VisionError(Exception):
-    """Base class for Vision adapter failures."""
-
-
-class VisionTransientError(VisionError):
-    """Recoverable Vision error; worker should retry with backoff."""
-
-
-class VisionPermanentError(VisionError):
-    """Non-recoverable Vision error; worker marks submission failed."""
-
-
-class FeedbackError(Exception):
-    """Base class for Feedback adapter failures."""
-
-
-class FeedbackTransientError(FeedbackError):
-    """Recoverable Feedback error; worker should retry."""
-
-
-class FeedbackPermanentError(FeedbackError):
-    """Non-recoverable Feedback error; worker marks submission failed."""
+# Error classes now live in ports and are imported above.
 
 
 def _backoff_seconds() -> int:
@@ -195,8 +169,15 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                        payload,
                        retry_count
                   from public.learning_submission_jobs
-                 where status = 'queued'
-                   and visible_at <= %s
+                 where (
+                          status = 'queued'
+                          and visible_at <= %s + interval '5 seconds'
+                       )
+                    or (
+                          status = 'leased'
+                          and leased_until is not null
+                          and leased_until <= %s
+                       )
                  order by visible_at asc, created_at asc
                  limit 1
                  for update skip locked
@@ -213,7 +194,7 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                      candidate.retry_count,
                      candidate.payload
             """,
-            (now, str(lease_key), lease_until),
+            (now, now, str(lease_key), lease_until),
         )
         row = cur.fetchone()
     if not row:
@@ -245,7 +226,8 @@ def _process_job(
     # Ensure RLS context remains set for update (submission includes student_sub).
     _set_current_sub(conn, submission.get("student_sub", job.payload.get("student_sub", "")))
 
-    if submission.get("analysis_status") != "pending":
+    # Accept both freshly queued and already extracted submissions (pages persisted).
+    if submission.get("analysis_status") not in ("pending", "extracted"):
         LOG.debug(
             "Job %s skipped because submission %s already %s",
             job.id,
@@ -348,6 +330,10 @@ def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]
                    task_id::text,
                    kind,
                    text_body,
+                   mime_type,
+                   size_bytes,
+                   storage_key,
+                   sha256,
                    analysis_status
               from public.learning_submissions
              where id = %s::uuid
@@ -670,10 +656,12 @@ def main() -> None:
     logging.basicConfig(level=normalized_level)
     dsn = _default_dsn()
 
-    from importlib import import_module
+    # Centralised config load (keeps behaviour identical to the previous env logic).
+    from backend.learning.config import load_ai_config
 
-    vision_path = os.getenv("LEARNING_VISION_ADAPTER", "backend.learning.adapters.stub_vision")
-    feedback_path = os.getenv("LEARNING_FEEDBACK_ADAPTER", "backend.learning.adapters.stub_feedback")
+    cfg = load_ai_config()
+    vision_path = cfg.vision_adapter_path
+    feedback_path = cfg.feedback_adapter_path
 
     vision_module = import_module(vision_path)
     feedback_module = import_module(feedback_path)

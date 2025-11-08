@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from backend.learning.workers.process_learning_submission_jobs import VisionResult
+from backend.learning.adapters.ports import VisionResult
 
 
 class StubVisionAdapter:

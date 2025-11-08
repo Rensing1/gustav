@@ -4,8 +4,8 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 
 ## Local setup (CLI)
 - Prereqs: Supabase CLI installed; Docker running.
-- Ensure storage is enabled: `supabase/config.toml` has `[storage] enabled = true` and the bucket config:
-  - `[storage.buckets.materials]` with `public = false`, `file_size_limit = "20MiB"`, `allowed_mime_types = ["application/pdf","image/png","image/jpeg"]`, `objects_path = "./storage/materials"`.
+- Ensure storage is enabled: `supabase/config.toml` has `[storage] enabled = true`.
+- Buckets werden durch Migrationen provisioniert (privat): `materials`, `submissions`.
 - Start services without Studio:
   - `supabase stop`
   - `supabase start -x studio`
@@ -21,13 +21,20 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
   - `SUPABASE_URL` (e.g., `http://127.0.0.1:54321`)
   - `SUPABASE_SERVICE_ROLE_KEY` (from `supabase start` output)
   - `SUPABASE_STORAGE_BUCKET` (default: `materials`)
+  - `LEARNING_STORAGE_BUCKET` (default: `submissions`)
+  - `MATERIALS_MAX_UPLOAD_BYTES` (default: 20 MiB)
+  - `LEARNING_MAX_UPLOAD_BYTES` (default: 10 MiB)
   - See `.env.example` for a ready-to-copy template; store real values in `.env` (gitignored).
 
 ## Security
 - Use Service Role key only in the backend. Never expose keys to the browser.
-- Buckets must be private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
+- Buckets are private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
 - Download URL responses include `Cache-Control: private, no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.
+
+## Governance & Provisioning
+- Quelle der Wahrheit: SQL‑Migrationen legen `materials` und `submissions` privat an.
+- Dev‑Convenience: Optional `AUTO_CREATE_STORAGE_BUCKETS=true` zum Nachprovisionieren fehlender Buckets beim App‑Start (nicht in Prod/Stage verwenden).
 
 ## Gateway
 - Current reverse proxy: Caddy (see `reverse-proxy/Caddyfile`).

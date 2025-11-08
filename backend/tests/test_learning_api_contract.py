@@ -55,19 +55,19 @@ async def _client() -> httpx.AsyncClient:
 
 
 async def _create_course(client: httpx.AsyncClient, title: str) -> str:
-    resp = await client.post("/api/teaching/courses", json={"title": title})
+    resp = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
     assert resp.status_code == 201
     return resp.json()["id"]
 
 
 async def _create_unit(client: httpx.AsyncClient, title: str = "Unit") -> dict:
-    resp = await client.post("/api/teaching/units", json={"title": title})
+    resp = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
     assert resp.status_code == 201
     return resp.json()
 
 
 async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = "Section") -> dict:
-    resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+    resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title}, headers={"Origin": "http://test"})
     assert resp.status_code == 201
     return resp.json()
 
@@ -83,6 +83,7 @@ async def _create_material(
     resp = await client.post(
         f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
         json={"title": title, "body_md": body_md},
+        headers={"Origin": "http://test"},
     )
     assert resp.status_code == 201
     return resp.json()
@@ -108,13 +109,14 @@ async def _create_task(
     resp = await client.post(
         f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
         json=payload,
+        headers={"Origin": "http://test"},
     )
     assert resp.status_code == 201
     return resp.json()
 
 
 async def _create_module(client: httpx.AsyncClient, course_id: str, unit_id: str) -> dict:
-    resp = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+    resp = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
     assert resp.status_code == 201
     return resp.json()
 
@@ -130,6 +132,7 @@ async def _set_section_visibility(
     resp = await client.patch(
         f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
         json={"visible": visible},
+        headers={"Origin": "http://test"},
     )
     assert resp.status_code == 200
     return resp.json()
@@ -137,7 +140,7 @@ async def _set_section_visibility(
 
 async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: str) -> None:
     resp = await client.post(
-        f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub}
+        f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub}, headers={"Origin": "http://test"}
     )
     assert resp.status_code in (201, 204)
 

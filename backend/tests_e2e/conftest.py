@@ -16,7 +16,8 @@ import requests
 
 try:
     from dotenv import load_dotenv  # type: ignore
-    load_dotenv()
+    if os.getenv("RUN_E2E", "0") == "1":
+        load_dotenv()
 except Exception:
     pass
 

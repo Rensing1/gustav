@@ -72,7 +72,7 @@ async def test_learning_worker_update_completed_sets_fields():
     dsn = _dsn()
 
     analysis_payload = {
-        "schema": "criteria.v1",
+        "schema": "criteria.v2",
         "score": 4,
         "criteria_results": [],
     }
@@ -116,7 +116,7 @@ async def test_learning_worker_update_completed_sets_fields():
     assert text_body == "## Processed Markdown"
     assert feedback_md == "### Short feedback body"
     assert isinstance(analysis_json, dict)
-    assert analysis_json["schema"] == "criteria.v1"
+    assert analysis_json["schema"] == "criteria.v2"
     assert error_code is None
 
 

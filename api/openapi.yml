@@ -884,10 +884,10 @@ components:
           pattern: '^[0-9a-f]{64}$'
         analysis_status:
           type: string
-          enum: [pending, completed, failed]
+          enum: [pending, extracted, completed, failed]
           description: >-
-            Analysis lifecycle: pending (queued or running), completed (text/feedback available),
-            failed (analysis halted; see error_code for details).
+            Analysis lifecycle: pending (queued), extracted (PDF successfully parsed into images/text),
+            completed (feedback available), failed (processing halted; inspect error_code).
         error_code:
           type: string
           nullable: true
@@ -896,9 +896,13 @@ components:
             - vision_failed
             - feedback_retrying
             - feedback_failed
+            - input_corrupt
+            - input_unsupported
+            - input_too_large
           description: >-
-            Normalized error indicator for AI processing. `*_retrying` marks in-flight retries,
-            `*_failed` indicates that processing stopped and the submission remains without feedback.
+            Normalized error indicator for processing.
+            `*_retrying` marks in-flight retries, `*_failed` indicates that analysis stopped,
+            and `input_*` values signal validation/pre-processing failures before AI execution.
         analysis_json:
           oneOf:
             - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
@@ -4641,6 +4645,9 @@ paths:
         url:
           type: string
           format: uri
+          description: >-
+            Absolute presigned URL for client-side PUT upload (https://...).
+            In dev, a local stub path like `/api/learning/internal/upload-stub?...` may be returned when the stub flag is enabled.
         headers:
           type: object
           additionalProperties:
@@ -4728,7 +4735,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Forbidden (not enrolled or CSRF check failed)
+          description: Forbidden (csrf_violation)
           headers:
             Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
             Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
@@ -4746,13 +4753,69 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Storage unavailable
+          description: Storage unavailable (storage_adapter_not_configured | storage_service_error)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
   # Teaching — Live unit view (teacher-only)
+  /api/learning/internal/upload-stub:
+    put:
+      tags: [Learning]
+      summary: Dev-only local upload target (student-only)
+      description: >-
+        Accepts a small file upload and writes to STORAGE_VERIFY_ROOT under the provided `storage_key`.
+        Returns computed `sha256` and `size_bytes` used to finalize the submission.
+        Route is gated by the `ENABLE_DEV_UPLOAD_STUB` feature flag (default: false); when disabled the endpoint returns 404.
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: storage_key
+          required: true
+          schema:
+            type: string
+          description: Path-like storage key. Must match the platform's safe pattern.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Upload stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sha256, size_bytes]
+                properties:
+                  sha256:
+                    type: string
+                    pattern: '^[0-9a-f]{64}$'
+                  size_bytes:
+                    type: integer
+                    minimum: 1
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden (CSRF)
+        '404':
+          description: Feature disabled (ENABLE_DEV_UPLOAD_STUB=false)
   /api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary:
     get:
       tags: [Teaching]

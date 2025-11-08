@@ -159,7 +159,10 @@ class Gustav {
       throw new Error(`put ${putResp.status}`);
     }
     const putJson = await putResp.json().catch(() => ({}));
-    const sha256 = putJson.sha256 || '';
+    let sha256 = putJson.sha256 || '';
+    if (!sha256) {
+      sha256 = await this.hashFileSha256(file);
+    }
 
     // Fill hidden fields — used by the final POST /submissions
     const set = (name, value) => {
@@ -170,6 +173,20 @@ class Gustav {
     set('mime_type', mime);
     set('size_bytes', String(size));
     set('sha256', sha256);
+  }
+
+  /**
+   * Compute SHA-256 digest for a File using Web Crypto.
+   */
+  async hashFileSha256(file) {
+    const cryptoObj = window.crypto || window.msCrypto;
+    if (!cryptoObj || !cryptoObj.subtle) {
+      throw new Error('Secure hashing not supported in this browser');
+    }
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await cryptoObj.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
   /**

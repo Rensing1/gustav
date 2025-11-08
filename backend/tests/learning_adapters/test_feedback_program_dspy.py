@@ -14,6 +14,8 @@ Approach:
 from __future__ import annotations
 
 import sys
+import json
+from importlib import import_module
 from types import SimpleNamespace
 
 import pytest
@@ -31,7 +33,6 @@ def _uninstall_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_program_raises_when_dspy_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     _uninstall_fake_dspy(monkeypatch)
-    from importlib import import_module
 
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
     with pytest.raises(ImportError):
@@ -40,9 +41,20 @@ def test_program_raises_when_dspy_missing(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
-    from importlib import import_module
-
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    def fake_lm_call(*, prompt: str, timeout: int) -> str:
+        return json.dumps(
+            {
+                "score": 4,
+                "criteria_results": [
+                    {"criterion": "Inhalt", "max_score": 10, "score": 8, "explanation_md": "Inhalt stärkt Aufbau"},
+                    {"criterion": "Struktur", "max_score": 10, "score": 6, "explanation_md": "Struktur klar"},
+                ],
+            }
+        )
+
+    monkeypatch.setattr(prog, "_lm_call", fake_lm_call)
     feedback_md, analysis = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Ein kurzer Text", criteria=["Inhalt", "Struktur"]
     )
@@ -64,9 +76,12 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
 
 def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
-    from importlib import import_module
-
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    def fake_lm_call(*, prompt: str, timeout: int) -> str:
+        return json.dumps({"score": 0, "criteria_results": []})
+
+    monkeypatch.setattr(prog, "_lm_call", fake_lm_call)
     feedback_md, analysis = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Nur Text", criteria=[]
     )
@@ -75,4 +90,3 @@ def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch
     assert analysis.get("schema") == "criteria.v2"
     assert analysis.get("criteria_results") == []
     assert analysis.get("score") == 0
-

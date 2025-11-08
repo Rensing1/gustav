@@ -100,8 +100,9 @@ async def test_unit_task_form_has_htmx_attributes(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.anyio
-async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pytest.MonkeyPatch):
-    """Posting via HTMX should return the updated history fragment and trigger a success message."""
+@pytest.mark.parametrize("analysis_status", ["pending", "extracted"])
+async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pytest.MonkeyPatch, analysis_status: str):
+    """Posting via HTMX should return the updated history fragment and trigger refresh while in progress."""
     student = _student_session()
     course_id = str(uuid.uuid4())
     unit_id = str(uuid.uuid4())
@@ -118,7 +119,7 @@ async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pyt
             "attempt_nr": 1,
             "kind": "text",
             "text_body": "Hallo",
-            "analysis_status": "pending",
+            "analysis_status": analysis_status,
             "created_at": "2025-11-04T12:00:00+00:00",
         }]
 
@@ -149,7 +150,7 @@ async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pyt
     assert r.headers.get("HX-Trigger")
     html = r.text
     assert f'id="task-history-{task_id}"' in html
-    # Pending → includes hx polling
+    # In-progress → includes hx polling
     assert "hx-trigger=\"every 2s\"" in html or "hx-trigger=\"load, every 2s\"" in html
 
 
@@ -179,3 +180,56 @@ async def test_non_htmx_submit_keeps_prg(monkeypatch: pytest.MonkeyPatch):
     assert r.status_code in (302, 303)
     assert r.headers.get("location", "").startswith(f"/learning/courses/{course_id}/units/{unit_id}")
 
+
+@pytest.mark.anyio
+async def test_htmx_upload_missing_sha_computes_digest(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """SSR route should compute sha256 from STORAGE_VERIFY_ROOT when the field is empty."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    unit_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+    created_id = str(uuid.uuid4())
+
+    data = b"hello-local-upload"
+    storage_key = "submissions/demo/task/student/image.png"
+    storage_root = tmp_path / "dev_uploads"
+    target = storage_root / storage_key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+
+    captured_payload = {}
+
+    def _create_submission(json_payload):
+        captured_payload["json"] = json_payload
+        return {"id": created_id}
+
+    fake = _FakeAsyncClient({
+        f"POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions": _create_submission,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    form = {
+        "mode": "upload",
+        "unit_id": unit_id,
+        "storage_key": storage_key,
+        "mime_type": "image/png",
+        "size_bytes": str(len(data)),
+        "sha256": "",
+    }
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.post(
+            f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+            data=form,
+            headers={"HX-Request": "true"},
+        )
+    assert r.status_code == 200
+    payload = captured_payload.get("json")
+    assert payload is not None
+    import hashlib as _hashlib
+
+    expected_sha = _hashlib.sha256(data).hexdigest()
+    assert payload.get("sha256") == expected_sha

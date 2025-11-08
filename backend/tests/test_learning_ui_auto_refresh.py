@@ -55,13 +55,9 @@ class _FakeAsyncClient:
 
 
 @pytest.mark.anyio
-async def test_history_fragment_autopolls_when_pending(monkeypatch: pytest.MonkeyPatch):
-    """The history fragment should include hx polling attributes while pending.
-
-    We simulate the internal API returning the latest submission with
-    analysis_status='pending' and assert that the fragment advertises
-    hx-get + hx-trigger to refresh itself.
-    """
+@pytest.mark.parametrize("status", ["pending", "extracted"])
+async def test_history_fragment_autopolls_for_in_progress_status(monkeypatch: pytest.MonkeyPatch, status: str):
+    """History fragment must auto-refresh while analysis is pending or extracting."""
     student = _student_session()
 
     # Fake the internal API used by the fragment
@@ -74,7 +70,7 @@ async def test_history_fragment_autopolls_when_pending(monkeypatch: pytest.Monke
         "size_bytes": 123,
         "storage_key": "submissions/c/t/u/key.png",
         "sha256": "deadbeef",
-        "analysis_status": "pending",
+        "analysis_status": status,
         "analysis_json": None,
         "feedback": None,
         "error_code": None,
@@ -97,7 +93,7 @@ async def test_history_fragment_autopolls_when_pending(monkeypatch: pytest.Monke
         r = await client.get("/learning/courses/c1/tasks/t1/history?open_attempt_id=" + latest["id"])  # type: ignore[index]
     assert r.status_code == 200
     html = r.text
-    # Pending → auto-refresh attributes present
+    # In-progress (pending/extracted) → auto-refresh attributes present
     assert "class=\"task-panel__history\"" in html
     assert "hx-get=\"/learning/courses/c1/tasks/t1/history?open_attempt_id=" in html
     assert "hx-trigger=\"every 2s\"" in html or "hx-trigger=\"load, every 2s\"" in html
@@ -149,7 +145,8 @@ async def test_history_fragment_stops_polling_when_completed(monkeypatch: pytest
 
 
 @pytest.mark.anyio
-async def test_unit_page_embeds_autopoll_when_latest_pending(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize("status", ["pending", "extracted"])
+async def test_unit_page_embeds_autopoll_when_latest_in_progress(monkeypatch: pytest.MonkeyPatch, status: str):
     """Unit page should use a polling placeholder if the latest attempt is pending.
 
     This ensures that after PRG the history auto-refreshes (vision text/feedback).
@@ -168,7 +165,7 @@ async def test_unit_page_embeds_autopoll_when_latest_pending(monkeypatch: pytest
             "tasks": [{"id": task_id, "instruction_md": "Aufgabe", "criteria": ["K"], "position": 1}],
         }]
 
-    # Latest submission pending
+    # Latest submission pending/extracted
     def _submissions(_params):
         return [{
             "id": open_id,
@@ -179,7 +176,7 @@ async def test_unit_page_embeds_autopoll_when_latest_pending(monkeypatch: pytest
             "size_bytes": 100,
             "storage_key": "submissions/.../img.png",
             "sha256": "deadbeef",
-            "analysis_status": "pending",
+            "analysis_status": status,
             "analysis_json": None,
             "feedback": None,
             "error_code": None,

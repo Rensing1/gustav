@@ -1,6 +1,21 @@
 # Changelog
 
 ## Unreleased
+### UI
+- ui(learning): Task-Formular sendet per HTMX und tauscht nur das Verlaufs-Fragment (kein Full-Page-Reload). PRG-Fallback ohne HTMX bleibt erhalten; Erfolgsbanner via HX-Trigger.
+- ui(learning): Verlauf aktualisiert sich automatisch (hx-trigger="every 2s") solange der neueste Versuch pending ist; Polling stoppt bei completed.
+- ui(learning): HTML5 `required` am Textfeld entfernt, damit Upload-Modus den Submit nicht clientseitig blockiert; Servervalidierung greift weiter für leeren Text.
+
+### AI
+- ai(vision): Local-Vision-Adapter übergibt bei JPEG/PNG Bilddaten base64-kodiert über das `images`-Argument an den Ollama-Client (falls unterstützt). Fallback ohne `images`, wenn die Client-Signatur es nicht kennt. Reduziert generische Modell-Ablehnungen bei Bildabgaben deutlich.
+
+### Docs (updates)
+- docs(plan): Neu `2025-11-05_vision-images-param.md` (Vision-Bilder an Modell) und Update in `2025-11-04-ollama-client-compat.md` (Hinweis auf `images`).
+- docs(plan): `2025-11-04_ui_htmx_submit.md` und `2025-11-04_learning_ui_autorefresh.md` dokumentieren die UI-Verbesserungen.
+
+### Tests (updates)
+- tests(learning-adapters): Neu `test_local_vision_images_param.py` stellt sicher, dass der Vision-Adapter `images=[<b64>]` übergibt.
+- tests(learning-ui): HTMX-Submit-, Auto-Refresh- und HTML5-Required-Regressionstests ergänzt.
 ### Security
  - security(operations): Internal health responses set `Vary: Origin` and `Cache-Control: private, no-store` consistently.
  - security(db): Avoid committing DB passwords — create `gustav_worker` without password/login; deployments set credentials out-of-band.

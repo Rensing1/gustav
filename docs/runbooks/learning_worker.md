@@ -51,6 +51,14 @@ Ziel: Lokale Inferenz ohne Cloud‑Egress. Standard ist `AI_BACKEND=stub`.
 - Umschalten auf lokale Adapter:
   - In `.env`: `AI_BACKEND=local`
   - Neustarten: `docker compose up -d --build`
+- DSPy ist im Worker-Image vorinstalliert und nutzt exakt die oben genannten Variablen
+  (`AI_FEEDBACK_MODEL`, `OLLAMA_BASE_URL`, Timeouts). Es existiert kein separates
+  Feature-Flag. Schlägt der DSPy-Aufruf fehl (Timeout, Parsing, Konfig), loggt der
+  Worker eine WARN-Meldung und fällt deterministisch auf den Ollama-Stub zurück.
+- Security/Compliance:
+  - Deployment-Verantwortliche wählen das Modell bewusst über `.env`. Der Worker prüft
+    lediglich, ob die Variablen gesetzt sind und behandelt Laufzeitfehler als Fallback.
+  - Keine Rohtexte in Logs hinterlassen; nur IDs/Fehlercodes protokollieren.
 - Health/Verifikation:
   - Worker‑Logs prüfen (keine PII, nur IDs/Fehlercodes/Timings)
   - Interner Check auf `ollama list` (Container‑Healthcheck)

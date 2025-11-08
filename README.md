@@ -25,6 +25,23 @@ gustav-alpha2/
 
 - Ausführen: `.venv/bin/pytest -q`
 
+## Storage (Supabase)
+
+- Private Buckets: `materials` (Teaching) und `submissions` (Learning) werden per SQL‑Migration provisioniert (privat, nur signierte URLs).
+- Zentrale Konfiguration (ENV):
+  - `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` (nur Backend, niemals im Browser)
+  - `SUPABASE_STORAGE_BUCKET` (Default `materials`)
+  - `LEARNING_STORAGE_BUCKET` (Default `submissions`)
+  - `MATERIALS_MAX_UPLOAD_BYTES` (Default 20971520 = 20 MiB)
+  - `LEARNING_MAX_UPLOAD_BYTES` (Default 10485760 = 10 MiB)
+  - Optional (nur Dev): `AUTO_CREATE_STORAGE_BUCKETS=true` erlaubt dem Backend, fehlende Buckets beim Start nachzupflegen. In Prod/Stage ausgeschaltet lassen.
+
+Schlüssel (storage_key) – Konventionen:
+- Teaching: `materials/{unit_id}/{section_id}/{material_id}/{uuid}.{ext}`
+- Learning: `submissions/{course_id}/{task_id}/{student_sub}/{epoch_ms}-{uuid}.{ext}`
+
+Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage-bucket-unification.md`.
+
 ## Lokale KI (Ollama/DSPy)
 
 - Standard ist `AI_BACKEND=stub` (deterministisch, keine Modelle nötig).
@@ -37,6 +54,24 @@ gustav-alpha2/
     - In `.env`: `AI_BACKEND=local`
     - Neustart: `docker compose up -d --build`
   - Sicherheit: Keine Cloud‑Egress. Logs enthalten keine PII; nur IDs/Fehlercodes/Timings.
+
+### Ollama‑Integrationstests (optional)
+
+- Standard: aus. Aktiviere explizit, nur gegen lokale Hosts.
+- Vorbereitung (Modelle ziehen):
+  - `docker compose exec ollama ollama pull ${AI_FEEDBACK_MODEL}`
+  - `docker compose exec ollama ollama pull ${AI_VISION_MODEL}` (für Vision)
+- Komfort‑Shortcuts (empfohlen):
+  - Nur Konnektivität/Feedback: `make test-ollama`
+  - Mit Vision‑Pfad: `make test-ollama-vision`
+    - Beide Targets setzen `RUN_OLLAMA_E2E=1` und `OLLAMA_BASE_URL=http://localhost:11434` automatisch.
+- Alternativ manuell:
+  - `export RUN_OLLAMA_E2E=1`
+  - Optional Vision: `export RUN_OLLAMA_VISION_E2E=1`
+  - Host setzen: `export OLLAMA_BASE_URL=http://localhost:11434`
+  - Feedback‑Konnektivität: `pytest -q -m ollama_integration`
+  - Vision‑Pfad: `pytest -q -m ollama_integration -k vision`
+- Sicherheit: Tests akzeptieren nur `localhost`, `127.0.0.1` oder `ollama` als Host. Bei fehlenden Modellen/Verbindung wird mit Anleitung geskippt.
 
 ### ROCm (AMD‑GPU) Hinweise
 - Das Compose‑Setup nutzt `ollama/ollama:rocm` und mapped `/dev/kfd` und `/dev/dri` in den Container.

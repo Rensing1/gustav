@@ -10,6 +10,7 @@ and verify that `_parse` and normalization produce robust `criteria.v2` data:
 
 from __future__ import annotations
 
+import json
 import sys
 from types import SimpleNamespace
 
@@ -95,3 +96,27 @@ def test_parser_fills_missing_criteria_and_defaults_on_malformed(monkeypatch: py
     assert len(items2) == 2
     assert all("criterion" in it and "score" in it for it in items2)
 
+
+def test_parser_passes_through_model_feedback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DSPy feedback text must propagate to callers instead of stub markdown."""
+    _install_fake_dspy(monkeypatch)
+    from importlib import import_module
+
+    mod = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    payload = {
+        "schema": "criteria.v2",
+        "score": 4,
+        "criteria_results": [
+            {"criterion": "Inhalt", "max_score": 10, "score": 8, "explanation_md": "klar"},
+        ],
+        "feedback_md": "**Lob**\n\n- Gute Argumente.",
+    }
+
+    monkeypatch.setattr(mod, "_run_model", lambda **_: json.dumps(payload), raising=False)  # type: ignore[attr-defined]
+
+    feedback_md, analysis = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="# Text", criteria=["Inhalt"]
+    )
+    assert feedback_md == payload["feedback_md"]
+    assert analysis["criteria_results"][0]["score"] == 8

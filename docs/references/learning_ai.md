@@ -124,6 +124,9 @@ Refer to the latest migration plan in `docs/plan/2025-11-01-ki-integration.md` f
   - `AI_BACKEND=stub|local`
   - `LOCAL_OLLAMA_URL` (e.g. `http://127.0.0.1:11434`)
   - `WORKER_MAX_RETRIES=3`, `WORKER_BACKOFF_SECONDS=10`, `WORKER_LEASE_SECONDS=45`, `WORKER_POLL_INTERVAL=0.5`
+- Praxisregel: Nur `AI_BACKEND=local` (plus `AI_FEEDBACK_MODEL` / `OLLAMA_BASE_URL`)
+  schaltet DSPy/Ollama frei. Mit dem Default `stub` liefert der Worker bewusst
+  nur Platzhalter für Tests und Demoumgebungen.
 - Worker process:
   - Run via `poetry run python -m backend.learning.worker` or container `learning-ai-worker`.
   - Horizontal scaling allowed; locking is handled via queue `status` update with optimistic concurrency.

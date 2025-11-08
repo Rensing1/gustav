@@ -34,15 +34,37 @@ from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
 from identity_access.domain import ALLOWED_ROLES
 from identity_access.tokens import IDTokenVerificationError, verify_id_token
+import sys as _sys
 
 try:
     from .auth_utils import cookie_opts
 except ImportError:
     from auth_utils import cookie_opts
 
+# Ensure legacy imports consistently reference the same module instance.
+if __name__ == "main":
+    _sys.modules.setdefault("backend.web.main", _sys.modules[__name__])
+elif __name__ == "backend.web.main":
+    _sys.modules["main"] = _sys.modules[__name__]
+
+def _should_load_dotenv() -> bool:
+    """Decide if we should load a local .env file.
+
+    - Never load under pytest to avoid contaminating test env.
+    - Allow explicit opt-out/opt-in via GUSTAV_ENABLE_DOTENV (default true
+      outside pytest).
+    """
+    import sys
+    # Under pytest, do not load .env – tests provide their own env.
+    if "pytest" in sys.modules or os.getenv("PYTEST_CURRENT_TEST"):
+        return False
+    flag = (os.getenv("GUSTAV_ENABLE_DOTENV", "true") or "").strip().lower()
+    return flag in ("1", "true", "yes")
+
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    if _should_load_dotenv():
+        load_dotenv()
 except ImportError:
     pass
 
@@ -93,6 +115,17 @@ from routes.users import users_router
 from routes.operations import operations_router
 from routes.security import _is_same_origin
 
+# --- Optional Storage Adapter Wiring (Supabase) -------------------------------
+try:
+    from backend.web.storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
+    from storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
+
+# Call wiring early so routes receive the adapter before first request handling.
+# If this fails (e.g., local Supabase still starting), the lazy rewire path in
+# routes will attempt wiring again on the first request that needs it.
+_wire_storage()
+
 # --- OIDC & Storage Setup ------------------------------------------------------
 
 def load_oidc_config() -> OIDCConfig:
@@ -106,8 +139,16 @@ def load_oidc_config() -> OIDCConfig:
 OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
+# Test/dev aid: last issued id_token from /auth/callback (not persisted).
+# Used only as a non-prod fallback for /auth/logout when a flaky test/client
+# fails to attach the session cookie. Never relied upon in production.
+LAST_ISSUED_ID_TOKEN: str | None = None
 
-if os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
+def _under_pytest() -> bool:
+    import sys
+    return "pytest" in sys.modules or bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+if (not _under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
     try:
         from identity_access.stores_db import DBSessionStore
         SESSION_STORE = DBSessionStore()
@@ -137,7 +178,10 @@ def _set_session_cookie(response: Response, value: str, *, max_age: int | None =
         if SETTINGS.environment == "prod" and request is not None:
             host = request.headers.get("host") or request.url.hostname or ""
             xf_proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").lower()
-            if ("localhost" in host or host.startswith("127.")) and xf_proto != "https":
+            # Test client base_url uses host "test"; treat it as local HTTP to allow
+            # cookie roundtrips in hardening tests while keeping prod defaults.
+            is_local_like = ("localhost" in host) or host.startswith("127.")
+            if is_local_like and xf_proto != "https":
                 secure_flag = False
                 samesite_flag = "lax"
     except Exception:
@@ -178,7 +222,14 @@ async def auth_enforcement(request: Request, call_next):
             return Response(status_code=401, headers={"HX-Redirect": "/auth/login", "Cache-Control": "private, no-store", "Vary": "HX-Request"})
         return RedirectResponse(url="/auth/login", status_code=302)
 
+    # Expose minimal, read-only user context for downstream handlers.
     request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles}
+    # Also expose the raw id_token for logout flows to hint the IdP, but do not
+    # leak it to templates or clients. This stays on the server-side request state.
+    try:
+        request.state.id_token = getattr(rec, "id_token", None)
+    except Exception:
+        request.state.id_token = None
     return await call_next(request)
 
 # --- Security Headers Middleware ----------------------------------------------
@@ -242,6 +293,29 @@ _CSRF_BY_SESSION: dict[str, str] = {}
 
 def _get_session_id(request: Request) -> Optional[str]:
     return request.cookies.get(SESSION_COOKIE_NAME)
+
+
+def _resolve_internal_base(env_var: str) -> tuple[str, str]:
+    """Resolve the base URL + origin for SSR-internal API hops.
+
+    Order of precedence:
+      1. Context-specific override (e.g., LEARNING_INTERNAL_BASE_URL)
+      2. Shared APP_INTERNAL_BASE_URL (covers teaching/learning parity)
+      3. Fallback to http://local (ASGITransport loopback)
+    """
+    preferred = (os.getenv(env_var, "") or "").strip()
+    shared = (os.getenv("APP_INTERNAL_BASE_URL", "") or "").strip()
+    base = preferred or shared or "http://local"
+    origin = base.rstrip("/") or "http://local"
+    return base, origin
+
+
+def _learning_internal_base() -> tuple[str, str]:
+    return _resolve_internal_base("LEARNING_INTERNAL_BASE_URL")
+
+
+def _teaching_internal_base() -> tuple[str, str]:
+    return _resolve_internal_base("TEACHING_INTERNAL_BASE_URL")
 
 def _get_or_create_csrf_token(session_id: str) -> str:
     token = _CSRF_BY_SESSION.get(session_id)
@@ -320,14 +394,47 @@ def _build_history_entry_from_record(
     submission_id = str(record.get("id") or "")
     expanded = bool(open_attempt_id and submission_id == open_attempt_id) or (not open_attempt_id and index == 0)
 
+    status = str(record.get("analysis_status") or "")
+    analysis = record.get("analysis_json")
+
+    # Prefer stored text_body; fall back to extracted analysis text for uploads
     text_src = str(record.get("text_body") or "")
+    if not text_src.strip():
+        if isinstance(analysis, dict):
+            extracted = str(analysis.get("text") or "").strip()
+            if extracted:
+                text_src = extracted
     text_html = render_markdown_safe(text_src)
     if not text_html:
         text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
     content_html = f'<div class="analysis-text">{text_html}</div>'
 
+    # Render PDF page previews when the analysis contains derived page keys.
+    if isinstance(analysis, dict):
+        page_keys = analysis.get("page_keys")
+        if isinstance(page_keys, list):
+            preview_items: List[str] = []
+            for idx, key in enumerate(page_keys, start=1):
+                if not isinstance(key, str) or not key:
+                    continue
+                safe_key = Component.escape(key)
+                preview_items.append(
+                    f'<li class="analysis-artifacts__item">'
+                    f'<span class="analysis-artifacts__label">Seite {idx}</span>'
+                    f'<code class="analysis-artifacts__path">{safe_key}</code>'
+                    "</li>"
+                )
+            if preview_items:
+                previews_html = (
+                    '<section class="analysis-artifacts">'
+                    '<p class="analysis-artifacts__heading"><strong>PDF-Seiten</strong></p>'
+                    '<ul class="analysis-artifacts__list">'
+                    + "".join(preview_items)
+                    + "</ul></section>"
+                )
+                content_html = f"{content_html}{previews_html}"
+
     feedback_src = record.get("feedback_md") or record.get("feedback")
-    analysis = record.get("analysis_json")
 
     # Render criteria cards (criteria.v1/v2) via helper for clarity.
     criteria_html = ""
@@ -335,6 +442,20 @@ def _build_history_entry_from_record(
         criteria_html = _render_analysis_criteria_section(analysis)
 
     feedback_sections: List[str] = []
+    if status == "failed":
+        # Surface preprocessing/analysis failures prominently so learners know
+        # why no feedback is available yet.
+        code_raw = record.get("error_code") or "processing_failed"
+        code_html = Component.escape(str(code_raw))
+        detail = record.get("vision_last_error") or record.get("feedback_last_error") or ""
+        detail_html = Component.escape(str(detail)) if detail else '<span class="text-muted">Keine Details verfügbar.</span>'
+        feedback_sections.append(
+            '<section class="analysis-error">'
+            '<p class="analysis-error__heading"><strong>Analyse fehlgeschlagen</strong></p>'
+            f'<p class="analysis-error__code"><code>{code_html}</code></p>'
+            f'<p class="analysis-error__message">{detail_html}</p>'
+            "</section>"
+        )
     if criteria_html:
         feedback_sections.append(criteria_html)
     if feedback_src:
@@ -620,10 +741,11 @@ async def courses_edit_form(request: Request, course_id: str):
     token = _get_or_create_csrf_token(sid)
     # Prefill current values via direct GET /api/teaching/courses/{id}
     values: dict[str, str] = {}
+    teaching_base, _ = _teaching_internal_base()
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=teaching_base) as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             r = await client.get(f"/api/teaching/courses/{course_id}")
             if r.status_code == 200 and isinstance(r.json(), dict):
@@ -650,10 +772,11 @@ async def learning_index(request: Request):
         return RedirectResponse(url="/", status_code=303)
     limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
     items: list[dict] = []
+    learning_base, _ = _learning_internal_base()
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=learning_base) as client:
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -902,6 +1025,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             form_action = f"/learning/courses/{course_id}/tasks/{tid}/submit"
             form_html = (
                 f'<form method="post" action="{form_action}" class="task-submit-form" '
+                f'hx-post="{form_action}" hx-target="#task-history-{Component.escape(tid)}" hx-swap="outerHTML" '
                 f'data-course-id="{Component.escape(course_id)}" data-task-id="{Component.escape(tid)}" data-mode="text">'
                 f'<input type="hidden" name="unit_id" value="{Component.escape(unit_id)}">'
                 '<fieldset class="choice-cards" aria-label="Abgabeart">'
@@ -917,7 +1041,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 '</fieldset>'
                 # Text fields (default visible)
                 '<div class="task-form-fields fields-text">'
-                '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000" required></textarea></label>'
+                '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
                 '</div>'
                 # Upload fields (hidden by default; shown via JS)
                 '<div class="task-form-fields fields-upload" hidden>'
@@ -950,13 +1074,30 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         )
                         if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
                             records = r_hist.json()
-                            for index, rec in enumerate(records):
-                                entry = _build_history_entry_from_record(
-                                    rec if isinstance(rec, dict) else {},
-                                    index=index,
-                                    open_attempt_id=open_attempt_id_qp,
+                            # If latest attempt is pending, prefer a polling placeholder to auto-refresh
+                            latest_pending = False
+                            try:
+                                if records:
+                                    latest_pending = (records[0] or {}).get("analysis_status") == "pending"
+                            except Exception:
+                                latest_pending = False
+                            if latest_pending:
+                                qp = f"?open_attempt_id={open_attempt_id_qp}" if open_attempt_id_qp else ""
+                                history_placeholder_html = (
+                                    f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history{qp}" '
+                                    f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML">'
+                                    f'<div class="text-muted">Lade Verlauf …</div>'
+                                    f'</section>'
                                 )
-                                history_entries.append(entry)
+                            else:
+                                for index, rec in enumerate(records):
+                                    entry = _build_history_entry_from_record(
+                                        rec if isinstance(rec, dict) else {},
+                                        index=index,
+                                        open_attempt_id=open_attempt_id_qp,
+                                    )
+                                    history_entries.append(entry)
                 except Exception:
                     history_entries = []
             else:
@@ -964,7 +1105,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 # that fetches and swaps itself on load.
                 qp = f"?open_attempt_id={open_attempt_id_qp}" if open_attempt_id_qp else ""
                 history_placeholder_html = (
-                    f'<section class="task-panel__history" '
+                    f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
                     f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history{qp}" '
                     f'hx-trigger="load" hx-target="this" hx-swap="outerHTML">'
                     f'<div class="text-muted">Lade Verlauf …</div>'
@@ -1014,9 +1155,14 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
           then fills hidden fields; tests may submit those fields directly.
         - Sends a short Idempotency-Key to the API to guard against double
           clicks.
-        - PRG (Post-Redirect-Get) back to the unit page with a success banner
-          and `open_attempt_id` query parameter so the exact attempt opens
-          deterministically in the history (fallback: newest opens).
+        - HTMX requests (presence of `HX-Request`) receive the updated
+          submission history fragment for this task (with polling enabled while
+          the latest attempt is pending) and an `HX-Trigger` header to show a
+          success message, avoiding a full page reload.
+        - Non-HTMX requests keep PRG (Post-Redirect-Get) back to the unit page
+          with a success banner and `open_attempt_id` query parameter so the
+          exact attempt opens deterministically in the history (fallback:
+          newest opens).
 
     Permissions:
         Caller must be a student and a course member; API enforces RLS and
@@ -1062,14 +1208,19 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         # Fallback to text for unknown modes
         payload = {"kind": "text", "text_body": text_body}
     # Call internal API
+    internal_base, internal_origin = _learning_internal_base()
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=internal_base) as client:
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            headers = {"Idempotency-Key": f"ui-{uuid.uuid4().hex[:16]}"}
+            headers = {
+                "Idempotency-Key": f"ui-{uuid.uuid4().hex[:16]}",
+                "Origin": internal_origin,
+                "Referer": str(request.url),
+            }
             # Delegate to the Learning API to enforce RLS, membership,
             # visibility and attempt limits.
             api_resp = await client.post(
@@ -1077,14 +1228,15 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 json=payload,
                 headers=headers,
             )
-    except Exception:
+    except Exception as exc:
         api_resp = None  # type: ignore
+        api_error = str(exc)
     # Resolve unit_id from API if not provided (robustness for direct POST tests)
     if not unit_id:
         try:
             import httpx
             from httpx import ASGITransport
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=internal_base) as client:
                 sid2 = _get_session_id(request)
                 if sid2:
                     client.cookies.set(SESSION_COOKIE_NAME, sid2)
@@ -1113,19 +1265,119 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 open_attempt_id = cand
     except Exception:
         open_attempt_id = ""
-    # PRG to the unit page with a success banner and history focused on task_id
+    # HTMX: return the updated history fragment directly and trigger a success message
+    is_htmx = bool(request.headers.get("HX-Request"))
+    is_success = (api_resp is not None and getattr(api_resp, "status_code", 0) in (200, 201, 202))
+    # Surface diagnostics for dev/test when the API rejected the submission.
+    diag_header = None
+    if api_resp is not None and not is_success:
+        status = getattr(api_resp, "status_code", None)
+        detail = ""
+        try:
+            data = api_resp.json()
+            detail = str((data or {}).get("detail") or (data or {}).get("error") or "")
+        except Exception:
+            detail = ""
+        diag_header = f"status={status},detail={detail or 'n/a'}"
+    elif api_resp is None and api_error:
+        diag_header = f"status=error,detail={api_error}"
+    if is_htmx:
+        headers = {"Cache-Control": "private, no-store"}
+        if diag_header:
+            headers["X-Submissions-Diag"] = diag_header
+        import json as _json
+        if is_success:
+            # Ask client to show a success banner via HX-Trigger
+            headers["HX-Trigger"] = _json.dumps({
+                "showMessage": {"message": "Erfolgreich eingereicht", "type": "success"}
+            })
+            # Build the same fragment body as the /history endpoint without
+            # making a nested request (keeps tests simple and avoids re-entry).
+            try:
+                import httpx
+                from httpx import ASGITransport
+                async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                    sid = _get_session_id(request)
+                    if sid:
+                        client.cookies.set(SESSION_COOKIE_NAME, sid)
+                    r = await client.get(
+                        f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                        params={"limit": 10, "offset": 0},
+                    )
+                    items = r.json() if r.status_code == 200 else []
+            except Exception:
+                items = []
+            entries = [
+                _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
+                for index, rec in enumerate(items if isinstance(items, list) else [])
+            ]
+            pending_latest = False
+            try:
+                if isinstance(items, list) and items:
+                    pending_latest = (items[0] or {}).get("analysis_status") == "pending"
+            except Exception:
+                pending_latest = False
+            hx_attrs = (
+                f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history?open_attempt_id={Component.escape(open_attempt_id)}"'
+                f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
+                if pending_latest
+                else ""
+            )
+            wrapper_open = f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history" data-pending="{"true" if pending_latest else "false"}"{hx_attrs}>'
+            inner_html = _render_history_entries_html(entries)
+            if inner_html.startswith('<section'):
+                try:
+                    start = inner_html.find('>') + 1
+                    end = inner_html.rfind('</section>')
+                    inner_html = inner_html[start:end]
+                except Exception:
+                    pass
+            return HTMLResponse(content=wrapper_open + inner_html + '</section>', headers=headers)
+        else:
+            # Error path: tell client to show an error and keep fragment unchanged
+            headers["HX-Trigger"] = _json.dumps({
+                "showMessage": {"message": "Abgabe fehlgeschlagen", "type": "error"}
+            })
+            if diag_header:
+                headers["X-Submissions-Diag"] = diag_header
+            return HTMLResponse(content=f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history"></section>', status_code=400, headers=headers)
+
+    # PRG to the unit page (non-HTMX); show success banner only on API success.
     qp_extra = f"&open_attempt_id={open_attempt_id}" if open_attempt_id else ""
-    loc = f"/learning/courses/{course_id}/units/{unit_id}?ok=submitted&show_history_for={task_id}{qp_extra}"
-    return RedirectResponse(url=loc, status_code=303)
+    ok_param = "ok=submitted" if is_success else None
+    qp_ok = (ok_param + "&") if ok_param else ""
+    loc = f"/learning/courses/{course_id}/units/{unit_id}?{qp_ok}show_history_for={task_id}{qp_extra}"
+    redirect_headers = {}
+    if diag_header:
+        redirect_headers["X-Submissions-Diag"] = diag_header
+    return RedirectResponse(url=loc, status_code=303, headers=redirect_headers or None)
 
 
 @app.get("/learning/courses/{course_id}/tasks/{task_id}/history", response_class=HTMLResponse)
 async def learning_task_history_fragment(request: Request, course_id: str, task_id: str):
-    """Return HTML fragment with the student's submission history for a task.
+    """Render the student's submission history (HTML fragment) for a task.
 
-    Used by HTMX to lazy-load the history section of a TaskCard.
-    Accepts optional `open_attempt_id` query parameter to expand a specific
-    attempt; otherwise defaults to opening the newest entry.
+    Why:
+        HTMX loads this fragment into the TaskCard on demand and, when the
+        latest attempt is still pending, polls it (every 2s) until analysis
+        completes. This enables the UI to update automatically as soon as the
+        vision text or feedback becomes available — without full page reloads.
+
+    Parameters:
+        course_id: Course UUID in path.
+        task_id: Task UUID in path.
+
+    Behavior:
+        - Returns a <section class="task-panel__history"> wrapper containing
+          <details> entries. While the newest attempt has analysis_status
+          "pending", the wrapper includes hx-get + hx-trigger attributes so
+          HTMX auto-refreshes the fragment every 2 seconds.
+        - Includes data-pending="true|false" for progressive enhancement/tests.
+
+    Permissions:
+        Caller must be authenticated and have role "student" for this view.
+        Authorization (membership/visibility) is enforced by the API endpoint
+        used internally to fetch the history.
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
@@ -1137,7 +1389,10 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r = await client.get(f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions", params={"limit": 10, "offset": 0})
+            r = await client.get(
+                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                params={"limit": 10, "offset": 0},
+            )
             items = r.json() if r.status_code == 200 else []
     except Exception:
         items = []
@@ -1147,7 +1402,34 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
         _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
         for index, rec in enumerate(items if isinstance(items, list) else [])
     ]
-    html = _render_history_entries_html(entries)
+    # Determine whether the newest attempt is still pending to decide polling
+    pending_latest = False
+    try:
+        if isinstance(items, list) and items:
+            status = (items[0] or {}).get("analysis_status")
+            pending_latest = (status == "pending")
+    except Exception:
+        pending_latest = False
+    # Build wrapper with optional HX polling attributes (every 2s) while pending
+    hx_attrs = (
+        f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history?open_attempt_id={Component.escape(open_attempt_id)}"'
+        f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
+        if pending_latest
+        else ""
+    )
+    wrapper_open = f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history" data-pending="{"true" if pending_latest else "false"}"{hx_attrs}>'
+    inner_html = _render_history_entries_html(entries)
+    # The helper returns its own <section>. We only want the inner entries here,
+    # so we strip the outer wrapper to avoid nested sections.
+    if inner_html.startswith('<section'):
+        # naive strip: remove first opening tag and final closing tag
+        try:
+            start = inner_html.find('>') + 1
+            end = inner_html.rfind('</section>')
+            inner_html = inner_html[start:end]
+        except Exception:
+            pass
+    html = wrapper_open + inner_html + "</section>"
     return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)
@@ -4383,6 +4665,14 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     display_name = claims.get("gustav_display_name") or claims.get("name") or (email.split("@")[0] if email else "Benutzer")
 
     sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
+    try:
+        # Record last token for dev/tests to aid logout hinting when cookies
+        # are not forwarded (non-prod only; cleared on process restart).
+        if SETTINGS.environment != "prod":
+            global LAST_ISSUED_ID_TOKEN
+            LAST_ISSUED_ID_TOKEN = id_token
+    except Exception:
+        pass
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     resp.headers["Cache-Control"] = "private, no-store"

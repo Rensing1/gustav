@@ -45,6 +45,9 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 ## Lokale KI (Ollama/DSPy)
 
 - Standard ist `AI_BACKEND=stub` (deterministisch, keine Modelle nötig).
+- Echte Rückmeldungen (DSPy/Ollama) erhältst du nur mit `AI_BACKEND=local`
+  sowie korrekt gesetzten `AI_FEEDBACK_MODEL` und `OLLAMA_BASE_URL`. Bleibt
+  das Flag auf `stub`, liefert der Worker absichtlich nur Platzhalter.
 - Für lokale Inferenz (nur dev/staging):
   - Compose stellt `ollama` bereit (interner Port 11434). Env in `learning-worker` bereits verdrahtet (`OLLAMA_BASE_URL=http://ollama:11434`).
   - Modelle ziehen (die IDs wählst du selbst, z. B. `AI_FEEDBACK_MODEL=<modell>`):

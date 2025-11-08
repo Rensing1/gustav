@@ -81,7 +81,7 @@ def _run_model(*, text_md: str, criteria: Sequence[str]) -> str:
     return _lm_call(prompt=prompt, timeout=timeout)
 
 
-def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> Dict[str, Any] | None:
+def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] | None, str | None]:
     """Parse model output to criteria.v2; return None if irreparably malformed.
 
     Accepts minor field variations and normalizes:
@@ -90,11 +90,16 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> Dict[str, Any] | None:
       with keys `criterion|name`, `max_score|max`, `explanation_md|explanation`
     - scores clamped to [0,max_score]
     - ensure each expected criterion appears (fill with defaults if missing)
+    Returns:
+        Tuple of (analysis_json | None, feedback_md | None).
     """
     try:
         obj = json.loads(raw)
     except Exception:
-        return None
+        return None, None
+
+    feedback_val = obj.get("feedback_md") or obj.get("feedback") or obj.get("feedback_markdown")
+    feedback_md = feedback_val.strip() if isinstance(feedback_val, str) and feedback_val.strip() else None
 
     # Extract candidate items list with field variants
     items_raw = obj.get("criteria_results") or obj.get("criteria") or []
@@ -166,7 +171,7 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> Dict[str, Any] | None:
     if overall_i > 5:
         overall_i = 5
 
-    return {"schema": "criteria.v2", "score": overall_i, "criteria_results": norm_items}
+    return {"schema": "criteria.v2", "score": overall_i, "criteria_results": norm_items}, feedback_md
 
 
 def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> tuple[str, dict]:
@@ -203,7 +208,7 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> tuple[str, dic
             {"schema": "criteria.v2", "score": 0, "criteria_results": []},
         )
 
-    parsed = _parse_to_v2(raw, criteria=criteria)
+    parsed, feedback_override = _parse_to_v2(raw, criteria=criteria)
     if parsed is None:
         # Fallback deterministic structure
         crit_items = [
@@ -219,9 +224,10 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> tuple[str, dic
     else:
         analysis = parsed
 
-    feedback_md = (
+    default_feedback = (
         "**Rückmeldung**\n\n"
         "- Stärken: klar benannt.\n"
         "- Nächste Schritte: einzelne Kriterien gezielt verbessern."
     )
+    feedback_md = feedback_override or default_feedback
     return feedback_md, analysis

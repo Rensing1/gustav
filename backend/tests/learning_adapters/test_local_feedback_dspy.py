@@ -48,6 +48,15 @@ def _uninstall_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delitem(sys.modules, "dspy", raising=False)
 
 
+def _find_backend_marker(caplog: pytest.LogCaptureFixture, value: str) -> bool:
+    """Helper to locate backend telemetry logs in the adapter output."""
+    for record in caplog.records:
+        message = record.getMessage()
+        if "feedback_backend=" in message and f"feedback_backend={value}" in message:
+            return True
+    return False
+
+
 def test_feedback_prefers_dspy_when_importable(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_bomb_ollama(monkeypatch)
     _install_fake_dspy(monkeypatch)
@@ -139,3 +148,43 @@ def test_feedback_dspy_timeout_raises_transient(monkeypatch: pytest.MonkeyPatch)
 
     with pytest.raises(FeedbackTransientError):
         adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+
+
+def test_feedback_logs_backend_dspy(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    _install_fake_dspy(monkeypatch)
+    _install_bomb_ollama(monkeypatch)
+
+    import importlib
+
+    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+
+    def _stub_lm_call(*, prompt: str, timeout: int) -> str:
+        return '{"schema":"criteria.v2","score":3,"criteria_results":[],"feedback_md":"**OK**"}'
+
+    monkeypatch.setattr(program, "_lm_call", _stub_lm_call)
+
+    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+    caplog.set_level("INFO")
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert _find_backend_marker(caplog, "dspy"), "DSPy backend log missing"
+
+
+def test_feedback_logs_backend_fallback(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    _uninstall_fake_dspy(monkeypatch)
+    from backend.tests.learning_adapters.test_local_feedback import _install_fake_ollama
+
+    _install_fake_ollama(monkeypatch, mode="ok")
+
+    import importlib
+
+    caplog.set_level("INFO")
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert _find_backend_marker(caplog, "ollama"), "Fallback backend log missing"

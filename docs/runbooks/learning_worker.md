@@ -43,6 +43,9 @@ Purpose: Operate and troubleshoot the asynchronous learning worker (vision + fee
 ## Lokale KI (Ollama/DSPy)
 
 Ziel: Lokale Inferenz ohne Cloud‑Egress. Standard ist `AI_BACKEND=stub`.
+Nur mit `AI_BACKEND=local` plus gesetzten `AI_FEEDBACK_MODEL` und
+`OLLAMA_BASE_URL` erzeugt der Worker echte Feedbacks via DSPy/Ollama; der
+Stub-Pfad bleibt absichtlich deterministisch für CI.
 
 - Compose bringt den Service `ollama` mit (interner Port `11434`).
 - Modelle bereitstellen (dev/staging):

@@ -82,6 +82,10 @@ class _LocalFeedbackAdapter:
         if use_dspy and dspy_program is not None:
             try:
                 feedback_md, analysis = dspy_program.analyze_feedback(text_md=text_md, criteria=criteria)
+                logger.info(
+                    "learning.feedback.completed feedback_backend=dspy criteria_count=%s",
+                    len(criteria),
+                )
                 return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis)
             except FeedbackTransientError:
                 raise
@@ -132,6 +136,10 @@ class _LocalFeedbackAdapter:
         }
 
         feedback_md = "**Rückmeldung**\n\n- Stärken: klar erkennbar.\n- Hinweise: gezielt ausbauen."
+        logger.info(
+            "learning.feedback.completed feedback_backend=ollama criteria_count=%s",
+            len(criteria),
+        )
         return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis)
 
     def _dspy_prerequisites_met(self) -> tuple[bool, str | None]:

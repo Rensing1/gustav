@@ -158,7 +158,10 @@ class TaskCard(Component):
                 "</details>"
             )
 
-        return '<section class="task-panel__history">' + "".join(entries_html) + "</section>"
+        # Give the history wrapper a stable id so HTMX forms can target it
+        # directly without reloading the whole page.
+        history_id = f"task-history-{self.escape(self.task_id)}"
+        return f'<section id="{history_id}" class="task-panel__history">' + "".join(entries_html) + "</section>"
 
     def _render_form(self) -> str:
         banner_html = (

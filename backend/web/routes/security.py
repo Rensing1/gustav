@@ -17,6 +17,11 @@ def _is_same_origin(request: Request) -> bool:
     - Else if Referer is present, validate its origin similarly.
     - Else (no headers): allow to not break non-browser clients.
     Proxy awareness: Only trust X-Forwarded-* when GUSTAV_TRUST_PROXY=true.
+    Robustness:
+    - When not trusting proxies, prefer the explicit Host header if present to
+      derive server host/port (falls back to ASGI URL components). This avoids
+      rare mismatches in test transports where `request.url.hostname` may be
+      unset while `Host` is provided.
     """
     origin_val = request.headers.get("origin")
     try:
@@ -58,9 +63,24 @@ def _is_same_origin(request: Request) -> bool:
                         port = 443 if scheme == "https" else 80
                 return scheme, host, port
 
-            scheme = (request.url.scheme or "http").lower()
-            host = (request.url.hostname or "").lower()
-            port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
+            # Without proxy trust, prefer the explicit Host header if present;
+            # fall back to ASGI URL components. Normalize default ports.
+            scheme = (req.url.scheme or "http").lower()
+            host_hdr = req.headers.get("host") or ""
+            if host_hdr:
+                if ":" in host_hdr:
+                    h_only, p_str = host_hdr.rsplit(":", 1)
+                    host = h_only.lower()
+                    try:
+                        port = int(p_str)
+                    except Exception:
+                        port = 443 if scheme == "https" else 80
+                else:
+                    host = host_hdr.lower()
+                    port = int(req.url.port) if req.url.port else (443 if scheme == "https" else 80)
+            else:
+                host = (req.url.hostname or "").lower()
+                port = int(req.url.port) if req.url.port else (443 if scheme == "https" else 80)
             return scheme, host, port
 
         s_scheme, s_host, s_port = parse_server(request)
@@ -77,4 +97,3 @@ def _is_same_origin(request: Request) -> bool:
         return True
     except Exception:
         return False
-

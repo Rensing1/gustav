@@ -97,12 +97,11 @@ def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch
         return json.dumps({"score": 0, "criteria_results": []})
 
     monkeypatch.setattr(prog, "_run_analysis_model", lambda **_: fake_lm_call(prompt="", timeout=0))
-    monkeypatch.setattr(prog, "_run_feedback_model", lambda **_: "**Bitte Kriterien definieren.**")
+    monkeypatch.setattr(prog, "_run_feedback_model", lambda **_: "Eine kurze Rückmeldung im Fließtext.")
     result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Nur Text", criteria=[]
     )
 
     assert isinstance(result.feedback_md, str) and result.feedback_md.strip() != ""
-    assert result.analysis_json.get("schema") == "criteria.v2"
-    assert result.analysis_json.get("criteria_results") == []
-    assert result.analysis_json.get("score") == 0
+    # No structured analysis when no criteria are defined
+    assert result.analysis_json == {}

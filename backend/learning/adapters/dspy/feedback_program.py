@@ -70,25 +70,25 @@ def _build_feedback_prompt(
     criteria: Sequence[str],
     analysis_json: Dict[str, Any],
 ) -> str:
-    """Prompt instructing the LM to turn structured analysis into Markdown feedback."""
+    """Prompt instructing the LM to turn structured analysis into concise prose feedback."""
     crit_summary = "\n".join(
         f"- {item['criterion']}: {item['score']}/{item['max_score']}"
         for item in analysis_json.get("criteria_results", [])
     )
     analysis_serialized = json.dumps(analysis_json, ensure_ascii=False)
     return (
-        "Role: Teacher. Compose concise Markdown feedback grounded in the analysis JSON.\n"
-        "Rules:\n"
-        "1. Reference each criterion explicitly (bullets allowed).\n"
-        "2. Mention strengths and concrete next steps.\n"
-        "3. Do not repeat the full student text; cite criteria names instead.\n"
+        "Rolle: Lehrkraft. Formuliere eine kurze, gut lesbare Rückmeldung im Fließtext, basierend auf der Analyse.\n"
+        "Regeln:\n"
+        "1. Nenne kurz, was gut gelungen ist, und was beim nächsten Mal verbessert werden kann.\n"
+        "2. Schreibe verständliche, zusammenhängende Sätze (keine Listen/Bullets).\n"
+        "3. Wiederhole den Schülertext nicht vollständig; beziehe dich auf die analysierten Kriterien.\n"
         "Analysis summary:\n"
         f"{crit_summary or '- No criteria provided.'}\n"
         "Full analysis JSON:\n"
         f"{analysis_serialized}\n"
         "Learner text (verbatim):\n"
         f"{_sanitize_text(text_md)}\n"
-        "Return Markdown only."
+        "Gib ausschließlich den Rückmeldungstext in Markdown (Fließtext) zurück."
     )
 
 
@@ -301,12 +301,26 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult
         raise ImportError("dspy is not available")
 
     if not criteria:
-        # Keep contract simple for MVP: no criteria → empty list, overall 0
-        return FeedbackResult(
-            feedback_md="**Rückmeldung**\n\n- Bitte Kriterien definieren, um eine Bewertung zu erhalten.",
-            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
-            parse_status="skipped",
+        # No criteria: produce feedback prose without an analysis payload.
+        try:
+            feedback_only = _run_feedback_model(
+                text_md=text_md,
+                criteria=[],
+                analysis_json={},  # indicate absence for the synthesis stage
+            )
+        except TimeoutError:
+            raise
+        except Exception as exc:
+            logger.warning("learning.feedback.feedback_model_failed reason=%s", exc.__class__.__name__)
+            feedback_only = _default_feedback_md()
+
+        logger.info(
+            "learning.feedback.dspy_pipeline_completed feedback_source=%s parse_status=%s criteria_count=%s",
+            "no_criteria",
+            "skipped",
+            0,
         )
+        return FeedbackResult(feedback_md=feedback_only, analysis_json={}, parse_status="skipped")
 
     analysis_runner = FeedbackAnalysisProgram(runner=_run_analysis_model)
     parse_status = "parsed"

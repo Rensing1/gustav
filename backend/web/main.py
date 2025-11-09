@@ -602,7 +602,8 @@ def _build_history_entry_from_record(
             "</section>"
         )
     feedback_html = "".join(feedback_sections)
-    telemetry_html = _render_submission_telemetry(record)
+    # Telemetry card removed per product decision; keep section empty for learners.
+    telemetry_html = ""
 
     return HistoryEntry(
         label=label,

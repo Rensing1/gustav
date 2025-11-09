@@ -25,12 +25,25 @@ import os
 import logging
 from typing import Any, Dict, Sequence
 
+from backend.learning.adapters.dspy.programs import (
+    FeedbackAnalysisProgram,
+    FeedbackSynthesisProgram,
+)
+from backend.learning.adapters.dspy.signatures import (  # noqa: F401
+    FeedbackAnalysisSignature,
+    FeedbackSynthesisSignature,
+)
 from backend.learning.adapters.ports import FeedbackResult
 
 logger = logging.getLogger(__name__)
 
 
-def _build_prompt(*, text_md: str, criteria: Sequence[str]) -> str:
+def _sanitize_text(text_md: str) -> str:
+    """Pass student text through unchanged to preserve original phrasing."""
+    return text_md
+
+
+def _build_analysis_prompt(*, text_md: str, criteria: Sequence[str]) -> str:
     """Build a simple, privacy‑aware instruction and output contract.
 
     Emphasises:
@@ -41,11 +54,41 @@ def _build_prompt(*, text_md: str, criteria: Sequence[str]) -> str:
     crit_lines = "\n".join(f"- {str(c)}" for c in criteria)
     return (
         "Role: Teacher. Provide formative feedback.\n"
-        "Privacy: Do not include student text in the output.\n"
+        "Privacy: Do not include student text in the output beyond references.\n"
         "Output: JSON following schema 'criteria.v2' with keys: score (0..5), "
         "criteria_results (array of objects: criterion, max_score, score, explanation_md).\n"
         "Criteria (ordered):\n" + crit_lines + "\n"
+        "Learner text (verbatim):\n"
+        f"{_sanitize_text(text_md)}\n"
         "Only return the JSON, no prose."
+    )
+
+
+def _build_feedback_prompt(
+    *,
+    text_md: str,
+    criteria: Sequence[str],
+    analysis_json: Dict[str, Any],
+) -> str:
+    """Prompt instructing the LM to turn structured analysis into Markdown feedback."""
+    crit_summary = "\n".join(
+        f"- {item['criterion']}: {item['score']}/{item['max_score']}"
+        for item in analysis_json.get("criteria_results", [])
+    )
+    analysis_serialized = json.dumps(analysis_json, ensure_ascii=False)
+    return (
+        "Role: Teacher. Compose concise Markdown feedback grounded in the analysis JSON.\n"
+        "Rules:\n"
+        "1. Reference each criterion explicitly (bullets allowed).\n"
+        "2. Mention strengths and concrete next steps.\n"
+        "3. Do not repeat the full student text; cite criteria names instead.\n"
+        "Analysis summary:\n"
+        f"{crit_summary or '- No criteria provided.'}\n"
+        "Full analysis JSON:\n"
+        f"{analysis_serialized}\n"
+        "Learner text (verbatim):\n"
+        f"{_sanitize_text(text_md)}\n"
+        "Return Markdown only."
     )
 
 
@@ -81,9 +124,41 @@ def _run_model(*, text_md: str, criteria: Sequence[str]) -> str:
     Tests may monkeypatch this function directly or the `_lm_call` shim to
     intercept prompt content and return tailored outputs.
     """
-    prompt = _build_prompt(text_md=text_md, criteria=criteria)
+    prompt = _build_analysis_prompt(text_md=text_md, criteria=criteria)
     timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
     return _lm_call(prompt=prompt, timeout=timeout)
+
+
+def _run_analysis_model(*, text_md: str, criteria: Sequence[str]) -> str:
+    """Indirection to keep legacy `_run_model` patchable in tests."""
+    return _run_model(text_md=text_md, criteria=criteria)
+
+
+def _run_feedback_model(
+    *,
+    text_md: str,
+    criteria: Sequence[str],
+    analysis_json: Dict[str, Any],
+) -> str:
+    """Execute the feedback synthesis LM call."""
+    prompt = _build_feedback_prompt(text_md=text_md, criteria=criteria, analysis_json=analysis_json)
+    timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
+    return _lm_call(prompt=prompt, timeout=timeout)
+
+
+def _sanitize_sample(raw: str) -> str:
+    sample = " ".join(raw.split())
+    if len(sample) > 160:
+        return sample[:157] + "..."
+    return sample
+
+
+def _log_parse_failure(*, reason: str, raw: str) -> None:
+    logger.warning(
+        "learning.feedback.dspy_parse_failed reason=%s sample=%s",
+        reason,
+        _sanitize_sample(raw),
+    )
 
 
 def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] | None, str | None]:
@@ -101,6 +176,7 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
     try:
         obj = json.loads(raw)
     except Exception:
+        _log_parse_failure(reason="json_decode", raw=raw)
         return None, None
 
     feedback_val = obj.get("feedback_md") or obj.get("feedback") or obj.get("feedback_markdown")
@@ -179,6 +255,28 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
     return {"schema": "criteria.v2", "score": overall_i, "criteria_results": norm_items}, feedback_md
 
 
+def _build_default_analysis(criteria: Sequence[str]) -> Dict[str, Any]:
+    """Deterministic fallback analysis."""
+    crit_items = [
+        {
+            "criterion": str(name),
+            "max_score": 10,
+            "score": 6,
+            "explanation_md": f"Bezug zum Kriterium „{str(name)}“",
+        }
+        for name in criteria
+    ]
+    return {"schema": "criteria.v2", "score": 3, "criteria_results": crit_items}
+
+
+def _default_feedback_md() -> str:
+    return (
+        "**Rückmeldung**\n\n"
+        "- Stärken: klar benannt.\n"
+        "- Nächste Schritte: einzelne Kriterien gezielt verbessern."
+    )
+
+
 def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
     """Produce minimal Markdown feedback and criteria.v2 analysis via DSPy path.
 
@@ -202,9 +300,6 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult
         # If import fails at this layer, let callers fall back to non‑DSPy path.
         raise ImportError("dspy is not available")
 
-    # Execute pseudo model and parse
-    raw = _run_model(text_md=text_md, criteria=criteria)
-
     if not criteria:
         # Keep contract simple for MVP: no criteria → empty list, overall 0
         return FeedbackResult(
@@ -213,33 +308,57 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult
             parse_status="skipped",
         )
 
-    parsed, feedback_override = _parse_to_v2(raw, criteria=criteria)
+    analysis_runner = FeedbackAnalysisProgram(runner=_run_analysis_model)
     parse_status = "parsed"
-    if parsed is None:
-        parse_status = "fallback"
-        safe_len = len(raw or "")
-        logger.warning(
-            "learning.feedback.dspy_parse_failed reason=parse_error payload_len=%s",
-            safe_len,
-        )
-        # Fallback deterministic structure
-        crit_items = [
-            {
-                "criterion": str(name),
-                "max_score": 10,
-                "score": 6,
-                "explanation_md": f"Bezug zum Kriterium „{str(name)}“",
-            }
-            for name in criteria
-        ]
-        analysis = {"schema": "criteria.v2", "score": 3, "criteria_results": crit_items}
-    else:
-        analysis = parsed
+    feedback_source = "synthesis"
 
-    default_feedback = (
-        "**Rückmeldung**\n\n"
-        "- Stärken: klar benannt.\n"
-        "- Nächste Schritte: einzelne Kriterien gezielt verbessern."
+    try:
+        raw_analysis = analysis_runner.run(text_md=text_md, criteria=criteria)
+    except TimeoutError:
+        raise
+    except Exception as exc:
+        logger.warning("learning.feedback.analysis_model_failed reason=%s", exc.__class__.__name__)
+        raw_analysis = None
+
+    analysis_json: Dict[str, Any] | None = None
+    embedded_feedback: str | None = None
+    if raw_analysis is not None:
+        analysis_json, embedded_feedback = _parse_to_v2(raw_analysis, criteria=criteria)
+        if analysis_json is None:
+            parse_status = "analysis_fallback"
+            analysis_json = _build_default_analysis(criteria)
+    else:
+        parse_status = "analysis_error"
+        analysis_json = _build_default_analysis(criteria)
+
+    feedback_runner = FeedbackSynthesisProgram(runner=_run_feedback_model)
+    feedback_md: str | None = None
+
+    try:
+        feedback_md = feedback_runner.run(text_md=text_md, criteria=criteria, analysis_json=analysis_json)
+    except TimeoutError:
+        raise
+    except Exception as exc:
+        logger.warning("learning.feedback.feedback_model_failed reason=%s", exc.__class__.__name__)
+        feedback_md = None
+
+    if not feedback_md or not feedback_md.strip():
+        if embedded_feedback:
+            feedback_md = embedded_feedback
+            feedback_source = "analysis_embed"
+        else:
+            if parse_status == "parsed":
+                parse_status = "feedback_fallback"
+            elif parse_status in {"analysis_fallback", "analysis_error"}:
+                parse_status = "analysis_feedback_fallback"
+            feedback_md = _default_feedback_md()
+            feedback_source = "fallback"
+
+    logger.info(
+        "learning.feedback.dspy_pipeline_completed feedback_source=%s parse_status=%s criteria_count=%s",
+        feedback_source,
+        parse_status,
+        len(criteria),
     )
-    feedback_md = feedback_override or default_feedback
-    return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis, parse_status=parse_status)
+
+    return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis_json, parse_status=parse_status)

@@ -45,6 +45,7 @@ def test_parser_accepts_variants_and_clamps(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     monkeypatch.setattr(mod, "_run_model", lambda **_: raw)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", lambda **_: "**Stub Feedback**", raising=False)  # type: ignore[attr-defined]
 
     result = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt", "Struktur"]
@@ -77,6 +78,7 @@ def test_parser_fills_missing_criteria_and_defaults_on_malformed(monkeypatch: py
         "}\n"
     )
     monkeypatch.setattr(mod, "_run_model", lambda **_: raw_one)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", lambda **_: "**Stub Feedback**", raising=False)  # type: ignore[attr-defined]
 
     result = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt", "Struktur"]
@@ -88,6 +90,7 @@ def test_parser_fills_missing_criteria_and_defaults_on_malformed(monkeypatch: py
 
     # Second case: malformed JSON → all defaults used (deterministic fallbacks)
     monkeypatch.setattr(mod, "_run_model", lambda **_: "not json at all")  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", lambda **_: "**Stub Feedback**", raising=False)  # type: ignore[attr-defined]
     result2 = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt", "Struktur"]
     )
@@ -114,6 +117,7 @@ def test_parser_passes_through_model_feedback(monkeypatch: pytest.MonkeyPatch) -
     }
 
     monkeypatch.setattr(mod, "_run_model", lambda **_: json.dumps(payload), raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", lambda **_: payload["feedback_md"], raising=False)  # type: ignore[attr-defined]
 
     result = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt"]
@@ -130,12 +134,107 @@ def test_parser_logs_when_raw_payload_not_json(monkeypatch: pytest.MonkeyPatch, 
     mod = import_module("backend.learning.adapters.dspy.feedback_program")
 
     monkeypatch.setattr(mod, "_run_model", lambda **_: "### not json", raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", lambda **_: "**Stub Feedback**", raising=False)  # type: ignore[attr-defined]
 
     caplog.set_level("INFO")
     result = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt"]
     )
 
-    assert result.parse_status == "fallback"
+    assert result.parse_status == "analysis_fallback"
     assert any("learning.feedback.dspy_parse_failed" in record.getMessage() for record in caplog.records), \
         "Expected parse failure log entry"
+
+
+def test_two_phase_pipeline_uses_analysis_and_feedback_programs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DSPy path should call analysis first and pass normalized JSON to feedback synthesis."""
+    _install_fake_dspy(monkeypatch)
+    from importlib import import_module
+
+    mod = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    calls: dict[str, bool] = {"analysis": False, "feedback": False}
+
+    def fake_analysis(*, text_md: str, criteria: list[str]) -> str:
+        calls["analysis"] = True
+        assert "# Text" in text_md
+        return json.dumps(
+            {
+                "schema": "criteria.v2",
+                "score": 4,
+                "criteria_results": [
+                    {
+                        "criterion": criteria[0],
+                        "max_score": 10,
+                        "score": 8,
+                        "explanation_md": "OK",
+                    }
+                ],
+            }
+        )
+
+    def fake_feedback(*, text_md: str, criteria: list[str], analysis_json: dict) -> str:
+        calls["feedback"] = True
+        assert analysis_json["criteria_results"][0]["score"] == 8
+        assert criteria == ["Inhalt"]
+        return "**LLM Feedback**\n\n- Inhalt: 8/10"
+
+    monkeypatch.setattr(mod, "_run_analysis_model", fake_analysis, raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", fake_feedback, raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        mod,
+        "_run_model",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy single-phase runner must not execute")),
+        raising=False,
+    )  # type: ignore[attr-defined]
+
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="# Text", criteria=["Inhalt"]
+    )
+
+    assert calls["analysis"] is True, "analysis stage should run first"
+    assert calls["feedback"] is True, "feedback stage should run second"
+    assert result.feedback_md.startswith("**LLM Feedback**")
+    assert result.analysis_json["criteria_results"][0]["score"] == 8
+
+
+def test_two_phase_pipeline_falls_back_when_analysis_invalid(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """If analysis JSON is invalid, fall back to defaults but still run feedback synthesis."""
+    _install_fake_dspy(monkeypatch)
+    from importlib import import_module
+
+    mod = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    def fake_analysis(*, text_md: str, criteria: list[str]) -> str:
+        return "not json"
+
+    captured: dict[str, list[dict]] = {}
+
+    def fake_feedback(*, text_md: str, criteria: list[str], analysis_json: dict) -> str:
+        captured["analysis_json"] = analysis_json["criteria_results"]
+        return "**Fallback Feedback**"
+
+    monkeypatch.setattr(mod, "_run_analysis_model", fake_analysis, raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", fake_feedback, raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        mod,
+        "_run_model",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy single-phase runner must not execute")),
+        raising=False,
+    )  # type: ignore[attr-defined]
+
+    caplog.set_level("WARNING")
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="# Text", criteria=["Inhalt", "Struktur"]
+    )
+
+    assert any("learning.feedback.dspy_parse_failed" in record.getMessage() for record in caplog.records)
+    assert result.parse_status == "analysis_fallback"
+    assert "analysis_json" in captured, "feedback synthesis must run even on analysis fallback"
+    assert captured["analysis_json"][0]["criterion"] == "Inhalt"
+    assert result.feedback_md == "**Fallback Feedback**"
+    assert result.analysis_json["criteria_results"][0]["criterion"] == "Inhalt"

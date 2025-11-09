@@ -53,7 +53,7 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
     _install_fake_dspy(monkeypatch)
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
 
-    def fake_lm_call(*, prompt: str, timeout: int) -> str:
+    def fake_analysis(*, text_md: str, criteria):
         return json.dumps(
             {
                 "score": 4,
@@ -64,7 +64,12 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
             }
         )
 
-    monkeypatch.setattr(prog, "_lm_call", fake_lm_call)
+    def fake_feedback(*, text_md: str, criteria, analysis_json):
+        assert analysis_json["criteria_results"][0]["criterion"] == "Inhalt"
+        return "**LLM**\n\n- Inhalt stark."
+
+    monkeypatch.setattr(prog, "_run_analysis_model", fake_analysis)
+    monkeypatch.setattr(prog, "_run_feedback_model", fake_feedback)
     result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Ein kurzer Text", criteria=["Inhalt", "Struktur"]
     )
@@ -91,7 +96,8 @@ def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch
     def fake_lm_call(*, prompt: str, timeout: int) -> str:
         return json.dumps({"score": 0, "criteria_results": []})
 
-    monkeypatch.setattr(prog, "_lm_call", fake_lm_call)
+    monkeypatch.setattr(prog, "_run_analysis_model", lambda **_: fake_lm_call(prompt="", timeout=0))
+    monkeypatch.setattr(prog, "_run_feedback_model", lambda **_: "**Bitte Kriterien definieren.**")
     result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Nur Text", criteria=[]
     )

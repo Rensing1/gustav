@@ -52,34 +52,7 @@ from backend.storage.learning_policy import (
 from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 from backend.storage.keys import make_submission_key
-try:
-    import requests  # kept for backward-compat patching in tests
-except Exception:  # pragma: no cover - requests always present in app/test
-    requests = None  # type: ignore
-
-# Patchable HTTP client accessor used by tests to deterministically stub network IO.
-# Tests may either set `learning._http = Stub()` or monkeypatch `learning.requests`.
-_http = None  # default resolved lazily via _get_http_client()
-
-def _get_http_client():
-    """Return the HTTP client object to use for proxying uploads.
-
-    Resolution order (to aid deterministic monkeypatching in tests):
-    1) module-level `_http` if set (preferred test hook)
-    2) module-level `requests` (legacy test hook still used in some tests)
-    3) import-time `requests` fallback (should always exist in app/tests)
-    """
-    alias = globals().get("_http")
-    if alias is not None:
-        return alias
-    rq = globals().get("requests")
-    if rq is not None:
-        return rq
-    try:  # pragma: no cover - defensive fallback
-        import requests as _rq
-        return _rq
-    except Exception:
-        raise RuntimeError("no_http_client_available")
+import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
 
 
@@ -118,6 +91,27 @@ def _dev_upload_stub_enabled() -> bool:
 
 def _upload_proxy_enabled() -> bool:
     return (os.getenv("ENABLE_STORAGE_UPLOAD_PROXY", "false") or "").strip().lower() == "true"
+
+
+def _upload_proxy_timeout_seconds() -> float:
+    raw = (os.getenv("LEARNING_UPLOAD_PROXY_TIMEOUT_SECONDS") or "").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 30.0
+    return max(5.0, min(value, 120.0))
+
+
+async def _async_forward_upload(
+    *,
+    url: str,
+    payload: bytes,
+    content_type: str,
+    timeout: float,
+) -> httpx.Response:
+    """Forward the upload to Supabase (patchable for tests)."""
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.put(url, content=payload, headers={"Content-Type": content_type})
 
 
 def _cache_headers_success() -> dict[str, str]:
@@ -1196,16 +1190,12 @@ async def internal_upload_proxy(request: Request):
     content_type = request.headers.get("content-type") or "application/octet-stream"
 
     try:
-        # Resolve via module import to honor test monkeypatches on `routes.learning.requests`
-        import importlib as _importlib
-        lr_mod = _importlib.import_module("routes.learning")
-        rq = getattr(lr_mod, "requests", None)
-        if rq is None:
-            # Fall back to this module's alias or a fresh import
-            rq = globals().get("requests")
-            if rq is None:
-                import requests as rq  # type: ignore
-        resp = rq.put(target, data=body, headers={"Content-Type": content_type})
+        resp = await _async_forward_upload(
+            url=target,
+            payload=body,
+            content_type=content_type,
+            timeout=_upload_proxy_timeout_seconds(),
+        )
     except Exception:
         # Prod-parity: any upstream exception is a 502 (no soft-200 in dev/test).
         return JSONResponse({"error": "bad_gateway", "detail": "proxy_failed"}, status_code=502, headers=_cache_headers_error())

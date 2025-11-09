@@ -89,6 +89,14 @@ Refer to the latest migration plan in `docs/plan/2025-11-01-ki-integration.md` f
 ---
 
 ## 7. Observability & Operations
+
+### Telemetry Surfaces
+- **Student UI / API**: Shows `vision_attempts`, `vision_last_error`, `feedback_last_attempt_at`, `feedback_last_error`. Strings are sanitized server-side (secrets stripped, length ≤256) so Lernende nur den Status erkennen.
+- **Teacher UI**: Enthält dieselben Felder plus Kontext (z. B. erneute Anstöße, Support-Hinweise). Rohpfade/Storage-Keys bleiben verborgen.
+- **Worker Logs**: Vollständige Fehlermeldungen + Stacktraces, aber nur serverseitig abrufbar (RLS-konformes Service-Account). Nutzt dieselbe Sanitizer-Funktion bevor Inhalte persistiert werden.
+- **Learning Analytics Dashboard**: Aggregiert Telemetrie (Attempts, Dauer zwischen Versuchen) für Trendanalysen; persönliche Daten werden dabei pseudonymisiert.
+- **Upload Proxy**: Nutzt einen asynchronen Forwarder (httpx) und blockiert keine Event-Loop-Worker mehr; Upstream-Fehler liefern 502 in allen Umgebungen.
+
 - **Metrics**
   - `analysis_jobs_inflight` (gauge)
   - `ai_worker_processed_total{status}` (counter)

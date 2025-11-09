@@ -277,6 +277,64 @@ async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
 
 
 @pytest.mark.anyio
+async def test_ui_history_fragment_renders_telemetry_block():
+    """Telemetry fields must be visible, sanitized and labelled for learners."""
+
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Telemetry Check"},
+            headers={"Origin": "http://test"},
+        )
+        assert resp.status_code == 202
+        submission = resp.json()
+        sub_id = submission.get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to seed telemetry fields")
+
+    sensitive = "FATAL secret_token=XYZ12345 " + ("spam " * 50)
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set vision_attempts = 3,
+                       vision_last_error = %s,
+                       feedback_last_attempt_at = now(),
+                       feedback_last_error = %s,
+                       analysis_status = 'failed',
+                       error_code = 'vision_failed'
+                 where id = %s::uuid
+                """,
+                (sensitive, sensitive, sub_id),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": sub_id},
+        )
+
+    assert r.status_code == 200
+    html = r.text
+    # Telemetry list rendered with data attributes for tests
+    assert 'class="analysis-telemetry"' in html
+    assert 'data-testid="vision-attempts"' in html
+    assert "3" in html
+    assert 'data-testid="feedback-last-attempt"' in html
+    assert 'data-testid="feedback-last-error"' in html
+    # Sanitization removes raw secret token references
+    assert "secret_token" not in html.lower()
+    assert "[redacted]" in html
+
+
+@pytest.mark.anyio
 async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
     """Criteria.v2 payloads must render badges with clamped scores and accessible labels."""
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()

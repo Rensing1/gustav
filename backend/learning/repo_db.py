@@ -22,6 +22,22 @@ except Exception:  # pragma: no cover
     Connection = Any  # type: ignore
     HAVE_PSYCOPG = False
 
+_ERROR_MAX_LENGTH = 256
+_SENSITIVE_TOKEN_PATTERN = re.compile(r"(?i)(secret|token|password|key)[-_a-z0-9]*\s*=\s*\S+")
+
+
+def _sanitize_error_message(value: Optional[str]) -> Optional[str]:
+    """Strip secrets and truncate lengthy adapter errors for safe exposure."""
+    if not value:
+        return None
+    collapsed = " ".join(str(value).split())
+    if not collapsed:
+        return None
+    scrubbed = _SENSITIVE_TOKEN_PATTERN.sub("[redacted]", collapsed)
+    if len(scrubbed) > _ERROR_MAX_LENGTH:
+        scrubbed = scrubbed[: _ERROR_MAX_LENGTH - 3].rstrip() + "..."
+    return scrubbed
+
 
 def _default_app_login_dsn() -> str:
     """Return the local dev DSN using the app login role (e.g. gustav_app).
@@ -510,7 +526,9 @@ class DBLearningRepo:
                                analysis_json,
                                feedback_md,
                                error_code,
+                               coalesce(vision_attempts, 0),
                                vision_last_error,
+                               to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                feedback_last_error,
                                to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
@@ -606,7 +624,9 @@ class DBLearningRepo:
                                   analysis_json,
                                   feedback_md,
                                   error_code,
+                                  coalesce(vision_attempts, 0),
                                   vision_last_error,
+                                  to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                   feedback_last_error,
                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                   to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
@@ -643,7 +663,9 @@ class DBLearningRepo:
                                    analysis_json,
                                    feedback_md,
                                    error_code,
+                                   coalesce(vision_attempts, 0),
                                    vision_last_error,
+                                   to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                    feedback_last_error,
                                    to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                    to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
@@ -696,13 +718,15 @@ class DBLearningRepo:
                                        storage_key,
                                        sha256,
                                        analysis_status,
-                                       analysis_json,
-                                       feedback_md,
-                                       error_code,
-                                       vision_last_error,
-                                       feedback_last_error,
-                                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                       to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                               analysis_json,
+                               feedback_md,
+                               error_code,
+                               coalesce(vision_attempts, 0),
+                               vision_last_error,
+                               to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               feedback_last_error,
+                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                                   from public.learning_submissions
                                  where course_id = %s::uuid and task_id = %s::uuid and student_sub = %s and idempotency_key = %s
                                 """,
@@ -781,7 +805,9 @@ class DBLearningRepo:
                            analysis_json,
                            feedback_md,
                            error_code,
+                           coalesce(vision_attempts, 0),
                            vision_last_error,
+                           to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            feedback_last_error,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
@@ -907,8 +933,26 @@ class DBLearningRepo:
             may still miss optional fields, so for completed states we
             synthesize a minimal payload to keep learner history readable.
         """
-        status = row[8]
-        analysis_raw = row[9]
+        (
+            submission_id,
+            attempt_nr,
+            kind,
+            text_body,
+            mime_type,
+            size_bytes,
+            storage_key,
+            sha256,
+            status,
+            analysis_raw,
+            feedback_md,
+            error_code,
+            vision_attempts,
+            vision_last_error,
+            feedback_last_attempt_at,
+            feedback_last_error,
+            created_at,
+            completed_at,
+        ) = list(row)
         if status != "completed":
             analysis_payload = None
         else:
@@ -919,10 +963,6 @@ class DBLearningRepo:
                 except Exception:  # pragma: no cover - defensive
                     pass
             # Synthesize fallback analysis text when missing/empty
-            kind = row[2]
-            text_body = row[3]
-            storage_key = row[6]
-            sha256 = row[7]
             if not isinstance(analysis_payload, dict):
                 analysis_payload = {}
             existing_text = str(
@@ -935,24 +975,27 @@ class DBLearningRepo:
                     analysis_payload["text"] = DBLearningRepo._pdf_text_stub(storage_key, sha256)
                 else:
                     analysis_payload["text"] = DBLearningRepo._image_text_stub(storage_key, sha256)
+        telemetry_attempts = int(vision_attempts or 0)
         return {
-            "id": row[0],
-            "attempt_nr": int(row[1]),
-            "kind": row[2],
-            "text_body": row[3],
-            "mime_type": row[4],
-            "size_bytes": row[5],
-            "storage_key": row[6],
-            "sha256": row[7],
+            "id": submission_id,
+            "attempt_nr": int(attempt_nr),
+            "kind": kind,
+            "text_body": text_body,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "storage_key": storage_key,
+            "sha256": sha256,
             "analysis_status": status,
             "analysis_json": analysis_payload,
-            "feedback": row[10] if status != "pending" else None,
-            "error_code": row[11],
-            "vision_last_error": row[12],
-            "feedback_last_error": row[13],
-            # created_at is returned by SQL as ISO string in column index 14
-            "created_at": row[14],
-            "completed_at": row[15],
+            "feedback": feedback_md if status != "pending" else None,
+            "error_code": error_code,
+            "vision_attempts": telemetry_attempts,
+            "vision_last_error": _sanitize_error_message(vision_last_error),
+            "feedback_last_attempt_at": feedback_last_attempt_at,
+            "feedback_last_error": _sanitize_error_message(feedback_last_error),
+            # created_at/completed_at already returned as ISO strings
+            "created_at": created_at,
+            "completed_at": completed_at,
         }
 
     # ------------------------------------------------------------------

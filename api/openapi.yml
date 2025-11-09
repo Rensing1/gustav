@@ -852,81 +852,28 @@ components:
               explanation_md:
                 type: string
                 description: Objective analysis in Markdown (rendered safely on the UI).
-    LearningSubmission:
+    SubmissionTelemetry:
       type: object
-      required: [id, attempt_nr, kind, analysis_status, created_at]
+      additionalProperties: false
+      required:
+        - vision_attempts
+        - vision_last_error
+        - feedback_last_attempt_at
+        - feedback_last_error
       properties:
-        id:
-          type: string
-          format: uuid
-        attempt_nr:
-          type: integer
-          minimum: 1
-        kind:
-          type: string
-          enum: [text, image, file]
-        text_body:
-          type: string
-          nullable: true
-          description: Unified text representation; empty while analysis is pending or when OCR/analysis failed.
-        mime_type:
-          type: string
-          nullable: true
-        size_bytes:
-          type: integer
-          nullable: true
-        storage_key:
-          type: string
-          nullable: true
-        sha256:
-          type: string
-          nullable: true
-          pattern: '^[0-9a-f]{64}$'
-        analysis_status:
-          type: string
-          enum: [pending, extracted, completed, failed]
-          description: >-
-            Analysis lifecycle: pending (queued), extracted (PDF successfully parsed into images/text),
-            completed (feedback available), failed (processing halted; inspect error_code).
-        error_code:
-          type: string
-          nullable: true
-          enum:
-            - vision_retrying
-            - vision_failed
-            - feedback_retrying
-            - feedback_failed
-            - input_corrupt
-            - input_unsupported
-            - input_too_large
-          description: >-
-            Normalized error indicator for processing.
-            `*_retrying` marks in-flight retries, `*_failed` indicates that analysis stopped,
-            and `input_*` values signal validation/pre-processing failures before AI execution.
-        analysis_json:
-          nullable: true
-          description: |-
-            Structured criteria-based feedback payload (criteria.v1 or criteria.v2).
-            Remains `null` for `pending` and `extracted` submissions; the payload
-            is only populated once feedback has been issued. Internal extraction
-            metadata such as page keys is stored separately and never exposed.
-          oneOf:
-            - type: 'null'
-            - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
-            - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
-        feedback_md:
-          type: string
-          nullable: true
-          description: Markdown feedback for the learner; null until the analysis has completed.
         vision_attempts:
           type: integer
-          nullable: true
+          format: int32
           minimum: 0
-          description: Number of vision adapter attempts performed for this submission.
+          default: 0
+          description: Number of OCR/vision attempts.
         vision_last_error:
           type: string
           nullable: true
-          description: Latest sanitized error message reported by the vision adapter.
+          maxLength: 256
+          description: |-
+            Sanitized last error returned by the vision adapter; student-visible,
+            therefore secrets/paths are stripped and long messages truncated.
         feedback_last_attempt_at:
           type: string
           format: date-time
@@ -935,7 +882,78 @@ components:
         feedback_last_error:
           type: string
           nullable: true
-          description: Latest sanitized error message reported by the feedback adapter.
+          maxLength: 256
+          description: |-
+            Sanitized feedback adapter error text. Intended for teachers but always
+            truncated/cleaned before exposure.
+    LearningSubmission:
+      allOf:
+        - $ref: '#/components/schemas/SubmissionTelemetry'
+        - type: object
+          required: [id, attempt_nr, kind, analysis_status, created_at]
+          properties:
+            id:
+              type: string
+              format: uuid
+            attempt_nr:
+              type: integer
+              minimum: 1
+            kind:
+              type: string
+              enum: [text, image, file]
+            text_body:
+              type: string
+              nullable: true
+              description: Unified text representation; empty while analysis is pending or when OCR/analysis failed.
+            mime_type:
+              type: string
+              nullable: true
+            size_bytes:
+              type: integer
+              nullable: true
+            storage_key:
+              type: string
+              nullable: true
+            sha256:
+              type: string
+              nullable: true
+              pattern: '^[0-9a-f]{64}$'
+            analysis_status:
+              type: string
+              enum: [pending, extracted, completed, failed]
+              description: >-
+                Analysis lifecycle: pending (queued), extracted (PDF successfully parsed into images/text),
+                completed (feedback available), failed (processing halted; inspect error_code).
+            error_code:
+              type: string
+              nullable: true
+              enum:
+                - vision_retrying
+                - vision_failed
+                - feedback_retrying
+                - feedback_failed
+                - input_corrupt
+                - input_unsupported
+                - input_too_large
+              description: >-
+                Normalized error indicator for processing.
+                `*_retrying` marks in-flight retries, `*_failed` indicates that analysis stopped,
+                and `input_*` values signal validation/pre-processing failures before AI execution.
+            analysis_json:
+              nullable: true
+              description: |-
+                Structured criteria-based feedback payload (criteria.v1 or criteria.v2).
+                Remains `null` for `pending` and `extracted` submissions; the payload
+                is only populated once feedback has been issued. Internal extraction
+                metadata such as page keys is stored separately and never exposed.
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
+                - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
+            feedback_md:
+              type: string
+              nullable: true
+              description: Markdown feedback for the learner; null until the analysis has completed.
     TeachingLatestSubmission:
       type: object
       additionalProperties: false
@@ -4821,6 +4839,82 @@ paths:
           description: Forbidden (CSRF)
         '404':
           description: Feature disabled (ENABLE_DEV_UPLOAD_STUB=false)
+  /api/learning/internal/upload-proxy:
+    put:
+      tags: [Learning]
+      summary: Proxy presigned upload via same-origin endpoint (student-only)
+      description: >-
+        Forwards the request body to a presigned storage URL (usually Supabase Storage) while keeping
+        browser uploads on the same origin. Returns the computed `sha256` and `size_bytes` so the student
+        can finalize the submission payload. No additional rate-limiting or throttling is applied.
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Host validation: Query param `url` must match the SUPABASE_URL host (prevents SSRF)."
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: url
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Absolute presigned HTTPS URL returned by the upload-intents endpoint (must match SUPABASE_URL host).
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Upload proxied successfully
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sha256, size_bytes]
+                properties:
+                  sha256:
+                    type: string
+                    pattern: '^[0-9a-f]{64}$'
+                  size_bytes:
+                    type: integer
+                    minimum: 1
+        '400':
+          description: Bad request (missing_url | invalid_url | invalid_url_host | empty_body | size_exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (CSRF violation)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Feature disabled (ENABLE_STORAGE_UPLOAD_PROXY=false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Upstream error (proxy_failed | upstream_error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary:
     get:
       tags: [Teaching]

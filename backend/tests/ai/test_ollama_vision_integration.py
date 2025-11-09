@@ -9,7 +9,7 @@ How to run locally:
     export RUN_OLLAMA_E2E=1
     export RUN_OLLAMA_VISION_E2E=1
     export OLLAMA_BASE_URL=http://localhost:11434   # or http://ollama:11434 inside Compose
-    export AI_VISION_MODEL=llama3.2-vision          # pick a locally pulled model
+    export AI_VISION_MODEL=qwen2.5vl:3b             # or your preferred pulled vision model
     docker compose exec ollama ollama pull "$AI_VISION_MODEL"
     pytest -q -m ollama_integration -k vision
 """
@@ -39,11 +39,11 @@ def _should_run_vision() -> str | None:
     host = (urllib.parse.urlparse(base_url).hostname or "").lower()
     if host not in ALLOWED_HOSTS:
         return f"OLLAMA_BASE_URL must point to a local host (got: {host!r})"
-    model = os.getenv("AI_VISION_MODEL", "").strip()
+    model = os.getenv("AI_VISION_MODEL", "qwen2.5vl:3b").strip()
     if not model:
         return (
             "AI_VISION_MODEL is not set. Example:\n"
-            "  export AI_VISION_MODEL=llama3.2-vision\n"
+            "  export AI_VISION_MODEL=qwen2.5vl:3b\n"
             "  docker compose exec ollama ollama pull $AI_VISION_MODEL"
         )
     try:
@@ -65,7 +65,7 @@ def test_ollama_vision_generate_with_images_param():
     import ollama  # type: ignore
 
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip()
-    model = os.getenv("AI_VISION_MODEL", "").strip()
+    model = os.getenv("AI_VISION_MODEL", "qwen2.5vl:3b").strip()
 
     try:
         client = ollama.Client(base_url)

@@ -43,7 +43,9 @@ def _sanitize_text(text_md: str) -> str:
     return text_md
 
 
-def _build_analysis_prompt(*, text_md: str, criteria: Sequence[str]) -> str:
+def _build_analysis_prompt(
+    *, text_md: str, criteria: Sequence[str], teacher_instructions_md: str | None = None, solution_hints_md: str | None = None
+) -> str:
     """Build a simple, privacy‑aware instruction and output contract.
 
     Emphasises:
@@ -52,16 +54,19 @@ def _build_analysis_prompt(*, text_md: str, criteria: Sequence[str]) -> str:
     - Criteria names are included so the model can align explanations.
     """
     crit_lines = "\n".join(f"- {str(c)}" for c in criteria)
-    return (
-        "Role: Teacher. Provide formative feedback.\n"
-        "Privacy: Do not include student text in the output beyond references.\n"
-        "Output: JSON following schema 'criteria.v2' with keys: score (0..5), "
-        "criteria_results (array of objects: criterion, max_score, score, explanation_md).\n"
-        "Criteria (ordered):\n" + crit_lines + "\n"
-        "Learner text (verbatim):\n"
-        f"{_sanitize_text(text_md)}\n"
-        "Only return the JSON, no prose."
-    )
+    parts = [
+        "Rolle: Lehrkraft. Führe eine Kriterien-Analyse durch.",
+        "Datenschutz: Gib nur Analysewerte und kurze Begründungen aus.",
+        "Ausgabe: Striktes JSON im Schema 'criteria.v2' mit 'criteria_results' (Objekte mit criterion, max_score=10, score 0..10, explanation_md).",
+        "Kriterien (Reihenfolge beibehalten):\n" + crit_lines,
+    ]
+    if (teacher_instructions_md or "").strip():
+        parts.append("Aufgabenstellung (nur zur Analyse):\n" + str(teacher_instructions_md))
+    if (solution_hints_md or "").strip():
+        parts.append("Lösungshinweise (nur zur Analyse; nicht offenlegen):\n" + str(solution_hints_md))
+    parts.append("Schülertext (wörtlich):\n" + _sanitize_text(text_md))
+    parts.append("Gib ausschließlich das JSON zurück, keine Prosa.")
+    return "\n".join(parts)
 
 
 def _build_feedback_prompt(
@@ -69,6 +74,7 @@ def _build_feedback_prompt(
     text_md: str,
     criteria: Sequence[str],
     analysis_json: Dict[str, Any],
+    teacher_instructions_md: str | None = None,
 ) -> str:
     """Prompt instructing the LM to turn structured analysis into concise prose feedback."""
     crit_summary = "\n".join(
@@ -76,20 +82,20 @@ def _build_feedback_prompt(
         for item in analysis_json.get("criteria_results", [])
     )
     analysis_serialized = json.dumps(analysis_json, ensure_ascii=False)
-    return (
-        "Rolle: Lehrkraft. Formuliere eine kurze, gut lesbare Rückmeldung im Fließtext, basierend auf der Analyse.\n"
-        "Regeln:\n"
-        "1. Nenne kurz, was gut gelungen ist, und was beim nächsten Mal verbessert werden kann.\n"
-        "2. Schreibe verständliche, zusammenhängende Sätze (keine Listen/Bullets).\n"
-        "3. Wiederhole den Schülertext nicht vollständig; beziehe dich auf die analysierten Kriterien.\n"
-        "Analysis summary:\n"
-        f"{crit_summary or '- No criteria provided.'}\n"
-        "Full analysis JSON:\n"
-        f"{analysis_serialized}\n"
-        "Learner text (verbatim):\n"
-        f"{_sanitize_text(text_md)}\n"
-        "Gib ausschließlich den Rückmeldungstext in Markdown (Fließtext) zurück."
-    )
+    parts = [
+        "Rolle: Lehrkraft. Formuliere eine kurze, gut lesbare Rückmeldung im Fließtext, basierend auf der Analyse.",
+        "Regeln:",
+        "1. Nenne kurz, was gut gelungen ist, und was beim nächsten Mal verbessert werden kann.",
+        "2. Schreibe verständliche, zusammenhängende Sätze (keine Listen/Bullets).",
+        "3. Wiederhole den Schülertext nicht vollständig; beziehe dich auf die analysierten Kriterien.",
+        "Analyse-Zusammenfassung:\n" + (crit_summary or "- No criteria provided."),
+        "Analyse-JSON (vollständig):\n" + analysis_serialized,
+    ]
+    if (teacher_instructions_md or "").strip():
+        parts.append("Aufgabenstellung (Kontext):\n" + str(teacher_instructions_md))
+    parts.append("Schülertext (wörtlich):\n" + _sanitize_text(text_md))
+    parts.append("Gib ausschließlich den Rückmeldungstext in Markdown (Fließtext) zurück.")
+    return "\n".join(parts)
 
 
 def _lm_call(*, prompt: str, timeout: int) -> str:
@@ -118,20 +124,34 @@ def _lm_call(*, prompt: str, timeout: int) -> str:
     return json.dumps(raw)
 
 
-def _run_model(*, text_md: str, criteria: Sequence[str]) -> str:
+def _run_model(
+    *, text_md: str, criteria: Sequence[str], teacher_instructions_md: str | None = None, solution_hints_md: str | None = None
+) -> str:
     """Run the (mockable) LM call using a structured prompt.
 
     Tests may monkeypatch this function directly or the `_lm_call` shim to
     intercept prompt content and return tailored outputs.
     """
-    prompt = _build_analysis_prompt(text_md=text_md, criteria=criteria)
+    prompt = _build_analysis_prompt(
+        text_md=text_md,
+        criteria=criteria,
+        teacher_instructions_md=teacher_instructions_md,
+        solution_hints_md=solution_hints_md,
+    )
     timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
     return _lm_call(prompt=prompt, timeout=timeout)
 
 
-def _run_analysis_model(*, text_md: str, criteria: Sequence[str]) -> str:
+def _run_analysis_model(
+    *, text_md: str, criteria: Sequence[str], teacher_instructions_md: str | None = None, solution_hints_md: str | None = None
+) -> str:
     """Indirection to keep legacy `_run_model` patchable in tests."""
-    return _run_model(text_md=text_md, criteria=criteria)
+    return _run_model(
+        text_md=text_md,
+        criteria=criteria,
+        teacher_instructions_md=teacher_instructions_md,
+        solution_hints_md=solution_hints_md,
+    )
 
 
 def _run_feedback_model(
@@ -139,9 +159,15 @@ def _run_feedback_model(
     text_md: str,
     criteria: Sequence[str],
     analysis_json: Dict[str, Any],
+    teacher_instructions_md: str | None = None,
 ) -> str:
     """Execute the feedback synthesis LM call."""
-    prompt = _build_feedback_prompt(text_md=text_md, criteria=criteria, analysis_json=analysis_json)
+    prompt = _build_feedback_prompt(
+        text_md=text_md,
+        criteria=criteria,
+        analysis_json=analysis_json,
+        teacher_instructions_md=teacher_instructions_md,
+    )
     timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
     return _lm_call(prompt=prompt, timeout=timeout)
 
@@ -277,7 +303,13 @@ def _default_feedback_md() -> str:
     )
 
 
-def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
+def analyze_feedback(
+    *,
+    text_md: str,
+    criteria: Sequence[str],
+    teacher_instructions_md: str | None = None,
+    solution_hints_md: str | None = None,
+) -> FeedbackResult:
     """Produce minimal Markdown feedback and criteria.v2 analysis via DSPy path.
 
     Why:
@@ -307,6 +339,7 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult
                 text_md=text_md,
                 criteria=[],
                 analysis_json={},  # indicate absence for the synthesis stage
+                teacher_instructions_md=teacher_instructions_md,
             )
         except TimeoutError:
             raise
@@ -327,7 +360,12 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult
     feedback_source = "synthesis"
 
     try:
-        raw_analysis = analysis_runner.run(text_md=text_md, criteria=criteria)
+        raw_analysis = analysis_runner.run(
+            text_md=text_md,
+            criteria=criteria,
+            teacher_instructions_md=teacher_instructions_md,
+            solution_hints_md=solution_hints_md,
+        )
     except TimeoutError:
         raise
     except Exception as exc:
@@ -349,7 +387,12 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult
     feedback_md: str | None = None
 
     try:
-        feedback_md = feedback_runner.run(text_md=text_md, criteria=criteria, analysis_json=analysis_json)
+        feedback_md = feedback_runner.run(
+            text_md=text_md,
+            criteria=criteria,
+            analysis_json=analysis_json,
+            teacher_instructions_md=teacher_instructions_md,
+        )
     except TimeoutError:
         raise
     except Exception as exc:

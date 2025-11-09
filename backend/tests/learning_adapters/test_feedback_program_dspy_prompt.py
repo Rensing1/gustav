@@ -31,7 +31,7 @@ def test_dspy_feedback_program_builds_prompt_and_normalizes(monkeypatch: pytest.
     text_md = "# Lösung\nText"  # not asserted to avoid leaking
     criteria = ["Inhalt", "Darstellung"]
 
-    feedback_md, analysis = mod.analyze_feedback(text_md=text_md, criteria=criteria)
+    result = mod.analyze_feedback(text_md=text_md, criteria=criteria)
 
     # Prompt assertions: includes criteria names and privacy/output hints
     assert captured_prompts, "Expected _lm_call to be invoked"
@@ -41,9 +41,9 @@ def test_dspy_feedback_program_builds_prompt_and_normalizes(monkeypatch: pytest.
     assert "criteria.v2" in p and "JSON" in p
 
     # Normalization assertions
-    assert analysis["schema"] == "criteria.v2"
-    assert 0 <= int(analysis["score"]) <= 5
-    items = analysis["criteria_results"]
+    assert result.analysis_json["schema"] == "criteria.v2"
+    assert 0 <= int(result.analysis_json["score"]) <= 5
+    items = result.analysis_json["criteria_results"]
     assert isinstance(items, list) and len(items) == 2
     # Scores must be clamped into valid ranges per criterion
     inhalt = next(i for i in items if i["criterion"] == "Inhalt")
@@ -66,10 +66,10 @@ def test_dspy_feedback_program_whitespace_response_falls_back(monkeypatch: pytes
 
     monkeypatch.setattr(mod, "_lm_call", fake_lm_call)
 
-    feedback_md, analysis = mod.analyze_feedback(text_md="# t", criteria=["X"])
-    assert analysis["schema"] == "criteria.v2"
-    assert analysis["criteria_results"] and analysis["criteria_results"][0]["criterion"] == "X"
-    assert 0 <= int(analysis["score"]) <= 5
+    result = mod.analyze_feedback(text_md="# t", criteria=["X"])
+    assert result.analysis_json["schema"] == "criteria.v2"
+    assert result.analysis_json["criteria_results"] and result.analysis_json["criteria_results"][0]["criterion"] == "X"
+    assert 0 <= int(result.analysis_json["score"]) <= 5
 
 
 @pytest.mark.anyio
@@ -109,10 +109,10 @@ def test_dspy_feedback_program_binds_real_ollama_client(monkeypatch: pytest.Monk
     mod = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
     mod = importlib.reload(mod)
 
-    feedback_md, analysis = mod.analyze_feedback(text_md="# Lösung", criteria=["Inhalt"])
+    result = mod.analyze_feedback(text_md="# Lösung", criteria=["Inhalt"])
 
-    assert feedback_md
-    assert analysis["schema"] == "criteria.v2"
+    assert result.feedback_md
+    assert result.analysis_json["schema"] == "criteria.v2"
 
     assert captured_calls, "Expected DSPy program to call ollama.Client.generate"
     call = captured_calls[0]

@@ -69,6 +69,14 @@ def _find_backend_marker(caplog: pytest.LogCaptureFixture, value: str) -> bool:
     return False
 
 
+def _find_parse_status_marker(caplog: pytest.LogCaptureFixture, value: str) -> bool:
+    for record in caplog.records:
+        message = record.getMessage()
+        if "parse_status=" in message and f"parse_status={value}" in message:
+            return True
+    return False
+
+
 def test_feedback_prefers_dspy_when_importable(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_bomb_ollama(monkeypatch)
     _install_fake_dspy(monkeypatch)
@@ -185,6 +193,33 @@ def test_feedback_logs_backend_dspy(monkeypatch: pytest.MonkeyPatch, caplog: pyt
 
     adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
     assert _find_backend_marker(caplog, "dspy"), "DSPy backend log missing"
+
+
+def test_feedback_logs_parse_status(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """The adapter log should mention whether DSPy parsing succeeded."""
+    _install_fake_dspy(monkeypatch)
+    _install_bomb_ollama(monkeypatch)
+
+    import importlib
+
+    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+
+    class _StubResult:
+        feedback_md = "**OK**"
+        analysis_json = {"schema": "criteria.v2", "criteria_results": []}
+        parse_status = "parsed"
+
+    monkeypatch.setattr(program, "analyze_feedback", lambda **_: _StubResult())
+
+    caplog.set_level("INFO")
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert _find_parse_status_marker(caplog, "parsed"), "Expected parse_status log entry"
 
 
 def test_feedback_logs_backend_fallback(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

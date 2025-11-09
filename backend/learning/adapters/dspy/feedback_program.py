@@ -22,7 +22,12 @@ from __future__ import annotations
 
 import json
 import os
+import logging
 from typing import Any, Dict, Sequence
+
+from backend.learning.adapters.ports import FeedbackResult
+
+logger = logging.getLogger(__name__)
 
 
 def _build_prompt(*, text_md: str, criteria: Sequence[str]) -> str:
@@ -174,7 +179,7 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
     return {"schema": "criteria.v2", "score": overall_i, "criteria_results": norm_items}, feedback_md
 
 
-def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> tuple[str, dict]:
+def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
     """Produce minimal Markdown feedback and criteria.v2 analysis via DSPy path.
 
     Why:
@@ -187,8 +192,7 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> tuple[str, dic
         criteria: Ordered list of criteria names.
 
     Returns:
-        A tuple of `(feedback_md, analysis_json)` where `analysis_json` follows
-        the `criteria.v2` schema.
+        FeedbackResult with Markdown feedback and `criteria.v2` analysis.
     """
     # NOTE: Import dspy shallowly to select this program only when available.
     try:  # pragma: no cover - presence is tested from adapter, not here
@@ -203,13 +207,21 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> tuple[str, dic
 
     if not criteria:
         # Keep contract simple for MVP: no criteria → empty list, overall 0
-        return (
-            "**Rückmeldung**\n\n- Bitte Kriterien definieren, um eine Bewertung zu erhalten.",
-            {"schema": "criteria.v2", "score": 0, "criteria_results": []},
+        return FeedbackResult(
+            feedback_md="**Rückmeldung**\n\n- Bitte Kriterien definieren, um eine Bewertung zu erhalten.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="skipped",
         )
 
     parsed, feedback_override = _parse_to_v2(raw, criteria=criteria)
+    parse_status = "parsed"
     if parsed is None:
+        parse_status = "fallback"
+        safe_len = len(raw or "")
+        logger.warning(
+            "learning.feedback.dspy_parse_failed reason=parse_error payload_len=%s",
+            safe_len,
+        )
         # Fallback deterministic structure
         crit_items = [
             {
@@ -230,4 +242,4 @@ def analyze_feedback(*, text_md: str, criteria: Sequence[str]) -> tuple[str, dic
         "- Nächste Schritte: einzelne Kriterien gezielt verbessern."
     )
     feedback_md = feedback_override or default_feedback
-    return feedback_md, analysis
+    return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis, parse_status=parse_status)

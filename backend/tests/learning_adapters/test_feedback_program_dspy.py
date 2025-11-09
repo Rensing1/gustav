@@ -65,14 +65,14 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
         )
 
     monkeypatch.setattr(prog, "_lm_call", fake_lm_call)
-    feedback_md, analysis = prog.analyze_feedback(  # type: ignore[attr-defined]
+    result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Ein kurzer Text", criteria=["Inhalt", "Struktur"]
     )
 
-    assert isinstance(feedback_md, str) and feedback_md.strip() != ""
-    assert analysis.get("schema") == "criteria.v2"
+    assert isinstance(result.feedback_md, str) and result.feedback_md.strip() != ""
+    assert result.analysis_json.get("schema") == "criteria.v2"
 
-    items = analysis.get("criteria_results") or []
+    items = result.analysis_json.get("criteria_results") or []
     assert len(items) == 2
     for crit_name, item in zip(["Inhalt", "Struktur"], items):
         assert item["criterion"] == crit_name
@@ -80,7 +80,7 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
         assert 0 <= int(item["score"]) <= 10
         assert crit_name in item["explanation_md"]  # name appears in explanation
 
-    overall = int(analysis.get("score", -1))
+    overall = int(result.analysis_json.get("score", -1))
     assert 0 <= overall <= 5
 
 
@@ -92,11 +92,11 @@ def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch
         return json.dumps({"score": 0, "criteria_results": []})
 
     monkeypatch.setattr(prog, "_lm_call", fake_lm_call)
-    feedback_md, analysis = prog.analyze_feedback(  # type: ignore[attr-defined]
+    result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Nur Text", criteria=[]
     )
 
-    assert isinstance(feedback_md, str) and feedback_md.strip() != ""
-    assert analysis.get("schema") == "criteria.v2"
-    assert analysis.get("criteria_results") == []
-    assert analysis.get("score") == 0
+    assert isinstance(result.feedback_md, str) and result.feedback_md.strip() != ""
+    assert result.analysis_json.get("schema") == "criteria.v2"
+    assert result.analysis_json.get("criteria_results") == []
+    assert result.analysis_json.get("score") == 0

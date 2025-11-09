@@ -12,15 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies
 COPY backend/web/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-  && pip install --no-cache-dir psycopg[binary]==3.2.3 ollama \
   && apt-get purge -y --auto-remove gcc || true
 
 # Copy web app source (SSR/HTMX)
 # Copy web layer first so reload still works as expected
 COPY backend/web/ .
-# Ensure dependencies are present in final image layers (defensive, avoids cache quirks)
-RUN pip install --no-cache-dir -r /app/requirements.txt \
-  && pip install --no-cache-dir psycopg[binary]==3.2.3 ollama
 # Identity Access domain layer is located outside web package; copy it explicitly
 # Clean Architecture layout: we ship the web layer plus domain packages.
 # Identity/Teaching live as top-level packages; Learning stays under backend/ to

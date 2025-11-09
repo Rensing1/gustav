@@ -797,6 +797,23 @@ async def test_list_submissions_history_happy_path():
     assert latest.get("analysis_json") in (None, {})
     assert earliest["attempt_nr"] == 1
     assert earliest.get("analysis_json") in (None, {})
+    # Telemetry is always present per contract
+    telemetry_fields = (
+        "vision_attempts",
+        "vision_last_error",
+        "feedback_last_attempt_at",
+        "feedback_last_error",
+    )
+    for attempt in payload:
+        for field in telemetry_fields:
+            assert field in attempt, f"{field} missing from submission payload"
+        assert attempt["vision_attempts"] >= 0
+        assert (
+            attempt["vision_last_error"] is None or len(attempt["vision_last_error"]) <= 256
+        ), "vision_last_error must be sanitized to <=256 chars"
+        if attempt["feedback_last_attempt_at"] is not None:
+            # Fast ISO check
+            assert attempt["feedback_last_attempt_at"].endswith("Z") or "+" in attempt["feedback_last_attempt_at"]
 
 
 @pytest.mark.anyio
@@ -850,6 +867,67 @@ async def test_list_submissions_forbidden_non_member():
 
     assert resp.status_code == 403
     assert resp.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_submission_telemetry_is_sanitized_and_capped():
+    """Telemetry fields must expose sanitized strings and ISO timestamps."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "telemetry-check"},
+            json={"kind": "text", "text_body": "Antwort"},
+        )
+        assert resp.status_code == 202
+        submission_id = resp.json()["id"]
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover - safety
+        pytest.skip("psycopg required to seed telemetry values")
+
+    sensitive = "FATAL secret_token=XYZ12345" + (" spam" * 200)
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to seed telemetry values")
+
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set vision_attempts = 3,
+                       vision_last_error = %s,
+                       feedback_last_attempt_at = now(),
+                       feedback_last_error = %s
+                 where id = %s::uuid
+                """,
+                (sensitive, sensitive, submission_id),
+            )
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        history_resp = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 1, "offset": 0},
+        )
+
+    assert history_resp.status_code == 200
+    payload = history_resp.json()
+    assert payload, "expected at least one submission"
+    telemetry = payload[0]
+    assert telemetry["vision_attempts"] == 3
+    for key in ("vision_last_error", "feedback_last_error"):
+        value = telemetry[key]
+        assert value is not None
+        assert "secret_token" not in value.lower()
+        assert len(value) <= 256
+    assert telemetry["feedback_last_attempt_at"] is not None
 
 
 @pytest.mark.anyio

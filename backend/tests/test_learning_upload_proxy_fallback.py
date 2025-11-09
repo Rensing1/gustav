@@ -12,7 +12,6 @@ from __future__ import annotations
 import os
 import uuid
 from uuid import UUID
-import types
 
 import httpx
 import pytest
@@ -88,18 +87,17 @@ async def test_upload_proxy_flow(monkeypatch):
     # Monkeypatch requests.put used by proxy to avoid network
     body_sent = {}
 
-    def fake_put(url: str, data: bytes, headers: dict[str, str]):
-        body_sent["url"] = url
-        body_sent["data"] = data
-        body_sent["headers"] = headers
+    class _Resp:
+        status_code = 200
 
-        class _Resp:
-            status_code = 200
-
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        body_sent["url"] = kwargs.get("url")
+        body_sent["data"] = kwargs.get("payload")
+        body_sent["headers"] = {"Content-Type": kwargs.get("content_type")}
         return _Resp()
 
     import routes.learning as lr  # type: ignore
-    monkeypatch.setattr(lr, "requests", types.SimpleNamespace(put=fake_put))
+    monkeypatch.setattr(lr, "_async_forward_upload", fake_forward)
 
     # Request upload-intent; expect same-origin proxy url
     async with (await _client()) as c:

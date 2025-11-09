@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import sys
 import json
+import builtins
 from importlib import import_module
 from types import SimpleNamespace
 
@@ -33,6 +34,15 @@ def _uninstall_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_program_raises_when_dspy_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     _uninstall_fake_dspy(monkeypatch)
+
+    original_import = builtins.__import__
+
+    def _fake_import(name, *args, **kwargs):
+        if name == "dspy":
+            raise ImportError("dspy intentionally hidden for test")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
 
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
     with pytest.raises(ImportError):

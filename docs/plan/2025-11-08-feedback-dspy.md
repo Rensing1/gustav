@@ -2,12 +2,19 @@
 
 Datum: 2025-11-08
 Autor: Codex (mit Felix)
-Status: Entwurf
+Status: In Arbeit – DSPy fehlt weiterhin, Adapter liefert noch Stub-Rückmeldungen
 
 ## Kontext / Problem
 - Aktuell liefert der Feedback-Adapter (`backend/learning/adapters/local_feedback.py`) statische Rückmeldungen.
 - Der DSPy-Pfad existiert theoretisch (`backend/learning/adapters/dspy/feedback_program.py`), wird aber nie genutzt, weil `dspy` sowie das benötigte LM-Binding nicht installiert/konfiguriert sind.
 - Folge: Lernende erhalten keine adaptive Rückmeldung; alle Kriterienbewertungen sind Platzhalter.
+- Zusätzlich verwirft `local_feedback` jede reale LLM-Antwort (auch beim Ollama-Aufruf) und baut eine fixe `criteria.v2`-Struktur auf – selbst wenn ein Modell reagiert, sehen Lernende weiterhin Stubs.
+
+## Aktueller Stand (2025-11-09)
+- `pyproject.toml`/`poetry.lock` enthalten keinen DSPy-Eintrag; Docker-Images und CI können DSPy daher nicht importieren → der „DSPy“-Codepfad ist de facto tot.
+- `AI_BACKEND` steht in Compose weiterhin standardmäßig auf `stub`; ohne explizites `AI_BACKEND=local` im Worker greift garantiert der Stub-Adapter, selbst wenn DSPy installiert würde.
+- Das lokale Feedback-Modul ignoriert das Ergebnis des Ollama-Aufrufs vollständig und generiert `analysis_json`/`feedback_md` deterministisch (Zeilen 97–135). Damit existiert keine echte Modellintegration – das muss vor der DSPy-Aktivierung korrigiert werden.
+- Tests decken zwar die Stub-Pfade ab, prüfen aber nicht, dass der DSPy-Zweig aufgerufen wird oder dass reale Modellantworten ausgegeben werden. Es fehlen Contract-/Integrationstests, die echte (oder gemockte) LLM-Ausgaben verifizieren.
 
 ## Ziel(e)
 - DSPy real betreiben, sodass sowohl Rückmeldung als auch Auswertung (criteria.v2-Analyse) komplett modellgestützt erfolgen.
@@ -49,12 +56,17 @@ Als Lehrkraft möchte ich, dass das KI-Feedback echte lernstandsbasierte Hinweis
 - **Grundannahme**
   - DSPy ist fester Bestandteil der Deployment-Pipeline; fehlende Installationen gelten als Konfigurationsfehler, nicht als legitimer Betriebszustand.
   - `AI_BACKEND` bleibt auf `local`, der Feedback-Adapter entscheidet ausschließlich anhand der Runtime, ob DSPy erfolgreich ausgeführt werden kann; schlägt DSPy fehl, greift der deterministische Fallback.
+- **Iteration 0 – Voraussetzungen nachziehen (NEU)**
+  - `pyproject.toml`, `poetry.lock` und Docker-Image um DSPy + benötigte Provider ergänzen, inklusive reproduzierbarer Version (Security/KISS).
+  - `.env`, `.env.example`, `README` und Compose-Doku klarstellen, dass produktive Feedbacks nur mit `AI_BACKEND=local`, `AI_FEEDBACK_MODEL` und `OLLAMA_BASE_URL` funktionieren; Default weiterhin `stub`, aber Worker-Doku muss explizit auf „local“ verweisen.
+  - Health-/Smoke-Test („import dspy“) in CI hinterlegen, damit fehlende Abhängigkeiten sofort auffallen.
 - **Iteration 1 – DSPy-Programmierung**
   - Implementiere `backend/learning/adapters/dspy/feedback_program.py` als echtes DSPy `Program` (Structured Output + LM Binding via Ollama/HTTP) statt `_lm_call`.
   - Modellkonfiguration über die bestehenden ENV (`AI_FEEDBACK_MODEL`, `OLLAMA_BASE_URL`, Timeouts); Validierung der ENV gehört in diese Iteration.
   - Output Parsing weiterhin über `_parse_to_v2`, ergänzt um Telemetrie/Logging bei Schemafehlern.
 - **Iteration 2 – Adapter Integration**
   - `backend/learning/adapters/local_feedback.py` nutzt DSPy standardmäßig; gelingt der Aufruf nicht, fällt der Adapter explizit auf den bestehenden Ollama-/Stub-Pfad zurück.
+  - Reales LLM-Feedback (DSPy oder direkter Ollama-Fallback) wird an Lernende durchgereicht – keine statische Konstruktion mehr nach dem Aufruf.
   - Fehler im DSPy-Pfad werfen `FeedbackTransientError`, damit der Worker einen Retry plant (keine stille Unterdrückung).
 - **Iteration 3 – Deployment & Observability**
   - Poetry/requirements um `dspy`, ggf. `transformers` und benötigte Provider ergänzen; Lockfile aktualisieren.
@@ -71,6 +83,7 @@ Als Lehrkraft möchte ich, dass das KI-Feedback echte lernstandsbasierte Hinweis
    - Adapter-Test (Happy Path): injiziere Fake-`dspy` + Fake-Programme, stelle sicher, dass `local_feedback.analyze` den DSPy-Zweig nimmt und kein Stub-Feedback produziert.
    - Adapter-Test (Konfigurationsfehler): simuliere fehlende `AI_FEEDBACK_MODEL`- oder Host-ENV → erwarte Fallback + WARN.
    - Worker-E2E-Test: Setze `AI_BACKEND=local`, monkeypatch DSPy, führe Submission durch → verifiziere, dass `analysis_json` den DSPy-Inhalt enthält.
+   - **Neu**: Regressionstest für den Ollama-Fallback, der sicherstellt, dass reale Modellantworten im Response landen (keine erneute Stub-Konstruktion).
 2. **Implementierung minimal**
    - Dateien/Module:
      - `backend/learning/adapters/dspy/signatures.py`: `EvaluateCriteriaSignature`, `CriterionResult`, `GenerateFeedbackSignature`.
@@ -79,6 +92,7 @@ Als Lehrkraft möchte ich, dass das KI-Feedback echte lernstandsbasierte Hinweis
    - Adapter bleibt KISS: nutzt DSPy, wenn ENV ok, andernfalls Fallback.
 3. **Refactor & Logging**
    - Telemetrie/Logs ergänzen (`feedback_backend=dspy`), Timeout-Handling klären.
+   - Logging/Test-Hooks ergänzen, die festhalten, ob DSPy, Ollama oder der reine Stub gegriffen hat (Learning Analytics Dashboard + Operator Feedback).
 
 ## DSPy-Design (Variante 2 – echte Signatures)
 

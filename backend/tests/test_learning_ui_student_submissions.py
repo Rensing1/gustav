@@ -277,8 +277,8 @@ async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
 
 
 @pytest.mark.anyio
-async def test_ui_history_fragment_renders_telemetry_block():
-    """Telemetry fields must be visible, sanitized and labelled for learners."""
+async def test_ui_history_fragment_omits_telemetry_block():
+    """Telemetry card has been removed from learner view (no analysis-telemetry section)."""
 
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
     async with (await _client()) as c:
@@ -323,15 +323,8 @@ async def test_ui_history_fragment_renders_telemetry_block():
 
     assert r.status_code == 200
     html = r.text
-    # Telemetry list rendered with data attributes for tests
-    assert 'class="analysis-telemetry"' in html
-    assert 'data-testid="vision-attempts"' in html
-    assert "3" in html
-    assert 'data-testid="feedback-last-attempt"' in html
-    assert 'data-testid="feedback-last-error"' in html
-    # Sanitization removes raw secret token references
-    assert "secret_token" not in html.lower()
-    assert "[redacted]" in html
+    # Telemetry section omitted from learner-facing history
+    assert 'class="analysis-telemetry"' not in html
 
 
 @pytest.mark.anyio

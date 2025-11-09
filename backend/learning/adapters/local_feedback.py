@@ -162,7 +162,7 @@ class _LocalFeedbackAdapter:
             "learning.feedback.completed feedback_backend=ollama criteria_count=%s",
             len(criteria),
         )
-        return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis)
+        return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis, parse_status="stub")
 
     def _dspy_prerequisites_met(self) -> tuple[bool, str | None]:
         """Check whether env/config allow the DSPy path."""

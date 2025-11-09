@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from datetime import datetime, timezone
 import os
+import json
 
 import pytest
 
@@ -115,6 +116,31 @@ async def test_e2e_local_ai_text_submission_completed_v2_with_dspy(monkeypatch: 
         # Mock AI backends: Vision uses Ollama; Feedback prefers DSPy
         _install_fake_ollama(monkeypatch, text="## Vision Output\n\nHello world.")
         _install_fake_dspy(monkeypatch)
+        import importlib
+
+        monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+        dspy_program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+
+        def _fake_run_analysis_model(*, text_md: str, criteria):
+            crit_items = [
+                {"criterion": str(name), "max_score": 10, "score": 9, "explanation_md": f"Analyse {name}"}
+                for name in criteria
+            ]
+            payload = {
+                "schema": "criteria.v2",
+                "score": 4,
+                "criteria_results": crit_items,
+            }
+            return json.dumps(payload)
+
+        def _fake_run_feedback_model(*, text_md: str, criteria, analysis_json):
+            assert analysis_json["criteria_results"][0]["score"] == 9
+            return "**DSPy Feedback**\n\n- Individuell formuliert."
+
+        monkeypatch.setattr(dspy_program, "_run_analysis_model", _fake_run_analysis_model)
+        monkeypatch.setattr(dspy_program, "_run_feedback_model", _fake_run_feedback_model)
 
     # Create pending text submission
     repo = DBLearningRepo(dsn=dsn)
@@ -170,6 +196,9 @@ async def test_e2e_local_ai_text_submission_completed_v2_with_dspy(monkeypatch: 
     assert isinstance(analysis_json, dict)
     assert analysis_json.get("schema") == "criteria.v2"
     assert isinstance(feedback_md, str) and len(feedback_md.strip()) > 0
+    assert feedback_md == "**DSPy Feedback**\n\n- Individuell formuliert."
+    assert "Stärken: klar benannt" not in feedback_md
+    assert any("Analyse" in it["explanation_md"] for it in analysis_json.get("criteria_results") or [])
 
 
 @pytest.mark.anyio

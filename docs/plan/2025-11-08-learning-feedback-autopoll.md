@@ -56,18 +56,58 @@ Als Lehrkraft möchte ich echte, kriteriumsbasierte Hinweise sehen, sobald DSPy 
 
 ## Fortschritt (Stand 2025-11-08)
 - ✅ UI-Persistenz (Schritt 3): History-Fragment und TaskCard rendern jetzt `data-submission-id`, `data-open-attempt-id`, `hx-vals` und den gemeinsamen `hx-on`-Handler. `gustav.js` speichert beim Toggle die geöffnete Submission-ID, sodass Polling denselben Versuch offen lässt. Unit-Test `backend/tests/test_learning_ui_auto_refresh.py` deckt die neue Struktur ab und läuft grün.
-- ⏳ Logging & DSPy (Schritte 1 & 2): Noch offen – `_parse_to_v2` loggt weiterhin nicht, Structured-Output-Pfade fehlen, Worker-E2E persistiert Stub-Feedback.
-- ⏳ Regressionstests (Schritt 4): Bisher nur das UI-Teilziel getestet; Worker-E2E folgt, sobald DSPy-Anpassungen implementiert sind.
+- ✅ Logging & DSPy (Schritte 1 & 2): `_parse_to_v2` loggt jetzt anonymisierte Modellantworten bei JSON-Fehlern (`learning.feedback.dspy_parse_failed`), `FeedbackResult.parse_status` landet im Adapter-Log, und die neuen Module `backend/learning/adapters/dspy/{signatures,programs}.py` kapseln den strukturierten Output. Worker-E2E schreibt die DSPy-Markdown-Ausgabe unverändert in die DB (kein Stub mehr).
+- ✅ Zwei-Phasen-DSPy: `feedback_program` ruft nun zuerst `_run_analysis_model` (liefert strukturiertes `criteria.v2`), normalisiert das Ergebnis und übergibt es an `_run_feedback_model`, damit die sprachliche Rückmeldung immer auf derselben Analyse basiert. Neue Signaturen (`FeedbackSynthesisSignature`), Programme (`FeedbackSynthesisProgram`) sowie Parser- und Worker-Tests sichern die Pipeline. Telemetrie differenziert `analysis_fallback`, `feedback_fallback` usw.
+- ✅ Zielgerichtete Regressionstests: `pytest backend/tests/learning_adapters/test_feedback_program_dspy_parser.py`, `backend/tests/learning_adapters/test_feedback_program_dspy.py` und der Worker-E2E (`pytest backend/tests/test_learning_worker_e2e_local.py -k dspy`) laufen grün.
+- ⏳ Breitere Regression (Schritt 4): Noch offen sind ein vollständiges `pytest -k learning_ui` (inkl. Browser-naher Tests) und ein manueller End-to-End-Check nach dem nächsten Deploy.
 
 ## Schritte (offen)
-1. Logging & Diagnostics
-   - `_parse_to_v2`: anonymisierten Ausschnitt des Modelloutputs loggen, wenn JSON-Parsing scheitert.
-   - Worker-Log-Dashboard anreichern (`feedback_backend=dspy`, `parse=failed|ok`).
+1. Regressionstests (Rest)
+   - Breitere Testläufe (`pytest -k learning_ui`, ggf. Gesamt-Suite) nach den nächsten UI-Änderungen.
+   - Manuelle Verifikation (lokale Submission, Polling beobachten, DB-Eintrag prüfen) sobald wieder ein Deploy ansteht.
 
-2. DSPy Structured Output
-   - Neue Module `backend/learning/adapters/dspy/signatures.py`, `.../programs.py`.
-   - Tests: Parser akzeptiert reale DSPy-Ergebnisse, Worker-E2E prüft `feedback_md` ungleich Stub.
+## Erweiterungsplan: DSPy als echter Zwei-Phasen-Prozess
 
-3. Regressionstests
-   - Unit + E2E: `pytest -k learning_ui` + Worker.
-   - Manuelle Verifikation (lokale Submission, Polling beobachten, DB-Eintrag prüfen).
+Ziel: Auswertung (Kriterienanalyse) und Rückmeldung (sprachliche Empfehlung) getrennt über DSPy laufen lassen, jeweils mit eigenen Signaturen/Modulen und echten `dspy.OutputField`s, damit strukturierte Antworten nicht mehr „per Prompt“ erzwungen werden müssen.
+
+### User Story
+Als Lehrkraft möchte ich, dass GUSTAV zuerst eine nachvollziehbare Analyse („welches Kriterium bekommt welchen Score?“) erstellt und erst anschließend eine sprachliche Rückmeldung generiert, die sich eindeutig auf diese Analyse bezieht. So kann ich jede Phase separat prüfen und im Fehlerfall gezielt optimieren.
+
+### BDD-Szenarien (Auszug)
+1. **Analyse getrennt von Feedback**
+   - Given eine Submission mit drei Kriterien,
+   - When das DSPy-Analyseprogramm läuft,
+   - Then entsteht ein JSON mit `criteria_results`, das von der Feedback-Phase unverändert übernommen wird.
+2. **Feedback nutzt Analyse**
+   - Given eine vorhandene Analyse mit Scores und Begründungen,
+   - When das DSPy-Feedbackprogramm aufgerufen wird,
+   - Then verweist der erzeugte Markdown-Text auf konkrete Kriterien und Scores (z. B. „Inhalt: 8/10 …“).
+3. **Fallback pro Phase**
+   - Given die Analyse liefert kein valides JSON,
+   - When der Worker fortfährt,
+   - Then wird nur die Analyse mit Defaults ersetzt, während die Feedback-Phase trotzdem einen Text erzeugt (basierend auf den Ersatzdaten).
+
+### Technische Umsetzung
+1. **Signaturen**
+   - `FeedbackAnalysisSignature` bleibt bestehen, erhält aber echte DSPy-Felder (Input `student_text_md`, `criteria`; Output `criteria_results_json` + optional `analysis_log`).
+   - Neue `FeedbackSynthesisSignature` (Input: `analysis_json`, `student_text_md`; Output: `feedback_md`, `hints_md`).
+2. **Programme/Module**
+   - `backend/learning/adapters/dspy/programs.py` erweitert zu zwei Modulen:
+     1. `CriteriaAnalysisProgram` (ruft LLM, erzwingt JSON über DSPy OutputFields).
+     2. `FeedbackSynthesisProgram` (separater Prompt für sprachliche Hinweise).
+   - Beide Programme kapseln die LM-Aufrufe; Tests können jeden Runner separat mocken.
+3. **Adapter-Pipeline**
+   - `local_feedback._LocalFeedbackAdapter.analyze` ruft zuerst Analyseprogramm, normalisiert Ergebnis (`criteria.v2`), speichert es.
+   - Anschließend ruft es das Feedbackprogramm mit dem normalisierten JSON, damit Rückmeldungen garantiert auf den endgültigen Werten basieren.
+   - Telemetrie unterscheidet `analysis_parse_status` und `feedback_parse_status`.
+4. **Tests**
+   - Unit-Tests für beide Programme (jeweils JSON-Passthrough, Logging).
+   - Integrationstest: DSPy-Analyse liefert Werte, Feedbackprogramm referenziert sie (assert auf Markdown-Inhalt).
+   - Worker-E2E erweitert: sowohl Analyse- als auch Feedback-Phase werden verifiziert (DB enthält analysierte Kriterien + referenzierende Rückmeldung).
+5. **Migration/Docs**
+   - Keine Schemaänderung nötig, aber `docs/ARCHITECTURE.md` + Plan-Dokument aktualisieren (Beschreibung der Zwei-Phasen-Verarbeitung).
+   - `.env`-/README-Hinweis: Für echte DSPy-Läufe müssen beide Module aktiviert sein (`AI_BACKEND=local`, `AI_FEEDBACK_MODEL`, `OLLAMA_BASE_URL` gesetzt, `dspy-ai` installiert).
+
+### Rollout-Strategie
+1. Direktes Austauschen der Pipeline (Ein-Phasen-Variante entfernen, sobald zwei Phasen implementiert und getestet sind).
+2. Nach erfolgreichem Testlauf UI/Worker-Dokumentation aktualisieren und Deploy durchführen.

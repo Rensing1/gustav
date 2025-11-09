@@ -8,6 +8,7 @@ import logging
 import uuid
 import secrets
 import mimetypes
+import json
 from typing import Optional, Dict, Any, List, Mapping
 from datetime import datetime, timezone
 
@@ -601,14 +602,16 @@ def _build_history_entry_from_record(
             "</section>"
         )
     feedback_html = "".join(feedback_sections)
+    telemetry_html = _render_submission_telemetry(record)
 
     return HistoryEntry(
         label=label,
         timestamp=timestamp,
         content_html=content_html,
         feedback_html=feedback_html,
-        status_html="",
+        status_html=telemetry_html,
         expanded=expanded,
+        submission_id=submission_id,
     )
 
 
@@ -668,6 +671,56 @@ def _render_analysis_criteria_section(analysis: Mapping[str, object]) -> str:
     return section_html
 
 
+def _render_submission_telemetry(record: Mapping[str, Any]) -> str:
+    """Render telemetry (attempt counter, timestamps, sanitized errors) for learners."""
+    try:
+        attempts = int(record.get("vision_attempts") or 0)
+    except (TypeError, ValueError):
+        attempts = 0
+    attempts = max(0, attempts)
+    last_attempt_raw = str(record.get("feedback_last_attempt_at") or "").strip()
+    vision_error = str(record.get("vision_last_error") or "").strip()
+    feedback_error = str(record.get("feedback_last_error") or "").strip()
+
+    attempts_item = (
+        '<li data-testid="vision-attempts">'
+        '<span class="analysis-telemetry__label">Vision-Versuche</span>'
+        f'<span class="analysis-telemetry__value">{Component.escape(str(attempts))}</span>'
+        "</li>"
+    )
+    last_attempt_value = Component.escape(last_attempt_raw) if last_attempt_raw else "–"
+    feedback_time_item = (
+        '<li data-testid="feedback-last-attempt">'
+        '<span class="analysis-telemetry__label">Letzter Feedback-Versuch</span>'
+        f'<span class="analysis-telemetry__value">{last_attempt_value}</span>'
+        "</li>"
+    )
+    items = [attempts_item, feedback_time_item]
+    if vision_error:
+        items.append(
+            '<li data-testid="vision-last-error">'
+            '<span class="analysis-telemetry__label text-muted">Vision-Fehler (nur Lehrkraft)</span>'
+            f'<span class="analysis-telemetry__value">{Component.escape(vision_error)}</span>'
+            "</li>"
+        )
+    if feedback_error:
+        items.append(
+            '<li data-testid="feedback-last-error">'
+            '<span class="analysis-telemetry__label text-muted">Feedback-Fehler (nur Lehrkraft)</span>'
+            f'<span class="analysis-telemetry__value">{Component.escape(feedback_error)}</span>'
+            "</li>"
+        )
+
+    return (
+        '<section class="analysis-telemetry" aria-label="Analysefortschritt">'
+        '<p class="analysis-telemetry__heading"><strong>Analysefortschritt</strong></p>'
+        '<ul class="analysis-telemetry__list">'
+        + "".join(items)
+        + "</ul>"
+        "</section>"
+    )
+
+
 def _normalise_criterion_score(raw_score: object, raw_max_score: object) -> tuple[int | None, int, str]:
     """Clamp scores to 0..10 and choose a badge variant; returns None when score is invalid."""
     try:
@@ -694,10 +747,13 @@ def _render_history_entries_html(entries: List[HistoryEntry]) -> str:
     parts: List[str] = []
     for entry in entries:
         open_attr = " open" if entry.expanded else ""
+        submission_attr = (
+            f' data-submission-id="{Component.escape(entry.submission_id)}"' if entry.submission_id else ""
+        )
         inner_segments = [entry.content_html, entry.feedback_html, entry.status_html]
         inner_html = "".join(segment for segment in inner_segments if segment)
         parts.append(
-            f'<details{open_attr} class="task-panel__history-entry">'
+            f'<details{open_attr}{submission_attr} class="task-panel__history-entry">'
             f'<summary class="task-panel__history-summary">'
             f'<span class="task-panel__history-label">{Component.escape(entry.label)}</span>'
             f'<span class="task-panel__history-timestamp">{Component.escape(entry.timestamp)}</span>'
@@ -1217,11 +1273,14 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                                 except Exception:
                                     latest_status = None
                             if _is_analysis_in_progress(latest_status):
-                                qp = f"?open_attempt_id={open_attempt_id_qp}" if open_attempt_id_qp else ""
+                                payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
                                 history_placeholder_html = (
                                     f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history{qp}" '
-                                    f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML">'
+                                    f'data-pending="true" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+                                    f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML" '
+                                    f"hx-vals='{payload}' "
+                                    'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
                                     f'<div class="text-muted">Lade Verlauf …</div>'
                                     f'</section>'
                                 )
@@ -1238,11 +1297,14 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             else:
                 # Lazy-load the history via HTMX; we include a placeholder section
                 # that fetches and swaps itself on load.
-                qp = f"?open_attempt_id={open_attempt_id_qp}" if open_attempt_id_qp else ""
+                payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
                 history_placeholder_html = (
                     f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history{qp}" '
-                    f'hx-trigger="load" hx-target="this" hx-swap="outerHTML">'
+                    f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+                    f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
+                    f"hx-vals='{payload}' "
+                    'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
                     f'<div class="text-muted">Lade Verlauf …</div>'
                     f'</section>'
                 )
@@ -1502,13 +1564,22 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 except Exception:
                     latest_status = None
             pending_latest = _is_analysis_in_progress(latest_status)
-            hx_attrs = (
-                f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history?open_attempt_id={Component.escape(open_attempt_id)}"'
+            hx_poll_attrs = (
+                f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history"'
                 f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
                 if pending_latest
                 else ""
             )
-            wrapper_open = f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history" data-pending="{"true" if pending_latest else "false"}"{hx_attrs}>'
+            hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
+            wrapper_open = (
+                f'<section id="task-history-{Component.escape(task_id)}"'
+                f' class="task-panel__history"'
+                f' data-pending="{"true" if pending_latest else "false"}"'
+                f' data-open-attempt-id="{Component.escape(open_attempt_id)}"'
+                f'{hx_poll_attrs}'
+                f" hx-vals='{hx_vals_payload}'"
+                f' hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+            )
             inner_html = _render_history_entries_html(entries)
             if inner_html.startswith('<section'):
                 try:
@@ -1599,13 +1670,22 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
             latest_status = None
     pending_latest = _is_analysis_in_progress(latest_status)
     # Build wrapper with optional HX polling attributes (every 2s) while in progress
-    hx_attrs = (
-        f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history?open_attempt_id={Component.escape(open_attempt_id)}"'
+    hx_poll_attrs = (
+        f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history"'
         f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
         if pending_latest
         else ""
     )
-    wrapper_open = f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history" data-pending="{"true" if pending_latest else "false"}"{hx_attrs}>'
+    hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
+    wrapper_open = (
+        f'<section id="task-history-{Component.escape(task_id)}"'
+        f' class="task-panel__history"'
+        f' data-pending="{"true" if pending_latest else "false"}"'
+        f' data-open-attempt-id="{Component.escape(open_attempt_id)}"'
+        f'{hx_poll_attrs}'
+        f" hx-vals='{hx_vals_payload}'"
+        f' hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+    )
     inner_html = _render_history_entries_html(entries)
     # The helper returns its own <section>. We only want the inner entries here,
     # so we strip the outer wrapper to avoid nested sections.

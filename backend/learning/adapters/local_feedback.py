@@ -41,7 +41,14 @@ class _LocalFeedbackAdapter:
 
         self._timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
 
-    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:  # type: ignore[override]
+    def analyze(
+        self,
+        *,
+        text_md: str,
+        criteria: Sequence[str],
+        instruction_md: str | None = None,
+        hints_md: str | None = None,
+    ) -> FeedbackResult:  # type: ignore[override]
         """Produce formative feedback and a criteria.v2 analysis.
 
         Why:
@@ -81,7 +88,12 @@ class _LocalFeedbackAdapter:
 
         if use_dspy and dspy_program is not None:
             try:
-                dspy_result = dspy_program.analyze_feedback(text_md=text_md, criteria=criteria)
+                dspy_result = dspy_program.analyze_feedback(
+                    text_md=text_md,
+                    criteria=criteria,
+                    teacher_instructions_md=instruction_md,
+                    solution_hints_md=hints_md,
+                )
                 converted: FeedbackResult | None = None
                 if isinstance(dspy_result, FeedbackResult):
                     converted = dspy_result

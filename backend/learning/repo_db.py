@@ -676,6 +676,29 @@ class DBLearningRepo:
                         )
                         row = cur.fetchone()
                     submission_id = row[0]
+                    # Enrich job payload with task instruction and optional hints for the Feedback adapter
+                    instruction_md: str | None = None
+                    hints_md: str | None = None
+                    try:
+                        section_id = str(meta[1])  # from get_task_metadata_for_student
+                        cur.execute(
+                            """
+                            select id::text, instruction_md, hints_md
+                              from public.get_released_tasks_for_student(%s, %s, %s)
+                            """,
+                            (data.student_sub, course_uuid, section_id),
+                        )
+                        rows_ctx = cur.fetchall() or []
+                        for tid, instr, hints in rows_ctx:
+                            if str(tid) == task_uuid:
+                                instruction_md = instr
+                                hints_md = hints
+                                break
+                    except Exception:
+                        # Be tolerant: missing helper or columns shouldn't block submissions
+                        instruction_md = None
+                        hints_md = None
+
                     job_payload = {
                         "submission_id": submission_id,
                         "course_id": course_uuid,
@@ -684,6 +707,8 @@ class DBLearningRepo:
                         "kind": data.kind,
                         "attempt_nr": attempt_nr,
                         "criteria": criteria,
+                        "instruction_md": instruction_md,
+                        "hints_md": hints_md,
                     }
                     queue_table = self._resolve_queue_table(cur)
                     if queue_table:

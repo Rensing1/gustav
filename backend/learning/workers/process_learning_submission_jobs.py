@@ -19,6 +19,7 @@ import logging
 import os
 import re
 from typing import Optional, Sequence
+import inspect
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 from importlib import import_module
@@ -274,9 +275,23 @@ def _process_job(
         return
 
     try:
-        feedback_result = feedback_adapter.analyze(
-            text_md=vision_result.text_md, criteria=job.payload.get("criteria", [])
-        )
+        # Pass task context (instruction/hints) to adapters that support it; keep compatibility otherwise.
+        analyze_kwargs = {
+            "text_md": vision_result.text_md,
+            "criteria": job.payload.get("criteria", []),
+        }
+        if isinstance(job.payload, dict):
+            instr = job.payload.get("instruction_md")
+            hints = job.payload.get("hints_md")
+            sig = None
+            try:
+                sig = inspect.signature(feedback_adapter.analyze)  # type: ignore[attr-defined]
+            except Exception:
+                sig = None
+            if sig and "instruction_md" in sig.parameters and "hints_md" in sig.parameters:
+                analyze_kwargs["instruction_md"] = instr
+                analyze_kwargs["hints_md"] = hints
+        feedback_result = feedback_adapter.analyze(**analyze_kwargs)  # type: ignore[arg-type]
     except FeedbackPermanentError as exc:
         LOG.warning(
             "Feedback permanent error for submission %s job %s: %s",

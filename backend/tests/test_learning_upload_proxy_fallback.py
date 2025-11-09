@@ -97,7 +97,13 @@ async def test_upload_proxy_flow(monkeypatch):
         return _Resp()
 
     import routes.learning as lr  # type: ignore
+    try:  # type: ignore[attr-defined]
+        import backend.web.routes.learning as lr_backend  # type: ignore
+    except ImportError:  # pragma: no cover
+        lr_backend = None  # type: ignore
     monkeypatch.setattr(lr, "_async_forward_upload", fake_forward)
+    if lr_backend is not None:
+        monkeypatch.setattr(lr_backend, "_async_forward_upload", fake_forward)
 
     # Request upload-intent; expect same-origin proxy url
     async with (await _client()) as c:

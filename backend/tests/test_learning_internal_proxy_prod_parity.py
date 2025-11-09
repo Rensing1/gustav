@@ -36,6 +36,10 @@ async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPa
 
     import main  # noqa
     import routes.learning as learning  # noqa
+    try:  # type: ignore[attr-defined]
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except ImportError:  # pragma: no cover - alias may not exist outside app package
+        learning_backend = None  # type: ignore
     from identity_access.stores import SessionStore  # type: ignore
 
     main.SESSION_STORE = SessionStore()
@@ -46,6 +50,8 @@ async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPa
         raise RuntimeError("upstream down")
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
 
 
@@ -59,6 +65,10 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
 
     import main  # noqa
     import routes.learning as learning  # noqa
+    try:  # type: ignore[attr-defined]
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except ImportError:  # pragma: no cover
+        learning_backend = None  # type: ignore
     from identity_access.stores import SessionStore  # type: ignore
 
     main.SESSION_STORE = SessionStore()
@@ -71,6 +81,8 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
 
 @pytest.mark.anyio
@@ -83,6 +95,10 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
 
     import main  # noqa
     import routes.learning as learning  # noqa
+    try:  # type: ignore[attr-defined]
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except ImportError:  # pragma: no cover
+        learning_backend = None  # type: ignore
     from identity_access.stores import SessionStore  # type: ignore
 
     main.SESSION_STORE = SessionStore()
@@ -99,6 +115,8 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
@@ -122,6 +140,10 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
 
     import main  # noqa
     import routes.learning as learning  # noqa
+    try:  # type: ignore[attr-defined]
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except ImportError:  # pragma: no cover
+        learning_backend = None  # type: ignore
     from identity_access.stores import SessionStore  # type: ignore
 
     main.SESSION_STORE = SessionStore()
@@ -142,6 +164,8 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

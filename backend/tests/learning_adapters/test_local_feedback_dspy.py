@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
+import builtins
 
 import pytest
 
@@ -46,6 +47,17 @@ def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
 def _uninstall_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
     if "dspy" in sys.modules:
         monkeypatch.delitem(sys.modules, "dspy", raising=False)
+
+
+def _force_dspy_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_import = builtins.__import__
+
+    def _fake_import(name, *args, **kwargs):
+        if name == "dspy":
+            raise ImportError("dspy intentionally hidden for test")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
 
 
 def _find_backend_marker(caplog: pytest.LogCaptureFixture, value: str) -> bool:
@@ -85,6 +97,7 @@ def test_feedback_prefers_dspy_when_importable(monkeypatch: pytest.MonkeyPatch) 
 def test_feedback_falls_back_to_ollama_when_dspy_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     # Remove any pre-existing dspy markers
     _uninstall_fake_dspy(monkeypatch)
+    _force_dspy_import_error(monkeypatch)
 
     # Provide a benign ollama client
     from backend.tests.learning_adapters.test_local_feedback import _install_fake_ollama  # reuse helper
@@ -176,6 +189,7 @@ def test_feedback_logs_backend_dspy(monkeypatch: pytest.MonkeyPatch, caplog: pyt
 
 def test_feedback_logs_backend_fallback(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     _uninstall_fake_dspy(monkeypatch)
+    _force_dspy_import_error(monkeypatch)
     from backend.tests.learning_adapters.test_local_feedback import _install_fake_ollama
 
     _install_fake_ollama(monkeypatch, mode="ok")

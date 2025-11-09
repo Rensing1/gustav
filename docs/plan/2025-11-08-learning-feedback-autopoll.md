@@ -59,12 +59,10 @@ Als Lehrkraft möchte ich echte, kriteriumsbasierte Hinweise sehen, sobald DSPy 
 - ✅ Logging & DSPy (Schritte 1 & 2): `_parse_to_v2` loggt jetzt anonymisierte Modellantworten bei JSON-Fehlern (`learning.feedback.dspy_parse_failed`), `FeedbackResult.parse_status` landet im Adapter-Log, und die neuen Module `backend/learning/adapters/dspy/{signatures,programs}.py` kapseln den strukturierten Output. Worker-E2E schreibt die DSPy-Markdown-Ausgabe unverändert in die DB (kein Stub mehr).
 - ✅ Zwei-Phasen-DSPy: `feedback_program` ruft nun zuerst `_run_analysis_model` (liefert strukturiertes `criteria.v2`), normalisiert das Ergebnis und übergibt es an `_run_feedback_model`, damit die sprachliche Rückmeldung immer auf derselben Analyse basiert. Neue Signaturen (`FeedbackSynthesisSignature`), Programme (`FeedbackSynthesisProgram`) sowie Parser- und Worker-Tests sichern die Pipeline. Telemetrie differenziert `analysis_fallback`, `feedback_fallback` usw.
 - ✅ Zielgerichtete Regressionstests: `pytest backend/tests/learning_adapters/test_feedback_program_dspy_parser.py`, `backend/tests/learning_adapters/test_feedback_program_dspy.py` und der Worker-E2E (`pytest backend/tests/test_learning_worker_e2e_local.py -k dspy`) laufen grün.
-- ⏳ Breitere Regression (Schritt 4): Noch offen sind ein vollständiges `pytest -k learning_ui` (inkl. Browser-naher Tests) und ein manueller End-to-End-Check nach dem nächsten Deploy.
+- ✅ Breitere Regression (Schritt 4): Komplette Test-Suite (`.venv/bin/pytest -q -rs`) inkl. UI- und Worker-Szenarien sowie die optionalen Ollama/Supabase/Keycloak-E2Es liefen grün (Vision-Test nutzt jetzt `qwen2.5vl:3b`). Manuelle Verprobung erfolgt beim nächsten Deploy wie gewohnt.
 
 ## Schritte (offen)
-1. Regressionstests (Rest)
-   - Breitere Testläufe (`pytest -k learning_ui`, ggf. Gesamt-Suite) nach den nächsten UI-Änderungen.
-   - Manuelle Verifikation (lokale Submission, Polling beobachten, DB-Eintrag prüfen) sobald wieder ein Deploy ansteht.
+_(keine – Plan abgeschlossen; manueller Check findet im nächsten regulären Deploy-Slot statt)._
 
 ## Erweiterungsplan: DSPy als echter Zwei-Phasen-Prozess
 

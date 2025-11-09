@@ -1,4 +1,5 @@
 import asyncio
+import re
 import types
 import uuid
 
@@ -95,7 +96,10 @@ async def test_history_fragment_autopolls_for_in_progress_status(monkeypatch: py
     html = r.text
     # In-progress (pending/extracted) → auto-refresh attributes present
     assert "class=\"task-panel__history\"" in html
-    assert "hx-get=\"/learning/courses/c1/tasks/t1/history?open_attempt_id=" in html
+    assert "hx-get=\"/learning/courses/c1/tasks/t1/history\"" in html
+    assert f'data-open-attempt-id="{latest["id"]}"' in html
+    hx_vals = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
+    assert hx_vals and hx_vals.group(1) == latest["id"]
     assert "hx-trigger=\"every 2s\"" in html or "hx-trigger=\"load, every 2s\"" in html
     assert "data-pending=\"true\"" in html
 
@@ -142,6 +146,76 @@ async def test_history_fragment_stops_polling_when_completed(monkeypatch: pytest
     assert "data-pending=\"false\"" in html
     assert "hx-get=\"/learning/courses/c1/tasks/t1/history" not in html
     assert "hx-trigger=\"" not in html
+
+
+@pytest.mark.anyio
+async def test_history_fragment_exposes_submission_ids_and_open_state_attrs(monkeypatch: pytest.MonkeyPatch):
+    """Fragment must expose submission ids + open state hooks for HTMX persistence."""
+    student = _student_session()
+
+    latest = {
+        "id": str(uuid.uuid4()),
+        "attempt_nr": 3,
+        "kind": "text",
+        "text_body": "Neueste Antwort",
+        "mime_type": None,
+        "size_bytes": None,
+        "storage_key": None,
+        "sha256": None,
+        "analysis_status": "pending",
+        "analysis_json": None,
+        "feedback": None,
+        "error_code": None,
+        "created_at": "2025-11-04T12:10:00+00:00",
+        "completed_at": None,
+    }
+    older = {
+        "id": str(uuid.uuid4()),
+        "attempt_nr": 2,
+        "kind": "text",
+        "text_body": "Ältere Antwort",
+        "mime_type": None,
+        "size_bytes": None,
+        "storage_key": None,
+        "sha256": None,
+        "analysis_status": "completed",
+        "analysis_json": {"schema": "criteria.v2", "results": []},
+        "feedback": "Gut gemacht",
+        "error_code": None,
+        "created_at": "2025-11-03T09:00:00+00:00",
+        "completed_at": "2025-11-03T09:05:00+00:00",
+    }
+
+    open_id = older["id"]
+
+    def _submissions(_params):
+        return [latest, older]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get(f"/learning/courses/c1/tasks/t1/history?open_attempt_id={open_id}")
+    assert r.status_code == 200
+    html = r.text
+
+    # Each <details> carries the submission id for client-side persistence
+    assert f'data-submission-id="{latest["id"]}"' in html
+    assert f'data-submission-id="{older["id"]}"' in html
+
+    # Wrapper advertises which attempt should remain open and exposes hx-vals
+    assert f'data-open-attempt-id="{open_id}"' in html
+    hx_vals_match = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
+    assert hx_vals_match, "history wrapper must include hx-vals for open_attempt_id"
+    assert hx_vals_match.group(1) == open_id
+
+    # Toggle handler present so HTMX polls can update the open attempt id
+    assert 'hx-on="toggle:' in html
 
 
 @pytest.mark.anyio
@@ -200,6 +274,8 @@ async def test_unit_page_embeds_autopoll_when_latest_in_progress(monkeypatch: py
     html = r.text
     # The pre-render should include a placeholder history with polling enabled
     assert "class=\"task-panel__history\"" in html
-    expected_hx = f"hx-get=\"/learning/courses/{course_id}/tasks/{task_id}/history?open_attempt_id="
+    expected_hx = f"hx-get=\"/learning/courses/{course_id}/tasks/{task_id}/history\""
     assert expected_hx in html
+    hx_vals = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
+    assert hx_vals and hx_vals.group(1) == open_id
     assert "hx-trigger=\"load, every 2s\"" in html or "hx-trigger=\"every 2s\"" in html

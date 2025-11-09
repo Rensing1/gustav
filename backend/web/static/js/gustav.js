@@ -125,11 +125,44 @@ class Gustav {
   }
 
   /**
+   * Persist which submission the learner has opened while HTMX polls history fragments.
+   *
+   * hx-on calls this whenever a <details> toggles. We update data-open-attempt-id
+   * and hx-vals so the next poll request keeps the same attempt expanded.
+   */
+  handleHistoryToggle(event, wrapper) {
+    if (!wrapper || !wrapper.classList || !wrapper.classList.contains('task-panel__history')) {
+      return;
+    }
+    const details = event.target && event.target.closest
+      ? event.target.closest('details.task-panel__history-entry')
+      : null;
+    if (!details) return;
+
+    const historyEl = wrapper;
+    let openId = '';
+
+    if (details.open) {
+      openId = details.dataset.submissionId || '';
+    } else {
+      const stillOpen = historyEl.querySelector('details.task-panel__history-entry[open]');
+      openId = stillOpen ? (stillOpen.dataset.submissionId || '') : '';
+    }
+
+    historyEl.dataset.openAttemptId = openId;
+    try {
+      historyEl.setAttribute('hx-vals', JSON.stringify({ open_attempt_id: openId }));
+    } catch (err) {
+      console.warn('Failed to persist open attempt id', err);
+    }
+  }
+
+  /**
    * Execute the client-side upload prepare flow for learning submissions.
    * 1) POST upload-intent → get storage_key + PUT URL
    * 2) PUT file to returned URL
    * 3) Fill hidden fields for final submission
-   */
+    */
   async prepareLearningUpload(form, file) {
     const courseId = form.dataset.courseId;
     const taskId = form.dataset.taskId;

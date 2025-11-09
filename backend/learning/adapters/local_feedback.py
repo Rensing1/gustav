@@ -81,12 +81,34 @@ class _LocalFeedbackAdapter:
 
         if use_dspy and dspy_program is not None:
             try:
-                feedback_md, analysis = dspy_program.analyze_feedback(text_md=text_md, criteria=criteria)
-                logger.info(
-                    "learning.feedback.completed feedback_backend=dspy criteria_count=%s",
-                    len(criteria),
-                )
-                return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis)
+                dspy_result = dspy_program.analyze_feedback(text_md=text_md, criteria=criteria)
+                converted: FeedbackResult | None = None
+                if isinstance(dspy_result, FeedbackResult):
+                    converted = dspy_result
+                elif hasattr(dspy_result, "feedback_md") and hasattr(dspy_result, "analysis_json"):
+                    converted = FeedbackResult(
+                        feedback_md=str(getattr(dspy_result, "feedback_md")),
+                        analysis_json=getattr(dspy_result, "analysis_json"),
+                        parse_status=getattr(dspy_result, "parse_status", None),
+                    )
+                else:
+                    try:
+                        feedback_md, analysis = dspy_result  # type: ignore[misc]
+                        converted = FeedbackResult(
+                            feedback_md=str(feedback_md),
+                            analysis_json=analysis,
+                            parse_status=getattr(dspy_result, "parse_status", None),
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive guard
+                        logger.warning("learning.feedback.dspy_invalid_return reason=%s", exc.__class__.__name__)
+                if converted is not None:
+                    parse_status = converted.parse_status or "unknown"
+                    logger.info(
+                        "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
+                        len(criteria),
+                        parse_status,
+                    )
+                    return converted
             except FeedbackTransientError:
                 raise
             except TimeoutError as exc:

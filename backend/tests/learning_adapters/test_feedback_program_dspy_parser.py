@@ -46,14 +46,14 @@ def test_parser_accepts_variants_and_clamps(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(mod, "_run_model", lambda **_: raw)  # type: ignore[attr-defined]
 
-    feedback_md, analysis = mod.analyze_feedback(  # type: ignore[attr-defined]
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt", "Struktur"]
     )
-    assert isinstance(feedback_md, str) and feedback_md.strip()
-    assert analysis.get("schema") == "criteria.v2"
-    assert analysis.get("score") == 5  # clamped
+    assert result.feedback_md.strip()
+    assert result.analysis_json.get("schema") == "criteria.v2"
+    assert result.analysis_json.get("score") == 5  # clamped
 
-    items = analysis.get("criteria_results")
+    items = result.analysis_json.get("criteria_results")
     assert len(items) == 2
 
     a, b = items[0], items[1]
@@ -78,21 +78,21 @@ def test_parser_fills_missing_criteria_and_defaults_on_malformed(monkeypatch: py
     )
     monkeypatch.setattr(mod, "_run_model", lambda **_: raw_one)  # type: ignore[attr-defined]
 
-    _, analysis = mod.analyze_feedback(  # type: ignore[attr-defined]
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt", "Struktur"]
     )
-    items = analysis.get("criteria_results")
+    items = result.analysis_json.get("criteria_results")
     assert len(items) == 2
     names = {it["criterion"] for it in items}
     assert names == {"Inhalt", "Struktur"}
 
     # Second case: malformed JSON → all defaults used (deterministic fallbacks)
     monkeypatch.setattr(mod, "_run_model", lambda **_: "not json at all")  # type: ignore[attr-defined]
-    _, analysis2 = mod.analyze_feedback(  # type: ignore[attr-defined]
+    result2 = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt", "Struktur"]
     )
-    assert analysis2.get("schema") == "criteria.v2"
-    items2 = analysis2.get("criteria_results")
+    assert result2.analysis_json.get("schema") == "criteria.v2"
+    items2 = result2.analysis_json.get("criteria_results")
     assert len(items2) == 2
     assert all("criterion" in it and "score" in it for it in items2)
 
@@ -115,8 +115,27 @@ def test_parser_passes_through_model_feedback(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(mod, "_run_model", lambda **_: json.dumps(payload), raising=False)  # type: ignore[attr-defined]
 
-    feedback_md, analysis = mod.analyze_feedback(  # type: ignore[attr-defined]
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Text", criteria=["Inhalt"]
     )
-    assert feedback_md == payload["feedback_md"]
-    assert analysis["criteria_results"][0]["score"] == 8
+    assert result.feedback_md == payload["feedback_md"]
+    assert result.analysis_json["criteria_results"][0]["score"] == 8
+
+
+def test_parser_logs_when_raw_payload_not_json(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """If the LM answer is not JSON, log a parse failure with a redacted sample."""
+    _install_fake_dspy(monkeypatch)
+    from importlib import import_module
+
+    mod = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    monkeypatch.setattr(mod, "_run_model", lambda **_: "### not json", raising=False)  # type: ignore[attr-defined]
+
+    caplog.set_level("INFO")
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="# Text", criteria=["Inhalt"]
+    )
+
+    assert result.parse_status == "fallback"
+    assert any("learning.feedback.dspy_parse_failed" in record.getMessage() for record in caplog.records), \
+        "Expected parse failure log entry"

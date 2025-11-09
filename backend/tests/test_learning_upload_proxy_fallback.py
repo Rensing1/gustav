@@ -16,6 +16,7 @@ from uuid import UUID
 import httpx
 import pytest
 from httpx import ASGITransport
+from fastapi.routing import APIRoute
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -104,6 +105,13 @@ async def test_upload_proxy_flow(monkeypatch):
     monkeypatch.setattr(lr, "_async_forward_upload", fake_forward)
     if lr_backend is not None:
         monkeypatch.setattr(lr_backend, "_async_forward_upload", fake_forward)
+    # Some suites reload routes.learning. Patch the actual FastAPI endpoint globals as well.
+    for route in main.app.routes:
+        if isinstance(route, APIRoute) and route.path == "/api/learning/internal/upload-proxy":
+            route.endpoint.__globals__["_async_forward_upload"] = fake_forward
+            break
+    else:  # pragma: no cover - defensive to surface wiring issues
+        raise AssertionError("upload-proxy route not registered on FastAPI app")
 
     # Request upload-intent; expect same-origin proxy url
     async with (await _client()) as c:

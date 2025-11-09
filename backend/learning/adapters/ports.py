@@ -44,10 +44,12 @@ class FeedbackResult:
     Parameters:
         feedback_md: Markdown feedback presented to the learner.
         analysis_json: Criteria-based report; schema='criteria.v2'.
+        parse_status: Optional status marker (e.g., "parsed", "fallback") for telemetry.
     """
 
     feedback_md: str
     analysis_json: dict
+    parse_status: Optional[str] = None
 
 
 # ----------------------------- Protocols ------------------------------------

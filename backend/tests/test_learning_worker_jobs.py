@@ -403,7 +403,10 @@ async def test_worker_marks_failed_after_max_retries(monkeypatch):
         now=tick,
     )
 
-    second_tick = tick + timedelta(seconds=2)
+    # Use a slightly larger offset than the nominal backoff to avoid
+    # flakiness on slower CI/DB clocks. With WORKER_BACKOFF_SECONDS=1 and
+    # first retry_count=0, visible_at = now + 1s; we wait 3s.
+    second_tick = tick + timedelta(seconds=3)
     processed = run_once(
         dsn=worker_dsn,
         vision_adapter=_PermanentVisionAdapter(),

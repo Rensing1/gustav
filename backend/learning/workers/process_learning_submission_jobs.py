@@ -240,7 +240,16 @@ def _process_job(
         return
 
     try:
-        vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
+        # For plain text submissions we never invoke Vision/OCR/LLM. Preserve the
+        # original student text verbatim to avoid unintended transformations.
+        if (submission.get("kind") or "").strip() == "text":
+            from backend.learning.adapters.ports import VisionResult as _VR  # local import to avoid cycles
+            vision_result = _VR(
+                text_md=str(submission.get("text_body") or ""),
+                raw_metadata={"adapter": "worker", "backend": "pass_through", "reason": "text_submission"},
+            )
+        else:
+            vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
     except VisionPermanentError as exc:
         LOG.warning(
             "Vision permanent error for submission %s job %s: %s",
@@ -721,6 +730,22 @@ def main() -> None:
     cfg = load_ai_config()
     vision_path = cfg.vision_adapter_path
     feedback_path = cfg.feedback_adapter_path
+
+    # Configure DSPy globally when available so structured outputs are preferred.
+    try:  # pragma: no cover - behavior validated via higher-level tests
+        import dspy  # type: ignore
+
+        model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
+        if model_name and hasattr(dspy, "LM"):
+            lm = dspy.LM(f"ollama/{model_name}")  # type: ignore[attr-defined]
+            adapter_cls = getattr(dspy, "JSONAdapter", None)
+            if adapter_cls is not None:
+                dspy.configure(lm=lm, adapter=adapter_cls())  # type: ignore[misc]
+            else:
+                dspy.configure(lm=lm)
+            LOG.info("learning.feedback.dspy_configured model=%s adapter=%s", model_name, "JSONAdapter" if adapter_cls else "default")
+    except Exception as _cfg_exc:  # pragma: no cover
+        LOG.debug("DSPy not configured: %s", type(_cfg_exc).__name__)
 
     vision_module = import_module(vision_path)
     feedback_module = import_module(feedback_path)

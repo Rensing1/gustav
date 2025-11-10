@@ -16,6 +16,43 @@ from typing import Protocol
 
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 
+# Conservative upper bound to protect server memory when verifying by download.
+# Must be kept in sync with learning upload policy (10 MiB).
+_SAFE_MAX_BYTES = 10 * 1024 * 1024
+
+def _stream_hash_from_url(url: str, *, timeout: float = 15.0, max_bytes: int = _SAFE_MAX_BYTES) -> tuple[bool, str | None, int | None, str]:
+    """
+    Download content from a URL and compute its SHA-256 in a streaming fashion.
+
+    Returns (ok, hex_sha256 | None, size | None, reason).
+
+    Notes:
+        - Uses httpx if available; otherwise, returns a failure.
+        - Enforces a hard maximum on downloaded bytes to avoid memory pressure.
+    """
+    try:
+        import httpx  # type: ignore
+    except Exception:
+        return (False, None, None, "http_client_unavailable")
+
+    try:
+        h = _sha256()
+        total = 0
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:  # type: ignore
+            with client.stream("GET", url) as resp:  # type: ignore
+                if int(getattr(resp, "status_code", 500)) >= 400:
+                    return (False, None, None, "download_error")
+                for chunk in resp.iter_bytes():  # type: ignore[attr-defined]
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > max_bytes:
+                        return (False, None, total, "size_exceeded")
+                    h.update(chunk)
+        return (True, h.hexdigest(), total, "ok")
+    except Exception:
+        return (False, None, None, "download_exception")
+
 
 @dataclass(frozen=True, slots=True)
 class VerificationConfig:
@@ -53,6 +90,7 @@ def verify_storage_object_integrity(
 
     remote_checked = False
     last_reason = "missing_object"
+    head_seen = False
     if bucket and not isinstance(adapter, NullStorageAdapter):
         attempts = config.retry_attempts if require else 1
         for attempt in range(max(1, attempts)):
@@ -67,6 +105,7 @@ def verify_storage_object_integrity(
                 last_reason = "head_error"
             else:
                 if head:
+                    head_seen = True
                     length = head.get("content_length")
                     etag = head.get("etag") or head.get("ETag") or head.get("sha256") or head.get("content_sha256")
                     expected_size_int = None
@@ -83,11 +122,23 @@ def verify_storage_object_integrity(
                     if expected_size_int is not None and actual_size is not None and expected_size_int != actual_size:
                         last_reason = "size_mismatch"
                     elif expected_sha256 and etag:
-                        normalized = str(etag).strip('"').lower()
-                        if normalized != str(expected_sha256).lower():
-                            last_reason = "hash_mismatch"
+                        # Only accept a trusted SHA-256 header name; generic ETags are
+                        # not reliable checksums in many backends (e.g., Supabase).
+                        # Some providers put sha256 in custom headers (e.g., content_sha256).
+                        # Treat unknown/opaque ETags as non-authoritative.
+                        name = None
+                        for k in ("sha256", "content_sha256"):
+                            if k in head:
+                                name = k
+                                break
+                        if name is not None:
+                            normalized = str(head.get(name)).strip('"').lower()
+                            if normalized != str(expected_sha256).lower():
+                                last_reason = "hash_mismatch"
+                            else:
+                                return (True, "ok")
                         else:
-                            return (True, "ok")
+                            last_reason = "hash_unavailable"
                     elif expected_size_int is not None and actual_size is not None:
                         return (True, "ok")
                     else:
@@ -98,6 +149,32 @@ def verify_storage_object_integrity(
             if attempt < attempts - 1:
                 time.sleep(config.retry_sleep_seconds)
         remote_checked = True
+
+    # If strict verification is required and we saw a HEAD but no trustworthy
+    # hash header, attempt a secure, bounded download to compute SHA-256.
+    if require and head_seen and expected_sha256:
+        try:
+            dl = adapter.presign_download(bucket=bucket, key=storage_key, expires_in=60, disposition="inline")
+            url = (dl or {}).get("url")
+        except Exception:
+            url = None
+        if isinstance(url, str) and url:
+            ok, actual_sha, actual_size, reason = _stream_hash_from_url(url, timeout=15.0, max_bytes=_SAFE_MAX_BYTES)
+            if ok and isinstance(actual_sha, str):
+                # If expected size is known, enforce it too
+                try:
+                    expected_size_int2 = int(expected_size) if expected_size is not None else None
+                except Exception:
+                    expected_size_int2 = None
+                if expected_size_int2 is not None and isinstance(actual_size, int) and actual_size != expected_size_int2:
+                    return (False, "size_mismatch")
+                if actual_sha.lower() == str(expected_sha256).lower():
+                    return (True, "ok")
+                else:
+                    return (False, "hash_mismatch")
+            else:
+                # Preserve the more specific earlier reason when download failed
+                last_reason = last_reason or reason or "download_failed"
 
     root = (config.local_verify_root or "").strip()
     if not root:

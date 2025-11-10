@@ -20,3 +20,8 @@ dspy-ai==3.0.3
 
 # Supabase client (for Storage adapter wiring)
 supabase==2.6.0
+
+# Imaging (PDF vision stitching requires Pillow in worker container)
+Pillow==10.4.0
+# PDF rendering backend (required for PDF → images in worker)
+pypdfium2==4.30.0

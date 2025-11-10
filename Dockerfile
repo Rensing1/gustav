@@ -24,6 +24,7 @@ COPY backend/web/ .
 COPY backend/identity_access ./identity_access
 COPY backend/teaching ./teaching
 COPY backend/learning ./backend/learning
+COPY backend/vision ./backend/vision
 COPY backend/storage ./backend/storage
 COPY backend/__init__.py ./backend/__init__.py
 

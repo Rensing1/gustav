@@ -320,6 +320,26 @@ async def test_worker_retries_vision_transient_error(monkeypatch):
         idempotency_key="worker-retry-path"
     )
 
+    # For this test we want to exercise the Vision adapter path. The worker
+    # normally bypasses Vision for text submissions, so we flip this submission
+    # to a non-text kind in the DB before running the worker.
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set kind = 'image',
+                       mime_type = 'image/png',
+                       text_body = null,
+                       storage_key = coalesce(storage_key, 'dev/dummy.png'),
+                       size_bytes = coalesce(size_bytes, 1),
+                       sha256 = coalesce(sha256, repeat('0', 64))
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+        conn.commit()
+
     # Deterministic configuration for retries.
     monkeypatch.setenv("WORKER_BACKOFF_SECONDS", "2")
     worker_module.MAX_RETRIES = 3  # type: ignore[attr-defined]

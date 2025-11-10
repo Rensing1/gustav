@@ -81,21 +81,22 @@ def render_pdf_to_images(
 
     pages_out: List[RenderPage] = []
 
-    # Render flags: include annotations if requested.
-    render_flags = 0
+    # Convert target DPI to a scale factor (PDF default resolution is 72 DPI)
     try:
-        if include_annotations:
-            render_flags |= pdfium.BitmapConvFlags.ANNOT  # type: ignore[attr-defined]
+        scale = float(dpi) / 72.0
+        if scale <= 0:
+            scale = 1.0
     except Exception:
-        # Fallback if constant not available in the mocked environment
-        render_flags = 0
+        scale = 4.1667  # ~300 DPI fallback
 
     for i in range(max_pages):
         try:
             page = doc[i]
-            # pypdfium2 commonly uses a scale factor rather than dpi directly;
-            # but libraries provide helpers. For tests we call a generic render.
-            bitmap = page.render(dpi=dpi, flags=render_flags)
+            # pypdfium2 expects a scale factor; derive from DPI (72 base DPI)
+            bitmap = page.render(
+                scale=scale,
+                draw_annots=bool(include_annotations),
+            )
             pil = bitmap.to_pil()  # to Pillow Image
             if grayscale and pil.mode != "L":
                 pil = pil.convert("L")

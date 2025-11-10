@@ -26,6 +26,8 @@ services:
       - ./backend/teaching:/app/teaching:z
       # Learning bounded context
       - ./backend/learning:/app/backend/learning:z
+      # Vision utilities (PDF rendering, preprocessing, stitching)
+      - ./backend/vision:/app/backend/vision:z
       # Shared storage helpers (learning upload policy, verification)
       - ./backend/storage:/app/backend/storage:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
@@ -82,6 +84,7 @@ services:
     command: ["python", "-m", "backend.learning.workers.process_learning_submission_jobs"]
     volumes:
       - ./backend/learning:/app/backend/learning:z
+      - ./backend/vision:/app/backend/vision:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
       # Shared dev uploads directory (same path as in web)
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z

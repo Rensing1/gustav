@@ -192,7 +192,8 @@ async def test_e2e_local_ai_text_submission_completed_v2_with_dspy(monkeypatch: 
             status, text_body, analysis_json, feedback_md = cur.fetchone()
 
     assert status == "completed"
-    assert isinstance(text_body, str) and "Vision Output" in text_body
+    # Text submissions must preserve the exact student text (no Vision rewrite)
+    assert isinstance(text_body, str) and text_body.strip() == "# Draft text"
     assert isinstance(analysis_json, dict)
     assert analysis_json.get("schema") == "criteria.v2"
     assert isinstance(feedback_md, str) and len(feedback_md.strip()) > 0

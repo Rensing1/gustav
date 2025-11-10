@@ -37,7 +37,12 @@ def test_dspy_feedback_program_builds_prompt_and_normalizes(monkeypatch: pytest.
     assert captured_prompts, "Expected _lm_call to be invoked"
     p = captured_prompts[0]
     assert "Inhalt" in p and "Darstellung" in p
-    assert "Do not include student text" in p
+    # Accept either the previous English privacy hint or the new German wording
+    assert (
+        "Do not include student text" in p
+        or "Schülertext (wörtlich)" in p
+        or "Datenschutz:" in p
+    )
     assert "criteria.v2" in p and "JSON" in p
 
     # Normalization assertions

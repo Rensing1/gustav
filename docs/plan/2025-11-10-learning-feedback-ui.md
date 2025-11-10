@@ -2,7 +2,7 @@
 
 Datum: 2025-11-10  
 Autor: Codex (mit Felix)  
-Status: In Arbeit
+Status: Abgeschlossen (2025-11-09)
 
 ## Kontext / Problem
 - **Stub-Auswertung:** Trotz aktiver DSPy-Pipeline zeigen die Karten „Auswertung“ weiterhin die generischen Defaults (Score 6/10, „Bezug zum Kriterium …“). Log-Auszüge (`feedback_backend=dspy`) und DB-Dumps (z. B. submission `497da435-94e1-5c47-9887-14eb42c06a7e`) belegen, dass `_parse_to_v2` zwar JSON parst, aber für jedes fehlende Feld die Fallback-Werte einsetzt.
@@ -47,6 +47,7 @@ Status: In Arbeit
 1. **Prompt-/DSPy-Härtung**
    - Dokumentiere den aktuellen Aufbau (`_build_analysis_prompt`, `_build_feedback_prompt`) inkl. Eingaben/Ausgaben im Plan + ggf. `docs/`.
    - Ersetze die freien JSON-Prompts durch echte DSPy-Signaturen & Programme, die `dspy.OutputField`s verwenden. Damit erzwingt DSPy strukturiertes JSON (Analysis) bzw. Markdown (Feedback).
+   - Übergib dem Feedback-Adapter zusätzlich die Aufgabenstellung (`instruction_md`) und optionalen Lösungshinweise (`hints_md`) über die Job-Payload; der Worker reicht diese Felder nur an Adapter weiter, die sie unterstützen (introspektiv, abwärtskompatibel).
    - Passe `_parse_to_v2` an, damit fehlende Items den Parse-Status (`analysis_missing_items`) setzen und Telemetrie bessere Hinweise liefert.
    - Tests (erst rot): `backend/tests/learning_adapters/test_feedback_program_dspy.py` angepasst: „ohne Kriterien → Analysis = {} (leer), Feedback vorhanden“.
 2. **UI-Überarbeitung**

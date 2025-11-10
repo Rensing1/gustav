@@ -1,27 +1,83 @@
-"""
-DSPy program scaffolding for feedback analysis.
-
-Intent:
-    Provide a tiny abstraction that mirrors how DSPy modules would expose
-    their structured output while remaining dependency-light for tests.
-    By funnelling raw model execution through this helper we keep the
-    `feedback_program` module focused on parsing and normalization logic.
-"""
+"""DSPy program scaffolding for learning feedback (analysis → synthesis)."""
 
 from __future__ import annotations
 
 from typing import Any, Callable, Sequence
 
+from backend.learning.adapters.dspy.signatures import (
+    FeedbackAnalysisSignature,
+    FeedbackSynthesisSignature,
+)
+from backend.learning.adapters.dspy.types import CriteriaAnalysis, CriterionResult
+
+
+def _ensure_criteria_results(value: Any) -> list[CriterionResult]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [CriterionResult.from_value(item) for item in value]
+    return [CriterionResult.from_value(value)]
+
+
+def run_structured_analysis(
+    *,
+    text_md: str,
+    criteria: Sequence[str],
+    teacher_instructions_md: str | None = None,
+    solution_hints_md: str | None = None,
+) -> CriteriaAnalysis:
+    """Execute DSPy Predict(Signature) to obtain structured analysis data."""
+    try:  # pragma: no cover - exercised via tests
+        import dspy  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise ImportError(f"dspy unavailable: {exc}")
+
+    predict = dspy.Predict(FeedbackAnalysisSignature)  # type: ignore[attr-defined]
+    out = predict(
+        student_text_md=text_md,
+        criteria=list(criteria),
+        teacher_instructions_md=teacher_instructions_md,
+        solution_hints_md=solution_hints_md,
+    )
+    score_value = getattr(out, "overall_score", 0)
+    try:
+        score_int = int(score_value) if score_value is not None else 0
+    except Exception:
+        score_int = 0
+    return CriteriaAnalysis(
+        schema="criteria.v2",
+        score=score_int,
+        criteria_results=_ensure_criteria_results(getattr(out, "criteria_results", [])),
+    )
+
+
+def run_structured_feedback(
+    *,
+    text_md: str,
+    criteria: Sequence[str],
+    analysis_json: CriteriaAnalysis | dict[str, Any],
+    teacher_instructions_md: str | None = None,
+) -> str:
+    """Execute DSPy Predict(Signature) to obtain feedback prose."""
+    try:  # pragma: no cover
+        import dspy  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise ImportError(f"dspy unavailable: {exc}")
+
+    payload = analysis_json.to_dict() if isinstance(analysis_json, CriteriaAnalysis) else analysis_json
+    predict = dspy.Predict(FeedbackSynthesisSignature)  # type: ignore[attr-defined]
+    out = predict(
+        student_text_md=text_md,
+        analysis_json=payload,
+        teacher_instructions_md=teacher_instructions_md,
+    )
+    return str(getattr(out, "feedback_md", ""))
+
 
 class FeedbackAnalysisProgram:
-    """Lightweight runner facade for the feedback analysis prompt."""
+    """Lightweight runner facade for the legacy single-step analysis prompt."""
 
     def __init__(self, *, runner: Callable[..., str]):
-        """
-        Parameters:
-            runner: Callable accepting `text_md` and `criteria` and returning
-                    the raw (JSON) model response as string.
-        """
         self._runner = runner
 
     def run(
@@ -32,7 +88,6 @@ class FeedbackAnalysisProgram:
         teacher_instructions_md: str | None = None,
         solution_hints_md: str | None = None,
     ) -> str:
-        """Execute the configured runner with the provided inputs."""
         import inspect as _inspect
         kwargs = {"text_md": text_md, "criteria": criteria}
         try:
@@ -50,11 +105,6 @@ class FeedbackSynthesisProgram:
     """Wrapper around the feedback-synthesis runner (second DSPy stage)."""
 
     def __init__(self, *, runner: Callable[..., str]):
-        """
-        Parameters:
-            runner: Callable accepting `text_md`, `criteria`, `analysis_json`
-                    and returning Markdown feedback as string.
-        """
         self._runner = runner
 
     def run(
@@ -65,7 +115,6 @@ class FeedbackSynthesisProgram:
         analysis_json: dict[str, Any],
         teacher_instructions_md: str | None = None,
     ) -> str:
-        """Execute the configured runner for the synthesis stage."""
         import inspect as _inspect
         kwargs = {"text_md": text_md, "criteria": criteria, "analysis_json": analysis_json}
         try:

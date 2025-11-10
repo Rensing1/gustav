@@ -87,6 +87,9 @@ def test_parser_fills_missing_criteria_and_defaults_on_malformed(monkeypatch: py
     assert len(items) == 2
     names = {it["criterion"] for it in items}
     assert names == {"Inhalt", "Struktur"}
+    # Missing criterion should default to score 0 for KISS/no-evidence behavior
+    filled = {it["criterion"]: it for it in items}
+    assert filled["Struktur"]["score"] == 0
 
     # Second case: malformed JSON → all defaults used (deterministic fallbacks)
     monkeypatch.setattr(mod, "_run_model", lambda **_: "not json at all")  # type: ignore[attr-defined]
@@ -98,6 +101,8 @@ def test_parser_fills_missing_criteria_and_defaults_on_malformed(monkeypatch: py
     items2 = result2.analysis_json.get("criteria_results")
     assert len(items2) == 2
     assert all("criterion" in it and "score" in it for it in items2)
+    # Deterministic fallback: all items default to 0
+    assert all(it["score"] == 0 for it in items2)
 
 
 def test_parser_passes_through_model_feedback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,6 +149,58 @@ def test_parser_logs_when_raw_payload_not_json(monkeypatch: pytest.MonkeyPatch, 
     assert result.parse_status == "analysis_fallback"
     assert any("learning.feedback.dspy_parse_failed" in record.getMessage() for record in caplog.records), \
         "Expected parse failure log entry"
+
+
+def test_parser_handles_json_code_fences(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LLMs often wrap JSON responses in ```json fences; parser should unwrap them."""
+    _install_fake_dspy(monkeypatch)
+    from importlib import import_module
+
+    mod = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    payload = {
+        "schema": "criteria.v2",
+        "score": 4,
+        "criteria_results": [
+            {"criterion": "Inhalt", "max_score": 10, "score": 9, "explanation_md": "stark"},
+            {"criterion": "Struktur", "max_score": 10, "score": 5, "explanation_md": "geht"},
+        ],
+    }
+    fenced = f"```json\n{json.dumps(payload, ensure_ascii=False)}\n```"
+
+    monkeypatch.setattr(mod, "_run_model", lambda **_: fenced, raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", lambda **_: "**LLM Feedback**", raising=False)  # type: ignore[attr-defined]
+
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="# Text", criteria=["Inhalt", "Struktur"]
+    )
+    assert result.parse_status == "parsed"
+    scores = [item["score"] for item in result.analysis_json["criteria_results"]]
+    assert scores == [9, 5]
+
+
+def test_parser_extracts_json_from_wrapped_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If a response contains prose plus a fenced JSON block, parser should use the block."""
+    _install_fake_dspy(monkeypatch)
+    from importlib import import_module
+
+    mod = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    payload = {
+        "criteria_results": [
+            {"criterion": "Inhalt", "max_score": 10, "score": 7, "explanation_md": "ok"},
+        ],
+    }
+    wrapped = "Hier ist die Analyse:\n```JSON\n" + json.dumps(payload) + "\n```\nDanke!"
+
+    monkeypatch.setattr(mod, "_run_model", lambda **_: wrapped, raising=False)  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_run_feedback_model", lambda **_: "**LLM Feedback**", raising=False)  # type: ignore[attr-defined]
+
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="# Text", criteria=["Inhalt"]
+    )
+    assert result.parse_status == "parsed"
+    assert result.analysis_json["criteria_results"][0]["score"] == 7
 
 
 def test_two_phase_pipeline_uses_analysis_and_feedback_programs(

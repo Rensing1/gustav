@@ -159,13 +159,15 @@ class _LocalFeedbackAdapter:
             crit_list.append({
                 "criterion": str(name),
                 "max_score": 10,
-                "score": 6,  # within 0..max_score (v2)
+                # KISS default without evidence: 0
+                "score": 0,  # within 0..max_score (v2)
                 "explanation_md": "Kurzbegründung auf Basis des Kriteriums.",
             })
 
         analysis = {
             "schema": "criteria.v2",
-            "score": 3,  # overall score within 0..5
+            # Overall derives to 0 when all items are 0
+            "score": 0,  # overall score within 0..5
             "criteria_results": crit_list,
         }
 

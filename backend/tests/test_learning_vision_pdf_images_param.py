@@ -10,14 +10,12 @@ We also verify that fenced code blocks returned by the model are unwrapped.
 """
 from __future__ import annotations
 
-import os
 import sys
-from pathlib import Path
-from PIL import Image
-
 import types
 
 from backend.learning.adapters.local_vision import build
+from backend.storage.config import get_submissions_bucket
+from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives
 
 
 class _FakeClient:
@@ -39,19 +37,26 @@ def test_pdf_uses_derived_page_images(tmp_path, monkeypatch):
     task_id = "task-1"
     student_sub = "student-abc"
     submission_id = "sub-xyz"
-    derived_prefix = f"submissions/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
-    (tmp_path / derived_prefix).mkdir(parents=True, exist_ok=True)
-    # Two valid PNG pages with simple content to exercise stitching
-    img1 = Image.new("L", (20, 10), color=50)
-    img2 = Image.new("L", (20, 12), color=200)
-    p1 = tmp_path / derived_prefix / "page_0001.png"
-    p2 = tmp_path / derived_prefix / "page_0002.png"
-    img1.save(p1, format="PNG")
-    img2.save(p2, format="PNG")
+    monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
+    bucket = get_submissions_bucket()
+    ensure_pdf_derivatives(
+        root=tmp_path,
+        bucket=bucket,
+        course_id=course_id,
+        task_id=task_id,
+        student_sub=student_sub,
+        submission_id=submission_id,
+        page_count=2,
+    )
+    derived_dir = (
+        tmp_path / bucket / course_id / task_id / student_sub / "derived" / submission_id
+    )
+    assert derived_dir.exists(), f"derived dir missing: {derived_dir}"
+    derived_files = sorted(p.name for p in derived_dir.iterdir())
+    assert derived_files, f"derived dir empty: {derived_dir}"
 
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
     monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
-
     # Inject fake ollama client
     fake = types.SimpleNamespace(Client=_FakeClient, last_instance=None)
     monkeypatch.setitem(sys.modules, "ollama", fake)
@@ -66,9 +71,8 @@ def test_pdf_uses_derived_page_images(tmp_path, monkeypatch):
         "kind": "file",
         "mime_type": "application/pdf",
         # storage_key of the original PDF is irrelevant for derived reads
-        "storage_key": f"submissions/{course_id}/{task_id}/{student_sub}/{submission_id}.pdf",
+        "storage_key": f"{bucket}/{course_id}/{task_id}/{student_sub}/{submission_id}.pdf",
         "size_bytes": 10,
-        "sha256": "0" * 64,
     }
     job_payload = {"mime_type": "application/pdf", "storage_key": submission["storage_key"]}
 

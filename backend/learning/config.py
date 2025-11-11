@@ -53,6 +53,11 @@ def _validate_ollama_url(url: str) -> None:
         raise ValueError("OLLAMA_BASE_URL must point to localhost/service network host")
 
 
+def _is_prod_like() -> bool:
+    env = (os.getenv("GUSTAV_ENV") or "dev").lower()
+    return env in {"prod", "production", "stage", "staging"}
+
+
 def load_ai_config() -> AIConfig:
     """
     Parse and validate AI-related configuration from environment variables.
@@ -65,6 +70,8 @@ def load_ai_config() -> AIConfig:
     backend = (os.getenv("AI_BACKEND") or "stub").strip().lower()
     if backend not in {"stub", "local"}:
         raise ValueError("AI_BACKEND must be 'stub' or 'local'")
+    if backend == "stub" and _is_prod_like():
+        raise ValueError("AI_BACKEND=stub is not allowed in production/staging environments.")
 
     # Adapter module paths (DI)
     default_vision = (
@@ -97,4 +104,3 @@ def load_ai_config() -> AIConfig:
         timeout_feedback_seconds=timeout_feedback,
         ollama_base_url=ollama_url,
     )
-

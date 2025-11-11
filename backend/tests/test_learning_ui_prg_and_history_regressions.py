@@ -82,7 +82,7 @@ def test_history_uses_analysis_text_when_text_body_empty():
             "text": "## Extracted\n\nHello",
             "criteria_results": [],
         },
-        "feedback": None,
+        "feedback_md": None,
     }
 
     from main import _build_history_entry_from_record  # type: ignore
@@ -91,4 +91,3 @@ def test_history_uses_analysis_text_when_text_body_empty():
     assert hasattr(entry, "content_html")
     # Markdown-Content sollte im HTML landen
     assert re.search(r"Extracted|Hello", entry.content_html)
-

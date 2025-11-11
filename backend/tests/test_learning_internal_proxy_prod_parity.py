@@ -28,7 +28,7 @@ async def _client():
 async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     # Enable proxy and set SUPABASE_URL host validation
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
-    monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     # Reload modules to pick up env
     if "routes.learning" in importlib.sys.modules:
@@ -58,7 +58,7 @@ async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPa
 @pytest.mark.anyio
 async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
-    monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     if "routes.learning" in importlib.sys.modules:
         importlib.reload(importlib.import_module("routes.learning"))
@@ -88,7 +88,7 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
 @pytest.mark.anyio
 async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
-    monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     if "routes.learning" in importlib.sys.modules:
         importlib.reload(importlib.import_module("routes.learning"))
@@ -122,7 +122,7 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.put(
             "/api/learning/internal/upload-proxy",
-            params={"url": "http://supabase.local:54321/storage/v1/object/test"},
+            params={"url": "https://supabase.local:54321/storage/v1/object/test"},
             content=b"abc",
             headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
         )
@@ -133,7 +133,7 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
 @pytest.mark.anyio
 async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
-    monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     if "routes.learning" in importlib.sys.modules:
         importlib.reload(importlib.import_module("routes.learning"))
@@ -173,7 +173,7 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
         async def _upload(payload: bytes):
             return await c.put(
                 "/api/learning/internal/upload-proxy",
-                params={"url": "http://supabase.local:54321/storage/v1/object/test"},
+                params={"url": "https://supabase.local:54321/storage/v1/object/test"},
                 content=payload,
                 headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
             )
@@ -182,3 +182,44 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert peak >= 2, "Expected overlapping async forwards"
+
+
+@pytest.mark.anyio
+async def test_upload_proxy_enforces_https_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-local HTTP URLs must be rejected with invalid_url before forwarding."""
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:  # type: ignore[attr-defined]
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except ImportError:  # pragma: no cover
+        learning_backend = None  # type: ignore
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-http", name="S", roles=["student"])  # type: ignore
+
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("insecure URL must be rejected before forwarding")
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        response = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": "http://supabase.local:54321/storage/v1/object/submissions/test"},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
+        )
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["error"] == "bad_request"
+    assert payload["detail"] == "invalid_url"

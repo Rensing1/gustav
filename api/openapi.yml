@@ -4702,6 +4702,8 @@ paths:
         - "RLS: course membership and visibility enforced via helpers."
       x-permissions:
         requiredRole: student
+      x-notes:
+        - "Diagnostics: Responses MAY include 'X-Submissions-Diag' on certain 403 cases to aid test triage. Header contains only non-PII context (reason, env, origin, server)."
       parameters:
         - in: path
           name: course_id

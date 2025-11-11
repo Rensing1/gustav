@@ -144,15 +144,7 @@ class PreprocessPdfSubmissionUseCase:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, false)", (context.student_sub,))
                 cur.execute(
-                    """
-                    update public.learning_submissions
-                       set analysis_status = 'failed',
-                           analysis_json = null,
-                           error_code = %s,
-                           vision_last_error = %s,
-                           vision_last_attempt_at = now()
-                     where id = %s::uuid
-                    """,
-                    (code, message[:1024], context.submission_id),
+                    "select public.learning_worker_update_failed(%s::uuid, %s, %s)",
+                    (context.submission_id, code, message),
                 )
             conn.commit()

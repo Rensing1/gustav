@@ -289,3 +289,59 @@ def test_pdf_preprocessing_rejects_oversized_submission(monkeypatch):
     assert status == "failed"
     assert error_code == "input_too_large"
     assert called["n"] == 0, "renderer should not be invoked for oversize submissions"
+
+
+def test_pdf_preprocessing_failed_path_uses_security_helper(monkeypatch):
+    """The failed-path helper must call the SECURITY DEFINER function for auditing."""
+    import backend.learning.usecases.pdf_preprocessing as pdf_uc
+
+    executed: list[str] = []
+
+    class _Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, sql, params=None):  # type: ignore[no-untyped-def]
+            executed.append(sql.strip())
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return _Cursor()
+
+        def commit(self):
+            executed.append("commit")
+
+    def _fake_connect(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return _Conn()
+
+    monkeypatch.setattr(pdf_uc.psycopg, "connect", _fake_connect)
+
+    usecase = PreprocessPdfSubmissionUseCase(
+        repo=types.SimpleNamespace(),
+        worker_dsn="postgresql://worker",
+        storage=types.SimpleNamespace(),
+        bucket="submissions",
+    )
+    context = SubmissionContext(
+        submission_id=str(uuid.uuid4()),
+        course_id=str(uuid.uuid4()),
+        task_id=str(uuid.uuid4()),
+        student_sub="student-guard",
+        storage_key="submissions/course/task/student/file.pdf",
+        mime_type="application/pdf",
+        size_bytes=1024,
+        sha256="a" * 64,
+    )
+
+    usecase._mark_failed(context=context, code="vision_failed", message="boom")
+
+    assert any("learning_worker_update_failed" in stmt for stmt in executed), executed

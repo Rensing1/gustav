@@ -34,7 +34,7 @@ gustav-alpha2/
   - `LEARNING_STORAGE_BUCKET` (Default `submissions`)
   - `MATERIALS_MAX_UPLOAD_BYTES` (Default 20971520 = 20 MiB)
   - `LEARNING_MAX_UPLOAD_BYTES` (Default 10485760 = 10 MiB)
-  - Optional (nur Dev): `AUTO_CREATE_STORAGE_BUCKETS=true` erlaubt dem Backend, fehlende Buckets beim Start nachzupflegen. In Prod/Stage ausgeschaltet lassen.
+  - Optional **nur Dev/Test**: `AUTO_CREATE_STORAGE_BUCKETS=true` erlaubt dem Backend, fehlende Buckets beim Start nachzupflegen. In Prod/Stage unbedingt `false` lassen; beim Start wird ein Hinweis ins Log geschrieben, falls das Flag dennoch gesetzt ist.
 
 Schlüssel (storage_key) – Konventionen:
 - Teaching: `materials/{unit_id}/{section_id}/{material_id}/{uuid}.{ext}`
@@ -47,7 +47,8 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 - Standard ist `AI_BACKEND=stub` (deterministisch, keine Modelle nötig).
 - Echte Rückmeldungen (DSPy/Ollama) erhältst du nur mit `AI_BACKEND=local`
   sowie korrekt gesetzten `AI_FEEDBACK_MODEL` und `OLLAMA_BASE_URL`. Bleibt
-  das Flag auf `stub`, liefert der Worker absichtlich nur Platzhalter.
+  das Flag auf `stub`, liefert der Worker absichtlich nur Platzhalter (und Prod/Stage verweigern seit 2025‑11 den Start mit `stub`).
+- Default-Modelle orientieren sich an Qwen 2.5 (`AI_VISION_MODEL=qwen2.5-vl:7b`, `AI_FEEDBACK_MODEL=qwen2.5:7b-instruct`). Passe sie nur an, wenn du die Modelle lokal bereits gepullt hast.
 - Für lokale Inferenz (nur dev/staging):
   - Compose stellt `ollama` bereit (interner Port 11434). Env in `learning-worker` bereits verdrahtet (`OLLAMA_BASE_URL=http://ollama:11434`).
   - Modelle ziehen (die IDs wählst du selbst, z. B. `AI_FEEDBACK_MODEL=<modell>`):
@@ -76,9 +77,10 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
   - Vision‑Pfad: `pytest -q -m ollama_integration -k vision`
 - Sicherheit: Tests akzeptieren nur `localhost`, `127.0.0.1` oder `ollama` als Host. Bei fehlenden Modellen/Verbindung wird mit Anleitung geskippt.
 
-### ROCm (AMD‑GPU) Hinweise
-- Das Compose‑Setup nutzt `ollama/ollama:rocm` und mapped `/dev/kfd` und `/dev/dri` in den Container.
-- Gruppen: `video`, `render` werden hinzugefügt; stelle sicher, dass der Host‑User GPU‑Zugriff hat.
+### GPU (optional) Hinweise
+- Standardmäßig verwendet `docker-compose` das CPU-kompatible Image `ollama/ollama:latest`, damit alle Hosts starten.
+- Für AMD‑GPU/ROCm setze `OLLAMA_IMAGE=ollama/ollama:rocm` (oder einen passenden Tag) und stelle sicher, dass `/dev/kfd` und `/dev/dri` gemountet werden können.
+- Gruppen: `video`, `render` werden weiterhin hinzugefügt; stelle sicher, dass der Host‑User GPU‑Zugriff hat.
 - Optionale Env‑Tuning:
   - `HIP_VISIBLE_DEVICES=all` (Default) oder z. B. `0`
   - `HSA_OVERRIDE_GFX_VERSION` nur setzen, wenn dein Stack es erfordert (sonst leer lassen)

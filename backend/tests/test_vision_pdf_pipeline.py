@@ -35,9 +35,10 @@ def fake_pdfium(monkeypatch):
         def __init__(self, idx):
             self.idx = idx
 
-        def render(self, dpi=300, flags=0):
-            # Assert dpi arrives; flags are accepted
-            assert dpi in (200, 300, 400)
+        def render(self, **kwargs):
+            # New renderer passes scale/draw_annots instead of dpi.
+            scale = kwargs.get("scale")
+            assert scale is None or isinstance(scale, (int, float))
             return FakeBitmap()
 
     class FakeDoc:
@@ -84,7 +85,7 @@ def test_page_limit_enforced(monkeypatch):
 
         def __getitem__(self, i):
             class P:
-                def render(self, dpi=300, flags=0):
+                def render(self, **_kwargs):
                     class B:
                         def to_pil(self):
                             class I:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 from typing import Iterable
+import inspect
 
 import requests
 import logging
@@ -27,37 +28,75 @@ def _env_flag(name: str, default: str = "false") -> bool:
     return (os.getenv(name, default) or "").strip().lower() == "true"
 
 
+def _supports_timeout(func) -> bool:
+    """Return True if callable signature supports a 'timeout' kw or **kwargs.
+
+    This guards tests that monkeypatch `bootstrap.requests` with simple callables
+    not accepting a `timeout` keyword argument, while keeping timeouts enabled
+    for real HTTP clients.
+    """
+    try:
+        sig = inspect.signature(func)
+        if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+            return True
+        return "timeout" in sig.parameters
+    except Exception:
+        return False
+
+
 def _list_buckets(base_url: str, key: str) -> list[dict]:
     url = f"{base_url.rstrip('/')}/storage/v1/bucket"
     headers = {"apikey": key, "Authorization": f"Bearer {key}"}
-    resp = requests.get(url, headers=headers)
     try:
-        _log.debug("GET /storage/v1/bucket status=%s", getattr(resp, "status_code", "?"))
-    except Exception:
-        pass
-    try:
-        data = resp.json() if hasattr(resp, "json") else []
-    except Exception:
-        data = []
-    return data if isinstance(data, list) else []
+        get = getattr(requests, "get")
+        kwargs = {"headers": headers}
+        if _supports_timeout(get):
+            kwargs["timeout"] = (3, 10)
+        resp = get(url, **kwargs)
+        try:
+            _log.debug("GET /storage/v1/bucket status=%s", getattr(resp, "status_code", "?"))
+        except Exception:
+            pass
+        try:
+            data = resp.json() if hasattr(resp, "json") else []
+        except Exception:
+            data = []
+        return data if isinstance(data, list) else []
+    except Exception as exc:
+        try:
+            _log.warning("list buckets failed: error=%s", type(exc).__name__)
+        except Exception:
+            pass
+        return []
 
 
 def _create_bucket(base_url: str, key: str, name: str, public: bool = False) -> bool:
     url = f"{base_url.rstrip('/')}/storage/v1/bucket"
     headers = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     payload = {"name": name, "public": public}
-    resp = requests.post(url, headers=headers, json=payload)
-    status = getattr(resp, "status_code", 500)
-    # Log outcome for diagnostics (e.g., 409 conflict / 403 forbidden / 503 unavailable)
     try:
-        body_text = getattr(resp, "text", "")
-    except Exception:
-        body_text = ""
-    if status >= 300:
-        _log.warning("create bucket '%s' failed: status=%s body=%s", name, status, body_text)
-    else:
-        _log.debug("POST /storage/v1/bucket status=%s created='%s'", status, name)
-    return status < 300
+        post = getattr(requests, "post")
+        kwargs = {"headers": headers, "json": payload}
+        if _supports_timeout(post):
+            kwargs["timeout"] = (3, 10)
+        resp = post(url, **kwargs)
+        status = getattr(resp, "status_code", 500)
+        # Log outcome for diagnostics (e.g., 409 conflict / 403 forbidden / 503 unavailable)
+        try:
+            body_text = getattr(resp, "text", "")
+        except Exception:
+            body_text = ""
+        if status >= 300:
+            _log.warning("create bucket '%s' failed: status=%s body=%s", name, status, body_text)
+        else:
+            _log.debug("POST /storage/v1/bucket status=%s created='%s'", status, name)
+        return status < 300
+    except Exception as exc:
+        try:
+            _log.warning("create bucket '%s' failed: error=%s", name, type(exc).__name__)
+        except Exception:
+            pass
+        return False
 
 
 def ensure_buckets(base_url: str, key: str, buckets: Iterable[str]) -> bool:
@@ -133,6 +172,9 @@ def ensure_buckets_from_env() -> bool:
     """
     if not _env_flag("AUTO_CREATE_STORAGE_BUCKETS"):
         return False
+    _log.warning(
+        "AUTO_CREATE_STORAGE_BUCKETS=true detected (dev/test convenience only). Disable this flag in prod/stage environments."
+    )
     base = (os.getenv("SUPABASE_URL") or "").strip()
     key = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
     if not base or not key:

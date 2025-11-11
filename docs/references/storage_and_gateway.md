@@ -34,7 +34,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 
 ## Governance & Provisioning
 - Quelle der Wahrheit: SQL‑Migrationen legen `materials` und `submissions` privat an.
-- Dev‑Convenience: Optional `AUTO_CREATE_STORAGE_BUCKETS=true` zum Nachprovisionieren fehlender Buckets beim App‑Start (nicht in Prod/Stage verwenden).
+- Dev‑Convenience: Optional `AUTO_CREATE_STORAGE_BUCKETS=true` zum Nachprovisionieren fehlender Buckets beim App‑Start. **Nur in Dev/Test setzen**; beim Start wird ein Hinweis ins Log geschrieben, falls das Flag aktiv ist, damit Prod/Stage es nicht versehentlich nutzen.
 
 ## Gateway
 - Current reverse proxy: Caddy (see `reverse-proxy/Caddyfile`).

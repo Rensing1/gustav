@@ -27,7 +27,7 @@ async def test_internal_upload_proxy_respects_central_limit(monkeypatch):
     monkeypatch.setenv("LEARNING_MAX_UPLOAD_BYTES", "16")
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     # Ensure URL host validation passes
-    monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     # Reload config and route to pick env
     if "backend.storage.config" in importlib.sys.modules:
@@ -49,10 +49,9 @@ async def test_internal_upload_proxy_respects_central_limit(monkeypatch):
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.put(
             "/api/learning/internal/upload-proxy",
-            params={"url": "http://supabase.local:54321/storage/v1/object/test"},
+            params={"url": "https://supabase.local:54321/storage/v1/object/test"},
             content=body,
             headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
         )
     assert r.status_code == 400
     assert r.json().get("detail") == "size_exceeded"
-

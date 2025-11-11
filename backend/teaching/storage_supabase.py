@@ -171,7 +171,8 @@ class SupabaseStorageAdapter(StorageAdapterProtocol):
             if not url:
                 raise RuntimeError("failed_to_presign_download")
             import requests  # local import to avoid hard dep in tests
-            head = requests.head(self._normalize_signed_url_host(str(url)))
+            # Apply a conservative timeout to prevent hangs under network issues.
+            head = requests.head(self._normalize_signed_url_host(str(url)), timeout=5)
             ctype = head.headers.get("content-type") or head.headers.get("Content-Type")
             clen = head.headers.get("content-length") or head.headers.get("Content-Length")
             try:

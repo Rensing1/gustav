@@ -71,7 +71,28 @@ def run_structured_feedback(
         analysis_json=payload,
         teacher_instructions_md=teacher_instructions_md,
     )
-    return str(getattr(out, "feedback_md", ""))
+    val = getattr(out, "feedback_md", None)
+    if isinstance(val, str) and val.strip() and val.strip().lower() != "none":
+        return val
+    # If the model omitted the field, synthesize a minimal prose from the analysis payload
+    # (stay within DSPy path; no backend fallback here).
+    items = payload.get("criteria_results", []) if isinstance(payload, dict) else []
+    positives = [
+        f"{i.get('criterion', 'Kriterium')}: {i.get('score', 0)}/{i.get('max_score', 10)}"
+        for i in items
+        if int(i.get("score", 0)) >= int(i.get("max_score", 10)) // 2
+    ]
+    improves = [
+        f"{i.get('criterion', 'Kriterium')}"
+        for i in items
+        if int(i.get("score", 0)) < int(i.get("max_score", 10)) // 2
+    ]
+    parts = []
+    if positives:
+        parts.append("Stärken: " + ", ".join(positives) + ".")
+    if improves:
+        parts.append("Hinweise: gezielt ausbauen bei " + ", ".join(improves) + ".")
+    return " ".join(parts) or "Kurze, konstruktive Rückmeldung basierend auf der Analyse."
 
 
 class FeedbackAnalysisProgram:

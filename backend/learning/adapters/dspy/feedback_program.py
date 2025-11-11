@@ -36,6 +36,37 @@ from backend.learning.adapters.ports import FeedbackResult
 
 logger = logging.getLogger(__name__)
 
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _truthy_env(name: str, *, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in _TRUTHY
+
+
+def _json_adapter_enabled() -> bool:
+    """Feature flag for JSONAdapter (default on; set env to 'false' to disable)."""
+    return _truthy_env("LEARNING_DSPY_JSON_ADAPTER", default=True)
+
+
+def _ensure_ollama_host_env() -> str | None:
+    """
+    DSPy (LiteLLM) expects api_base and/or OLLAMA_HOST. Propagate OLLAMA_BASE_URL.
+
+    This mirrors docker-compose where only the base URL is configured. By
+    setting the host lazily we retain compatibility with any manual overrides.
+    """
+    base_url = (os.getenv("OLLAMA_BASE_URL") or "").strip()
+    if not base_url:
+        return None
+    if not (os.getenv("OLLAMA_HOST") or "").strip():
+        os.environ["OLLAMA_HOST"] = base_url
+    if not (os.getenv("OLLAMA_API_BASE") or "").strip():
+        os.environ["OLLAMA_API_BASE"] = base_url
+    return base_url
+
 
 def _sanitize_text(text_md: str) -> str:
     """Return student text verbatim; truncation happens in prompt builders."""
@@ -141,7 +172,18 @@ def _lm_call(*, prompt: str, timeout: int) -> str:
         raise RuntimeError(f"ollama client unavailable: {exc}") from exc
 
     client = ollama.Client(base_url)
-    raw = client.generate(model=model_name, prompt=prompt, options={"timeout": timeout})
+    # Use raw mode to bypass model templates on the server, avoiding template errors
+    # like "function 'currentDate' not defined" and to keep prompts under our control.
+    raw = client.generate(
+        model=model_name,
+        prompt=prompt,
+        options={
+            "raw": True,
+            # Override any model Modelfile templates to avoid server-side template parsing
+            # errors (e.g., unknown functions) and keep prompt under our control.
+            "template": "{{ .Prompt }}",
+        },
+    )
     if isinstance(raw, dict):
         response = raw.get("response") or raw.get("message")
         if isinstance(response, str):
@@ -240,6 +282,7 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
     # Extract candidate items list with field variants
     items_raw = obj.get("criteria_results") or obj.get("criteria") or []
     by_name: Dict[str, Dict[str, Any]] = {}
+    ordered_items: list[Dict[str, Any]] = []
     for it in items_raw:
         name = it.get("criterion") or it.get("name")
         if not name:
@@ -266,28 +309,41 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
         # ensure the criterion name appears for clarity
         if str(name) not in str(expl):
             expl = f"{expl} (Bezug: {name})".strip()
-        by_name[str(name)] = {
+        normalized_item = {
             "criterion": str(name),
             "max_score": max_i,
             "score": sc_i,
             "explanation_md": str(expl) if expl else f"Bezug zum Kriterium „{name}“",
         }
+        by_name[str(name)] = normalized_item
+        ordered_items.append(dict(normalized_item))
 
     # Build normalized list following requested ordering and fill missing
     norm_items: list[Dict[str, Any]] = []
+    expected_count = len(list(criteria))
+    items_raw_count = len(ordered_items)  # number of items emitted by the model
     for name in criteria:
-        if str(name) in by_name:
-            norm_items.append(by_name[str(name)])
-        else:
-            norm_items.append(
-                {
-                    "criterion": str(name),
-                    "max_score": 10,
-                    # KISS default: no evidence → score 0
-                    "score": 0,
-                    "explanation_md": f"Bezug zum Kriterium „{str(name)}“",
-                }
-            )
+        key = str(name)
+        if key in by_name:
+            norm_items.append(by_name[key])
+            continue
+        # Alignment by order ONLY when the model returned at least as many items
+        # as expected (pure renaming case). Do not consume items if the model
+        # produced fewer entries than required; synthesize defaults instead.
+        if ordered_items and items_raw_count >= expected_count:
+            item = ordered_items.pop(0)
+            item["criterion"] = key
+            norm_items.append(item)
+            continue
+        # Otherwise, fill deterministically
+        norm_items.append(
+            {
+                "criterion": key,
+                "max_score": 10,
+                "score": 0,
+                "explanation_md": f"Bezug zum Kriterium „{key}“",
+            }
+        )
 
     # Overall score: prefer provided, else compute average normalized → [0,5]
     overall = obj.get("score")
@@ -374,14 +430,27 @@ def analyze_feedback(
 
     Returns:
         FeedbackResult with Markdown feedback and `criteria.v2` analysis.
+
+    Notes:
+        - The DSPy JSONAdapter is enabled by default; set
+          `LEARNING_DSPY_JSON_ADAPTER=false` locally if a model cannot emit
+          strict JSON for the structured signatures.
+        - `OLLAMA_BASE_URL` must point to the reachable Ollama service; this
+          function propagates it to `OLLAMA_HOST` for LiteLLM/DSPy.
+
+    Permissions:
+        Invoked by the learning worker (gustav_worker role). End-user context
+        is already authorized upstream; this function must not leak student text.
     """
     # NOTE: Import dspy shallowly to select this program only when available.
     try:  # pragma: no cover - presence is tested from adapter, not here
         import dspy  # type: ignore
         _ = getattr(dspy, "__version__", None)  # touch to prove availability
     except Exception:
-        # If import fails at this layer, let callers fall back to non‑DSPy path.
+        # If import fails at this layer, let callers fall back to non-DSPy path.
         raise ImportError("dspy is not available")
+
+    api_base = _ensure_ollama_host_env()
 
     if not criteria:
         # No criteria: produce feedback prose without an analysis payload.
@@ -415,11 +484,14 @@ def analyze_feedback(
             import dspy  # type: ignore
             model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
             if model_name and hasattr(dspy, "LM"):
-                lm = dspy.LM(f"ollama/{model_name}")  # type: ignore[attr-defined]
-                adapter_cls = getattr(dspy, "JSONAdapter", None)
+                lm_kwargs = {"api_base": api_base} if api_base else {}
+                lm = dspy.LM(f"ollama/{model_name}", **lm_kwargs)  # type: ignore[attr-defined]
+                use_json_adapter = _json_adapter_enabled()
+                adapter_cls = getattr(dspy, "JSONAdapter", None) if use_json_adapter else None
                 if adapter_cls is not None:
                     dspy.configure(lm=lm, adapter=adapter_cls())  # type: ignore[misc]
                 else:
+                    # Default path keeps prompts simple and skips strict JSON enforcement.
                     dspy.configure(lm=lm)
         except Exception:
             pass

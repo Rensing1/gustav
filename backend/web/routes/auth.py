@@ -255,6 +255,18 @@ async def auth_logout(request: Request, redirect: str | None = None):
 
     # Remove server-side session if present (best-effort; never fail logout)
     sid = request.cookies.get(mod.SESSION_COOKIE_NAME)
+    # Fallback: if framework cookie parser missed it (e.g., jar quirk), parse raw header
+    if not sid:
+        raw_cookie = request.headers.get("cookie", "")
+        try:
+            # Minimal, dependency-free parse for `gustav_session=<value>` token
+            parts = [p.strip() for p in raw_cookie.split(";") if p]
+            for p in parts:
+                if p.startswith(f"{mod.SESSION_COOKIE_NAME}="):
+                    sid = p.split("=", 1)[1]
+                    break
+        except Exception:
+            sid = None
     rec = None
     if sid:
         try:

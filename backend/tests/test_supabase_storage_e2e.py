@@ -57,10 +57,10 @@ async def test_e2e_supabase_upload_finalize_download_delete_flow(monkeypatch):
     async with (await _client(main.app)) as c:
         # Create a unit and a section
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit"})
+        r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit"}, headers={"Origin": "http://test"})
         assert r_unit.status_code == 201, r_unit.text
         unit_id = r_unit.json()["id"]
-        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Intro"})
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Intro"}, headers={"Origin": "http://test"})
         assert r_section.status_code == 201, r_section.text
         section_id = r_section.json()["id"]
 
@@ -164,19 +164,20 @@ async def test_e2e_learning_submission_file_upload_finalize(monkeypatch):
     async with (await _client(main.app)) as c:
         # Create course/unit/section/task
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course"}, headers={"Origin": "http://test"})
         assert r_course.status_code == 201, r_course.text
         course_id = r_course.json()["id"]
-        r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit"})
+        r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit"}, headers={"Origin": "http://test"})
         unit_id = r_unit.json()["id"]
-        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Sec"})
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Sec"}, headers={"Origin": "http://test"})
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Aufgabe", "criteria": ["K"], "max_attempts": 3},
+            headers={"Origin": "http://test"},
         )
         task_id = r_task.json()["id"]
-        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
         module_id = r_module.json()["id"]
         r_vis = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
@@ -186,7 +187,7 @@ async def test_e2e_learning_submission_file_upload_finalize(monkeypatch):
         assert r_vis.status_code == 200, r_vis.text
         # Enrol student
         r_member = await c.post(
-            f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}
+            f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"}
         )
         assert r_member.status_code == 201, r_member.text
 
@@ -269,19 +270,20 @@ async def test_e2e_learning_submission_image_upload_finalize(monkeypatch):
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course IMG"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course IMG"}, headers={"Origin": "http://test"})
         assert r_course.status_code == 201, r_course.text
         course_id = r_course.json()["id"]
-        r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit IMG"})
+        r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit IMG"}, headers={"Origin": "http://test"})
         unit_id = r_unit.json()["id"]
-        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Sec"})
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Sec"}, headers={"Origin": "http://test"})
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Bild-Aufgabe", "criteria": ["Qualität"], "max_attempts": 3},
+            headers={"Origin": "http://test"},
         )
         task_id = r_task.json()["id"]
-        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
         module_id = r_module.json()["id"]
         r_vis = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
@@ -290,7 +292,7 @@ async def test_e2e_learning_submission_image_upload_finalize(monkeypatch):
         )
         assert r_vis.status_code == 200, r_vis.text
         r_member = await c.post(
-            f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}
+            f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"}
         )
         assert r_member.status_code == 201, r_member.text
 

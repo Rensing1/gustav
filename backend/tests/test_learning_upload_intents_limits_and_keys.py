@@ -33,24 +33,26 @@ async def _seed_course_with_task():
     teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
         course_id = r_course.json()["id"]
-        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"})
+        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
         unit_id = r_unit.json()["id"]
-        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"})
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"}, headers={"Origin": "http://test"})
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"], "max_attempts": 3},
+            headers={"Origin": "http://test"},
         )
         task_id = r_task.json()["id"]
-        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
         module_id = r_module.json()["id"]
         await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
-        await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name})  # type: ignore
+        await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"})  # type: ignore
     return student.session_id, course_id, task_id
 
 
@@ -109,4 +111,3 @@ async def test_learning_upload_intent_uses_config_limit_and_key_shape(monkeypatc
     assert call["key"].startswith("submissions/")
     assert call["key"].endswith(".png")
     assert re.match(r"^submissions/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[0-9]{13}-[0-9a-f]+\.png$", call["key"]) is not None
-

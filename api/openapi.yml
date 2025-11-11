@@ -4670,7 +4670,6 @@ paths:
           format: uri
           description: >-
             Absolute presigned URL for client-side PUT upload (https://...).
-            In dev, a local stub path like `/api/learning/internal/upload-stub?...` may be returned when the stub flag is enabled.
         headers:
           type: object
           additionalProperties:
@@ -4702,8 +4701,7 @@ paths:
         - "RLS: course membership and visibility enforced via helpers."
       x-permissions:
         requiredRole: student
-      x-notes:
-        - "Diagnostics: Responses MAY include 'X-Submissions-Diag' on certain 403 cases to aid test triage. Header contains only non-PII context (reason, env, origin, server)."
+      x-notes: []
       parameters:
         - in: path
           name: course_id
@@ -4789,6 +4787,7 @@ paths:
 
   # Teaching — Live unit view (teacher-only)
   /api/learning/internal/upload-stub:
+    x-internal: true
     put:
       tags: [Learning]
       summary: Dev-only local upload target (student-only)
@@ -4842,6 +4841,7 @@ paths:
         '404':
           description: Feature disabled (ENABLE_DEV_UPLOAD_STUB=false)
   /api/learning/internal/upload-proxy:
+    x-internal: true
     put:
       tags: [Learning]
       summary: Proxy presigned upload via same-origin endpoint (student-only)

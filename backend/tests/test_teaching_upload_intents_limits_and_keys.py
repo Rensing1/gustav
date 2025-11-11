@@ -20,7 +20,7 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 async def _client():
     import main  # noqa
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 async def _seed_unit_section():
@@ -91,4 +91,3 @@ async def test_teaching_upload_intent_uses_config_limit_and_key_shape(monkeypatc
     assert call["key"].startswith("materials/")
     assert call["key"].endswith(".pdf")
     assert re.match(r"^materials/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[0-9a-f]+\.pdf$", call["key"]) is not None
-

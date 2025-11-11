@@ -221,8 +221,8 @@ def _require_student(request: Request):
                     fp.write(f"require_student: {diag}\n")
         except Exception:
             pass
-        headers = _cache_headers_error(); headers["X-Submissions-Diag"] = diag
-        return None, JSONResponse({"error": "forbidden"}, status_code=403, headers=headers)
+        # Do not leak diagnostics to clients; log above when CSRF_DIAG_LOG set.
+        return None, JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     return user, None
 
 
@@ -592,56 +592,10 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     Permissions:
         Caller must be an enrolled student with access to the released task.
     """
-    # CSRF defense: In production, always require Origin/Referer presence and
-    # same-origin. In non-prod, STRICT_CSRF_SUBMISSIONS=true enforces the same.
-    # Resolve environment lazily to avoid import-order issues in pytest.
-    prod_env = _current_environment() == "prod"
-    strict_toggle = (os.getenv("STRICT_CSRF_SUBMISSIONS", "false") or "").lower() == "true"
-    strict = prod_env or strict_toggle
-    check_ok = _require_strict_same_origin(request) if strict else _is_same_origin(request)
-    if not check_ok:
-        # Dev-only resilience: if origin exactly equals the server origin
-        # (scheme+host[:default-port]), allow it. This avoids rare false
-        # negatives without weakening port checks.
-        if not prod_env:
-            origin_hdr = str(request.headers.get("origin") or "").strip().lower()
-            scheme = (request.url.scheme or "http").lower()
-            host = (request.url.hostname or "").lower()
-            port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-            default = 443 if scheme == "https" else 80
-            server_origin = f"{scheme}://{host}{(':' + str(port)) if port != default else ''}"
-            if origin_hdr == server_origin:
-                check_ok = True
-    if not check_ok:
-        # Minimal diagnostics to aid flaky full-suite failures (harmless in prod)
-        try:
-            origin_hdr = str(request.headers.get("origin") or request.headers.get("referer") or "")
-            scheme = (request.url.scheme or "http").lower(); host = (request.headers.get("host") or request.url.hostname or "").lower()
-            # Honor explicit host header port if present, else derive from URL/default
-            if ":" in host:
-                host_only, port_str = host.rsplit(":", 1)
-                host = host_only
-                try:
-                    port = int(port_str)
-                except Exception:
-                    port = 443 if scheme == "https" else 80
-            else:
-                port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-            default = 443 if scheme == "https" else 80
-            server_origin = f"{scheme}://{host}{(':' + str(port)) if port != default else ''}"
-            diag = f"env={_current_environment()},strict={strict},origin={origin_hdr},server={server_origin}"
-        except Exception:
-            diag = "env=?,strict=?,origin=?,server=?"
-        try:
-            import os as _os
-            log_path = (_os.getenv("CSRF_DIAG_LOG") or "").strip()
-            if log_path:
-                with open(log_path, "a", encoding="utf-8") as fp:
-                    fp.write(f"create_submission: {diag}\n")
-        except Exception:
-            pass
-        headers = _cache_headers_error(); headers["X-CSRF-Diag"] = diag
-        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=headers)
+    # CSRF defense: Always require Origin/Referer presence and same-origin.
+    # Unified policy (dev = prod): no fallback to non-strict mode.
+    if not _require_strict_same_origin(request):
+        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
 
     # Authorization (student-only) after CSRF: prevents masking CSRF diagnostics
     # with unrelated authorization errors.
@@ -741,8 +695,8 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                     fp.write(f"create_submission: {diag}\n")
         except Exception:
             pass
-        headers = _cache_headers_error(); headers["X-Submissions-Diag"] = diag
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=headers)
+        # Do not leak diagnostics to clients; log above when CSRF_DIAG_LOG set.
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
     except ValueError as exc:

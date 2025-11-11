@@ -3,7 +3,7 @@ Global Security Headers – middleware coverage
 
 Verifiziert, dass HTML- und JSON-Antworten die erwarteten Security-Header
 enthalten (CSP, XFO, XCTO, Referrer-Policy, Permissions-Policy) und dass
-HSTS nur in PROD aktiv ist.
+HSTS immer aktiv ist (dev = prod).
 """
 
 from __future__ import annotations
@@ -49,15 +49,15 @@ async def test_html_route_includes_security_headers():
 
 
 @pytest.mark.anyio
-async def test_api_route_includes_security_headers_and_hsts_only_in_prod(monkeypatch: pytest.MonkeyPatch):
-    # Non-prod: HSTS absent
+async def test_api_route_includes_security_headers_and_hsts_always(monkeypatch: pytest.MonkeyPatch):
+    # Non-prod: HSTS present
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as c:
         r = await c.get("/health")
     assert r.status_code == 200
     _assert_base_headers(r.headers)
-    assert "Strict-Transport-Security" not in r.headers
+    assert "Strict-Transport-Security" in r.headers
 
-    # Prod: HSTS present
+    # Prod: HSTS also present
     main.SETTINGS.override_environment("prod")
     try:
         async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as c:
@@ -67,4 +67,3 @@ async def test_api_route_includes_security_headers_and_hsts_only_in_prod(monkeyp
         assert "Strict-Transport-Security" in r2.headers
     finally:
         main.SETTINGS.override_environment(None)
-

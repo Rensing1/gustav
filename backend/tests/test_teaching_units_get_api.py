@@ -36,7 +36,7 @@ if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defen
 
 async def _create_unit(client: httpx.AsyncClient, *, title: str, teacher_cookie: str) -> str:
     client.cookies.set(main.SESSION_COOKIE_NAME, teacher_cookie)
-    r = await client.post("/api/teaching/units", json={"title": title})
+    r = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201
     body = r.json()
     assert isinstance(body, dict) and body.get("id")
@@ -46,7 +46,7 @@ async def _create_unit(client: httpx.AsyncClient, *, title: str, teacher_cookie:
 @pytest.mark.anyio
 async def test_get_unit_by_id_owner_returns_200():
     owner = main.SESSION_STORE.create(sub="t-unit-owner-1", name="Owner", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         uid = await _create_unit(c, title="Genetik", teacher_cookie=owner.session_id)
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
         r = await c.get(f"/api/teaching/units/{uid}")
@@ -60,7 +60,7 @@ async def test_get_unit_by_id_owner_returns_200():
 async def test_get_unit_by_id_non_author_returns_403():
     owner = main.SESSION_STORE.create(sub="t-unit-owner-2", name="Owner", roles=["teacher"])  # type: ignore
     intruder = main.SESSION_STORE.create(sub="t-unit-other-2", name="Other", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         uid = await _create_unit(c, title="Ökologie", teacher_cookie=owner.session_id)
         c.cookies.set(main.SESSION_COOKIE_NAME, intruder.session_id)
         r = await c.get(f"/api/teaching/units/{uid}")
@@ -71,7 +71,7 @@ async def test_get_unit_by_id_non_author_returns_403():
 async def test_get_unit_by_id_unknown_returns_404():
     owner = main.SESSION_STORE.create(sub="t-unit-owner-3", name="Owner", roles=["teacher"])  # type: ignore
     unknown = str(_uuid.uuid4())
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
         r = await c.get(f"/api/teaching/units/{unknown}")
     assert r.status_code == 404
@@ -80,7 +80,7 @@ async def test_get_unit_by_id_unknown_returns_404():
 @pytest.mark.anyio
 async def test_get_unit_invalid_id_returns_400():
     owner = main.SESSION_STORE.create(sub="t-unit-owner-4", name="Owner", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
         r = await c.get("/api/teaching/units/not-a-uuid")
     assert r.status_code == 400

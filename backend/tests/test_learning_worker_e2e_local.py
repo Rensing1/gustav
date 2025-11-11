@@ -203,6 +203,143 @@ async def test_e2e_local_ai_text_submission_completed_v2_with_dspy(monkeypatch: 
 
 
 @pytest.mark.anyio
+async def test_e2e_local_ai_text_submission_without_json_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Regression guard: the worker must succeed even when JSONAdapter would raise ResponseError.
+
+    We simulate an adapter failure by making the structured DSPy helpers raise whenever the
+    JSONAdapter is instantiated. The legacy runners also raise so that the worker only succeeds
+    if JSONAdapter is skipped entirely (desired fix).
+    """
+    _require_db_or_skip()
+    fixture = await _prepare_learning_fixture()
+    dsn = _dsn()
+    worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
+
+    # Clean queue and ensure deterministic submission
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+            cur.execute("select set_config('app.current_sub', %s, false)", (fixture.student_sub,))
+            cur.execute(
+                """
+                delete from public.learning_submissions
+                 where student_sub = %s
+                   and idempotency_key in ('e2e-local-text-no-json-adapter')
+                """,
+                (fixture.student_sub,),
+            )
+        conn.commit()
+
+    # Install fake Ollama + stateful DSPy module
+    _install_fake_ollama(monkeypatch, text="## Vision Output\n\nHello world.")
+
+    adapter_usage = {"used": False}
+
+    class _TrackingJSONAdapter:
+        def __init__(self) -> None:
+            adapter_usage["used"] = True
+
+        def __call__(self) -> "_TrackingJSONAdapter":
+            adapter_usage["used"] = True
+            return self
+
+    fake_dspy = SimpleNamespace(
+        __version__="0.0-test",
+        JSONAdapter=_TrackingJSONAdapter,
+        LM=lambda model: SimpleNamespace(model=model),
+        configure=lambda **kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "dspy", fake_dspy)
+    monkeypatch.setitem(sys.modules, "dspy", fake_dspy)
+
+    from backend.learning.adapters.dspy import programs as dspy_programs
+    from backend.learning.adapters.dspy import feedback_program as dspy_feedback
+
+    def _structured_analysis(**kwargs):  # type: ignore[no-untyped-def]
+        if adapter_usage["used"]:
+            raise RuntimeError("ResponseError from JSONAdapter")
+        return {
+            "schema": "criteria.v2",
+            "score": 4,
+            "criteria_results": [
+                {"criterion": "Inhalt", "max_score": 10, "score": 9, "explanation_md": "Analyse Inhalt"}
+            ],
+        }
+
+    def _structured_feedback(**kwargs):  # type: ignore[no-untyped-def]
+        if adapter_usage["used"]:
+            raise RuntimeError("ResponseError from JSONAdapter")
+        return "**DSPy Feedback**\n\n- Individuell formuliert."
+
+    def _bomb_legacy_analysis(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("Legacy analysis should not run when JSONAdapter is disabled")
+
+    def _bomb_legacy_feedback(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("Legacy feedback should not run when JSONAdapter is disabled")
+
+    monkeypatch.setattr(dspy_programs, "run_structured_analysis", _structured_analysis)
+    monkeypatch.setattr(dspy_programs, "run_structured_feedback", _structured_feedback)
+    monkeypatch.setattr(dspy_feedback, "_run_analysis_model", _bomb_legacy_analysis)
+    monkeypatch.setattr(dspy_feedback, "_run_feedback_model", _bomb_legacy_feedback)
+
+    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+    monkeypatch.setenv("LEARNING_DSPY_JSON_ADAPTER", "false")
+
+    # Build adapters with local preference
+    import importlib
+
+    local_vision = importlib.import_module("backend.learning.adapters.local_vision").build()  # type: ignore[attr-defined]
+    local_feedback = importlib.import_module("backend.learning.adapters.local_feedback").build()  # type: ignore[attr-defined]
+
+    repo = DBLearningRepo(dsn=dsn)
+    create = CreateSubmissionUseCase(repo)
+    submission = create.execute(
+        CreateSubmissionInput(
+            course_id=fixture.course_id,
+            task_id=fixture.task["id"],
+            student_sub=fixture.student_sub,
+            kind="text",
+            text_body="# Draft text",
+            storage_key=None,
+            mime_type=None,
+            size_bytes=None,
+            sha256=None,
+            idempotency_key="e2e-local-text-no-json-adapter",
+        )
+    )
+    submission_id = submission["id"]
+
+    from backend.learning.workers.process_learning_submission_jobs import run_once  # type: ignore
+
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=local_vision,
+        feedback_adapter=local_feedback,
+        now=datetime.now(tz=timezone.utc),
+    )
+    assert processed is True
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select analysis_status, analysis_json, feedback_md
+                  from public.learning_submissions
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            status, analysis_json, feedback_md = cur.fetchone()
+
+    assert status == "completed"
+    assert isinstance(analysis_json, dict) and analysis_json.get("schema") == "criteria.v2"
+    assert feedback_md == "**DSPy Feedback**\n\n- Individuell formuliert."
+    assert "Stärken: klar benannt" not in feedback_md
+
+
+@pytest.mark.anyio
 async def test_e2e_local_ai_image_submission_completed_v2(monkeypatch: pytest.MonkeyPatch) -> None:
     _require_db_or_skip()
     fixture = await _prepare_learning_fixture()

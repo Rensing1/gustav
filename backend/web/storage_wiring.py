@@ -100,14 +100,6 @@ def wire_supabase_adapter_if_configured() -> bool:
         _learning.set_storage_adapter(adapter)
         logger.info("Storage adapter wired: Supabase")
         _STARTUP_ATTEMPTED = True
-        
-        # Dev convenience: ensure buckets requested by env exist when helper is called.
-        try:
-            from backend.storage.bootstrap import ensure_buckets_from_env  # type: ignore
-            ensure_buckets_from_env()
-        except Exception:
-            # Do not block wiring on bootstrap issues in dev.
-            pass
         return True
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.warning(

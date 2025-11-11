@@ -25,7 +25,12 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    # Provide Origin to satisfy strict CSRF for setup writes.
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 def _releases_path(course_id: str, module_id: str) -> str:
@@ -92,4 +97,3 @@ async def test_releases_list_headers_vary_origin_owner_and_errors():
         r403 = await client.get(_releases_path(cid, module["id"]))
         assert r403.status_code == 403
         assert r403.headers.get("Vary") == "Origin"
-

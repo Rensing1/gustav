@@ -49,7 +49,7 @@ async def test_course_modules_ui_reorder_persists_with_db_repo():
     # Teacher session
     sess = main.SESSION_STORE.create(sub="t-ui-mod-db", name="Lehrer DBMOD", roles=["teacher"])  # type: ignore
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
 
         # Create course and two units
@@ -100,4 +100,3 @@ async def test_course_modules_ui_reorder_persists_with_db_repo():
         items = after.json()
         assert [m.get("id") for m in items] == [m2_id, m1_id]
         assert [m.get("position") for m in items] == [1, 2]
-

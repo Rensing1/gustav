@@ -26,7 +26,7 @@ from identity_access.stores import SessionStore  # type: ignore
 
 
 async def _client():
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 @pytest.mark.anyio
@@ -60,4 +60,3 @@ async def test_sections_list_sets_private_no_store():
     assert r.status_code == 200
     cc = r.headers.get("Cache-Control", "")
     assert "no-store" in cc and "private" in cc
-

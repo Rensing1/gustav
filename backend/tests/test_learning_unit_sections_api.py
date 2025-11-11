@@ -22,7 +22,12 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    # Provide Origin for setup writes (dev = prod strict CSRF)
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Mathe") -> str:

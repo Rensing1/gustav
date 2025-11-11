@@ -42,7 +42,7 @@ def _helpers_available_or_skip():
 
 
 async def _client():
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 async def _create_course(client: httpx.AsyncClient) -> str:

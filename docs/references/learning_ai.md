@@ -129,15 +129,15 @@ Refer to the latest migration plan in `docs/plan/2025-11-01-ki-integration.md` f
 
 ## 9. Configuration & Deployment
 - Environment variables:
-  - `AI_BACKEND=stub|local` (prod/stage starten seit 2025‑11 nicht mehr mit `stub`).
-  - `AI_VISION_MODEL` (Default `qwen2.5-vl:7b`)
-  - `AI_FEEDBACK_MODEL` (Default `qwen2.5:7b-instruct`)
+  - `AI_BACKEND=local|stub` (Default `local`; prod/stage refuse `stub`).
+  - `AI_VISION_MODEL` (Default `qwen2.5vl:3b`)
+  - `AI_FEEDBACK_MODEL` (Default `gpt-oss:latest`)
   - `OLLAMA_BASE_URL` (Default `http://ollama:11434` innerhalb von Compose)
   - `AI_TIMEOUT_VISION` (Default `30`), `AI_TIMEOUT_FEEDBACK` (Default `15`)
   - `WORKER_MAX_RETRIES=3`, `WORKER_BACKOFF_SECONDS=10`, `WORKER_LEASE_SECONDS=45`, `WORKER_POLL_INTERVAL=0.5`
-- Praxisregel: Nur `AI_BACKEND=local` (plus echte Modelle/OLLAMA_BASE_URL)
-  schaltet DSPy/Ollama frei. Mit dem Default `stub` liefert der Worker bewusst
-  nur Platzhalter für Tests und Demoumgebungen – und produktive Deployments werden hart abgebrochen, falls jemand dennoch `stub` setzt.
+- Praxisregel: Standard ist `AI_BACKEND=local` mit echten Modellen/OLLAMA_BASE_URL.
+  Für Tests/CI kann `stub` verwendet werden; Produktions-/Staging‑Starts mit
+  `stub` werden hart abgewiesen (Fail‑fast auf Prozessstart).
 - Worker process:
   - Run via `poetry run python -m backend.learning.worker` or container `learning-ai-worker`.
   - Horizontal scaling allowed; locking is handled via queue `status` update with optimistic concurrency.

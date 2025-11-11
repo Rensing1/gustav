@@ -6,7 +6,7 @@ KI‑gestützte Lernplattform mit FastAPI und HTMX. Server‑seitiges Rendern (S
 
 - Voraussetzungen: Docker & Docker Compose, Port `8100` frei
 - Start: `docker compose build && docker compose up`
-- Öffnen (Reverse Proxy aktiv): `http://app.localhost:8100`
+- Öffnen (Reverse Proxy aktiv): `https://app.localhost:8100`
 - Entwicklung: Live‑Reload für `backend/web` ist aktiv
 - Nützlich: `docker compose up -d`, `docker compose logs -f`, `docker compose down`
 
@@ -34,7 +34,7 @@ gustav-alpha2/
   - `LEARNING_STORAGE_BUCKET` (Default `submissions`)
   - `MATERIALS_MAX_UPLOAD_BYTES` (Default 20971520 = 20 MiB)
   - `LEARNING_MAX_UPLOAD_BYTES` (Default 10485760 = 10 MiB)
-  - Optional **nur Dev/Test**: `AUTO_CREATE_STORAGE_BUCKETS=true` erlaubt dem Backend, fehlende Buckets beim Start nachzupflegen. In Prod/Stage unbedingt `false` lassen; beim Start wird ein Hinweis ins Log geschrieben, falls das Flag dennoch gesetzt ist.
+  - Optional (nur für gezielte lokale E2E): `AUTO_CREATE_STORAGE_BUCKETS=true` erlaubt temporär Auto‑Provisioning. In regulären Setups immer `false`; der Startschutz (Prod‑Guard) verhindert unsichere Prod‑Konfigurationen.
 
 Schlüssel (storage_key) – Konventionen:
 - Teaching: `materials/{unit_id}/{section_id}/{material_id}/{uuid}.{ext}`
@@ -44,11 +44,14 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 
 ## Lokale KI (Ollama/DSPy)
 
-- Standard ist `AI_BACKEND=stub` (deterministisch, keine Modelle nötig).
-- Echte Rückmeldungen (DSPy/Ollama) erhältst du nur mit `AI_BACKEND=local`
+- Standard ist `AI_BACKEND=local` (prod‑tauglich). Für reine CI kann `stub` verwendet werden; Prod/Stage starten nicht mit `stub`.
+- Echte Rückmeldungen (DSPy/Ollama) erhältst du mit `AI_BACKEND=local`
   sowie korrekt gesetzten `AI_FEEDBACK_MODEL` und `OLLAMA_BASE_URL`. Bleibt
-  das Flag auf `stub`, liefert der Worker absichtlich nur Platzhalter (und Prod/Stage verweigern seit 2025‑11 den Start mit `stub`).
-- Default-Modelle orientieren sich an Qwen 2.5 (`AI_VISION_MODEL=qwen2.5-vl:7b`, `AI_FEEDBACK_MODEL=qwen2.5:7b-instruct`). Passe sie nur an, wenn du die Modelle lokal bereits gepullt hast.
+  das Flag auf `stub`, liefert der Worker deterministische Platzhalter. Prod/Stage verweigern seit 2025‑11 den Start mit `stub` (Fail‑fast).
+- Default‑Modelle:
+  - Vision: `AI_VISION_MODEL=qwen2.5vl:3b`
+  - Feedback: `AI_FEEDBACK_MODEL=gpt-oss:latest`
+  Passe sie nur an, wenn du die Modelle lokal bereits gepullt hast.
 - Für lokale Inferenz (nur dev/staging):
   - Compose stellt `ollama` bereit (interner Port 11434). Env in `learning-worker` bereits verdrahtet (`OLLAMA_BASE_URL=http://ollama:11434`).
   - Modelle ziehen (die IDs wählst du selbst, z. B. `AI_FEEDBACK_MODEL=<modell>`):
@@ -107,13 +110,14 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 ## Identity & Sessions (Kurzüberblick)
 
 - IdP: Keycloak (OIDC Authorization Code Flow mit PKCE)
-- Session-Cookie: `gustav_session` (httpOnly)
+- Session‑Cookie: `gustav_session` (HttpOnly, Secure, SameSite=Strict)
 - Umgebungsvariablen:
-  - `GUSTAV_ENV`: `dev` (Default) oder `prod` → steuert Cookie-Flags (`Secure`, `SameSite`)
+  - `GUSTAV_ENV`: steuert nur wenige nicht‑sicherheitskritische Aspekte (z. B. CSP‑Lockerung in dev); Cookies sind stets Secure+Strict.
   - `SESSIONS_BACKEND`: `memory` (Default) oder `db` (Postgres/Supabase)
   - `DATABASE_URL` (oder `SUPABASE_DB_URL`): DSN für DB-gestützte Sessions
-- `WEB_BASE`: Browser‑sichtbare Basis‑URL der App (z. B. `http://app.localhost:8100`)
-- `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `http://app.localhost:8100/auth/callback`); wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
+- `WEB_BASE`: Browser‑sichtbare Basis‑URL der App (z. B. `https://app.localhost:8100`)
+- `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `https://app.localhost:8100/auth/callback`);
+  wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
 - `KC_BASE_URL` (bevorzugt) bzw. `KC_BASE` (Legacy): Öffentliche Basis‑URL von Keycloak. Für Proxys `KC_PUBLIC_BASE_URL` setzen.
 
 ### Directory (Users API) — Admin‑Client
@@ -125,16 +129,25 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 - Der Client benötigt minimale `realm-management` Rollen (z. B. `view-users`, `query-users`).
 - Legacy‑Fallback (nur dev): `KC_ADMIN_USERNAME`/`KC_ADMIN_PASSWORD` (Password‑Grant) ist weiterhin möglich, in Produktion aber zu vermeiden.
 
-### E2E-Hosts und Cookies
+### E2E-Hosts, TLS und Cookies
 
 - Cookies sind hostgebunden. Für eine stabile E2E-Anmeldung müssen Web‑Host und Cookie‑Host übereinstimmen.
-- Standard-Setup (Reverse‑Proxy `Caddyfile`):
-- App: `http://app.localhost:8100`
-- Keycloak: `http://id.localhost:8100`
+- Standard‑Setup (Reverse‑Proxy `Caddyfile`, TLS intern):
+- App: `https://app.localhost:8100`
+- Keycloak: `https://id.localhost:8100`
 - E2E-Tests leiten `WEB_BASE` automatisch aus `REDIRECT_URI` ab (wenn `WEB_BASE` nicht gesetzt ist) und nutzen `KC_BASE` bzw. `KC_PUBLIC_BASE_URL`.
-- Empfehlung: Setze vor E2E-Läufen explizit
-- `export WEB_BASE=http://app.localhost:8100`
-- `export KC_BASE=http://id.localhost:8100`
+- Empfehlung: Setze vor E2E‑Läufen explizit
+- `export WEB_BASE=https://app.localhost:8100`
+- `export KC_PUBLIC_BASE_URL=https://id.localhost:8100`
+
+## Sicherheits‑Defaults (dev = prod)
+
+- TLS/HSTS: Immer aktiv über den Caddy‑Proxy (HSTS max‑age=31536000; includeSubDomains)
+- CSRF: Strikt für alle Schreib‑Routen (Origin/Referer müssen server‑gleich sein)
+- Cookies: Immer `Secure` + `SameSite=Strict` + `HttpOnly`
+- Caching: Private/no‑store auf sensitiven Antworten; `Vary: Origin`
+- Diagnostik: Keine clientseitigen Diagnose‑Header; optionale Server‑Logs via Flags
+
 
 ## Persistenz (Keycloak‑Accounts)
 

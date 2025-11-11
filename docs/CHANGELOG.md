@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+### Security (dev = prod)
+- security(cookies): Always set `Secure` + `SameSite=Strict` for session cookie (local = prod).
+- security(csrf): Strict CSRF on all write routes (Origin/Referer same-origin required) across environments.
+- security(headers): Enable HSTS by default; remove client-facing diagnostic headers.
+- security(ssr): Internal SSR→API hops send an Origin header to satisfy strict CSRF.
+
+### Config & Defaults
+- config(urls): Default WEB_BASE and KC_PUBLIC_BASE_URL use `https://…:8100` (Caddy TLS internal).
+- config(compose): Validate compose; avoid `host.docker.internal`; bind Ollama to loopback.
+- ai(defaults): Vision=`qwen2.5vl:3b`, Feedback=`gpt-oss:latest`.
 ### UI
 - ui(learning): Task-Formular sendet per HTMX und tauscht nur das Verlaufs-Fragment (kein Full-Page-Reload). PRG-Fallback ohne HTMX bleibt erhalten; Erfolgsbanner via HX-Trigger.
 - ui(learning): Verlauf aktualisiert sich automatisch (hx-trigger="every 2s") solange der neueste Versuch pending ist; Polling stoppt bei completed.
@@ -175,7 +185,7 @@
 - fix(web/members): Removing a member immediately updates the current members list; inline error banner on API failure.
 - docs(teaching): Reference updated for Users list endpoint and SSR member management behavior.
 - devops(keycloak): Set defaultRoles=["student"] in realm import; docker‑compose passes KC_ADMIN_USERNAME/PASSWORD (defaults admin/admin) for directory access.
-- security(web): Global security headers middleware now covered by tests; HSTS only in `prod`.
+- security(web): Global security headers middleware covered by tests; HSTS always on (dev = prod).
 - security(auth): Dynamic `redirect_uri` derives host:port from ASGI request when not trusting proxy; tests for `/auth/register` added.
 - security(ssr): Do not mint CSRF tokens when no session cookie present (defensive guard for `/courses` and `/units`).
 - consistency(ssr): Removed redundant XFO/XCTO meta tags from `/units` SSR HTML; rely on middleware headers.

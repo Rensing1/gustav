@@ -181,7 +181,7 @@ E2E‑Tests (Identity):
 - `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
 
 #### CSRF‑Strategie (Browser‑Flows)
-- Same‑Site Cookies: In PROD `SameSite=strict` + `Secure`; in DEV `lax`.
+- Same‑Site Cookies: Immer `SameSite=strict` + `Secure` (dev = prod).
 - Server prüft bei schreibenden Endpunkten die **Origin** (Same‑Origin‑Pflicht):
   - Learning: z. B. `POST /api/learning/.../submissions`
   - Teaching: alle Schreib‑APIs (z. B. `POST /api/teaching/courses`, `POST/PATCH /api/teaching/units`, Reorder/Materials/Tasks/Members)
@@ -206,7 +206,7 @@ E2E‑Tests (Identity):
 
 #### Nonce & Session‑TTL
 - Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: private, no-store`.
-- Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). In PROD wird das `gustav_session`‑Cookie mit `Max-Age=<TTL>` gesetzt; Flags: `HttpOnly; Secure; SameSite=strict`. In DEV wird kein `Max-Age` gesetzt (`SameSite=lax`).
+- Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). Das `gustav_session`‑Cookie wird immer mit `HttpOnly; Secure; SameSite=strict` gesetzt (dev = prod). `Max-Age` kann je nach Deployment variieren.
 - /api/me: liefert zusätzlich `expires_at` (UTC‑ISO‑8601), damit Clients die Restlaufzeit anzeigen können. Antworten sind nie cachebar.
 
 ## Deployment & Betrieb

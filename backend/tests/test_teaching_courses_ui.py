@@ -39,7 +39,7 @@ if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defen
 async def _seed_course(client: httpx.AsyncClient, *, title: str, teacher_session_cookie: str) -> None:
     # API uses authenticated teacher identity from middleware; provide cookie.
     client.cookies.set(main.SESSION_COOKIE_NAME, teacher_session_cookie)
-    resp = await client.post("/api/teaching/courses", json={"title": title})
+    resp = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
     assert resp.status_code == 201, resp.text
 
 

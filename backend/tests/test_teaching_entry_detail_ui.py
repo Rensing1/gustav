@@ -41,7 +41,7 @@ def _extract_csrf_token(html: str) -> str | None:
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 @pytest.mark.anyio
@@ -213,4 +213,3 @@ class FakeStorageAdapter:
         return {"content_type": "application/pdf", "content_length": 1024}
     def presign_download(self, **kwargs):
         return {"url": "http://storage.local/download", "expires_at": "2099-01-01T00:00:30+00:00"}
-

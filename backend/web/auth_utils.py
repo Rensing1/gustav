@@ -16,22 +16,13 @@ from __future__ import annotations
 
 
 def cookie_opts(environment: str) -> dict:
-    """Return cookie flags for the given environment.
+    """Return hardened cookie flags (dev = prod).
 
-    Parameters
-    ----------
-    environment:
-        Environment name (e.g., "dev" or "prod"). Values are case-insensitive.
+    Intent: Unify environments to production-grade flags to prevent CSRF and
+    cookie leakage regardless of local/prod settings.
 
-    Returns
-    -------
-    dict
-        Mapping with keys "secure" and "samesite" configured as follows:
-        - prod:  secure=True,  samesite="strict"
-        - other: secure=False, samesite="lax"
+    Returns a mapping with keys:
+      - secure: True
+      - samesite: "strict"
     """
-    env = (environment or "").lower()
-    secure = env == "prod"
-    samesite = "strict" if secure else "lax"
-    return {"secure": secure, "samesite": samesite}
-
+    return {"secure": True, "samesite": "strict"}

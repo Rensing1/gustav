@@ -40,6 +40,7 @@ try:  # pragma: no cover - optional dependency in some environments
     import psycopg
     from psycopg import Connection
     from psycopg.rows import dict_row
+    from psycopg import sql as _sql
     HAVE_PSYCOPG = True
 except Exception:  # pragma: no cover
     psycopg = None  # type: ignore
@@ -159,18 +160,26 @@ def run_once(
 
 
 def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
-    """Lease the next visible job using `SELECT ... FOR UPDATE SKIP LOCKED`."""
+    """Lease the next visible job from the available queue table.
+
+    Supports both the new `learning_submission_jobs` and the legacy
+    `learning_submission_ocr_jobs` table to remain compatible with different
+    migration baselines.
+    """
     lease_key = uuid4()
     lease_until = now + timedelta(seconds=LEASE_SECONDS)
+    queue_table = _resolve_queue_table(conn)
+    if not queue_table:
+        return None
     with conn.cursor() as cur:
-        cur.execute(
+        stmt = _sql.SQL(
             """
             with candidate as (
                 select id,
                        submission_id,
                        payload,
                        retry_count
-                  from public.learning_submission_jobs
+                  from public.{}
                  where (
                           status = 'queued'
                           and visible_at <= %s + interval '5 seconds'
@@ -184,7 +193,7 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                  limit 1
                  for update skip locked
             )
-            update public.learning_submission_jobs as jobs
+            update public.{} as jobs
                set status = 'leased',
                    lease_key = %s::uuid,
                    leased_until = %s,
@@ -195,9 +204,9 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                      candidate.submission_id::text,
                      candidate.retry_count,
                      candidate.payload
-            """,
-            (now, now, str(lease_key), lease_until),
-        )
+            """
+        ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table))
+        cur.execute(stmt, (now, now, str(lease_key), lease_until))
         row = cur.fetchone()
     if not row:
         return None
@@ -207,6 +216,20 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
         retry_count=int(row["retry_count"]),
         payload=row["payload"],
     )
+
+
+def _resolve_queue_table(conn: Connection) -> Optional[str]:
+    """Return available queue table name (new or legacy) if present."""
+    for name in ("learning_submission_jobs", "learning_submission_ocr_jobs"):
+        with conn.cursor() as cur:
+            cur.execute("select to_regclass(%s) as reg", (f"public.{name}",))
+            reg = cur.fetchone()
+            if reg:
+                # Support both dict_row and tuple rows
+                val = reg.get("reg") if isinstance(reg, dict) else reg[0]
+                if val:
+                    return name
+    return None
 
 
 def _process_job(
@@ -718,6 +741,40 @@ def _resolve_worker_dsn() -> str:
     return dsn
 
 
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _truthy_env(name: str, *, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in _TRUTHY
+
+
+def _json_adapter_enabled() -> bool:
+    """Feature toggle for JSONAdapter (default on; set env to 'false' to disable)."""
+    return _truthy_env("LEARNING_DSPY_JSON_ADAPTER", default=True)
+
+
+def _ensure_ollama_host_env() -> str | None:
+    """
+    Align DSPy/LiteLLM host resolution with the worker configuration.
+
+    DSPy (via LiteLLM) expects `api_base` or `OLLAMA_API_BASE`, whereas our
+    env files only expose `OLLAMA_BASE_URL`. We propagate the value to the
+    expected knobs and return it so callers can pass `api_base` explicitly.
+    """
+    base_url = (os.getenv("OLLAMA_BASE_URL") or "").strip()
+    if not base_url:
+        return None
+
+    if not (os.getenv("OLLAMA_HOST") or "").strip():
+        os.environ["OLLAMA_HOST"] = base_url
+    if not (os.getenv("OLLAMA_API_BASE") or "").strip():
+        os.environ["OLLAMA_API_BASE"] = base_url
+    return base_url
+
+
 def main() -> None:
     """CLI entrypoint for the worker."""
     level_name = os.getenv("LOG_LEVEL", "INFO")
@@ -731,6 +788,12 @@ def main() -> None:
     cfg = load_ai_config()
     vision_path = cfg.vision_adapter_path
     feedback_path = cfg.feedback_adapter_path
+    LOG.info(
+        "learning.adapters.selected backend=%s vision=%s feedback=%s",
+        cfg.backend,
+        vision_path,
+        feedback_path,
+    )
 
     # Configure DSPy globally when available so structured outputs are preferred.
     try:  # pragma: no cover - behavior validated via higher-level tests
@@ -738,13 +801,19 @@ def main() -> None:
 
         model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
         if model_name and hasattr(dspy, "LM"):
-            lm = dspy.LM(f"ollama/{model_name}")  # type: ignore[attr-defined]
-            adapter_cls = getattr(dspy, "JSONAdapter", None)
+            api_base = _ensure_ollama_host_env()
+            lm_kwargs = {"api_base": api_base} if api_base else {}
+            lm = dspy.LM(f"ollama/{model_name}", **lm_kwargs)  # type: ignore[attr-defined]
+            use_json_adapter = _json_adapter_enabled()
+            adapter_cls = getattr(dspy, "JSONAdapter", None) if use_json_adapter else None
             if adapter_cls is not None:
                 dspy.configure(lm=lm, adapter=adapter_cls())  # type: ignore[misc]
+                adapter_label = "JSONAdapter"
             else:
+                # Explicit opt-out path: allow local debugging without JSONAdapter.
                 dspy.configure(lm=lm)
-            LOG.info("learning.feedback.dspy_configured model=%s adapter=%s", model_name, "JSONAdapter" if adapter_cls else "default")
+                adapter_label = "default"
+            LOG.info("learning.feedback.dspy_configured model=%s adapter=%s", model_name, adapter_label)
     except Exception as _cfg_exc:  # pragma: no cover
         LOG.debug("DSPy not configured: %s", type(_cfg_exc).__name__)
 

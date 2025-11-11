@@ -86,6 +86,7 @@ class _LocalFeedbackAdapter:
         elif skip_reason:
             logger.warning("learning.feedback.dspy_skipped reason=%s", skip_reason)
 
+        dspy_analysis: dict | None = None
         if use_dspy and dspy_program is not None:
             try:
                 dspy_result = dspy_program.analyze_feedback(
@@ -114,13 +115,62 @@ class _LocalFeedbackAdapter:
                     except Exception as exc:  # pragma: no cover - defensive guard
                         logger.warning("learning.feedback.dspy_invalid_return reason=%s", exc.__class__.__name__)
                 if converted is not None:
-                    parse_status = converted.parse_status or "unknown"
-                    logger.info(
-                        "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
-                        len(criteria),
-                        parse_status,
-                    )
-                    return converted
+                    parse_status = (converted.parse_status or "unknown").strip()
+                    feedback_trimmed = (converted.feedback_md or "").strip()
+                    # Treat the literal string "None" as empty to avoid persisting it.
+                    if feedback_trimmed.lower() == "none":
+                        feedback_trimmed = ""
+                    degraded_statuses = {"analysis_fallback", "analysis_error", "analysis_feedback_fallback"}
+                    looks_stub = feedback_trimmed.startswith("**Rückmeldung**") and "Stärken:" in feedback_trimmed
+                    if parse_status in degraded_statuses:
+                        logger.info(
+                            "learning.feedback.dspy_degraded_to_ollama criteria_count=%s parse_status=%s",
+                            len(criteria),
+                            parse_status or "unknown",
+                        )
+                        dspy_analysis = converted.analysis_json if isinstance(converted.analysis_json, dict) else None
+                        # Switch to Ollama fallback path below
+                        use_dspy = False
+                    elif not feedback_trimmed or looks_stub:
+                        # Stay within DSPy path: synthesize a brief feedback from the structured analysis
+                        # rather than calling Ollama again.
+                        analysis_dict = converted.analysis_json if isinstance(converted.analysis_json, dict) else None
+                        if analysis_dict is None:
+                            analysis_dict = {"schema": "criteria.v2", "score": 0, "criteria_results": []}
+                        crit = analysis_dict.get("criteria_results", []) if isinstance(analysis_dict, dict) else []
+                        good = [
+                            f"{c.get('criterion', 'Kriterium')}: {c.get('score', 0)}/{c.get('max_score', 10)}"
+                            for c in crit
+                            if int(c.get("score", 0)) >= int(c.get("max_score", 10)) // 2
+                        ]
+                        bad = [
+                            str(c.get('criterion', 'Kriterium'))
+                            for c in crit
+                            if int(c.get("score", 0)) < int(c.get("max_score", 10)) // 2
+                        ]
+                        synthetic = []
+                        if good:
+                            synthetic.append("Stärken: " + ", ".join(good) + ".")
+                        if bad:
+                            synthetic.append("Hinweise: gezielt ausbauen bei " + ", ".join(bad) + ".")
+                        feedback_text = " ".join(synthetic) or "Kurze, konstruktive Rückmeldung basierend auf der Analyse."
+                        logger.info(
+                            "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
+                            len(criteria),
+                            parse_status,
+                        )
+                        return FeedbackResult(
+                            feedback_md=feedback_text,
+                            analysis_json=analysis_dict,
+                            parse_status=parse_status,
+                        )
+                    else:
+                        logger.info(
+                            "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
+                            len(criteria),
+                            parse_status,
+                        )
+                        return converted
             except FeedbackTransientError:
                 raise
             except TimeoutError as exc:
@@ -128,10 +178,15 @@ class _LocalFeedbackAdapter:
                 raise FeedbackTransientError(str(exc)) from exc
             except RuntimeError as exc:
                 logger.warning("learning.feedback.dspy_runtime_error reason=%s", str(exc))
+                # Switch to Ollama fallback path
+                use_dspy = False
             except Exception as exc:  # pragma: no cover - defensive fallback
                 logger.warning("learning.feedback.dspy_failed reason=%s", exc.__class__.__name__)
-            # Any exception reaches this point → fall back to Ollama path.
+                # Switch to Ollama fallback path
+                use_dspy = False
+            # Any exception reaches this point → fall back to Ollama path by disabling DSPy
 
+        feedback_md_from_ollama: str | None = None
         if not use_dspy:
             # Import ollama lazily for test monkeypatching support.
             try:
@@ -147,36 +202,63 @@ class _LocalFeedbackAdapter:
             try:
                 # Use positional host argument for broader client compatibility
                 client = ollama.Client(self._base_url)
-                _ = client.generate(model=self._model, prompt=prompt, options={"timeout": self._timeout})
+                # Force raw mode to bypass server-side templates that may reference
+                # unavailable functions (e.g., currentDate) and keep behavior stable.
+                raw = client.generate(
+                    model=self._model,
+                    prompt=prompt,
+                    options={
+                        "raw": True,
+                        # Ensure server template is not applied to avoid template errors
+                        "template": "{{ .Prompt }}",
+                    },
+                )
+                if isinstance(raw, dict):
+                    val = raw.get("response") or raw.get("message")
+                    feedback_md_from_ollama = str(val or "").strip() if val is not None else None
+                elif isinstance(raw, str):
+                    feedback_md_from_ollama = raw.strip()
+                else:  # pragma: no cover - defensive normalization
+                    feedback_md_from_ollama = str(raw).strip()
             except TimeoutError as exc:
                 raise FeedbackTransientError(str(exc))
             except Exception as exc:  # pragma: no cover - conservative mapping
                 raise FeedbackTransientError(str(exc))
 
-        # Build a minimal but valid criteria.v2 analysis structure.
-        crit_list = []
-        for name in criteria:
-            crit_list.append({
-                "criterion": str(name),
-                "max_score": 10,
-                # KISS default without evidence: 0
-                "score": 0,  # within 0..max_score (v2)
-                "explanation_md": "Kurzbegründung auf Basis des Kriteriums.",
-            })
+        # Prefer DSPy-produced analysis if available; otherwise build a minimal criteria.v2 payload.
+        if dspy_analysis and isinstance(dspy_analysis, dict):
+            analysis = dspy_analysis
+        else:
+            crit_list = []
+            for name in criteria:
+                crit_list.append(
+                    {
+                        "criterion": str(name),
+                        "max_score": 10,
+                        # KISS default without evidence: 0
+                        "score": 0,  # within 0..max_score (v2)
+                        "explanation_md": "Kurzbegründung auf Basis des Kriteriums.",
+                    }
+                )
 
-        analysis = {
-            "schema": "criteria.v2",
-            # Overall derives to 0 when all items are 0
-            "score": 0,  # overall score within 0..5
-            "criteria_results": crit_list,
-        }
+            analysis = {
+                "schema": "criteria.v2",
+                # Overall derives to 0 when all items are 0
+                "score": 0,  # overall score within 0..5
+                "criteria_results": crit_list,
+            }
 
-        feedback_md = "**Rückmeldung**\n\n- Stärken: klar erkennbar.\n- Hinweise: gezielt ausbauen."
-        logger.info(
-            "learning.feedback.completed feedback_backend=ollama criteria_count=%s",
-            len(criteria),
+        # Prefer actual model output if available; otherwise return a deterministic stub.
+        feedback_md = (feedback_md_from_ollama or "").strip() or (
+            "**Rückmeldung**\n\n- Stärken: klar erkennbar.\n- Hinweise: gezielt ausbauen."
         )
-        return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis, parse_status="stub")
+        parse_status = "model" if feedback_md_from_ollama else "stub"
+        logger.info(
+            "learning.feedback.completed feedback_backend=ollama criteria_count=%s parse_status=%s",
+            len(criteria),
+            parse_status,
+        )
+        return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis, parse_status=parse_status)
 
     def _dspy_prerequisites_met(self) -> tuple[bool, str | None]:
         """Check whether env/config allow the DSPy path."""

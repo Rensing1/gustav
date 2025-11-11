@@ -21,7 +21,11 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Mathe") -> str:
@@ -86,4 +90,3 @@ async def test_course_units_list_contains_links_to_unit_detail():
         r2 = await c.get(expected_href)
         assert r2.status_code == 200
         assert r2.headers.get("Cache-Control") == "private, no-store"
-

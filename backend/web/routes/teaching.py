@@ -1097,28 +1097,14 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
 
 
 def _csrf_guard(request: Request) -> JSONResponse | None:
-    """Enforce same-origin for browser write requests.
+    """Enforce strict same-origin for browser write requests (dev = prod).
 
     Behavior:
-        - In production or when STRICT_CSRF_TEACHING=true, require that either
-          Origin or Referer is present AND same-origin. Missing or foreign
-          headers result in 403 with detail=csrf_violation.
-        - In non-strict modes, fall back to best-effort `_is_same_origin`,
-          which permits requests without these headers (server-to-server calls).
+        - Require Origin or Referer AND exact same-origin (scheme/host/port).
+          Missing or foreign headers → 403 with detail=csrf_violation.
     """
-    import os
-
-    prod_env = (os.getenv("GUSTAV_ENV", "dev") or "").lower() == "prod"
-    strict_toggle = (os.getenv("STRICT_CSRF_TEACHING", "false") or "").lower() == "true"
-    strict = prod_env or strict_toggle
-
-    if strict:
-        origin_present = (request.headers.get("origin") or request.headers.get("referer"))
-        if not origin_present or (not _is_same_origin(request)):
-            return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
-        return None
-
-    if not _is_same_origin(request):
+    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
+    if not origin_present or (not _is_same_origin(request)):
         return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
     return None
 

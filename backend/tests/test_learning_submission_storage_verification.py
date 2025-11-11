@@ -85,18 +85,19 @@ async def _prepare_fixture():
     async with (await _client()) as c:
         # Teacher creates course/unit/section/task and releases section
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
         course_id = r_course.json()["id"]
-        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"})
+        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
         unit_id = r_unit.json()["id"]
-        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"})
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"}, headers={"Origin": "http://test"})
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"], "max_attempts": 3},
+            headers={"Origin": "http://test"},
         )
         task_id = r_task.json()["id"]
-        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
         module_id = r_module.json()["id"]
         r_vis = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
@@ -105,7 +106,7 @@ async def _prepare_fixture():
         )
         assert r_vis.status_code == 200
         # Add student to course
-        r_member = await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name})  # type: ignore
+        r_member = await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"})  # type: ignore
         assert r_member.status_code == 201
     return student.session_id, course_id, task_id
 
@@ -140,7 +141,6 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
         # Enforce verification via env
         monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
         monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
-
         async with (await _client()) as c:
             c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
             r = await c.post(
@@ -152,6 +152,7 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
                     "size_bytes": size,
                     "sha256": wrong_hash,
                 },
+                headers={"Origin": "http://test"},
             )
         assert r.status_code == 400
         assert r.json().get("detail") == "invalid_file_payload"
@@ -181,7 +182,6 @@ async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch
 
         monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
         monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
-
         async with (await _client()) as c:
             c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
             r = await c.post(
@@ -193,6 +193,7 @@ async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch
                     "size_bytes": size,
                     "sha256": good_hash,
                 },
+                headers={"Origin": "http://test"},
             )
         # Async accept with pending analysis
         assert r.status_code == 202

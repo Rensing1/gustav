@@ -33,12 +33,12 @@ async def test_service_role_key_guard_prod_raises(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.anyio
 async def test_service_role_key_guard_dev_allows_dummy(monkeypatch: pytest.MonkeyPatch):
-    """In dev env, a dummy service role key is tolerated for local setups."""
+    """Legacy behavior: In dev env, dummy key tolerated (until dev=prod flip)."""
     # Arrange: dev defaults
     monkeypatch.setenv("GUSTAV_ENV", "dev")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "DUMMY_DO_NOT_USE")
 
-    # Act/Assert: should not raise
+    # Act/Assert: should not raise for now (will flip when dev=prod guard is enabled)
     from backend.web import config as cfg  # type: ignore
 
     importlib.reload(cfg)
@@ -75,6 +75,7 @@ async def test_dsn_user_guard_prod_allows_nonlimited_user(monkeypatch: pytest.Mo
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -94,6 +95,7 @@ async def test_kc_admin_client_secret_guard_prod_raises(monkeypatch: pytest.Monk
     monkeypatch.setenv("GUSTAV_ENV", "prod")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
     monkeypatch.setenv("AI_BACKEND", "local")
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     # Placeholder secret must be rejected
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "CHANGE_ME_DEV")
 
@@ -131,6 +133,7 @@ async def test_prod_disallows_ai_stub_backend(monkeypatch: pytest.MonkeyPatch):
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
     )
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv("AI_BACKEND", "stub")
 
     from backend.web import config as cfg  # type: ignore
@@ -150,6 +153,7 @@ async def test_prod_requires_storage_verify_and_disables_proxy(monkeypatch: pyte
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("AI_BACKEND", "local")
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -182,3 +186,27 @@ async def test_prod_requires_storage_verify_and_disables_proxy(monkeypatch: pyte
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
     importlib.reload(cfg)
     cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+async def test_prod_forbids_auto_create_storage_buckets(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like env, AUTO_CREATE_STORAGE_BUCKETS=true must abort startup."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
+    monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_SECRET")
+    monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("AI_BACKEND", "local")
+    monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
+    )
+    # The new guard must reject this setting in prod-like envs
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "true")
+
+    from backend.web import config as cfg  # type: ignore
+    import importlib
+    importlib.reload(cfg)
+    with pytest.raises(SystemExit):
+        cfg.ensure_secure_config_on_startup()

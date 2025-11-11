@@ -52,7 +52,7 @@ def _probe_db_and_helpers() -> bool:
 
 
 async def _client():
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 @pytest.mark.anyio

@@ -36,7 +36,11 @@ from backend.teaching.repo_db import DBTeachingRepo  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 def _service_dsn() -> str:

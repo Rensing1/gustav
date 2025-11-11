@@ -38,19 +38,19 @@ async def _client() -> httpx.AsyncClient:
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Kurs") -> str:
-    r = await client.post("/api/teaching/courses", json={"title": title})
+    r = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
 
 async def _create_unit(client: httpx.AsyncClient, title: str = "Einheit") -> dict:
-    r = await client.post("/api/teaching/units", json={"title": title})
+    r = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201, r.text
     return r.json()
 
 
 async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = "Abschnitt") -> dict:
-    r = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+    r = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -59,19 +59,20 @@ async def _create_task(client: httpx.AsyncClient, unit_id: str, section_id: str,
     r = await client.post(
         f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
         json={"instruction_md": instruction, "criteria": ["Kriterium 1"], "max_attempts": 3},
+        headers={"Origin": "http://test"},
     )
     assert r.status_code == 201, r.text
     return r.json()
 
 
 async def _attach_unit(client: httpx.AsyncClient, course_id: str, unit_id: str) -> dict:
-    r = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+    r = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
     assert r.status_code == 201, r.text
     return r.json()
 
 
 async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: str) -> None:
-    r = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub})
+    r = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub}, headers={"Origin": "http://test"})
     assert r.status_code in (201, 204), r.text
 
 
@@ -228,6 +229,7 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
         r_sub = await c_student.post(
             f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
             json={"kind": "text", "text_body": "Lösung"},
+            headers={"Origin": "http://test"},
         )
         assert r_sub.status_code in (200, 201, 202)
 

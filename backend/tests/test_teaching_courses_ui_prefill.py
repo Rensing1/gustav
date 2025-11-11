@@ -42,7 +42,7 @@ def _extract_value(html: str, field: str) -> str | None:
 async def test_edit_prefill_uses_get_by_id_beyond_first_page():
     # Arrange: teacher with 55 courses; target is #55 (outside first 50)
     sess = main.SESSION_STORE.create(sub="t-prefill-1", name="Lehrer", roles=["teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         # Seed 55 courses, capture IDs in order of creation
         created: list[tuple[str, str]] = []

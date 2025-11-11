@@ -48,7 +48,7 @@ def _extract_hidden_token(html: str, name: str) -> str | None:
 async def test_unit_edit_prefill_uses_get_by_id_beyond_first_page():
     # Arrange: teacher with 55 units; target is #55 (outside first 50)
     sess = main.SESSION_STORE.create(sub="t-unit-prefill-1", name="Lehrer", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         created: list[tuple[str, str]] = []
         for i in range(55):
@@ -70,7 +70,7 @@ async def test_unit_edit_prefill_uses_get_by_id_beyond_first_page():
 @pytest.mark.anyio
 async def test_unit_edit_invalid_payload_shows_error_message():
     sess = main.SESSION_STORE.create(sub="t-unit-edit-err-1", name="Teacher", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r_unit = await c.post("/api/teaching/units", json={"title": "Physik"})
         assert r_unit.status_code == 201
@@ -95,7 +95,7 @@ async def test_unit_edit_invalid_payload_shows_error_message():
 @pytest.mark.anyio
 async def test_unit_edit_csrf_required_on_post():
     sess = main.SESSION_STORE.create(sub="t-unit-csrf-1", name="Teacher", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.post("/api/teaching/units", json={"title": "Photosynthese"})
         assert r.status_code == 201

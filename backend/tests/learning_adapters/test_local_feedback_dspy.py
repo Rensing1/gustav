@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
+import importlib
 import builtins
 
 import pytest
@@ -222,6 +223,43 @@ def test_feedback_logs_parse_status(monkeypatch: pytest.MonkeyPatch, caplog: pyt
     assert _find_parse_status_marker(caplog, "parsed"), "Expected parse_status log entry"
 
 
+def test_feedback_handles_none_without_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If DSPy returns feedback_md=None, adapter should not persist 'None' nor call Ollama."""
+    # Install fake dspy presence
+    from types import SimpleNamespace
+
+    fake_dspy = SimpleNamespace(__version__="0.0-test")
+    monkeypatch.setitem(sys.modules, "dspy", fake_dspy)
+
+    # Bomb ollama: ensure no fallback is attempted
+    class _BombOllamaClient:
+        def generate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("ollama should not be called when DSPy is present")
+
+    monkeypatch.setitem(sys.modules, "ollama", SimpleNamespace(Client=lambda host=None: _BombOllamaClient()))
+
+    import importlib
+
+    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+
+    class _Result:
+        feedback_md = None
+        analysis_json = {"schema": "criteria.v2", "criteria_results": [
+            {"criterion": "Inhalt", "max_score": 10, "score": 7, "explanation_md": "OK"}
+        ]}
+        parse_status = "parsed_structured"
+
+    # Return DSPy object with feedback_md=None
+    monkeypatch.setattr(program, "analyze_feedback", lambda **_: _Result())
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    res = adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert isinstance(res.feedback_md, str) and res.feedback_md.strip() and res.feedback_md.lower() != "none"
+    assert res.analysis_json.get("schema") == "criteria.v2"
+
+
 def test_feedback_logs_backend_fallback(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     _uninstall_fake_dspy(monkeypatch)
     _force_dspy_import_error(monkeypatch)
@@ -237,3 +275,83 @@ def test_feedback_logs_backend_fallback(monkeypatch: pytest.MonkeyPatch, caplog:
 
     adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
     assert _find_backend_marker(caplog, "ollama"), "Fallback backend log missing"
+
+
+def test_feedback_recovers_when_json_adapter_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Regression guard: JSONAdapter failures must not force stub feedback.
+
+    We simulate a JSONAdapter-enabled DSPy call raising ResponseError by making
+    the structured analysis/synthesis helpers explode whenever the adapter is
+    instantiated. The legacy fallback runners also raise so the test only
+    passes when the JSONAdapter is skipped entirely (which is the desired fix).
+    """
+
+    from types import SimpleNamespace
+
+    # Track whether the JSONAdapter was instantiated/configured.
+    adapter_usage = {"used": False}
+
+    monkeypatch.setenv("LEARNING_DSPY_JSON_ADAPTER", "false")
+
+    class _TrackingJSONAdapter:
+        def __init__(self) -> None:
+            adapter_usage["used"] = True
+
+        def __call__(self) -> "_TrackingJSONAdapter":
+            adapter_usage["used"] = True
+            return self
+
+    def _fake_configure(*, lm, adapter=None, **_kwargs):  # type: ignore[no-untyped-def]
+        if adapter is not None:
+            adapter_usage["used"] = True
+
+    fake_dspy = SimpleNamespace(
+        __version__="0.0-test",
+        JSONAdapter=_TrackingJSONAdapter,
+        LM=lambda model: SimpleNamespace(model=model),
+        configure=_fake_configure,
+    )
+    monkeypatch.setitem(sys.modules, "dspy", fake_dspy)
+
+    # Patching must happen after the fake module is installed.
+    from backend.learning.adapters.dspy import programs as dspy_programs
+    from backend.learning.adapters.dspy import feedback_program as dspy_feedback
+
+    def _raise_when_adapter_used(**kwargs):  # type: ignore[no-untyped-def]
+        if adapter_usage["used"]:
+            raise RuntimeError("ResponseError from JSONAdapter")
+        return {
+            "schema": "criteria.v2",
+            "score": 4,
+            "criteria_results": [
+                {"criterion": "Inhalt", "max_score": 10, "score": 9, "explanation_md": "Analyse Inhalt"}
+            ],
+        }
+
+    def _structured_feedback(**kwargs):  # type: ignore[no-untyped-def]
+        if adapter_usage["used"]:
+            raise RuntimeError("ResponseError from JSONAdapter")
+        return "**DSPy Feedback**\n\n- Individuell formuliert."
+
+    monkeypatch.setattr(dspy_programs, "run_structured_analysis", _raise_when_adapter_used)
+    monkeypatch.setattr(dspy_programs, "run_structured_feedback", _structured_feedback)
+
+    def _bomb_legacy_analysis(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("Legacy analysis should not run when JSONAdapter is disabled")
+
+    def _bomb_legacy_feedback(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("Legacy feedback should not run when JSONAdapter is disabled")
+
+    monkeypatch.setattr(dspy_feedback, "_run_analysis_model", _bomb_legacy_analysis)
+    monkeypatch.setattr(dspy_feedback, "_run_feedback_model", _bomb_legacy_feedback)
+
+    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    result: FeedbackResult = adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert result.feedback_md == "**DSPy Feedback**\n\n- Individuell formuliert."
+    assert "Stärken: klar" not in result.feedback_md

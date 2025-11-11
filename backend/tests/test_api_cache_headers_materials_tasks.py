@@ -28,7 +28,12 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    # Strict CSRF is always enforced (dev = prod). Provide same-origin header by default.
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 @pytest.mark.anyio
@@ -71,4 +76,3 @@ async def test_materials_and_tasks_list_include_private_no_store():
         assert r_task.status_code == 200
         cc_task = r_task.headers.get("Cache-Control", "")
         assert "private" in cc_task and "no-store" in cc_task
-

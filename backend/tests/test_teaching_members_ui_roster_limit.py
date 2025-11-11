@@ -39,7 +39,7 @@ async def test_members_page_renders_max_10_current_members():
     _require_db_or_skip()
     main.SESSION_STORE = SessionStore()
     t = main.SESSION_STORE.create(sub="teacher-roster-10", name="Owner", roles=["teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, t.session_id)
         r = await c.post("/api/teaching/courses", json={"title": "Roster 10"})
         assert r.status_code == 201
@@ -50,4 +50,3 @@ async def test_members_page_renders_max_10_current_members():
         page = await c.get(f"/courses/{cid}/members")
         assert page.status_code == 200
         assert _count_current_members(page.text) == 10
-

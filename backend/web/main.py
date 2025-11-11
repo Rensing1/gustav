@@ -173,18 +173,6 @@ def _set_session_cookie(response: Response, value: str, *, max_age: int | None =
     opts = _session_cookie_options()
     secure_flag = opts["secure"]
     samesite_flag = opts["samesite"]
-    try:
-        if SETTINGS.environment == "prod" and request is not None:
-            host = request.headers.get("host") or request.url.hostname or ""
-            xf_proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").lower()
-            # Test client base_url uses host "test"; treat it as local HTTP to allow
-            # cookie roundtrips in hardening tests while keeping prod defaults.
-            is_local_like = ("localhost" in host) or host.startswith("127.")
-            if is_local_like and xf_proto != "https":
-                secure_flag = False
-                samesite_flag = "lax"
-    except Exception:
-        pass
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=value,
@@ -259,8 +247,8 @@ async def security_headers(request: Request, call_next):
     if SETTINGS.environment == "prod":
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-    if SETTINGS.environment == "prod":
-        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    # HSTS: always on (dev = prod)
+    response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
 # --- Dummy Data Stores ----------------------------------------------------------
@@ -315,6 +303,19 @@ def _learning_internal_base() -> tuple[str, str]:
 
 def _teaching_internal_base() -> tuple[str, str]:
     return _resolve_internal_base("TEACHING_INTERNAL_BASE_URL")
+
+def _internal_api_client():
+    """Create an ASGI client preloaded with Origin for strict CSRF (dev = prod).
+
+    Uses the teaching internal base (or APP_INTERNAL_BASE_URL) which defaults to
+    http://local for in-process ASGITransport hops. The default headers include
+    an Origin matching the server origin so write endpoints that enforce strict
+    CSRF accept these internal SSR→API calls.
+    """
+    import httpx
+    from httpx import ASGITransport
+    base, origin = _teaching_internal_base()
+    return httpx.AsyncClient(transport=ASGITransport(app=app), base_url=base, headers={"Origin": origin})
 
 def _get_or_create_csrf_token(session_id: str) -> str:
     token = _CSRF_BY_SESSION.get(session_id)
@@ -933,11 +934,8 @@ async def courses_edit_form(request: Request, course_id: str):
     token = _get_or_create_csrf_token(sid)
     # Prefill current values via direct GET /api/teaching/courses/{id}
     values: dict[str, str] = {}
-    teaching_base, _ = _teaching_internal_base()
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=teaching_base) as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             r = await client.get(f"/api/teaching/courses/{course_id}")
             if r.status_code == 200 and isinstance(r.json(), dict):
@@ -964,11 +962,15 @@ async def learning_index(request: Request):
         return RedirectResponse(url="/", status_code=303)
     limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
     items: list[dict] = []
-    learning_base, _ = _learning_internal_base()
+    learning_base, learning_origin = _learning_internal_base()
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=learning_base) as client:
+        # Use an internal ASGI client with an explicit Origin header for
+        # consistency with strict CSRF (even though this is a GET/read).
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url=learning_base, headers={"Origin": learning_origin}
+        ) as client:
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -1009,7 +1011,7 @@ async def learning_course_detail(request: Request, course_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -1085,9 +1087,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
     success_banner = request.query_params.get("ok") == "submitted"
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -1254,9 +1254,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             history_placeholder_html = ''
             if show_history_for and show_history_for == tid:
                 try:
-                    import httpx
-                    from httpx import ASGITransport
-                    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                    async with _internal_api_client() as client:
                         sid = _get_session_id(request) or ""
                         if sid:
                             client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -1430,7 +1428,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=internal_base) as client:
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=internal_base, headers={"Origin": internal_origin}) as client:
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -1482,7 +1480,10 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         try:
             import httpx
             from httpx import ASGITransport
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url=internal_base) as client:
+            # Use explicit Origin for internal reads to keep behavior uniform.
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url=internal_base, headers={"Origin": internal_origin}
+            ) as client:
                 sid2 = _get_session_id(request)
                 if sid2:
                     client.cookies.set(SESSION_COOKIE_NAME, sid2)
@@ -1529,8 +1530,6 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         diag_header = f"status=error,detail={api_error}"
     if is_htmx:
         headers = {"Cache-Control": "private, no-store"}
-        if diag_header:
-            headers["X-Submissions-Diag"] = diag_header
         import json as _json
         if is_success:
             # Ask client to show a success banner via HX-Trigger
@@ -1540,9 +1539,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
             # Build the same fragment body as the /history endpoint without
             # making a nested request (keeps tests simple and avoids re-entry).
             try:
-                import httpx
-                from httpx import ASGITransport
-                async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+                async with _internal_api_client() as client:
                     sid = _get_session_id(request)
                     if sid:
                         client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -1595,8 +1592,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
             headers["HX-Trigger"] = _json.dumps({
                 "showMessage": {"message": "Abgabe fehlgeschlagen", "type": "error"}
             })
-            if diag_header:
-                headers["X-Submissions-Diag"] = diag_header
+            # Do not leak diagnostics to clients in error cases.
             return HTMLResponse(content=f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history"></section>', status_code=400, headers=headers)
 
     # PRG to the unit page (non-HTMX); show success banner only on API success.
@@ -1604,10 +1600,8 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
     ok_param = "ok=submitted" if is_success else None
     qp_ok = (ok_param + "&") if ok_param else ""
     loc = f"/learning/courses/{course_id}/units/{unit_id}?{qp_ok}show_history_for={task_id}{qp_extra}"
-    redirect_headers = {}
-    if diag_header:
-        redirect_headers["X-Submissions-Diag"] = diag_header
-    return RedirectResponse(url=loc, status_code=303, headers=redirect_headers or None)
+    # Do not leak diagnostics in the redirect response either
+    return RedirectResponse(url=loc, status_code=303)
 
 
 @app.get("/learning/courses/{course_id}/tasks/{task_id}/history", response_class=HTMLResponse)
@@ -1643,9 +1637,7 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
     if (user or {}).get("role") != "student":
         return HTMLResponse("", status_code=403)
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -1721,9 +1713,7 @@ async def courses_edit_submit(request: Request, course_id: str):
         "term": (str(form.get("term", "")).strip() or None),
     }
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             await client.patch(f"/api/teaching/courses/{course_id}", json=payload)
@@ -1749,9 +1739,7 @@ async def courses_modules_page(request: Request, course_id: str):
     units: list[dict] = []
     # Fetch via internal API to reuse guards and serialization
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             r_mod = await client.get(f"/api/teaching/courses/{course_id}/modules")
             if r_mod.status_code == 200 and isinstance(r_mod.json(), list):
@@ -1794,9 +1782,7 @@ async def courses_modules_create(request: Request, course_id: str):
     modules: list[dict] = []
     units: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             r = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
@@ -1845,9 +1831,7 @@ async def course_module_sections_page(request: Request, course_id: str, module_i
     sections: list[dict] = []
     releases: dict[str, dict] = {}
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             # Resolve unit via modules list
             r_mod = await client.get(f"/api/teaching/courses/{course_id}/modules")
@@ -1943,9 +1927,7 @@ async def course_module_sections_toggle(request: Request, course_id: str, module
     visible = bool(form.get("visible"))
     # Call API to persist
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.patch(
@@ -2043,9 +2025,7 @@ async def courses_modules_reorder(request: Request, course_id: str):
     # Extract `module_<uuid>` ids submitted by Sortable and strip the prefix.
     ordered_ids = [elem_id.replace("module_", "") for elem_id in form.getlist("id")]
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.post(
@@ -2078,9 +2058,7 @@ async def courses_modules_delete(request: Request, course_id: str, module_id: st
     modules: list[dict] = []
     units: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             dr = await client.delete(f"/api/teaching/courses/{course_id}/modules/{module_id}")
@@ -2444,10 +2422,7 @@ def _extract_api_error_detail(response) -> str:
 async def _fetch_sections_for_unit(unit_id: str, *, session_id: str) -> list[dict]:
     """Fetch sections for the UI; returns empty list on error."""
     try:
-        import httpx
-        from httpx import ASGITransport
-
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if session_id:
                 client.cookies.set(SESSION_COOKIE_NAME, session_id)
             resp = await client.get(f"/api/teaching/units/{unit_id}/sections")
@@ -2614,9 +2589,7 @@ async def teaching_live_home(request: Request):
     # Courses: GET /api/teaching/courses (owned by teacher)
     courses: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -2696,9 +2669,7 @@ async def teaching_live_units_partial(request: Request, course_id: str):
     # Fetch modules for course, then render unit options by fetching unit titles
     modules: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -2757,9 +2728,7 @@ async def teaching_live_open(request: Request, course_id: str | None = None, uni
         return RedirectResponse(url="/teaching/live", status_code=303)
     # Verify relation via API
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -2853,7 +2822,7 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -2874,7 +2843,7 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -2893,7 +2862,7 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -2950,7 +2919,7 @@ async def _render_sections_release_panel(request: Request, course_id: str, unit_
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -3011,7 +2980,7 @@ async def teaching_live_sections_panel_partial(request: Request, course_id: str,
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -3058,7 +3027,7 @@ async def teaching_live_toggle_section_visibility(
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -3066,7 +3035,6 @@ async def teaching_live_toggle_section_visibility(
             r = await client.patch(
                 f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
                 json={"visible": bool(visible_val)},
-                headers={"Origin": "http://local"},
             )
             if r.status_code not in (200, 204):
                 # Render minimal error card
@@ -3106,7 +3074,7 @@ async def teaching_unit_live_matrix_partial(request: Request, course_id: str, un
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -3151,7 +3119,7 @@ async def teaching_unit_live_detail_partial(
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -3262,7 +3230,7 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -3318,7 +3286,7 @@ async def courses_index(request: Request):
         import httpx
         from httpx import ASGITransport
 
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             sid = request.cookies.get(SESSION_COOKIE_NAME)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -3361,16 +3329,13 @@ async def courses_create(request: Request):
     # Call the API endpoint; map 400 errors back into the form.
     api_status = 0
     try:
-        import httpx
-        from httpx import ASGITransport
-
         payload = {
             "title": title,
             "subject": (str(form.get("subject", "")).strip() or None),
             "grade_level": (str(form.get("grade_level", "")).strip() or None),
             "term": (str(form.get("term", "")).strip() or None),
         }
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.post("/api/teaching/courses", json=payload)
@@ -3394,7 +3359,7 @@ async def courses_create(request: Request):
             import httpx
             from httpx import ASGITransport
 
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            async with _internal_api_client() as client:
                 if sid:
                     client.cookies.set(SESSION_COOKIE_NAME, sid)
                 r = await client.get("/api/teaching/courses", params={"limit": limit, "offset": offset})
@@ -3428,9 +3393,7 @@ async def delete_course_htmx(request: Request, course_id: str):
         return HTMLResponse(content="CSRF Error", status_code=403)
     # Call DELETE /api/teaching/courses/{id}
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             await client.delete(f"/api/teaching/courses/{course_id}")
@@ -3441,9 +3404,7 @@ async def delete_course_htmx(request: Request, course_id: str):
     limit, offset = _clamp_pagination(None, None)
     items: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             r = await client.get("/api/teaching/courses", params={"limit": limit, "offset": offset})
@@ -3571,7 +3532,7 @@ async def units_edit_form(request: Request, unit_id: str):
         import httpx
         from httpx import ASGITransport
 
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             r = await client.get(f"/api/teaching/units/{unit_id}")
             if r.status_code == 200:
@@ -3638,7 +3599,7 @@ async def units_edit_submit(request: Request, unit_id: str):
         import httpx
         from httpx import ASGITransport
 
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.patch(f"/api/teaching/units/{unit_id}", json=payload)
@@ -3687,9 +3648,7 @@ async def unit_details_index(request: Request, unit_id: str):
     unit_summary: str | None = None
     sections: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             u = await client.get(f"/api/teaching/units/{unit_id}")
             if u.status_code != 200 or not isinstance(u.json(), dict):
@@ -3719,9 +3678,7 @@ async def unit_details_index(request: Request, unit_id: str):
 
 async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session_id: str) -> list[dict]:
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if session_id:
                 client.cookies.set(SESSION_COOKIE_NAME, session_id)
             r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/materials")
@@ -3743,7 +3700,7 @@ async def _fetch_tasks_for_section(unit_id: str, section_id: str, *, session_id:
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if session_id:
                 client.cookies.set(SESSION_COOKIE_NAME, session_id)
             r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
@@ -3793,7 +3750,7 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             u = await client.get(f"/api/teaching/units/{unit_id}")
             if u.status_code != 200:
@@ -3912,7 +3869,7 @@ async def materials_new(request: Request, unit_id: str, section_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             s = await client.get(f"/api/teaching/units/{unit_id}/sections")
             if s.status_code == 200 and isinstance(s.json(), list):
@@ -3949,7 +3906,7 @@ async def tasks_new(request: Request, unit_id: str, section_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             s = await client.get(f"/api/teaching/units/{unit_id}/sections")
             if s.status_code == 200 and isinstance(s.json(), list):
@@ -3970,7 +3927,7 @@ async def _fetch_material_detail(unit_id: str, section_id: str, material_id: str
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if session_id:
                 client.cookies.set(SESSION_COOKIE_NAME, session_id)
             r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/materials")
@@ -3990,7 +3947,7 @@ async def _fetch_task_detail(unit_id: str, section_id: str, task_id: str, *, ses
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if session_id:
                 client.cookies.set(SESSION_COOKIE_NAME, session_id)
             r = await client.get(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
@@ -4092,7 +4049,7 @@ async def material_detail_page(request: Request, unit_id: str, section_id: str, 
         if str(mat.get("kind") or "") == "file":
             import httpx
             from httpx import ASGITransport
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            async with _internal_api_client() as client:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
                 resp = await client.get(
                     f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url",
@@ -4122,9 +4079,7 @@ async def material_detail_update(request: Request, unit_id: str, section_id: str
     if form.get("body_md") is not None:
         payload["body_md"] = str(form.get("body_md"))
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             await client.patch(
@@ -4146,9 +4101,7 @@ async def material_detail_delete(request: Request, unit_id: str, section_id: str
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             await client.delete(f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
@@ -4201,9 +4154,7 @@ async def task_detail_update(request: Request, unit_id: str, section_id: str, ta
         except Exception:
             pass
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             await client.patch(
@@ -4225,9 +4176,7 @@ async def task_detail_delete(request: Request, unit_id: str, section_id: str, ta
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             await client.delete(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
@@ -4266,9 +4215,7 @@ async def materials_create(request: Request, unit_id: str, section_id: str):
     body_md = str(form.get("body_md", ""))
     error: str | None = None
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             payload = {"title": title, "body_md": body_md}
@@ -4310,9 +4257,7 @@ async def materials_reorder(request: Request, unit_id: str, section_id: str):
     # Delegate to API when UUID-like ids are present
     if _is_uuid_like(section_id):
         try:
-            import httpx
-            from httpx import ASGITransport
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            async with _internal_api_client() as client:
                 if sid:
                     client.cookies.set(SESSION_COOKIE_NAME, sid)
                 resp = await client.post(
@@ -4362,9 +4307,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
             max_attempts = None
     error: str | None = None
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             payload = {
@@ -4404,9 +4347,7 @@ async def tasks_reorder(request: Request, unit_id: str, section_id: str):
     ordered_ids = [sid.replace("task_", "") for sid in form.getlist("id")]
     if _is_uuid_like(section_id):
         try:
-            import httpx
-            from httpx import ASGITransport
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            async with _internal_api_client() as client:
                 if sid:
                     client.cookies.set(SESSION_COOKIE_NAME, sid)
                 resp = await client.post(
@@ -4450,9 +4391,7 @@ async def materials_upload_intent(request: Request, unit_id: str, section_id: st
     # Call API to get presigned upload details
     presign = None
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.post(
@@ -4511,9 +4450,7 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
     alt_text = str(form.get("alt_text", "")).strip() or None
     error: str | None = None
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.post(
@@ -4548,10 +4485,7 @@ async def sections_create(request: Request, unit_id: str):
         error_code = "invalid_title"
     else:
         try:
-            import httpx
-            from httpx import ASGITransport
-
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            async with _internal_api_client() as client:
                 if sid:
                     client.cookies.set(SESSION_COOKIE_NAME, sid)
                 resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
@@ -4591,10 +4525,7 @@ async def sections_delete(request: Request, unit_id: str, section_id: str):
 
     error_code: str | None = None
     try:
-        import httpx
-        from httpx import ASGITransport
-
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.delete(f"/api/teaching/units/{unit_id}/sections/{section_id}")
@@ -4645,9 +4576,7 @@ async def sections_reorder(request: Request, unit_id: str):
     # 1) Try to persist via API when unit/ids are UUID-like (DB-backed path)
     if _is_uuid_like(unit_id):
         try:
-            import httpx
-            from httpx import ASGITransport
-            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            async with _internal_api_client() as client:
                 if sid:
                     client.cookies.set(SESSION_COOKIE_NAME, sid)
                 resp = await client.post(
@@ -4686,7 +4615,7 @@ async def members_index(request: Request, course_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
             # Reduce visible roster to 10 for compact UI
             m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 10, "offset": 0})
@@ -4738,7 +4667,7 @@ async def search_students_for_course(request: Request, course_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             # Fetch a subset of current members to exclude from candidates (not displayed here)
@@ -4785,7 +4714,7 @@ async def add_member_htmx(request: Request, course_id: str):
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             if student_sub:
@@ -4813,7 +4742,7 @@ async def remove_member_htmx(request: Request, course_id: str, student_sub: str)
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.delete(f"/api/teaching/courses/{course_id}/members/{student_sub}")
@@ -4833,7 +4762,7 @@ async def _handle_member_change_api(course_id: str, sid: str | None, *, error: s
     try:
         import httpx
         from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             # Compact roster after mutation (default page-size 10)
@@ -4853,9 +4782,7 @@ async def _handle_member_change_api(course_id: str, sid: str | None, *, error: s
     # Refresh candidates from list endpoint so removed users reappear
     candidates: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             u = await client.get("/api/users/list", params={"role": "student", "limit": 50, "offset": 0})

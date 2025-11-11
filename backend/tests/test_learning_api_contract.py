@@ -51,7 +51,12 @@ class LearningFixture:
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    # Provide Origin for strict CSRF on Learning write endpoints
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 async def _create_course(client: httpx.AsyncClient, title: str) -> str:
@@ -1029,7 +1034,8 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
 
     fixture = await _prepare_learning_fixture()
 
-    async with (await _client()) as client:
+    # Use a client without default Origin header to simulate missing Origin
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",

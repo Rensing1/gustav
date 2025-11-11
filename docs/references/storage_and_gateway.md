@@ -38,9 +38,12 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 
 ## Gateway
 - Current reverse proxy: Caddy (see `reverse-proxy/Caddyfile`).
+- TLS/HSTS: Caddy terminates TLS locally (tls internal). The app middleware always
+  sends `Strict-Transport-Security: max-age=31536000; includeSubDomains` in dev and prod
+  (dev = prod) to keep behaviour consistent across environments.
 - No extra Kong layer needed for the app traffic at this stage.
-- Supabase’s internal stack may use Kong for its own services; this is separate from the app.
-- Later (optional): add gateway policies (CORS/HSTS/rate limiting) if needed.
+- Supabase’s internal stack uses Kong for its own services; this is separate from the app.
+- Later (optional): add gateway policies (CORS/rate limiting) if needed.
 
 ## Tests / E2E
 - Optional E2E smoke test: set `RUN_SUPABASE_E2E=1` and provide `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`. See pytest marker `supabase_integration`.

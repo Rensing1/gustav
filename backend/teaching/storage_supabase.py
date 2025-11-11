@@ -96,8 +96,16 @@ class SupabaseStorageAdapter(StorageAdapterProtocol):
             # Ensure /storage/v1 prefix
             if path.startswith("/object/"):
                 path = "/storage/v1" + path
+            # First collapse any accidental double slashes so subsequent
+            # rewriting matches reliably (e.g., '/storage/v1//object/sign/...').
+            if "//" in path:
+                path = path.replace("//", "/")
             # Force upload/sign endpoint shape for PUT
             path = path.replace("/storage/v1/object/sign/", "/storage/v1/object/upload/sign/")
+            # Collapse accidental double slashes which sometimes occur when
+            # mixing client libraries (supabase vs storage3) and local rewrites.
+            while "//" in path:
+                path = path.replace("//", "/")
             url = _u((p.scheme, p.netloc, path, p.params, p.query, p.fragment))
         except Exception:
             pass

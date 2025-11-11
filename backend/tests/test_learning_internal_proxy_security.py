@@ -181,3 +181,48 @@ async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.Monkey
         )
     assert r.status_code == 200
 
+
+@pytest.mark.anyio
+async def test_proxy_allows_double_slash_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Proxy should accept presigned URLs that contain accidental double slashes.
+
+    Some presigners can emit /storage/v1//object/...; we normalize before checks.
+    """
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except Exception:
+        learning_backend = None
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-doubleslash", name="S", roles=["student"])  # type: ignore
+
+    class _Resp:
+        status_code = 200
+
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        return _Resp()
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+
+    # Note the double slash after /storage/v1/
+    good = "http://host.docker.internal:54321/storage/v1//object/upload/submissions/file"
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": good},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/pdf"},
+        )
+    assert r.status_code == 200

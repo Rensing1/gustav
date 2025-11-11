@@ -977,7 +977,6 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
                 "headers": {"Content-Type": mime_type},
                 "accepted_mime_types": accepted,
                 "max_size_bytes": _max_upload_bytes(),
-                "method": "PUT",
                 "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=_upload_intent_ttl_seconds())).isoformat(timespec="seconds"),
             }
             return JSONResponse(intent, status_code=200, headers=_cache_headers_success())
@@ -1047,7 +1046,6 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         "headers": headers_out,
         "accepted_mime_types": accepted,
         "max_size_bytes": _max_upload_bytes(),
-        "method": presigned.get("method", "PUT"),
         # Short-lived expiry (defense-in-depth): 10 minutes from now (UTC)
         "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat(timespec="seconds"),
     }
@@ -1157,7 +1155,10 @@ async def internal_upload_proxy(request: Request):
     Security:
         - Requires authenticated student and strict same-origin.
         - Validates the target URL host against SUPABASE_URL to prevent SSRF.
-        - Enforces MAX_UPLOAD_BYTES size.
+        - Allows http only for local dev hosts (localhost, 127.0.0.0/8, ::1, host.docker.internal).
+        - Restricts the path to `/storage/v1/object/...` to narrow SSRF surface.
+        - Enforces MAX_UPLOAD_BYTES size and a MIME allowlist (images/PDF and
+          `application/octet-stream` for compatibility with some browsers).
     Behavior:
         - Forwards the raw body with the incoming Content-Type header.
         - Returns {sha256, size_bytes} on success (200≤code<300).
@@ -1175,12 +1176,32 @@ async def internal_upload_proxy(request: Request):
         return JSONResponse({"error": "bad_request", "detail": "missing_url"}, status_code=400, headers=_cache_headers_error())
     base = (os.getenv("SUPABASE_URL") or "").strip()
     try:
-        th = _urlparse(target).hostname or ""
-        bh = _urlparse(base).hostname or ""
+        parsed_target = _urlparse(target)
+        parsed_base = _urlparse(base)
     except Exception:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
-    if not th or not bh or th != bh:
+
+    scheme = (parsed_target.scheme or "").lower()
+    target_host = (parsed_target.hostname or "").lower()
+    base_host = (parsed_base.hostname or "").lower()
+
+    if not scheme or not target_host:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+
+    if scheme == "http":
+        local_hosts = {"localhost", "::1", "host.docker.internal"}
+        if not (target_host in local_hosts or target_host.startswith("127.")):
+            return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+    elif scheme != "https":
+        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+
+    if not base_host or target_host != base_host:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
+
+    # Enforce that the path targets the storage upload endpoint to reduce SSRF surface.
+    path = parsed_target.path or "/"
+    if not path.startswith("/storage/v1/object/"):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
 
     body = await request.body()
     if not body:
@@ -1188,6 +1209,10 @@ async def internal_upload_proxy(request: Request):
     if len(body) > _max_upload_bytes():
         return JSONResponse({"error": "bad_request", "detail": "size_exceeded"}, status_code=400, headers=_cache_headers_error())
     content_type = request.headers.get("content-type") or "application/octet-stream"
+    # Enforce MIME allowlist for uploads proxied through our origin.
+    allowed_mime = (set(ALLOWED_IMAGE_MIME) | set(ALLOWED_FILE_MIME) | {"application/octet-stream"})
+    if content_type not in allowed_mime:
+        return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
 
     try:
         resp = await _async_forward_upload(

@@ -4886,7 +4886,7 @@ paths:
                     type: integer
                     minimum: 1
         '400':
-          description: Bad request (missing_url | invalid_url | invalid_url_host | empty_body | size_exceeded)
+          description: Bad request (missing_url | invalid_url | invalid_url_host | empty_body | size_exceeded | mime_not_allowed)
           content:
             application/json:
               schema:

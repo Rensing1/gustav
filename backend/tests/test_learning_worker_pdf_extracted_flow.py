@@ -6,6 +6,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +15,8 @@ pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
 
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
+from backend.storage.config import get_submissions_bucket
+from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives  # noqa: E402
 
 
 def _dsn() -> str:
@@ -42,11 +45,20 @@ def _install_fake_ollama(monkeypatch: pytest.MonkeyPatch, *, text: str = "## Vis
 
 
 @pytest.mark.anyio
-async def test_worker_completes_pdf_from_extracted(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_worker_completes_pdf_from_extracted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     _require_db_or_skip()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
     if not worker_dsn:
         pytest.skip("SERVICE_ROLE_DSN required for worker integration test")
+
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+    monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
+    bucket = get_submissions_bucket()
 
     # Clean queue to avoid interference from previous runs
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
@@ -90,7 +102,7 @@ async def test_worker_completes_pdf_from_extracted(monkeypatch: pytest.MonkeyPat
             )
             # Seed submission in pending state
             submission_id = uuid.uuid4()
-            storage_key = f"submissions/{course_id}/{task_id}/{student_sub}/orig/sample.pdf"
+            storage_key = f"{bucket}/{course_id}/{task_id}/{student_sub}/orig/sample.pdf"
             cur.execute(
                 """
                 insert into public.learning_submissions (
@@ -122,6 +134,16 @@ async def test_worker_completes_pdf_from_extracted(monkeypatch: pytest.MonkeyPat
         conn.commit()
 
     # Mark submission as already extracted to mimic finished render step
+    page_keys = ensure_pdf_derivatives(
+        root=storage_root,
+        bucket=bucket,
+        course_id=str(course_id),
+        task_id=str(task_id),
+        student_sub=student_sub,
+        submission_id=str(submission_id),
+        page_count=2,
+    )
+
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute(
@@ -129,13 +151,10 @@ async def test_worker_completes_pdf_from_extracted(monkeypatch: pytest.MonkeyPat
                 update public.learning_submissions
                    set analysis_status = 'extracted',
                        internal_metadata = coalesce(internal_metadata, '{}'::jsonb)
-                                            || jsonb_build_object(
-                                                'page_keys',
-                                                to_jsonb(ARRAY['k/page_0001.png','k/page_0002.png'])
-                                              )
+                                            || jsonb_build_object('page_keys', %s::jsonb)
                  where id = %s::uuid
                 """,
-                (str(submission_id),),
+                (json.dumps(page_keys), str(submission_id)),
             )
         conn.commit()
 

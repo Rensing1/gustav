@@ -56,19 +56,19 @@ async def _client() -> httpx.AsyncClient:
 
 async def _create_course(client: httpx.AsyncClient, title: str) -> str:
     resp = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()["id"]
 
 
 async def _create_unit(client: httpx.AsyncClient, title: str = "Unit") -> dict:
     resp = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
 async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = "Section") -> dict:
     resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title}, headers={"Origin": "http://test"})
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
@@ -85,7 +85,7 @@ async def _create_material(
         json={"title": title, "body_md": body_md},
         headers={"Origin": "http://test"},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
@@ -111,13 +111,13 @@ async def _create_task(
         json=payload,
         headers={"Origin": "http://test"},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
 async def _create_module(client: httpx.AsyncClient, course_id: str, unit_id: str) -> dict:
     resp = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
@@ -134,7 +134,7 @@ async def _set_section_visibility(
         json={"visible": visible},
         headers={"Origin": "http://test"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     return resp.json()
 
 
@@ -171,6 +171,11 @@ async def _prepare_learning_fixture(
         pytest.skip("DB-backed LearningRepo required for Learning contract tests")
 
     main.SESSION_STORE = SessionStore()
+    try:
+        # Ensure dev-like policies for this fixture (cookies/CSRF), independent of global test env
+        main.SETTINGS.override_environment("dev")
+    except Exception:
+        pass
 
     teacher = main.SESSION_STORE.create(
         sub=f"teacher-learning-{uuid4()}",
@@ -446,7 +451,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         assert first_payload["attempt_nr"] == 1
         assert first_payload["analysis_status"] == "pending"
         assert first_payload.get("analysis_json") is None
-        assert first_payload.get("feedback") is None
+        assert first_payload.get("feedback_md") is None
         assert first_payload["text_body"] == "Versuch 1"
         submission_id = first_payload["id"]
 
@@ -793,7 +798,7 @@ async def test_list_submissions_history_happy_path():
     assert latest["attempt_nr"] == 2
     # Async: pending status until worker completes; payloads may be empty
     assert latest["analysis_status"] == "pending"
-    assert latest.get("feedback") in (None, "", {})
+    assert latest.get("feedback_md") in (None, "", {})
     assert latest.get("analysis_json") in (None, {})
     assert earliest["attempt_nr"] == 1
     assert earliest.get("analysis_json") in (None, {})
@@ -1111,7 +1116,7 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
     assert payload["analysis_status"] == "pending"
     assert payload["storage_key"] == "uploads/student123/solution.png"
     assert payload.get("analysis_json") is None
-    assert payload.get("feedback") is None
+    assert payload.get("feedback_md") is None
 
 
 @pytest.mark.anyio

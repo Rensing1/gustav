@@ -359,9 +359,10 @@ def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]
                    size_bytes,
                    storage_key,
                    sha256,
-                   analysis_status
-              from public.learning_submissions
-             where id = %s::uuid
+                   analysis_status,
+                   internal_metadata
+             from public.learning_submissions
+            where id = %s::uuid
             """,
             (submission_id,),
         )

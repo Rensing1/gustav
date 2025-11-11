@@ -26,12 +26,7 @@ import logging
 import re
 from typing import Any, Dict, Sequence
 
-from backend.learning.adapters.dspy.programs import (
-    FeedbackAnalysisProgram,
-    FeedbackSynthesisProgram,
-    run_structured_analysis,
-    run_structured_feedback,
-)
+from backend.learning.adapters.dspy import programs as dspy_programs
 from backend.learning.adapters.dspy.signatures import (  # noqa: F401
     FeedbackAnalysisSignature,
     FeedbackSynthesisSignature,
@@ -399,7 +394,7 @@ def analyze_feedback(
                     dspy.configure(lm=lm)
         except Exception:
             pass
-        structured_analysis = run_structured_analysis(
+        structured_analysis = dspy_programs.run_structured_analysis(
             text_md=text_md,
             criteria=criteria,
             teacher_instructions_md=teacher_instructions_md,
@@ -419,7 +414,7 @@ def analyze_feedback(
 
         feedback_md: str | None = None
         try:
-            feedback_md = run_structured_feedback(
+            feedback_md = dspy_programs.run_structured_feedback(
                 text_md=text_md,
                 criteria=criteria,
                 analysis_json=analysis_payload.to_dict(),
@@ -453,7 +448,7 @@ def analyze_feedback(
         # structured path unavailable; proceed to legacy two-stage path
         pass
 
-    analysis_runner = FeedbackAnalysisProgram(runner=_run_analysis_model)
+    analysis_runner = dspy_programs.FeedbackAnalysisProgram(runner=_run_analysis_model)
 
     try:
         raw_analysis = analysis_runner.run(
@@ -479,7 +474,7 @@ def analyze_feedback(
         parse_status = "analysis_error"
         analysis_json = _build_default_analysis(criteria)
 
-    feedback_runner = FeedbackSynthesisProgram(runner=_run_feedback_model)
+    feedback_runner = dspy_programs.FeedbackSynthesisProgram(runner=_run_feedback_model)
     feedback_md: str | None = None
 
     try:

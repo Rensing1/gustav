@@ -15,6 +15,7 @@ Notes:
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -26,6 +27,8 @@ from backend.learning.workers.process_learning_submission_jobs import (  # type:
     VisionResult,
     VisionTransientError,
 )
+from backend.storage.config import get_submissions_bucket
+from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives, write_dummy_png
 
 
 class _FakeOllamaClient:
@@ -46,15 +49,12 @@ def _install_fake_ollama(monkeypatch: pytest.MonkeyPatch, *, mode: str = "ok") -
     monkeypatch.setitem(sys.modules, "ollama", fake_module)
 
 
-@pytest.mark.parametrize(
-    "mime",
-    [
-        "image/jpeg",
-        "image/png",
-        "application/pdf",
-    ],
-)
-def test_local_vision_happy_path_returns_markdown(monkeypatch: pytest.MonkeyPatch, tmp_path, mime: str) -> None:
+@pytest.mark.parametrize("mime", ["image/jpeg", "image/png", "application/pdf"])
+def test_local_vision_happy_path_returns_markdown(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mime: str,
+) -> None:
     _install_fake_ollama(monkeypatch, mode="ok")
 
     # Import after monkeypatching so adapter sees fake module.
@@ -63,18 +63,53 @@ def test_local_vision_happy_path_returns_markdown(monkeypatch: pytest.MonkeyPatc
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]
 
-    # For image/jpeg|png provide local bytes so the adapter can attach images.
-    submission = {"id": "deadbeef-dead-beef-dead-beef000001", "kind": "file", "text_body": None}
+    bucket = get_submissions_bucket()
+    submission = {
+        "id": "deadbeef-dead-beef-dead-beef000001",
+        "kind": "file",
+        "text_body": None,
+        "course_id": "course-1",
+        "task_id": "task-1",
+        "student_sub": "student-1",
+    }
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+
     if mime in {"image/jpeg", "image/png"}:
-        root = tmp_path / "storage"
-        file_path = root / "submissions" / ("img.jpg" if mime == "image/jpeg" else "img.png")
-        file_path.parent.mkdir(parents=True)
-        header = b"\xff\xd8\xff" if mime == "image/jpeg" else b"\x89PNG\r\n\x1a\n"
-        file_path.write_bytes(header + b"x" * 16)
-        monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
-        job_payload = {"mime_type": mime, "storage_key": f"submissions/{file_path.name}", "size_bytes": file_path.stat().st_size}
+        ext = "jpg" if mime == "image/jpeg" else "png"
+        storage_key = (
+            f"{bucket}/{submission['course_id']}/{submission['task_id']}/{submission['student_sub']}/img.{ext}"
+        )
+        file_path = storage_root / storage_key
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        if mime == "image/jpeg":
+            file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 16)
+        else:
+            write_dummy_png(file_path)
+        job_payload = {
+            "mime_type": mime,
+            "storage_key": storage_key,
+            "size_bytes": file_path.stat().st_size,
+        }
     else:
-        job_payload = {"mime_type": mime, "storage_key": "files/abc123"}
+        storage_key = (
+            f"{bucket}/{submission['course_id']}/{submission['task_id']}/{submission['student_sub']}/orig/sample.pdf"
+        )
+        ensure_pdf_derivatives(
+            root=storage_root,
+            bucket=bucket,
+            course_id=submission["course_id"],
+            task_id=submission["task_id"],
+            student_sub=submission["student_sub"],
+            submission_id=submission["id"],
+            page_count=2,
+        )
+        job_payload = {
+            "mime_type": mime,
+            "storage_key": storage_key,
+            "size_bytes": 4096,
+        }
 
     result: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
     assert isinstance(result, VisionResult)

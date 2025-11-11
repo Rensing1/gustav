@@ -64,7 +64,7 @@ def test_row_to_submission_pending_hides_analysis_and_sanitizes_errors():
 
     assert submission["analysis_status"] == "pending"
     assert submission["analysis_json"] is None
-    assert submission["feedback"] is None, "pending submissions must hide feedback markdown"
+    assert submission["feedback_md"] is None, "pending submissions must hide feedback markdown"
     assert submission["vision_attempts"] == 0, "missing attempts fall back to zero"
 
     vision_error = submission["vision_last_error"] or ""
@@ -91,7 +91,7 @@ def test_row_to_submission_completed_truncates_long_errors_and_preserves_feedbac
 
     assert submission["analysis_status"] == "completed"
     assert submission["analysis_json"] == {"text": "well done"}
-    assert submission["feedback"] == "Great job"
+    assert submission["feedback_md"] == "Great job"
     assert submission["vision_attempts"] == 3
     assert submission["feedback_last_attempt_at"] == "2025-11-08T13:37:00+00:00"
 

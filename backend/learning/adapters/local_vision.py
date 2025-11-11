@@ -20,7 +20,6 @@ import os
 from typing import Dict, Optional
 import base64
 import inspect
-import os
 import logging
 
 from backend.learning.adapters.ports import (
@@ -29,11 +28,23 @@ from backend.learning.adapters.ports import (
     VisionTransientError,
 )
 from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
+from backend.storage.config import get_submissions_bucket
 
 LOG = logging.getLogger(__name__)
 
 
 SUPPORTED_MIME = {"image/jpeg", "image/png", "application/pdf"}
+
+
+def _submissions_bucket() -> str:
+    return get_submissions_bucket()
+
+
+def _strip_bucket_prefix(key: str, bucket: str) -> str:
+    prefix = f"{bucket}/"
+    if key.startswith(prefix):
+        return key[len(prefix) :]
+    return key
 
 
 class _LocalVisionAdapter:
@@ -54,14 +65,15 @@ class _LocalVisionAdapter:
 
         Strategy (KISS):
         - Prefer a precomputed derived image at derived/<submission_id>/stitched.png under STORAGE_VERIFY_ROOT.
-        - Otherwise, read the original PDF from STORAGE_VERIFY_ROOT and render pages via process_pdf_bytes,
+        - Look for existing derived page keys stored in `internal_metadata.page_keys` before re-rendering.
+        - Otherwise, read the original PDF from STORAGE_VERIFY_ROOT or Supabase and render pages via process_pdf_bytes,
           stitch them vertically, and persist stitched.png for reuse.
-        - If neither is possible, return None so caller can retry later.
+        - If none of these paths succeed, return None so the caller can retry later.
         """
         root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
         if not root:
             return None
-        # Identities for derived path
+        bucket = _submissions_bucket()
         submission_id = (submission or {}).get("id") or ""
         course_id = (submission or {}).get("course_id") or ""
         task_id = (submission or {}).get("task_id") or ""
@@ -70,42 +82,135 @@ class _LocalVisionAdapter:
             return None
         from pathlib import Path
         base = Path(root).resolve()
-        derived_rel = f"submissions/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
-        stitched_path = (base / derived_rel / "stitched.png").resolve()
-        try:
-            common1 = os.path.commonpath([str(base), str(stitched_path)])
-        except Exception:
+        candidate_dirs: list["Path"] = []
+        for rel in (
+            f"{bucket}/{course_id}/{task_id}/{student_sub}/derived/{submission_id}",
+            f"{course_id}/{task_id}/{student_sub}/derived/{submission_id}",
+        ):
+            try:
+                cand = (base / rel).resolve()
+                if os.path.commonpath([str(base), str(cand)]) != str(base):
+                    continue
+            except Exception:
+                continue
+            candidate_dirs.append(cand)
+        if not candidate_dirs:
             return None
-        if common1 != str(base):
-            return None
+        derived_dir = candidate_dirs[0]
+        stitched_path = (derived_dir / "stitched.png").resolve()
+
         # Return cached stitched if present
         if stitched_path.exists() and stitched_path.is_file():
             try:
                 return stitched_path.read_bytes()
             except Exception:
                 return None
+
+        def _persist_stitched(data: bytes) -> None:
+            try:
+                stitched_path.parent.mkdir(parents=True, exist_ok=True)
+                stitched_path.write_bytes(data)
+            except Exception:
+                pass
+
+        def _read_page_bytes(paths: list[Path]) -> list[bytes]:
+            bytes_list: list[bytes] = []
+            for path in paths:
+                try:
+                    data = path.read_bytes()
+                except Exception:
+                    LOG.warning(
+                        "learning.vision.pdf_ensure_stitched action=read_page_failed submission_id=%s path=%s",
+                        submission_id,
+                        path,
+                    )
+                    continue
+                if data:
+                    bytes_list.append(data)
+            return bytes_list
+
+        def _resolved_key_paths(keys: list[str]) -> list[Path]:
+            resolved: list[Path] = []
+            for key in keys:
+                try:
+                    candidate = (base / key).resolve()
+                    if os.path.commonpath([str(base), str(candidate)]) != str(base):
+                        continue
+                except Exception:
+                    continue
+                resolved.append(candidate)
+            return resolved
+
+        page_keys = []
+        internal_meta = (submission or {}).get("internal_metadata")
+        if isinstance(internal_meta, dict):
+            raw_page_keys = internal_meta.get("page_keys")
+            if isinstance(raw_page_keys, list):
+                page_keys = [str(k) for k in raw_page_keys if isinstance(k, str) and k.strip()]
+
+        def _stitch_or_none(pages: list[bytes]) -> Optional[bytes]:
+            if not pages:
+                return None
+            try:
+                return stitch_images_vertically(pages)
+            except Exception as exc:
+                LOG.warning(
+                    "learning.vision.pdf_ensure_stitched action=stitch_failed error_type=%s message=%s submission_id=%s",
+                    type(exc).__name__,
+                    str(exc)[:120],
+                    submission_id,
+                )
+                return None
+
+        if page_keys:
+            resolved_paths = _resolved_key_paths(page_keys)
+            page_bytes = _read_page_bytes(resolved_paths)
+            stitched_png = _stitch_or_none(page_bytes)
+            if stitched_png:
+                _persist_stitched(stitched_png)
+                return stitched_png
+
         # If per-page derived images exist, stitch them now
         try:
-            derived_dir = stitched_path.parent
-            if derived_dir.exists() and derived_dir.is_dir():
-                page_files = sorted([p for p in derived_dir.iterdir() if p.name.startswith("page_") and p.suffix.lower() == ".png"])  # type: ignore[attr-defined]
-                if page_files:
-                    page_bytes = []
-                    for p in page_files:
-                        try:
-                            page_bytes.append(p.read_bytes())
-                        except Exception:
-                            continue
-                    if page_bytes:
-                        stitched_png = stitch_images_vertically(page_bytes)
-                        try:
-                            derived_dir.mkdir(parents=True, exist_ok=True)
-                            stitched_path.write_bytes(stitched_png)
-                        except Exception:
-                            pass
-                        return stitched_png
+            for cand in candidate_dirs:
+                if not cand.exists() or not cand.is_dir():
+                    # Avoid logging derived path (may contain student identifiers)
+                    LOG.warning(
+                        "learning.vision.pdf_ensure_stitched action=missing_derived_dir submission_id=%s",
+                        submission_id,
+                    )
+                    continue
+                page_files = sorted(  # type: ignore[attr-defined]
+                    [p for p in cand.iterdir() if p.name.startswith("page_") and p.suffix.lower() == ".png"]
+                )
+                if not page_files:
+                    LOG.warning(
+                        "learning.vision.pdf_ensure_stitched action=no_page_files submission_id=%s",
+                        submission_id,
+                    )
+                    continue
+                page_bytes = _read_page_bytes(page_files)
+                stitched_png = _stitch_or_none(page_bytes)
+                if stitched_png:
+                    _persist_stitched(stitched_png)
+                    return stitched_png
+            # Final fallback: scan for matching derived dirs (handles legacy layouts)
+            for cand in base.glob(f"**/derived/{submission_id}"):
+                if not cand.is_dir():
+                    continue
+                page_files = sorted(  # type: ignore[attr-defined]
+                    [p for p in cand.iterdir() if p.name.startswith("page_") and p.suffix.lower() == ".png"]
+                )
+                if not page_files:
+                    continue
+                page_bytes = _read_page_bytes(page_files)
+                stitched_png = _stitch_or_none(page_bytes)
+                if stitched_png:
+                    _persist_stitched(stitched_png)
+                    return stitched_png
         except Exception:
             pass
+
         # Try to read original PDF and render (local or remote fetch fallback)
         storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
         if not storage_key:
@@ -113,29 +218,22 @@ class _LocalVisionAdapter:
         pdf_path = (base / storage_key).resolve()
         data: Optional[bytes] = None
         try:
-            common2 = os.path.commonpath([str(base), str(pdf_path)])
-        except Exception:
-            common2 = ""
-        if common2 == str(base) and pdf_path.exists() and pdf_path.is_file():
-            try:
+            if os.path.commonpath([str(base), str(pdf_path)]) == str(base) and pdf_path.exists() and pdf_path.is_file():
                 data = pdf_path.read_bytes()
                 LOG.info(
                     "learning.vision.pdf_ensure_stitched action=read_local size=%s submission_id=%s",
                     len(data),
                     submission_id,
                 )
-            except Exception:
-                data = None
+        except Exception:
+            data = None
+
         # Remote fetch from Supabase if local PDF not available
         if data is None:
             supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
             srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
             if supabase_url and srk and storage_key:
-                # Build object URL: storage/v1/object/submissions/<object>
-                bucket = "submissions"
-                obj = storage_key
-                if storage_key.startswith("submissions/"):
-                    obj = storage_key[len("submissions/") :]
+                obj = _strip_bucket_prefix(storage_key, bucket)
                 url = f"{supabase_url}/storage/v1/object/{bucket}/{obj}"
                 try:
                     import httpx  # type: ignore
@@ -152,34 +250,26 @@ class _LocalVisionAdapter:
                         content = bytes(getattr(resp, "content", b""))
                         ctype = str(getattr(resp, "headers", {}).get("content-type", ""))
                         if content:
-                            # Basic validation to avoid trying to render non-PDF content
                             if (not ctype.lower().startswith("application/pdf")) and (not content.startswith(b"%PDF-")):
                                 LOG.warning(
-                                    "learning.vision.pdf_ensure_stitched action=wrong_content status=%s ctype=%s size=%s bucket=%s object_key=%s submission_id=%s",
+                                    "learning.vision.pdf_ensure_stitched action=wrong_content status=%s ctype=%s size=%s submission_id=%s",
                                     getattr(resp, "status_code", ""),
                                     ctype,
                                     len(content),
-                                    bucket,
-                                    obj,
                                     submission_id,
                                 )
                             else:
                                 data = content
                                 LOG.info(
-                                    "learning.vision.pdf_ensure_stitched action=fetch_remote size=%s bucket=%s object_key=%s submission_id=%s",
+                                    "learning.vision.pdf_ensure_stitched action=fetch_remote size=%s submission_id=%s",
                                     len(content),
-                                    bucket,
-                                    obj,
                                     submission_id,
                                 )
                 except Exception:
-                    # Network or auth errors → leave data None, let caller retry later
                     pass
         if data is None:
             return None
-        # Render + stitch
         try:
-            # Safety: ensure bytes look like a PDF before rendering to avoid noisy errors
             if not data.startswith(b"%PDF-"):
                 LOG.warning(
                     "learning.vision.pdf_ensure_stitched action=wrong_content_pre_render size=%s submission_id=%s",
@@ -189,28 +279,21 @@ class _LocalVisionAdapter:
                 return None
             pages, _meta = process_pdf_bytes(data)
             page_bytes = [p.data for p in pages if getattr(p, "data", None)]
-            if not page_bytes:
+            stitched_png = _stitch_or_none(page_bytes)
+            if not stitched_png:
                 LOG.error(
                     "learning.vision.pdf_ensure_stitched action=render_no_pages submission_id=%s",
                     submission_id,
                 )
                 return None
-            stitched_png = stitch_images_vertically(page_bytes)
-            # Persist for reuse (best effort)
-            try:
-                stitched_path.parent.mkdir(parents=True, exist_ok=True)
-                stitched_path.write_bytes(stitched_png)
-                LOG.info(
-                    "learning.vision.pdf_ensure_stitched action=persist_derived bytes=%s submission_id=%s",
-                    len(stitched_png),
-                    submission_id,
-                )
-            except Exception:
-                # Non-fatal if persistence fails
-                pass
+            _persist_stitched(stitched_png)
+            LOG.info(
+                "learning.vision.pdf_ensure_stitched action=persist_derived bytes=%s submission_id=%s",
+                len(stitched_png),
+                submission_id,
+            )
             return stitched_png
         except Exception as exc:
-            # Log anonymized error class/message to aid diagnosis without PII
             try:
                 err_type = type(exc).__name__
                 err_msg = str(exc)
@@ -220,7 +303,7 @@ class _LocalVisionAdapter:
             LOG.error(
                 "learning.vision.pdf_ensure_stitched action=render_error error_type=%s message=%s submission_id=%s",
                 err_type,
-                err_msg[:120],  # cap size
+                err_msg[:120],
                 submission_id,
             )
             return None
@@ -273,6 +356,7 @@ class _LocalVisionAdapter:
         image_b64: Optional[str] = None
         # For PDFs we can pass multiple page images; collect them here when available
         image_list_b64: list[str] = []
+        bucket = _submissions_bucket()
         if kind != "text":
             root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
             # Fallback to submission fields when job payload omits transport metadata.
@@ -333,11 +417,8 @@ class _LocalVisionAdapter:
                 supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
                 srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
                 if supabase_url and srk:
-                    # Infer bucket and object key; tolerate a leading bucket segment inside storage_key
-                    bucket = "submissions"
-                    obj = storage_key
-                    if storage_key.startswith("submissions/"):
-                        obj = storage_key[len("submissions/") :]
+                    # Infer object key; tolerate a leading bucket segment inside storage_key
+                    obj = _strip_bucket_prefix(storage_key, bucket)
                     url = f"{supabase_url}/storage/v1/object/{bucket}/{obj}"
                     try:
                         import httpx  # type: ignore
@@ -364,7 +445,7 @@ class _LocalVisionAdapter:
                 from pathlib import Path as _P
                 base = _P(root).resolve()
                 derived_prefix = (
-                    f"submissions/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
+                    f"{bucket}/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
                     if course_id and task_id and student_sub and submission_id
                     else None
                 )
@@ -387,7 +468,7 @@ class _LocalVisionAdapter:
             # Remote fetch for PDF derived pages (if local read failed)
             if mime == "application/pdf" and not image_list_b64:
                 derived_prefix = (
-                    f"submissions/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
+                    f"{bucket}/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
                     if course_id and task_id and student_sub and submission_id
                     else None
                 )
@@ -401,10 +482,8 @@ class _LocalVisionAdapter:
                     if httpx is not None:
                         for idx in range(1, 6):
                             page_key = f"{derived_prefix}/page_{idx:04}.png"
-                            obj = page_key
-                            if obj.startswith("submissions/"):
-                                obj = obj[len("submissions/") :]
-                            url = f"{supabase_url}/storage/v1/object/submissions/{obj}"
+                            obj = _strip_bucket_prefix(page_key, bucket)
+                            url = f"{supabase_url}/storage/v1/object/{bucket}/{obj}"
                             try:
                                 resp = httpx.get(
                                     url,

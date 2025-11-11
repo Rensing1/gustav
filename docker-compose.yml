@@ -102,10 +102,10 @@ services:
       - LEARNING_FEEDBACK_ADAPTER=${LEARNING_FEEDBACK_ADAPTER:-backend.learning.adapters.stub_feedback}
       # Local AI (Ollama/DSPy) configuration for AI_BACKEND=local
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - AI_VISION_MODEL=${AI_VISION_MODEL:-llama3.2-vision}
-      - AI_FEEDBACK_MODEL=${AI_FEEDBACK_MODEL:-llama3.1}
+      - AI_VISION_MODEL=${AI_VISION_MODEL:-qwen2.5-vl:7b}
+      - AI_FEEDBACK_MODEL=${AI_FEEDBACK_MODEL:-qwen2.5:7b-instruct}
       - AI_TIMEOUT_VISION=${AI_TIMEOUT_VISION:-30}
-      - AI_TIMEOUT_FEEDBACK=${AI_TIMEOUT_FEEDBACK:-30}
+      - AI_TIMEOUT_FEEDBACK=${AI_TIMEOUT_FEEDBACK:-15}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
@@ -183,7 +183,7 @@ services:
       - gustav-alpha2-network
 
   ollama:
-    image: ollama/ollama:rocm
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     container_name: gustav-ollama
     # Expose API port for host-based integration tests
     # - Compose-internal: http://ollama:11434

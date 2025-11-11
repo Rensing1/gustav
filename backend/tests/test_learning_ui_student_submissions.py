@@ -32,16 +32,65 @@ if str(REPO_ROOT) not in os.sys.path:
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 import routes.learning as learning_routes  # type: ignore  # noqa: E402
+from backend.teaching.repo_db import DBTeachingRepo  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
+def _service_dsn() -> str:
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    return (
+        os.getenv("SERVICE_ROLE_DSN")
+        or os.getenv("RLS_TEST_SERVICE_DSN")
+        or os.getenv("DATABASE_URL")
+        or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+    )
+
+
+def _teaching_repo() -> DBTeachingRepo:
+    return DBTeachingRepo(dsn=_service_dsn())
+
+
+def _fallback_create_module(*, course_id: str, unit_id: str, teacher_sub: str) -> str:
+    record = _teaching_repo().create_course_module_owned(course_id, teacher_sub, unit_id=unit_id, context_notes=None)
+    return record["id"]
+
+
+def _fallback_release_section(*, course_id: str, module_id: str, section_id: str, teacher_sub: str, visible: bool = True) -> None:
+    _teaching_repo().set_module_section_visibility(
+        course_id=course_id,
+        module_id=module_id,
+        section_id=section_id,
+        owner_sub=teacher_sub,
+        visible=visible,
+    )
+
+
+def _fallback_add_member(*, course_id: str, student_sub: str, teacher_sub: str) -> None:
+    with psycopg.connect(_service_dsn()) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (teacher_sub,))
+            cur.execute(
+                """
+                insert into public.course_memberships (course_id, student_id, role)
+                values (%s, %s, 'student')
+                on conflict (course_id, student_id) do nothing
+                """,
+                (course_id, student_sub),
+            )
+        conn.commit()
+
+
 async def _prepare_learning_fixture():
     main.SESSION_STORE = SessionStore()
     student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
     teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    teacher_sub = teacher.sub  # type: ignore[attr-defined]
     async with (await _client()) as c:
         # Teacher seeds course/unit/section/task and releases
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -57,13 +106,29 @@ async def _prepare_learning_fixture():
         )
         task_id = r_task.json()["id"]
         r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
-        module_id = r_module.json()["id"]
-        await c.patch(
+        if r_module.status_code == 201:
+            module_id = r_module.json().get("id")
+        else:
+            module_id = _fallback_create_module(course_id=course_id, unit_id=unit_id, teacher_sub=teacher_sub)
+        vis_resp = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
             json={"visible": True},
         )
-        # Add student member
-        await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name})  # type: ignore
+        if vis_resp.status_code != 200:
+            _fallback_release_section(
+                course_id=course_id,
+                module_id=module_id,
+                section_id=section_id,
+                teacher_sub=teacher_sub,
+                visible=True,
+            )
+        # Add student member; fall back to direct insert if API path is restricted.
+        enroll = await c.post(
+            f"/api/teaching/courses/{course_id}/members",
+            json={"sub": student.sub, "name": student.name},  # type: ignore
+        )
+        if enroll.status_code not in (200, 201, 204):
+            _fallback_add_member(course_id=course_id, student_sub=student.sub, teacher_sub=teacher_sub)  # type: ignore[attr-defined]
     return student.session_id, course_id, unit_id, task_id
 
 
@@ -676,7 +741,7 @@ async def test_ui_submit_upload_png_without_js_uses_server_fallback(tmp_path, mo
                 "sha256": entry["sha256"],
                 "analysis_status": entry["analysis_status"],
                 "analysis_json": entry["analysis_json"],
-                "feedback": entry["feedback"],
+                "feedback_md": entry["feedback_md"],
                 "error_code": entry["error_code"],
                 "vision_last_error": entry["vision_last_error"],
                 "feedback_last_error": entry["feedback_last_error"],
@@ -712,7 +777,7 @@ async def test_ui_submit_upload_png_without_js_uses_server_fallback(tmp_path, mo
                 "sha256": str(data.sha256 or ""),
                 "analysis_status": "pending",
                 "analysis_json": None,
-                "feedback": None,
+                "feedback_md": None,
                 "error_code": None,
                 "vision_last_error": None,
                 "feedback_last_error": None,

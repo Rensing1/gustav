@@ -114,7 +114,7 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 ### `LearningSubmission` (API)
 - `analysis_status`: `pending | completed | error` — MVP liefert immer `completed`.
 - `analysis_json`: Struktur nach `criteria.v1` (siehe oben). Hinweis: In der Async‑Pipeline ist dieses Feld während `pending` `null` und wird erst nach Abschluss gesetzt.
-- `feedback`: Kurztext für formatives Feedback (Stub). Später ersetzt durch echte KI-Ausgabe.
+- `feedback_md`: Markdown für formatives Feedback (Stub in Dev; KI-Ausgabe produktiv).
 – `created_at`: RFC3339‑Zeitstempel in UTC mit explizitem `+00:00`‑Offset (z. B. `2025-10-23T09:45:00+00:00`).
 
 ## Architektur & Adapter

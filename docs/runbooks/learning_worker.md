@@ -40,6 +40,53 @@ Purpose: Operate and troubleshoot the asynchronous learning worker (vision + fee
 - Migrations: `supabase migration up`.
 - Tests: `.venv/bin/pytest -q`.
 
+## Preflight Checklist (Local = Prod)
+
+Ziel: In wenigen Schritten verifizieren, dass der Learning‑Worker korrekt
+konfiguriert ist, DSPy/Ollama erreicht und sinnvolle Ergebnisse persistiert.
+
+1) Container starten/neu erstellen
+
+- `docker compose up -d --build`
+
+2) Runtime‑ENV im Worker prüfen (DI/Ollama/DSPy)
+
+- `docker compose exec -T learning-worker sh -lc 'printf "AI_BACKEND=%s\nLEARNING_DSPY_JSON_ADAPTER=%s\nOLLAMA_BASE_URL=%s\nAI_FEEDBACK_MODEL=%s\n" "$AI_BACKEND" "$LEARNING_DSPY_JSON_ADAPTER" "$OLLAMA_BASE_URL" "$AI_FEEDBACK_MODEL"'`
+- Erwartet:
+  - `AI_BACKEND=local`
+  - `LEARNING_DSPY_JSON_ADAPTER=default` Use Case: lokal ggf. `false`
+  - `OLLAMA_BASE_URL=http://ollama:11434`
+  - `AI_FEEDBACK_MODEL=<dein modell>`
+
+3) Worker‑Logs auf Adapter/DSPy‑Signal prüfen
+
+- `docker compose logs -n 200 learning-worker | rg "learning.adapters.selected|learning.feedback.dspy_configured|learning.feedback.dspy_pipeline_completed|feedback_backend="`
+- Erwartet:
+  - `learning.adapters.selected backend=local … feedback=backend.learning.adapters.local_feedback`
+  - `learning.feedback.dspy_configured model=… adapter=JSONAdapter` oder `adapter=default` (falls JSONAdapter deaktiviert)
+  - Bei Einreichung: `learning.feedback.dspy_pipeline_completed … parse_status=parsed_structured|parsed`
+
+4) Ollama‑Logs auf Model‑Load/Generate prüfen
+
+- `docker compose logs -n 200 ollama | rg -i "/api/generate|loading model|started|invalid option|currentDate"`
+- Erwartet:
+  - `/api/generate` mit `200`
+  - „loading model“, „runner started“ (beim ersten Aufruf)
+  - Keine `invalid option provided option=timeout` und kein `function "currentDate" not defined`
+
+5) DB‑Persistenz (eine Test‑Einreichung vorausgesetzt)
+
+- `psql 'postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres' -c "select analysis_status, left(feedback_md,120) as feedback, analysis_json->>'schema' as schema, created_at from public.learning_submissions order by created_at desc limit 5;"`
+- Erwartet:
+  - `analysis_status = completed`
+  - `schema = criteria.v2`
+  - `feedback` ist nicht leer/"None"
+
+Troubleshooting‑Hinweise:
+- Leere/semantisch schwache structured Outputs: JSONAdapter lokal deaktivieren (`.env: LEARNING_DSPY_JSON_ADAPTER=false`, dann `docker compose up -d --force-recreate learning-worker`).
+- Template/500‑Fehler: Client mit `options={raw: true, template: "{{ .Prompt }}"}` aufrufen (im Code bereits so implementiert).
+- Netz/Host: `OLLAMA_BASE_URL` muss im Container erreichbar sein (Compose‑Service‑Name `ollama`).
+
 ## Lokale KI (Ollama/DSPy)
 
 Ziel: Lokale Inferenz ohne Cloud‑Egress. Standard ist `AI_BACKEND=stub`.

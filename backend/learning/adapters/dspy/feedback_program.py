@@ -38,8 +38,25 @@ logger = logging.getLogger(__name__)
 
 
 def _sanitize_text(text_md: str) -> str:
-    """Pass student text through unchanged to preserve original phrasing."""
+    """Return student text verbatim; truncation happens in prompt builders."""
     return text_md
+
+
+def _clip(text: str | None, *, max_chars: int) -> str:
+    """Bound prompt parts to a safe size to avoid LM server errors (e.g., 500).
+
+    Rationale:
+        Long prompts (task instructions + full analysis JSON + student text)
+        can exceed the model/context capacity and trigger 500s from local LM
+        servers. We conservatively clamp each part to keep prompts small and
+        robust for classroom use without changing semantics.
+    """
+    if not text:
+        return ""
+    s = str(text)
+    if len(s) <= max_chars:
+        return s
+    return s[: max_chars - 10] + "\n[truncated]"
 
 
 def _build_analysis_prompt(
@@ -53,17 +70,22 @@ def _build_analysis_prompt(
     - Criteria names are included so the model can align explanations.
     """
     crit_lines = "\n".join(f"- {str(c)}" for c in criteria)
+    # Conservative per‑section limits keep the total prompt size manageable.
+    instr = _clip(teacher_instructions_md, max_chars=4000)
+    hints = _clip(solution_hints_md, max_chars=2000)
+    text = _clip(_sanitize_text(text_md), max_chars=6000)
+
     parts = [
         "Rolle: Lehrkraft. Führe eine Kriterien-Analyse durch.",
         "Datenschutz: Gib nur Analysewerte und kurze Begründungen aus.",
         "Ausgabe: Striktes JSON im Schema 'criteria.v2' mit 'criteria_results' (Objekte mit criterion, max_score=10, score 0..10, explanation_md).",
         "Kriterien (Reihenfolge beibehalten):\n" + crit_lines,
     ]
-    if (teacher_instructions_md or "").strip():
-        parts.append("Aufgabenstellung (nur zur Analyse):\n" + str(teacher_instructions_md))
-    if (solution_hints_md or "").strip():
-        parts.append("Lösungshinweise (nur zur Analyse; nicht offenlegen):\n" + str(solution_hints_md))
-    parts.append("Schülertext (wörtlich):\n" + _sanitize_text(text_md))
+    if instr:
+        parts.append("Aufgabenstellung (nur zur Analyse):\n" + instr)
+    if hints:
+        parts.append("Lösungshinweise (nur zur Analyse; nicht offenlegen):\n" + hints)
+    parts.append("Schülertext (wörtlich):\n" + text)
     parts.append("Gib ausschließlich das JSON zurück, keine Prosa.")
     return "\n".join(parts)
 
@@ -75,12 +97,20 @@ def _build_feedback_prompt(
     analysis_json: Dict[str, Any],
     teacher_instructions_md: str | None = None,
 ) -> str:
-    """Prompt instructing the LM to turn structured analysis into concise prose feedback."""
+    """Prompt instructing the LM to turn structured analysis into concise prose feedback.
+
+    Note:
+        Do not embed the full analysis JSON verbatim; large payloads increased
+        failure rates on local LM backends. We include a concise criteria
+        summary and clamp all text sections.
+    """
     crit_summary = "\n".join(
         f"- {item['criterion']}: {item['score']}/{item['max_score']}"
         for item in analysis_json.get("criteria_results", [])
     )
-    analysis_serialized = json.dumps(analysis_json, ensure_ascii=False)
+    instr = _clip(teacher_instructions_md, max_chars=2000)
+    text = _clip(_sanitize_text(text_md), max_chars=4000)
+
     parts = [
         "Rolle: Lehrkraft. Formuliere eine kurze, gut lesbare Rückmeldung im Fließtext, basierend auf der Analyse.",
         "Regeln:",
@@ -88,11 +118,10 @@ def _build_feedback_prompt(
         "2. Schreibe verständliche, zusammenhängende Sätze (keine Listen/Bullets).",
         "3. Wiederhole den Schülertext nicht vollständig; beziehe dich auf die analysierten Kriterien.",
         "Analyse-Zusammenfassung:\n" + (crit_summary or "- No criteria provided."),
-        "Analyse-JSON (vollständig):\n" + analysis_serialized,
     ]
-    if (teacher_instructions_md or "").strip():
-        parts.append("Aufgabenstellung (Kontext):\n" + str(teacher_instructions_md))
-    parts.append("Schülertext (wörtlich):\n" + _sanitize_text(text_md))
+    if instr:
+        parts.append("Aufgabenstellung (Kontext):\n" + instr)
+    parts.append("Schülertext (wörtlich):\n" + text)
     parts.append("Gib ausschließlich den Rückmeldungstext in Markdown (Fließtext) zurück.")
     return "\n".join(parts)
 

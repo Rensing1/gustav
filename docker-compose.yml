@@ -3,7 +3,7 @@ services:
     image: caddy:2-alpine
     container_name: gustav-caddy
     ports:
-      - "8100:80"
+      - "8100:443"
     volumes:
       - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
@@ -36,27 +36,27 @@ services:
     env_file:
       - .env
     environment:
-      # Force container to talk to host Supabase API
-      - SUPABASE_URL=http://host.docker.internal:54321
+      # Internal Supabase gateway (Kong) reachable via shared network
+      - SUPABASE_URL=http://supabase_kong_gustav-alpha2:8000
       # Same-origin proxy for Storage uploads to avoid browser CORS issues
-      - ENABLE_STORAGE_UPLOAD_PROXY=true
+      - ENABLE_STORAGE_UPLOAD_PROXY=false
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       - KC_BASE_URL=${KC_BASE_URL:-http://keycloak:8080}
-      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-http://id.localhost:8100}
+      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost:8100}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
       # Keycloak Admin API credentials for /api/users/search and name resolution
       - KC_ADMIN_USERNAME=${KC_ADMIN_USERNAME:-admin}
       - KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-admin}
       # Browser-facing app base controls callback host
-      - WEB_BASE=${WEB_BASE:-http://app.localhost:8100}
-      - REDIRECT_URI=${WEB_BASE:-http://app.localhost:8100}/auth/callback
+      - WEB_BASE=${WEB_BASE:-https://app.localhost:8100}
+      - REDIRECT_URI=${WEB_BASE:-https://app.localhost:8100}/auth/callback
       # Trust reverse-proxy headers for Same-Origin checks in CSRF logic
       - GUSTAV_TRUST_PROXY=true
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
       - SESSIONS_BACKEND=db
-      - AUTO_CREATE_STORAGE_BUCKETS=true
+      - AUTO_CREATE_STORAGE_BUCKETS=false
       # Allow storage3 fallback in container even when using host.docker.internal
       - SUPABASE_FALLBACK_STORAGE3=true
       # App runtime DSN: build from app login user/pass and container DB host.
@@ -72,8 +72,7 @@ services:
       - STORAGE_VERIFY_ROOT=${STORAGE_VERIFY_ROOT:-/app/.tmp/dev_uploads}
       - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # All Supabase services reachable via shared external network
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2
@@ -91,34 +90,35 @@ services:
     env_file:
       - .env
     environment:
-      # Force container to talk to host Supabase API
-      - SUPABASE_URL=http://host.docker.internal:54321
+      # Internal Supabase gateway (Kong) reachable via shared network
+      - SUPABASE_URL=http://supabase_kong_gustav-alpha2:8000
       - LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
       # Worker DSN: defaults to the app login role (gustav_app) so RLS stays active.
       - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
-      # Adapter selection: default to deterministic stubs; switch to local with AI_BACKEND=local
-      - AI_BACKEND=${AI_BACKEND:-stub}
-      - LEARNING_VISION_ADAPTER=${LEARNING_VISION_ADAPTER:-backend.learning.adapters.stub_vision}
-      - LEARNING_FEEDBACK_ADAPTER=${LEARNING_FEEDBACK_ADAPTER:-backend.learning.adapters.stub_feedback}
+      # Adapter selection: controlled by AI_BACKEND; prod-ready default is local
+      - AI_BACKEND=${AI_BACKEND:-local}
       # Local AI (Ollama/DSPy) configuration for AI_BACKEND=local
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - AI_VISION_MODEL=${AI_VISION_MODEL:-qwen2.5-vl:7b}
-      - AI_FEEDBACK_MODEL=${AI_FEEDBACK_MODEL:-qwen2.5:7b-instruct}
+      # Ensure LiteLLM sees a matching base as well
+      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-${OLLAMA_BASE_URL:-http://ollama:11434}}
+      - AI_VISION_MODEL=${AI_VISION_MODEL:-qwen2.5vl:3b}
+      - AI_FEEDBACK_MODEL=${AI_FEEDBACK_MODEL:-gpt-oss:latest}
       - AI_TIMEOUT_VISION=${AI_TIMEOUT_VISION:-30}
       - AI_TIMEOUT_FEEDBACK=${AI_TIMEOUT_FEEDBACK:-15}
+      # Enable structured outputs by default; set to 'false' to disable
+      - LEARNING_DSPY_JSON_ADAPTER=${LEARNING_DSPY_JSON_ADAPTER:-true}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
       - WORKER_POLL_INTERVAL=${WORKER_POLL_INTERVAL:-0.5}
-      - AUTO_CREATE_STORAGE_BUCKETS=true
+      - AUTO_CREATE_STORAGE_BUCKETS=false
       # Allow storage3 fallback in container even when using host.docker.internal
       - SUPABASE_FALLBACK_STORAGE3=true
       # Share dev upload root to enable Vision to read uploaded files in dev
       - STORAGE_VERIFY_ROOT=${STORAGE_VERIFY_ROOT:-/app/.tmp/dev_uploads}
       - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # All Supabase services reachable via shared external network
     healthcheck:
       test:
         [
@@ -153,8 +153,8 @@ services:
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
       KC_DB_URL_PROPERTIES: ${KC_DB_URL_PROPERTIES:-sslmode=disable}
       KC_PROXY: edge
-      KC_HOSTNAME_URL: http://id.localhost:8100
-      KC_HOSTNAME_ADMIN_URL: http://id.localhost:8100
+      KC_HOSTNAME_URL: https://id.localhost:8100
+      KC_HOSTNAME_ADMIN_URL: https://id.localhost:8100
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -189,7 +189,7 @@ services:
     # - Compose-internal: http://ollama:11434
     # - Host-accessible:  http://localhost:11434
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_models:/root/.ollama
     # GPU device/group wiring is optional. Remove group_add/devices by default

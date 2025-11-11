@@ -126,3 +126,11 @@ def ensure_secure_config_on_startup() -> None:
         raise SystemExit(
             "Refusing to start: ENABLE_STORAGE_UPLOAD_PROXY must be false in production/staging."
         )
+
+    # 8) Forbid automatic bucket provisioning in prod-like envs
+    #    Buckets must be provisioned via migrations or explicit runbooks.
+    if (os.getenv("AUTO_CREATE_STORAGE_BUCKETS", "false") or "").strip().lower() == "true":
+        raise SystemExit(
+            "Refusing to start: AUTO_CREATE_STORAGE_BUCKETS=true is not allowed in production/staging. "
+            "Provision storage buckets via migrations/runbooks."
+        )

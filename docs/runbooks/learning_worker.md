@@ -57,7 +57,8 @@ Stub-Pfad bleibt absichtlich deterministisch für CI.
 - DSPy ist im Worker-Image vorinstalliert und nutzt exakt die oben genannten Variablen
   (`AI_FEEDBACK_MODEL`, `OLLAMA_BASE_URL`, Timeouts). Es existiert kein separates
   Feature-Flag. Schlägt der DSPy-Aufruf fehl (Timeout, Parsing, Konfig), loggt der
-  Worker eine WARN-Meldung und fällt deterministisch auf den Ollama-Stub zurück.
+  Worker eine WARN-Meldung. Strukturierte Ausgaben können über den JSONAdapter
+  erzwungen werden (siehe unten).
 - Security/Compliance:
   - Deployment-Verantwortliche wählen das Modell bewusst über `.env`. Der Worker prüft
     lediglich, ob die Variablen gesetzt sind und behandelt Laufzeitfehler als Fallback.
@@ -67,6 +68,32 @@ Stub-Pfad bleibt absichtlich deterministisch für CI.
   - Interner Check auf `ollama list` (Container‑Healthcheck)
 - Neustart Ollama (z. B. nach Modell‑Updates):
   - `docker compose restart ollama`
+
+### DSPy JSONAdapter (strukturierte Ausgaben)
+
+- Zweck: Der JSONAdapter erzwingt strikt typisierte Felder für die DSPy‑Signaturen
+  (Analysis/Synthesis). Manche lokalen Modelle liefern formal JSON, aber befüllen
+  die typisierten Felder nicht sinnvoll. Ergebnis: Logs zeigen `parsed_structured`,
+  aber inhaltlich leere Kriterien/Feedback.
+
+- Steuerung (Compose‑ENV):
+  - `.env` im Projektwurzelverzeichnis setzen:
+    - `LEARNING_DSPY_JSON_ADAPTER=false` (deaktiviert) oder `true` (Standard)
+  - Compose propagiert diese Variable in den Container (siehe `docker-compose.yml:110`).
+  - Neustarten: `docker compose up -d --force-recreate learning-worker`
+
+- Verifikation:
+  - Worker‑Logs beim Start: `learning.feedback.dspy_configured model=… adapter=JSONAdapter` (aktiv)
+    oder `adapter=default` (deaktiviert).
+  - Laufzeitprüfung: `docker compose exec -T learning-worker sh -lc 'echo LEARNING_DSPY_JSON_ADAPTER=$LEARNING_DSPY_JSON_ADAPTER'`
+
+- Troubleshooting‑Pattern:
+  - Symptom: `dspy_pipeline_completed parse_status=parsed_structured`, aber `criteria_results=[]`
+    bzw. Scores fast ausschließlich 0; Feedback leer/„None“.
+  - Maßnahme: JSONAdapter testweise deaktivieren (`LEARNING_DSPY_JSON_ADAPTER=false`) und
+    Worker neu starten. Parser/Normalisierung akzeptieren dann tolerant Feldvarianten und
+    ordnen nach Reihenfolge.
+  - Hinweis: In Prod nur mit Modell‑Allowlist aktivieren/deaktivieren. Immer Log‑Signal prüfen.
 
 ### ROCm (AMD‑GPU)
 - Das Compose nutzt `ollama/ollama:rocm` mit Gerätemappings `/dev/kfd`, `/dev/dri` und Gruppen `video`, `render`.

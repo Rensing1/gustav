@@ -1200,6 +1200,12 @@ async def internal_upload_proxy(request: Request):
 
     # Enforce that the path targets the storage upload endpoint to reduce SSRF surface.
     path = parsed_target.path or "/"
+    # Be tolerant to accidental double slashes from upstream clients by
+    # collapsing them before applying prefix checks (dev/local presigners can
+    # produce .../storage/v1//object/...). This does not weaken the check
+    # because we still require the fixed upload prefix afterwards.
+    while "//" in path:
+        path = path.replace("//", "/")
     if not path.startswith("/storage/v1/object/"):
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
 

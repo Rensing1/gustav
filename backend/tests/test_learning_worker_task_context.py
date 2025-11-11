@@ -148,16 +148,32 @@ async def test_worker_passes_task_context_to_feedback_adapter():
     )
     sub_id = submission["id"]
 
-    feedback = _FeedbackCapturingAdapter()
-    processed = run_once(
-        dsn=worker_dsn,
-        vision_adapter=_Vision(text="Text"),
-        feedback_adapter=feedback,
-        now=datetime.now(tz=timezone.utc),
-    )
-    assert processed is True
+    assert _job_pending(worker_dsn=worker_dsn, submission_id=sub_id)
 
-    assert feedback.last_kwargs is not None, "Adapter did not receive kwargs"
-    assert feedback.last_kwargs.get("instruction_md") == fixture.task.get("instruction_md")
-    assert feedback.last_kwargs.get("hints_md") == fixture.task.get("hints_md")
+    captured_kwargs: dict | None = None
+    for attempt in range(10):
+        adapter = _FeedbackCapturingAdapter()
+        processed = run_once(
+            dsn=worker_dsn,
+            vision_adapter=_Vision(text="Text"),
+            feedback_adapter=adapter,
+            now=datetime.now(tz=timezone.utc),
+        )
+        assert processed is True
+        if not _job_pending(worker_dsn=worker_dsn, submission_id=sub_id):
+            captured_kwargs = adapter.last_kwargs
+            break
+
+    assert captured_kwargs is not None, "Worker did not process the targeted submission"
+    assert captured_kwargs.get("instruction_md") == fixture.task.get("instruction_md")
+    assert captured_kwargs.get("hints_md") == fixture.task.get("hints_md")
+def _job_pending(*, worker_dsn: str, submission_id: str) -> bool:
+    """Return True when a queue entry for the submission still exists."""
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                "select 1 from public.learning_submission_jobs where submission_id = %s::uuid limit 1",
+                (submission_id,),
+            )
+            return cur.fetchone() is not None
 

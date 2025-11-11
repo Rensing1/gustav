@@ -1,17 +1,20 @@
-# Host-based routing for local development
-# Access via:
-#   - http://app.localhost:8100 → GUSTAV web
-#   - http://id.localhost:8100  → Keycloak
+"# Host-based routing with TLS for local development\n"
+"# Access via:\n"
+"#   - https://app.localhost:8100 → GUSTAV web\n"
+"#   - https://id.localhost:8100  → Keycloak\n"
 
-app.localhost:80 {
+app.localhost:443 {
+  tls internal
   # Use the container_name as upstream to avoid DNS alias ambiguity
   reverse_proxy gustav-alpha2:8000
 }
 
-localhost:80 {
+localhost:443 {
+  tls internal
   reverse_proxy gustav-alpha2:8000
 }
 
-id.localhost:80 {
+id.localhost:443 {
+  tls internal
   reverse_proxy keycloak:8080
 }

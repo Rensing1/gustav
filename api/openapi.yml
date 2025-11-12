@@ -2135,8 +2135,7 @@ paths:
             Set-Cookie:
               description: >-
                 httpOnly session cookie `gustav_session`.
-                Production: `HttpOnly; Secure; SameSite=strict`.
-                Development/Test: `HttpOnly; SameSite=lax`.
+                All environments: `HttpOnly; Secure; SameSite=strict`.
                 In production, `Max-Age` matches the server session TTL (default 3600 seconds).
               schema:
                 type: string
@@ -2190,8 +2189,7 @@ paths:
             Set-Cookie:
               description: >-
                 Clears the httpOnly session cookie `gustav_session` (expires it).
-                Production: `HttpOnly; Secure; SameSite=strict; Max-Age=0`.
-                Development/Test: `HttpOnly; SameSite=lax; Max-Age=0`.
+                All environments: `HttpOnly; Secure; SameSite=strict; Max-Age=0`.
               schema:
                 type: string
             Location:

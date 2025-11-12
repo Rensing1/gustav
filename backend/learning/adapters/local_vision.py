@@ -585,31 +585,6 @@ class _LocalVisionAdapter:
 def build() -> _LocalVisionAdapter:
     """Factory used by the worker DI to construct the adapter instance."""
     return _LocalVisionAdapter()
-
-    
-    
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     
     

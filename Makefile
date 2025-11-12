@@ -100,7 +100,8 @@ DSN ?= postgresql://postgres:postgres@127.0.0.1:54322/postgres
 LEGACY_SCHEMA ?= legacy_raw
 WORKDIR ?= .tmp/migration_run
 
-KC_BASE_URL ?= http://127.0.0.1:8100
+# Keycloak admin/API is exposed via Caddy with TLS on 8100 for host access
+KC_BASE_URL ?= https://127.0.0.1:8100
 KC_HOST_HEADER ?= id.localhost
 KC_REALM ?= gustav
 KC_ADMIN_USER ?= admin

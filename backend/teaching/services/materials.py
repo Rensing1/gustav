@@ -12,7 +12,6 @@ from uuid import uuid4
 from teaching.storage import StorageAdapterProtocol
 from backend.storage.config import get_materials_bucket, get_materials_max_upload_bytes
 from backend.storage.keys import make_materials_key
-from backend.storage.config import get_materials_bucket
 
 
 class MaterialsRepoProtocol(Protocol):

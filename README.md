@@ -142,6 +142,12 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 - `export WEB_BASE=https://app.localhost:8100`
 - `export KC_PUBLIC_BASE_URL=https://id.localhost:8100`
 
+### Lokales TLS vertrauen (Caddy)
+
+- Der Reverse Proxy terminiert TLS lokal auf Port 8100. Browser können beim ersten Start warnen.
+- Akzeptiere das selbstsignierte Zertifikat für `app.localhost` und `id.localhost`, damit OIDC‑Redirects und Secure‑Cookies zuverlässig funktionieren.
+- Services im Compose‑Netz sprechen intern unverschlüsselt (z. B. `http://keycloak:8080` für `KC_BASE_URL` in Containern).
+
 ## Sicherheits‑Defaults (dev = prod)
 
 - TLS/HSTS: Immer aktiv über den Caddy‑Proxy (HSTS max‑age=31536000; includeSubDomains)

@@ -273,35 +273,34 @@ def _process_job(
             )
         else:
             vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
-    except VisionPermanentError as exc:
+    except VisionPermanentError:
+        # Avoid logging exception messages to prevent PII in logs.
         LOG.warning(
-            "Vision permanent error for submission %s job %s: %s",
+            "Vision permanent error for submission %s job %s",
             job.submission_id,
             job.id,
-            exc,
         )
         _handle_vision_error(
             conn=conn,
             job=job,
             submission_id=job.submission_id,
             now=now,
-            message=str(exc),
+            message="vision_failed",
             transient=False,
         )
         return
-    except VisionTransientError as exc:
+    except VisionTransientError:
         LOG.info(
-            "Vision transient error for submission %s job %s: %s",
+            "Vision transient error for submission %s job %s",
             job.submission_id,
             job.id,
-            exc,
         )
         _handle_vision_error(
             conn=conn,
             job=job,
             submission_id=job.submission_id,
             now=now,
-            message=str(exc),
+            message="vision_retrying",
             transient=True,
         )
         return
@@ -324,35 +323,33 @@ def _process_job(
                 analyze_kwargs["instruction_md"] = instr
                 analyze_kwargs["hints_md"] = hints
         feedback_result = feedback_adapter.analyze(**analyze_kwargs)  # type: ignore[arg-type]
-    except FeedbackPermanentError as exc:
+    except FeedbackPermanentError:
         LOG.warning(
-            "Feedback permanent error for submission %s job %s: %s",
+            "Feedback permanent error for submission %s job %s",
             job.submission_id,
             job.id,
-            exc,
         )
         _handle_feedback_error(
             conn=conn,
             job=job,
             submission_id=job.submission_id,
             now=now,
-            message=str(exc),
+            message="feedback_failed",
             transient=False,
         )
         return
-    except FeedbackTransientError as exc:
+    except FeedbackTransientError:
         LOG.info(
-            "Feedback transient error for submission %s job %s: %s",
+            "Feedback transient error for submission %s job %s",
             job.submission_id,
             job.id,
-            exc,
         )
         _handle_feedback_error(
             conn=conn,
             job=job,
             submission_id=job.submission_id,
             now=now,
-            message=str(exc),
+            message="feedback_retrying",
             transient=True,
         )
         return
@@ -449,12 +446,11 @@ def _handle_vision_error(
         telemetry.increment_counter("ai_worker_retry_total", phase="vision")
         next_visible = _nack_retry(conn=conn, job=job, now=now)
         LOG.warning(
-            "Vision retry scheduled for submission=%s job=%s retry=%s next_visible_at=%s reason=%s",
+            "Vision retry scheduled for submission=%s job=%s retry=%s next_visible_at=%s",
             submission_id,
             job.id,
             job.retry_count + 1,
             next_visible.isoformat(),
-            truncated,
         )
         return
 
@@ -485,12 +481,11 @@ def _handle_feedback_error(
         telemetry.increment_counter("ai_worker_retry_total", phase="feedback")
         next_visible = _nack_retry(conn=conn, job=job, now=now)
         LOG.warning(
-            "Feedback retry scheduled for submission=%s job=%s retry=%s next_visible_at=%s reason=%s",
+            "Feedback retry scheduled for submission=%s job=%s retry=%s next_visible_at=%s",
             submission_id,
             job.id,
             job.retry_count + 1,
             next_visible.isoformat(),
-            truncated,
         )
         return
 

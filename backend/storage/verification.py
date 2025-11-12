@@ -39,13 +39,27 @@ def _stream_hash_from_url(
         return (False, None, None, "http_client_unavailable")
 
     try:
+        # Enforce host allowlist: only permit downloads from the configured SUPABASE_URL host
+        from urllib.parse import urlparse
+
+        supabase_base = (os.getenv("SUPABASE_URL") or "").strip()
+        sup_host = urlparse(supabase_base).hostname or ""
+        target = urlparse(url)
+        tgt_host = target.hostname or ""
+        if not sup_host or (tgt_host != sup_host):
+            return (False, None, None, "untrusted_host")
+
         # Resolve dynamic cap at call time to avoid drift with central config
         limit = int(max_bytes) if isinstance(max_bytes, int) and max_bytes > 0 else get_learning_max_upload_bytes()
         h = _sha256()
         total = 0
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:  # type: ignore
+        # Do not follow redirects; unexpected redirects can escape the allowlisted host
+        with httpx.Client(timeout=timeout, follow_redirects=False) as client:  # type: ignore
             with client.stream("GET", url) as resp:  # type: ignore
-                if int(getattr(resp, "status_code", 500)) >= 400:
+                code = int(getattr(resp, "status_code", 500))
+                if 300 <= code < 400:
+                    return (False, None, None, "redirect_detected")
+                if code >= 400:
                     return (False, None, None, "download_error")
                 for chunk in resp.iter_bytes():  # type: ignore[attr-defined]
                     if not chunk:

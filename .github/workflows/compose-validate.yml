@@ -2,17 +2,35 @@ name: Compose Validate
 
 on:
   pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - '.env.example'
+      - 'Makefile'
+      - 'reverse-proxy/**'
+      - 'keycloak/**'
+      - '.github/workflows/compose-validate.yml'
   push:
-    branches: [ main, master ]
+    branches: [ main, master, development ]
+    paths:
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - '.env.example'
+      - 'Makefile'
+      - 'reverse-proxy/**'
+      - 'keycloak/**'
+      - '.github/workflows/compose-validate.yml'
 
 jobs:
   docker-validate:
     runs-on: ubuntu-latest
     steps:
+      # NOTE: For supply-chain hardening, pin to commit SHAs in CI once verified.
+      # uses: actions/checkout@<commit-sha>
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
+        # uses: docker/setup-buildx-action@<commit-sha>
         uses: docker/setup-buildx-action@v3
       - name: Validate docker compose config
         run: |
           make docker-validate
-

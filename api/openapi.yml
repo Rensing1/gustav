@@ -426,6 +426,7 @@ components:
         size_bytes:
           type: integer
           minimum: 1
+          maximum: 20971520
           description: Declared file size in bytes
     MaterialUploadIntentResponse:
       type: object
@@ -947,7 +948,6 @@ components:
                 is only populated once feedback has been issued. Internal extraction
                 metadata such as page keys is stored separately and never exposed.
               oneOf:
-                - type: 'null'
                 - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
                 - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
             feedback_md:

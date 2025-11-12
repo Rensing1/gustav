@@ -1012,7 +1012,8 @@ class DBLearningRepo:
             "sha256": sha256,
             "analysis_status": status,
             "analysis_json": analysis_payload,
-            "feedback_md": feedback_md if status != "pending" else None,
+            # Expose feedback only after analysis is fully completed.
+            "feedback_md": feedback_md if status == "completed" else None,
             "error_code": error_code,
             "vision_attempts": telemetry_attempts,
             "vision_last_error": _sanitize_error_message(vision_last_error),

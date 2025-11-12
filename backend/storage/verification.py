@@ -15,12 +15,14 @@ from pathlib import Path
 from typing import Protocol
 
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
+from backend.storage.config import get_learning_max_upload_bytes
 
-# Conservative upper bound to protect server memory when verifying by download.
-# Must be kept in sync with learning upload policy (10 MiB).
-_SAFE_MAX_BYTES = 10 * 1024 * 1024
-
-def _stream_hash_from_url(url: str, *, timeout: float = 15.0, max_bytes: int = _SAFE_MAX_BYTES) -> tuple[bool, str | None, int | None, str]:
+def _stream_hash_from_url(
+    url: str,
+    *,
+    timeout: float = 15.0,
+    max_bytes: int | None = None,
+) -> tuple[bool, str | None, int | None, str]:
     """
     Download content from a URL and compute its SHA-256 in a streaming fashion.
 
@@ -29,6 +31,7 @@ def _stream_hash_from_url(url: str, *, timeout: float = 15.0, max_bytes: int = _
     Notes:
         - Uses httpx if available; otherwise, returns a failure.
         - Enforces a hard maximum on downloaded bytes to avoid memory pressure.
+          Limit is read from centralized config (LEARNING_MAX_UPLOAD_BYTES).
     """
     try:
         import httpx  # type: ignore
@@ -36,6 +39,8 @@ def _stream_hash_from_url(url: str, *, timeout: float = 15.0, max_bytes: int = _
         return (False, None, None, "http_client_unavailable")
 
     try:
+        # Resolve dynamic cap at call time to avoid drift with central config
+        limit = int(max_bytes) if isinstance(max_bytes, int) and max_bytes > 0 else get_learning_max_upload_bytes()
         h = _sha256()
         total = 0
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:  # type: ignore
@@ -46,7 +51,7 @@ def _stream_hash_from_url(url: str, *, timeout: float = 15.0, max_bytes: int = _
                     if not chunk:
                         continue
                     total += len(chunk)
-                    if total > max_bytes:
+                    if total > limit:
                         return (False, None, total, "size_exceeded")
                     h.update(chunk)
         return (True, h.hexdigest(), total, "ok")
@@ -159,7 +164,11 @@ def verify_storage_object_integrity(
         except Exception:
             url = None
         if isinstance(url, str) and url:
-            ok, actual_sha, actual_size, reason = _stream_hash_from_url(url, timeout=15.0, max_bytes=_SAFE_MAX_BYTES)
+            ok, actual_sha, actual_size, reason = _stream_hash_from_url(
+                url,
+                timeout=15.0,
+                max_bytes=get_learning_max_upload_bytes(),
+            )
             if ok and isinstance(actual_sha, str):
                 # If expected size is known, enforce it too
                 try:

@@ -15,12 +15,36 @@ info:
 servers:
   - url: /
 
+# All endpoints require an authenticated session by default.
+# Public endpoints explicitly override with `security: []` at operation level.
+security:
+  - cookieAuth: []
+
 components:
   securitySchemes:
     cookieAuth:
       type: apiKey
       in: cookie
       name: gustav_session
+  responses:
+    Unauthorized401:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            default:
+              value: { error: "unauthorized" }
+    Forbidden403:
+      description: Insufficient permissions for the requested resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            default:
+              value: { error: "forbidden" }
   schemas:
     Role:
       type: string
@@ -2045,6 +2069,7 @@ paths:
         generates and manages the opaque `state` (CSRF) and a `nonce` (replay
         protection) for the OIDC flow; clients MUST NOT provide these values.
       operationId: startLogin
+      security: []
       parameters:
         - in: query
           name: redirect
@@ -2112,6 +2137,7 @@ paths:
       summary: OAuth2/OIDC callback from Keycloak
       description: Handles the authorization code, sets session cookie, and redirects.
       operationId: authCallback
+      security: []
       parameters:
         - in: query
           name: code
@@ -2223,6 +2249,7 @@ paths:
       summary: Redirect to IdP forgot password page
       description: Redirect to Keycloak password reset page.
       operationId: forgotPassword
+      security: []
       parameters:
         - in: query
           name: login_hint
@@ -2260,6 +2287,7 @@ paths:
         includes a `nonce` parameter (replay protection) in the authorization request,
         analogous to `/auth/login`.
       operationId: startRegistration
+      security: []
       parameters:
         - in: query
           name: login_hint

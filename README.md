@@ -36,6 +36,8 @@ gustav-alpha2/
   - `LEARNING_MAX_UPLOAD_BYTES` (Default 10485760 = 10 MiB)
   - Optional (nur für gezielte lokale E2E): `AUTO_CREATE_STORAGE_BUCKETS=true` erlaubt temporär Auto‑Provisioning. In regulären Setups immer `false`; der Startschutz (Prod‑Guard) verhindert unsichere Prod‑Konfigurationen.
 
+- Hinweis: Falls signierte URLs im lokalen Umfeld interne Hosts enthalten, kann `SUPABASE_REWRITE_SIGNED_URL_HOST=true` gesetzt werden. Nur in Dev/Test nutzen; in Prod/Stage bleibt der Wert strikt `false`.
+
 Schlüssel (storage_key) – Konventionen:
 - Teaching: `materials/{unit_id}/{section_id}/{material_id}/{uuid}.{ext}`
 - Learning: `submissions/{course_id}/{task_id}/{student_sub}/{epoch_ms}-{uuid}.{ext}`

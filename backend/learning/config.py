@@ -85,9 +85,9 @@ def load_ai_config() -> AIConfig:
     vision_adapter = os.getenv("LEARNING_VISION_ADAPTER", default_vision)
     feedback_adapter = os.getenv("LEARNING_FEEDBACK_ADAPTER", default_feedback)
 
-    # Models and timeouts
-    vision_model = os.getenv("AI_VISION_MODEL", "qwen2.5-vl:7b")
-    feedback_model = os.getenv("AI_FEEDBACK_MODEL", "qwen2.5:7b-instruct")
+    # Models and timeouts (align defaults with .env.example and README)
+    vision_model = os.getenv("AI_VISION_MODEL", "qwen2.5vl:3b")
+    feedback_model = os.getenv("AI_FEEDBACK_MODEL", "gpt-oss:latest")
     timeout_vision = _int_env("AI_TIMEOUT_VISION", 30)
     timeout_feedback = _int_env("AI_TIMEOUT_FEEDBACK", 15)
 

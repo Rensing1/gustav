@@ -369,3 +369,26 @@ def _reset_settings_environment_override():
     except Exception:
         pass
     yield
+
+
+@pytest.fixture(autouse=True)
+def _configure_dspy_cache_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Ensure DSPy/diskcache can write a cache directory during import.
+
+    Some DSPy versions instantiate a disk-backed cache at import time. On
+    read-only or unusual environments this can fail with sqlite OperationalError
+    (readonly database). Point XDG/HOME and a dedicated DSPY cache dir to a
+    temporary, writable path to keep the import stable across CI setups.
+    """
+    try:
+        cache_root = tmp_path / "dspy_cache"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        # Common envs consulted by cache libraries
+        monkeypatch.setenv("XDG_CACHE_HOME", str(cache_root))
+        monkeypatch.setenv("HOME", str(tmp_path))
+        # Best-effort hints for DSPy variants
+        monkeypatch.setenv("DSPY_CACHE_DIR", str(cache_root))
+        monkeypatch.setenv("DISKCACHE_DIR", str(cache_root))
+    except Exception:
+        pass
+    yield

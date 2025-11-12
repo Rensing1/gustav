@@ -274,12 +274,12 @@ def _process_job(
         else:
             vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
     except VisionPermanentError as exc:
-        # Log sanitized reason for operator visibility; student content is not included in exceptions.
+        # Log only the exception class to avoid leaking PII/prompt content in logs.
         LOG.warning(
             "Vision permanent error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_vision_error(
             conn=conn,
@@ -291,11 +291,12 @@ def _process_job(
         )
         return
     except VisionTransientError as exc:
+        # Keep logs free of raw messages; store truncated details in DB instead.
         LOG.info(
             "Vision transient error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_vision_error(
             conn=conn,
@@ -330,7 +331,7 @@ def _process_job(
             "Feedback permanent error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_feedback_error(
             conn=conn,
@@ -346,7 +347,7 @@ def _process_job(
             "Feedback transient error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_feedback_error(
             conn=conn,

@@ -534,7 +534,7 @@ async def test_callback_sets_secure_cookie_flags_in_prod(monkeypatch: pytest.Mon
     assert "gustav_session=" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
-    assert "SameSite=strict" in set_cookie
+    assert "SameSite=lax" in set_cookie
 
 
 @pytest.mark.anyio
@@ -567,7 +567,7 @@ async def test_logout_uses_secure_cookie_flags_in_prod(monkeypatch: pytest.Monke
     assert "gustav_session=" in set_cookie
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
     assert "Secure" in set_cookie
-    assert "SameSite=strict" in set_cookie
+    assert "SameSite=lax" in set_cookie
 
 
 @pytest.mark.anyio
@@ -738,6 +738,6 @@ async def test_callback_sets_cookie_flags_and_no_max_age(monkeypatch: pytest.Mon
     sc = resp.headers.get("set-cookie", "")
     assert "gustav_session=" in sc
     assert "HttpOnly" in sc
-    assert "SameSite=strict" in sc
+    assert "SameSite=lax" in sc
     assert "Secure" in sc
     assert "Max-Age=" not in sc and "max-age=" not in sc

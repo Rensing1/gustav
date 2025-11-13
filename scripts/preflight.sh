@@ -3,8 +3,8 @@ set -euo pipefail
 
 echo "== GUSTAV Preflight =="
 
-WEB_BASE=${WEB_BASE:-http://app.localhost:8100}
-KC_BASE=${KC_BASE:-http://id.localhost:8100}
+WEB_BASE=${WEB_BASE:-http://app.localhost}
+KC_BASE=${KC_BASE:-http://id.localhost}
 KC_REALM=${KC_REALM:-gustav}
 DB_HOST=${DB_HOST:-127.0.0.1}
 DB_PORT=${DB_PORT:-54322}

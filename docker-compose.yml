@@ -3,7 +3,8 @@ services:
     image: caddy:2-alpine
     container_name: gustav-caddy
     ports:
-      - "8100:443"
+      - "80:80"
+      - "443:443"
     volumes:
       - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
@@ -12,6 +13,7 @@ services:
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
+      - supabase_network_gustav-alpha2
 
   web:
     build: .
@@ -38,20 +40,22 @@ services:
     environment:
       # Internal Supabase gateway (Kong) reachable via shared network
       - SUPABASE_URL=http://supabase_kong_gustav-alpha2:8000
+      # Browser-facing public Supabase base (used in signed URLs)
+      - SUPABASE_PUBLIC_URL=https://app.localhost
       # Same-origin proxy for Storage uploads to avoid browser CORS issues
       - ENABLE_STORAGE_UPLOAD_PROXY=false
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       - KC_BASE_URL=${KC_BASE_URL:-http://keycloak:8080}
-      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost:8100}
+      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
       # Keycloak Admin API credentials for /api/users/search and name resolution
       - KC_ADMIN_USERNAME=${KC_ADMIN_USERNAME:-admin}
       - KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-admin}
       # Browser-facing app base controls callback host
-      - WEB_BASE=${WEB_BASE:-https://app.localhost:8100}
-      - REDIRECT_URI=${WEB_BASE:-https://app.localhost:8100}/auth/callback
+      - WEB_BASE=${WEB_BASE:-https://app.localhost}
+      - REDIRECT_URI=${WEB_BASE:-https://app.localhost}/auth/callback
       # Trust reverse-proxy headers for Same-Origin checks in CSRF logic
       - GUSTAV_TRUST_PROXY=true
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
@@ -153,8 +157,8 @@ services:
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
       KC_DB_URL_PROPERTIES: ${KC_DB_URL_PROPERTIES:-sslmode=disable}
       KC_PROXY: edge
-      KC_HOSTNAME_URL: https://id.localhost:8100
-      KC_HOSTNAME_ADMIN_URL: https://id.localhost:8100
+      KC_HOSTNAME_URL: https://id.localhost
+      KC_HOSTNAME_ADMIN_URL: https://id.localhost
     depends_on:
       keycloak-db:
         condition: service_healthy

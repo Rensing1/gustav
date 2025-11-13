@@ -126,7 +126,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 2) Login auf IdP‑UI (gebrandet). `GET /auth/register` nutzt ebenfalls den Auth‑Endpoint und setzt `kc_action=register` (statt altem `…/registrations`‑Pfad), optional mit `login_hint`.
 3) IdP → Redirect zu `REDIRECT_URI` (z. B. `http://app.localhost:8100/auth/callback`).
 4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
-5) Web legt Serversession an und setzt `gustav_session` (httpOnly; in DEV SameSite=lax, in PROD strict + Secure).
+5) Web legt Serversession an und setzt `gustav_session` (httpOnly; Secure; SameSite=lax) — einheitlich in DEV und PROD.
 6) HTMX-Anfragen (Sidebar-Link) erhalten statt 302 ein `204` mit `HX-Redirect`, damit der Browser trotzdem voll zur IdP-URL navigiert und der PKCE-State bestehen bleibt.
 
 ## API Contract‑First (Vorgehen)
@@ -181,7 +181,7 @@ E2E‑Tests (Identity):
 - `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
 
 #### CSRF‑Strategie (Browser‑Flows)
-- Same‑Site Cookies: Immer `SameSite=strict` + `Secure` (dev = prod).
+- Same‑Site Cookies: `SameSite=lax` + `Secure` (dev = prod). Lax erlaubt Top‑Level OIDC‑Redirects, ohne Drittanbieter‑Kontexte zuzulassen.
 - Server prüft bei schreibenden Endpunkten die **Origin** (Same‑Origin‑Pflicht):
   - Learning: z. B. `POST /api/learning/.../submissions`
   - Teaching: alle Schreib‑APIs (z. B. `POST /api/teaching/courses`, `POST/PATCH /api/teaching/units`, Reorder/Materials/Tasks/Members)
@@ -206,7 +206,7 @@ E2E‑Tests (Identity):
 
 #### Nonce & Session‑TTL
 - Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: private, no-store`.
-- Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). Das `gustav_session`‑Cookie wird immer mit `HttpOnly; Secure; SameSite=strict` gesetzt (dev = prod). `Max-Age` kann je nach Deployment variieren.
+- Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). Das `gustav_session`‑Cookie wird immer mit `HttpOnly; Secure; SameSite=lax` gesetzt (dev = prod). `Max-Age` kann je nach Deployment variieren.
 - /api/me: liefert zusätzlich `expires_at` (UTC‑ISO‑8601), damit Clients die Restlaufzeit anzeigen können. Antworten sind nie cachebar.
 
 ## Deployment & Betrieb

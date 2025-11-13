@@ -22,6 +22,7 @@ help:
 	@echo "  supabase-sync-env  - Sync Supabase service role key into .env"
 	@echo "  import-legacy      - Import legacy Supabase dump with Keycloak mapping"
 	@echo "  import-legacy-dry  - Dry-run for the legacy import (no writes)"
+	@echo "  import-legacy-all  - Full import: users (Keycloak) + data (courses, memberships, …)"
 	@echo "  docker-validate    - Validate docker compose config (catches syntax/vars)"
 
 .PHONY: up
@@ -100,8 +101,11 @@ DSN ?= postgresql://postgres:postgres@127.0.0.1:54322/postgres
 LEGACY_SCHEMA ?= legacy_raw
 WORKDIR ?= .tmp/migration_run
 
-# Keycloak admin/API is exposed via Caddy with TLS on 8100 for host access
-KC_BASE_URL ?= https://127.0.0.1:8100
+# Temp legacy DB (for user import from original schemas, incl. auth.users)
+LEGACY_TMPDB ?= legacy_import
+
+# Keycloak admin/API via Caddy with proper hostname for TLS
+KC_BASE_URL ?= https://id.localhost
 KC_HOST_HEADER ?= id.localhost
 KC_REALM ?= gustav
 KC_ADMIN_USER ?= admin
@@ -114,7 +118,13 @@ endif
 import-legacy:
 	# Auto-load .env into the environment for this target (export all)
 	@set -a; [ -f .env ] && . ./.env; set +a; \
+	# Ensure local CA bundle from Caddy is available for Keycloak admin HTTPS
+	mkdir -p .tmp; \
+	if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
+	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	fi; \
 	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
 	./.venv/bin/python scripts/import_legacy_backup.py \
 	  --dump $(DUMP) \
 	  --dsn $(DSN) \
@@ -130,7 +140,13 @@ import-legacy:
 import-legacy-dry:
 	# Auto-load .env into the environment for this target (export all)
 	@set -a; [ -f .env ] && . ./.env; set +a; \
+	# Ensure local CA bundle from Caddy is available for Keycloak admin HTTPS
+	mkdir -p .tmp; \
+	if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
+	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	fi; \
 	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
 	./.venv/bin/python scripts/import_legacy_backup.py \
 	  --dump $(DUMP) \
 	  --dsn $(DSN) \
@@ -142,6 +158,40 @@ import-legacy-dry:
 	  --kc-admin-user $(KC_ADMIN_USER) \
 	  --dry-run \
 	  --verbose
+
+.PHONY: import-legacy-all
+ifeq ($(VERBOSE),)
+.SILENT: import-legacy-all
+endif
+import-legacy-all:
+	@echo "[1/5] Prepare CA bundle for Keycloak admin HTTPS"
+	mkdir -p .tmp; \
+	if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
+	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	fi
+	@echo "[2/5] Restore minimal legacy subset into temporary DB '$(LEGACY_TMPDB)' for user import"
+	@chmod +x scripts/restore_legacy_subset.sh; \
+	scripts/restore_legacy_subset.sh \
+	  "$(DUMP)" \
+	  "$(DB_HOST)" "$(DB_PORT)" "$(DB_SUPERUSER)" "$(DB_SUPERPASSWORD)" \
+	  "$(LEGACY_TMPDB)" \
+	  "$(WORKDIR)"
+	@echo "[3/5] Import users into Keycloak from legacy DB"
+	set -e; \
+	LEGACY_DSN=postgresql://$(DB_SUPERUSER):$(DB_SUPERPASSWORD)@$(DB_HOST):$(DB_PORT)/$(LEGACY_TMPDB); \
+	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
+	./.venv/bin/python -m backend.tools.legacy_user_import \
+	  --legacy-dsn $$LEGACY_DSN \
+	  --kc-base-url $(KC_BASE_URL) \
+	  --kc-host-header $(KC_HOST_HEADER) \
+	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --kc-admin-pass $(KC_ADMIN_PASS) \
+	  --realm $(KC_REALM) \
+	  --force-replace
+	@echo "[4/5] Import domain data (courses, memberships, units, …) into current DB"
+	$(MAKE) import-legacy VERBOSE=$(VERBOSE)
+	@echo "[5/5] Done. You may drop the temp DB with: dropdb -h $(DB_HOST) -p $(DB_PORT) -U $(DB_SUPERUSER) $(LEGACY_TMPDB)"
 
 .PHONY: docker-validate
 docker-validate:

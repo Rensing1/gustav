@@ -39,15 +39,31 @@ def _stream_hash_from_url(
         return (False, None, None, "http_client_unavailable")
 
     try:
-        # Enforce host allowlist: only permit downloads from the configured SUPABASE_URL host
+        # Enforce host allowlist: only permit downloads from trusted storage hosts
+        # Trust either the internal SUPABASE_URL host (Kong) or the browser-facing
+        # SUPABASE_PUBLIC_URL host when a path-proxy is used (same-origin setups).
         from urllib.parse import urlparse
 
         supabase_base = (os.getenv("SUPABASE_URL") or "").strip()
+        public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
         sup_host = urlparse(supabase_base).hostname or ""
+        pub_host = urlparse(public_base).hostname or ""
         target = urlparse(url)
         tgt_host = target.hostname or ""
-        if not sup_host or (tgt_host != sup_host):
+        allowed_hosts = {h for h in (sup_host, pub_host) if h}
+        if not allowed_hosts or (tgt_host not in allowed_hosts):
             return (False, None, None, "untrusted_host")
+
+        # Prefer internal gateway for server-side verification to avoid TLS trust
+        # issues against the browser-facing host (e.g., local Caddy CA). If the
+        # download URL uses the public host and an internal SUPABASE_URL exists,
+        # rewrite scheme/host/port to the internal base while preserving path/query.
+        if pub_host and sup_host and tgt_host == pub_host and supabase_base:
+            tb = urlparse(url)
+            ib = urlparse(supabase_base)
+            if ib.scheme and ib.netloc:
+                netloc = ib.netloc
+                url = tb._replace(scheme=ib.scheme, netloc=netloc).geturl()
 
         # Resolve dynamic cap at call time to avoid drift with central config
         limit = int(max_bytes) if isinstance(max_bytes, int) and max_bytes > 0 else get_learning_max_upload_bytes()

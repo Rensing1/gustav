@@ -23,6 +23,10 @@ def cookie_opts(environment: str) -> dict:
 
     Returns a mapping with keys:
       - secure: True
-      - samesite: "strict"
+      - samesite: "lax"  # Allow top-level OAuth redirects to set/send cookie
     """
-    return {"secure": True, "samesite": "strict"}
+    # SameSite=Lax is the recommended default for session cookies so that
+    # cookies are sent on top-level navigations (e.g., after an OAuth/OIDC
+    # redirect back from the identity provider). "Strict" would break the
+    # login flow by suppressing the Set-Cookie/Send in cross-site redirects.
+    return {"secure": True, "samesite": "lax"}

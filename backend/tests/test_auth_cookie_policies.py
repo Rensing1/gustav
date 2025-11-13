@@ -67,8 +67,8 @@ async def test_callback_sets_host_only_cookie_dev(monkeypatch: pytest.MonkeyPatc
     sc = r.headers.get("set-cookie", "")
     # Host-only: no Domain attribute present
     assert "Domain=" not in sc and "domain=" not in sc
-    # Einheitliche Flags (auch in dev): Secure + SameSite=strict
-    assert "SameSite=strict" in sc
+    # Einheitliche Flags (auch in dev): Secure + SameSite=lax
+    assert "SameSite=lax" in sc
     assert "Secure" in sc
 
 
@@ -90,5 +90,5 @@ async def test_callback_sets_host_only_cookie_prod(monkeypatch: pytest.MonkeyPat
     sc = r.headers.get("set-cookie", "")
     # Host-only cookie (no Domain attribute) even in prod
     assert "Domain=" not in sc and "domain=" not in sc
-    assert "SameSite=strict" in sc
+    assert "SameSite=lax" in sc
     assert "Secure" in sc

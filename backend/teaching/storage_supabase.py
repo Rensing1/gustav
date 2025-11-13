@@ -257,32 +257,38 @@ class SupabaseStorageAdapter(StorageAdapterProtocol):
     # --- Local helpers ---------------------------------------------------------
 
     def _normalize_signed_url_host(self, url: str) -> str:
-        """For local dev, rewrite signed URL host to SUPABASE_URL host.
+        """Normalize signed URL host to a browser-reachable base.
 
         Why:
-            Some local setups return signed URLs with container-internal hosts
-            that are not resolvable from the test runner. Rewriting the host to
-            the configured SUPABASE_URL keeps signatures valid (token is path‑
-            bound) and makes direct PUT/GET calls succeed.
+            Local and containerized setups may return signed URLs pointing at
+            an internal host that browsers cannot reach. Prefer a configured
+            SUPABASE_PUBLIC_URL for browser use (dev = prod). If not provided,
+            optionally fall back to SUPABASE_URL when explicitly enabled.
 
         Behavior:
-            - Only rewrites when SUPABASE_URL is set and appears local
-              (host is 127.0.0.1 or localhost), or when the explicit toggle
-              SUPABASE_REWRITE_SIGNED_URL_HOST=true is set.
-            - Scheme and port are taken from SUPABASE_URL; path/query/fragment
-              are preserved from the original signed URL.
+            - If SUPABASE_PUBLIC_URL is set, always rewrite host/scheme/port to
+              that base and preserve path/query/fragment.
+            - Else, rewrite to SUPABASE_URL only when
+              SUPABASE_REWRITE_SIGNED_URL_HOST=true is set to avoid surprises.
+            - Ensure "/storage/v1" prefix when the path starts with legacy
+              forms like "/object/" or "/sign/". Collapse duplicate slashes.
         """
-        base = (os.getenv("SUPABASE_URL") or "").strip()
-        if not base:
+        public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
+        internal_base = (os.getenv("SUPABASE_URL") or "").strip()
+        # Choose target base: public preferred, otherwise guarded internal
+        target_base = ""
+        if public_base:
+            target_base = public_base
+        else:
+            force = (os.getenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "false").lower() == "true")
+            if force and internal_base:
+                target_base = internal_base
+        if not target_base:
             return url
         try:
             src = _urlparse(url)
-            dst = _urlparse(base)
+            dst = _urlparse(target_base)
             if not src.scheme or not src.netloc:
-                return url
-            # Only rewrite when explicitly enabled to avoid surprising unit tests.
-            force = (os.getenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "false").lower() == "true")
-            if not force:
                 return url
             # If hosts already match, keep as is.
             if (src.hostname, src.port, src.scheme) == (dst.hostname, dst.port, dst.scheme):

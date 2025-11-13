@@ -225,17 +225,35 @@ async def auth_enforcement(request: Request, call_next):
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     # Baseline defensive headers
+    # Build connect-src dynamically to allow the configured public Supabase URL
+    # if it differs from the app origin. This keeps uploads working during
+    # transitions (e.g., subdomain vs. same-origin path proxy) without
+    # weakening CSP more than necessary.
+    extra_connect = []
+    try:
+        pub = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
+        if pub:
+            from urllib.parse import urlparse as _p
+            p = _p(pub)
+            if p.scheme and p.netloc:
+                # include scheme://host[:port] once
+                netloc = p.netloc
+                extra_connect.append(f"{p.scheme}://{netloc}")
+    except Exception:
+        pass
+    connect_src = "'self'" + (" " + " ".join(dict.fromkeys(extra_connect)) if extra_connect else "")
+
     if SETTINGS.environment == "prod":
         # Harden CSP in production: avoid 'unsafe-inline' to reduce XSS surface.
         csp = (
             "default-src 'self'; script-src 'self'; style-src 'self'; "
-            "img-src 'self' data:; font-src 'self' data:; connect-src 'self';"
+            f"img-src 'self' data'; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
         )
     else:
         # Developer experience: allow inline for local SSR templates/components.
         csp = (
             "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; font-src 'self' data:; connect-src 'self';"
+            f"img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
         )
     response.headers.setdefault("Content-Security-Policy", csp)
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
@@ -1171,37 +1189,6 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     sections = []
             # Render neutral message when none are released
             if not sections:
-                # Render a helpful placeholder including the submission form UI so
-                # students can still see how to submit when no tasks are listed yet.
-                placeholder_form = (
-                    '<section class="card"><h2>Aufgabe</h2>'
-                    '<form method="post" action="#" class="task-submit-form" data-mode="text">'
-                    '<fieldset class="choice-cards" aria-label="Abgabeart">'
-                    '<label class="choice-card choice-card--text">'
-                    '<input type="radio" name="mode" value="text" checked>'
-                    '<span class="choice-card__title">📝 Text</span>'
-                    '</label>'
-                    '<label class="choice-card choice-card--upload">'
-                    '<input type="radio" name="mode" value="upload">'
-                    '<span class="choice-card__title">⬆️ Upload</span>'
-                    '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
-                    '</label>'
-                    '</fieldset>'
-                    '<div class="task-form-fields fields-text">'
-                    '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
-                    '</div>'
-                    '<div class="task-form-fields fields-upload" hidden>'
-                    '<label>Datei auswählen '
-                    '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-                    '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
-                    '<input type="hidden" name="storage_key" value="">'
-                    '<input type="hidden" name="mime_type" value="">'
-                    '<input type="hidden" name="size_bytes" value="">'
-                    '<input type="hidden" name="sha256" value="">'
-                    '</div>'
-                    '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
-                    '</form></section>'
-                )
                 return HTMLResponse(
                     content=Layout(
                         title=Component.escape(unit_title),
@@ -1210,7 +1197,6 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             f"<h1>{Component.escape(unit_title)}</h1>"
                             f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
                             "<section class=\"card\"><p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p></section>"
-                            f"{placeholder_form}"
                             "</div>"
                         ),
                         user=user,
@@ -1356,37 +1342,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
         if idx < len(sections) - 1:
             parts.append("<hr class=\"section-separator\">")
 
-    # Always include a minimal submit form as a UX safety net so students see
-    # the choice cards even if no tasks could be resolved in this view.
-    placeholder_form = (
-        '<form method="post" action="#" class="task-submit-form" data-mode="text">'
-        '<fieldset class="choice-cards" aria-label="Abgabeart">'
-        '<label class="choice-card choice-card--text">'
-        '<input type="radio" name="mode" value="text" checked>'
-        '<span class="choice-card__title">📝 Text</span>'
-            '</label>'
-            '<label class="choice-card choice-card--upload">'
-            '<input type="radio" name="mode" value="upload">'
-            '<span class="choice-card__title">⬆️ Upload</span>'
-            '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
-            '</label>'
-            '</fieldset>'
-            '<div class="task-form-fields fields-text">'
-            '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
-            '</div>'
-            '<div class="task-form-fields fields-upload" hidden>'
-            '<label>Datei auswählen '
-            '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-            '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
-            '<input type="hidden" name="storage_key" value="">'
-            '<input type="hidden" name="mime_type" value="">'
-            '<input type="hidden" name="size_bytes" value="">'
-            '<input type="hidden" name="sha256" value="">'
-            '</div>'
-        '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
-        '</form>'
-    )
-    parts.insert(0, TaskCard(task_id="placeholder", title="Aufgabe", instruction_html="", history_entries=[], history_placeholder_html="", feedback_banner_html=None, form_html=placeholder_form).render())
+    # Removed placeholder TaskCard: the page now only shows actual materials and tasks.
 
     # Ensure at least one history placeholder exists for real tasks when the
     # Learning API is unavailable: derive task IDs from the Teaching repo and
@@ -1710,6 +1666,9 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
             headers["HX-Trigger"] = _json.dumps({
                 "showMessage": {"message": "Abgabe fehlgeschlagen", "type": "error"}
             })
+            # In non-prod, surface a minimal diagnostic header to aid debugging.
+            if diag_header and SETTINGS.environment != "prod":
+                headers["X-Diag"] = diag_header
             # Do not leak diagnostics to clients in error cases.
             return HTMLResponse(content=f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history"></section>', status_code=400, headers=headers)
 

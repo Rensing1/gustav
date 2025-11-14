@@ -4858,6 +4858,9 @@ paths:
       responses:
         '200':
           description: Upload stored
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
@@ -4872,16 +4875,40 @@ paths:
                     minimum: 1
         '400':
           description: Bad request
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '403':
           description: Forbidden (CSRF)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Feature disabled (ENABLE_DEV_UPLOAD_STUB=false)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/learning/internal/upload-proxy:
     x-internal: true
     put:
@@ -4904,6 +4931,15 @@ paths:
             type: string
             format: uri
           description: Absolute presigned HTTPS URL returned by the upload-intents endpoint (must match SUPABASE_URL host).
+        - in: query
+          name: headers
+          required: false
+          schema:
+            type: string
+            format: byte
+          description: >-
+            Opaque, base64url-encoded JSON of the presign headers provided by the upload intent. Clients forward the
+            payload verbatim; the server replays the exact headers when proxying to Supabase.
       requestBody:
         required: true
         content:
@@ -4931,24 +4967,36 @@ paths:
                     minimum: 1
         '400':
           description: Bad request (missing_url | invalid_url | invalid_url_host | empty_body | size_exceeded | mime_not_allowed)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Forbidden (CSRF violation)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Feature disabled (ENABLE_STORAGE_UPLOAD_PROXY=false)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:

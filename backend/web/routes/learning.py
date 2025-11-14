@@ -10,6 +10,8 @@ if __name__ == "backend.web.routes.learning":
 elif __name__ == "routes.learning":
     sys.modules.setdefault("backend.web.routes.learning", sys.modules[__name__])
 
+import base64
+import json
 import os
 import sys as _sys
 from typing import Any
@@ -102,16 +104,94 @@ def _upload_proxy_timeout_seconds() -> float:
     return max(5.0, min(value, 120.0))
 
 
+def _encode_proxy_headers(headers: Any) -> str | None:
+    """Return a base64url-encoded JSON payload containing presign headers."""
+    if not headers:
+        return None
+    try:
+        mapping = dict(headers)
+    except Exception:
+        return None
+    safe: dict[str, str] = {}
+    for key, value in mapping.items():
+        if key is None or value is None:
+            continue
+        k = str(key).strip()
+        if not k:
+            continue
+        safe[k] = str(value)
+    if not safe:
+        return None
+    raw = json.dumps(safe, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_proxy_headers(token: str | None) -> dict[str, str]:
+    if not token:
+        return {}
+    try:
+        padded = token + "=" * (-len(token) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode("ascii"))
+        parsed = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    safe: dict[str, str] = {}
+    for key, value in parsed.items():
+        if isinstance(key, str) and isinstance(value, str):
+            safe[key] = value
+    return safe
+
+
+async def _read_request_stream_with_limit(request: Request, limit: int) -> tuple[bytes | None, str | None]:
+    """Consume the request stream without buffering unlimited bytes."""
+
+    total = 0
+    buffer = bytearray()
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        buffer.extend(chunk)
+        total += len(chunk)
+        if limit > 0 and total > limit:
+            return None, "size_exceeded"
+    if not buffer:
+        return None, "empty_body"
+    return bytes(buffer), None
+
+
+def _normalized_parts(parsed) -> tuple[str, str, int | None]:  # type: ignore[override]
+    scheme = (getattr(parsed, "scheme", "") or "").lower()
+    host = (getattr(parsed, "hostname", "") or "").lower()
+    port = getattr(parsed, "port", None)
+    if port is None:
+        if scheme == "https":
+            port = 443
+        elif scheme == "http":
+            port = 80
+    return scheme, host, port
+
+
 async def _async_forward_upload(
     *,
     url: str,
     payload: bytes,
     content_type: str,
     timeout: float,
+    headers: dict[str, str] | None = None,
 ) -> httpx.Response:
     """Forward the upload to Supabase (patchable for tests)."""
+    send_headers: dict[str, str] = {}
+    if headers:
+        for key, value in headers.items():
+            if key is None or value is None:
+                continue
+            send_headers[str(key)] = str(value)
+    if not any(str(k).lower() == "content-type" for k in send_headers):
+        send_headers["Content-Type"] = content_type
     async with httpx.AsyncClient(timeout=timeout) as client:
-        return await client.put(url, content=payload, headers={"Content-Type": content_type})
+        return await client.put(url, content=payload, headers=send_headers)
 
 
 def _cache_headers_success() -> dict[str, str]:
@@ -1041,21 +1121,27 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     # Apply same-origin proxy when enabled and the presign target host matches
     # our configured SUPABASE_URL host. This keeps behavior stable for fakes
     # in tests and avoids coupling to a specific adapter class name.
+    try:
+        headers_src: dict[str, Any] = dict(presigned.get("headers") or upload_headers)
+    except Exception:
+        headers_src = dict(upload_headers)
+    proxy_headers_token = _encode_proxy_headers(headers_src)
+
     if _upload_proxy_enabled():
         base = (os.getenv("SUPABASE_URL") or "").strip()
         try:
-            th = _urlparse(str(presign_url)).hostname or ""
-            bh = _urlparse(base).hostname or ""
+            parsed_target = _urlparse(str(presign_url))
+            parsed_base = _urlparse(base)
+            th = parsed_target.hostname or ""
+            bh = parsed_base.hostname or ""
         except Exception:
             th = bh = ""
         if th and bh and th == bh:
             # Same-origin proxy to avoid Storage CORS; target url is passed as query
             url_out = f"/api/learning/internal/upload-proxy?url={_quote(str(presign_url))}"
+            if proxy_headers_token:
+                url_out += f"&headers={_quote(proxy_headers_token)}"
     # Normalize response headers to lower-case keys for stability across clients.
-    try:
-        headers_src = dict(presigned.get("headers") or upload_headers)
-    except Exception:
-        headers_src = presigned.get("headers") or upload_headers
     # Provide both canonical casings for compatibility with tests and clients.
     headers_out = {}
     for k, v in dict(headers_src).items():
@@ -1152,12 +1238,9 @@ async def internal_upload_stub(request: Request):
     if common != str(base):
         return JSONResponse({"error": "bad_request", "detail": "path_escape"}, status_code=400, headers=_cache_headers_error())
 
-    # Read body bytes; enforce size limit.
-    body = await request.body()
-    if not body:
-        return JSONResponse({"error": "bad_request", "detail": "empty_body"}, status_code=400, headers=_cache_headers_error())
-    if len(body) > _max_upload_bytes():
-        return JSONResponse({"error": "bad_request", "detail": "size_exceeded"}, status_code=400, headers=_cache_headers_error())
+    body, body_error = await _read_request_stream_with_limit(request, _max_upload_bytes())
+    if body_error:
+        return JSONResponse({"error": "bad_request", "detail": body_error}, status_code=400, headers=_cache_headers_error())
 
     # Ensure parent dirs exist and write the file.
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -1196,6 +1279,8 @@ async def internal_upload_proxy(request: Request):
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
     target = str(request.query_params.get("url") or "").strip()
+    header_token = str(request.query_params.get("headers") or "").strip()
+    forward_headers = _decode_proxy_headers(header_token)
     if not target:
         return JSONResponse({"error": "bad_request", "detail": "missing_url"}, status_code=400, headers=_cache_headers_error())
     base = (os.getenv("SUPABASE_URL") or "").strip()
@@ -1205,21 +1290,21 @@ async def internal_upload_proxy(request: Request):
     except Exception:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
 
-    scheme = (parsed_target.scheme or "").lower()
-    target_host = (parsed_target.hostname or "").lower()
-    base_host = (parsed_base.hostname or "").lower()
+    target_scheme, target_host, target_port = _normalized_parts(parsed_target)
+    base_scheme, base_host, base_port = _normalized_parts(parsed_base)
 
-    if not scheme or not target_host:
+    if not target_scheme or target_scheme not in {"http", "https"} or not target_host:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
 
-    if scheme == "http":
-        local_hosts = {"localhost", "::1", "host.docker.internal"}
-        if not (target_host in local_hosts or target_host.startswith("127.")):
-            return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
-    elif scheme != "https":
+    local_hosts = {"localhost", "::1", "host.docker.internal"}
+    is_local_http = target_host in local_hosts or target_host.startswith("127.")
+    if target_scheme == "http" and not is_local_http:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
-
+    if base_scheme == "https" and target_scheme != "https":
+        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
     if not base_host or target_host != base_host:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
+    if base_port and target_port and target_port != base_port:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
 
     # Enforce that the path targets the storage upload endpoint to reduce SSRF surface.
@@ -1233,11 +1318,9 @@ async def internal_upload_proxy(request: Request):
     if not path.startswith("/storage/v1/object/"):
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
 
-    body = await request.body()
-    if not body:
-        return JSONResponse({"error": "bad_request", "detail": "empty_body"}, status_code=400, headers=_cache_headers_error())
-    if len(body) > _max_upload_bytes():
-        return JSONResponse({"error": "bad_request", "detail": "size_exceeded"}, status_code=400, headers=_cache_headers_error())
+    body, body_error = await _read_request_stream_with_limit(request, _max_upload_bytes())
+    if body_error:
+        return JSONResponse({"error": "bad_request", "detail": body_error}, status_code=400, headers=_cache_headers_error())
     content_type = request.headers.get("content-type") or "application/octet-stream"
     # Enforce MIME allowlist for uploads proxied through our origin.
     allowed_mime = (set(ALLOWED_IMAGE_MIME) | set(ALLOWED_FILE_MIME) | {"application/octet-stream"})
@@ -1250,6 +1333,7 @@ async def internal_upload_proxy(request: Request):
             payload=body,
             content_type=content_type,
             timeout=_upload_proxy_timeout_seconds(),
+            headers=forward_headers or None,
         )
     except Exception:
         # Prod-parity: any upstream exception is a 502 (no soft-200 in dev/test).

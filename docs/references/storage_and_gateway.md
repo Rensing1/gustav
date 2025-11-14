@@ -25,12 +25,15 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
   - `MATERIALS_MAX_UPLOAD_BYTES` (default: 20 MiB)
   - `LEARNING_MAX_UPLOAD_BYTES` (default: 10 MiB)
   - See `.env.example` for a ready-to-copy template; store real values in `.env` (gitignored).
+  - Upload limit overrides are clamped to the OpenAPI contract (10 MiB learning / 20 MiB teaching). Non-positive values fall back to the defaults to avoid accidental zero-byte policies.
 
 ## Security
 - Use Service Role key only in the backend. Never expose keys to the browser.
 - Buckets are private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
 - Download URL responses include `Cache-Control: private, no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.
+- The learning upload proxy (`ENABLE_STORAGE_UPLOAD_PROXY=true`) now validates scheme/host/port against `SUPABASE_URL`, allows HTTP only for localhost/127.0.0.0/8/::1/host.docker.internal, streams request bodies with the central size limit, and forwards presign headers (e.g., `x-upsert`) 1:1 to Supabase to keep parity with direct PUT uploads.
+- Remote Vision fetches reuse the same SUPABASE_URL allowlist and stream-download with `LEARNING_MAX_UPLOAD_BYTES`, aborting early on host mismatches or oversized responses.
 
 ## Governance & Provisioning
 - Quelle der Wahrheit: SQL‑Migrationen legen `materials` und `submissions` privat an.

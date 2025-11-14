@@ -28,9 +28,13 @@ import routes.learning as learning  # type: ignore  # noqa: E402
 class _FakeAdapter:
     def presign_upload(self, *, bucket: str, key: str, expires_in: int, headers: dict[str, str]):
         # Minimal presigned URL to a supabase-like host
+        presign_headers = {
+            "x-upsert": "true",
+            "Content-Type": headers.get("Content-Type", "application/octet-stream"),
+        }
         return {
             "url": f"http://127.0.0.1:54321/storage/v1/object/sign/{bucket}/{key}?token=abc",
-            "headers": headers,
+            "headers": presign_headers,
             "method": "PUT",
         }
 
@@ -94,7 +98,10 @@ async def test_upload_proxy_flow(monkeypatch):
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         body_sent["url"] = kwargs.get("url")
         body_sent["data"] = kwargs.get("payload")
-        body_sent["headers"] = {"Content-Type": kwargs.get("content_type")}
+        proxy_headers = dict(kwargs.get("headers") or {})
+        if not proxy_headers and kwargs.get("content_type"):
+            proxy_headers = {"Content-Type": kwargs.get("content_type")}
+        body_sent["headers"] = proxy_headers
         return _Resp()
 
     import routes.learning as lr  # type: ignore
@@ -132,3 +139,4 @@ async def test_upload_proxy_flow(monkeypatch):
         assert int(j.get("size_bytes", 0)) == len(data)
         # Upstream captured and content-type preserved
         assert body_sent.get("headers", {}).get("Content-Type") == "image/png"
+        assert body_sent.get("headers", {}).get("x-upsert") == "true"

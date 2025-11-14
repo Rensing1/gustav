@@ -2,12 +2,15 @@
 
 ## Unreleased
 ### Security (dev = prod)
+- security(learning-upload): Internal upload proxy now enforces SUPABASE_URL scheme/port matching, allows HTTP only for localhost-style hosts, streams request bodies with early size checks, and forwards presign headers 1:1 to Supabase. The dev upload stub adopts the same cache headers for error paths.
+- security(vision): Remote Supabase fetches in the Vision adapter parse/whitelist hosts, stream-download with the central upload limit, and propagate `untrusted_host` / `remote_fetch_too_large` errors. PDF preprocessing sanitizes renderer/persist errors before persisting them.
 - security(cookies): Always set `Secure` + `SameSite=Strict` for session cookie (local = prod).
 - security(csrf): Strict CSRF on all write routes (Origin/Referer same-origin required) across environments.
 - security(headers): Enable HSTS by default; remove client-facing diagnostic headers.
 - security(ssr): Internal SSR→API hops send an Origin header to satisfy strict CSRF.
 
 ### Config & Defaults
+- config(storage): Clamp `LEARNING_MAX_UPLOAD_BYTES` / `MATERIALS_MAX_UPLOAD_BYTES` env overrides to the OpenAPI contract (10 MiB / 20 MiB) and ignore non-positive values to avoid accidental zero-byte policies.
 - config(urls): Default WEB_BASE and KC_PUBLIC_BASE_URL now use `https://…` on port 443 (Caddy TLS internal).
 - config(compose): Validate compose; avoid `host.docker.internal`; bind Ollama to loopback.
 - ai(defaults): Vision=`qwen2.5vl:3b`, Feedback=`gpt-oss:latest`.
@@ -20,6 +23,7 @@
 - ai(vision): Local-Vision-Adapter übergibt bei JPEG/PNG Bilddaten base64-kodiert über das `images`-Argument an den Ollama-Client (falls unterstützt). Fallback ohne `images`, wenn die Client-Signatur es nicht kennt. Reduziert generische Modell-Ablehnungen bei Bildabgaben deutlich.
 
 ### Docs (updates)
+- docs(storage): Document that the learning upload proxy enforces SUPABASE_URL scheme/port, streams uploads with the central limit, and replays presign headers for proxy calls; highlight that `*_MAX_UPLOAD_BYTES` overrides are clamped to the published contract.
 - docs(plan): Neu `2025-11-05_vision-images-param.md` (Vision-Bilder an Modell) und Update in `2025-11-04-ollama-client-compat.md` (Hinweis auf `images`).
 - docs(plan): `2025-11-04_ui_htmx_submit.md` und `2025-11-04_learning_ui_autorefresh.md` dokumentieren die UI-Verbesserungen.
 

@@ -45,16 +45,38 @@ def test_pdf_remote_fetch_and_render_stitch(tmp_path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
 
-    # Fake PDF bytes returned by httpx.get
+    # Fake PDF bytes returned by httpx streaming client
     pdf_bytes = b"%PDF-1.4\n% dummy remote"
 
-    # Fake httpx.get
-    class _Resp:
-        def __init__(self, content: bytes, status_code: int = 200):
-            self.content = content
+    class _HttpxStream:
+        def __init__(self, data: bytes, status_code: int = 200):
+            self._data = data
             self.status_code = status_code
 
-    fake_httpx = SimpleNamespace(get=lambda url, headers=None, timeout=None: _Resp(pdf_bytes, 200))
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def iter_bytes(self):  # type: ignore[no-untyped-def]
+            yield self._data
+
+    class _HttpxClient:
+        def __init__(self, data: bytes, status_code: int = 200):
+            self._data = data
+            self._status = status_code
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            return _HttpxStream(self._data, self._status)
+
+    fake_httpx = SimpleNamespace(Client=lambda timeout=None, follow_redirects=None: _HttpxClient(pdf_bytes, 200))
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
 
     # Monkeypatch pipeline.process_pdf_bytes to return two PNG-like pages
@@ -95,4 +117,3 @@ def test_pdf_remote_fetch_and_render_stitch(tmp_path, monkeypatch: pytest.Monkey
     assert isinstance(images, list) and len(images) == 1
     stitched = base64.b64decode(images[0])
     assert stitched.startswith(b"\x89PNG")
-

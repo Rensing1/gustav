@@ -135,6 +135,7 @@ Refer to the latest migration plan in `docs/plan/2025-11-01-ki-integration.md` f
   - `OLLAMA_BASE_URL` (Default `http://ollama:11434` innerhalb von Compose)
   - `AI_TIMEOUT_VISION` (Default `30`), `AI_TIMEOUT_FEEDBACK` (Default `15`)
   - `WORKER_MAX_RETRIES=3`, `WORKER_BACKOFF_SECONDS=10`, `WORKER_LEASE_SECONDS=45`, `WORKER_POLL_INTERVAL=0.5`
+  - Vision download safeguards: the adapter only fetches remote objects from the hosts configured via `SUPABASE_URL`/`SUPABASE_PUBLIC_URL`, enforces HTTPS (HTTP is accepted only for localhost/127.0.0.0/8/::1/host.docker.internal), and stream-downloads with `LEARNING_MAX_UPLOAD_BYTES` so oversized responses abort early.
 - Praxisregel: Standard ist `AI_BACKEND=local` mit echten Modellen/OLLAMA_BASE_URL.
   Für Tests/CI kann `stub` verwendet werden; Produktions-/Staging‑Starts mit
   `stub` werden hart abgewiesen (Fail‑fast auf Prozessstart).

@@ -8,7 +8,7 @@
 - security(ssr): Internal SSR→API hops send an Origin header to satisfy strict CSRF.
 
 ### Config & Defaults
-- config(urls): Default WEB_BASE and KC_PUBLIC_BASE_URL use `https://…:8100` (Caddy TLS internal).
+- config(urls): Default WEB_BASE and KC_PUBLIC_BASE_URL now use `https://…` on port 443 (Caddy TLS internal).
 - config(compose): Validate compose; avoid `host.docker.internal`; bind Ollama to loopback.
 - ai(defaults): Vision=`qwen2.5vl:3b`, Feedback=`gpt-oss:latest`.
 ### UI

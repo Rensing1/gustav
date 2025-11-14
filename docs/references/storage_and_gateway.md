@@ -5,7 +5,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 ## Local setup (CLI)
 - Prereqs: Supabase CLI installed; Docker running.
 - Ensure storage is enabled: `supabase/config.toml` has `[storage] enabled = true`.
-- Buckets werden durch Migrationen provisioniert (privat): `materials`, `submissions`.
+- Buckets werden durch Migrationen provisioniert (privat): `materials`, `submissions`. RLS ist auf `storage.objects` aktiv (deny‑by‑default); direkte DB‑Zugriffe durch App‑Rollen sind nicht erlaubt.
 - Start services without Studio:
   - `supabase stop`
   - `supabase start -x studio`

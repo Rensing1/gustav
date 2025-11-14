@@ -99,8 +99,8 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 
 - DEV (hostbasiert, einfach & robust):
   - Caddy routet hostbasiert:
-    - `http://app.localhost:8100` → Web (GUSTAV)
-    - `http://id.localhost:8100` → Keycloak (IdP)
+    - `https://app.localhost` → Web (GUSTAV)
+    - `https://id.localhost` → Keycloak (IdP)
   - Persistenz (DEV): Keycloak speichert Realm und Benutzer im Compose-internen Postgres-Service `keycloak-db` (PostgreSQL 16) mit Volume `keycloak_pg_data`. Der Service ist über `depends_on.condition=service_healthy` als Startbedingung definiert, damit Keycloak erst nach erfolgreichem `pg_isready` hochfährt.
     PROD nutzt dieselbe Konfiguration, aber `KC_DB_URL` zeigt auf eine gemanagte Instanz (TLS, Backups, Secret-Store); `KC_DB_URL_PROPERTIES` sollte dort mindestens `sslmode=require` setzen.
   - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
@@ -124,7 +124,7 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 #### Ablauf Authorization‑Code‑Flow
 1) Browser: `GET /auth/login` (GUSTAV) → 302 zu IdP `…/protocol/openid-connect/auth` (Host: `id.localhost`).
 2) Login auf IdP‑UI (gebrandet). `GET /auth/register` nutzt ebenfalls den Auth‑Endpoint und setzt `kc_action=register` (statt altem `…/registrations`‑Pfad), optional mit `login_hint`.
-3) IdP → Redirect zu `REDIRECT_URI` (z. B. `http://app.localhost:8100/auth/callback`).
+3) IdP → Redirect zu `REDIRECT_URI` (z. B. `https://app.localhost/auth/callback`).
 4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
 5) Web legt Serversession an und setzt `gustav_session` (httpOnly; Secure; SameSite=lax) — einheitlich in DEV und PROD.
 6) HTMX-Anfragen (Sidebar-Link) erhalten statt 302 ein `204` mit `HX-Redirect`, damit der Browser trotzdem voll zur IdP-URL navigiert und der PKCE-State bestehen bleibt.
@@ -160,7 +160,7 @@ E2E‑Tests (Identity):
 - Voraussetzung: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
 - Ausführung:
   - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
-  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE_URL=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
+  - Nur E2E: `RUN_E2E=1 WEB_BASE=https://app.localhost KC_BASE_URL=https://id.localhost .venv/bin/pytest -q -m e2e`
 
 ### Auth Router & Security (aktualisiert)
 - Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
@@ -211,8 +211,8 @@ E2E‑Tests (Identity):
 
 ## Deployment & Betrieb
 - Containerisiert über `Dockerfile` und `docker-compose.yml`.
-- Reverse‑Proxy: Caddy (hostbasiertes Routing). Nur `127.0.0.1:8100` ist gemappt (lokal).
-- Entwicklungsstart: `docker compose up --build` (Hot‑reload aktiv). Zugriff: `app.localhost:8100` und `id.localhost:8100`.
+- Reverse‑Proxy: Caddy (hostbasiertes Routing). Lokal ist Port `443` gemappt (TLS, `tls internal`).
+- Entwicklungsstart: `docker compose up --build` (Hot‑reload aktiv). Zugriff: `app.localhost` und `id.localhost`.
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
@@ -268,7 +268,7 @@ E2E‑Tests (Identity):
 
 ### Lokaler Betrieb & UFW
 - Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.
-- Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:8100`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 8100 proto tcp`.
+- Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:443`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 443 proto tcp`.
 
 ## Migrationspfad zu einer getrennten SPA (optional)
 Wenn UI‑Anforderungen wachsen (Offline, State‑heavy, App‑Store), kann ein separates `frontend/` entstehen. Schritte:

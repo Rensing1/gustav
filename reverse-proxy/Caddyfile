@@ -1,7 +1,7 @@
 # Host-based routing with TLS for local development
 # Access via:
-#   - https://app.localhost:8100 → GUSTAV web
-#   - https://id.localhost:8100  → Keycloak
+#   - https://app.localhost → GUSTAV web
+#   - https://id.localhost  → Keycloak
 
 app.localhost:443 {
   tls internal

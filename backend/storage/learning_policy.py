@@ -13,10 +13,13 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping
 
 from .verification import VerificationConfig
+from backend.storage.config import get_learning_max_upload_bytes
 
 ALLOWED_IMAGE_MIME = frozenset({"image/jpeg", "image/png"})
 ALLOWED_FILE_MIME = frozenset({"application/pdf"})
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB
+# Pull the size limit from central config to keep routers and policy in sync.
+# Defaults to 10 MiB when LEARNING_MAX_UPLOAD_BYTES is not set.
+MAX_UPLOAD_BYTES = get_learning_max_upload_bytes()
 STORAGE_KEY_RE = re.compile(r"(?!(?:.*\.\.))[a-z0-9][a-z0-9_./\-]{0,255}")
 
 

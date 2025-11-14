@@ -49,6 +49,8 @@ def _stream_hash_from_url(
         sup_host = urlparse(supabase_base).hostname or ""
         pub_host = urlparse(public_base).hostname or ""
         target = urlparse(url)
+        if target.scheme not in {"http", "https"}:
+            return (False, None, None, "invalid_url_scheme")
         tgt_host = target.hostname or ""
         allowed_hosts = {h for h in (sup_host, pub_host) if h}
         if not allowed_hosts or (tgt_host not in allowed_hosts):

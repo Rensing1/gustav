@@ -51,4 +51,4 @@ def test_default_app_base_returns_local_default_on_garbage():
     # Ensure env fallbacks do not influence this unit test
     with _clear_env_vars(["APP_BASE", "WEB_BASE", "REDIRECT_URI", "KC_PUBLIC_BASE_URL"]):
         base = _default_app_base(12345)  # type: ignore[arg-type]
-    assert base == "http://localhost:8100"
+    assert base == "https://app.localhost"

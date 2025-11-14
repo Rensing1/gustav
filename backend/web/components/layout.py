@@ -143,19 +143,11 @@ class Layout(Component):
         <footer class="content-footer" role="contentinfo" aria-label="Seitenfuß">
             <div class="footer-content">
                 <p class="text-center text-muted">
-                    &copy; 2024 GUSTAV - Open Source Lernplattform
-                    <br>
-                    <a href="/privacy" hx-get="/privacy" hx-target="#main-content">
-                        Datenschutz
-                    </a>
-                    ·
-                    <a href="/imprint" hx-get="/imprint" hx-target="#main-content">
-                        Impressum
-                    </a>
-                    ·
-                    <a href="https://github.com/yourgithub/gustav" target="_blank" rel="noopener">
-                        GitHub
-                    </a>
+                    <a href="/privacy" hx-get="/privacy" hx-target="#main-content">Datenschutz</a>
+                    –
+                    <a href="/imprint" hx-get="/imprint" hx-target="#main-content">Impressum</a>
+                    –
+                    <a href="https://github.com/Rensing1/gustav/" target="_blank" rel="noopener">GitHub</a>
                 </p>
             </div>
         </footer>

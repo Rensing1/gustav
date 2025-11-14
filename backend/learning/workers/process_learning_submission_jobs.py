@@ -182,7 +182,7 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                   from public.{}
                  where (
                           status = 'queued'
-                          and visible_at <= %s + interval '5 seconds'
+                          and visible_at <= %s + interval '30 seconds'
                        )
                     or (
                           status = 'leased'

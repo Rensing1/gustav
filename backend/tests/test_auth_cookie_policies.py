@@ -4,7 +4,7 @@ Cookie policy tests to ensure host-only cookies and consistent flags.
 Goals:
 - After /auth/callback, Set-Cookie for `gustav_session` must NOT include a
   Domain attribute (host-only cookie → avoids leakage across hosts).
-- Einheitlich (dev = prod): SameSite=strict, Secure immer.
+- Einheitlich (dev = prod): SameSite=lax, Secure immer (host‑only, kein Domain‑Attribut).
 
 We mock token exchange and verification to avoid external dependencies.
 """

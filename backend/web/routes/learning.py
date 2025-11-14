@@ -1284,14 +1284,15 @@ async def internal_upload_proxy(request: Request):
     if not target:
         return JSONResponse({"error": "bad_request", "detail": "missing_url"}, status_code=400, headers=_cache_headers_error())
     base = (os.getenv("SUPABASE_URL") or "").strip()
+    public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
     try:
         parsed_target = _urlparse(target)
-        parsed_base = _urlparse(base)
+        parsed_base = _urlparse(base) if base else None
+        parsed_public = _urlparse(public_base) if public_base else None
     except Exception:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
 
     target_scheme, target_host, target_port = _normalized_parts(parsed_target)
-    base_scheme, base_host, base_port = _normalized_parts(parsed_base)
 
     if not target_scheme or target_scheme not in {"http", "https"} or not target_host:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
@@ -1300,11 +1301,29 @@ async def internal_upload_proxy(request: Request):
     is_local_http = target_host in local_hosts or target_host.startswith("127.")
     if target_scheme == "http" and not is_local_http:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
-    if base_scheme == "https" and target_scheme != "https":
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
-    if not base_host or target_host != base_host:
+    allowed_hosts: list[tuple[str, str, int | None]] = []
+    for parsed in (parsed_base, parsed_public):
+        if not parsed:
+            continue
+        scheme, host, port = _normalized_parts(parsed)
+        if host:
+            allowed_hosts.append((scheme, host, port))
+    if not allowed_hosts:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
-    if base_port and target_port and target_port != base_port:
+
+    matched_scheme = None
+    matched_port: int | None = None
+    for scheme, host, port in allowed_hosts:
+        if target_host == host:
+            matched_scheme = scheme
+            matched_port = port
+            break
+
+    if matched_scheme is None:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
+    if matched_scheme == "https" and target_scheme != "https":
+        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+    if matched_port and target_port and target_port != matched_port:
         return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
 
     # Enforce that the path targets the storage upload endpoint to reduce SSRF surface.

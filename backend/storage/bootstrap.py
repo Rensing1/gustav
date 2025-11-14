@@ -21,6 +21,8 @@ import inspect
 import requests
 import logging
 
+from backend.storage.config import get_submissions_bucket
+
 _log = logging.getLogger("gustav.storage")
 
 
@@ -180,7 +182,7 @@ def ensure_buckets_from_env() -> bool:
     if not base or not key:
         return False
     teaching_bucket = (os.getenv("SUPABASE_STORAGE_BUCKET") or "materials").strip()
-    learning_bucket = (os.getenv("LEARNING_STORAGE_BUCKET") or "submissions").strip()
+    learning_bucket = get_submissions_bucket()
     return ensure_buckets(base, key, [teaching_bucket, learning_bucket])
 
 

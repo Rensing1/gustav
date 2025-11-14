@@ -181,6 +181,50 @@ async def test_proxy_rejects_port_mismatch(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.anyio
+async def test_proxy_allows_supabase_public_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SUPABASE_PUBLIC_URL host should be whitelisted for rewritten upload URLs."""
+
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.internal:54321")
+    monkeypatch.setenv("SUPABASE_PUBLIC_URL", "https://app.localhost")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except Exception:
+        learning_backend = None
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-public", name="S", roles=["student"])  # type: ignore
+
+    class _Resp:
+        status_code = 200
+
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        return _Resp()
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+
+    good = "https://app.localhost/storage/v1/object/upload/submissions/file"
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": good},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
+        )
+    assert r.status_code == 200
+
+
+@pytest.mark.anyio
 async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.MonkeyPatch) -> None:
     """Local http with host.docker.internal should be treated as local dev host."""
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")

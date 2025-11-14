@@ -78,7 +78,12 @@ class Navigation(Component):
         name = self.user.get("name", "") if self.user else ""
         return f"""
     <!-- Sidebar Toggle Button -->
-    <button class="sidebar-toggle" data-action="sidebar-toggle" aria-label="Navigation umschalten">
+    <button class="sidebar-toggle"
+            type="button"
+            data-action="sidebar-toggle"
+            aria-label="Navigation umschalten"
+            aria-controls="sidebar"
+            aria-expanded="false">
         <span class="sidebar-toggle-icon">☰</span>
     </button>
 
@@ -107,7 +112,11 @@ class Navigation(Component):
     </aside>
 
     <!-- Mobile Overlay -->
-    <div class="sidebar-overlay" data-action="sidebar-close"></div>"""
+    <div class="sidebar-overlay"
+         data-action="sidebar-close"
+         role="button"
+         tabindex="0"
+         aria-label="Navigation schließen"></div>"""
 
     def render_aside(self, oob: bool = False) -> str:
         """Render only the sidebar <aside> element (for OOB updates via HTMX)
@@ -358,10 +367,11 @@ class Navigation(Component):
            hx-get="{href}"
            hx-target="#main-content"
            hx-push-url="true"
-           hx-indicator="#loading-indicator"
-           class="sidebar-link{active_class}"
-           aria-label="{self.escape(text)}"
-           data-tooltip="{self.escape(text)}"{aria_attr}>
+            hx-indicator="#loading-indicator"
+            class="sidebar-link{active_class}"
+            aria-label="{self.escape(text)}"
+            role="menuitem"
+            data-tooltip="{self.escape(text)}"{aria_attr}>
             {icon_html}
             <span class="nav-text">{self.escape(text)}</span>
         </a>"""
@@ -376,7 +386,8 @@ class Navigation(Component):
         <a href="/auth/logout"
            class="sidebar-link sidebar-logout"
            aria-label="Abmelden"
-           data-tooltip="Abmelden">
+            role="menuitem"
+            data-tooltip="Abmelden">
             <span class="nav-icon">🚪</span>
             <span class="nav-text">Abmelden</span>
         </a>"""

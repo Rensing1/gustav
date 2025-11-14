@@ -22,6 +22,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
   - `SUPABASE_SERVICE_ROLE_KEY` (from `supabase start` output)
   - `SUPABASE_STORAGE_BUCKET` (default: `materials`)
   - `LEARNING_STORAGE_BUCKET` (default: `submissions`)
+  - `LEARNING_SUBMISSIONS_BUCKET` (legacy fallback). Solange ältere Deployments noch die alte Variable nutzen, wird sie automatisch als Ersatz gelesen – ein späteres Umbenennen kann daher ohne Downtime erfolgen.
   - `MATERIALS_MAX_UPLOAD_BYTES` (default: 20 MiB)
   - `LEARNING_MAX_UPLOAD_BYTES` (default: 10 MiB)
   - See `.env.example` for a ready-to-copy template; store real values in `.env` (gitignored).
@@ -33,6 +34,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 - Download URL responses include `Cache-Control: private, no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.
 - The learning upload proxy (`ENABLE_STORAGE_UPLOAD_PROXY=true`) now validates scheme/host/port against `SUPABASE_URL`, allows HTTP only for localhost/127.0.0.0/8/::1/host.docker.internal, streams request bodies with the central size limit, and forwards presign headers (e.g., `x-upsert`) 1:1 to Supabase to keep parity with direct PUT uploads.
+- Wenn signierte URLs auf `SUPABASE_PUBLIC_URL` umgeschrieben werden (Same-Origin-Workaround), akzeptieren Proxy und Storage-Verifikation sowohl den internen `SUPABASE_URL`-Host als auch den öffentlichen Host und behalten trotzdem die SSRF-Guards bei.
 - Remote Vision fetches reuse the same SUPABASE_URL allowlist and stream-download with `LEARNING_MAX_UPLOAD_BYTES`, aborting early on host mismatches or oversized responses.
 
 ## Governance & Provisioning

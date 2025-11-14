@@ -29,9 +29,10 @@ gustav-alpha2/
 
 - Private Buckets: `materials` (Teaching) und `submissions` (Learning) werden per SQL‑Migration provisioniert (privat, nur signierte URLs).
 - Zentrale Konfiguration (ENV):
-  - `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` (nur Backend, niemals im Browser)
+- `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` (nur Backend, niemals im Browser)
+- `SUPABASE_PUBLIC_URL` (Browser-Facing Host, z. B. `https://app.localhost`, wird für signierte URLs/Proxy-Checks verwendet)
   - `SUPABASE_STORAGE_BUCKET` (Default `materials`)
-  - `LEARNING_STORAGE_BUCKET` (Default `submissions`)
+  - `LEARNING_STORAGE_BUCKET` (Default `submissions`; Legacy-Setups dürfen weiterhin `LEARNING_SUBMISSIONS_BUCKET` setzen – der Wert wird als Fallback gelesen)
   - `MATERIALS_MAX_UPLOAD_BYTES` (Default 20971520 = 20 MiB)
   - `LEARNING_MAX_UPLOAD_BYTES` (Default 10485760 = 10 MiB)
   - Optional (nur für gezielte lokale E2E): `AUTO_CREATE_STORAGE_BUCKETS=true` erlaubt temporär Auto‑Provisioning. In regulären Setups immer `false`; der Startschutz (Prod‑Guard) verhindert unsichere Prod‑Konfigurationen.

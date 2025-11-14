@@ -127,7 +127,7 @@ Dateien (Tests)
   - Anzeige im Seitenmenü; Abmelde‑Button verlinkt auf `GET /auth/logout`
 
 - Logout vereinheitlichen (`backend/web/routes/auth.py`):
-  - Route `/auth/logout`: Session‑Cookie sicher löschen (HttpOnly, Secure in PROD, `SameSite=strict`) und Redirect zum IdP `end_session_endpoint` mit `post_logout_redirect_uri=/auth/logout/success`. Der optionale `redirect`‑Parameter erlaubt nur interne absolute Pfade und wird strikt validiert (Pattern `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`). Ungültige Werte werden ignoriert.
+- Route `/auth/logout`: Session‑Cookie sicher löschen (`HttpOnly; Secure; SameSite=lax`, host‑only) und Redirect zum IdP `end_session_endpoint` mit `post_logout_redirect_uri=/auth/logout/success`. Der optionale `redirect`‑Parameter erlaubt nur interne absolute Pfade und wird strikt validiert (Pattern `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`). Ungültige Werte werden ignoriert.
   - Optional `id_token_hint`, falls vorhanden; ansonsten Fallback ohne Hint (DEV)
 
 - OpenAPI aktualisieren (`api/openapi.yml`):
@@ -666,7 +666,7 @@ Nonce (Replay‑Schutz)
 Cookie‑Lebensdauer (Prod)
 - Given Session‑TTL ist 3600s (Standard)
   When /auth/callback erfolgreich ist (in PROD)
-  Then enthält `Set-Cookie` `Max-Age=3600` und `SameSite=strict; HttpOnly; Secure`
+Then enthält `Set-Cookie` `Max-Age=3600` und `SameSite=lax; HttpOnly; Secure` (host‑only)
 
 /api/me liefert expires_at
 - Given eine gültige Session

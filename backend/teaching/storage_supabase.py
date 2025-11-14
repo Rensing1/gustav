@@ -179,8 +179,17 @@ class SupabaseStorageAdapter(StorageAdapterProtocol):
             if not url:
                 raise RuntimeError("failed_to_presign_download")
             import requests  # local import to avoid hard dep in tests
-            # Apply a conservative timeout to prevent hangs under network issues.
-            head = requests.head(self._normalize_signed_url_host(str(url)), timeout=5)
+            # Normalize and validate target before probing
+            target = self._normalize_signed_url_host(str(url))
+            p = _urlparse(target)
+            # Only probe http/https URLs to approved hosts; otherwise, skip for safety
+            allowed = self._allowed_storage_hosts()
+            if (p.scheme or "").lower() not in {"http", "https"}:
+                return {"content_length": None, "content_type": None}
+            if not allowed or (p.hostname or "").lower() not in allowed:
+                return {"content_length": None, "content_type": None}
+            # Apply a conservative timeout and do not follow redirects
+            head = requests.head(target, timeout=5, allow_redirects=False)
             ctype = head.headers.get("content-type") or head.headers.get("Content-Type")
             clen = head.headers.get("content-length") or head.headers.get("Content-Length")
             try:
@@ -317,6 +326,26 @@ class SupabaseStorageAdapter(StorageAdapterProtocol):
             return rebuilt
         except Exception:
             return url
+
+    def _allowed_storage_hosts(self) -> set[str]:
+        """Return approved hostnames for storage HTTP probes.
+
+        Sources:
+        - SUPABASE_PUBLIC_URL (preferred browser-facing base)
+        - SUPABASE_URL (internal base; used only if configured)
+        """
+        hosts: set[str] = set()
+        for var in ("SUPABASE_PUBLIC_URL", "SUPABASE_URL"):
+            val = (os.getenv(var) or "").strip()
+            if not val:
+                continue
+            try:
+                h = _urlparse(val).hostname
+                if h:
+                    hosts.add(h.lower())
+            except Exception:
+                continue
+        return hosts
 
 
 __all__ = ["SupabaseStorageAdapter"]

@@ -38,7 +38,7 @@ def _derive_app_base() -> str:
     Preference order:
       1) WEB_BASE env if provided
       2) Base extracted from REDIRECT_URI (strip /auth/callback)
-      3) Fallback to http://app.localhost:8100 (matches reverse proxy)
+      3) Fallback to https://app.localhost (matches reverse proxy)
     """
     wb = os.getenv("WEB_BASE")
     if wb:
@@ -54,7 +54,7 @@ def _derive_app_base() -> str:
                 return f"{p.scheme}://{p.netloc}"
         except Exception:
             pass
-    return "http://app.localhost:8100"
+    return "https://app.localhost"
 
 
 def _derive_kc_base() -> str:
@@ -63,7 +63,7 @@ def _derive_kc_base() -> str:
     Preference order:
       1) KC_BASE env if provided
       2) KC_PUBLIC_BASE_URL (browser-facing) if provided
-      3) Fallback to http://id.localhost:8100 (matches reverse proxy)
+      3) Fallback to https://id.localhost (matches reverse proxy)
     """
     kb = os.getenv("KC_BASE")
     if kb:
@@ -71,7 +71,7 @@ def _derive_kc_base() -> str:
     pub = os.getenv("KC_PUBLIC_BASE_URL")
     if pub:
         return pub.rstrip("/")
-    return "http://id.localhost:8100"
+    return "https://id.localhost"
 
 
 WEB_BASE = _derive_app_base()

@@ -4,9 +4,9 @@ KI‑gestützte Lernplattform mit FastAPI und HTMX. Server‑seitiges Rendern (S
 
 ## Schnellstart
 
-- Voraussetzungen: Docker & Docker Compose, Port `8100` frei
+- Voraussetzungen: Docker & Docker Compose, Ports `80/443` frei
 - Start: `docker compose build && docker compose up`
-- Öffnen (Reverse Proxy aktiv): `https://app.localhost:8100`
+- Öffnen (Reverse Proxy aktiv): `https://app.localhost`
 - Entwicklung: Live‑Reload für `backend/web` ist aktiv
 - Nützlich: `docker compose up -d`, `docker compose logs -f`, `docker compose down`
 
@@ -95,6 +95,7 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 - Arbeitsweise: Contract‑First, TDD (Red‑Green‑Refactor)
 - Bitte Hinweise in `docs/ARCHITECTURE.md` und `docs/plan/README.md` beachten
 - Branch‑Strategie: `development` (aktiv), PRs gegen `development`
+- Repo-Hygiene: `.gitignore` schließt u. a. `*.bak`/`.env` aus; bitte keine Secrets commiten.
 
 ## Healthcheck
 
@@ -112,13 +113,13 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 ## Identity & Sessions (Kurzüberblick)
 
 - IdP: Keycloak (OIDC Authorization Code Flow mit PKCE)
-- Session‑Cookie: `gustav_session` (HttpOnly, Secure, SameSite=Strict)
+- Session‑Cookie: `gustav_session` (HttpOnly, Secure, SameSite=lax)
 - Umgebungsvariablen:
-  - `GUSTAV_ENV`: steuert nur wenige nicht‑sicherheitskritische Aspekte (z. B. CSP‑Lockerung in dev); Cookies sind stets Secure+Strict.
+  - `GUSTAV_ENV`: steuert nur wenige nicht‑sicherheitskritische Aspekte (z. B. CSP‑Lockerung in dev); Cookies sind stets Secure+SameSite=lax.
   - `SESSIONS_BACKEND`: `memory` (Default) oder `db` (Postgres/Supabase)
   - `DATABASE_URL` (oder `SUPABASE_DB_URL`): DSN für DB-gestützte Sessions
-- `WEB_BASE`: Browser‑sichtbare Basis‑URL der App (z. B. `https://app.localhost:8100`)
-- `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `https://app.localhost:8100/auth/callback`);
+- `WEB_BASE`: Browser‑sichtbare Basis‑URL der App (z. B. `https://app.localhost`)
+- `REDIRECT_URI`: Muss auf `/auth/callback` der App zeigen (z. B. `https://app.localhost/auth/callback`);
   wird zur Berechnung des App‑Basis‑URLs genutzt (Logout‑Redirect)
 - `KC_BASE_URL` (bevorzugt) bzw. `KC_BASE` (Legacy): Öffentliche Basis‑URL von Keycloak. Für Proxys `KC_PUBLIC_BASE_URL` setzen.
 
@@ -135,24 +136,25 @@ Siehe auch: `docs/references/storage_and_gateway.md` und Plan `docs/plan/storage
 
 - Cookies sind hostgebunden. Für eine stabile E2E-Anmeldung müssen Web‑Host und Cookie‑Host übereinstimmen.
 - Standard‑Setup (Reverse‑Proxy `Caddyfile`, TLS intern):
-- App: `https://app.localhost:8100`
-- Keycloak: `https://id.localhost:8100`
+- App: `https://app.localhost`
+- Keycloak: `https://id.localhost`
 - E2E-Tests leiten `WEB_BASE` automatisch aus `REDIRECT_URI` ab (wenn `WEB_BASE` nicht gesetzt ist) und nutzen `KC_BASE` bzw. `KC_PUBLIC_BASE_URL`.
 - Empfehlung: Setze vor E2E‑Läufen explizit
-- `export WEB_BASE=https://app.localhost:8100`
-- `export KC_PUBLIC_BASE_URL=https://id.localhost:8100`
+- `export WEB_BASE=https://app.localhost`
+- `export KC_PUBLIC_BASE_URL=https://id.localhost`
 
 ### Lokales TLS vertrauen (Caddy)
 
-- Der Reverse Proxy terminiert TLS lokal auf Port 8100. Browser können beim ersten Start warnen.
-- Akzeptiere das selbstsignierte Zertifikat für `app.localhost` und `id.localhost`, damit OIDC‑Redirects und Secure‑Cookies zuverlässig funktionieren.
+- Der Reverse Proxy terminiert TLS lokal (Port 443). Browser können beim ersten Start warnen.
+- Importiere die lokale Caddy‑Root‑CA ins Betriebssystem‑Trust‑Store, damit TLS‑Prüfung in Browsern und Tools (requests/curl) funktioniert.
+  - Alternativ für CLI/Tests: `export REQUESTS_CA_BUNDLE=.tmp/caddy-root.crt` bzw. `export CURL_CA_BUNDLE=.tmp/caddy-root.crt`.
 - Services im Compose‑Netz sprechen intern unverschlüsselt (z. B. `http://keycloak:8080` für `KC_BASE_URL` in Containern).
 
 ## Sicherheits‑Defaults (dev = prod)
 
 - TLS/HSTS: Immer aktiv über den Caddy‑Proxy (HSTS max‑age=31536000; includeSubDomains)
 - CSRF: Strikt für alle Schreib‑Routen (Origin/Referer müssen server‑gleich sein)
-- Cookies: Immer `Secure` + `SameSite=Strict` + `HttpOnly`
+- Cookies: Immer `Secure` + `SameSite=lax` + `HttpOnly` (host‑only, kein `Domain=`)
 - Caching: Private/no‑store auf sensitiven Antworten; `Vary: Origin`
 - Diagnostik: Keine clientseitigen Diagnose‑Header; optionale Server‑Logs via Flags
 

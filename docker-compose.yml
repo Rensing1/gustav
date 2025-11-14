@@ -203,6 +203,7 @@ services:
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
       # Select which GPUs are visible to the container; default 'all'
       - HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-all}
+      - OLLAMA_VULKAN=1
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

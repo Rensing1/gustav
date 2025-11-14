@@ -9,10 +9,10 @@ Owner: Platform/App
 | Web | DATABASE_URL | postgresql://gustav_app@127.0.0.1:54322/postgres | Secret | env/.env | App‑DSN (RLS) |
 | Web | TEACHING_DATABASE_URL | =DATABASE_URL | Secret | env/.env | Repo DSN |
 | Web | SESSION_DATABASE_URL | postgresql://postgres@supabase_db_gustav-alpha2:5432/postgres | Secret | env/.env | Sessions (Service Role) |
-| Web | WEB_BASE | https://app.localhost:8100 | FQDN | env/.env | Browser Base |
-| Web | REDIRECT_URI | https://app.localhost:8100/auth/callback | FQDN/callback | env/.env | OIDC Callback |
-| KC | KC_BASE_URL | https://id.localhost:8100 | HTTPS FQDN | env/.env | IdP Base |
-| KC | KC_PUBLIC_BASE_URL | https://id.localhost:8100 | HTTPS FQDN | env/.env | IdP Public |
+| Web | WEB_BASE | https://app.localhost | FQDN | env/.env | Browser Base |
+| Web | REDIRECT_URI | https://app.localhost/auth/callback | FQDN/callback | env/.env | OIDC Callback |
+| KC | KC_BASE_URL | https://id.localhost | HTTPS FQDN | env/.env | IdP Base |
+| KC | KC_PUBLIC_BASE_URL | https://id.localhost | HTTPS FQDN | env/.env | IdP Public |
 | KC | KC_REALM | gustav | gustav | env/.env | Realm |
 | Supabase | SUPABASE_URL | http://127.0.0.1:54321 | FQDN | env/.env | Storage/API |
 | Supabase | SUPABASE_SERVICE_ROLE_KEY | DUMMY_DO_NOT_USE | Secret | env/.env | Backend Storage |

@@ -393,6 +393,7 @@ components:
           description: Hex-encoded SHA-256 checksum of the uploaded file (only for `kind=file`).
         alt_text:
           type: string
+          maxLength: 500
           description: Optional alternative text for accessibility (only for `kind=file`).
         created_at:
           type: string
@@ -424,6 +425,7 @@ components:
           nullable: true
         alt_text:
           type: string
+          maxLength: 500
           description: Alternative text for file materials (ignored for markdown)
     MaterialReorder:
       type: object
@@ -745,6 +747,7 @@ components:
         alt_text:
           type: string
           nullable: true
+          maxLength: 500
           description: Alternative text supplied by teachers for accessibility
         position:
           type: integer
@@ -2161,7 +2164,8 @@ paths:
             Set-Cookie:
               description: >-
                 httpOnly session cookie `gustav_session`.
-                All environments: `HttpOnly; Secure; SameSite=strict`.
+                All environments: `HttpOnly; Secure; SameSite=lax` (OAuth/OIDC‑kompatibel),
+                ohne `Domain`‑Attribut (host‑only cookie).
                 In production, `Max-Age` matches the server session TTL (default 3600 seconds).
               schema:
                 type: string
@@ -2215,7 +2219,8 @@ paths:
             Set-Cookie:
               description: >-
                 Clears the httpOnly session cookie `gustav_session` (expires it).
-                All environments: `HttpOnly; Secure; SameSite=strict; Max-Age=0`.
+                All environments: `HttpOnly; Secure; SameSite=lax; Max-Age=0`,
+                ohne `Domain`‑Attribut (host‑only cookie).
               schema:
                 type: string
             Location:
@@ -3874,6 +3879,17 @@ paths:
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '502':
           description: Upstream storage deletion failed
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
           content:
             application/json:
               schema:
@@ -4939,6 +4955,9 @@ paths:
                 $ref: '#/components/schemas/Error'
         '502':
           description: Upstream error (proxy_failed | upstream_error)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:

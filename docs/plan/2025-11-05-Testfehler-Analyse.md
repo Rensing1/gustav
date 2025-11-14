@@ -140,8 +140,8 @@ Fehlerbild & Analyse (heute)
 Umgesetzte Maßnahmen (heute)
 1. Startup-Guards (Prod-Sicherheit) aktivieren sich nun auch unter Pytest, wenn `GUSTAV_ENV` prod-like: backend/web/config.py:1–end
    - Änderung: Pytest-Bypass entfernt; Tests `test_config_security.py` grün.
-2. Cookie-Policy in PROD schärfen: backend/web/main.py:1–220
-   - Änderung: „Host=test“ wird nicht mehr wie „localhost“ behandelt; `Secure` und `SameSite=strict` bleiben aktiv. Test `test_auth_contract.py::test_callback_sets_secure_cookie_flags_in_prod` grün.
+2. Cookie-Policy vereinheitlicht (dev=prod): backend/web/main.py:1–220
+   - Änderung: `Secure` und `SameSite=lax` bleiben aktiv (host‑only Cookie). Test `test_auth_contract.py::test_callback_sets_secure_cookie_flags_in_prod` grün.
 3. `id_token_hint`-Fallback ergänzt:
    - backend/web/main.py:220 – Middleware setzt `request.state.id_token` serverseitig.
    - backend/web/routes/auth.py:270–300 – Logout nutzt Session-Record oder `request.state.id_token`.
@@ -212,7 +212,7 @@ Nächste Schritte (geplant)
    - Nach CSRF-Fix erneut `.venv/bin/pytest -q` und Ergebnis hier dokumentieren.
 
 Sicherheitsbewertung
-- Keine Abschwächung in PROD: CSRF bleibt streng, Cookies bleiben `Secure`/`SameSite=strict` in PROD. Der DEV-Sonderpfad in `create_submission` akzeptiert ausschließlich exakt dieselbe Origin (keine Hosts/Ports-Kulanz) und dient ausschließlich der Test-Stabilität.
+- Keine Abschwächung in PROD: CSRF bleibt streng, Cookies bleiben `Secure`/`SameSite=lax` (host‑only). Der DEV-Sonderpfad in `create_submission` akzeptiert ausschließlich exakt dieselbe Origin (keine Hosts/Ports-Kulanz) und dient ausschließlich der Test-Stabilität.
 
 Offene Punkte für Review/Feedback
 - Möchtest du, dass wir `_is_same_origin` stärker vereinheitlichen (z. B. Port-Normalisierung an einer Stelle) oder den DEV-Sonderpfad entfernen, sobald die genaue Ursache identifiziert ist?
@@ -243,7 +243,7 @@ Empfohlene ToDos
 3) DEV-Guard entfernen, sobald `_is_same_origin` zentral robust genug ist (Verträge für Port‑Mismatch und Cross‑Origin bleiben grün).
 
 Sicherheitsbewertung
-- Produktionspfad unverändert: strikte CSRF‑Prüfung (Origin/Referer zwingend), keine DEV-Fallbacks, `Secure` + `SameSite=strict` für Cookies.
+- Produktionspfad unverändert: strikte CSRF‑Prüfung (Origin/Referer zwingend), keine DEV-Fallbacks, `Secure` + `SameSite=lax` für Cookies (host‑only).
 - DEV‑Resilience ist bewusst eng gefasst (nur exakt gleiche Origin) und ausschließlich für Teststabilität gedacht.
 
 Aktualisiert am: 2025-11-06 (Nacht)

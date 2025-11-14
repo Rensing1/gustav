@@ -732,7 +732,7 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.anyio
 async def test_callback_sets_cookie_flags_and_no_max_age(monkeypatch: pytest.MonkeyPatch):
-    """Cookie must be HttpOnly; SameSite=strict; Secure; no Max-Age (session)."""
+    """Cookie must be HttpOnly; SameSite=lax; Secure; no Max-Age (session)."""
     token = _make_id_token()
     resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=302)
     sc = resp.headers.get("set-cookie", "")

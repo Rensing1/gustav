@@ -135,7 +135,7 @@ def load_oidc_config() -> OIDCConfig:
     base_url = os.getenv("KC_BASE_URL", "http://localhost:8080")
     realm = os.getenv("KC_REALM", "gustav")
     client_id = os.getenv("KC_CLIENT_ID", "gustav-web")
-    redirect_uri = os.getenv("REDIRECT_URI", "http://app.localhost:8100/auth/callback")
+    redirect_uri = os.getenv("REDIRECT_URI", "https://app.localhost/auth/callback")
     public_base = os.getenv("KC_PUBLIC_BASE_URL", base_url)
     return OIDCConfig(base_url=base_url, realm=realm, client_id=client_id, redirect_uri=redirect_uri, public_base_url=public_base)
 
@@ -994,7 +994,7 @@ async def learning_index(request: Request):
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
                 try:
                     if os.getenv("PYTEST_CURRENT_TEST"):
-                        print("__SSR_DEBUG_SID__", sid)
+                        logger.debug("__SSR_DEBUG_SID__ %s", sid)
                 except Exception:
                     pass
             r = await client.get("/api/learning/courses", params={"limit": limit, "offset": offset})

@@ -138,8 +138,8 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
 
 3. **Gesundheitschecks**  
    ```bash
-   curl -s http://app.localhost:8100/health
-   curl -s -o /dev/null -w '%{http_code}\n' http://id.localhost:8100/realms/gustav/.well-known/openid-configuration
+   curl -s https://app.localhost/health
+   curl -s -o /dev/null -w '%{http_code}\n' https://id.localhost/realms/gustav/.well-known/openid-configuration
    ```
    Erwartet werden `{"status":"healthy"}` sowie HTTP 200 für Keycloak.
 

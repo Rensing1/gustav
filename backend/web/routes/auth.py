@@ -35,6 +35,24 @@ INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
 MAX_INAPP_REDIRECT_LEN = 256
 
 
+def _resolve_active_main(request: Request):
+    """Return the active main module whose app matches the request.app.
+
+    Tests may import the app as either `main` or `backend.web.main`. Prefer the
+    module whose `app` object is identical to the ASGI app on the request.
+    Fallback to a best-effort selection among available candidates.
+    """
+    import sys as _sys
+    candidates = [m for m in (_sys.modules.get("main"), _sys.modules.get("backend.web.main")) if m]
+    for m in candidates:
+        try:
+            if getattr(m, "app", None) is getattr(request, "app", None):
+                return m
+        except Exception:
+            pass
+    return candidates[0] if candidates else None
+
+
 def _request_app_base(request: Request) -> str:
     """Derive the browser-facing app base from the incoming request.
 
@@ -95,9 +113,8 @@ async def auth_login(request: Request, redirect: str | None = None):
     Permissions:
         Public.
     """
-    # Resolve main module robustly (prefer top-level alias when present)
-    import sys as _sys
-    mod = _sys.modules.get("main") or _sys.modules.get("backend.web.main")
+    # Resolve active main module by matching the ASGI app instance
+    mod = _resolve_active_main(request)
     if mod is None:  # pragma: no cover - alias fallback
         try:
             from backend.web import main as mod  # type: ignore
@@ -139,7 +156,7 @@ async def auth_login(request: Request, redirect: str | None = None):
 
 
 @auth_router.get("/auth/forgot")
-async def auth_forgot(login_hint: str | None = None):
+async def auth_forgot(request: Request, login_hint: str | None = None):
     """
     Redirect to Keycloak 'Forgot Password' page.
 
@@ -147,9 +164,8 @@ async def auth_forgot(login_hint: str | None = None):
         Adds `Cache-Control: private, no-store` to avoid caching redirect
         responses by browsers or proxies.
     """
-    # Resolve the active main module robustly (favor top-level alias when present)
-    import sys as _sys
-    mod = _sys.modules.get("main") or _sys.modules.get("backend.web.main")
+    # Resolve the active main module robustly (prefer matching app)
+    mod = _resolve_active_main(request)
     if mod is None:  # pragma: no cover - fallback when aliasing failed
         try:
             from backend.web import main as mod  # type: ignore
@@ -181,8 +197,7 @@ async def auth_register(request: Request, login_hint: str | None = None):
         Adds `Cache-Control: private, no-store` to prevent caching.
     """
     # Resolve main module robustly for shared config/state
-    import sys as _sys
-    mod = _sys.modules.get("main") or _sys.modules.get("backend.web.main")
+    mod = _resolve_active_main(request)
     if mod is None:  # pragma: no cover
         try:
             from backend.web import main as mod  # type: ignore
@@ -244,9 +259,8 @@ async def auth_logout(request: Request, redirect: str | None = None):
     Security:
         Adds `Cache-Control: private, no-store` to the 302 response.
     """
-    # Resolve the active main module robustly (favor top-level alias when present)
-    import sys as _sys
-    mod = _sys.modules.get("main") or _sys.modules.get("backend.web.main")
+    # Resolve the active main module robustly (prefer matching app)
+    mod = _resolve_active_main(request)
     if mod is None:  # pragma: no cover
         try:
             from backend.web import main as mod  # type: ignore
@@ -380,7 +394,7 @@ def _default_app_base(redirect_uri: str) -> str:
         - If `redirect_uri` ends with `/auth/callback`, return the prefix before it.
         - Else, return `scheme://netloc` from parsing `redirect_uri`.
         - On parsing issues, try environment fallbacks; finally use
-          `http://localhost:8100`.
+          `https://app.localhost`.
     """
     from urllib.parse import urlparse
     import os
@@ -418,7 +432,7 @@ def _default_app_base(redirect_uri: str) -> str:
             continue
 
     # 4) Last resort: safe local default for dev
-    return "http://localhost:8100"
+    return "https://app.localhost"
 
 
 def _is_inapp_path(value: str) -> bool:

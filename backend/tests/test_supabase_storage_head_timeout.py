@@ -45,10 +45,11 @@ def test_head_fallback_sets_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
 
     import requests  # type: ignore
     monkeypatch.setattr(requests, "head", fake_head)
+    # Approve example.local so the adapter performs a HEAD probe
+    monkeypatch.setenv("SUPABASE_PUBLIC_URL", "http://example.local")
 
     info = adapter.head_object(bucket="b", key="k.pdf")
     assert info["content_type"] == "application/pdf"
     # Timeout must be set to a finite value (e.g., 5 seconds)
     assert isinstance(called.get("timeout"), (int, float))
     assert called["timeout"] and called["timeout"] <= 10
-

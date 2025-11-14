@@ -43,7 +43,7 @@ def _derive_app_base() -> str:
                 return f"{p.scheme}://{p.netloc}"
         except Exception:
             pass
-    return "http://app.localhost:8100"
+    return "https://app.localhost"
 
 
 def _derive_kc_base() -> str:
@@ -53,7 +53,7 @@ def _derive_kc_base() -> str:
     pub = os.getenv("KC_PUBLIC_BASE_URL")
     if pub:
         return pub.rstrip("/")
-    return "http://id.localhost:8100"
+    return "https://id.localhost"
 
 
 def pytest_collection_modifyitems(config, items):

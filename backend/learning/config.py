@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from urllib.parse import urlparse
+import re
 
 
 @dataclass(frozen=True)
@@ -42,15 +43,21 @@ def _int_env(name: str, default: int) -> int:
     return value
 
 
+_HOST_RE = re.compile(r"^[a-z0-9._-]+$")
+
+
 def _validate_ollama_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("OLLAMA_BASE_URL must start with http:// or https://")
     host = (parsed.hostname or "").lower()
-    # Allow typical local-only forms (service name in compose, localhost, loopback)
-    if not (host == "localhost" or host.startswith("127.") or host.startswith("::1") or host.isalpha()):
-        # host.isalpha() allows service names like "ollama" in docker compose networks
-        raise ValueError("OLLAMA_BASE_URL must point to localhost/service network host")
+    # Allow typical local/service forms: localhost, loopback, docker service names
+    if host in {"localhost"} or host.startswith("127.") or host.startswith("::1"):
+        return
+    # Accept docker compose service names (no dots) and simple service hostnames
+    if "." not in host and _HOST_RE.match(host):
+        return
+    raise ValueError("OLLAMA_BASE_URL must point to localhost or a valid service hostname without dots")
 
 
 def _is_prod_like() -> bool:

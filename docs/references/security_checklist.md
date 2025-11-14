@@ -3,8 +3,8 @@
 Status: Stable
 
 ## Auth & Cookies
-- HttpOnly; Prod: Secure + SameSite=strict; Dev: SameSite=lax.
-- Keine Domain‑Attribute (host‑only).
+- Immer: `HttpOnly; Secure; SameSite=lax` (OAuth/OIDC‑kompatibel).
+- Keine Domain‑Attribute (host‑only Cookie).
 
 ## OAuth/OIDC
 - Nonce + State validiert; Redirect-Sanitization (nur In‑App‑Pfad).

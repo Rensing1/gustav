@@ -507,6 +507,7 @@ components:
         alt_text:
           type: string
           description: Optional alternative text for accessibility
+          maxLength: 500
     MaterialDownloadUrlResponse:
       type: object
       required: [url, expires_at]
@@ -4920,7 +4921,8 @@ paths:
         can finalize the submission payload. No additional rate-limiting or throttling is applied.
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
-        - "Host validation: Query param `url` must match the SUPABASE_URL host (prevents SSRF)."
+        - "Host validation: Query param `url` must match the SUPABASE_URL or SUPABASE_PUBLIC_URL host (prevents SSRF/rewrites)."
+        - "HTTP uploads are only accepted for localhost-style hosts (localhost/127.0.0.0/8/::1/host.docker.internal)."
       security:
         - cookieAuth: []
       parameters:
@@ -4930,7 +4932,9 @@ paths:
           schema:
             type: string
             format: uri
-          description: Absolute presigned HTTPS URL returned by the upload-intents endpoint (must match SUPABASE_URL host).
+          description: >-
+            Absolute presigned HTTPS URL returned by the upload-intents endpoint (host must equal SUPABASE_URL or SUPABASE_PUBLIC_URL;
+            HTTP is only accepted for localhost-style hosts).
         - in: query
           name: headers
           required: false

@@ -35,14 +35,24 @@ def get_materials_bucket() -> str:
     return (os.getenv("SUPABASE_STORAGE_BUCKET") or MATERIALS_BUCKET_DEFAULT).strip()
 
 
+LEGACY_SUBMISSIONS_ENV = "LEARNING_SUBMISSIONS_BUCKET"
+
+
 def get_submissions_bucket() -> str:
     """Return the configured submissions bucket name.
 
     Env:
-        LEARNING_STORAGE_BUCKET – optional override; otherwise defaults to
-        SUBMISSIONS_BUCKET_DEFAULT.
+        LEARNING_STORAGE_BUCKET – preferred override.
+        LEARNING_SUBMISSIONS_BUCKET – legacy env var kept for backward compat.
+        Falls back to SUBMISSIONS_BUCKET_DEFAULT when neither is set.
     """
-    return (os.getenv("LEARNING_STORAGE_BUCKET") or SUBMISSIONS_BUCKET_DEFAULT).strip()
+    new_name = (os.getenv("LEARNING_STORAGE_BUCKET") or "").strip()
+    if new_name:
+        return new_name
+    legacy = (os.getenv(LEGACY_SUBMISSIONS_ENV) or "").strip()
+    if legacy:
+        return legacy
+    return SUBMISSIONS_BUCKET_DEFAULT
 
 
 __all__ = [

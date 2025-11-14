@@ -49,3 +49,12 @@ def test_env_overrides(monkeypatch):
     assert cfg.get_materials_bucket() == 'mat-dev'
     assert cfg.get_submissions_bucket() == 'subs-dev'
 
+
+def test_submissions_bucket_falls_back_to_legacy_env(monkeypatch):
+    """Legacy LEARNING_SUBMISSIONS_BUCKET must stay supported for old deploys."""
+
+    monkeypatch.delenv('LEARNING_STORAGE_BUCKET', raising=False)
+    monkeypatch.setenv('LEARNING_SUBMISSIONS_BUCKET', 'legacy-subs')
+
+    cfg = _reload_config()
+    assert cfg.get_submissions_bucket() == 'legacy-subs'

@@ -23,7 +23,8 @@ except Exception:  # pragma: no cover
     HAVE_PSYCOPG = False
 
 _ERROR_MAX_LENGTH = 256
-_SENSITIVE_TOKEN_PATTERN = re.compile(r"(?i)(secret|token|password|key)[-_a-z0-9]*\s*=\s*\S+")
+_SENSITIVE_TOKEN_PATTERN = re.compile(r"(?i)(secret|token|password|key)[-_a-z0-9]*\s*[:=]\s*\S+")
+_FILESYSTEM_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:\\[^\s]+|/[^\s]+)")
 
 
 def _sanitize_error_message(value: Optional[str]) -> Optional[str]:
@@ -34,6 +35,7 @@ def _sanitize_error_message(value: Optional[str]) -> Optional[str]:
     if not collapsed:
         return None
     scrubbed = _SENSITIVE_TOKEN_PATTERN.sub("[redacted]", collapsed)
+    scrubbed = _FILESYSTEM_PATH_PATTERN.sub("[path]", scrubbed)
     if len(scrubbed) > _ERROR_MAX_LENGTH:
         scrubbed = scrubbed[: _ERROR_MAX_LENGTH - 3].rstrip() + "..."
     return scrubbed

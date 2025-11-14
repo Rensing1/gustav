@@ -10,6 +10,7 @@ import importlib
 import httpx
 import pytest
 from httpx import ASGITransport
+from starlette.requests import Request as StarletteRequest
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -141,6 +142,45 @@ async def test_proxy_rejects_disallowed_mime(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.anyio
+async def test_proxy_rejects_port_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except Exception:
+        learning_backend = None
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-port", name="S", roles=["student"])  # type: ignore
+
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("forward must not be called when port mismatched")
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+
+    bad = "https://supabase.local:65432/storage/v1/object/upload/submissions/file"
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": bad},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
+        )
+    assert r.status_code == 400
+    assert r.json().get("detail") == "invalid_url_host"
+
+
+@pytest.mark.anyio
 async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.MonkeyPatch) -> None:
     """Local http with host.docker.internal should be treated as local dev host."""
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
@@ -224,5 +264,53 @@ async def test_proxy_allows_double_slash_path(monkeypatch: pytest.MonkeyPatch) -
             params={"url": good},
             content=b"abc",
             headers={"Origin": "http://test", "Content-Type": "application/pdf"},
+        )
+    assert r.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_proxy_streams_request_body_without_calling_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure the proxy reads the incoming body via stream, not Request.body()."""
+
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except Exception:
+        learning_backend = None
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-stream", name="S", roles=["student"])  # type: ignore
+
+    class _Resp:
+        status_code = 200
+
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        return _Resp()
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+
+    async def _fail_body(self):  # type: ignore[no-untyped-def]
+        raise AssertionError("Request.body() usage is forbidden for streaming proxy")
+
+    monkeypatch.setattr(StarletteRequest, "body", _fail_body, raising=False)
+
+    good = "http://host.docker.internal:54321/storage/v1/object/upload/submissions/file"
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": good},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
         )
     assert r.status_code == 200

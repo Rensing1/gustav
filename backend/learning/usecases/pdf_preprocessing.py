@@ -29,6 +29,7 @@ from typing import Protocol
 import psycopg  # type: ignore
 
 from backend.vision.pdf_renderer import PdfRenderError
+from backend.learning.repo_db import _sanitize_error_message as _sanitize_repo_error_message
 
 
 class BinaryWriteStorage(Protocol):
@@ -140,11 +141,12 @@ class PreprocessPdfSubmissionUseCase:
 
     def _mark_failed(self, *, context: SubmissionContext, code: str, message: str) -> None:
         """Set submission status to failed with the provided error code/message."""
+        clean_message = _sanitize_repo_error_message(message) or "processing_failed"
         with psycopg.connect(self._worker_dsn) as conn:  # type: ignore[arg-type]
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, false)", (context.student_sub,))
                 cur.execute(
                     "select public.learning_worker_update_failed(%s::uuid, %s, %s)",
-                    (context.submission_id, code, message),
+                    (context.submission_id, code, clean_message),
                 )
             conn.commit()

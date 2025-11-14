@@ -28,11 +28,32 @@ class _CapturingClient:
 
 def _install_fake_httpx_and_ollama(monkeypatch: pytest.MonkeyPatch, client: _CapturingClient) -> None:
     # Simulate remote fetch failure (e.g., 404 or network error)
-    class _Resp:
-        status_code = 404
-        content = b""
+    class _HttpxStream:
+        def __init__(self, status_code: int = 404):
+            self.status_code = status_code
 
-    fake_httpx = SimpleNamespace(get=lambda url, headers=None, timeout=None: _Resp())
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def iter_bytes(self):  # type: ignore[no-untyped-def]
+            if False:
+                yield b""  # pragma: no cover
+            return
+
+    class _HttpxClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            return _HttpxStream()
+
+    fake_httpx = SimpleNamespace(Client=lambda timeout=None, follow_redirects=None: _HttpxClient())
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
     # Provide an ollama client stub to detect unintended calls
     fake_ollama = SimpleNamespace(Client=lambda base_url=None: client)
@@ -71,4 +92,3 @@ def test_missing_local_and_remote_is_transient(tmp_path, monkeypatch: pytest.Mon
     assert isinstance(ei.value, VisionTransientError)
     assert "image_unavailable" in str(ei.value)
     assert client.called is False
-

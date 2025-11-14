@@ -345,3 +345,65 @@ def test_pdf_preprocessing_failed_path_uses_security_helper(monkeypatch):
     usecase._mark_failed(context=context, code="vision_failed", message="boom")
 
     assert any("learning_worker_update_failed" in stmt for stmt in executed), executed
+
+
+def test_mark_failed_sanitizes_sensitive_error_messages(monkeypatch):
+    """Error messages must be scrubbed before stored in the database."""
+
+    import backend.learning.usecases.pdf_preprocessing as pdf_uc
+
+    captured: list[tuple[str, tuple]] = []
+
+    class _Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, sql, params=None):  # type: ignore[no-untyped-def]
+            if "learning_worker_update_failed" in sql:
+                captured.append((sql, tuple(params or ())))
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return _Cursor()
+
+        def commit(self):
+            pass
+
+    def _fake_connect(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return _Conn()
+
+    monkeypatch.setattr(pdf_uc.psycopg, "connect", _fake_connect)
+
+    usecase = PreprocessPdfSubmissionUseCase(
+        repo=types.SimpleNamespace(),
+        worker_dsn="postgresql://worker",
+        storage=types.SimpleNamespace(),
+        bucket="submissions",
+    )
+    context = SubmissionContext(
+        submission_id=str(uuid.uuid4()),
+        course_id=str(uuid.uuid4()),
+        task_id=str(uuid.uuid4()),
+        student_sub="student-redact",
+        storage_key="submissions/course/task/student/file.pdf",
+        mime_type="application/pdf",
+        size_bytes=1024,
+        sha256="a" * 64,
+    )
+
+    noisy = "Renderer crashed /tmp/secret/path token=ABC123 " + ("x" * 400)
+    usecase._mark_failed(context=context, code="vision_failed", message=noisy)
+
+    assert captured, "expected failed update to be recorded"
+    sanitized_message = captured[-1][1][2]
+    assert "token" not in sanitized_message.lower()
+    assert len(sanitized_message) <= 256

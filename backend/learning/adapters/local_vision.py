@@ -21,6 +21,7 @@ from typing import Dict, Optional
 import base64
 import inspect
 import logging
+from urllib.parse import urlparse as _urlparse
 
 from backend.learning.adapters.ports import (
     VisionPermanentError,
@@ -28,7 +29,7 @@ from backend.learning.adapters.ports import (
     VisionTransientError,
 )
 from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
-from backend.storage.config import get_submissions_bucket
+from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 
 LOG = logging.getLogger(__name__)
 
@@ -45,6 +46,67 @@ def _strip_bucket_prefix(key: str, bucket: str) -> str:
     if key.startswith(prefix):
         return key[len(prefix) :]
     return key
+
+
+def _storage_base_and_hosts() -> tuple[str | None, set[str]]:
+    hosts: set[str] = set()
+    base_url: str | None = None
+    for env_name in ("SUPABASE_URL", "SUPABASE_PUBLIC_URL"):
+        raw = (os.getenv(env_name) or "").strip()
+        if not raw:
+            continue
+        try:
+            parsed = _urlparse(raw)
+        except Exception:
+            continue
+        scheme = (parsed.scheme or "").lower()
+        host = (parsed.hostname or "").lower()
+        if not host or scheme not in {"http", "https"}:
+            continue
+        hosts.add(host)
+        if base_url is None and env_name == "SUPABASE_URL":
+            base_url = raw.rstrip("/")
+        elif base_url is None:
+            base_url = raw.rstrip("/")
+    return (base_url.rstrip("/") if base_url else None, hosts)
+
+
+def _download_supabase_object(*, bucket: str, object_key: str, srk: str, max_bytes: int) -> tuple[bytes | None, str]:
+    base_url, allowed_hosts = _storage_base_and_hosts()
+    if not base_url or not allowed_hosts:
+        return (None, "untrusted_host")
+    target = f"{base_url.rstrip('/')}/storage/v1/object/{bucket}/{object_key}"
+    try:
+        parsed = _urlparse(target)
+    except Exception:
+        return (None, "untrusted_host")
+    host = (parsed.hostname or "").lower()
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in {"http", "https"} or host not in allowed_hosts:
+        return (None, "untrusted_host")
+    try:
+        import httpx  # type: ignore
+    except Exception:
+        return (None, "http_client_unavailable")
+    try:
+        headers = {"apikey": srk, "Authorization": f"Bearer {srk}"}
+        with httpx.Client(timeout=10, follow_redirects=False) as client:  # type: ignore[attr-defined]
+            with client.stream("GET", target, headers=headers) as resp:
+                code = int(getattr(resp, "status_code", 500))
+                if 300 <= code < 400:
+                    return (None, "redirect")
+                if code >= 400:
+                    return (None, "http_error")
+                data = bytearray()
+                for chunk in resp.iter_bytes():  # type: ignore[attr-defined]
+                    if not chunk:
+                        continue
+                    data.extend(chunk)
+                    if max_bytes > 0 and len(data) > max_bytes:
+                        return (None, "size_exceeded")
+        return (bytes(data), "ok")
+    except Exception:
+        return (None, "download_error")
 
 
 class _LocalVisionAdapter:
@@ -230,43 +292,26 @@ class _LocalVisionAdapter:
 
         # Remote fetch from Supabase if local PDF not available
         if data is None:
-            supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
             srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
-            if supabase_url and srk and storage_key:
+            if srk and storage_key:
                 obj = _strip_bucket_prefix(storage_key, bucket)
-                url = f"{supabase_url}/storage/v1/object/{bucket}/{obj}"
-                try:
-                    import httpx  # type: ignore
-
-                    resp = httpx.get(
-                        url,
-                        headers={
-                            "apikey": srk,
-                            "Authorization": f"Bearer {srk}",
-                        },
-                        timeout=15,
+                fetched, reason = _download_supabase_object(
+                    bucket=bucket,
+                    object_key=obj,
+                    srk=srk,
+                    max_bytes=get_learning_max_upload_bytes(),
+                )
+                if reason == "untrusted_host":
+                    raise VisionTransientError("untrusted_host")
+                if reason == "size_exceeded":
+                    raise VisionTransientError("remote_fetch_too_large")
+                if fetched:
+                    data = fetched
+                    LOG.info(
+                        "learning.vision.pdf_ensure_stitched action=fetch_remote size=%s submission_id=%s",
+                        len(fetched),
+                        submission_id,
                     )
-                    if 200 <= int(getattr(resp, "status_code", 0)) < 300:
-                        content = bytes(getattr(resp, "content", b""))
-                        ctype = str(getattr(resp, "headers", {}).get("content-type", ""))
-                        if content:
-                            if (not ctype.lower().startswith("application/pdf")) and (not content.startswith(b"%PDF-")):
-                                LOG.warning(
-                                    "learning.vision.pdf_ensure_stitched action=wrong_content status=%s ctype=%s size=%s submission_id=%s",
-                                    getattr(resp, "status_code", ""),
-                                    ctype,
-                                    len(content),
-                                    submission_id,
-                                )
-                            else:
-                                data = content
-                                LOG.info(
-                                    "learning.vision.pdf_ensure_stitched action=fetch_remote size=%s submission_id=%s",
-                                    len(content),
-                                    submission_id,
-                                )
-                except Exception:
-                    pass
         if data is None:
             return None
         try:
@@ -349,6 +394,7 @@ class _LocalVisionAdapter:
         if mime not in SUPPORTED_MIME:
             raise VisionPermanentError(f"unsupported mime: {mime}")
 
+        max_download_bytes = get_learning_max_upload_bytes()
         # Stream bytes from local storage when configured for non-text kinds.
         # We intentionally avoid importing the web layer; implement a minimal
         # verification here mirroring the path guard and integrity checks.
@@ -414,31 +460,22 @@ class _LocalVisionAdapter:
 
             # Fallback: if local root not provided or file not found, try Supabase fetch
             if (not image_b64) and storage_key and mime in {"image/jpeg", "image/png"}:
-                supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
                 srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
-                if supabase_url and srk:
-                    # Infer object key; tolerate a leading bucket segment inside storage_key
+                if srk:
                     obj = _strip_bucket_prefix(storage_key, bucket)
-                    url = f"{supabase_url}/storage/v1/object/{bucket}/{obj}"
-                    try:
-                        import httpx  # type: ignore
-
-                        resp = httpx.get(
-                            url,
-                            headers={
-                                "apikey": srk,
-                                "Authorization": f"Bearer {srk}",
-                            },
-                            timeout=10,
-                        )
-                        if int(getattr(resp, "status_code", 0)) >= 200 and int(getattr(resp, "status_code", 0)) < 300:
-                            data = bytes(getattr(resp, "content", b""))
-                            if data:
-                                image_b64 = base64.b64encode(data).decode("ascii")
-                                meta["bytes_read"] = len(data)
-                    except Exception:
-                        # Remote fetch failures are treated as non-fatal: continue without images
-                        pass
+                    data, reason = _download_supabase_object(
+                        bucket=bucket,
+                        object_key=obj,
+                        srk=srk,
+                        max_bytes=max_download_bytes,
+                    )
+                    if reason == "untrusted_host":
+                        raise VisionTransientError("untrusted_host")
+                    if reason == "size_exceeded":
+                        raise VisionTransientError("remote_fetch_too_large")
+                    if data:
+                        image_b64 = base64.b64encode(data).decode("ascii")
+                        meta["bytes_read"] = len(data)
 
             # Local fetch for PDF derived pages (independent of original PDF presence)
             if mime == "application/pdf" and root and not image_list_b64:
@@ -472,33 +509,23 @@ class _LocalVisionAdapter:
                     if course_id and task_id and student_sub and submission_id
                     else None
                 )
-                supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
                 srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
-                if derived_prefix and supabase_url and srk:
-                    try:
-                        import httpx  # type: ignore
-                    except Exception:
-                        httpx = None  # type: ignore
-                    if httpx is not None:
-                        for idx in range(1, 6):
-                            page_key = f"{derived_prefix}/page_{idx:04}.png"
-                            obj = _strip_bucket_prefix(page_key, bucket)
-                            url = f"{supabase_url}/storage/v1/object/{bucket}/{obj}"
-                            try:
-                                resp = httpx.get(
-                                    url,
-                                    headers={
-                                        "apikey": srk,
-                                        "Authorization": f"Bearer {srk}",
-                                    },
-                                    timeout=10,
-                                )
-                                if 200 <= int(getattr(resp, "status_code", 0)) < 300:
-                                    data = bytes(getattr(resp, "content", b""))
-                                    if data:
-                                        image_list_b64.append(base64.b64encode(data).decode("ascii"))
-                            except Exception:
-                                continue
+                if derived_prefix and srk:
+                    for idx in range(1, 6):
+                        page_key = f"{derived_prefix}/page_{idx:04}.png"
+                        obj = _strip_bucket_prefix(page_key, bucket)
+                        data, reason = _download_supabase_object(
+                            bucket=bucket,
+                            object_key=obj,
+                            srk=srk,
+                            max_bytes=max_download_bytes,
+                        )
+                        if reason == "untrusted_host":
+                            raise VisionTransientError("untrusted_host")
+                        if reason == "size_exceeded":
+                            raise VisionTransientError("remote_fetch_too_large")
+                        if data:
+                            image_list_b64.append(base64.b64encode(data).decode("ascii"))
 
             # At this point, for image/jpeg|png we require bytes to avoid model
             # calls without visual inputs. If still missing, classify as transient

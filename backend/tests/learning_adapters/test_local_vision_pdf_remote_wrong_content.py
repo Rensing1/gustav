@@ -21,15 +21,37 @@ def test_pdf_remote_wrong_content_transient(tmp_path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
 
-    # Fake httpx.get returning HTML bytes with 200
-    class _Resp:
-        def __init__(self, content: bytes, status_code: int = 200, headers: dict | None = None):
-            self.content = content
+    # Fake httpx streaming client returning HTML bytes with 200
+    class _HttpxStream:
+        def __init__(self, data: bytes, status_code: int = 200):
+            self._data = data
             self.status_code = status_code
-            self.headers = headers or {"content-type": "text/html"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def iter_bytes(self):  # type: ignore[no-untyped-def]
+            yield self._data
+
+    class _HttpxClient:
+        def __init__(self, data: bytes, status_code: int = 200):
+            self._data = data
+            self._status = status_code
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            return _HttpxStream(self._data, self._status)
 
     html = b"<!doctype html><title>Not Found</title>"
-    fake_httpx = SimpleNamespace(get=lambda url, headers=None, timeout=None: _Resp(html, 200))
+    fake_httpx = SimpleNamespace(Client=lambda timeout=None, follow_redirects=None: _HttpxClient(html, 200))
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
 
     # Fake ollama client to ensure no call is made
@@ -64,4 +86,3 @@ def test_pdf_remote_wrong_content_transient(tmp_path, monkeypatch: pytest.Monkey
     # Logging contains wrong_content hint
     logs = "\n".join(r.getMessage() for r in caplog.records)
     assert "wrong_content" in logs
-

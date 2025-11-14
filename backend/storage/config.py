@@ -54,7 +54,7 @@ __all__ = [
 
 # --- Size limits --------------------------------------------------------------
 
-def _parse_int_env(name: str, default: int) -> int:
+def _parse_int_env(name: str, default: int, *, contract_max: int | None = None) -> int:
     raw = (os.getenv(name) or "").strip()
     if not raw:
         return default
@@ -62,17 +62,23 @@ def _parse_int_env(name: str, default: int) -> int:
         value = int(raw)
     except ValueError:
         return default
-    return max(0, value)
+    if value <= 0:
+        return default
+    if isinstance(contract_max, int) and contract_max > 0:
+        value = min(value, contract_max)
+    return value
 
 
 def get_learning_max_upload_bytes() -> int:
-    """Maximum upload size for learning submissions (default 10 MiB)."""
-    return _parse_int_env("LEARNING_MAX_UPLOAD_BYTES", 10 * 1024 * 1024)
+    """Maximum upload size for learning submissions (default/clamped 10 MiB)."""
+    contract_max = 10 * 1024 * 1024
+    return _parse_int_env("LEARNING_MAX_UPLOAD_BYTES", contract_max, contract_max=contract_max)
 
 
 def get_materials_max_upload_bytes() -> int:
-    """Maximum upload size for teaching materials (default 20 MiB)."""
-    return _parse_int_env("MATERIALS_MAX_UPLOAD_BYTES", 20 * 1024 * 1024)
+    """Maximum upload size for teaching materials (default/clamped 20 MiB)."""
+    contract_max = 20 * 1024 * 1024
+    return _parse_int_env("MATERIALS_MAX_UPLOAD_BYTES", contract_max, contract_max=contract_max)
 
 
 __all__ += [

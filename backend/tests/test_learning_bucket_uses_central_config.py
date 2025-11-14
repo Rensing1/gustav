@@ -45,13 +45,43 @@ def test_local_vision_adapter_uses_configured_bucket(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "get_submissions_bucket", lambda: "subs-cfg", raising=True)
 
     # Patch httpx before importing the adapter so remote fetches use the sentinel.
+    class _Stream:
+        def __init__(self, tracker: list[str], data: bytes):
+            self._tracker = tracker
+            self._data = data
+            self.status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def iter_bytes(self):  # type: ignore[no-untyped-def]
+            yield self._data
+
+    class _Client:
+        def __init__(self, tracker: list[str], data: bytes):
+            self._tracker = tracker
+            self._data = data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, method: str, url: str, headers=None):  # type: ignore[no-untyped-def]
+            self._tracker.append(url)
+            return _Stream(self._tracker, self._data)
+
     class _HttpxModule:
         def __init__(self) -> None:
             self.urls: list[str] = []
+            self._data = b"%PDF-1.4\n"
 
-        def get(self, url, **kwargs):  # type: ignore[no-untyped-def]
-            self.urls.append(url)
-            raise RuntimeError("stop after capturing url")
+        def Client(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _Client(self.urls, self._data)
 
     fake_httpx = _HttpxModule()
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)

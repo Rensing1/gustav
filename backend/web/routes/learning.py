@@ -228,21 +228,55 @@ def _current_environment() -> str:
     - Try to import `backend.web.main` or `main` and read `SETTINGS.environment`.
     - Fallback to `GUSTAV_ENV` (default "dev").
     """
-    try:
-        import importlib
-        mod = importlib.import_module("backend.web.main")
-    except Exception:
+    def _read_env_from_module(mod: object | None) -> str | None:
+        if mod is None:
+            return None
         try:
-            import importlib
-            mod = importlib.import_module("main")
+            settings = getattr(mod, "SETTINGS", None)
         except Exception:
-            mod = None
-    if mod is not None:
+            return None
+        if settings is None:
+            return None
         try:
-            env = getattr(getattr(mod, "SETTINGS", object()), "environment", "dev")
-            return str(env).lower()
+            raw = getattr(settings, "environment", None)
         except Exception:
-            pass
+            return None
+        if raw is None:
+            return None
+        value = str(raw).strip().lower()
+        return value or None
+
+    def _loaded_override_env(alias: str) -> str | None:
+        mod = sys.modules.get(alias)
+        if mod is None:
+            return None
+        try:
+            settings = getattr(mod, "SETTINGS", None)
+        except Exception:
+            return None
+        if settings is None:
+            return None
+        # Only short-circuit when an explicit override is present so tests can
+        # observe module-level overrides even if later imports fail.
+        if getattr(settings, "_env_override", None) is None:
+            return None
+        return _read_env_from_module(mod)
+
+    for alias in ("backend.web.main", "main"):
+        env = _loaded_override_env(alias)
+        if env:
+            return env
+
+    import importlib
+
+    for alias in ("backend.web.main", "main"):
+        try:
+            mod = importlib.import_module(alias)
+        except Exception:
+            continue
+        env = _read_env_from_module(mod)
+        if env:
+            return env
     return (os.getenv("GUSTAV_ENV", "dev") or "").lower()
 
 

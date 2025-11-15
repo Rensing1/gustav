@@ -59,11 +59,12 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
    ```bash
    cp .env.example .env
    ```
-   Danach `.env` editieren und sichere Werte setzen:
-   - `APP_DB_PASSWORD`, `KC_ADMIN_CLIENT_SECRET`, `KC_DB_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`
-   - Öffentlich erreichbare URLs: `WEB_BASE`, `REDIRECT_URI`, `KC_BASE_URL`, `KC_PUBLIC_BASE_URL`
-   - Falls Ollama/AI geplant: `AI_BACKEND`, `AI_FEEDBACK_MODEL`, `AI_VISION_MODEL`
-   - Storage-Schlüssel niemals auf Default belassen (`SUPABASE_SERVICE_ROLE_KEY` nur serverseitig nutzen).
+   Danach `.env` editieren und sichere Werte setzen. Für produktive Deployments sind folgende Einträge verpflichtend, weil sonst die Sicherheits-Guards beim Start abbrechen (`backend/web/config.py`):
+   - `GUSTAV_ENV=prod`, `REQUIRE_STORAGE_VERIFY=true`, `ENABLE_STORAGE_UPLOAD_PROXY=false`, `ENABLE_DEV_UPLOAD_STUB=false`, `AUTO_CREATE_STORAGE_BUCKETS=false`.
+   - `APP_DB_PASSWORD`, `KC_ADMIN_CLIENT_SECRET`, `KC_DB_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`.
+   - Öffentlich erreichbare URLs: `WEB_BASE`, `REDIRECT_URI`, `KC_BASE_URL`, `KC_PUBLIC_BASE_URL` **und** die Keycloak-spezifischen Hostnames aus dem Compose-File (`KC_HOSTNAME_URL`, `KC_HOSTNAME_ADMIN_URL`). Alle vier Werte müssen auf die endgültigen HTTPS-FQDNs zeigen, sonst funktionieren OIDC-Redirects nicht.
+   - Supabase-Credentials: `SUPABASE_URL` kommt aus `supabase status`, der `SUPABASE_SERVICE_ROLE_KEY` darf **nie** auf `DUMMY_DO_NOT_USE` verbleiben. Sobald der Supabase-Stack läuft (Abschnitt 3), Werte mit `make supabase-sync-env` oder `scripts/sync_supabase_env.py` in `.env` schreiben und anschließend den Dummy manuell ersetzen.
+   - Falls Ollama/AI geplant: `AI_BACKEND` auf ein reales Backend setzen (`local` oder `remote`), niemals `stub`. Modelle: `AI_FEEDBACK_MODEL`, `AI_VISION_MODEL`, Timeouts etc.
 
 3. **Uploads-Verzeichnis anlegen (für Vision-Worker)**  
    ```bash
@@ -72,16 +73,10 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
 
 4. **Hostname-Anpassungen planen**  
    - `reverse-proxy/Caddyfile`: Domains `app.localhost` und `id.localhost` durch die echten FQDNs ersetzen.  
-   - DNS/A-Records der Schule auf die Server-IP legen (z. B. `gustav.schule.de` → App, `id.gustav.schule.de` → Keycloak).
-   - Für produktive HTTPS-Setups die Caddy-Ports im `docker-compose.yml` von `8100:80` auf `80:80` und zusätzlich `443:443` erweitern:
-     ```yaml
-     services:
-       caddy:
-         ports:
-           - "80:80"
-           - "443:443"
-     ```
-     Beispiel für eine echte Caddy-Konfiguration (`reverse-proxy/Caddyfile`):
+   - DNS/A-Records der Schule auf die Server-IP legen (z. B. `gustav.schule.de` → App, `id.gustav.schule.de` → Keycloak). Für Tests ohne öffentliche Domains können weiterhin `*.localhost`-Einträge genutzt werden.
+   - `docker-compose.yml`: Stelle sicher, dass `caddy` Ports `80:80` **und** `443:443` mapped (Standard seit 2025). Nur für rein lokale Tests darfst du das Mapping auf `8100:80` zurückdrehen; produktive Zertifikate von Let’s Encrypt gehen nur bei offenem Port 80/443.
+   - **Keycloak-Redirects aktualisieren**: Die ausgelieferte Realm-Datei `keycloak/realm-gustav.json` erlaubt ausschließlich `https://localhost/*`. Passe vor dem ersten Start entweder diese Datei an oder konfiguriere nach dem Import über die Keycloak-Admin-Konsole (`Clients → gustav-web → Settings`). Hinterlege dort die endgültigen Werte aus `WEB_BASE` unter `Valid Redirect URIs` **und** `Web Origins` (z. B. `https://gustav.schule.de/*`). Erst wenn die Domains eingetragen sind, akzeptiert Keycloak den OIDC-Redirect und der Login funktioniert auf PROD.
+   - Beispiel für eine echte Caddy-Konfiguration (`reverse-proxy/Caddyfile`):
      ```caddy
      gustav.schule.de {
        reverse_proxy gustav-alpha2:8000
@@ -104,13 +99,26 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
    ```
    Läuft alles, zeigt `supabase status` bei API, DB, Storage und Studio „RUNNING“. Der Befehl erstellt automatisch das Docker-Netz `supabase_network_gustav-alpha2`, das GUSTAV später nutzt.
 
-2. **Migrationen anwenden**  
+2. **Supabase-Credentials in `.env` spiegeln**  
+   ```bash
+   make supabase-sync-env
+   # Alternativ: scripts/sync_supabase_env.py
+   ```
+   Das Skript aktualisiert ausschließlich `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY`. Werte wie `SUPABASE_PUBLIC_URL` (muss auf `WEB_BASE` zeigen) oder `SUPABASE_ANON_KEY` setzt du im Anschluss von Hand, sonst verweisen signierte Downloads weiterhin auf `https://app.localhost`. Prüfe außerdem, dass kein Dummy-Schlüssel (`DUMMY_DO_NOT_USE`) übrig bleibt.
+
+3. **Migrationen anwenden**  
    ```bash
    supabase migration up
    ```
    Sorgt dafür, dass Postgres, Policies und Storage-Buckets dem Versionsstand unter `supabase/migrations/` entsprechen.
 
-3. **(Optional) Seeds oder Backups einspielen**  
+4. **App-Loginrolle anlegen bzw. Passwort rotieren**  
+   ```bash
+   make db-login-user APP_DB_USER=gustav_app APP_DB_PASSWORD='<starkes Passwort>'
+   ```
+   Dieser Schritt ist Pflicht, weil Migrationen ausschließlich Rechte an die Rolle `gustav_limited` vergeben (siehe Kommentar in `supabase/migrations/20251109082814_grant_storage_select.sql`). Das eigentliche LOGIN-Role (`APP_DB_USER`) existiert nicht automatisch und muss hier erstellt werden – idealerweise mit einem serverseitigen Passwort-Manager. Verwende denselben User/Pass, den du in `.env` gesetzt hast.
+
+5. **(Optional) Seeds oder Backups einspielen**  
    - Seeds laufen automatisch, wenn in `supabase/config.toml` aktiviert.  
    - Für echte Produktionsdaten bitte das jeweilige Runbook (unter `docs/migration/`) befolgen.
 
@@ -124,10 +132,10 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
    docker compose ps
    ```
    Dienste im Compose-Stack:
-   - `caddy`: Reverse Proxy, stellt Port 8100 bereit  
+   - `caddy`: Reverse Proxy, stellt Port 80/443 (Let’s Encrypt) bereit – nur für rein lokale Tests alternativ `8100:80` nutzen  
    - `web`: FastAPI/HTMX-Backend  
    - `learning-worker`: Hintergrundjobs & KI-Feedback  
-   - `keycloak` + `keycloak-db`: Identity Provider  
+   - `keycloak` + `keycloak-db`: Identity Provider, läuft mit `kc.sh start --optimized` (kein Dev-Modus). Hostnames werden über `.env` via `KC_HOSTNAME_URL`/`KC_HOSTNAME_ADMIN_URL` gesetzt und müssen zu deinen FQDNs passen.  
    - `ollama`: lokale KI-Inferenz (kann bei Bedarf aus dem Compose-File entfernt werden)
 
 2. **Logs prüfen**  
@@ -138,10 +146,11 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
 
 3. **Gesundheitschecks**  
    ```bash
-   curl -s https://app.localhost/health
-   curl -s -o /dev/null -w '%{http_code}\n' https://id.localhost/realms/gustav/.well-known/openid-configuration
+   # Ersetze die Domains durch deine Werte aus WEB_BASE bzw. KC_PUBLIC_BASE_URL
+   curl -s https://gustav.schule.de/health
+   curl -s -o /dev/null -w '%{http_code}\n' https://id.gustav.schule.de/realms/gustav/.well-known/openid-configuration
    ```
-   Erwartet werden `{"status":"healthy"}` sowie HTTP 200 für Keycloak.
+   Ergebnis: `{"status":"healthy"}` und HTTP 200 für den Keycloak-Endpunkt. Wenn du (noch) über `localhost` testest, füge den passenden `Host`-Header hinzu: `curl -s -H "Host: app.localhost" https://<SERVER-IP>/health`.
 
 4. **Optionale Tests**  
    ```bash
@@ -171,7 +180,8 @@ Der Server sollte nur die wirklich benötigten Ports öffentlich anbieten. Typis
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow 22/tcp           # SSH-Login
-sudo ufw allow 8100/tcp         # Caddy / Web-Frontend
+sudo ufw allow 80/tcp           # HTTP (Let’s Encrypt Challenge)
+sudo ufw allow 443/tcp          # HTTPS (Caddy Reverse Proxy)
 # Optional: nur öffnen, wenn externe KI-Clients Ollama nutzen sollen
 sudo ufw allow 11434/tcp        # Ollama API
 sudo ufw enable
@@ -179,7 +189,7 @@ sudo ufw status verbose
 ```
 
 - Die Supabase-Ports (54321–54324 für API/Studio, 54322 für Postgres) bleiben geschlossen und sind nur über Docker-Bridge erreichbar.  
-- Falls deine Distribution `firewalld` nutzt, setze äquivalent `firewall-cmd --permanent --add-port=8100/tcp` usw.  
+- Falls deine Distribution `firewalld` nutzt, setze äquivalent `firewall-cmd --permanent --add-port=80/tcp --add-port=443/tcp`. Für rein lokale Tests ohne echte Domains genügt Port 8100; in dem Fall ersetze die Regeln entsprechend.
 - Prüfe zusätzlich die Schul-Firewall bzw. den Router und gib dieselben Ports frei.
 
 ---

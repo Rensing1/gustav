@@ -421,18 +421,9 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
                 )
                 job_count = int(cur.fetchone()[0])
         except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):  # type: ignore[attr-defined]
-            conn.rollback()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "select count(*) from public.learning_submission_ocr_jobs where submission_id = %s",
-                        (submission_id,),
-                    )
-                    job_count = int(cur.fetchone()[0])
-            except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):  # type: ignore[attr-defined]
-                pytest.skip(
-                    "Queue table missing or no privileges; migration/grants not applied in this environment."
-                )
+            pytest.skip(
+                "Queue table missing or no privileges; migration/grants not applied in this environment."
+            )
 
     assert job_count == 1
 

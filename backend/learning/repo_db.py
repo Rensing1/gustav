@@ -713,17 +713,16 @@ class DBLearningRepo:
                         "hints_md": hints_md,
                     }
                     queue_table = self._resolve_queue_table(cur)
-                    if queue_table:
-                        insert_sql = sql.SQL(
-                            "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"
-                        ).format(sql.Identifier(queue_table))
-                        cur.execute(
-                            insert_sql,
-                            (
-                                submission_id,
-                                Json(job_payload) if Json is not None else json.dumps(job_payload),
-                            ),
-                        )
+                    insert_sql = sql.SQL(
+                        "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"
+                    ).format(sql.Identifier(queue_table))
+                    cur.execute(
+                        insert_sql,
+                        (
+                            submission_id,
+                            Json(job_payload) if Json is not None else json.dumps(job_payload),
+                        ),
+                    )
                     conn.commit()
                 except Exception as exc:
                     # If another in-flight request inserted with the same Idempotency-Key, reuse it
@@ -851,15 +850,29 @@ class DBLearningRepo:
 
         return [self._row_to_submission(row) for row in rows]
 
-    def _resolve_queue_table(self, cur) -> Optional[str]:
-        """Return the available queue table name (new or legacy), if any."""
-        candidates = ("learning_submission_jobs", "learning_submission_ocr_jobs")
-        for name in candidates:
-            cur.execute("select to_regclass(%s)", (f"public.{name}",))
-            reg = cur.fetchone()
-            if reg and reg[0]:
-                return name
-        return None
+    def _resolve_queue_table(self, cur) -> str:
+        """
+        Ensure the canonical worker queue exists before inserting jobs.
+
+        Parameters:
+            cur: Open psycopg cursor operating under `gustav_limited`. The caller
+                 already set `app.current_sub`, so we only assert schema state here.
+
+        Behavior:
+            - Checks `to_regclass('public.learning_submission_jobs')`.
+            - Returns the canonical table name when present, otherwise aborts with a
+              descriptive runtime error so API callers see a 500 instead of silently
+              failing to enqueue submissions.
+
+        Permissions:
+            Requires SELECT on `pg_catalog.pg_class`, included in the default privileges
+            of the application role.
+        """
+        cur.execute("select to_regclass('public.learning_submission_jobs')")
+        reg = cur.fetchone()
+        if reg and reg[0]:
+            return "learning_submission_jobs"
+        raise RuntimeError("Queue table public.learning_submission_jobs missing; run migrations.")
 
     @staticmethod
     def _render_feedback(kind: str, attempt: int) -> str:

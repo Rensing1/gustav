@@ -160,17 +160,10 @@ def run_once(
 
 
 def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
-    """Lease the next visible job from the available queue table.
-
-    Supports both the new `learning_submission_jobs` and the legacy
-    `learning_submission_ocr_jobs` table to remain compatible with different
-    migration baselines.
-    """
+    """Lease the next visible job from the canonical queue table."""
     lease_key = uuid4()
     lease_until = now + timedelta(seconds=LEASE_SECONDS)
     queue_table = _resolve_queue_table(conn)
-    if not queue_table:
-        return None
     with conn.cursor() as cur:
         stmt = _sql.SQL(
             """
@@ -218,18 +211,38 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
     )
 
 
-def _resolve_queue_table(conn: Connection) -> Optional[str]:
-    """Return available queue table name (new or legacy) if present."""
-    for name in ("learning_submission_jobs", "learning_submission_ocr_jobs"):
-        with conn.cursor() as cur:
-            cur.execute("select to_regclass(%s) as reg", (f"public.{name}",))
-            reg = cur.fetchone()
-            if reg:
-                # Support both dict_row and tuple rows
-                val = reg.get("reg") if isinstance(reg, dict) else reg[0]
-                if val:
-                    return name
-    return None
+def _resolve_queue_table(conn: Connection) -> str:
+    """
+    Ensure the worker queue exists and return its canonical table name.
+
+    Why:
+        All downstream DML (_nack_retry/_delete_job) targets
+        `public.learning_submission_jobs`. Falling back to the legacy OCR table would
+        break retries, so we fail fast when migrations are missing.
+
+    Parameters:
+        conn: psycopg connection running as the dedicated worker role. The role only
+              needs SELECT on the queue table to verify its existence.
+
+    Behavior:
+        - Queries `to_regclass('public.learning_submission_jobs')`.
+        - Returns the canonical name when present, otherwise raises.
+
+    Permissions:
+        Requires SELECT on `pg_catalog.pg_class` (covered by default schema access) and
+        visibility of the `public.learning_submission_jobs` relation.
+
+    Raises:
+        RuntimeError: when `public.learning_submission_jobs` is not present.
+    """
+    with conn.cursor() as cur:
+        cur.execute("select to_regclass('public.learning_submission_jobs') as reg")
+        reg = cur.fetchone()
+    if reg:
+        val = reg.get("reg") if isinstance(reg, dict) else reg[0]
+        if val:
+            return "learning_submission_jobs"
+    raise RuntimeError("Queue table public.learning_submission_jobs missing; run migrations.")
 
 
 def _process_job(

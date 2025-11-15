@@ -81,6 +81,9 @@ class PreprocessPdfSubmissionUseCase:
         if context.size_bytes and context.size_bytes > self._size_limit:
             self._mark_failed(context=context, code="input_too_large", message="declared size exceeds configured limit")
             return
+        if len(pdf_bytes) > self._size_limit:
+            self._mark_failed(context=context, code="input_too_large", message="payload size exceeds configured limit")
+            return
 
         try:
             pipeline = importlib.import_module("backend.vision.pipeline")

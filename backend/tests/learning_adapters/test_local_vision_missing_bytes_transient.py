@@ -4,7 +4,8 @@ Vision adapter — missing bytes must be transient with retry.
 Scenario:
     STORAGE_VERIFY_ROOT is set but the referenced file is not present.
     Remote GET also fails. The adapter must NOT call the model without
-    images and must raise VisionTransientError("image_unavailable").
+    images and must raise VisionTransientError("remote_fetch_failed") so
+    retries have actionable telemetry.
 """
 from __future__ import annotations
 
@@ -90,5 +91,5 @@ def test_missing_local_and_remote_is_transient(tmp_path, monkeypatch: pytest.Mon
     from backend.learning.workers.process_learning_submission_jobs import VisionTransientError  # type: ignore
 
     assert isinstance(ei.value, VisionTransientError)
-    assert "image_unavailable" in str(ei.value)
+    assert "remote_fetch_failed" in str(ei.value)
     assert client.called is False

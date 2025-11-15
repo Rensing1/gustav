@@ -147,3 +147,17 @@ def test_local_vision_unsupported_mime_is_permanent(monkeypatch: pytest.MonkeyPa
 
     with pytest.raises(VisionPermanentError):
         adapter.extract(submission=submission, job_payload=job_payload)
+
+
+def test_local_vision_uses_default_base_url_when_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Vision adapter should fall back to a safe default host when OLLAMA_BASE_URL is unset."""
+    _install_fake_ollama(monkeypatch, mode="ok")
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    importlib.reload(mod)
+
+    adapter = mod.build()  # type: ignore[attr-defined]
+    assert getattr(adapter, "_base_url", None) == "http://ollama:11434"

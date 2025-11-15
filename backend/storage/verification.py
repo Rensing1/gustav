@@ -23,6 +23,9 @@ def _allowed_upload_mime() -> frozenset[str]:
 
     return frozenset(ALLOWED_IMAGE_MIME | ALLOWED_FILE_MIME)
 
+
+_MISMATCH_REASONS = frozenset({"size_mismatch", "hash_mismatch"})
+
 def _stream_hash_from_url(
     url: str,
     *,
@@ -120,9 +123,9 @@ def verify_storage_object_integrity(
     """
     Verify a storage object by comparing size and SHA-256 hash.
 
-    Returns tuple (ok, reason). When `config.require_remote` is False, the helper
-    falls back to best-effort verification and reports "skipped" if the object
-    cannot be found.
+    Returns tuple (ok, reason). Even when `config.require_remote` is False, any
+    detected size/hash mismatch is treated as a hard failure; "skipped" only
+    applies when verification could not run (e.g., no root, adapter missing).
     """
 
     normalized_mime = (mime_type or "").strip().lower()
@@ -198,6 +201,11 @@ def verify_storage_object_integrity(
                 time.sleep(config.retry_sleep_seconds)
         remote_checked = True
 
+    if last_reason in _MISMATCH_REASONS:
+        # Once a mismatch is detected (remote HEAD returned conflicting size/hash),
+        # refuse the upload immediately even if verification is technically optional.
+        return (False, last_reason)
+
     # If strict verification is required and we saw a HEAD but no trustworthy
     # hash header, attempt a secure, bounded download to compute SHA-256.
     if require and head_seen and expected_sha256:
@@ -249,13 +257,17 @@ def verify_storage_object_integrity(
     if not target.exists() or not target.is_file():
         return (not require, "missing_file" if require else "skipped")
     actual_size = target.stat().st_size
-    if expected_size is None or int(actual_size) != int(expected_size):
-        return (not require, "size_mismatch" if require else "skipped")
+    try:
+        expected_size_int = int(expected_size)
+    except Exception:
+        return (False, "missing_fields")
+    if int(actual_size) != expected_size_int:
+        return (False, "size_mismatch")
     h = _sha256()
     with target.open("rb") as fh:
         for chunk in iter(lambda: fh.read(65536), b""):
             h.update(chunk)
     actual_hash = h.hexdigest()
     if actual_hash.lower() != str(expected_sha256).lower():
-        return (not require, "hash_mismatch" if require else "skipped")
+        return (False, "hash_mismatch")
     return (True, "ok")

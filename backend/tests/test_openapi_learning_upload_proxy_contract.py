@@ -47,3 +47,12 @@ def test_openapi_upload_proxy_documents_error_responses():
     responses = spec["paths"]["/api/learning/internal/upload-proxy"]["put"]["responses"]
     for status in ("200", "400", "401", "403", "404", "502"):
         assert status in responses, f"upload-proxy must document HTTP {status}"
+
+
+def test_openapi_logout_paths_are_public():
+    """Logout endpoints must explicitly opt out of root-level cookie auth."""
+    spec = _load_spec()
+    for path in ("/auth/logout", "/auth/logout/success"):
+        get_op = spec["paths"].get(path, {}).get("get")
+        assert get_op is not None, f"{path} GET operation missing in OpenAPI spec"
+        assert get_op.get("security") == [], f"{path} must set security: [] to remain public"

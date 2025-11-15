@@ -159,6 +159,48 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_submission_verification_detects_mismatch_even_when_optional(monkeypatch):
+    """Even when REQUIRE_STORAGE_VERIFY=false, detected mismatches must be rejected."""
+    student_sid, course_id, task_id = await _prepare_fixture()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        with _use_storage_adapter(FakeStorageAdapter()):
+            async with (await _client()) as c:
+                c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+                r_intent = await c.post(
+                    f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+                    json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 12},
+                    headers={"Origin": "http://test"},
+                )
+        assert r_intent.status_code == 200
+        storage_key = r_intent.json()["storage_key"]
+
+        dest = Path(root) / storage_key
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        payload = b"hello world!"
+        dest.write_bytes(payload)
+        wrong_hash = sha256(b"hello world?").hexdigest()
+
+        monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
+        monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "false")
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+            r = await c.post(
+                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                json={
+                    "kind": "file",
+                    "storage_key": storage_key,
+                    "mime_type": "application/pdf",
+                    "size_bytes": len(payload),
+                    "sha256": wrong_hash,
+                },
+                headers={"Origin": "http://test"},
+            )
+        assert r.status_code == 400
+        assert r.json().get("detail") == "invalid_file_payload"
+
+
+@pytest.mark.anyio
 async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch):
     student_sid, course_id, task_id = await _prepare_fixture()
     with tempfile.TemporaryDirectory() as tmp:

@@ -2195,6 +2195,7 @@ paths:
         Clears the application session cookie and redirects to the Identity Provider's
         end-session endpoint. After IdP logout, the browser returns to the app start page.
       operationId: logoutUnified
+      security: []
       parameters:
         - in: query
           name: redirect
@@ -2234,6 +2235,7 @@ paths:
       tags: [Auth]
       summary: Logout success page
       description: Shows a confirmation that the user has been logged out and links to /auth/login.
+      security: []
       responses:
         '200':
           description: HTML page confirming logout

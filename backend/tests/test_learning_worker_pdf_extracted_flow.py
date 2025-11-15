@@ -58,6 +58,8 @@ async def test_worker_completes_pdf_from_extracted(
     storage_root.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     bucket = get_submissions_bucket()
 
     # Clean queue to avoid interference from previous runs

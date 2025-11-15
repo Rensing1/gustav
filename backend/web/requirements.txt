@@ -12,3 +12,16 @@ python-jose[cryptography]==3.3.0  # JWT handling (ID token verification)
 requests==2.32.3           # HTTP client for OIDC token exchange
 psycopg[binary]==3.2.3     # Postgres driver for DB-backed sessions
 httpx==0.27.0              # In-process API calls from SSR (ASGITransport)
+
+# Local AI client (used by learning-worker adapters)
+ollama==0.3.0
+# DSPy program orchestration for feedback adapters
+dspy-ai==3.0.3
+
+# Supabase client (for Storage adapter wiring)
+supabase==2.6.0
+
+# Imaging (PDF vision stitching requires Pillow in worker container)
+Pillow==10.4.0
+# PDF rendering backend (required for PDF → images in worker)
+pypdfium2==4.30.0

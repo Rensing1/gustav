@@ -99,8 +99,8 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 
 - DEV (hostbasiert, einfach & robust):
   - Caddy routet hostbasiert:
-    - `http://app.localhost:8100` → Web (GUSTAV)
-    - `http://id.localhost:8100` → Keycloak (IdP)
+    - `https://app.localhost` → Web (GUSTAV)
+    - `https://id.localhost` → Keycloak (IdP)
   - Persistenz (DEV): Keycloak speichert Realm und Benutzer im Compose-internen Postgres-Service `keycloak-db` (PostgreSQL 16) mit Volume `keycloak_pg_data`. Der Service ist über `depends_on.condition=service_healthy` als Startbedingung definiert, damit Keycloak erst nach erfolgreichem `pg_isready` hochfährt.
     PROD nutzt dieselbe Konfiguration, aber `KC_DB_URL` zeigt auf eine gemanagte Instanz (TLS, Backups, Secret-Store); `KC_DB_URL_PROPERTIES` sollte dort mindestens `sslmode=require` setzen.
   - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
@@ -124,9 +124,9 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 #### Ablauf Authorization‑Code‑Flow
 1) Browser: `GET /auth/login` (GUSTAV) → 302 zu IdP `…/protocol/openid-connect/auth` (Host: `id.localhost`).
 2) Login auf IdP‑UI (gebrandet). `GET /auth/register` nutzt ebenfalls den Auth‑Endpoint und setzt `kc_action=register` (statt altem `…/registrations`‑Pfad), optional mit `login_hint`.
-3) IdP → Redirect zu `REDIRECT_URI` (z. B. `http://app.localhost:8100/auth/callback`).
+3) IdP → Redirect zu `REDIRECT_URI` (z. B. `https://app.localhost/auth/callback`).
 4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
-5) Web legt Serversession an und setzt `gustav_session` (httpOnly; in DEV SameSite=lax, in PROD strict + Secure).
+5) Web legt Serversession an und setzt `gustav_session` (httpOnly; Secure; SameSite=lax) — einheitlich in DEV und PROD.
 6) HTMX-Anfragen (Sidebar-Link) erhalten statt 302 ein `204` mit `HX-Redirect`, damit der Browser trotzdem voll zur IdP-URL navigiert und der PKCE-State bestehen bleibt.
 
 ## API Contract‑First (Vorgehen)
@@ -160,7 +160,7 @@ E2E‑Tests (Identity):
 - Voraussetzung: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
 - Ausführung:
   - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
-  - Nur E2E: `RUN_E2E=1 WEB_BASE=http://app.localhost:8100 KC_BASE_URL=http://id.localhost:8100 .venv/bin/pytest -q -m e2e`
+  - Nur E2E: `RUN_E2E=1 WEB_BASE=https://app.localhost KC_BASE_URL=https://id.localhost .venv/bin/pytest -q -m e2e`
 
 ### Auth Router & Security (aktualisiert)
 - Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
@@ -181,7 +181,7 @@ E2E‑Tests (Identity):
 - `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
 
 #### CSRF‑Strategie (Browser‑Flows)
-- Same‑Site Cookies: In PROD `SameSite=strict` + `Secure`; in DEV `lax`.
+- Same‑Site Cookies: `SameSite=lax` + `Secure` (dev = prod). Lax erlaubt Top‑Level OIDC‑Redirects, ohne Drittanbieter‑Kontexte zuzulassen.
 - Server prüft bei schreibenden Endpunkten die **Origin** (Same‑Origin‑Pflicht):
   - Learning: z. B. `POST /api/learning/.../submissions`
   - Teaching: alle Schreib‑APIs (z. B. `POST /api/teaching/courses`, `POST/PATCH /api/teaching/units`, Reorder/Materials/Tasks/Members)
@@ -206,13 +206,13 @@ E2E‑Tests (Identity):
 
 #### Nonce & Session‑TTL
 - Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: private, no-store`.
-- Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). In PROD wird das `gustav_session`‑Cookie mit `Max-Age=<TTL>` gesetzt; Flags: `HttpOnly; Secure; SameSite=strict`. In DEV wird kein `Max-Age` gesetzt (`SameSite=lax`).
+- Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). Das `gustav_session`‑Cookie wird immer mit `HttpOnly; Secure; SameSite=lax` gesetzt (dev = prod). `Max-Age` kann je nach Deployment variieren.
 - /api/me: liefert zusätzlich `expires_at` (UTC‑ISO‑8601), damit Clients die Restlaufzeit anzeigen können. Antworten sind nie cachebar.
 
 ## Deployment & Betrieb
 - Containerisiert über `Dockerfile` und `docker-compose.yml`.
-- Reverse‑Proxy: Caddy (hostbasiertes Routing). Nur `127.0.0.1:8100` ist gemappt (lokal).
-- Entwicklungsstart: `docker compose up --build` (Hot‑reload aktiv). Zugriff: `app.localhost:8100` und `id.localhost:8100`.
+- Reverse‑Proxy: Caddy (hostbasiertes Routing). Lokal ist Port `443` gemappt (TLS, `tls internal`).
+- Entwicklungsstart: `docker compose up --build` (Hot‑reload aktiv). Zugriff: `app.localhost` und `id.localhost`.
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
@@ -237,6 +237,12 @@ E2E‑Tests (Identity):
 - Adapter: `backend/teaching/storage_supabase.py` implementiert Zugriff (presign upload/download, head, delete).
 - Wiring: In `backend/web/main.py` wird der Adapter automatisch aktiviert, wenn `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` gesetzt sind.
 - ENV: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SUPABASE_STORAGE_BUCKET` (default: `materials`). Siehe `.env.example` und `docs/references/storage_and_gateway.md`.
+
+#### Storage-Bootstrap (nur Dev/CI)
+- Script: `backend/storage/bootstrap.py` stellt über die Supabase-REST-API sicher, dass die Lehr‑ (`SUPABASE_STORAGE_BUCKET`/`materials`) und Lern-Buckets (`LEARNING_STORAGE_BUCKET`/`submissions`) existieren.
+- Opt-in: Das Script läuft ausschließlich, wenn `AUTO_CREATE_STORAGE_BUCKETS=true` gesetzt ist (z. B. bei `docker compose run --rm web python -m backend.storage.bootstrap`). Standardwert in `.env.example` und `docker-compose.yml` ist `false`.
+- Produktionsregel: Prod/Stage setzen das Flag _nie_. Bucket-/Policy-Änderungen erfolgen ausschließlich über Migrationen oder explizite Admin-Schritte (Supabase-Konsole/Terraform). Der Startup-Guard (`backend/web/config.ensure_secure_config_on_startup`) beendet Prod-Builds, falls das Flag fälschlich aktiv ist.
+- Sicherheit: Das Script benötigt die Service-Role (`SUPABASE_SERVICE_ROLE_KEY`), erstellt nur fehlende Buckets (idempotent) und ändert keine Policies. Logs enthalten Warnungen, falls trotz Aktivierung Buckets fehlen – so wird ersichtlich, dass ein manueller Eingriff nötig ist.
 
 ### RLS & Ordering (Teaching/Sections)
 - RLS‑Identität: Heute setzt jede DB‑Operation `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen. Dieses Muster wird mittelfristig durch JWT/Claims in Policies ersetzt (separater Plan).
@@ -268,7 +274,7 @@ E2E‑Tests (Identity):
 
 ### Lokaler Betrieb & UFW
 - Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.
-- Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:8100`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 8100 proto tcp`.
+- Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:443`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 443 proto tcp`.
 
 ## Migrationspfad zu einer getrennten SPA (optional)
 Wenn UI‑Anforderungen wachsen (Offline, State‑heavy, App‑Store), kann ein separates `frontend/` entstehen. Schritte:

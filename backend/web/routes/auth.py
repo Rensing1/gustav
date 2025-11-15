@@ -35,6 +35,24 @@ INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
 MAX_INAPP_REDIRECT_LEN = 256
 
 
+def _resolve_active_main(request: Request):
+    """Return the active main module whose app matches the request.app.
+
+    Tests may import the app as either `main` or `backend.web.main`. Prefer the
+    module whose `app` object is identical to the ASGI app on the request.
+    Fallback to a best-effort selection among available candidates.
+    """
+    import sys as _sys
+    candidates = [m for m in (_sys.modules.get("main"), _sys.modules.get("backend.web.main")) if m]
+    for m in candidates:
+        try:
+            if getattr(m, "app", None) is getattr(request, "app", None):
+                return m
+        except Exception:
+            pass
+    return candidates[0] if candidates else None
+
+
 def _request_app_base(request: Request) -> str:
     """Derive the browser-facing app base from the incoming request.
 
@@ -95,14 +113,20 @@ async def auth_login(request: Request, redirect: str | None = None):
     Permissions:
         Public.
     """
-    import main  # late import to share STATE_STORE / OIDC_CFG
+    # Resolve active main module by matching the ASGI app instance
+    mod = _resolve_active_main(request)
+    if mod is None:  # pragma: no cover - alias fallback
+        try:
+            from backend.web import main as mod  # type: ignore
+        except Exception:
+            import main as mod  # type: ignore
 
     code_verifier = OIDCClient.generate_code_verifier()
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
     nonce = secrets.token_urlsafe(16)
     # Security: Accept only absolute in-app paths like "/courses". Reject external URLs.
     safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
-    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
+    rec = mod.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
     final_state = rec.state
     # Use a fresh client bound to current config (allows monkeypatch in tests)
     # Prefer dynamic redirect_uri only when the current request host matches
@@ -111,16 +135,16 @@ async def auth_login(request: Request, redirect: str | None = None):
     dynamic_redirect_uri = f"{current_base}/auth/callback"
     import os
 
-    allowed_base = (os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    allowed_base = (os.getenv("WEB_BASE") or getattr(mod, "OIDC_CFG").redirect_uri).rstrip("/")
     same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
 
-    redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
+    redirect_uri = dynamic_redirect_uri if same_host else getattr(mod, "OIDC_CFG").redirect_uri
     cfg = OIDCConfig(
-        base_url=main.OIDC_CFG.base_url,
-        realm=main.OIDC_CFG.realm,
-        client_id=main.OIDC_CFG.client_id,
+        base_url=getattr(mod, "OIDC_CFG").base_url,
+        realm=getattr(mod, "OIDC_CFG").realm,
+        client_id=getattr(mod, "OIDC_CFG").client_id,
         redirect_uri=redirect_uri,
-        public_base_url=main.OIDC_CFG.public_base_url,
+        public_base_url=getattr(mod, "OIDC_CFG").public_base_url,
     )
     oidc = OIDCClient(cfg)
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
@@ -132,7 +156,7 @@ async def auth_login(request: Request, redirect: str | None = None):
 
 
 @auth_router.get("/auth/forgot")
-async def auth_forgot(login_hint: str | None = None):
+async def auth_forgot(request: Request, login_hint: str | None = None):
     """
     Redirect to Keycloak 'Forgot Password' page.
 
@@ -140,11 +164,20 @@ async def auth_forgot(login_hint: str | None = None):
         Adds `Cache-Control: private, no-store` to avoid caching redirect
         responses by browsers or proxies.
     """
-    import main  # late import
+    # Resolve the active main module robustly (prefer matching app)
+    mod = _resolve_active_main(request)
+    if mod is None:  # pragma: no cover - fallback when aliasing failed
+        try:
+            from backend.web import main as mod  # type: ignore
+        except Exception:
+            import main as mod  # type: ignore
 
     # Use browser-facing base URL if configured to avoid mixed host issues behind proxies
-    public_or_internal = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
-    base = f"{public_or_internal}/realms/{main.OIDC_CFG.realm}/login-actions/reset-credentials"
+    cfg = getattr(mod, "OIDC_CFG", None)
+    base_cfg = getattr(cfg, "public_base_url", None) or getattr(cfg, "base_url", "")
+    public_or_internal = str(base_cfg).rstrip("/")
+    realm = getattr(cfg, "realm", "gustav")
+    base = f"{public_or_internal}/realms/{realm}/login-actions/reset-credentials"
     query = {"login_hint": login_hint} if login_hint else None
     target = f"{base}?{urlencode(query)}" if query else base
     return RedirectResponse(url=target, status_code=302, headers={"Cache-Control": "private, no-store"})
@@ -163,27 +196,34 @@ async def auth_register(request: Request, login_hint: str | None = None):
     Security:
         Adds `Cache-Control: private, no-store` to prevent caching.
     """
-    import main  # late import
+    # Resolve main module robustly for shared config/state
+    mod = _resolve_active_main(request)
+    if mod is None:  # pragma: no cover
+        try:
+            from backend.web import main as mod  # type: ignore
+        except Exception:
+            import main as mod  # type: ignore
 
     code_verifier = OIDCClient.generate_code_verifier()
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
     # Phase 2: Generate nonce for replay protection and persist in state
     nonce = secrets.token_urlsafe(16)
-    rec = main.STATE_STORE.create(code_verifier=code_verifier, redirect=None, nonce=nonce)
+    rec = mod.STATE_STORE.create(code_verifier=code_verifier, redirect=None, nonce=nonce)
     final_state = rec.state
     # Use dynamic redirect_uri only for allowed hosts, else fallback to configured
     current_base = _request_app_base(request).rstrip("/")
     dynamic_redirect_uri = f"{current_base}/auth/callback"
     import os
-    allowed_base = (os.getenv("WEB_BASE") or main.OIDC_CFG.redirect_uri).rstrip("/")
+    cfg = getattr(mod, "OIDC_CFG", None)
+    allowed_base = (os.getenv("WEB_BASE") or getattr(cfg, "redirect_uri", "")).rstrip("/")
     same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
-    redirect_uri = dynamic_redirect_uri if same_host else main.OIDC_CFG.redirect_uri
+    redirect_uri = dynamic_redirect_uri if same_host else getattr(cfg, "redirect_uri", "")
     cfg = OIDCConfig(
-        base_url=main.OIDC_CFG.base_url,
-        realm=main.OIDC_CFG.realm,
-        client_id=main.OIDC_CFG.client_id,
+        base_url=getattr(cfg, "base_url", ""),
+        realm=getattr(cfg, "realm", ""),
+        client_id=getattr(cfg, "client_id", ""),
         redirect_uri=redirect_uri,
-        public_base_url=main.OIDC_CFG.public_base_url,
+        public_base_url=getattr(cfg, "public_base_url", None),
     )
     oidc = OIDCClient(cfg)
     # Include nonce in the authorization request similar to /auth/login
@@ -219,38 +259,66 @@ async def auth_logout(request: Request, redirect: str | None = None):
     Security:
         Adds `Cache-Control: private, no-store` to the 302 response.
     """
-    import main  # late import for stores and cookie policy
+    # Resolve the active main module robustly (prefer matching app)
+    mod = _resolve_active_main(request)
+    if mod is None:  # pragma: no cover
+        try:
+            from backend.web import main as mod  # type: ignore
+        except Exception:
+            import main as mod  # type: ignore
 
     # Remove server-side session if present (best-effort; never fail logout)
-    sid = request.cookies.get(main.SESSION_COOKIE_NAME)
+    sid = request.cookies.get(mod.SESSION_COOKIE_NAME)
+    # Fallback: if framework cookie parser missed it (e.g., jar quirk), parse raw header
+    if not sid:
+        raw_cookie = request.headers.get("cookie", "")
+        try:
+            # Minimal, dependency-free parse for `gustav_session=<value>` token
+            parts = [p.strip() for p in raw_cookie.split(";") if p]
+            for p in parts:
+                if p.startswith(f"{mod.SESSION_COOKIE_NAME}="):
+                    sid = p.split("=", 1)[1]
+                    break
+        except Exception:
+            sid = None
     rec = None
     if sid:
         try:
-            rec = main.SESSION_STORE.get(sid or "")
+            rec = mod.SESSION_STORE.get(sid or "")
         except Exception as exc:
             logger.warning("Session lookup failed during logout: %s", exc.__class__.__name__)
         try:
-            main.SESSION_STORE.delete(sid)
+            mod.SESSION_STORE.delete(sid)
         except Exception as exc:
             logger.warning("Session delete failed during logout: %s", exc.__class__.__name__)
 
     # Compute IdP logout URL and app redirect target (show success banner)
     end_session = "/auth/logout/success"  # conservative fallback
     try:
-        base = (main.OIDC_CFG.public_base_url or main.OIDC_CFG.base_url).rstrip("/")
-        app_base = _default_app_base(main.OIDC_CFG.redirect_uri)
+        cfg = getattr(mod, "OIDC_CFG", None)
+        base = (getattr(cfg, "public_base_url", None) or getattr(cfg, "base_url", "")).rstrip("/")
+        app_base = _default_app_base(getattr(cfg, "redirect_uri", ""))
         # Accept only in-app absolute paths; ignore external values
         safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
         # After logout, go to the app success page with a re-login link
         dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
         # Build params: prefer id_token_hint (best compatibility), else include client_id
         params = {"post_logout_redirect_uri": dest}
+        # Prefer the session's id_token; fall back to request.state (set by middleware)
+        id_tok = None
         if rec and getattr(rec, "id_token", None):
-            params["id_token_hint"] = rec.id_token
+            id_tok = rec.id_token
         else:
-            params["client_id"] = main.OIDC_CFG.client_id
+            try:
+                id_tok = getattr(getattr(request, "state", object()), "id_token", None)
+            except Exception:
+                id_tok = None
+        if id_tok:
+            params["id_token_hint"] = id_tok
+        else:
+            params["client_id"] = getattr(cfg, "client_id", "gustav-web")
         end_session = (
-            f"{base}/realms/{main.OIDC_CFG.realm}/protocol/openid-connect/logout?" + urlencode(params)
+            f"{base}/realms/{getattr(cfg, 'realm', 'gustav')}/protocol/openid-connect/logout?" + urlencode(params)
         )
     except Exception as exc:
         logger.warning("Logout URL composition failed: %s", exc.__class__.__name__)
@@ -263,9 +331,9 @@ async def auth_logout(request: Request, redirect: str | None = None):
         from ..auth_utils import cookie_opts  # type: ignore
     except Exception:  # pragma: no cover - runtime in alternative envs
         from auth_utils import cookie_opts  # type: ignore
-    opts = cookie_opts(main.SETTINGS.environment)
+    opts = cookie_opts(getattr(mod, "SETTINGS").environment)
     resp.set_cookie(
-        key=main.SESSION_COOKIE_NAME,
+        key=mod.SESSION_COOKIE_NAME,
         value="",
         httponly=True,
         secure=opts["secure"],
@@ -326,7 +394,7 @@ def _default_app_base(redirect_uri: str) -> str:
         - If `redirect_uri` ends with `/auth/callback`, return the prefix before it.
         - Else, return `scheme://netloc` from parsing `redirect_uri`.
         - On parsing issues, try environment fallbacks; finally use
-          `http://localhost:8100`.
+          `https://app.localhost`.
     """
     from urllib.parse import urlparse
     import os
@@ -364,7 +432,7 @@ def _default_app_base(redirect_uri: str) -> str:
             continue
 
     # 4) Last resort: safe local default for dev
-    return "http://localhost:8100"
+    return "https://app.localhost"
 
 
 def _is_inapp_path(value: str) -> bool:

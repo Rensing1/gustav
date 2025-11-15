@@ -25,7 +25,7 @@ from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Kurs") -> str:
@@ -89,4 +89,3 @@ async def test_latest_detail_404_when_task_not_in_unit():
             f"/api/teaching/courses/{course_id}/units/{unit_a['id']}/tasks/{task_b['id']}/students/s-sub/submissions/latest"
         )
         assert r.status_code == 404
-

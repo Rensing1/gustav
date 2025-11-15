@@ -22,6 +22,24 @@ except Exception:  # pragma: no cover
     Connection = Any  # type: ignore
     HAVE_PSYCOPG = False
 
+_ERROR_MAX_LENGTH = 256
+_SENSITIVE_TOKEN_PATTERN = re.compile(r"(?i)(secret|token|password|key)[-_a-z0-9]*\s*[:=]\s*\S+")
+_FILESYSTEM_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:\\[^\s]+|/[^\s]+)")
+
+
+def _sanitize_error_message(value: Optional[str]) -> Optional[str]:
+    """Strip secrets and truncate lengthy adapter errors for safe exposure."""
+    if not value:
+        return None
+    collapsed = " ".join(str(value).split())
+    if not collapsed:
+        return None
+    scrubbed = _SENSITIVE_TOKEN_PATTERN.sub("[redacted]", collapsed)
+    scrubbed = _FILESYSTEM_PATH_PATTERN.sub("[path]", scrubbed)
+    if len(scrubbed) > _ERROR_MAX_LENGTH:
+        scrubbed = scrubbed[: _ERROR_MAX_LENGTH - 3].rstrip() + "..."
+    return scrubbed
+
 
 def _default_app_login_dsn() -> str:
     """Return the local dev DSN using the app login role (e.g. gustav_app).
@@ -510,6 +528,10 @@ class DBLearningRepo:
                                analysis_json,
                                feedback_md,
                                error_code,
+                               coalesce(vision_attempts, 0),
+                               vision_last_error,
+                               to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               feedback_last_error,
                                to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                           from public.learning_submissions
@@ -604,6 +626,10 @@ class DBLearningRepo:
                                   analysis_json,
                                   feedback_md,
                                   error_code,
+                                  coalesce(vision_attempts, 0),
+                                  vision_last_error,
+                                  to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                  feedback_last_error,
                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                   to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                         """,
@@ -639,6 +665,10 @@ class DBLearningRepo:
                                    analysis_json,
                                    feedback_md,
                                    error_code,
+                                   coalesce(vision_attempts, 0),
+                                   vision_last_error,
+                                   to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                   feedback_last_error,
                                    to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                                    to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                               from public.learning_submissions
@@ -648,6 +678,29 @@ class DBLearningRepo:
                         )
                         row = cur.fetchone()
                     submission_id = row[0]
+                    # Enrich job payload with task instruction and optional hints for the Feedback adapter
+                    instruction_md: str | None = None
+                    hints_md: str | None = None
+                    try:
+                        section_id = str(meta[1])  # from get_task_metadata_for_student
+                        cur.execute(
+                            """
+                            select id::text, instruction_md, hints_md
+                              from public.get_released_tasks_for_student(%s, %s, %s)
+                            """,
+                            (data.student_sub, course_uuid, section_id),
+                        )
+                        rows_ctx = cur.fetchall() or []
+                        for tid, instr, hints in rows_ctx:
+                            if str(tid) == task_uuid:
+                                instruction_md = instr
+                                hints_md = hints
+                                break
+                    except Exception:
+                        # Be tolerant: missing helper or columns shouldn't block submissions
+                        instruction_md = None
+                        hints_md = None
+
                     job_payload = {
                         "submission_id": submission_id,
                         "course_id": course_uuid,
@@ -656,19 +709,20 @@ class DBLearningRepo:
                         "kind": data.kind,
                         "attempt_nr": attempt_nr,
                         "criteria": criteria,
+                        "instruction_md": instruction_md,
+                        "hints_md": hints_md,
                     }
                     queue_table = self._resolve_queue_table(cur)
-                    if queue_table:
-                        insert_sql = sql.SQL(
-                            "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"
-                        ).format(sql.Identifier(queue_table))
-                        cur.execute(
-                            insert_sql,
-                            (
-                                submission_id,
-                                Json(job_payload) if Json is not None else json.dumps(job_payload),
-                            ),
-                        )
+                    insert_sql = sql.SQL(
+                        "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"
+                    ).format(sql.Identifier(queue_table))
+                    cur.execute(
+                        insert_sql,
+                        (
+                            submission_id,
+                            Json(job_payload) if Json is not None else json.dumps(job_payload),
+                        ),
+                    )
                     conn.commit()
                 except Exception as exc:
                     # If another in-flight request inserted with the same Idempotency-Key, reuse it
@@ -690,11 +744,15 @@ class DBLearningRepo:
                                        storage_key,
                                        sha256,
                                        analysis_status,
-                                       analysis_json,
-                                       feedback_md,
-                                       error_code,
-                                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                       to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                               analysis_json,
+                               feedback_md,
+                               error_code,
+                               coalesce(vision_attempts, 0),
+                               vision_last_error,
+                               to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               feedback_last_error,
+                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                                   from public.learning_submissions
                                  where course_id = %s::uuid and task_id = %s::uuid and student_sub = %s and idempotency_key = %s
                                 """,
@@ -767,12 +825,16 @@ class DBLearningRepo:
                            text_body,
                            mime_type,
                            size_bytes,
-                               storage_key,
-                               sha256,
+                           storage_key,
+                           sha256,
                            analysis_status,
                            analysis_json,
                            feedback_md,
                            error_code,
+                           coalesce(vision_attempts, 0),
+                           vision_last_error,
+                           to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           feedback_last_error,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                       from public.learning_submissions
@@ -788,15 +850,29 @@ class DBLearningRepo:
 
         return [self._row_to_submission(row) for row in rows]
 
-    def _resolve_queue_table(self, cur) -> Optional[str]:
-        """Return the available queue table name (new or legacy), if any."""
-        candidates = ("learning_submission_jobs", "learning_submission_ocr_jobs")
-        for name in candidates:
-            cur.execute("select to_regclass(%s)", (f"public.{name}",))
-            reg = cur.fetchone()
-            if reg and reg[0]:
-                return name
-        return None
+    def _resolve_queue_table(self, cur) -> str:
+        """
+        Ensure the canonical worker queue exists before inserting jobs.
+
+        Parameters:
+            cur: Open psycopg cursor operating under `gustav_limited`. The caller
+                 already set `app.current_sub`, so we only assert schema state here.
+
+        Behavior:
+            - Checks `to_regclass('public.learning_submission_jobs')`.
+            - Returns the canonical table name when present, otherwise aborts with a
+              descriptive runtime error so API callers see a 500 instead of silently
+              failing to enqueue submissions.
+
+        Permissions:
+            Requires SELECT on `pg_catalog.pg_class`, included in the default privileges
+            of the application role.
+        """
+        cur.execute("select to_regclass('public.learning_submission_jobs')")
+        reg = cur.fetchone()
+        if reg and reg[0]:
+            return "learning_submission_jobs"
+        raise RuntimeError("Queue table public.learning_submission_jobs missing; run migrations.")
 
     @staticmethod
     def _render_feedback(kind: str, attempt: int) -> str:
@@ -893,13 +969,31 @@ class DBLearningRepo:
         """Map a DB row to an API submission dict with safe fallbacks.
 
         Why:
-            Historical records may have a null/empty `analysis_json`. For
-            learnability, we synthesize a minimal analysis payload so the UI
-            can always display a meaningful text snippet in the history.
+            Only completed submissions expose `analysis_json`. Historical rows
+            may still miss optional fields, so for completed states we
+            synthesize a minimal payload to keep learner history readable.
         """
-        status = row[8]
-        analysis_raw = row[9]
-        if status == "pending":
+        (
+            submission_id,
+            attempt_nr,
+            kind,
+            text_body,
+            mime_type,
+            size_bytes,
+            storage_key,
+            sha256,
+            status,
+            analysis_raw,
+            feedback_md,
+            error_code,
+            vision_attempts,
+            vision_last_error,
+            feedback_last_attempt_at,
+            feedback_last_error,
+            created_at,
+            completed_at,
+        ) = list(row)
+        if status != "completed":
             analysis_payload = None
         else:
             analysis_payload = analysis_raw
@@ -909,10 +1003,6 @@ class DBLearningRepo:
                 except Exception:  # pragma: no cover - defensive
                     pass
             # Synthesize fallback analysis text when missing/empty
-            kind = row[2]
-            text_body = row[3]
-            storage_key = row[6]
-            sha256 = row[7]
             if not isinstance(analysis_payload, dict):
                 analysis_payload = {}
             existing_text = str(
@@ -925,20 +1015,68 @@ class DBLearningRepo:
                     analysis_payload["text"] = DBLearningRepo._pdf_text_stub(storage_key, sha256)
                 else:
                     analysis_payload["text"] = DBLearningRepo._image_text_stub(storage_key, sha256)
+        telemetry_attempts = int(vision_attempts or 0)
         return {
-            "id": row[0],
-            "attempt_nr": int(row[1]),
-            "kind": row[2],
-            "text_body": row[3],
-            "mime_type": row[4],
-            "size_bytes": row[5],
-            "storage_key": row[6],
-            "sha256": row[7],
+            "id": submission_id,
+            "attempt_nr": int(attempt_nr),
+            "kind": kind,
+            "text_body": text_body,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "storage_key": storage_key,
+            "sha256": sha256,
             "analysis_status": status,
             "analysis_json": analysis_payload,
-            "feedback": row[10] if status != "pending" else None,
-            "error_code": row[11],
-            # created_at is returned by SQL as ISO string in column index 12
-            "created_at": row[12],
-            "completed_at": row[13],
+            # Expose feedback only after analysis is fully completed.
+            "feedback_md": feedback_md if status == "completed" else None,
+            "error_code": error_code,
+            "vision_attempts": telemetry_attempts,
+            "vision_last_error": _sanitize_error_message(vision_last_error),
+            "feedback_last_attempt_at": feedback_last_attempt_at,
+            "feedback_last_error": _sanitize_error_message(feedback_last_error),
+            # created_at/completed_at already returned as ISO strings
+            "created_at": created_at,
+            "completed_at": completed_at,
         }
+
+    # ------------------------------------------------------------------
+    def mark_extracted(self, *, submission_id: str, page_keys: List[str]) -> None:
+        """Set analysis_status to 'extracted' and persist page key metadata internally.
+
+        Why:
+            After rendering a PDF to page images, we record their storage keys
+            to enable downstream OCR/vision steps. The artifacts remain private
+            (`internal_metadata`) so the public API stays schema-compliant.
+
+        Behavior:
+            - Updates only the targeted submission id.
+            - Sets `analysis_status = 'extracted'`.
+            - Stores `page_keys` inside `internal_metadata` while keeping
+              `analysis_json` null until feedback is generated.
+
+        Permissions:
+            The repo executes with the limited application role under RLS. The
+            caller must only pass submission ids that belong to the current
+            student/flow per surrounding use case.
+        """
+        if not submission_id:
+            raise ValueError("submission_id is required")
+        with psycopg.connect(self._dsn) as conn:  # type: ignore[arg-type]
+            with conn.cursor() as cur:
+                # We do not change completed_at here; 'extracted' is intermediate
+                cur.execute(
+                    """
+                    update public.learning_submissions
+                       set analysis_status = 'extracted',
+                           analysis_json = null,
+                           internal_metadata = coalesce(internal_metadata, '{}'::jsonb)
+                                              || jsonb_build_object('page_keys', %s::jsonb)
+                 where id = %s::uuid
+                    returning id
+                    """,
+                    (Json(list(page_keys)), str(UUID(submission_id))),
+                )
+                updated = cur.fetchone()
+                if not updated:
+                    raise LookupError("submission_not_found")
+            conn.commit()

@@ -5,7 +5,7 @@ Purpose: Perform the legacy → Alpha2 import once, end‑to‑end, without manu
 ## Prerequisites
 - Supabase available (`supabase status`) and service DSN exported:
   - `export SERVICE_ROLE_DSN='postgresql://postgres:postgres@127.0.0.1:54322/postgres'`
-- Keycloak reachable (via reverse proxy): `http://id.localhost:8100` (admin creds).
+- Keycloak reachable (via reverse proxy): `https://id.localhost` (admin creds).
 - Legacy CSV slices exist under `/tmp/legacy_stage/` (see `legacy_export_cookbook.md`).
 - Storage blobs unpacked under `/tmp/legacy_storage/stub/stub`.
 

@@ -113,7 +113,7 @@ async def test_callback_sets_cookie_max_age_matches_session_ttl_prod(monkeypatch
         sc = r_cb.headers.get("set-cookie", "")
         # Expect Max-Age=3600 and strict/secure flags in prod (RED)
         assert re.search(r"Max-Age=3600", sc, re.I), sc
-        assert "SameSite=strict" in sc
+        assert "SameSite=lax" in sc
         assert "Secure" in sc
     finally:
         main.SETTINGS.override_environment(None)

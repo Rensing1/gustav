@@ -16,22 +16,17 @@ from __future__ import annotations
 
 
 def cookie_opts(environment: str) -> dict:
-    """Return cookie flags for the given environment.
+    """Return hardened cookie flags (dev = prod).
 
-    Parameters
-    ----------
-    environment:
-        Environment name (e.g., "dev" or "prod"). Values are case-insensitive.
+    Intent: Unify environments to production-grade flags to prevent CSRF and
+    cookie leakage regardless of local/prod settings.
 
-    Returns
-    -------
-    dict
-        Mapping with keys "secure" and "samesite" configured as follows:
-        - prod:  secure=True,  samesite="strict"
-        - other: secure=False, samesite="lax"
+    Returns a mapping with keys:
+      - secure: True
+      - samesite: "lax"  # Allow top-level OAuth redirects to set/send cookie
     """
-    env = (environment or "").lower()
-    secure = env == "prod"
-    samesite = "strict" if secure else "lax"
-    return {"secure": secure, "samesite": samesite}
-
+    # SameSite=Lax is the recommended default for session cookies so that
+    # cookies are sent on top-level navigations (e.g., after an OAuth/OIDC
+    # redirect back from the identity provider). "Strict" would break the
+    # login flow by suppressing the Set-Cookie/Send in cross-site redirects.
+    return {"secure": True, "samesite": "lax"}

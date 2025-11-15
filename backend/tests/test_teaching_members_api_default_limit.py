@@ -32,7 +32,7 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client():
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 @pytest.mark.anyio
@@ -63,4 +63,3 @@ async def test_members_api_default_limit_is_10():
     # Assert: exactly 10 returned by default
     assert isinstance(items, list)
     assert len(items) == 10
-

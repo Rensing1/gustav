@@ -153,7 +153,7 @@ import psycopg, os
 LEGACY_DSN='postgresql://postgres:postgres@127.0.0.1:54322/legacy_tmp'
 DB_DSN='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
 client=KeycloakAdminClient.from_credentials(
-  base_url=os.getenv('KC_BASE','http://127.0.0.1:8100'),
+  base_url=os.getenv('KC_BASE','https://id.localhost'),
   host_header=os.getenv('KC_HOST','id.localhost'),
   realm=os.getenv('KC_REALM','gustav'),
   username=os.getenv('KEYCLOAK_ADMIN','admin'),

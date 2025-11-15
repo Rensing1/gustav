@@ -21,6 +21,7 @@ class HistoryEntry:
     feedback_html: str = ""
     status_html: str = ""
     expanded: bool = False
+    submission_id: str = ""
 
 
 @dataclass
@@ -139,6 +140,9 @@ class TaskCard(Component):
             # Ensure the boolean attribute `open` is placed before `class` to
             # keep test selectors stable and HTML readable.
             open_attr = " open" if entry.expanded else ""
+            submission_attr = (
+                f' data-submission-id="{self.escape(entry.submission_id)}"' if entry.submission_id else ""
+            )
             content_parts = [
                 entry.content_html,
                 entry.feedback_html,
@@ -149,7 +153,7 @@ class TaskCard(Component):
             # Place the boolean `open` attribute before `class` to satisfy tests
             # that search for `open` preceding the class attribute in the tag.
             entries_html.append(
-                f'<details{open_attr} class="task-panel__history-entry">'
+                f'<details{open_attr}{submission_attr} class="task-panel__history-entry">'
                 f'<summary class="task-panel__history-summary">'
                 f'<span class="task-panel__history-label">{self.escape(entry.label)}</span>'
                 f'<span class="task-panel__history-timestamp">{self.escape(entry.timestamp)}</span>'
@@ -158,7 +162,10 @@ class TaskCard(Component):
                 "</details>"
             )
 
-        return '<section class="task-panel__history">' + "".join(entries_html) + "</section>"
+        # Give the history wrapper a stable id so HTMX forms can target it
+        # directly without reloading the whole page.
+        history_id = f"task-history-{self.escape(self.task_id)}"
+        return f'<section id="{history_id}" class="task-panel__history">' + "".join(entries_html) + "</section>"
 
     def _render_form(self) -> str:
         banner_html = (

@@ -4,7 +4,7 @@ Cookie policy tests to ensure host-only cookies and consistent flags.
 Goals:
 - After /auth/callback, Set-Cookie for `gustav_session` must NOT include a
   Domain attribute (host-only cookie → avoids leakage across hosts).
-- In dev: SameSite=lax, no Secure; in prod: SameSite=strict, Secure.
+- Einheitlich (dev = prod): SameSite=lax, Secure immer (host‑only, kein Domain‑Attribut).
 
 We mock token exchange and verification to avoid external dependencies.
 """
@@ -67,9 +67,9 @@ async def test_callback_sets_host_only_cookie_dev(monkeypatch: pytest.MonkeyPatc
     sc = r.headers.get("set-cookie", "")
     # Host-only: no Domain attribute present
     assert "Domain=" not in sc and "domain=" not in sc
-    # Dev flags
+    # Einheitliche Flags (auch in dev): Secure + SameSite=lax
     assert "SameSite=lax" in sc
-    assert "Secure" not in sc
+    assert "Secure" in sc
 
 
 @pytest.mark.anyio
@@ -90,6 +90,5 @@ async def test_callback_sets_host_only_cookie_prod(monkeypatch: pytest.MonkeyPat
     sc = r.headers.get("set-cookie", "")
     # Host-only cookie (no Domain attribute) even in prod
     assert "Domain=" not in sc and "domain=" not in sc
-    assert "SameSite=strict" in sc
+    assert "SameSite=lax" in sc
     assert "Secure" in sc
-

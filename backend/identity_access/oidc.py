@@ -33,8 +33,8 @@ class OIDCConfig:
     base_url: str  # internal base URL (server-to-server), e.g., http://keycloak:8080
     realm: str  # e.g., gustav
     client_id: str  # e.g., gustav-web
-    redirect_uri: str  # e.g., http://localhost:8100/auth/callback
-    public_base_url: str | None = None  # browser-facing URL, e.g., http://localhost:8080
+    redirect_uri: str  # e.g., https://app.localhost/auth/callback
+    public_base_url: str | None = None  # browser-facing URL, e.g., https://id.localhost
 
     @property
     def auth_endpoint(self) -> str:

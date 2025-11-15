@@ -43,3 +43,6 @@ docs/migration/.tmp/
 .tmp/
 docs/migration/tmp/
 docs/migration/storage_raw/
+
+# Backup files
+*.bak

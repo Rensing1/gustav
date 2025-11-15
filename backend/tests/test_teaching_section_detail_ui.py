@@ -45,7 +45,7 @@ def _extract_csrf_token(html: str) -> str | None:
 
 
 async def _create_unit_via_api(client: httpx.AsyncClient, *, title: str) -> str:
-    r = await client.post("/api/teaching/units", json={"title": title})
+    r = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201
     body = r.json()
     assert isinstance(body, dict) and body.get("id")
@@ -53,7 +53,7 @@ async def _create_unit_via_api(client: httpx.AsyncClient, *, title: str) -> str:
 
 
 async def _create_section_via_api(client: httpx.AsyncClient, *, unit_id: str, title: str) -> str:
-    r = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+    r = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201
     body = r.json()
     assert isinstance(body, dict) and body.get("id")
@@ -96,7 +96,7 @@ class FakeStorageAdapter:
 async def test_section_detail_renders_two_columns_and_wrappers():
     # Arrange: Lehrer-Session und eine Unit+Section
     sess = main.SESSION_STORE.create(sub="t-ui-sec-detail-1", name="Lehrer SD", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         # Force in-memory repo to avoid DB dependency in this UI test
         teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
@@ -121,7 +121,7 @@ async def test_section_detail_renders_two_columns_and_wrappers():
 @pytest.mark.anyio
 async def test_create_material_shows_in_list_and_keeps_sortable():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-detail-2", name="Lehrer SD2", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = await _create_unit_via_api(c, title="UI-Unit-SD2")
@@ -136,7 +136,7 @@ async def test_create_material_shows_in_list_and_keeps_sortable():
         )
 
     assert resp.status_code in (302, 303)
-    page = await httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test").__aenter__()
+    page = await httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}).__aenter__()
     try:
         page.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         detail = await page.get(f"/units/{unit_id}/sections/{section_id}")
@@ -149,7 +149,7 @@ async def test_create_material_shows_in_list_and_keeps_sortable():
 @pytest.mark.anyio
 async def test_create_task_shows_in_list_and_keeps_sortable():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-detail-3", name="Lehrer SD3", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = await _create_unit_via_api(c, title="UI-Unit-SD3")
@@ -164,7 +164,7 @@ async def test_create_task_shows_in_list_and_keeps_sortable():
         )
 
     assert resp.status_code in (302, 303)
-    page = await httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test").__aenter__()
+    page = await httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}).__aenter__()
     try:
         page.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         detail = await page.get(f"/units/{unit_id}/sections/{section_id}")
@@ -177,7 +177,7 @@ async def test_create_task_shows_in_list_and_keeps_sortable():
 @pytest.mark.anyio
 async def test_materials_reorder_accepts_id_param_and_changes_order():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-detail-4", name="Lehrer SD4", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = await _create_unit_via_api(c, title="UI-Unit-SD4")
@@ -230,7 +230,7 @@ async def test_materials_reorder_accepts_id_param_and_changes_order():
 @pytest.mark.anyio
 async def test_tasks_reorder_accepts_id_param_and_changes_order():
     sess = main.SESSION_STORE.create(sub="t-ui-sec-detail-5", name="Lehrer SD5", roles=["teacher"])  # type: ignore
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = await _create_unit_via_api(c, title="UI-Unit-SD5")
@@ -282,7 +282,7 @@ async def test_file_upload_intent_ui_returns_presign_and_requires_csrf():
     import routes.teaching as teaching  # type: ignore
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
     teaching.set_storage_adapter(FakeStorageAdapter())
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = (await c.post("/api/teaching/units", json={"title": "U-Files"})).json()["id"]
         section_id = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "S-Files"})).json()["id"]
@@ -320,7 +320,7 @@ async def test_file_finalize_ui_creates_material_and_updates_list():
     import routes.teaching as teaching  # type: ignore
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
     teaching.set_storage_adapter(FakeStorageAdapter())
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = (await c.post("/api/teaching/units", json={"title": "U-Files2"})).json()["id"]
         section_id = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "S-Files2"})).json()["id"]
@@ -358,7 +358,7 @@ async def test_material_tabs_are_rendered_for_text_and_file():
     sess = main.SESSION_STORE.create(sub="t-ui-tabs-1", name="Lehrer Tabs", roles=["teacher"])  # type: ignore
     import routes.teaching as teaching  # type: ignore
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = (await c.post("/api/teaching/units", json={"title": "U-Tabs"})).json()["id"]
         section_id = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "S-Tabs"})).json()["id"]
@@ -375,7 +375,7 @@ async def test_tasks_form_has_criteria_and_hints_and_is_sent_to_api():
     sess = main.SESSION_STORE.create(sub="t-ui-task-crit-1", name="Lehrer Criteria", roles=["teacher"])  # type: ignore
     import routes.teaching as teaching  # type: ignore
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         unit_id = (await c.post("/api/teaching/units", json={"title": "U-Task"})).json()["id"]
         section_id = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "S-Task"})).json()["id"]
@@ -456,6 +456,7 @@ async def test_material_list_links_to_detail_page():
         m = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
             json={"title": "LinkMat", "body_md": "x"},
+            headers={"Origin": "http://test"},
         )
         assert m.status_code == 201
         mid = m.json().get("id")
@@ -475,6 +476,7 @@ async def test_task_list_links_to_detail_page():
         t = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Bitte lösen"},
+            headers={"Origin": "http://test"},
         )
         assert t.status_code == 201
         tid = t.json().get("id")

@@ -81,8 +81,8 @@
     }
   ],
       "redirectUris": [
-        "http://localhost:8100/*",
-        "http://app.localhost:8100/*"
+        "https://localhost/*",
+        "https://app.localhost/*"
       ],
       "webOrigins": ["*"],
       "attributes": {

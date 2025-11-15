@@ -45,7 +45,7 @@ def _extract_csrf_token(html: str) -> str | None:
 
 
 async def _create_unit_via_api(client: httpx.AsyncClient, *, title: str) -> str:
-    r = await client.post("/api/teaching/units", json={"title": title})
+    r = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201
     body = r.json()
     assert isinstance(body, dict) and body.get("id")
@@ -312,11 +312,11 @@ async def test_sections_reorder_calls_api_for_db_unit():
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         # Create unit and two sections via API
-        r_unit = await c.post("/api/teaching/units", json={"title": "DB-Unit"})
+        r_unit = await c.post("/api/teaching/units", json={"title": "DB-Unit"}, headers={"Origin": "http://test"})
         assert r_unit.status_code == 201
         uid = r_unit.json()["id"]
-        a = (await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Alpha"})).json()
-        b = (await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Beta"})).json()
+        a = (await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Alpha"}, headers={"Origin": "http://test"})).json()
+        b = (await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Beta"}, headers={"Origin": "http://test"})).json()
 
         # Get CSRF token from SSR page (token only; list is dummy)
         page = await c.get(f"/units/{uid}")
@@ -400,7 +400,7 @@ async def test_sections_page_supports_repo_created_unit_and_allows_create():
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         # Seed a unit via API to ensure its id comes from the Repo, not dummy store
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        create_resp = await c.post("/api/teaching/units", json={"title": "Repo-Unit"})
+        create_resp = await c.post("/api/teaching/units", json={"title": "Repo-Unit"}, headers={"Origin": "http://test"})
         assert create_resp.status_code == 201, create_resp.text
         unit_id = create_resp.json().get("id")
         assert unit_id, "API did not return a unit id"

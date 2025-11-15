@@ -5,7 +5,7 @@ Ziel: Übersicht über Authentifizierung, Session-Handling und den UserContextDT
 ## Überblick
 - IdP: Keycloak (Realm `gustav`), OIDC Authorization Code Flow mit PKCE.
 - App-Session: httpOnly-Cookie `gustav_session` (opaque), Session-Daten serverseitig.
-- Cookie-Flags: DEV `SameSite=lax`, PROD `Secure; SameSite=strict`; immer `HttpOnly`.
+- Cookie-Flags: Immer `HttpOnly; Secure; SameSite=lax` (host‑only, kein `Domain=`).
 - Anzeigename: Bei Registrierung optionales Feld „Wie möchtest du genannt werden?“ → Keycloak User-Attribut `display_name` → Token-Claim `gustav_display_name`.
 
 ## API
@@ -38,7 +38,7 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 ## Sicherheit
 - Signaturprüfung ID‑Token über JWKS; Fehlerfälle mit 400 und `Cache-Control: private, no-store`.
 - `state` und `nonce` im Login‑Flow; `nonce` wird gegen ID‑Token geprüft.
-- Cookies httpOnly; in PROD mit `Secure` + `SameSite=strict` und `Max-Age`.
+- Cookies httpOnly; in PROD optional `Max-Age=<TTL>`; Flags bleiben `Secure; SameSite=lax` (host‑only).
 - Open Redirects verhindert: In‑App‑Pfadprüfung für Redirect‑Parameter.
 
 ## Integration in UI

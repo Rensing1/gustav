@@ -8,6 +8,7 @@ dem neuesten Eintrag geöffnet ist. Solange UI‑Routen fehlen, schlagen diese T
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import uuid
 import pytest
@@ -16,6 +17,7 @@ from httpx import ASGITransport
 from pathlib import Path
 import os
 import psycopg  # type: ignore
+from datetime import datetime, timezone
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -29,16 +31,70 @@ if str(REPO_ROOT) not in os.sys.path:
 
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+import routes.learning as learning_routes  # type: ignore  # noqa: E402
+from backend.teaching.repo_db import DBTeachingRepo  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
+
+
+def _service_dsn() -> str:
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    return (
+        os.getenv("SERVICE_ROLE_DSN")
+        or os.getenv("RLS_TEST_SERVICE_DSN")
+        or os.getenv("DATABASE_URL")
+        or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+    )
+
+
+def _teaching_repo() -> DBTeachingRepo:
+    return DBTeachingRepo(dsn=_service_dsn())
+
+
+def _fallback_create_module(*, course_id: str, unit_id: str, teacher_sub: str) -> str:
+    record = _teaching_repo().create_course_module_owned(course_id, teacher_sub, unit_id=unit_id, context_notes=None)
+    return record["id"]
+
+
+def _fallback_release_section(*, course_id: str, module_id: str, section_id: str, teacher_sub: str, visible: bool = True) -> None:
+    _teaching_repo().set_module_section_visibility(
+        course_id=course_id,
+        module_id=module_id,
+        section_id=section_id,
+        owner_sub=teacher_sub,
+        visible=visible,
+    )
+
+
+def _fallback_add_member(*, course_id: str, student_sub: str, teacher_sub: str) -> None:
+    with psycopg.connect(_service_dsn()) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (teacher_sub,))
+            cur.execute(
+                """
+                insert into public.course_memberships (course_id, student_id, role)
+                values (%s, %s, 'student')
+                on conflict (course_id, student_id) do nothing
+                """,
+                (course_id, student_sub),
+            )
+        conn.commit()
 
 
 async def _prepare_learning_fixture():
     main.SESSION_STORE = SessionStore()
     student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
     teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    teacher_sub = teacher.sub  # type: ignore[attr-defined]
     async with (await _client()) as c:
         # Teacher seeds course/unit/section/task and releases
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -54,13 +110,29 @@ async def _prepare_learning_fixture():
         )
         task_id = r_task.json()["id"]
         r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
-        module_id = r_module.json()["id"]
-        await c.patch(
+        if r_module.status_code == 201:
+            module_id = r_module.json().get("id")
+        else:
+            module_id = _fallback_create_module(course_id=course_id, unit_id=unit_id, teacher_sub=teacher_sub)
+        vis_resp = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
             json={"visible": True},
         )
-        # Add student member
-        await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name})  # type: ignore
+        if vis_resp.status_code != 200:
+            _fallback_release_section(
+                course_id=course_id,
+                module_id=module_id,
+                section_id=section_id,
+                teacher_sub=teacher_sub,
+                visible=True,
+            )
+        # Add student member; fall back to direct insert if API path is restricted.
+        enroll = await c.post(
+            f"/api/teaching/courses/{course_id}/members",
+            json={"sub": student.sub, "name": student.name},  # type: ignore
+        )
+        if enroll.status_code not in (200, 201, 204):
+            _fallback_add_member(course_id=course_id, student_sub=student.sub, teacher_sub=teacher_sub)  # type: ignore[attr-defined]
     return student.session_id, course_id, unit_id, task_id
 
 
@@ -84,6 +156,30 @@ async def test_ui_renders_task_choice_cards():
 
 
 @pytest.mark.anyio
+async def test_ui_text_field_is_not_required_to_allow_upload_mode():
+    """Textarea must not be HTML-required so upload mode can submit.
+
+    Rationale:
+        When a user switches to "Upload", the text field becomes hidden. If the
+        textarea keeps the HTML5 `required` attribute, browsers block the form
+        submission entirely (no network request), which looks like "nothing
+        happens" for the user. Server-side validation already enforces that
+        `text_body` is present when kind=text, so the UI should not mark it as
+        required.
+    """
+    sid, course_id, unit_id, _task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(f"/learning/courses/{course_id}/units/{unit_id}")
+    assert r.status_code == 200
+    html = r.text
+    # Ensure the textarea exists but is not marked required in the SSR markup
+    m = re.search(r"<textarea[^>]*name=\"text_body\"[^>]*>", html)
+    assert m, "text_body textarea must be present"
+    assert "required" not in m.group(0), "textarea must not be HTML-required"
+
+
+@pytest.mark.anyio
 async def test_ui_submit_text_prg_and_history_shows_latest_open():
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
     async with (await _client()) as c:
@@ -96,18 +192,21 @@ async def test_ui_submit_text_prg_and_history_shows_latest_open():
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         assert post.status_code in (302, 303)
-        # Folge GET → Banner und Historie mit neuestem Eintrag geöffnet
-        follow = await c.get(post.headers.get("location", f"/learning/courses/{course_id}/units/{unit_id}"))
+        loc = post.headers.get("location", "")
+        diag = post.headers.get("X-Submissions-Diag", "")
+        assert "ok=submitted" in loc, f"successful submissions must flag ok=submitted (diag={diag})"
+        # Folge GET → Historie-Placeholder mit Lazy-Load für neuesten Eintrag
+        follow = await c.get(loc or f"/learning/courses/{course_id}/units/{unit_id}")
         assert follow.status_code == 200
         html = follow.text
-        assert ("Erfolgreich eingereicht" in html) or ("role=\"alert\"" in html)
-        # details open beim neuesten Eintrag
-    assert re.search(r'<details[^>]*open[^>]*class=\"task-panel__history-entry\"', html)
+        placeholder_id = f'task-history-{task_id}'
+        assert placeholder_id in html
+        # Wrapper vorhanden; Inhalte werden asynchron nachgeladen oder direkt gerendert
 
 
 @pytest.mark.anyio
 async def test_ui_prg_redirect_includes_open_attempt_id():
-    """PRG-Redirect enthält open_attempt_id für deterministisches Öffnen."""
+    """PRG-Redirect enthält show_history_for zum deterministischen Öffnen."""
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
@@ -119,9 +218,11 @@ async def test_ui_prg_redirect_includes_open_attempt_id():
         )
         assert post.status_code in (302, 303)
         loc = post.headers.get("location", "")
-    assert "open_attempt_id=" in loc
+        diag = post.headers.get("X-Submissions-Diag", "")
+        assert "ok=submitted" in loc, f"redirect must include ok=submitted (diag={diag})"
+    assert "show_history_for=" in loc
     # UUID v4 format (basic check)
-    assert re.search(r"open_attempt_id=[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}", loc)
+    assert re.search(r"show_history_for=[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}", loc)
 
 
 @pytest.mark.anyio
@@ -162,6 +263,7 @@ async def test_ui_history_fragment_shows_text_when_analysis_missing():
         resp = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
             json={"kind": "text", "text_body": "Meine Lösung"},
+            headers={"Origin": "http://test"},
         )
         assert resp.status_code == 202
         sub_id = resp.json().get("id")
@@ -197,6 +299,7 @@ async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
         resp = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
             json={"kind": "text", "text_body": "Feedback Test"},
+            headers={"Origin": "http://test"},
         )
         assert resp.status_code == 202
         submission = resp.json()
@@ -209,9 +312,9 @@ async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
 
     feedback_md = "### Feedback\n\n- Gut gemacht!"
     analysis = {
-        "schema": "criteria.v1",
+        "schema": "criteria.v2",
         "score": 4,
-        "criteria_results": [{"criterion": "Kriterium 1", "score": 8}],
+        "criteria_results": [{"criterion": "Kriterium 1", "score": 8, "max_score": 10}],
     }
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
@@ -243,6 +346,57 @@ async def test_ui_history_fragment_shows_feedback_and_status_after_completion():
 
 
 @pytest.mark.anyio
+async def test_ui_history_fragment_omits_telemetry_block():
+    """Telemetry card has been removed from learner view (no analysis-telemetry section)."""
+
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Telemetry Check"},
+            headers={"Origin": "http://test"},
+        )
+        assert resp.status_code == 202
+        submission = resp.json()
+        sub_id = submission.get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to seed telemetry fields")
+
+    sensitive = "FATAL secret_token=XYZ12345 " + ("spam " * 50)
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set vision_attempts = 3,
+                       vision_last_error = %s,
+                       feedback_last_attempt_at = now(),
+                       feedback_last_error = %s,
+                       analysis_status = 'failed',
+                       error_code = 'vision_failed'
+                 where id = %s::uuid
+                """,
+                (sensitive, sensitive, sub_id),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": sub_id},
+        )
+
+    assert r.status_code == 200
+    html = r.text
+    # Telemetry section omitted from learner-facing history
+    assert 'class="analysis-telemetry"' not in html
+
+
+@pytest.mark.anyio
 async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
     """Criteria.v2 payloads must render badges with clamped scores and accessible labels."""
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
@@ -252,6 +406,7 @@ async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
         resp = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
             json={"kind": "text", "text_body": "Criteria Feedback"},
+            headers={"Origin": "http://test"},
         )
         assert resp.status_code == 202
         submission = resp.json()
@@ -338,6 +493,152 @@ async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
 
 
 @pytest.mark.anyio
+async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    student = main.SESSION_STORE.get(sid)
+    if not student:
+        pytest.fail("Session lookup failed for seeded student")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to seed completed submission")
+
+    submission_id = uuid.uuid4()
+    origin_key = f"submissions/{course_id}/{task_id}/{student.sub}/orig/sample.pdf"
+    page_keys = [
+        f"submissions/{course_id}/{task_id}/{student.sub}/derived/{submission_id}/page_0001.png",
+        f"submissions/{course_id}/{task_id}/{student.sub}/derived/{submission_id}/page_0002.png",
+    ]
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (student.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id,
+                  course_id,
+                  task_id,
+                  student_sub,
+                  kind,
+                  storage_key,
+                  mime_type,
+                  size_bytes,
+                  sha256,
+                  attempt_nr,
+                  analysis_status,
+                  analysis_json,
+                  internal_metadata,
+                  feedback_md
+                ) values (
+                  %s::uuid,
+                  %s::uuid,
+                  %s::uuid,
+                  %s,
+                  'file',
+                  %s,
+                  'application/pdf',
+                  4096,
+                  %s,
+                  1,
+                  'completed',
+                  jsonb_build_object(
+                    'schema', 'criteria.v2',
+                    'text', '## OCR Ergebnis'
+                  ),
+                  jsonb_build_object('page_keys', %s::jsonb),
+                  '### Gut gemacht\n\nWeiter so!'
+                )
+                """,
+                (
+                    str(submission_id),
+                    str(course_id),
+                    str(task_id),
+                    student.sub,
+                    origin_key,
+                    "b" * 64,
+                    psycopg.types.json.Json(page_keys),  # type: ignore[attr-defined]
+                ),
+            )
+            conn.commit()
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": str(submission_id)},
+        )
+
+    assert r.status_code == 200
+    html = r.text
+    # Feedback heading rendered
+    assert '<section class="analysis-feedback">' in html
+    assert "Weiter so!" in html
+    # PDF page previews stay hidden (page_keys remain internal)
+    assert 'class="analysis-artifacts__list"' not in html
+    assert "page_0001.png" not in html
+    assert "page_0002.png" not in html
+
+
+@pytest.mark.anyio
+async def test_ui_history_shows_pdf_failure_message():
+    """History fragment should surface failure code + sanitized detail for failed PDFs."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    student = main.SESSION_STORE.get(sid)
+    assert student is not None
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required for failure history test")
+
+    submission_id = uuid.uuid4()
+    storage_key = f"submissions/{course_id}/{task_id}/{student.sub}/orig/failed.pdf"  # type: ignore[attr-defined]
+    failure_msg = "PDF konnte nicht verarbeitet werden"
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                    id, course_id, task_id, student_sub, kind,
+                    storage_key, mime_type, size_bytes, sha256, attempt_nr,
+                    analysis_status, analysis_json, text_body, feedback_md, error_code,
+                    vision_last_error
+                ) values (
+                    %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                    %s, 'application/pdf', 4096, %s, 1,
+                    'failed', null, null, null, 'input_corrupt',
+                    %s
+                )
+                """,
+                (
+                    str(submission_id),
+                    str(course_id),
+                    str(task_id),
+                    student.sub,  # type: ignore[arg-type]
+                    storage_key,
+                    "c" * 64,
+                    failure_msg,
+                ),
+            )
+        conn.commit()
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": str(submission_id)},
+        )
+
+    assert r.status_code == 200
+    html = r.text
+    assert 'class="analysis-error"' in html
+    assert "Analyse fehlgeschlagen" in html
+    assert "input_corrupt" in html
+    assert failure_msg in html
+
+
+@pytest.mark.anyio
 async def test_ui_submit_upload_png_prg_and_history_shows_latest_open():
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
     async with (await _client()) as c:
@@ -356,12 +657,15 @@ async def test_ui_submit_upload_png_prg_and_history_shows_latest_open():
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         assert post.status_code in (302, 303)
-        follow = await c.get(post.headers.get("location", f"/learning/courses/{course_id}/units/{unit_id}"))
+        loc = post.headers.get("location", "")
+        diag = post.headers.get("X-Submissions-Diag", "")
+        assert "ok=submitted" in loc, f"upload redirect missing ok flag (diag={diag})"
+        follow = await c.get(loc or f"/learning/courses/{course_id}/units/{unit_id}")
         assert follow.status_code == 200
         html = follow.text
-        assert ("Erfolgreich eingereicht" in html) or ("role=\"alert\"" in html)
-        # details open beim neuesten Eintrag
-    assert re.search(r'<details[^>]*open[^>]*class=\"task-panel__history-entry\"', html)
+        placeholder_id = f'task-history-{task_id}'
+        assert placeholder_id in html
+        # Wrapper vorhanden; Inhalte werden asynchron nachgeladen oder direkt gerendert
 
 
 @pytest.mark.anyio
@@ -405,8 +709,136 @@ async def test_ui_submit_upload_pdf_prg_and_history_shows_latest_open():
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         assert post.status_code in (302, 303)
-        follow = await c.get(post.headers.get("location", f"/learning/courses/{course_id}/units/{unit_id}"))
+        loc = post.headers.get("location", "")
+        diag = post.headers.get("X-Submissions-Diag", "")
+        assert "ok=submitted" in loc, f"PDF upload redirect missing ok flag (diag={diag})"
+        follow = await c.get(loc or f"/learning/courses/{course_id}/units/{unit_id}")
         assert follow.status_code == 200
         html = follow.text
-        assert ("Erfolgreich eingereicht" in html) or ("role=\"alert\"" in html)
-        assert re.search(r'<details[^>]*open[^>]*class=\"task-panel__history-entry\"', html)
+        placeholder_id = f'task-history-{task_id}'
+        assert placeholder_id in html
+        # Wrapper vorhanden; Inhalte werden asynchron nachgeladen oder direkt gerendert
+
+
+@pytest.mark.anyio
+async def test_ui_submit_upload_png_without_js_uses_server_fallback(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """JS-disabled browsers must still upload files via server-side fallback."""
+    storage_root = tmp_path / "dev_uploads"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "true")
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
+
+    class _StubLearningRepo:
+        def __init__(self):
+            self._items: list[dict] = []
+
+        def _public(self, entry: dict) -> dict:
+            return {
+                "id": entry["id"],
+                "attempt_nr": entry["attempt_nr"],
+                "kind": entry["kind"],
+                "text_body": entry["text_body"],
+                "mime_type": entry["mime_type"],
+                "size_bytes": entry["size_bytes"],
+                "storage_key": entry["storage_key"],
+                "sha256": entry["sha256"],
+                "analysis_status": entry["analysis_status"],
+                "analysis_json": entry["analysis_json"],
+                "feedback_md": entry["feedback_md"],
+                "error_code": entry["error_code"],
+                "vision_last_error": entry["vision_last_error"],
+                "feedback_last_error": entry["feedback_last_error"],
+                "created_at": entry["created_at"],
+                "completed_at": entry["completed_at"],
+            }
+
+        def list_submissions(self, *, student_sub: str, course_id: str, task_id: str, limit: int, offset: int) -> list[dict]:
+            filtered = [
+                self._public(item)
+                for item in self._items
+                if item["course_id"] == course_id and item["task_id"] == task_id and item["student_sub"] == student_sub
+            ]
+            return filtered[offset : offset + limit]
+
+        def create_submission(self, data):
+            attempts = 1 + sum(
+                1
+                for item in self._items
+                if item["task_id"] == data.task_id and item["student_sub"] == data.student_sub
+            )
+            entry = {
+                "id": str(uuid.uuid4()),
+                "course_id": data.course_id,
+                "task_id": data.task_id,
+                "student_sub": data.student_sub,
+                "attempt_nr": attempts,
+                "kind": data.kind,
+                "text_body": data.text_body,
+                "mime_type": str(data.mime_type or ""),
+                "size_bytes": int(data.size_bytes or 0),
+                "storage_key": str(data.storage_key or ""),
+                "sha256": str(data.sha256 or ""),
+                "analysis_status": "pending",
+                "analysis_json": None,
+                "feedback_md": None,
+                "error_code": None,
+                "vision_last_error": None,
+                "feedback_last_error": None,
+                "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "completed_at": None,
+            }
+            self._items.insert(0, entry)
+            return self._public(entry)
+
+    original_adapter = learning_routes.STORAGE_ADAPTER
+    original_repo = getattr(learning_routes, "REPO", None)
+    stub_repo = _StubLearningRepo()
+    learning_routes.set_repo(stub_repo)
+    learning_routes.REPO = stub_repo
+    learning_routes.set_storage_adapter(learning_routes.NullStorageAdapter())
+    try:
+        sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+        file_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        expected_sha = hashlib.sha256(file_bytes).hexdigest()
+        form_data = {
+            "mode": "upload",
+            "unit_id": unit_id,
+            "text_body": "",
+            "storage_key": "",
+            "mime_type": "",
+            "size_bytes": "",
+            "sha256": "",
+        }
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+            resp = await c.post(
+                f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+                data=form_data,
+                files={"upload_file": ("beweis.png", file_bytes, "image/png")},
+                follow_redirects=False,
+            )
+            assert resp.status_code in (302, 303)
+            location = resp.headers.get("location", "")
+            diag = resp.headers.get("X-Submissions-Diag", "")
+            assert "ok=submitted" in location, f"upload redirect missing ok flag (diag={diag})"
+            follow = await c.get(location or f"/learning/courses/{course_id}/units/{unit_id}")
+            assert follow.status_code == 200
+            api_resp = await c.get(f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
+        assert api_resp.status_code == 200
+        items = api_resp.json()
+        assert isinstance(items, list) and items, "submission list must include newest entry"
+        latest = items[0]
+        assert latest.get("kind") == "image"
+        assert latest.get("mime_type") == "image/png"
+        assert latest.get("sha256") == expected_sha
+        storage_key = str(latest.get("storage_key") or "")
+        assert storage_key, "server fallback must persist a storage_key"
+        stored_file = storage_root / storage_key
+        assert stored_file.exists(), "server fallback must upload file via dev stub"
+        assert stored_file.read_bytes() == file_bytes
+    finally:
+        learning_routes.set_storage_adapter(original_adapter)
+        if original_repo is not None:
+            learning_routes.set_repo(original_repo)
+            learning_routes.REPO = original_repo

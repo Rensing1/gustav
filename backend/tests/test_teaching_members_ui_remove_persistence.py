@@ -40,7 +40,7 @@ async def test_remove_member_persists_and_absent_after_reload():
     _require_db_or_skip()
     main.SESSION_STORE = SessionStore()
     t = main.SESSION_STORE.create(sub="teacher-rem-persist", name="Owner", roles=["teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, t.session_id)
         r = await c.post("/api/teaching/courses", json={"title": "Remove Persist"})
         assert r.status_code == 201
@@ -76,7 +76,7 @@ async def test_remove_member_by_non_owner_shows_error_and_keeps_member():
     # Owner creates course and adds a student
     owner = main.SESSION_STORE.create(sub="owner-rem-fail", name="Owner", roles=["teacher"])
     other = main.SESSION_STORE.create(sub="other-rem-fail", name="Other", roles=["teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
         r = await c.post("/api/teaching/courses", json={"title": "Remove Fail"})
         assert r.status_code == 201

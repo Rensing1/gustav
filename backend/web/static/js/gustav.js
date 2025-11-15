@@ -45,6 +45,7 @@ class Gustav {
     this.initSidebarAccessibility(); // Ensure keyboard navigation stays usable
     this.initSidebarGestures();
     this.initSidebarTooltips();
+    this.initLearningTaskForms(); // Progressive enhancement for student task forms
   }
 
   /**
@@ -69,6 +70,156 @@ class Gustav {
           this.setTheme(e.matches ? 'everforest-dark-hard' : 'rose-pine-dawn');
         }
       });
+  }
+
+  /**
+   * Progressive enhancement for Learning task submit forms (text/upload).
+   *
+   * - Toggles fields when switching mode (text vs. upload)
+   * - Handles client-side upload flow (upload-intent → PUT to stub → fill hidden fields)
+   */
+  initLearningTaskForms() {
+    const forms = document.querySelectorAll('form.task-submit-form');
+    if (!forms.length) return;
+
+    forms.forEach((form) => {
+      // Toggle fields when user changes mode
+      form.addEventListener('change', (e) => {
+        const modeInput = form.querySelector('input[name="mode"]:checked');
+        const mode = modeInput ? modeInput.value : (form.dataset.mode || 'text');
+        form.dataset.mode = mode;
+        const textFields = form.querySelector('.fields-text');
+        const uploadFields = form.querySelector('.fields-upload');
+        if (textFields && uploadFields) {
+          if (mode === 'upload' || mode === 'image' || mode === 'file') {
+            textFields.hidden = true;
+            uploadFields.hidden = false;
+          } else {
+            textFields.hidden = false;
+            uploadFields.hidden = true;
+          }
+        }
+      });
+
+      // Handle file selection → request upload-intent → PUT bytes → fill hidden fields
+      const fileInput = form.querySelector('input[type="file"][name="upload_file"]');
+      if (!fileInput) return;
+
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        try {
+          await this.prepareLearningUpload(form, file);
+          this.showNotification('Upload vorbereitet. Jetzt „Abgeben“ klicken.', 'info', 2500);
+        } catch (err) {
+          console.error('Upload prepare failed', err);
+          this.showNotification('Upload fehlgeschlagen. Bitte erneut versuchen.', 'error');
+          // Clear hidden fields to avoid submitting invalid payload
+          ['storage_key','mime_type','size_bytes','sha256'].forEach((name) => {
+            const el = form.querySelector(`input[name="${name}"]`);
+            if (el) el.value = '';
+          });
+        }
+      });
+    });
+  }
+
+  /**
+   * Persist which submission the learner has opened while HTMX polls history fragments.
+   *
+   * hx-on calls this whenever a <details> toggles. We update data-open-attempt-id
+   * and hx-vals so the next poll request keeps the same attempt expanded.
+   */
+  handleHistoryToggle(event, wrapper) {
+    if (!wrapper || !wrapper.classList || !wrapper.classList.contains('task-panel__history')) {
+      return;
+    }
+    const details = event.target && event.target.closest
+      ? event.target.closest('details.task-panel__history-entry')
+      : null;
+    if (!details) return;
+
+    const historyEl = wrapper;
+    let openId = '';
+
+    if (details.open) {
+      openId = details.dataset.submissionId || '';
+    } else {
+      const stillOpen = historyEl.querySelector('details.task-panel__history-entry[open]');
+      openId = stillOpen ? (stillOpen.dataset.submissionId || '') : '';
+    }
+
+    historyEl.dataset.openAttemptId = openId;
+    try {
+      historyEl.setAttribute('hx-vals', JSON.stringify({ open_attempt_id: openId }));
+    } catch (err) {
+      console.warn('Failed to persist open attempt id', err);
+    }
+  }
+
+  /**
+   * Execute the client-side upload prepare flow for learning submissions.
+   * 1) POST upload-intent → get storage_key + PUT URL
+   * 2) PUT file to returned URL
+   * 3) Fill hidden fields for final submission
+    */
+  async prepareLearningUpload(form, file) {
+    const courseId = form.dataset.courseId;
+    const taskId = form.dataset.taskId;
+    if (!courseId || !taskId) throw new Error('missing form dataset');
+
+    const mime = file.type;
+    const size = file.size;
+    const filename = file.name || 'upload.bin';
+    const kind = mime === 'application/pdf' ? 'file' : (mime.startsWith('image/') ? 'image' : 'file');
+
+    // Request upload intent (same-origin; CSRF enforced by Origin header)
+    const intentResp = await fetch(`/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, filename, mime_type: mime, size_bytes: size })
+    });
+    if (!intentResp.ok) {
+      throw new Error(`intent ${intentResp.status}`);
+    }
+    const intent = await intentResp.json();
+    const putUrl = intent.url;
+    const putHeaders = intent.headers || { 'Content-Type': mime };
+
+    // PUT the file to the provided URL (local stub in dev)
+    const putResp = await fetch(putUrl, { method: 'PUT', headers: putHeaders, body: file });
+    if (!putResp.ok) {
+      throw new Error(`put ${putResp.status}`);
+    }
+    const putJson = await putResp.json().catch(() => ({}));
+    let sha256 = putJson.sha256 || '';
+    if (!sha256) {
+      sha256 = await this.hashFileSha256(file);
+    }
+
+    // Fill hidden fields — used by the final POST /submissions
+    const set = (name, value) => {
+      const el = form.querySelector(`input[name="${name}"]`);
+      if (el) el.value = value;
+    };
+    set('storage_key', intent.storage_key || '');
+    set('mime_type', mime);
+    set('size_bytes', String(size));
+    set('sha256', sha256);
+  }
+
+  /**
+   * Compute SHA-256 digest for a File using Web Crypto.
+   */
+  async hashFileSha256(file) {
+    const cryptoObj = window.crypto || window.msCrypto;
+    if (!cryptoObj || !cryptoObj.subtle) {
+      throw new Error('Secure hashing not supported in this browser');
+    }
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await cryptoObj.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
   /**

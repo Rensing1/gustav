@@ -31,6 +31,11 @@ async def test_prod_requires_origin_or_referer(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GUSTAV_ENV", "prod")
     monkeypatch.delenv("STRICT_CSRF_SUBMISSIONS", raising=False)
     main.SESSION_STORE = SessionStore()
+    # Pin environment override as additional guard against import-order drift
+    try:
+        main.SETTINGS.override_environment("prod")
+    except Exception:
+        pass
     student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
@@ -39,4 +44,8 @@ async def test_prod_requires_origin_or_referer(monkeypatch: pytest.MonkeyPatch):
             json={"kind": "text", "text_body": "hi"},
         )
     assert res.status_code == 403
-    assert res.json().get("detail") == "csrf_violation"
+    # If this ever fails, include diagnostic headers in the assertion message
+    assert res.json().get("detail") == "csrf_violation", (
+        f"detail={res.json().get('detail')}, "
+        f"csrf={res.headers.get('X-CSRF-Diag')}, submissions={res.headers.get('X-Submissions-Diag')}"
+    )

@@ -55,7 +55,7 @@ Als verantwortliche Lehrkraft (Felix) möchte ich, dass sich Benutzer über Keyc
 ### Cookie-Härtung
 - **Given** der Login endet erfolgreich im Produktionsmodus  
   **When** das Session-Cookie gesetzt wird  
-  **Then** enthält es die Flags `HttpOnly`, `Secure` und `SameSite=strict`.
+**Then** enthält es die Flags `HttpOnly`, `Secure` und `SameSite=lax` (host‑only).
 
 - **Given** der Logout-Endpunkt wird aufgerufen  
   **When** das Cookie gelöscht wird  
@@ -63,7 +63,7 @@ Als verantwortliche Lehrkraft (Felix) möchte ich, dass sich Benutzer über Keyc
 
 ## API-Vertrag (Entwurf)
 - Keine neuen Endpunkte erforderlich; bestehender Vertrag deckt Rollen- und Session-Information ab.
-- Anpassung vorgenommen: `Set-Cookie`-Header bei `/auth/callback` beschreibt die Flags (`HttpOnly; Secure; SameSite=strict` in Prod, `HttpOnly; SameSite=lax` in Dev/Test).
+- Anpassung vorgenommen: `Set-Cookie`-Header bei `/auth/callback` beschreibt die Flags (`HttpOnly; Secure; SameSite=lax`, host‑only) konsistent für alle Umgebungen.
 
 ## Datenbank / Migration
 - DEV: Sessions weiterhin In‑Memory (einfach, schnell).
@@ -73,7 +73,7 @@ Als verantwortliche Lehrkraft (Felix) möchte ich, dass sich Benutzer über Keyc
 ## Technische Notizen
 - Rollen-Mapping in `auth_callback`: explizit auf erlaubte Rollen filtern, Unbekanntes ignorieren (Debug-Log).
 - Session-Expiry über `monkeypatch` auf `identity_access.stores._now` testen, damit Produktionscode Zeitquelle behält.
-- Cookie-Härtung steuern wir über Umgebungsvariable `GUSTAV_ENV` (`dev` vs. `prod`): In Prod setzen wir `HttpOnly`, `Secure`, `SameSite="strict"`, in Dev `HttpOnly`, `SameSite="lax"` ohne `Secure`.
+- Cookie-Härtung: Einheitlich in allen Umgebungen `HttpOnly; Secure; SameSite="lax"` (host‑only, kein `Domain=`).
 - Fehlerpfade im OIDC-Client und in `verify_id_token`: Logging über modulweiten `logger.warning` (keine personenbezogenen Daten).
 - Eigene Exception-Klasse für Token-Exchange-Fehler prüfen, damit der Webadapter differenziert reagieren kann.
 - Für realen Keycloak-Test: docker-compose-Service nutzen, siehe Validierungsplan unten.

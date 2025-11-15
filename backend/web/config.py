@@ -102,3 +102,35 @@ def ensure_secure_config_on_startup() -> None:
 
     _must_be_https(os.getenv("KC_BASE_URL", ""), "KC_BASE_URL")
     _must_be_https(os.getenv("KC_PUBLIC_BASE_URL", ""), "KC_PUBLIC_BASE_URL")
+
+    # 5) AI backend safety: stub adapters must never run in prod/stage.
+    ai_backend = (os.getenv("AI_BACKEND") or "stub").strip().lower()
+    if ai_backend == "stub":
+        raise SystemExit(
+            "Refusing to start: AI_BACKEND=stub is not allowed in production/staging. Configure a real adapter."
+        )
+
+    # 6) Storage verification must be enforced in prod-like envs
+    require_verify = (os.getenv("REQUIRE_STORAGE_VERIFY", "false") or "").strip().lower() == "true"
+    if not require_verify:
+        raise SystemExit(
+            "Refusing to start: REQUIRE_STORAGE_VERIFY=true is mandatory in production/staging."
+        )
+
+    # 7) Forbid dev upload stub and upload proxy in prod-like envs
+    if (os.getenv("ENABLE_DEV_UPLOAD_STUB", "false") or "").strip().lower() == "true":
+        raise SystemExit(
+            "Refusing to start: ENABLE_DEV_UPLOAD_STUB must be false in production/staging."
+        )
+    if (os.getenv("ENABLE_STORAGE_UPLOAD_PROXY", "false") or "").strip().lower() == "true":
+        raise SystemExit(
+            "Refusing to start: ENABLE_STORAGE_UPLOAD_PROXY must be false in production/staging."
+        )
+
+    # 8) Forbid automatic bucket provisioning in prod-like envs
+    #    Buckets must be provisioned via migrations or explicit runbooks.
+    if (os.getenv("AUTO_CREATE_STORAGE_BUCKETS", "false") or "").strip().lower() == "true":
+        raise SystemExit(
+            "Refusing to start: AUTO_CREATE_STORAGE_BUCKETS=true is not allowed in production/staging. "
+            "Provision storage buckets via migrations/runbooks."
+        )

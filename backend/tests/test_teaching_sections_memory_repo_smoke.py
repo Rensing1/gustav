@@ -27,7 +27,11 @@ from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 @pytest.mark.anyio
@@ -74,4 +78,3 @@ async def test_sections_crud_smoke_with_memory_repo():
         # Delete section
         r_del = await client.delete(f"/api/teaching/units/{unit['id']}/sections/{sec['id']}")
         assert r_del.status_code == 204
-

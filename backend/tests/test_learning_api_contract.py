@@ -51,24 +51,29 @@ class LearningFixture:
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    # Provide Origin for strict CSRF on Learning write endpoints
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 async def _create_course(client: httpx.AsyncClient, title: str) -> str:
-    resp = await client.post("/api/teaching/courses", json={"title": title})
-    assert resp.status_code == 201
+    resp = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
+    assert resp.status_code == 201, resp.text
     return resp.json()["id"]
 
 
 async def _create_unit(client: httpx.AsyncClient, title: str = "Unit") -> dict:
-    resp = await client.post("/api/teaching/units", json={"title": title})
-    assert resp.status_code == 201
+    resp = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
 async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = "Section") -> dict:
-    resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
-    assert resp.status_code == 201
+    resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title}, headers={"Origin": "http://test"})
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
@@ -83,8 +88,9 @@ async def _create_material(
     resp = await client.post(
         f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
         json={"title": title, "body_md": body_md},
+        headers={"Origin": "http://test"},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
@@ -108,14 +114,15 @@ async def _create_task(
     resp = await client.post(
         f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
         json=payload,
+        headers={"Origin": "http://test"},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
 async def _create_module(client: httpx.AsyncClient, course_id: str, unit_id: str) -> dict:
-    resp = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
-    assert resp.status_code == 201
+    resp = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
+    assert resp.status_code == 201, resp.text
     return resp.json()
 
 
@@ -130,14 +137,15 @@ async def _set_section_visibility(
     resp = await client.patch(
         f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
         json={"visible": visible},
+        headers={"Origin": "http://test"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     return resp.json()
 
 
 async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: str) -> None:
     resp = await client.post(
-        f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub}
+        f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub}, headers={"Origin": "http://test"}
     )
     assert resp.status_code in (201, 204)
 
@@ -168,6 +176,11 @@ async def _prepare_learning_fixture(
         pytest.skip("DB-backed LearningRepo required for Learning contract tests")
 
     main.SESSION_STORE = SessionStore()
+    try:
+        # Ensure dev-like policies for this fixture (cookies/CSRF), independent of global test env
+        main.SETTINGS.override_environment("dev")
+    except Exception:
+        pass
 
     teacher = main.SESSION_STORE.create(
         sub=f"teacher-learning-{uuid4()}",
@@ -408,18 +421,9 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
                 )
                 job_count = int(cur.fetchone()[0])
         except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):  # type: ignore[attr-defined]
-            conn.rollback()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "select count(*) from public.learning_submission_ocr_jobs where submission_id = %s",
-                        (submission_id,),
-                    )
-                    job_count = int(cur.fetchone()[0])
-            except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):  # type: ignore[attr-defined]
-                pytest.skip(
-                    "Queue table missing or no privileges; migration/grants not applied in this environment."
-                )
+            pytest.skip(
+                "Queue table missing or no privileges; migration/grants not applied in this environment."
+            )
 
     assert job_count == 1
 
@@ -443,7 +447,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         assert first_payload["attempt_nr"] == 1
         assert first_payload["analysis_status"] == "pending"
         assert first_payload.get("analysis_json") is None
-        assert first_payload.get("feedback") is None
+        assert first_payload.get("feedback_md") is None
         assert first_payload["text_body"] == "Versuch 1"
         submission_id = first_payload["id"]
 
@@ -790,10 +794,27 @@ async def test_list_submissions_history_happy_path():
     assert latest["attempt_nr"] == 2
     # Async: pending status until worker completes; payloads may be empty
     assert latest["analysis_status"] == "pending"
-    assert latest.get("feedback") in (None, "", {})
+    assert latest.get("feedback_md") in (None, "", {})
     assert latest.get("analysis_json") in (None, {})
     assert earliest["attempt_nr"] == 1
     assert earliest.get("analysis_json") in (None, {})
+    # Telemetry is always present per contract
+    telemetry_fields = (
+        "vision_attempts",
+        "vision_last_error",
+        "feedback_last_attempt_at",
+        "feedback_last_error",
+    )
+    for attempt in payload:
+        for field in telemetry_fields:
+            assert field in attempt, f"{field} missing from submission payload"
+        assert attempt["vision_attempts"] >= 0
+        assert (
+            attempt["vision_last_error"] is None or len(attempt["vision_last_error"]) <= 256
+        ), "vision_last_error must be sanitized to <=256 chars"
+        if attempt["feedback_last_attempt_at"] is not None:
+            # Fast ISO check
+            assert attempt["feedback_last_attempt_at"].endswith("Z") or "+" in attempt["feedback_last_attempt_at"]
 
 
 @pytest.mark.anyio
@@ -847,6 +868,67 @@ async def test_list_submissions_forbidden_non_member():
 
     assert resp.status_code == 403
     assert resp.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_submission_telemetry_is_sanitized_and_capped():
+    """Telemetry fields must expose sanitized strings and ISO timestamps."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "telemetry-check"},
+            json={"kind": "text", "text_body": "Antwort"},
+        )
+        assert resp.status_code == 202
+        submission_id = resp.json()["id"]
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover - safety
+        pytest.skip("psycopg required to seed telemetry values")
+
+    sensitive = "FATAL secret_token=XYZ12345" + (" spam" * 200)
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to seed telemetry values")
+
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set vision_attempts = 3,
+                       vision_last_error = %s,
+                       feedback_last_attempt_at = now(),
+                       feedback_last_error = %s
+                 where id = %s::uuid
+                """,
+                (sensitive, sensitive, submission_id),
+            )
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        history_resp = await client.get(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            params={"limit": 1, "offset": 0},
+        )
+
+    assert history_resp.status_code == 200
+    payload = history_resp.json()
+    assert payload, "expected at least one submission"
+    telemetry = payload[0]
+    assert telemetry["vision_attempts"] == 3
+    for key in ("vision_last_error", "feedback_last_error"):
+        value = telemetry[key]
+        assert value is not None
+        assert "secret_token" not in value.lower()
+        assert len(value) <= 256
+    assert telemetry["feedback_last_attempt_at"] is not None
 
 
 @pytest.mark.anyio
@@ -943,7 +1025,8 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
 
     fixture = await _prepare_learning_fixture()
 
-    async with (await _client()) as client:
+    # Use a client without default Origin header to simulate missing Origin
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
@@ -1030,20 +1113,68 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
     assert payload["analysis_status"] == "pending"
     assert payload["storage_key"] == "uploads/student123/solution.png"
     assert payload.get("analysis_json") is None
-    assert payload.get("feedback") is None
+    assert payload.get("feedback_md") is None
 
 
-    # History should include the image submission with storage_key
+@pytest.mark.anyio
+async def test_extracted_submission_response_hides_analysis_json_payload():
+    """Intermediate 'extracted' rows must not expose raw analysis payloads."""
+
+    fixture = await _prepare_learning_fixture()
+
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
-        history = await client.get(
+        create = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "PDF pending"},
+        )
+    assert create.status_code == 202
+    submission = create.json()
+    submission_id = submission["id"]
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+    from psycopg.types.json import Json  # type: ignore[attr-defined]
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to tweak submission state")
+
+    fake_page_keys = [
+        f"submissions/{fixture.course_id}/{fixture.task['id']}/{fixture.student_sub}/derived/{submission_id}/page_0001.png"
+    ]
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'extracted',
+                       analysis_json = null,
+                       internal_metadata = coalesce(internal_metadata, '{}'::jsonb)
+                                          || jsonb_build_object('page_keys', %s::jsonb)
+                 where id = %s::uuid
+                """,
+                (Json(fake_page_keys), submission_id),
+            )
+        conn.commit()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        resp = await client.get(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             params={"limit": 5, "offset": 0},
         )
-    assert history.status_code == 200
-    items = history.json()
-    assert isinstance(items, list) and items
-    assert items[0]["storage_key"] == "uploads/student123/solution.png"
+
+    assert resp.status_code == 200
+    payloads = resp.json()
+    extracted = next((item for item in payloads if item["id"] == submission_id), None)
+    assert extracted is not None
+    assert extracted["analysis_status"] == "extracted"
+    assert extracted.get("analysis_json") is None
 @pytest.mark.anyio
 async def test_create_submission_image_storage_key_sane_pattern():
     """Reject image uploads with suspicious storage_key (defense-in-depth)."""

@@ -291,6 +291,45 @@ def test_pdf_preprocessing_rejects_oversized_submission(monkeypatch):
     assert called["n"] == 0, "renderer should not be invoked for oversize submissions"
 
 
+def test_pdf_preprocessing_rejects_oversized_body_even_when_metadata_small(monkeypatch):
+    """Oversized payload bytes must be rejected even if metadata is below the limit."""
+    # Given: metadata size within limit, but actual PDF bytes exceed the limit.
+    limit = 1024
+    seed = _seed_pdf_submission(size_bytes=512)
+    repo = DBLearningRepo(dsn=_service_dsn())
+
+    called = {"n": 0}
+
+    def _should_not_run(_: bytes):
+        called["n"] += 1
+        return [], types.SimpleNamespace(page_count=0, dpi=300, grayscale=True, used_annotations=True)
+
+    import sys as _sys
+
+    monkeypatch.setitem(
+        _sys.modules,
+        "backend.vision.pipeline",
+        types.SimpleNamespace(process_pdf_bytes=_should_not_run),
+    )
+
+    storage = _MemoryStorage()
+    usecase = PreprocessPdfSubmissionUseCase(
+        repo=repo,
+        worker_dsn=_service_dsn(),
+        storage=storage,
+        bucket=os.getenv("LEARNING_SUBMISSIONS_BUCKET", "learning-submissions"),
+        size_limit_bytes=limit,
+    )
+
+    pdf_bytes = b"x" * (limit + 1)
+    usecase.execute(context=_build_context(seed), pdf_bytes=pdf_bytes)
+
+    status, error_code, *_ = _fetch_status(seed.submission_id)
+    assert status == "failed"
+    assert error_code == "input_too_large"
+    assert called["n"] == 0, "renderer should not be invoked when payload exceeds limit"
+
+
 def test_pdf_preprocessing_failed_path_uses_security_helper(monkeypatch):
     """The failed-path helper must call the SECURITY DEFINER function for auditing."""
     import backend.learning.usecases.pdf_preprocessing as pdf_uc

@@ -17,6 +17,12 @@ from typing import Protocol
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 from backend.storage.config import get_learning_max_upload_bytes
 
+
+def _allowed_upload_mime() -> frozenset[str]:
+    from backend.storage.learning_policy import ALLOWED_IMAGE_MIME, ALLOWED_FILE_MIME  # avoid circular import
+
+    return frozenset(ALLOWED_IMAGE_MIME | ALLOWED_FILE_MIME)
+
 def _stream_hash_from_url(
     url: str,
     *,
@@ -119,6 +125,10 @@ def verify_storage_object_integrity(
     cannot be found.
     """
 
+    normalized_mime = (mime_type or "").strip().lower()
+    if normalized_mime not in _allowed_upload_mime():
+        raise ValueError(f"mime_not_allowed:{normalized_mime}")
+
     bucket = config.storage_bucket
     # Interpret `require_remote` as "verification is required", not strictly
     # "remote HEAD must succeed". In dev/test setups a local verify root may
@@ -158,26 +168,27 @@ def verify_storage_object_integrity(
                             actual_size = None
                     if expected_size_int is not None and actual_size is not None and expected_size_int != actual_size:
                         last_reason = "size_mismatch"
-                    elif expected_sha256 and etag:
-                        # Only accept a trusted SHA-256 header name; generic ETags are
-                        # not reliable checksums in many backends (e.g., Supabase).
-                        # Some providers put sha256 in custom headers (e.g., content_sha256).
-                        # Treat unknown/opaque ETags as non-authoritative.
-                        name = None
-                        for k in ("sha256", "content_sha256"):
-                            if k in head:
-                                name = k
-                                break
-                        if name is not None:
-                            normalized = str(head.get(name)).strip('"').lower()
-                            if normalized != str(expected_sha256).lower():
-                                last_reason = "hash_mismatch"
+                    elif expected_sha256:
+                        if etag:
+                            # Only accept a trusted SHA-256 header name; generic ETags are
+                            # not reliable checksums in many backends (e.g., Supabase).
+                            name = None
+                            for k in ("sha256", "content_sha256"):
+                                if k in head:
+                                    name = k
+                                    break
+                            if name is not None:
+                                normalized = str(head.get(name)).strip('"').lower()
+                                if normalized != str(expected_sha256).lower():
+                                    last_reason = "hash_mismatch"
+                                else:
+                                    return (True, "match_head")
                             else:
-                                return (True, "ok")
+                                last_reason = "hash_unavailable"
                         else:
                             last_reason = "hash_unavailable"
                     elif expected_size_int is not None and actual_size is not None:
-                        return (True, "ok")
+                        return (True, "match_head")
                     else:
                         last_reason = "unknown_size"
                 else:
@@ -210,18 +221,20 @@ def verify_storage_object_integrity(
                 if expected_size_int2 is not None and isinstance(actual_size, int) and actual_size != expected_size_int2:
                     return (False, "size_mismatch")
                 if actual_sha.lower() == str(expected_sha256).lower():
-                    return (True, "ok")
+                    return (True, "match_download")
                 else:
                     return (False, "hash_mismatch")
             else:
-                # Preserve the more specific earlier reason when download failed
-                last_reason = last_reason or reason or "download_failed"
+                reason = reason or last_reason or "download_failed"
+                if reason == "redirect_detected":
+                    return (False, "download_redirect")
+                return (False, reason)
 
     root = (config.local_verify_root or "").strip()
     if not root:
         # No local root available; if verification is required and remote
         # verification didn't succeed, propagate the remote failure reason.
-        return ((not require), "skipped" if not require else last_reason)
+        return ((not require), "skipped" if not require else (last_reason or "missing_object"))
     if not storage_key or not expected_sha256 or expected_size is None:
         return (False, "missing_fields")
     base = Path(root).resolve()

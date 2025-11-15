@@ -238,6 +238,12 @@ E2E‑Tests (Identity):
 - Wiring: In `backend/web/main.py` wird der Adapter automatisch aktiviert, wenn `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` gesetzt sind.
 - ENV: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SUPABASE_STORAGE_BUCKET` (default: `materials`). Siehe `.env.example` und `docs/references/storage_and_gateway.md`.
 
+#### Storage-Bootstrap (nur Dev/CI)
+- Script: `backend/storage/bootstrap.py` stellt über die Supabase-REST-API sicher, dass die Lehr‑ (`SUPABASE_STORAGE_BUCKET`/`materials`) und Lern-Buckets (`LEARNING_STORAGE_BUCKET`/`submissions`) existieren.
+- Opt-in: Das Script läuft ausschließlich, wenn `AUTO_CREATE_STORAGE_BUCKETS=true` gesetzt ist (z. B. bei `docker compose run --rm web python -m backend.storage.bootstrap`). Standardwert in `.env.example` und `docker-compose.yml` ist `false`.
+- Produktionsregel: Prod/Stage setzen das Flag _nie_. Bucket-/Policy-Änderungen erfolgen ausschließlich über Migrationen oder explizite Admin-Schritte (Supabase-Konsole/Terraform). Der Startup-Guard (`backend/web/config.ensure_secure_config_on_startup`) beendet Prod-Builds, falls das Flag fälschlich aktiv ist.
+- Sicherheit: Das Script benötigt die Service-Role (`SUPABASE_SERVICE_ROLE_KEY`), erstellt nur fehlende Buckets (idempotent) und ändert keine Policies. Logs enthalten Warnungen, falls trotz Aktivierung Buckets fehlen – so wird ersichtlich, dass ein manueller Eingriff nötig ist.
+
 ### RLS & Ordering (Teaching/Sections)
 - RLS‑Identität: Heute setzt jede DB‑Operation `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen. Dieses Muster wird mittelfristig durch JWT/Claims in Policies ersetzt (separater Plan).
 - Rollen‑Trennung: `gustav_limited` definiert die Berechtigungen (RLS/Grants) und ist NOLOGIN. Die Anwendung verbindet sich über einen umgebungsspezifischen Login‑User (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.

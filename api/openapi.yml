@@ -2408,18 +2408,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Course'
-        '401':
-          description: Unauthenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
     post:
       tags: [Teaching]
       summary: Create a course (teacher only)
@@ -2462,12 +2452,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_input
-        '401':
-          description: Unauthenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403':
           description: Forbidden (not a teacher)
           content:
@@ -2516,8 +2501,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     patch:
       tags: [Teaching]
@@ -2571,8 +2556,8 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_field
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
       tags: [Teaching]
@@ -2606,8 +2591,8 @@ paths:
               schema:
                 type: string
                 example: private, no-store
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/members:
@@ -2658,8 +2643,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CourseMember'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [Teaching]
@@ -2724,8 +2709,8 @@ paths:
                   value:
                     error: bad_request
                     detail: student_sub_required
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/members/{student_sub}:
@@ -2764,8 +2749,8 @@ paths:
               schema:
                 type: string
                 example: private, no-store
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units:
@@ -2807,7 +2792,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Unit'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not a teacher), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [Teaching]
@@ -2858,7 +2843,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_summary
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not a teacher), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}:
@@ -2902,7 +2887,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     patch:
@@ -2969,7 +2954,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_summary
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -3014,7 +2999,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_unit_id
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/teaching/units/{unit_id}/sections:
@@ -3066,7 +3051,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_unit_id
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -3107,7 +3092,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Section'
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3156,7 +3141,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Section'
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -3208,7 +3193,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_path_params
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3288,7 +3273,7 @@ paths:
                   value:
                     error: bad_request
                     detail: section_ids_must_be_array
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3349,7 +3334,7 @@ paths:
                 invalid_section_id:
                   summary: Section id not a UUID
                   value: { error: bad_request, detail: invalid_section_id }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -3416,7 +3401,7 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3495,7 +3480,7 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -3551,7 +3536,7 @@ paths:
                 invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
                 invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
                 invalid_task_id: { value: { error: bad_request, detail: invalid_task_id } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3617,7 +3602,7 @@ paths:
                 duplicate_task_ids: { value: { error: bad_request, detail: duplicate_task_ids } }
                 invalid_task_ids: { value: { error: bad_request, detail: invalid_task_ids } }
                 task_mismatch: { value: { error: bad_request, detail: task_mismatch } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3682,7 +3667,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_section_id
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -3739,7 +3724,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3822,7 +3807,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_alt_text
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -3875,7 +3860,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '502':
@@ -3986,7 +3971,7 @@ paths:
                   value:
                     error: bad_request
                     detail: material_ids_must_be_array
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -4052,7 +4037,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_filename
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4144,7 +4129,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_alt_text
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (intent does not belong to caller), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or intent not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4214,7 +4199,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_disposition
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4248,7 +4233,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CourseModule'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -4290,7 +4275,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CourseModule'
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner or not the unit author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '409': { description: Unit already attached to this course, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4370,7 +4355,7 @@ paths:
                   value:
                     error: bad_request
                     detail: no_modules
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -4415,7 +4400,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -4617,8 +4602,8 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_role
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
 
   /api/users/list:
     get:
@@ -4677,8 +4662,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
     StudentUploadIntentRequest:
       type: object
       required: [kind, filename, mime_type, size_bytes]
@@ -5205,7 +5190,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found (course or unit not found, or unit ist nicht Teil des Kurses), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest:

@@ -27,8 +27,14 @@ Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Fel
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
   - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).
   - 200 `[{ id, attempt_nr, kind, storage_key?, analysis_status, error_code?, analysis_json, feedback_md, created_at, completed_at, ... }]`.
-    - `analysis_status ∈ {pending, completed, failed}`
-    - `error_code ∈ {vision_retrying, vision_failed, feedback_retrying, feedback_failed}` (nur gesetzt bei Retries oder `failed`).
+    - `analysis_status ∈ {pending, extracted, completed, failed}`  
+      - `pending`: Submission gespeichert, Analyse (OCR/Feedback) steht aus.  
+      - `extracted`: Nur bei PDF‑Abgaben; PDF wurde erfolgreich in Seiten/Text zerlegt, Feedback steht noch aus.  
+      - `completed`: Analyse inkl. Feedback abgeschlossen, `analysis_json`/`feedback_md` befüllt.  
+      - `failed`: Verarbeitung abgebrochen; Details über `error_code`.  
+    - `error_code` (optional) ist einer der normalisierten Fehlercodes  
+      `vision_retrying | vision_failed | feedback_retrying | feedback_failed | input_corrupt | input_unsupported | input_too_large`.  
+      `*_retrying` signalisiert in‑flight Retries, `*_failed` endgültige Abbrüche in Vision/Feedback, `input_*` Validierungs‑/Pre‑Processing‑Fehler vor dem eigentlichen KI‑Lauf.
   - 400/401/403/404.
 
 - `POST /api/learning/courses/{course_id}/tasks/{task_id}/upload-intents`
@@ -58,11 +64,15 @@ Fehlercodes (Beispiele):
 ## Schema & Migrationen (Supabase/PostgreSQL)
 - Submissions: `supabase/migrations/20251023093409_learning_submissions.sql` + Folge-Migration (siehe Plan 2025‑11‑01)
   - Tabelle `public.learning_submissions` (immutable Entries, Attempt-Zähler, optionale Storage-Metadaten)
-  - Seit 2025‑11: Spalten `vision_attempts`, `vision_last_error`, `vision_last_attempt_at`; `analysis_status`-Check auf `pending|completed|failed`
+  - Seit 2025‑11: Telemetriespalten  
+    - `vision_attempts int`, `vision_last_error text`, `vision_last_attempt_at timestamptz`  
+    - `feedback_last_attempt_at timestamptz`, `feedback_last_error text`  
+    - `analysis_status`‑Check auf `pending|extracted|completed|failed`
   - Indizes: `(course_id, task_id, student_sub)`, `created_at desc`, `student_sub/task_id/created_at desc`
   - JSON-Feld `analysis_json` folgt dem Schema `criteria.v1`:
     `{ schema: "criteria.v1", score: 0..5, criteria_results: [{ criterion, score: 0..10, explanation_md }] }`.
-    `feedback_md` enthält das Markdown‑Feedback für Lernende.
+    `feedback_md` enthält das Markdown‑Feedback für Lernende.  
+    Telemetriefelder (`vision_attempts`, `vision_last_error`, `feedback_last_attempt_at`, `feedback_last_error`) werden vom Worker gesetzt und sind für Schüler/Lehrkräfte lesbar, aber serverseitig sanitisiert (Strings gekürzt, Pfade/Secrets entfernt). Details zur Semantik siehe `docs/references/learning_ai.md` (Abschnitt „Telemetry Surfaces“).
 - Queue-Tabelle: `public.learning_submission_jobs` mit Leasingfeldern (`lease_key`, `leased_until`), Status `queued|leased|failed` und Index auf `(status, visible_at)`.
 - Helper-Funktionen: `supabase/migrations/20251023093417_learning_helpers.sql`
   - `hash_course_task_student`, `next_attempt_nr`, `check_task_visible_to_student`
@@ -112,10 +122,23 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Logging: Keine Payload-Inhalte für Submissions in Standard-Logs.
 
 ### `LearningSubmission` (API)
-- `analysis_status`: `pending | completed | error` — MVP liefert immer `completed`.
-- `analysis_json`: Struktur nach `criteria.v1` (siehe oben). Hinweis: In der Async‑Pipeline ist dieses Feld während `pending` `null` und wird erst nach Abschluss gesetzt.
-- `feedback_md`: Markdown für formatives Feedback (Stub in Dev; KI-Ausgabe produktiv).
-– `created_at`: RFC3339‑Zeitstempel in UTC mit explizitem `+00:00`‑Offset (z. B. `2025-10-23T09:45:00+00:00`).
+- `analysis_status`: `pending | extracted | completed | failed`  
+  - `pending`: Submission ist gespeichert, Worker hat Vision/Feedback noch nicht ausgeführt.  
+  - `extracted`: Nur PDF‑Pfad – PDF wurde in Seiten/Text zerlegt, Feedback steht noch aus.  
+  - `completed`: Analyse inkl. Feedback ist abgeschlossen, `analysis_json`/`feedback_md` sind gesetzt.  
+  - `failed`: Verarbeitung wurde abgebrochen; `error_code` beschreibt die Ursache.
+- `error_code` (optional):  
+  `vision_retrying | vision_failed | feedback_retrying | feedback_failed | input_corrupt | input_unsupported | input_too_large`.  
+  Die `vision_*`‑Codes beziehen sich auf den OCR‑Adapter, `feedback_*` auf die Feedback‑KI; `input_*` signalisiert Probleme mit der Eingabe (z. B. beschädigte oder zu große Dateien).  
+- `analysis_json`: Struktur nach `criteria.v1` oder `criteria.v2` (siehe oben bzw. AI‑Referenz). In der Async‑Pipeline ist dieses Feld während `pending` und `extracted` `null` und wird erst nach Abschluss gesetzt.  
+- `feedback_md`: Markdown für formatives Feedback (Stub in Dev; KI‑Ausgabe produktiv).  
+- Telemetrie (`SubmissionTelemetry`):  
+  - `vision_attempts` (int, ≥0): Anzahl Vision/OCR‑Versuche.  
+  - `vision_last_error` (text, nullable): letzte, bereits bereinigte Fehlermeldung des Vision‑Adapters.  
+  - `feedback_last_attempt_at` (timestamptz, nullable): Zeitpunkt des letzten Feedback‑Versuchs.  
+  - `feedback_last_error` (text, nullable): letzte, bereinigte Fehlermeldung des Feedback‑Adapters.  
+  Alle Texte sind serverseitig sanitisiert (Länge ≤ 256, keine Pfade/Secrets). Für weitere Details siehe `docs/references/learning_ai.md` (Telemetry‑Abschnitt).  
+- `created_at`: RFC3339‑Zeitstempel in UTC mit explizitem `+00:00`‑Offset (z. B. `2025-10-23T09:45:00+00:00`).
 
 ## Architektur & Adapter
 - Web‑Adapter: `backend/web/routes/learning.py`

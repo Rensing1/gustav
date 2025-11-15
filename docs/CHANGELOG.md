@@ -21,15 +21,26 @@
 
 ### AI
 - ai(vision): Local-Vision-Adapter übergibt bei JPEG/PNG Bilddaten base64-kodiert über das `images`-Argument an den Ollama-Client (falls unterstützt). Fallback ohne `images`, wenn die Client-Signatur es nicht kennt. Reduziert generische Modell-Ablehnungen bei Bildabgaben deutlich.
+- ai(worker): Queue arbeitet ausschließlich mit `public.learning_submission_jobs`; Legacy-Tabelle `learning_submission_ocr_jobs` wird per Migration entfernt und der Worker bricht früh ab, falls die neue Tabelle fehlt.
+- ai(vision): Remote-Supabase-Fetch prüft Host+Port-Kombinationen aus `SUPABASE_URL`/`SUPABASE_PUBLIC_URL`, erlaubt HTTP nur für lokale `.local`/Loopback-Hosts und meldet Redirect/HTTP-Statuscodes differenziert an den Adapter zurück.
+- ai(vision): Storage-Helfer teilen sich jetzt `_log_storage_event`-Telemetry (z. B. `cached_stitched`, `stitch_from_page_keys`, `fetch_remote_image`, `remote_fetch_failed reason=redirect`) und brechen Remote-Fetches mit klaren `VisionTransientError("remote_fetch_failed")` ab, sobald Supabase 3xx/4xx liefert. Dadurch bleiben Vision-Retries nachvollziehbar ohne PII zu loggen.
+- ai(vision): `_call_model` kapselt nun alle Ollama-Aufrufe (Timeouts, Markdown-Unwrap, Images-Handling), sodass `extract()` nur noch orchestriert und Tests den Helper gezielt prüfen können.
 
 ### Docs (updates)
 - docs(storage): Document that the learning upload proxy enforces SUPABASE_URL scheme/port, streams uploads with the central limit, and replays presign headers for proxy calls; highlight that `*_MAX_UPLOAD_BYTES` overrides are clamped to the published contract.
 - docs(plan): Neu `2025-11-05_vision-images-param.md` (Vision-Bilder an Modell) und Update in `2025-11-04-ollama-client-compat.md` (Hinweis auf `images`).
 - docs(plan): `2025-11-04_ui_htmx_submit.md` und `2025-11-04_learning_ui_autorefresh.md` dokumentieren die UI-Verbesserungen.
+- docs(plan): Neu `2025-11-16-vision-adapter-rest.md` beschreibt den verbleibenden Must-Fix für den Vision-Adapter (Helper-Aufspaltung, Logging, PDF-Pipeline).
+- docs(reference): `docs/references/learning_ai.md` dokumentiert `_log_storage_event` und die neuen Logpfade (Cache-Hits, Page-Key-Stitching, Remote-Image-Fetch, Redirect-Fehler).
+- docs(reference): Testing-Abschnitt nennt jetzt die dedizierten Helfer-Tests (`test_local_vision_model_helper.py`) als Regression-Schutz.
+- docs(architecture): Abschnitt „Storage-Bootstrap (nur Dev/CI)“ erläutert, dass `AUTO_CREATE_STORAGE_BUCKETS=true` ausschließlich lokal/CI verwendet wird und Prod/Staging weiterhin Migrationen für Buckets/Policies nutzen.
+- docs(env): `.env.example` referenziert jetzt die passenden Doku-Seiten statt langer Inline-Kommentare (Config-Matrix, Identity, Storage, Learning-AI).
 
 ### Tests (updates)
 - tests(learning-adapters): Neu `test_local_vision_images_param.py` stellt sicher, dass der Vision-Adapter `images=[<b64>]` übergibt.
+- tests(learning-adapters): Neu `test_local_vision_model_helper.py` beschreibt `_call_model` (Timeouts, Markdown-Unwrap, Images-Verhalten) und hält die Helper-Refactorierung grün.
 - tests(learning-ui): HTMX-Submit-, Auto-Refresh- und HTML5-Required-Regressionstests ergänzt.
+- tests(learning-adapters): Neu `test_local_vision_pdf_cached_paths.py` prüft Cache-Hits (`stitched.png`), Page-Key-Stitching und das Fehlermapping auf `remote_fetch_failed` bei Supabase-Redirects.
 ### Security
  - security(operations): Internal health responses set `Vary: Origin` and `Cache-Control: private, no-store` consistently.
  - security(db): Avoid committing DB passwords — create `gustav_worker` without password/login; deployments set credentials out-of-band.
@@ -43,6 +54,7 @@
   an Origin header to remain compatible.
 - mask(import): DSN is no longer logged or persisted in migration reports; prevents credential leakage.
 - csrf(submissions): In production, POST /submissions always requires Origin/Referer (strict same-origin), independent of STRICT_CSRF_SUBMISSIONS.
+- security(storage): `verify_storage_object_integrity` enforces the unified MIME whitelist, distinguishes `match_head` vs. `match_download`, and surfaces redirect/host errors explicitly so operators can audit failed verifications.
 
 ### API
 - api(operations): Clarify LearningWorker health checks schema; remove unused `metrics_scope` value from `LearningWorkerHealthCheck` enum.

@@ -38,7 +38,7 @@ class _FakeAdapter(StorageAdapterProtocol):
 @pytest.mark.parametrize(
     "ok,actual_sha,actual_size,expected_size,expected_result",
     [
-        (True, "a" * 64, 1234, 1234, (True, "ok")),
+        (True, "a" * 64, 1234, 1234, (True, "match_download")),
         (True, "b" * 64, 1234, 1234, (False, "hash_mismatch")),  # will override sha below
         (True, "c" * 64, 1000, 1234, (False, "size_mismatch")),
     ],
@@ -56,7 +56,7 @@ def test_streaming_verification_paths(monkeypatch, ok, actual_sha, actual_size, 
     monkeypatch.setattr(verification, "_stream_hash_from_url", fake_stream)
 
     # Use matching/mismatching expected hash depending on case
-    expected_sha = actual_sha if expected_result == (True, "ok") else ("z" * 64)
+    expected_sha = actual_sha if expected_result[0] else ("z" * 64)
 
     # Act
     result = verify_storage_object_integrity(
@@ -70,4 +70,3 @@ def test_streaming_verification_paths(monkeypatch, ok, actual_sha, actual_size, 
 
     # Assert
     assert result == expected_result
-

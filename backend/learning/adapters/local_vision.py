@@ -17,6 +17,7 @@ Notes:
 from __future__ import annotations
 
 import os
+import ipaddress
 from typing import Dict, Optional
 import base64
 import inspect
@@ -35,6 +36,18 @@ LOG = logging.getLogger(__name__)
 
 
 SUPPORTED_MIME = {"image/jpeg", "image/png", "application/pdf"}
+_LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
+
+
+def _is_local_host(host: str) -> bool:
+    """Return True if host resolves to loopback/private or uses .local suffix."""
+    if host in _LOCAL_HTTP_HOSTS or host.endswith(".local"):
+        return True
+    try:
+        parsed = ipaddress.ip_address(host)
+        return bool(parsed.is_loopback or parsed.is_private)
+    except ValueError:
+        return False
 
 
 def _submissions_bucket() -> str:
@@ -49,6 +62,12 @@ def _strip_bucket_prefix(key: str, bucket: str) -> str:
 
 
 def _storage_base_and_hosts() -> tuple[str | None, set[str]]:
+    """
+    Resolve Supabase base URL and allowed host:port combinations.
+
+    Returns:
+        tuple[str | None, set[str]]: (base_url, {"host:port", ...})
+    """
     hosts: set[str] = set()
     base_url: str | None = None
     for env_name in ("SUPABASE_URL", "SUPABASE_PUBLIC_URL"):
@@ -63,26 +82,46 @@ def _storage_base_and_hosts() -> tuple[str | None, set[str]]:
         host = (parsed.hostname or "").lower()
         if not host or scheme not in {"http", "https"}:
             continue
-        hosts.add(host)
-        if base_url is None and env_name == "SUPABASE_URL":
-            base_url = raw.rstrip("/")
-        elif base_url is None:
-            base_url = raw.rstrip("/")
+        port = parsed.port
+        if port is None:
+            port = 443 if scheme == "https" else 80
+        hosts.add(f"{host}:{port}")
+        candidate = raw.rstrip("/")
+        if base_url is None or env_name == "SUPABASE_URL":
+            base_url = candidate
     return (base_url.rstrip("/") if base_url else None, hosts)
 
 
+def _log_storage_event(*, submission_id: str, action: str, level: int = logging.INFO, **fields: object) -> None:
+    """Emit sanitized Vision storage logs without leaking storage paths or PII."""
+    safe_submission = submission_id or "unknown"
+    parts = [f"learning.vision.storage action={action} submission_id={safe_submission}"]
+    for key, value in fields.items():
+        if value is None or value == "":
+            continue
+        parts.append(f"{key}={value}")
+    LOG.log(level, " ".join(parts))
+
+
 def _download_supabase_object(*, bucket: str, object_key: str, srk: str, max_bytes: int) -> tuple[bytes | None, str]:
-    base_url, allowed_hosts = _storage_base_and_hosts()
-    if not base_url or not allowed_hosts:
+    base_url, allowed_host_ports = _storage_base_and_hosts()
+    if not base_url or not allowed_host_ports:
         return (None, "untrusted_host")
-    target = f"{base_url.rstrip('/')}/storage/v1/object/{bucket}/{object_key}"
+    object_path = object_key.lstrip("/")
+    target = f"{base_url.rstrip('/')}/storage/v1/object/{bucket}/{object_path}"
     try:
         parsed = _urlparse(target)
     except Exception:
         return (None, "untrusted_host")
     host = (parsed.hostname or "").lower()
     scheme = (parsed.scheme or "").lower()
-    if scheme not in {"http", "https"} or host not in allowed_hosts:
+    if scheme not in {"http", "https"}:
+        return (None, "untrusted_host")
+    if scheme == "http" and not _is_local_host(host):
+        return (None, "untrusted_host")
+    port = parsed.port or (443 if scheme == "https" else 80)
+    host_port = f"{host}:{port}"
+    if host_port not in allowed_host_ports:
         return (None, "untrusted_host")
     try:
         import httpx  # type: ignore
@@ -94,9 +133,9 @@ def _download_supabase_object(*, bucket: str, object_key: str, srk: str, max_byt
             with client.stream("GET", target, headers=headers) as resp:
                 code = int(getattr(resp, "status_code", 500))
                 if 300 <= code < 400:
-                    return (None, "redirect")
+                    return (None, f"redirect:{code}")
                 if code >= 400:
-                    return (None, "http_error")
+                    return (None, f"http_error:{code}")
                 data = bytearray()
                 for chunk in resp.iter_bytes():  # type: ignore[attr-defined]
                     if not chunk:
@@ -109,6 +148,183 @@ def _download_supabase_object(*, bucket: str, object_key: str, srk: str, max_byt
         return (None, "download_error")
 
 
+def _remote_fetch_submission_object(
+    *,
+    bucket: str,
+    object_key: str,
+    srk: str,
+    max_bytes: int,
+    submission_id: str,
+    success_action: str,
+) -> Optional[bytes]:
+    """Download a Supabase object with storage-role credentials and log outcome."""
+    fetched, reason = _download_supabase_object(
+        bucket=bucket,
+        object_key=object_key,
+        srk=srk,
+        max_bytes=max_bytes,
+    )
+    if reason == "untrusted_host":
+        raise VisionTransientError("untrusted_host")
+    if reason == "size_exceeded":
+        raise VisionTransientError("remote_fetch_too_large")
+    if fetched:
+        _log_storage_event(
+            submission_id=submission_id,
+            action=success_action,
+            size=len(fetched),
+        )
+        return fetched
+    if reason and reason != "ok":
+        _log_storage_event(
+            submission_id=submission_id,
+            action="remote_fetch_failed",
+            reason=reason,
+        )
+        raise VisionTransientError("remote_fetch_failed")
+    return None
+
+
+def _load_local_storage_bytes(
+    *,
+    root: str,
+    storage_key: str,
+    size_bytes: object,
+    sha256_hex: object,
+) -> Optional[bytes]:
+    """Read bytes from STORAGE_VERIFY_ROOT after path, size and hash checks."""
+    if not root or not storage_key:
+        return None
+    try:
+        from pathlib import Path
+
+        base = Path(root).resolve()
+        target = (base / storage_key).resolve()
+        common = os.path.commonpath([str(base), str(target)])
+    except Exception:
+        raise VisionPermanentError("path_error")
+    if common != str(base):
+        raise VisionPermanentError("path_escape")
+    if not target.exists() or not target.is_file():
+        return None
+    actual_size = target.stat().st_size
+    try:
+        expected_size = int(size_bytes) if size_bytes is not None else None
+    except Exception:
+        expected_size = None
+    if expected_size is not None and int(actual_size) != int(expected_size):
+        raise VisionPermanentError("size_mismatch")
+    if isinstance(sha256_hex, str) and len(sha256_hex) == 64:
+        import hashlib
+
+        h = hashlib.sha256()
+        with target.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
+        actual_hash = h.hexdigest()
+        if actual_hash.lower() != sha256_hex.lower():
+            raise VisionPermanentError("hash_mismatch")
+    try:
+        return target.read_bytes()
+    except Exception:
+        raise VisionPermanentError("read_error")
+
+
+def _resolve_submission_image_bytes(
+    *,
+    submission: Dict,
+    job_payload: Dict,
+    bucket: str,
+    max_download_bytes: int,
+    meta: Dict,
+) -> Optional[str]:
+    """Return base64 image bytes (JPEG/PNG) from local storage or Supabase."""
+    mime = (job_payload or {}).get("mime_type") or (submission or {}).get("mime_type") or ""
+    if mime not in {"image/jpeg", "image/png"}:
+        return None
+    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
+    size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
+    sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""
+    submission_id = (submission or {}).get("id") or ""
+    if storage_key and root:
+        data = _load_local_storage_bytes(
+            root=root,
+            storage_key=storage_key,
+            size_bytes=size_bytes,
+            sha256_hex=sha256_hex,
+        )
+        if data:
+            meta["bytes_read"] = len(data)
+            return base64.b64encode(data).decode("ascii")
+    if storage_key:
+        srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+        if srk:
+            obj = _strip_bucket_prefix(storage_key, bucket)
+            fetched = _remote_fetch_submission_object(
+                bucket=bucket,
+                object_key=obj,
+                srk=srk,
+                max_bytes=max_download_bytes,
+                submission_id=submission_id,
+                success_action="fetch_remote_image",
+            )
+            if fetched:
+                meta["bytes_read"] = len(fetched)
+                return base64.b64encode(fetched).decode("ascii")
+    return None
+
+
+def _call_model(
+    *,
+    mime: str,
+    prompt: str,
+    model: str,
+    base_url: str,
+    timeout: int,
+    image_b64: str | None,
+    image_list_b64: list[str] | None,
+) -> str:
+    """Invoke the Ollama vision model with optional image inputs."""
+    try:
+        import ollama  # type: ignore
+    except Exception as exc:  # pragma: no cover - defensive
+        raise VisionTransientError(f"ollama client unavailable: {exc}")
+
+    images_payload: list[str] | None = None
+    if mime == "application/pdf" and image_list_b64:
+        images_payload = image_list_b64
+    elif image_b64:
+        images_payload = [image_b64]
+    elif image_list_b64:
+        images_payload = image_list_b64
+
+    try:
+        client = ollama.Client(base_url)
+        opts = {"timeout": timeout, "temperature": 0}
+        generate = getattr(client, "generate")
+        signature = inspect.signature(generate)
+        params = set(signature.parameters.keys())
+        accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in signature.parameters.values())
+        kwargs: Dict[str, object] = {"model": model, "prompt": prompt, "options": opts}
+        if images_payload and (mime == "application/pdf" or "images" in params or accepts_kwargs):
+            kwargs["images"] = images_payload
+        response = generate(**kwargs)
+    except TimeoutError as exc:
+        raise VisionTransientError(str(exc))
+    except Exception as exc:  # pragma: no cover - conservative mapping
+        raise VisionTransientError(str(exc))
+
+    text = ""
+    if isinstance(response, dict):
+        text = str(response.get("response", "")).strip()
+    if text.startswith("```") and text.endswith("```"):
+        lines = text.splitlines()
+        if len(lines) >= 3 and lines[-1].strip() == "```":
+            text = "\n".join(lines[1:-1]).strip()
+    return text
+
+
 class _LocalVisionAdapter:
     """Minimal Vision adapter backed by a local Ollama client.
 
@@ -118,19 +334,36 @@ class _LocalVisionAdapter:
 
     def __init__(self) -> None:
         self._model = os.getenv("AI_VISION_MODEL", os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision"))
-        self._base_url = os.getenv("OLLAMA_BASE_URL")
+        raw_base_url = os.getenv("OLLAMA_BASE_URL")
+        # Mirror the feedback adapter behaviour: prefer explicit base URL and
+        # fall back to the docker-compose default host when unset.
+        self._base_url = (raw_base_url or "").strip() or "http://ollama:11434"
         # Keep a small, safe timeout budget. Tests don't depend on this.
         self._timeout = int(os.getenv("AI_TIMEOUT_VISION", "30"))
 
     def _ensure_pdf_stitched_png(self, *, submission: Dict, job_payload: Dict) -> Optional[bytes]:
         """Return stitched PNG bytes for a PDF submission or None if unavailable.
 
-        Strategy (KISS):
-        - Prefer a precomputed derived image at derived/<submission_id>/stitched.png under STORAGE_VERIFY_ROOT.
-        - Look for existing derived page keys stored in `internal_metadata.page_keys` before re-rendering.
-        - Otherwise, read the original PDF from STORAGE_VERIFY_ROOT or Supabase and render pages via process_pdf_bytes,
-          stitch them vertically, and persist stitched.png for reuse.
-        - If none of these paths succeed, return None so the caller can retry later.
+        Why:
+            Vision jobs re-run frequently; caching + logging keeps the path
+            auditable and avoids expensive PDF renders when derived data already
+            exists.
+
+        Parameters:
+            submission: Submission snapshot with IDs + optional page metadata.
+            job_payload: Worker payload containing storage_key (fall back target).
+
+        Behavior:
+            1. Serve `derived/<submission_id>/stitched.png` when present.
+            2. Stitch referenced page PNGs from `internal_metadata.page_keys`.
+            3. As fallback, scan derived directories, then render from the PDF
+               bytes (local or remote fetch). Persist stitched results each time.
+            4. Emit structured logs (action=...) without bucket/student details.
+
+        Permissions:
+            Requires read/write access to STORAGE_VERIFY_ROOT (worker service
+            account) and service-role access to Supabase Storage for remote
+            fetches.
         """
         root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
         if not root:
@@ -161,12 +394,16 @@ class _LocalVisionAdapter:
         derived_dir = candidate_dirs[0]
         stitched_path = (derived_dir / "stitched.png").resolve()
 
-        # Return cached stitched if present
+        # Return cached stitched if present (fast path for repeated jobs)
         if stitched_path.exists() and stitched_path.is_file():
             try:
-                return stitched_path.read_bytes()
+                cached = stitched_path.read_bytes()
             except Exception:
-                return None
+                cached = None
+            if cached:
+                _log_storage_event(submission_id=submission_id, action="cached_stitched", size=len(cached))
+                return cached
+            return None
 
         def _persist_stitched(data: bytes) -> None:
             try:
@@ -230,6 +467,11 @@ class _LocalVisionAdapter:
             stitched_png = _stitch_or_none(page_bytes)
             if stitched_png:
                 _persist_stitched(stitched_png)
+                _log_storage_event(
+                    submission_id=submission_id,
+                    action="stitch_from_page_keys",
+                    pages=len(page_bytes),
+                )
                 return stitched_png
 
         # If per-page derived images exist, stitch them now
@@ -255,6 +497,11 @@ class _LocalVisionAdapter:
                 stitched_png = _stitch_or_none(page_bytes)
                 if stitched_png:
                     _persist_stitched(stitched_png)
+                    _log_storage_event(
+                        submission_id=submission_id,
+                        action="stitch_from_page_dir",
+                        pages=len(page_bytes),
+                    )
                     return stitched_png
             # Final fallback: scan for matching derived dirs (handles legacy layouts)
             for cand in base.glob(f"**/derived/{submission_id}"):
@@ -269,6 +516,11 @@ class _LocalVisionAdapter:
                 stitched_png = _stitch_or_none(page_bytes)
                 if stitched_png:
                     _persist_stitched(stitched_png)
+                    _log_storage_event(
+                        submission_id=submission_id,
+                        action="stitch_from_page_dir",
+                        pages=len(page_bytes),
+                    )
                     return stitched_png
         except Exception:
             pass
@@ -295,23 +547,23 @@ class _LocalVisionAdapter:
             srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
             if srk and storage_key:
                 obj = _strip_bucket_prefix(storage_key, bucket)
-                fetched, reason = _download_supabase_object(
-                    bucket=bucket,
-                    object_key=obj,
-                    srk=srk,
-                    max_bytes=get_learning_max_upload_bytes(),
-                )
-                if reason == "untrusted_host":
-                    raise VisionTransientError("untrusted_host")
-                if reason == "size_exceeded":
-                    raise VisionTransientError("remote_fetch_too_large")
+                try:
+                    fetched = _remote_fetch_submission_object(
+                        bucket=bucket,
+                        object_key=obj,
+                        srk=srk,
+                        max_bytes=get_learning_max_upload_bytes(),
+                        submission_id=submission_id,
+                        success_action="fetch_remote_pdf",
+                    )
+                except VisionTransientError as exc:
+                    reason = str(exc)
+                    if reason in {"untrusted_host", "remote_fetch_failed"}:
+                        fetched = None
+                    else:
+                        raise
                 if fetched:
                     data = fetched
-                    LOG.info(
-                        "learning.vision.pdf_ensure_stitched action=fetch_remote size=%s submission_id=%s",
-                        len(fetched),
-                        submission_id,
-                    )
         if data is None:
             return None
         try:
@@ -415,67 +667,24 @@ class _LocalVisionAdapter:
             task_id = (submission or {}).get("task_id") or ""
             student_sub = (submission or {}).get("student_sub") or ""
 
-            if storage_key and root:
-                try:
-                    from pathlib import Path
-                    base = Path(root).resolve()
-                    target = (base / storage_key).resolve()
-                    common = os.path.commonpath([str(base), str(target)])
-                except Exception:
-                    raise VisionPermanentError("path_error")
-                if common != str(base):
-                    raise VisionPermanentError("path_escape")
-                # If the file is not present locally, do not classify as permanent yet.
-                # We will attempt a remote fetch and, if that also fails, treat as transient
-                # so the worker can retry when storage latency resolves.
-                if not target.exists() or not target.is_file():
-                    target = None  # type: ignore[assignment]
-                else:
-                    actual_size = target.stat().st_size
-                    try:
-                        expected_size = int(size_bytes) if size_bytes is not None else None
-                    except Exception:
-                        expected_size = None
-                    if expected_size is not None and int(actual_size) != int(expected_size):
-                        raise VisionPermanentError("size_mismatch")
-                    # Compute sha256 if provided
-                    if isinstance(sha256_hex, str) and len(sha256_hex) == 64:
-                        import hashlib
-                        h = hashlib.sha256()
-                        with target.open("rb") as fh:  # type: ignore[union-attr]
-                            for chunk in iter(lambda: fh.read(65536), b""):
-                                h.update(chunk)
-                        actual_hash = h.hexdigest()
-                        if actual_hash.lower() != sha256_hex.lower():
-                            raise VisionPermanentError("hash_mismatch")
-                    # Read bytes (for potential OCR libs) — here only for observability
-                    try:
-                        data = target.read_bytes()  # type: ignore[union-attr]
-                        meta["bytes_read"] = len(data)
-                        if mime in {"image/jpeg", "image/png"}:
-                            image_b64 = base64.b64encode(data).decode("ascii")
-                        # For PDFs, fetching derived page images is handled below as well
-                    except Exception:
-                        raise VisionPermanentError("read_error")
+            if mime in {"image/jpeg", "image/png"}:
+                image_b64 = _resolve_submission_image_bytes(
+                    submission=submission,
+                    job_payload=job_payload,
+                    bucket=bucket,
+                    max_download_bytes=max_download_bytes,
+                    meta=meta,
+                )
 
-            # Fallback: if local root not provided or file not found, try Supabase fetch
-            if (not image_b64) and storage_key and mime in {"image/jpeg", "image/png"}:
-                srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
-                if srk:
-                    obj = _strip_bucket_prefix(storage_key, bucket)
-                    data, reason = _download_supabase_object(
-                        bucket=bucket,
-                        object_key=obj,
-                        srk=srk,
-                        max_bytes=max_download_bytes,
-                    )
-                    if reason == "untrusted_host":
-                        raise VisionTransientError("untrusted_host")
-                    if reason == "size_exceeded":
-                        raise VisionTransientError("remote_fetch_too_large")
-                    if data:
-                        image_b64 = base64.b64encode(data).decode("ascii")
-                        meta["bytes_read"] = len(data)
+            if mime == "application/pdf" and storage_key and root:
+                data = _load_local_storage_bytes(
+                    root=root,
+                    storage_key=storage_key,
+                    size_bytes=size_bytes,
+                    sha256_hex=sha256_hex,
+                )
+                if data:
+                    meta["bytes_read"] = len(data)
 
             # Local fetch for PDF derived pages (independent of original PDF presence)
             if mime == "application/pdf" and root and not image_list_b64:
@@ -520,10 +729,24 @@ class _LocalVisionAdapter:
                             srk=srk,
                             max_bytes=max_download_bytes,
                         )
-                        if reason == "untrusted_host":
-                            raise VisionTransientError("untrusted_host")
                         if reason == "size_exceeded":
                             raise VisionTransientError("remote_fetch_too_large")
+                        if reason == "untrusted_host":
+                            _log_storage_event(
+                                submission_id=submission_id,
+                                action="remote_fetch_failed",
+                                reason=reason,
+                                stage="pdf_page",
+                            )
+                            continue
+                        if reason and reason != "ok":
+                            _log_storage_event(
+                                submission_id=submission_id,
+                                action="remote_fetch_failed",
+                                reason=reason,
+                                stage="pdf_page",
+                            )
+                            raise VisionTransientError("remote_fetch_failed")
                         if data:
                             image_list_b64.append(base64.b64encode(data).decode("ascii"))
 
@@ -533,17 +756,6 @@ class _LocalVisionAdapter:
             if mime in {"image/jpeg", "image/png"} and not image_b64:
                 raise VisionTransientError("image_unavailable")
 
-        # Intentionally prefer Ollama for Vision even when DSPy is importable.
-        # Rationale: E2E contract expects Vision to be backed by the local
-        # Ollama service while DSPy is reserved for Feedback analysis. This
-        # keeps responsibilities clear and makes behaviour predictable in dev/CI.
-
-        # Import client lazily so tests can monkeypatch sys.modules["ollama"].
-        try:
-            import ollama  # type: ignore
-        except Exception as exc:  # pragma: no cover - defensive, tests install a fake client
-            raise VisionTransientError(f"ollama client unavailable: {exc}")
-
         prompt = (
             "Transcribe the exact visible text as Markdown.\n"
             "- Verbatim OCR: do not summarize or invent structure.\n"
@@ -552,56 +764,33 @@ class _LocalVisionAdapter:
             f"Input kind: {kind or 'unknown'}; mime: {mime or 'n/a'}.\n"
             "If the content is an image or a scanned PDF page, return only the text you can read."
         )
-        try:
-            # Construct client with positional host argument for compatibility
-            # with real clients that expect `host` rather than `base_url`.
-            client = ollama.Client(self._base_url)
-            # Options include a timeout; use low temperature to reduce hallucinations.
-            opts = {"timeout": self._timeout, "temperature": 0}
-            # Pass images when supported by the client and available
-            generate = getattr(client, "generate")
-            params = set(inspect.signature(generate).parameters.keys())
-            # For PDFs: strictly require a single stitched image; never call without images.
-            # Do not rely on the client's signature exposing an explicit `images` parameter;
-            # some clients accept **kwargs. We always pass `images=[...]` for PDFs.
-            if mime == "application/pdf":
-                stitched_png = self._ensure_pdf_stitched_png(submission=submission, job_payload=job_payload)
-                if not stitched_png:
-                    raise VisionTransientError("pdf_images_unavailable")
-                try:
-                    stitched_b64 = base64.b64encode(stitched_png).decode("ascii")
-                    resp = generate(model=self._model, prompt=prompt, options=opts, images=[stitched_b64])
-                except TimeoutError as exc:
-                    raise VisionTransientError(str(exc))
-                except Exception as exc:
-                    raise VisionTransientError(str(exc))
-                text = ""
-                if isinstance(resp, dict):
-                    text = str(resp.get("response", "")).strip()
-                if text.startswith("```") and text.endswith("```"):
-                    lines_i = text.splitlines()
-                    if len(lines_i) >= 3 and lines_i[-1].strip() == "```":
-                        text = "\n".join(lines_i[1:-1]).strip()
-                return VisionResult(text_md=text or "", raw_metadata=meta)
-            # Single image (JPEG/PNG)
-            if image_b64 and ("images" in params):
-                response = generate(model=self._model, prompt=prompt, options=opts, images=[image_b64])
-            else:
-                response = generate(model=self._model, prompt=prompt, options=opts)
-        except TimeoutError as exc:
-            raise VisionTransientError(str(exc))
-        except Exception as exc:  # pragma: no cover - conservative mapping
-            # Treat generic client errors as transient in this minimal adapter.
-            raise VisionTransientError(str(exc))
+        if mime == "application/pdf":
+            stitched_png = self._ensure_pdf_stitched_png(submission=submission, job_payload=job_payload)
+            if not stitched_png:
+                raise VisionTransientError("pdf_images_unavailable")
+            stitched_b64 = base64.b64encode(stitched_png).decode("ascii")
+            text = _call_model(
+                mime=mime,
+                prompt=prompt,
+                model=self._model,
+                base_url=self._base_url,
+                timeout=self._timeout,
+                image_b64=None,
+                image_list_b64=[stitched_b64],
+            )
+            if not text:
+                raise VisionTransientError("empty response from local vision")
+            return VisionResult(text_md=text, raw_metadata=meta)
 
-        text = ""  # default safe fallback
-        if isinstance(response, dict):
-            text = str(response.get("response", "")).strip()
-        # Unwrap accidental fenced code blocks (```markdown ... ``` or ``` ... ```)
-        if text.startswith("```") and text.endswith("```"):
-            lines = text.splitlines()
-            if len(lines) >= 3 and lines[-1].strip() == "```":
-                text = "\n".join(lines[1:-1]).strip()
+        text = _call_model(
+            mime=mime,
+            prompt=prompt,
+            model=self._model,
+            base_url=self._base_url,
+            timeout=self._timeout,
+            image_b64=image_b64,
+            image_list_b64=image_list_b64,
+        )
         if not text:
             # Empty outputs are considered transient so the worker can retry.
             raise VisionTransientError("empty response from local vision")

@@ -39,6 +39,8 @@ def _png_bytes(w: int, h: int, gray: int) -> bytes:
 def test_pdf_without_stitched_or_original_raises_transient(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
     monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
 
     # Inject fake ollama client; should not be called
     fake = types.SimpleNamespace(Client=_RecordingClient, last_instance=None)
@@ -60,13 +62,44 @@ def test_pdf_without_stitched_or_original_raises_transient(tmp_path, monkeypatch
         adapter.extract(submission=submission, job_payload=job_payload)
     assert "pdf_images_unavailable" in str(exc.value)
     used = getattr(sys.modules.get("ollama"), "last_instance", None)
-    assert used is not None
-    assert getattr(used, "calls", []) == []
+    if used is not None:
+        assert getattr(used, "calls", []) == []
+
+
+def test_pdf_remote_page_fetch_untrusted_host_degrades_to_unavailable(tmp_path, monkeypatch):
+    """Remote derived fetch failures must surface as pdf_images_unavailable."""
+
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+    monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
+    # Force remote fetch path but make Supabase base URL untrusted (http + remote host)
+    monkeypatch.setenv("SUPABASE_URL", "http://supabase.cloud:54321")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk-test")
+
+    fake = types.SimpleNamespace(Client=_RecordingClient, last_instance=None)
+    monkeypatch.setitem(sys.modules, "ollama", fake)
+
+    adapter = build()
+    submission = {
+        "id": "sub-untrusted",
+        "course_id": "course",
+        "task_id": "task",
+        "student_sub": "student",
+        "kind": "file",
+        "mime_type": "application/pdf",
+        "storage_key": "submissions/course/task/student/sub-untrusted.pdf",
+    }
+    job_payload = {"mime_type": "application/pdf", "storage_key": submission["storage_key"]}
+
+    with pytest.raises(Exception) as exc:
+        adapter.extract(submission=submission, job_payload=job_payload)
+    assert "pdf_images_unavailable" in str(exc.value)
 
 
 def test_pdf_renders_and_stitches_from_original(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
     monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
 
     # Create fake original PDF bytes (content irrelevant; we will mock process_pdf_bytes)
     course_id = "c1"

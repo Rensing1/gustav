@@ -37,6 +37,8 @@ def test_pdf_uses_derived_page_images(tmp_path, monkeypatch):
     task_id = "task-1"
     student_sub = "student-abc"
     submission_id = "sub-xyz"
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     bucket = get_submissions_bucket()
     ensure_pdf_derivatives(

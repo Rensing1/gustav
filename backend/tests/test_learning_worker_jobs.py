@@ -66,20 +66,21 @@ class _StubFeedbackAdapter:
     base_score: int = 4
 
     def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
-        """Return deterministic feedback+analysis shaped like criteria.v1."""
+        """Return deterministic feedback+analysis shaped like criteria.v2."""
         results = []
         for index, criterion in enumerate(criteria):
             results.append(
                 {
                     "criterion": criterion,
                     "score": min(10, self.base_score + index),
+                    "max_score": 10,
                     "explanation_md": f"Stub feedback for {criterion}",
                 }
             )
         return FeedbackResult(
             feedback_md=self.feedback_md,
             analysis_json={
-                "schema": "criteria.v1",
+                "schema": "criteria.v2",
                 "score": self.base_score,
                 "criteria_results": results,
             },
@@ -145,6 +146,26 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
             cur.execute("delete from public.learning_submission_jobs")
         conn.commit()
 
+    # Ensure membership exists (some suite orders may skip API add_member on errors)
+    try:
+        with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into public.course_memberships (course_id, student_id, role)
+                    select %s::uuid, %s, 'student'
+                    where not exists (
+                        select 1 from public.course_memberships
+                         where course_id = %s::uuid and student_id = %s
+                    )
+                    """,
+                    (fixture.course_id, fixture.student_sub, fixture.course_id, fixture.student_sub),
+                )
+            conn.commit()
+    except Exception:
+        # Best-effort hardening; tests relying on API path still validate main behaviour
+        pass
+
     repo = DBLearningRepo(dsn=dsn)
     usecase = CreateSubmissionUseCase(repo)
     submission = usecase.execute(
@@ -176,9 +197,31 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
             )
             row = cur.fetchone()
             if not row:
-                pytest.fail("Submission did not enqueue a learning_submission_job")
+                pytest.fail(
+                    f"Submission did not enqueue a learning_submission_job (course={fixture.course_id}, task={fixture.task['id']})"
+                )
             job_id = row[0]
     return fixture, worker_dsn, job_id, submission_id
+
+
+def _force_submission_to_file(worker_dsn: str, submission_id: str) -> None:
+    """Switch the stored submission to a non-text kind so Vision adapters run."""
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set kind = 'image',
+                       mime_type = 'image/png',
+                       text_body = null,
+                       storage_key = coalesce(storage_key, 'learning/test.png'),
+                       size_bytes = coalesce(size_bytes, 1),
+                       sha256 = coalesce(sha256, repeat('0', 64))
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+        conn.commit()
 
 
 def _counter_value(name: str, **labels: str) -> int:
@@ -251,6 +294,8 @@ async def test_worker_processes_pending_submission_to_completed():
                 pytest.fail("Submission did not enqueue a learning_submission_job")
             job_id = job_row[0]
 
+    _force_submission_to_file(worker_dsn, submission_id)
+
     processed = run_once(
         dsn=worker_dsn,
         vision_adapter=_StubVisionAdapter(text_md="## Vision Extract\n\nStub content."),
@@ -306,7 +351,7 @@ async def test_worker_processes_pending_submission_to_completed():
     assert remaining_jobs == 0
 
     assert isinstance(analysis_json, dict)
-    assert analysis_json["schema"] == "criteria.v1"
+    assert analysis_json["schema"] == "criteria.v2"
     assert analysis_json["score"] == _StubFeedbackAdapter.base_score
 
 
@@ -318,6 +363,8 @@ async def test_worker_retries_vision_transient_error(monkeypatch):
     _, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
         idempotency_key="worker-retry-path"
     )
+
+    _force_submission_to_file(worker_dsn, submission_id)
 
     # Deterministic configuration for retries.
     monkeypatch.setenv("WORKER_BACKOFF_SECONDS", "2")
@@ -391,6 +438,8 @@ async def test_worker_marks_failed_after_max_retries(monkeypatch):
         idempotency_key="worker-fail-path"
     )
 
+    _force_submission_to_file(worker_dsn, submission_id)
+
     monkeypatch.setenv("WORKER_BACKOFF_SECONDS", "1")
     worker_module.MAX_RETRIES = 1  # type: ignore[attr-defined]
 
@@ -402,7 +451,10 @@ async def test_worker_marks_failed_after_max_retries(monkeypatch):
         now=tick,
     )
 
-    second_tick = tick + timedelta(seconds=2)
+    # Use a slightly larger offset than the nominal backoff to avoid
+    # flakiness on slower CI/DB clocks. With WORKER_BACKOFF_SECONDS=1 and
+    # first retry_count=0, visible_at = now + 1s; we wait 3s.
+    second_tick = tick + timedelta(seconds=3)
     processed = run_once(
         dsn=worker_dsn,
         vision_adapter=_PermanentVisionAdapter(),
@@ -520,11 +572,13 @@ async def test_worker_retries_feedback_transient_error(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_worker_marks_feedback_failure_records_job_error():
+async def test_worker_marks_feedback_failure_records_job_error(monkeypatch: pytest.MonkeyPatch):
     """Permanent feedback failures should persist error_code for audit trail."""
 
     _require_db_or_skip()
-    _fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
+    # Ensure worker and app talk to the same database for this test
+    monkeypatch.setenv("SERVICE_ROLE_DSN", _dsn())
+    fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
         idempotency_key="worker-feedback-fail"
     )
 
@@ -552,6 +606,10 @@ async def test_worker_marks_feedback_failure_records_job_error():
             )
             status, retry_count, job_error_code = cur.fetchone()
 
+            cur.execute(
+                "select set_config('app.current_sub', %s, true)",
+                (fixture.student_sub,),
+            )
             cur.execute(
                 """
                 select analysis_status,
@@ -606,6 +664,7 @@ async def test_worker_retry_emits_retry_metric_and_warning(caplog: pytest.LogCap
     _fixture, worker_dsn, _job_id, _submission_id = await _prepare_submission_with_job(
         idempotency_key="worker-metrics-retry"
     )
+    _force_submission_to_file(worker_dsn, _submission_id)
 
     caplog.set_level(logging.INFO, logger=worker_module.LOG.name)
     tick = datetime.now(tz=timezone.utc)

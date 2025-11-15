@@ -1,17 +1,37 @@
-# Host-based routing for local development
+# Host-based routing with TLS for local development
 # Access via:
-#   - http://app.localhost:8100 → GUSTAV web
-#   - http://id.localhost:8100  → Keycloak
+#   - https://app.localhost → GUSTAV web
+#   - https://id.localhost  → Keycloak
 
-app.localhost:80 {
-  # Use the container_name as upstream to avoid DNS alias ambiguity
+app.localhost:443 {
+  tls internal
+  # Same-origin path proxy for Supabase Storage (dev = prod)
+  @storage_path path /storage/v1/*
+  handle @storage_path {
+    # Kong routes often match on Host; set upstream Host to the public
+    # supabase host to ensure the route is found, while keeping the
+    # browser-facing origin on app.localhost (same-origin).
+    reverse_proxy {
+      to supabase_kong_gustav-alpha2:8000
+      header_up Host supabase.localhost
+    }
+  }
+  # Default app backend
   reverse_proxy gustav-alpha2:8000
 }
 
-localhost:80 {
+localhost:443 {
+  tls internal
   reverse_proxy gustav-alpha2:8000
 }
 
-id.localhost:80 {
+id.localhost:443 {
+  tls internal
   reverse_proxy keycloak:8080
+}
+
+# Public Supabase gateway for browser access to Storage API (dev = prod)
+supabase.localhost:443 {
+  tls internal
+  reverse_proxy supabase_kong_gustav-alpha2:8000
 }

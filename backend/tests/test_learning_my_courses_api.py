@@ -32,7 +32,11 @@ class _Actor:
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 async def _create_course(client: httpx.AsyncClient, title: str, *, subject: str | None = None) -> str:

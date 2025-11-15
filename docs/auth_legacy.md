@@ -221,7 +221,7 @@ Importer ausführen:
 ```bash
 python -m backend.tools.legacy_user_import \
   --legacy-dsn postgresql://postgres:postgres@127.0.0.1:54322/legacy_import \
-  --kc-base-url http://127.0.0.1:8100 \
+  --kc-base-url https://id.localhost \
   --kc-host-header id.localhost \
   --kc-admin-user gustav-admin \
   --kc-admin-pass '<ADMIN-PASSWORT>'

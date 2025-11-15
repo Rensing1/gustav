@@ -50,7 +50,11 @@ async def test_candidates_list_max_10(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(users_routes, "list_users_by_role", many_students)
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, t.session_id)
         r = await c.post("/api/teaching/courses", json={"title": "Cand Limit"})
         assert r.status_code == 201
@@ -59,4 +63,3 @@ async def test_candidates_list_max_10(monkeypatch: pytest.MonkeyPatch):
         frag = await c.get(f"/courses/{cid}/members/search")
         assert frag.status_code == 200
         assert _count_candidate_items(frag.text) <= 10
-

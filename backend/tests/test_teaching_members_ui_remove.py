@@ -32,7 +32,11 @@ def _extract_csrf_token(html: str) -> str | None:
 async def test_remove_member_htmx_updates_list():
     # Arrange: teacher, course with one member
     sess = main.SESSION_STORE.create(sub="t-rem-1", name="Lehrer", roles=["teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.post("/api/teaching/courses", json={"title": "Mathe R"})
         assert r.status_code == 201

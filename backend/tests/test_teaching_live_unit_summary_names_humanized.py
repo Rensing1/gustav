@@ -25,7 +25,11 @@ from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Kurs") -> str:

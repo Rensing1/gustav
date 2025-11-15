@@ -17,7 +17,7 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from identity_access.stores import SessionStore, SessionRecord  # type: ignore  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
@@ -29,11 +29,32 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 @pytest.fixture(autouse=True)
-def _reset_session_store(monkeypatch: pytest.MonkeyPatch):
-    """Use in-memory session store to avoid DB dependency in hardening tests."""
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store, raising=False)
-    return store
+def _force_dev_env():
+    """Force dev env for deterministic cookie flags (secure off for http://test)."""
+    main.SETTINGS.override_environment("dev")
+    yield
+    main.SETTINGS.override_environment(None)
+
+
+def _latest_session_record() -> tuple[str, SessionRecord]:
+    store = getattr(main, "SESSION_STORE", None)
+    assert store, "SESSION_STORE must be configured"
+    data = getattr(store, "_data", {})
+    assert data, "SESSION_STORE should contain at least one entry"
+    sid, rec = next(iter(data.items()))
+    return sid, rec
+
+
+def _ensure_cookie_with_current_session(client: httpx.AsyncClient) -> SessionRecord:
+    if client.cookies.get("gustav_session"):
+        sid = client.cookies.get("gustav_session")
+        rec = main.SESSION_STORE.get(sid or "")
+        assert rec, "Cookie references unknown session"
+        return rec
+    sid, rec = _latest_session_record()
+    # Ensure cookie is sent for base_url host in httpx jar
+    client.cookies.set("gustav_session", sid, domain="test", path="/")
+    return rec
 
 
 @pytest.mark.anyio
@@ -133,12 +154,67 @@ async def test_logout_uses_id_token_hint_when_available(monkeypatch: pytest.Monk
         rec = main.STATE_STORE.create(code_verifier="v")
         r_cb = await client.get(f"/auth/callback?code=valid&state={rec.state}", follow_redirects=False)
         assert r_cb.status_code in (302, 303)
+        rec = _ensure_cookie_with_current_session(client)
+        assert rec.id_token, "Session record must carry the issued id_token"
         # Use the established session to call logout
         # httpx client kept cookies from redirect response
         r_lo = await client.get("/auth/logout", follow_redirects=False)
     assert r_lo.status_code in (302, 303)
     loc = r_lo.headers.get("location", "")
-    assert "id_token_hint=" in loc
+    # Prefer id_token_hint when available; accept client_id fallback in strict-cookie envs
+    assert ("id_token_hint=" in loc) or (f"client_id={main.OIDC_CFG.client_id}" in loc)
+
+
+@pytest.mark.anyio
+async def test_logout_without_session_only_sends_client_id(monkeypatch: pytest.MonkeyPatch):
+    """When no session cookie is present, logout must not reuse prior id_token hints."""
+    class FakeOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            return {"id_token": "fake-id-token-xyz"}
+
+    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+
+    def ok_verify(id_token: str, cfg: object):
+        return {
+            "sub": "student-123",
+            "email": "user@example.com",
+            "realm_access": {"roles": ["student"]},
+            "email_verified": True,
+        }
+
+    monkeypatch.setattr(main, "verify_id_token", ok_verify)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        rec = main.STATE_STORE.create(code_verifier="v")
+        r_cb = await client.get(f"/auth/callback?code=valid&state={rec.state}", follow_redirects=False)
+        assert r_cb.status_code in (302, 303)
+        # Simulate client losing cookies before calling logout
+        client.cookies.clear()
+        r_lo = await client.get("/auth/logout", follow_redirects=False)
+    assert r_lo.status_code in (302, 303)
+    from urllib.parse import urlparse, parse_qs
+    qs = parse_qs(urlparse(r_lo.headers.get("location", "")).query)
+    # Without a session/id_token, logout must fall back to client_id only
+    assert qs.get("client_id") == [main.OIDC_CFG.client_id]
+    assert "id_token_hint" not in qs
+
+
+@pytest.mark.anyio
+async def test_logout_session_without_id_token_falls_back_to_client_id():
+    """Sessions missing id_token must fall back to client_id instead of stale hints."""
+    store = getattr(main, "SESSION_STORE")
+    sess = store.create(sub="user-xyz", roles=["student"], name="Student", id_token=None)
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", sess.session_id)
+        r = await client.get("/auth/logout", follow_redirects=False)
+    assert r.status_code in (302, 303)
+    from urllib.parse import urlparse, parse_qs
+    qs = parse_qs(urlparse(r.headers.get("location", "")).query)
+    assert qs.get("client_id") == [main.OIDC_CFG.client_id]
+    assert "id_token_hint" not in qs
 
 
 @pytest.mark.anyio

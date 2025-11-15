@@ -534,7 +534,7 @@ async def test_callback_sets_secure_cookie_flags_in_prod(monkeypatch: pytest.Mon
     assert "gustav_session=" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
-    assert "SameSite=strict" in set_cookie
+    assert "SameSite=lax" in set_cookie
 
 
 @pytest.mark.anyio
@@ -567,7 +567,7 @@ async def test_logout_uses_secure_cookie_flags_in_prod(monkeypatch: pytest.Monke
     assert "gustav_session=" in set_cookie
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
     assert "Secure" in set_cookie
-    assert "SameSite=strict" in set_cookie
+    assert "SameSite=lax" in set_cookie
 
 
 @pytest.mark.anyio
@@ -731,13 +731,13 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.anyio
-async def test_callback_sets_dev_cookie_flags_and_no_max_age(monkeypatch: pytest.MonkeyPatch):
-    """In dev, cookie should be HttpOnly; SameSite=lax; no Secure; no Max-Age."""
+async def test_callback_sets_cookie_flags_and_no_max_age(monkeypatch: pytest.MonkeyPatch):
+    """Cookie must be HttpOnly; SameSite=lax; Secure; no Max-Age (session)."""
     token = _make_id_token()
     resp = await _call_auth_callback_with_token(monkeypatch, token, expected_status=302)
     sc = resp.headers.get("set-cookie", "")
     assert "gustav_session=" in sc
     assert "HttpOnly" in sc
     assert "SameSite=lax" in sc
-    assert "Secure" not in sc
+    assert "Secure" in sc
     assert "Max-Age=" not in sc and "max-age=" not in sc

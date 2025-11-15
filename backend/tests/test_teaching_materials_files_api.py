@@ -8,6 +8,7 @@ storage integration, migrations and web routes for file materials.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -52,7 +53,7 @@ def _reset_storage_adapter():
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 async def _create_unit(client: httpx.AsyncClient, title: str = "Physik") -> dict[str, Any]:
@@ -157,7 +158,14 @@ async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_
         payload = resp.json()
         assert uuid.UUID(payload["intent_id"])
         assert uuid.UUID(payload["material_id"])
-        assert payload["storage_key"].startswith("materials/teacher-files/")
+        storage_key = payload["storage_key"]
+        segments = storage_key.split("/")
+        assert len(segments) == 5, storage_key
+        assert segments[0] == "materials"
+        assert segments[1] == unit["id"]
+        assert segments[2] == section["id"]
+        assert segments[3] == payload["material_id"]
+        assert re.match(r"^[0-9a-f]{32}\.pdf$", segments[4]), storage_key
         assert payload["url"].startswith("http://storage.local/upload")
         assert "authorization" in payload["headers"]
         assert "application/pdf" in payload["accepted_mime_types"]

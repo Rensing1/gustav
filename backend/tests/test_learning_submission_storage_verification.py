@@ -8,9 +8,12 @@ REQUIRE_STORAGE_VERIFY=true for strict environments/tests.
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 import httpx
@@ -18,8 +21,53 @@ from httpx import ASGITransport
 
 import uuid
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_DIR = REPO_ROOT / "backend"
+WEB_DIR = BACKEND_DIR / "web"
+for path in (WEB_DIR, BACKEND_DIR, REPO_ROOT):
+    if str(path) not in sys.path:
+        os.sys.path.insert(0, str(path))
+
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+import routes.learning as learning  # type: ignore  # noqa: E402
+from teaching.storage import StorageAdapterProtocol  # type: ignore  # noqa: E402
+
+
+class FakeStorageAdapter(StorageAdapterProtocol):
+    """Provide deterministic presign URLs for tests; HEAD is unused here."""
+
+    def __init__(self) -> None:
+        self.last_presign: dict[str, Any] | None = None
+
+    def presign_upload(self, *, bucket: str, key: str, expires_in: int, headers: dict[str, str]) -> dict[str, Any]:
+        self.last_presign = {"bucket": bucket, "key": key, "headers": headers, "expires_in": expires_in}
+        return {
+            "url": f"https://storage.test/{bucket}/{key}",
+            "headers": headers,
+            "method": "PUT",
+            "expires_in": expires_in,
+        }
+
+    def head_object(self, *, bucket: str, key: str) -> dict[str, Any]:
+        return {"content_length": 0, "etag": "fake"}  # not used in these tests
+
+    def delete_object(self, *, bucket: str, key: str) -> None:
+        return None
+
+    def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, Any]:
+        return {"url": f"https://storage.test/{bucket}/{key}?download=1", "headers": {}, "method": "GET"}
+
+
+@contextmanager
+def _use_storage_adapter(adapter: StorageAdapterProtocol):
+    original = getattr(learning, "STORAGE_ADAPTER", None)
+    learning.set_storage_adapter(adapter)
+    try:
+        yield adapter
+    finally:
+        if original is not None:
+            learning.set_storage_adapter(original)
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -37,18 +85,19 @@ async def _prepare_fixture():
     async with (await _client()) as c:
         # Teacher creates course/unit/section/task and releases section
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
         course_id = r_course.json()["id"]
-        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"})
+        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
         unit_id = r_unit.json()["id"]
-        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"})
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"}, headers={"Origin": "http://test"})
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"], "max_attempts": 3},
+            headers={"Origin": "http://test"},
         )
         task_id = r_task.json()["id"]
-        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
+        r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
         module_id = r_module.json()["id"]
         r_vis = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
@@ -57,7 +106,7 @@ async def _prepare_fixture():
         )
         assert r_vis.status_code == 200
         # Add student to course
-        r_member = await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name})  # type: ignore
+        r_member = await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"})  # type: ignore
         assert r_member.status_code == 201
     return student.session_id, course_id, task_id
 
@@ -68,13 +117,14 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         # Request an upload intent to get a storage_key
-        async with (await _client()) as c:
-            c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
-            r_intent = await c.post(
-                f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
-                json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 12},
-                headers={"Origin": "http://test"},
-            )
+        with _use_storage_adapter(FakeStorageAdapter()):
+            async with (await _client()) as c:
+                c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+                r_intent = await c.post(
+                    f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+                    json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 12},
+                    headers={"Origin": "http://test"},
+                )
         assert r_intent.status_code == 200
         intent = r_intent.json()
         storage_key = intent["storage_key"]
@@ -91,7 +141,6 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
         # Enforce verification via env
         monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
         monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
-
         async with (await _client()) as c:
             c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
             r = await c.post(
@@ -103,6 +152,49 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
                     "size_bytes": size,
                     "sha256": wrong_hash,
                 },
+                headers={"Origin": "http://test"},
+            )
+        assert r.status_code == 400
+        assert r.json().get("detail") == "invalid_file_payload"
+
+
+@pytest.mark.anyio
+async def test_submission_verification_detects_mismatch_even_when_optional(monkeypatch):
+    """Even when REQUIRE_STORAGE_VERIFY=false, detected mismatches must be rejected."""
+    student_sid, course_id, task_id = await _prepare_fixture()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        with _use_storage_adapter(FakeStorageAdapter()):
+            async with (await _client()) as c:
+                c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+                r_intent = await c.post(
+                    f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+                    json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 12},
+                    headers={"Origin": "http://test"},
+                )
+        assert r_intent.status_code == 200
+        storage_key = r_intent.json()["storage_key"]
+
+        dest = Path(root) / storage_key
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        payload = b"hello world!"
+        dest.write_bytes(payload)
+        wrong_hash = sha256(b"hello world?").hexdigest()
+
+        monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
+        monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "false")
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+            r = await c.post(
+                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                json={
+                    "kind": "file",
+                    "storage_key": storage_key,
+                    "mime_type": "application/pdf",
+                    "size_bytes": len(payload),
+                    "sha256": wrong_hash,
+                },
+                headers={"Origin": "http://test"},
             )
         assert r.status_code == 400
         assert r.json().get("detail") == "invalid_file_payload"
@@ -113,13 +205,14 @@ async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch
     student_sid, course_id, task_id = await _prepare_fixture()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        async with (await _client()) as c:
-            c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
-            r_intent = await c.post(
-                f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
-                json={"kind": "image", "filename": "img.png", "mime_type": "image/png", "size_bytes": 11},
-                headers={"Origin": "http://test"},
-            )
+        with _use_storage_adapter(FakeStorageAdapter()):
+            async with (await _client()) as c:
+                c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+                r_intent = await c.post(
+                    f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+                    json={"kind": "image", "filename": "img.png", "mime_type": "image/png", "size_bytes": 11},
+                    headers={"Origin": "http://test"},
+                )
         assert r_intent.status_code == 200
         storage_key = r_intent.json()["storage_key"]
         dest = (Path(root) / storage_key)
@@ -131,7 +224,6 @@ async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch
 
         monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
         monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
-
         async with (await _client()) as c:
             c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
             r = await c.post(
@@ -143,6 +235,7 @@ async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch
                     "size_bytes": size,
                     "sha256": good_hash,
                 },
+                headers={"Origin": "http://test"},
             )
         # Async accept with pending analysis
         assert r.status_code == 202

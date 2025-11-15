@@ -113,7 +113,7 @@ Status (2025‑10‑24): Iteration 1A und 1B umgesetzt (MVP)
   - `X-Content-Type-Options: nosniff`
   - `Strict-Transport-Security: max-age=31536000; includeSubDomains` (Prod)
   - `Permissions-Policy: geolocation=()`
-- Session-Cookie-Flags: Prod `HttpOnly; Secure; SameSite=strict`; Dev `HttpOnly; SameSite=lax` (kongruent zur Auth-Doku)
+- Session-Cookie-Flags: Immer `HttpOnly; Secure; SameSite=lax` (host‑only)
 - SSR-Antworten: `Cache-Control: private, no-store`
 
 ## Fehlerbehandlung (SSR)

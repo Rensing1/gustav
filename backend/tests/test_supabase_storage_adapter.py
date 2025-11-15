@@ -6,7 +6,7 @@ from teaching.storage_supabase import SupabaseStorageAdapter
 class _BucketStub:
     def __init__(self):
         self.removed = []
-        self.calls = {"create_signed_upload_url": [], "create_signed_url": [], "stat": [], "remove": []}
+        self.calls = {"create_signed_upload_url": [], "create_signed_url": [], "stat": [], "remove": [], "upload": []}
 
     def create_signed_upload_url(self, path):
         self.calls["create_signed_upload_url"].append(path)
@@ -24,6 +24,11 @@ class _BucketStub:
         self.calls["remove"].append(list(paths))
         self.removed.extend(paths)
         return {"data": {"removed": list(paths)}}
+
+    def upload(self, path, body, opts=None):
+        self.calls["upload"].append((path, body, dict(opts or {})))
+        # emulate success
+        return {"data": {"Key": path}}
 
 
 class _StorageStub:
@@ -84,3 +89,44 @@ async def test_delete_object_invokes_remove():
     adapter.delete_object(bucket="materials", key="teacher/unit/section/material/file.pdf")
     assert client.storage.bucket.removed == ["teacher/unit/section/material/file.pdf"]
 
+
+@pytest.mark.anyio
+async def test_put_object_calls_upload_with_normalized_key_and_content_type():
+    client = _SupabaseClientStub()
+    adapter = SupabaseStorageAdapter(client)
+    adapter.put_object(
+        bucket="materials",
+        key="/teacher/unit/section/material/page_0001.png",  # leading slash should be stripped
+        body=b"PNG...",
+        content_type="image/png",
+    )
+    calls = client.storage.bucket.calls["upload"]
+    assert len(calls) == 1
+    path, body, opts = calls[0]
+    assert path == "teacher/unit/section/material/page_0001.png"
+    assert body == b"PNG..."
+    # Accept either option key; adapter sets both for compatibility
+    assert opts.get("content-type") == "image/png"
+    assert opts.get("contentType") == "image/png"
+
+
+@pytest.mark.anyio
+async def test_put_object_bubbles_up_client_errors():
+    class _ErrBucket(_BucketStub):
+        def upload(self, path, body, opts=None):  # type: ignore[override]
+            raise RuntimeError("upload_failed")
+
+    class _ErrStorage(_StorageStub):
+        def __init__(self):
+            self.bucket = _ErrBucket()
+
+    class _ErrClient(_SupabaseClientStub):
+        def __init__(self):
+            self.storage = _ErrStorage()
+
+    client = _ErrClient()
+    adapter = SupabaseStorageAdapter(client)
+    with pytest.raises(RuntimeError):
+        adapter.put_object(
+            bucket="materials", key="a/b/c.png", body=b"..", content_type="image/png"
+        )

@@ -15,12 +15,36 @@ info:
 servers:
   - url: /
 
+# All endpoints require an authenticated session by default.
+# Public endpoints explicitly override with `security: []` at operation level.
+security:
+  - cookieAuth: []
+
 components:
   securitySchemes:
     cookieAuth:
       type: apiKey
       in: cookie
       name: gustav_session
+  responses:
+    Unauthorized401:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            default:
+              value: { error: "unauthorized" }
+    Forbidden403:
+      description: Insufficient permissions for the requested resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            default:
+              value: { error: "forbidden" }
   schemas:
     Role:
       type: string
@@ -369,6 +393,7 @@ components:
           description: Hex-encoded SHA-256 checksum of the uploaded file (only for `kind=file`).
         alt_text:
           type: string
+          maxLength: 500
           description: Optional alternative text for accessibility (only for `kind=file`).
         created_at:
           type: string
@@ -400,6 +425,7 @@ components:
           nullable: true
         alt_text:
           type: string
+          maxLength: 500
           description: Alternative text for file materials (ignored for markdown)
     MaterialReorder:
       type: object
@@ -426,6 +452,7 @@ components:
         size_bytes:
           type: integer
           minimum: 1
+          maximum: 20971520
           description: Declared file size in bytes
     MaterialUploadIntentResponse:
       type: object
@@ -480,6 +507,7 @@ components:
         alt_text:
           type: string
           description: Optional alternative text for accessibility
+          maxLength: 500
     MaterialDownloadUrlResponse:
       type: object
       required: [url, expires_at]
@@ -720,6 +748,7 @@ components:
         alt_text:
           type: string
           nullable: true
+          maxLength: 500
           description: Alternative text supplied by teachers for accessibility
         position:
           type: integer
@@ -852,72 +881,28 @@ components:
               explanation_md:
                 type: string
                 description: Objective analysis in Markdown (rendered safely on the UI).
-    LearningSubmission:
+    SubmissionTelemetry:
       type: object
-      required: [id, attempt_nr, kind, analysis_status, created_at]
+      additionalProperties: false
+      required:
+        - vision_attempts
+        - vision_last_error
+        - feedback_last_attempt_at
+        - feedback_last_error
       properties:
-        id:
-          type: string
-          format: uuid
-        attempt_nr:
-          type: integer
-          minimum: 1
-        kind:
-          type: string
-          enum: [text, image, file]
-        text_body:
-          type: string
-          nullable: true
-          description: Unified text representation; empty while analysis is pending or when OCR/analysis failed.
-        mime_type:
-          type: string
-          nullable: true
-        size_bytes:
-          type: integer
-          nullable: true
-        storage_key:
-          type: string
-          nullable: true
-        sha256:
-          type: string
-          nullable: true
-          pattern: '^[0-9a-f]{64}$'
-        analysis_status:
-          type: string
-          enum: [pending, completed, failed]
-          description: >-
-            Analysis lifecycle: pending (queued or running), completed (text/feedback available),
-            failed (analysis halted; see error_code for details).
-        error_code:
-          type: string
-          nullable: true
-          enum:
-            - vision_retrying
-            - vision_failed
-            - feedback_retrying
-            - feedback_failed
-          description: >-
-            Normalized error indicator for AI processing. `*_retrying` marks in-flight retries,
-            `*_failed` indicates that processing stopped and the submission remains without feedback.
-        analysis_json:
-          oneOf:
-            - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
-            - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
-          nullable: true
-          description: Structured criteria-based feedback payload (criteria.v1 or criteria.v2); null while analysis is pending.
-        feedback_md:
-          type: string
-          nullable: true
-          description: Markdown feedback for the learner; null until the analysis has completed.
         vision_attempts:
           type: integer
-          nullable: true
+          format: int32
           minimum: 0
-          description: Number of vision adapter attempts performed for this submission.
+          default: 0
+          description: Number of OCR/vision attempts.
         vision_last_error:
           type: string
           nullable: true
-          description: Latest sanitized error message reported by the vision adapter.
+          maxLength: 256
+          description: |-
+            Sanitized last error returned by the vision adapter; student-visible,
+            therefore secrets/paths are stripped and long messages truncated.
         feedback_last_attempt_at:
           type: string
           format: date-time
@@ -926,7 +911,77 @@ components:
         feedback_last_error:
           type: string
           nullable: true
-          description: Latest sanitized error message reported by the feedback adapter.
+          maxLength: 256
+          description: |-
+            Sanitized feedback adapter error text. Intended for teachers but always
+            truncated/cleaned before exposure.
+    LearningSubmission:
+      allOf:
+        - $ref: '#/components/schemas/SubmissionTelemetry'
+        - type: object
+          required: [id, attempt_nr, kind, analysis_status, created_at]
+          properties:
+            id:
+              type: string
+              format: uuid
+            attempt_nr:
+              type: integer
+              minimum: 1
+            kind:
+              type: string
+              enum: [text, image, file]
+            text_body:
+              type: string
+              nullable: true
+              description: Unified text representation; empty while analysis is pending or when OCR/analysis failed.
+            mime_type:
+              type: string
+              nullable: true
+            size_bytes:
+              type: integer
+              nullable: true
+            storage_key:
+              type: string
+              nullable: true
+            sha256:
+              type: string
+              nullable: true
+              pattern: '^[0-9a-f]{64}$'
+            analysis_status:
+              type: string
+              enum: [pending, extracted, completed, failed]
+              description: >-
+                Analysis lifecycle: pending (queued), extracted (PDF successfully parsed into images/text),
+                completed (feedback available), failed (processing halted; inspect error_code).
+            error_code:
+              type: string
+              nullable: true
+              enum:
+                - vision_retrying
+                - vision_failed
+                - feedback_retrying
+                - feedback_failed
+                - input_corrupt
+                - input_unsupported
+                - input_too_large
+              description: >-
+                Normalized error indicator for processing.
+                `*_retrying` marks in-flight retries, `*_failed` indicates that analysis stopped,
+                and `input_*` values signal validation/pre-processing failures before AI execution.
+            analysis_json:
+              nullable: true
+              description: |-
+                Structured criteria-based feedback payload (criteria.v1 or criteria.v2).
+                Remains `null` for `pending` and `extracted` submissions; the payload
+                is only populated once feedback has been issued. Internal extraction
+                metadata such as page keys is stored separately and never exposed.
+              oneOf:
+                - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
+                - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
+            feedback_md:
+              type: string
+              nullable: true
+              description: Markdown feedback for the learner; null until the analysis has completed.
     TeachingLatestSubmission:
       type: object
       additionalProperties: false
@@ -2018,6 +2073,7 @@ paths:
         generates and manages the opaque `state` (CSRF) and a `nonce` (replay
         protection) for the OIDC flow; clients MUST NOT provide these values.
       operationId: startLogin
+      security: []
       parameters:
         - in: query
           name: redirect
@@ -2085,6 +2141,7 @@ paths:
       summary: OAuth2/OIDC callback from Keycloak
       description: Handles the authorization code, sets session cookie, and redirects.
       operationId: authCallback
+      security: []
       parameters:
         - in: query
           name: code
@@ -2108,8 +2165,8 @@ paths:
             Set-Cookie:
               description: >-
                 httpOnly session cookie `gustav_session`.
-                Production: `HttpOnly; Secure; SameSite=strict`.
-                Development/Test: `HttpOnly; SameSite=lax`.
+                All environments: `HttpOnly; Secure; SameSite=lax` (OAuth/OIDC‑kompatibel),
+                ohne `Domain`‑Attribut (host‑only cookie).
                 In production, `Max-Age` matches the server session TTL (default 3600 seconds).
               schema:
                 type: string
@@ -2138,6 +2195,7 @@ paths:
         Clears the application session cookie and redirects to the Identity Provider's
         end-session endpoint. After IdP logout, the browser returns to the app start page.
       operationId: logoutUnified
+      security: []
       parameters:
         - in: query
           name: redirect
@@ -2163,8 +2221,8 @@ paths:
             Set-Cookie:
               description: >-
                 Clears the httpOnly session cookie `gustav_session` (expires it).
-                Production: `HttpOnly; Secure; SameSite=strict; Max-Age=0`.
-                Development/Test: `HttpOnly; SameSite=lax; Max-Age=0`.
+                All environments: `HttpOnly; Secure; SameSite=lax; Max-Age=0`,
+                ohne `Domain`‑Attribut (host‑only cookie).
               schema:
                 type: string
             Location:
@@ -2177,6 +2235,7 @@ paths:
       tags: [Auth]
       summary: Logout success page
       description: Shows a confirmation that the user has been logged out and links to /auth/login.
+      security: []
       responses:
         '200':
           description: HTML page confirming logout
@@ -2198,6 +2257,7 @@ paths:
       summary: Redirect to IdP forgot password page
       description: Redirect to Keycloak password reset page.
       operationId: forgotPassword
+      security: []
       parameters:
         - in: query
           name: login_hint
@@ -2235,6 +2295,7 @@ paths:
         includes a `nonce` parameter (replay protection) in the authorization request,
         analogous to `/auth/login`.
       operationId: startRegistration
+      security: []
       parameters:
         - in: query
           name: login_hint
@@ -2349,18 +2410,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Course'
-        '401':
-          description: Unauthenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
     post:
       tags: [Teaching]
       summary: Create a course (teacher only)
@@ -2403,12 +2454,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_input
-        '401':
-          description: Unauthenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403':
           description: Forbidden (not a teacher)
           content:
@@ -2457,8 +2503,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     patch:
       tags: [Teaching]
@@ -2512,8 +2558,8 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_field
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
       tags: [Teaching]
@@ -2547,8 +2593,8 @@ paths:
               schema:
                 type: string
                 example: private, no-store
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/members:
@@ -2599,8 +2645,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CourseMember'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [Teaching]
@@ -2665,8 +2711,8 @@ paths:
                   value:
                     error: bad_request
                     detail: student_sub_required
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/members/{student_sub}:
@@ -2705,8 +2751,8 @@ paths:
               schema:
                 type: string
                 example: private, no-store
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units:
@@ -2748,7 +2794,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Unit'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not a teacher), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [Teaching]
@@ -2799,7 +2845,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_summary
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not a teacher), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}:
@@ -2843,7 +2889,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     patch:
@@ -2910,7 +2956,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_summary
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -2955,7 +3001,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_unit_id
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/teaching/units/{unit_id}/sections:
@@ -3007,7 +3053,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_unit_id
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -3048,7 +3094,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Section'
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3097,7 +3143,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Section'
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -3149,7 +3195,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_path_params
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3229,7 +3275,7 @@ paths:
                   value:
                     error: bad_request
                     detail: section_ids_must_be_array
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3290,7 +3336,7 @@ paths:
                 invalid_section_id:
                   summary: Section id not a UUID
                   value: { error: bad_request, detail: invalid_section_id }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -3357,7 +3403,7 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3436,7 +3482,7 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -3492,7 +3538,7 @@ paths:
                 invalid_unit_id: { value: { error: bad_request, detail: invalid_unit_id } }
                 invalid_section_id: { value: { error: bad_request, detail: invalid_section_id } }
                 invalid_task_id: { value: { error: bad_request, detail: invalid_task_id } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3558,7 +3604,7 @@ paths:
                 duplicate_task_ids: { value: { error: bad_request, detail: duplicate_task_ids } }
                 invalid_task_ids: { value: { error: bad_request, detail: invalid_task_ids } }
                 task_mismatch: { value: { error: bad_request, detail: task_mismatch } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3623,7 +3669,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_section_id
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -3680,7 +3726,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3763,7 +3809,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_alt_text
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
@@ -3816,11 +3862,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '502':
           description: Upstream storage deletion failed
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
           content:
             application/json:
               schema:
@@ -3916,7 +3973,7 @@ paths:
                   value:
                     error: bad_request
                     detail: material_ids_must_be_array
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -3982,7 +4039,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_filename
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4074,7 +4131,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_alt_text
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (intent does not belong to caller), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit, section, or intent not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4144,7 +4201,7 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_disposition
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4178,7 +4235,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CourseModule'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
@@ -4220,7 +4277,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CourseModule'
         '400': { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner or not the unit author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '409': { description: Unit already attached to this course, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4300,7 +4357,7 @@ paths:
                   value:
                     error: bad_request
                     detail: no_modules
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Course or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -4345,7 +4402,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
@@ -4547,8 +4604,8 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_role
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
 
   /api/users/list:
     get:
@@ -4607,8 +4664,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
     StudentUploadIntentRequest:
       type: object
       required: [kind, filename, mime_type, size_bytes]
@@ -4641,6 +4698,8 @@ paths:
         url:
           type: string
           format: uri
+          description: >-
+            Absolute presigned URL for client-side PUT upload (https://...).
         headers:
           type: object
           additionalProperties:
@@ -4672,6 +4731,7 @@ paths:
         - "RLS: course membership and visibility enforced via helpers."
       x-permissions:
         requiredRole: student
+      x-notes: []
       parameters:
         - in: path
           name: course_id
@@ -4728,7 +4788,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Forbidden (not enrolled or CSRF check failed)
+          description: Forbidden (csrf_violation)
           headers:
             Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
             Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
@@ -4746,13 +4806,201 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Storage unavailable
+          description: Storage unavailable (storage_adapter_not_configured | storage_service_error)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
   # Teaching — Live unit view (teacher-only)
+  /api/learning/internal/upload-stub:
+    x-internal: true
+    put:
+      tags: [Learning]
+      summary: Dev-only local upload target (student-only)
+      description: >-
+        Accepts a small file upload and writes to STORAGE_VERIFY_ROOT under the provided `storage_key`.
+        Returns computed `sha256` and `size_bytes` used to finalize the submission.
+        Route is gated by the `ENABLE_DEV_UPLOAD_STUB` feature flag (default: false); when disabled the endpoint returns 404.
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: storage_key
+          required: true
+          schema:
+            type: string
+          description: Path-like storage key. Must match the platform's safe pattern.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Upload stored
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sha256, size_bytes]
+                properties:
+                  sha256:
+                    type: string
+                    pattern: '^[0-9a-f]{64}$'
+                  size_bytes:
+                    type: integer
+                    minimum: 1
+        '400':
+          description: Bad request
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (CSRF)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Feature disabled (ENABLE_DEV_UPLOAD_STUB=false)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/learning/internal/upload-proxy:
+    x-internal: true
+    put:
+      tags: [Learning]
+      summary: Proxy presigned upload via same-origin endpoint (student-only)
+      description: >-
+        Forwards the request body to a presigned storage URL (usually Supabase Storage) while keeping
+        browser uploads on the same origin. Returns the computed `sha256` and `size_bytes` so the student
+        can finalize the submission payload. No additional rate-limiting or throttling is applied.
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Host validation: Query param `url` must match the SUPABASE_URL or SUPABASE_PUBLIC_URL host (prevents SSRF/rewrites)."
+        - "HTTP uploads are only accepted for localhost-style hosts (localhost/127.0.0.0/8/::1/host.docker.internal)."
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: url
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: >-
+            Absolute presigned HTTPS URL returned by the upload-intents endpoint (host must equal SUPABASE_URL or SUPABASE_PUBLIC_URL;
+            HTTP is only accepted for localhost-style hosts).
+        - in: query
+          name: headers
+          required: false
+          schema:
+            type: string
+            format: byte
+          description: >-
+            Opaque, base64url-encoded JSON of the presign headers provided by the upload intent. Clients forward the
+            payload verbatim; the server replays the exact headers when proxying to Supabase.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Upload proxied successfully
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sha256, size_bytes]
+                properties:
+                  sha256:
+                    type: string
+                    pattern: '^[0-9a-f]{64}$'
+                  size_bytes:
+                    type: integer
+                    minimum: 1
+        '400':
+          description: Bad request (missing_url | invalid_url | invalid_url_host | empty_body | size_exceeded | mime_not_allowed)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (CSRF violation)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Feature disabled (ENABLE_STORAGE_UPLOAD_PROXY=false)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Upstream error (proxy_failed | upstream_error)
+          headers:
+            Cache-Control: { description: Security — private responses must not be cached, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary:
     get:
       tags: [Teaching]
@@ -4944,7 +5192,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401': { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found (course or unit not found, or unit ist nicht Teil des Kurses), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest:

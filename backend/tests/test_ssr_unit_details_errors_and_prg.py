@@ -35,7 +35,12 @@ def _extract_csrf_token(html: str) -> str | None:
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+    # Provide Origin for strict CSRF on Teaching API writes during setup
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 @pytest.mark.anyio
@@ -81,4 +86,3 @@ async def test_units_create_redirect_uses_303():
         )
 
     assert r.status_code == 303
-

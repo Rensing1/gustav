@@ -37,7 +37,7 @@ def _extract_csrf_token(html: str) -> str | None:
 
 
 async def _create_course_via_api(client: httpx.AsyncClient, *, title: str) -> str:
-    r = await client.post("/api/teaching/courses", json={"title": title})
+    r = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201
     body = r.json()
     assert isinstance(body, dict) and body.get("id")
@@ -45,7 +45,7 @@ async def _create_course_via_api(client: httpx.AsyncClient, *, title: str) -> st
 
 
 async def _create_unit_via_api(client: httpx.AsyncClient, *, title: str) -> str:
-    r = await client.post("/api/teaching/units", json={"title": title})
+    r = await client.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201
     body = r.json()
     assert isinstance(body, dict) and body.get("id")
@@ -62,9 +62,9 @@ async def test_course_modules_page_renders_and_reorder_changes_order():
         course_id = await _create_course_via_api(c, title="UI-Kurs Modules")
         u1 = await _create_unit_via_api(c, title="Erste Einheit")
         u2 = await _create_unit_via_api(c, title="Zweite Einheit")
-        m1 = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": u1})
+        m1 = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": u1}, headers={"Origin": "http://test"})
         assert m1.status_code == 201
-        m2 = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": u2})
+        m2 = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": u2}, headers={"Origin": "http://test"})
         assert m2.status_code == 201
 
         page = await c.get(f"/courses/{course_id}/modules")

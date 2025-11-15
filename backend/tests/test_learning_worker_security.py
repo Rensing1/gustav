@@ -26,6 +26,47 @@ import psycopg  # type: ignore  # noqa: E402
 from psycopg.types.json import Json  # type: ignore  # noqa: E402
 
 
+def _reset_worker_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unset env vars that influence the worker DSN resolution."""
+    for name in [
+        "LEARNING_DATABASE_URL",
+        "DATABASE_URL",
+        "LEARNING_DB_URL",
+        "ALLOW_SERVICE_DSN_FOR_TESTING",
+        "RUN_E2E",
+        "RUN_SUPABASE_E2E",
+        "PYTEST_CURRENT_TEST",
+    ]:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_worker_dsn_rejects_service_role(monkeypatch: pytest.MonkeyPatch):
+    """Learning worker must not run with service-role credentials by default."""
+    from backend.learning.workers import process_learning_submission_jobs as jobs
+
+    _reset_worker_env(monkeypatch)
+    monkeypatch.setenv(
+        "LEARNING_DATABASE_URL",
+        "postgresql://postgres:postgres@db:5432/postgres",
+    )
+    with pytest.raises(RuntimeError) as excinfo:
+        jobs._resolve_worker_dsn()
+    assert "gustav" in str(excinfo.value).lower(), str(excinfo.value)
+
+
+def test_worker_dsn_prefers_app_role_fallback(monkeypatch: pytest.MonkeyPatch):
+    """When no override is provided, worker DSN should use the app login role."""
+    from backend.learning.workers import process_learning_submission_jobs as jobs
+
+    _reset_worker_env(monkeypatch)
+    monkeypatch.setenv("APP_DB_USER", "gustav_app")
+    monkeypatch.setenv("APP_DB_PASSWORD", "pw")
+    monkeypatch.setenv("TEST_DB_HOST", "db")
+    monkeypatch.setenv("TEST_DB_PORT", "6543")
+    dsn = jobs._resolve_worker_dsn()
+    assert dsn.startswith("postgresql://gustav_app:pw@db:6543"), dsn
+
+
 def _dsn() -> str:
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
@@ -72,7 +113,7 @@ async def test_learning_worker_update_completed_sets_fields():
     dsn = _dsn()
 
     analysis_payload = {
-        "schema": "criteria.v1",
+        "schema": "criteria.v2",
         "score": 4,
         "criteria_results": [],
     }
@@ -116,7 +157,7 @@ async def test_learning_worker_update_completed_sets_fields():
     assert text_body == "## Processed Markdown"
     assert feedback_md == "### Short feedback body"
     assert isinstance(analysis_json, dict)
-    assert analysis_json["schema"] == "criteria.v1"
+    assert analysis_json["schema"] == "criteria.v2"
     assert error_code is None
 
 
@@ -250,3 +291,83 @@ async def test_learning_worker_mark_retry_updates_metadata():
     assert "temporary feedback issue" in feedback_last_error
     assert feedback_last_attempt_at is not None
     assert vision_attempts == 1
+
+
+@pytest.mark.anyio
+async def test_learning_worker_update_completed_jsonb_is_idempotent():
+    """JSONB overload should tolerate repeated calls after completion."""
+
+    _require_db_or_skip()
+    submission_id, student_sub, _ = await _create_pending_submission(
+        idempotency_key="security-completed-jsonb"
+    )
+    dsn = _dsn()
+
+    first_payload = {
+        "schema": "criteria.v2",
+        "score": 4,
+        "criteria_results": [],
+    }
+    second_payload = {
+        "schema": "criteria.v2",
+        "score": 1,
+        "criteria_results": [],
+    }
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    submission_id,
+                    "## Processed Markdown JSONB",
+                    "### First feedback body",
+                    Json(first_payload),
+                ),
+            )
+            cur.fetchone()
+
+            # Call again with different payload; should no-op (no exception) once completed.
+            cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    submission_id,
+                    "## Second Markdown",
+                    "### Second feedback body",
+                    Json(second_payload),
+                ),
+            )
+            cur.fetchone()
+
+            cur.execute(
+                """
+                select analysis_status, text_body, feedback_md, analysis_json
+                  from public.learning_submissions
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            status, text_body, feedback_md, analysis_json = cur.fetchone()
+
+    assert status == "completed"
+    assert text_body == "## Processed Markdown JSONB"
+    assert feedback_md == "### First feedback body"
+    assert isinstance(analysis_json, dict)
+    assert analysis_json.get("schema") == "criteria.v2"
+    assert analysis_json.get("score") == 4

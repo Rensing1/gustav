@@ -35,23 +35,26 @@ async def _prepare_fixture():
     async with _client(main.app) as client:
         # Create course and learning items
         _set_session_cookie(client, teacher.session_id)
-        course = (await client.post("/api/teaching/courses", json={"title": "Kurs"})).json()
-        unit = (await client.post("/api/teaching/units", json={"title": "Unit"})).json()
-        section = (await client.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "S"})).json()
+        course = (await client.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://internal"})).json()
+        unit = (await client.post("/api/teaching/units", json={"title": "Unit"}, headers={"Origin": "http://internal"})).json()
+        section = (await client.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "S"}, headers={"Origin": "http://internal"})).json()
         task = (
             await client.post(
                 f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
                 json={"instruction_md": "do", "max_attempts": 2},
+                headers={"Origin": "http://internal"},
             )
         ).json()
-        module = (await client.post(f"/api/teaching/courses/{course['id']}/modules", json={"unit_id": unit["id"]})).json()
+        module = (await client.post(f"/api/teaching/courses/{course['id']}/modules", json={"unit_id": unit["id"]}, headers={"Origin": "http://internal"})).json()
         await client.post(
             f"/api/teaching/courses/{course['id']}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://internal"},
         )
         await client.post(
             f"/api/teaching/courses/{course['id']}/members",
             json={"student_sub": student.sub, "name": "S"},
+            headers={"Origin": "http://internal"},
         )
 
     return course["id"], task["id"], student.session_id, main.app

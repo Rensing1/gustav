@@ -14,19 +14,33 @@ Intent:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import logging
 import os
-from typing import Optional, Protocol, Sequence
+import re
+from typing import Optional, Sequence
+import inspect
+from dataclasses import dataclass
 from uuid import UUID, uuid4
+from importlib import import_module
 
 from . import telemetry
+from backend.learning.adapters.ports import (
+    FeedbackAdapterProtocol,
+    FeedbackPermanentError,
+    FeedbackResult,
+    FeedbackTransientError,
+    VisionAdapterProtocol,
+    VisionPermanentError,
+    VisionResult,
+    VisionTransientError,
+)
 
 try:  # pragma: no cover - optional dependency in some environments
     import psycopg
     from psycopg import Connection
     from psycopg.rows import dict_row
+    from psycopg import sql as _sql
     HAVE_PSYCOPG = True
 except Exception:  # pragma: no cover
     psycopg = None  # type: ignore
@@ -41,34 +55,18 @@ def _require_psycopg() -> None:
         raise RuntimeError("psycopg3 is required for the learning worker")
 
 
-@dataclass
-class VisionResult:
-    """Vision adapter response."""
-
-    text_md: str
-    raw_metadata: Optional[dict] = None
-
-
-@dataclass
-class FeedbackResult:
-    """Feedback adapter response."""
-
-    feedback_md: str
-    analysis_json: dict
-
-
-class VisionAdapterProtocol(Protocol):
-    """Vision adapter turns submissions into Markdown text."""
-
-    def extract(self, *, submission: dict, job_payload: dict) -> VisionResult:
-        ...
-
-
-class FeedbackAdapterProtocol(Protocol):
-    """Feedback adapter generates formative feedback for Markdown text."""
-
-    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
-        ...
+# Re-export ports for backwards-compatible imports in tests and adapters.
+# This allows `from backend.learning.workers.process_learning_submission_jobs import VisionResult` to keep working.
+__all__ = [
+    "VisionResult",
+    "FeedbackResult",
+    "VisionAdapterProtocol",
+    "FeedbackAdapterProtocol",
+    "VisionTransientError",
+    "VisionPermanentError",
+    "FeedbackTransientError",
+    "FeedbackPermanentError",
+]
 
 
 @dataclass
@@ -85,28 +83,7 @@ LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "45"))
 MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
 
 
-class VisionError(Exception):
-    """Base class for Vision adapter failures."""
-
-
-class VisionTransientError(VisionError):
-    """Recoverable Vision error; worker should retry with backoff."""
-
-
-class VisionPermanentError(VisionError):
-    """Non-recoverable Vision error; worker marks submission failed."""
-
-
-class FeedbackError(Exception):
-    """Base class for Feedback adapter failures."""
-
-
-class FeedbackTransientError(FeedbackError):
-    """Recoverable Feedback error; worker should retry."""
-
-
-class FeedbackPermanentError(FeedbackError):
-    """Non-recoverable Feedback error; worker marks submission failed."""
+# Error classes now live in ports and are imported above.
 
 
 def _backoff_seconds() -> int:
@@ -183,25 +160,33 @@ def run_once(
 
 
 def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
-    """Lease the next visible job using `SELECT ... FOR UPDATE SKIP LOCKED`."""
+    """Lease the next visible job from the canonical queue table."""
     lease_key = uuid4()
     lease_until = now + timedelta(seconds=LEASE_SECONDS)
+    queue_table = _resolve_queue_table(conn)
     with conn.cursor() as cur:
-        cur.execute(
+        stmt = _sql.SQL(
             """
             with candidate as (
                 select id,
                        submission_id,
                        payload,
                        retry_count
-                  from public.learning_submission_jobs
-                 where status = 'queued'
-                   and visible_at <= %s
+                  from public.{}
+                 where (
+                          status = 'queued'
+                          and visible_at <= %s + interval '30 seconds'
+                       )
+                    or (
+                          status = 'leased'
+                          and leased_until is not null
+                          and leased_until <= %s
+                       )
                  order by visible_at asc, created_at asc
                  limit 1
                  for update skip locked
             )
-            update public.learning_submission_jobs as jobs
+            update public.{} as jobs
                set status = 'leased',
                    lease_key = %s::uuid,
                    leased_until = %s,
@@ -212,9 +197,9 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                      candidate.submission_id::text,
                      candidate.retry_count,
                      candidate.payload
-            """,
-            (now, str(lease_key), lease_until),
-        )
+            """
+        ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table))
+        cur.execute(stmt, (now, now, str(lease_key), lease_until))
         row = cur.fetchone()
     if not row:
         return None
@@ -224,6 +209,40 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
         retry_count=int(row["retry_count"]),
         payload=row["payload"],
     )
+
+
+def _resolve_queue_table(conn: Connection) -> str:
+    """
+    Ensure the worker queue exists and return its canonical table name.
+
+    Why:
+        All downstream DML (_nack_retry/_delete_job) targets
+        `public.learning_submission_jobs`. Falling back to the legacy OCR table would
+        break retries, so we fail fast when migrations are missing.
+
+    Parameters:
+        conn: psycopg connection running as the dedicated worker role. The role only
+              needs SELECT on the queue table to verify its existence.
+
+    Behavior:
+        - Queries `to_regclass('public.learning_submission_jobs')`.
+        - Returns the canonical name when present, otherwise raises.
+
+    Permissions:
+        Requires SELECT on `pg_catalog.pg_class` (covered by default schema access) and
+        visibility of the `public.learning_submission_jobs` relation.
+
+    Raises:
+        RuntimeError: when `public.learning_submission_jobs` is not present.
+    """
+    with conn.cursor() as cur:
+        cur.execute("select to_regclass('public.learning_submission_jobs') as reg")
+        reg = cur.fetchone()
+    if reg:
+        val = reg.get("reg") if isinstance(reg, dict) else reg[0]
+        if val:
+            return "learning_submission_jobs"
+    raise RuntimeError("Queue table public.learning_submission_jobs missing; run migrations.")
 
 
 def _process_job(
@@ -245,7 +264,8 @@ def _process_job(
     # Ensure RLS context remains set for update (submission includes student_sub).
     _set_current_sub(conn, submission.get("student_sub", job.payload.get("student_sub", "")))
 
-    if submission.get("analysis_status") != "pending":
+    # Accept both freshly queued and already extracted submissions (pages persisted).
+    if submission.get("analysis_status") not in ("pending", "extracted"):
         LOG.debug(
             "Job %s skipped because submission %s already %s",
             job.id,
@@ -256,13 +276,23 @@ def _process_job(
         return
 
     try:
-        vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
+        # For plain text submissions we never invoke Vision/OCR/LLM. Preserve the
+        # original student text verbatim to avoid unintended transformations.
+        if (submission.get("kind") or "").strip() == "text":
+            from backend.learning.adapters.ports import VisionResult as _VR  # local import to avoid cycles
+            vision_result = _VR(
+                text_md=str(submission.get("text_body") or ""),
+                raw_metadata={"adapter": "worker", "backend": "pass_through", "reason": "text_submission"},
+            )
+        else:
+            vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
     except VisionPermanentError as exc:
+        # Log only the exception class to avoid leaking PII/prompt content in logs.
         LOG.warning(
             "Vision permanent error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_vision_error(
             conn=conn,
@@ -274,11 +304,12 @@ def _process_job(
         )
         return
     except VisionTransientError as exc:
+        # Keep logs free of raw messages; store truncated details in DB instead.
         LOG.info(
             "Vision transient error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_vision_error(
             conn=conn,
@@ -291,15 +322,29 @@ def _process_job(
         return
 
     try:
-        feedback_result = feedback_adapter.analyze(
-            text_md=vision_result.text_md, criteria=job.payload.get("criteria", [])
-        )
+        # Pass task context (instruction/hints) to adapters that support it; keep compatibility otherwise.
+        analyze_kwargs = {
+            "text_md": vision_result.text_md,
+            "criteria": job.payload.get("criteria", []),
+        }
+        if isinstance(job.payload, dict):
+            instr = job.payload.get("instruction_md")
+            hints = job.payload.get("hints_md")
+            sig = None
+            try:
+                sig = inspect.signature(feedback_adapter.analyze)  # type: ignore[attr-defined]
+            except Exception:
+                sig = None
+            if sig and "instruction_md" in sig.parameters and "hints_md" in sig.parameters:
+                analyze_kwargs["instruction_md"] = instr
+                analyze_kwargs["hints_md"] = hints
+        feedback_result = feedback_adapter.analyze(**analyze_kwargs)  # type: ignore[arg-type]
     except FeedbackPermanentError as exc:
         LOG.warning(
             "Feedback permanent error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_feedback_error(
             conn=conn,
@@ -315,7 +360,7 @@ def _process_job(
             "Feedback transient error for submission %s job %s: %s",
             job.submission_id,
             job.id,
-            exc,
+            exc.__class__.__name__,
         )
         _handle_feedback_error(
             conn=conn,
@@ -348,9 +393,14 @@ def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]
                    task_id::text,
                    kind,
                    text_body,
-                   analysis_status
-              from public.learning_submissions
-             where id = %s::uuid
+                   mime_type,
+                   size_bytes,
+                   storage_key,
+                   sha256,
+                   analysis_status,
+                   internal_metadata
+             from public.learning_submissions
+            where id = %s::uuid
             """,
             (submission_id,),
         )
@@ -652,15 +702,92 @@ def run_forever(
             time.sleep(poll_interval)
 
 
-def _default_dsn() -> str:
-    env = os.getenv("LEARNING_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if env:
-        return env
-    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
-    port = os.getenv("TEST_DB_PORT", "54322")
-    user = os.getenv("APP_DB_USER", "gustav_app")
-    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
-    return f"postgresql://{user}:{password}@{host}:{port}/postgres"
+def _dsn_username(dsn: str) -> str:
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(dsn)
+        if parsed.username:
+            return parsed.username
+    except Exception:
+        pass
+    match = re.match(r"^[a-z]+://(?P<user>[^:@/]+)", dsn or "")
+    return match.group("user") if match else ""
+
+
+def _resolve_worker_dsn() -> str:
+    """
+    Resolve the Postgres DSN for the learning worker with least-privilege guards.
+
+    Behavior:
+        - Favors explicit overrides (LEARNING_DATABASE_URL/LEARNING_DB_URL/DATABASE_URL).
+        - Falls back to the app login role derived from APP_DB_USER/APP_DB_PASSWORD.
+        - Rejects service-role/superuser accounts (postgres, service_role) unless
+          ALLOW_SERVICE_DSN_FOR_TESTING=true (opt-in for local debugging).
+    """
+
+    def _truthy(env_name: str) -> bool:
+        return (os.getenv(env_name, "") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    candidates = [
+        os.getenv("LEARNING_DATABASE_URL"),
+        os.getenv("LEARNING_DB_URL"),
+        os.getenv("DATABASE_URL"),
+    ]
+    for candidate in candidates:
+        if candidate:
+            dsn = candidate
+            break
+    else:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        dsn = f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    allow_service = _truthy("ALLOW_SERVICE_DSN_FOR_TESTING") or _truthy("RUN_E2E") or _truthy("RUN_SUPABASE_E2E")
+    user = _dsn_username(dsn)
+    if user in {"postgres", "service_role", "supabase_admin"} and not allow_service:
+        raise RuntimeError(
+            "Learning worker requires the gustav_app (or gustav_worker) login role. "
+            "Override LEARNING_DATABASE_URL with a limited account or set "
+            "ALLOW_SERVICE_DSN_FOR_TESTING=true for temporary local debugging."
+        )
+    return dsn
+
+
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _truthy_env(name: str, *, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in _TRUTHY
+
+
+def _json_adapter_enabled() -> bool:
+    """Feature toggle for JSONAdapter (default on; set env to 'false' to disable)."""
+    return _truthy_env("LEARNING_DSPY_JSON_ADAPTER", default=True)
+
+
+def _ensure_ollama_host_env() -> str | None:
+    """
+    Align DSPy/LiteLLM host resolution with the worker configuration.
+
+    DSPy (via LiteLLM) expects `api_base` or `OLLAMA_API_BASE`, whereas our
+    env files only expose `OLLAMA_BASE_URL`. We propagate the value to the
+    expected knobs and return it so callers can pass `api_base` explicitly.
+    """
+    base_url = (os.getenv("OLLAMA_BASE_URL") or "").strip()
+    if not base_url:
+        return None
+
+    if not (os.getenv("OLLAMA_HOST") or "").strip():
+        os.environ["OLLAMA_HOST"] = base_url
+    if not (os.getenv("OLLAMA_API_BASE") or "").strip():
+        os.environ["OLLAMA_API_BASE"] = base_url
+    return base_url
 
 
 def main() -> None:
@@ -668,12 +795,42 @@ def main() -> None:
     level_name = os.getenv("LOG_LEVEL", "INFO")
     normalized_level = level_name.strip().upper() or "INFO"
     logging.basicConfig(level=normalized_level)
-    dsn = _default_dsn()
+    dsn = _resolve_worker_dsn()
 
-    from importlib import import_module
+    # Centralised config load (keeps behaviour identical to the previous env logic).
+    from backend.learning.config import load_ai_config
 
-    vision_path = os.getenv("LEARNING_VISION_ADAPTER", "backend.learning.adapters.stub_vision")
-    feedback_path = os.getenv("LEARNING_FEEDBACK_ADAPTER", "backend.learning.adapters.stub_feedback")
+    cfg = load_ai_config()
+    vision_path = cfg.vision_adapter_path
+    feedback_path = cfg.feedback_adapter_path
+    LOG.info(
+        "learning.adapters.selected backend=%s vision=%s feedback=%s",
+        cfg.backend,
+        vision_path,
+        feedback_path,
+    )
+
+    # Configure DSPy globally when available so structured outputs are preferred.
+    try:  # pragma: no cover - behavior validated via higher-level tests
+        import dspy  # type: ignore
+
+        model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
+        if model_name and hasattr(dspy, "LM"):
+            api_base = _ensure_ollama_host_env()
+            lm_kwargs = {"api_base": api_base} if api_base else {}
+            lm = dspy.LM(f"ollama/{model_name}", **lm_kwargs)  # type: ignore[attr-defined]
+            use_json_adapter = _json_adapter_enabled()
+            adapter_cls = getattr(dspy, "JSONAdapter", None) if use_json_adapter else None
+            if adapter_cls is not None:
+                dspy.configure(lm=lm, adapter=adapter_cls())  # type: ignore[misc]
+                adapter_label = "JSONAdapter"
+            else:
+                # Explicit opt-out path: allow local debugging without JSONAdapter.
+                dspy.configure(lm=lm)
+                adapter_label = "default"
+            LOG.info("learning.feedback.dspy_configured model=%s adapter=%s", model_name, adapter_label)
+    except Exception as _cfg_exc:  # pragma: no cover
+        LOG.debug("DSPy not configured: %s", type(_cfg_exc).__name__)
 
     vision_module = import_module(vision_path)
     feedback_module = import_module(feedback_path)

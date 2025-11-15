@@ -42,7 +42,7 @@ if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defen
 
 async def _seed_course(client: httpx.AsyncClient, *, title: str, teacher_session_cookie: str) -> str:
     client.cookies.set(main.SESSION_COOKIE_NAME, teacher_session_cookie)
-    r = await client.post("/api/teaching/courses", json={"title": title})
+    r = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
     assert r.status_code == 201
     # Return created course id by listing
     lst = await client.get("/api/teaching/courses")

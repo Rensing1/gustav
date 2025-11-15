@@ -24,8 +24,8 @@ ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
 
 pytestmark = pytest.mark.e2e
 
-WEB_BASE = os.getenv("WEB_BASE", "http://app.localhost:8100")
-KC_BASE = os.getenv("KC_BASE", "http://id.localhost:8100")
+WEB_BASE = os.getenv("WEB_BASE", "https://app.localhost")
+KC_BASE = os.getenv("KC_BASE", "https://id.localhost")
 REALM = os.getenv("KC_REALM", "gustav")
 
 

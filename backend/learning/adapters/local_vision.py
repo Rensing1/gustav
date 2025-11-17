@@ -740,6 +740,14 @@ class _LocalVisionAdapter:
                             )
                             continue
                         if reason and reason != "ok":
+                            if reason.startswith("http_error:400"):
+                                _log_storage_event(
+                                    submission_id=submission_id,
+                                    action="remote_fetch_failed",
+                                    reason=reason,
+                                    stage="pdf_page",
+                                )
+                                continue
                             _log_storage_event(
                                 submission_id=submission_id,
                                 action="remote_fetch_failed",

@@ -3909,8 +3909,6 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
     file_form = (
         f'<form id="material-create-file" class="material-form material-form--file" data-mode="file" hidden '
         f'method="post" action="/units/{unit_id}/sections/{section_id}/materials/finalize" '
-        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/finalize" '
-        f'hx-target="#material-list-section-{section_id}" hx-swap="outerHTML" '
         f'data-intent-url="/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents" '
         f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
@@ -3920,7 +3918,6 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
         f'<label>Datei auswählen<input class="form-input" type="file" name="upload_file" accept="{Component.escape(allowed_mime)}"></label>'
         f'<p class="text-muted">Erlaubt: PDF, PNG, JPEG · bis {max_mb} MB. Upload wird automatisch vorbereitet.</p>'
         f'<label>Alt-Text (optional)<input class="form-input" type="text" name="alt_text" maxlength="500"></label>'
-        f'<div class="alert alert-info" aria-live="polite">Ohne JavaScript ist der Datei-Upload deaktiviert. Bitte Text wählen oder JS aktivieren.</div>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit" disabled>Anlegen</button></div>'
         f'</form>'
     )

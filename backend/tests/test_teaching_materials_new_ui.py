@@ -97,8 +97,9 @@ async def test_materials_new_shows_toggle_and_data_attrs():
     assert 'data-intent-url="/api/teaching/units' in body
     assert 'data-allowed-mime="application/pdf,image/png,image/jpeg"' in body
     assert 'data-max-bytes="' in body
-    # Datei-Form zeigt No-JS-Hinweis
-    assert "Ohne JavaScript ist der Datei-Upload deaktiviert" in body
+    # Datei-Form wird vollständig serverseitig gerendert; JS übernimmt Toggle/Upload.
+    # Ein prominenter No-JS-Banner soll hier NICHT mehr erscheinen.
+    assert "Ohne JavaScript ist der Datei-Upload deaktiviert" not in body
     # CSRF vorhanden
     assert _extract_csrf_token(body)
 

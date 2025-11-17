@@ -47,6 +47,7 @@ class Gustav {
     this.initSidebarTooltips();
     this.initLearningTaskForms(); // Progressive enhancement for student task forms
     this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
+    this.initFilePreviewZoom(); // Zoom toggle for inline file previews
   }
 
   /**
@@ -273,6 +274,43 @@ class Gustav {
     set('intent_id', intent.intent_id || '');
     set('sha256', sha);
     return intent;
+  }
+
+  /**
+   * Zoom toggle for inline file previews (teacher + student).
+   *
+   * Behaviour:
+   * - Click on a .file-preview wrapper toggles file-preview--zoomed.
+   * - Keyboard: Enter/Space on focused wrapper toggles as well.
+   * - Uses event delegation so that HTMX-inserted previews also work.
+   */
+  initFilePreviewZoom() {
+    if (this.filePreviewZoomInit) return;
+    this.filePreviewZoomInit = true;
+
+    const toggleZoom = (wrapper) => {
+      if (!wrapper || !wrapper.classList) return;
+      wrapper.classList.toggle('file-preview--zoomed');
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!target || !target.closest) return;
+      const wrapper = target.closest('.file-preview[data-file-preview="true"]');
+      if (!wrapper) return;
+      event.preventDefault();
+      toggleZoom(wrapper);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const target = event.target;
+      if (!target || !target.closest) return;
+      const wrapper = target.closest('.file-preview[data-file-preview="true"]');
+      if (!wrapper) return;
+      event.preventDefault();
+      toggleZoom(wrapper);
+    });
   }
 
   /**

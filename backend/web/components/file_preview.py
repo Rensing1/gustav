@@ -63,22 +63,35 @@ class FilePreview(Component):
             return ""
 
         mime = self.mime
+
+        # Common wrapper attributes used for all preview types.
+        # They expose hooks for JS-based zoom and basic keyboard accessibility.
+        def wrapper_attrs(extra_class: str) -> str:
+            cls = self.classes("file-preview", extra_class)
+            return self.attributes(
+                class_=cls,
+                **{
+                    "data-file-preview": "true",
+                    "role": "button",
+                    "tabindex": "0",
+                },
+            )
         # Images: inline <img> preview
         if mime.startswith("image/"):
             alt_text = self.alt or self.title or "Datei-Material"
-            wrapper_cls = self.classes("file-preview", "file-preview--image")
+            wrapper = wrapper_attrs("file-preview--image")
             img_attrs = self.attributes(
                 src=self.url,
                 alt=alt_text,
                 class_="file-preview__image",
                 loading="lazy",
             )
-            return f'<figure class="{wrapper_cls}"><img {img_attrs}></figure>'
+            return f'<figure {wrapper}><img {img_attrs}></figure>'
 
         # PDFs: embed via <iframe> with bounded height
         if mime == "application/pdf":
             viewer_title = self.title or "PDF-Vorschau"
-            wrapper_cls = self.classes("file-preview", "file-preview--pdf")
+            wrapper = wrapper_attrs("file-preview--pdf")
             frame_style = f"width: 100%; height: {self.max_height}; border: none;"
             iframe_attrs = self.attributes(
                 src=self.url,
@@ -86,10 +99,10 @@ class FilePreview(Component):
                 class_="file-preview__frame",
                 style=frame_style,
             )
-            return f'<div class="{wrapper_cls}"><iframe {iframe_attrs}></iframe></div>'
+            return f'<div {wrapper}><iframe {iframe_attrs}></iframe></div>'
 
         # Fallback: simple download link for unsupported types
-        wrapper_cls = self.classes("file-preview", "file-preview--download")
+        wrapper = wrapper_attrs("file-preview--download")
         link_label = self.title or "Download"
         link_attrs = self.attributes(
             href=self.url,
@@ -97,5 +110,4 @@ class FilePreview(Component):
             rel="noopener",
             class_="btn",
         )
-        return f'<div class="{wrapper_cls}"><a {link_attrs}>{self.escape(link_label)}</a></div>'
-
+        return f'<div {wrapper}><a {link_attrs}>{self.escape(link_label)}</a></div>'

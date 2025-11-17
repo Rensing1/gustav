@@ -155,7 +155,13 @@ async def test_material_file_detail_shows_inline_pdf_preview():
         html = page.text
         # Inline-Preview statt Download-Button
         assert 'id="material-download-link"' not in html
-        assert 'class="file-preview file-preview--pdf"' in html
+        # Wrapper exposes hooks for JS-based zoom
+        assert 'file-preview file-preview--pdf' in html
+        assert 'data-file-preview="true"' in html
+        assert 'role="button"' in html
+        assert 'tabindex="0"' in html
+        # No zoom class on initial render
+        assert 'file-preview--zoomed' not in html
         assert '<iframe' in html or '<embed' in html
         assert 'http://storage.local/download' in html
 
@@ -182,8 +188,12 @@ async def test_material_file_detail_shows_inline_image_preview():
         assert page.status_code == 200
         html = page.text
         assert 'id="material-download-link"' not in html
-        # Image-Preview: <img> mit file-preview-Klasse
-        assert 'class="file-preview file-preview--image"' in html
+        # Image preview: <img> with file-preview class and zoom hooks
+        assert 'file-preview file-preview--image' in html
+        assert 'data-file-preview="true"' in html
+        assert 'role="button"' in html
+        assert 'tabindex="0"' in html
+        assert 'file-preview--zoomed' not in html
         assert '<img' in html
         assert 'http://storage.local/download' in html
 

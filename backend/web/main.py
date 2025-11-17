@@ -3879,33 +3879,60 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
 
 
 def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
-    # Reuse forms prepared earlier, add simple heading and back link
+    """Render create page with toggle Text | Datei (upload-intent handled per JS)."""
+    from teaching.services.materials import MaterialFileSettings
+
+    settings = MaterialFileSettings()
+    allowed_mime = ",".join(settings.accepted_mime_types)
+    max_bytes = settings.max_size_bytes
+    max_mb = round(max_bytes / (1024 * 1024), 2)
+
+    choice = (
+        '<fieldset class="choice-cards" aria-label="Materialart">'
+        '<label class="choice-card"><input type="radio" name="material_mode" value="text" checked>'
+        '<span class="choice-card__title">📝 Text</span></label>'
+        '<label class="choice-card"><input type="radio" name="material_mode" value="file">'
+        f'<span class="choice-card__title">⬆️ Datei</span><span class="choice-card__hint">PDF/PNG/JPEG · bis {max_mb} MB</span></label>'
+        '</fieldset>'
+    )
+
     text_form = (
-        f'<form id="material-create-text" method="post" action="/units/{unit_id}/sections/{section_id}/materials/create">'
+        f'<form id="material-create-text" class="material-form material-form--text" data-mode="text" '
+        f'method="post" action="/units/{unit_id}/sections/{section_id}/materials/create">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
         f'<label>Markdown<textarea class="form-input" name="body_md" required></textarea></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
         f'</form>'
     )
-    upload_intent_form = (
-        f'<form id="material-upload-intent-form" method="post" action="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
-        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
-        f'hx-target="#material-upload-area" hx-swap="outerHTML">'
+
+    file_form = (
+        f'<form id="material-create-file" class="material-form material-form--file" data-mode="file" hidden '
+        f'method="post" action="/units/{unit_id}/sections/{section_id}/materials/finalize" '
+        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/finalize" '
+        f'hx-target="#material-list-section-{section_id}" hx-swap="outerHTML" '
+        f'data-intent-url="/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents" '
+        f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Dateiname<input class="form-input" type="text" name="filename" required></label>'
-        f'<label>MIME<input class="form-input" type="text" name="mime_type" value="application/pdf" required></label>'
-        f'<label>Größe (Bytes)<input class="form-input" type="number" name="size_bytes" value="1024" min="1" required></label>'
-        f'<div class="form-actions"><button class="btn" type="submit">Upload vorbereiten</button></div>'
+        f'<input type="hidden" name="intent_id" value="">'
+        f'<input type="hidden" name="sha256" value="">'
+        f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
+        f'<label>Datei auswählen<input class="form-input" type="file" name="upload_file" accept="{Component.escape(allowed_mime)}"></label>'
+        f'<p class="text-muted">Erlaubt: PDF, PNG, JPEG · bis {max_mb} MB. Upload wird automatisch vorbereitet.</p>'
+        f'<label>Alt-Text (optional)<input class="form-input" type="text" name="alt_text" maxlength="500"></label>'
+        f'<div class="alert alert-info" aria-live="polite">Ohne JavaScript ist der Datei-Upload deaktiviert. Bitte Text wählen oder JS aktivieren.</div>'
+        f'<div class="form-actions"><button class="btn btn-primary" type="submit" disabled>Anlegen</button></div>'
         f'</form>'
     )
+
     return (
-        '<div class="container">'
+        '<div class="container" data-material-create="true">'
         f'<h1>Material anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
         f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
-        '<div class="two-col">'
-        f'<section class="card"><h2>Text‑Material</h2>{text_form}</section>'
-        f'<section class="card"><h2>Datei‑Material</h2><div id="material-upload-area">{upload_intent_form}</div></section>'
+        f'{choice}'
+        '<div class="stacked-forms">'
+        f'{text_form}'
+        f'{file_form}'
         '</div>'
         '</div>'
     )
@@ -4559,7 +4586,12 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
         error = "backend_error"
     materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid or "")
     token = _get_or_create_csrf_token(sid or "")
-    # If finalize failed, we still return the list with an error banner
+    # HTMX: return partial with optional error banner. Non-HTMX: redirect back to section detail on success.
+    if "HX-Request" not in request.headers:
+        if error:
+            # Minimal error surface for classic form posts
+            return HTMLResponse(f"Fehler: {Component.escape(error)}", status_code=400)
+        return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
     return HTMLResponse(_render_material_list_partial(unit_id, section_id, materials, csrf_token=token, error=error))
 
 

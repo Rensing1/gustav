@@ -346,7 +346,7 @@ async def test_file_finalize_ui_creates_material_and_updates_list():
                 "alt_text": "Beschreibung",
                 "csrf_token": token,
             },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={"Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true"},
         )
         assert finalize_resp.status_code == 200
         # Returns updated material list with the new title present
@@ -367,7 +367,10 @@ async def test_material_tabs_are_rendered_for_text_and_file():
         assert page.status_code == 200
         html = page.text
         assert 'id="material-create-text"' in html
-        assert 'id="material-upload-intent-form"' in html
+        assert 'class="material-form material-form--file"' in html
+        assert 'name="material_mode"' in html
+        # data-intent-url present for JS helper
+        assert 'data-intent-url="/api/teaching/units' in html
 
 
 @pytest.mark.anyio

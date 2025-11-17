@@ -46,6 +46,63 @@ class Gustav {
     this.initSidebarGestures();
     this.initSidebarTooltips();
     this.initLearningTaskForms(); // Progressive enhancement for student task forms
+    this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
+    this.initFilePreviewZoom(); // Zoom toggle for inline file previews
+  }
+
+  /**
+   * Validate file against allowed MIME and max size.
+   */
+  validateFile(file, allowedMime, maxBytes) {
+    if (allowedMime && allowedMime.length) {
+      const ok = allowedMime.indexOf(file.type) !== -1;
+      if (!ok) throw new Error('mime_not_allowed');
+    }
+    if (maxBytes > 0 && (file.size <= 0 || file.size > maxBytes)) {
+      throw new Error('size_exceeded');
+    }
+  }
+
+  /**
+   * Generic intent + PUT upload helper. Returns { intent, sha, mime, size }.
+   */
+  async requestIntentAndUpload(intentUrl, file, payload) {
+    const intentResp = await fetch(intentUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!intentResp.ok) {
+      throw new Error(`intent_failed_${intentResp.status}`);
+    }
+    const intent = await intentResp.json();
+    const uploadUrl = intent.url || intent.upload_url;
+    const uploadHeaders = intent.headers || intent.upload_headers || { 'Content-Type': file.type || 'application/octet-stream' };
+    if (!uploadUrl) {
+      throw new Error('upload_url_missing');
+    }
+
+    const putResp = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: uploadHeaders,
+      body: file
+    });
+    if (!putResp.ok) {
+      throw new Error(`upload_failed_${putResp.status}`);
+    }
+
+    let sha = '';
+    try {
+      const putJson = await putResp.json();
+      sha = putJson.sha256 || '';
+    } catch (_) {
+      sha = '';
+    }
+    if (!sha) {
+      sha = await this.hashFileSha256(file);
+    }
+    return { intent, sha, mime: file.type || 'application/octet-stream', size: file.size };
   }
 
   /**
@@ -125,6 +182,155 @@ class Gustav {
   }
 
   /**
+   * Progressive enhancement for teacher material create (Text | Datei).
+   * - Toggles visibility between the two forms.
+   * - Prepares upload-intent + PUT for file mode, then submits finalize form.
+   */
+  initMaterialCreateForms() {
+    const container = document.querySelector('[data-material-create]');
+    if (!container) return;
+
+    const radios = container.querySelectorAll('input[name="material_mode"]');
+    const forms = container.querySelectorAll('.material-form');
+    const showMode = (mode) => {
+      container.dataset.mode = mode;
+      forms.forEach((f) => {
+        const isMatch = (f.dataset.mode || '') === mode;
+        f.hidden = !isMatch;
+      });
+    };
+    radios.forEach((r) =>
+      r.addEventListener('change', () => {
+        showMode(r.value);
+      })
+    );
+    showMode('text');
+
+    const fileForm = container.querySelector('form.material-form--file');
+    if (!fileForm) return;
+    const submitBtn = fileForm.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = false; // JS enabled → allow submit
+    const fileInput = fileForm.querySelector('input[name="upload_file"]');
+    const intentInput = fileForm.querySelector('input[name="intent_id"]');
+    const shaInput = fileForm.querySelector('input[name="sha256"]');
+    fileForm.dataset.fileDirty = fileForm.dataset.fileDirty || '1';
+
+    const clearPrepared = () => {
+      fileForm.dataset.fileDirty = '1';
+      if (intentInput) intentInput.value = '';
+      if (shaInput) shaInput.value = '';
+    };
+    if (fileInput) {
+      fileInput.addEventListener('change', clearPrepared);
+    }
+
+    fileForm.addEventListener('submit', async (e) => {
+      // If already prepared and file unchanged, allow normal submit (HTMX catches if present)
+      if (fileForm.dataset.fileDirty !== '1' && intentInput?.value && shaInput?.value) {
+        return;
+      }
+      e.preventDefault();
+      if (!fileInput || !fileInput.files || !fileInput.files.length) {
+        this.showNotification('Bitte eine Datei auswählen.', 'error');
+        if (fileInput) fileInput.focus();
+        return;
+      }
+      try {
+        await this.prepareMaterialUpload(fileForm, fileInput.files[0]);
+        fileForm.dataset.fileDirty = '0';
+        // trigger a fresh submit so HTMX/native can proceed with filled hidden fields
+        fileForm.requestSubmit();
+      } catch (err) {
+        console.error('material upload failed', err);
+        const code = err && err.message ? String(err.message) : '';
+        if (code === 'mime_not_allowed') {
+          this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
+        } else if (code === 'size_exceeded') {
+          this.showNotification('Datei zu groß. Bitte das Größenlimit beachten.', 'error');
+        } else {
+          this.showNotification('Upload fehlgeschlagen. Bitte erneut versuchen.', 'error');
+        }
+        clearPrepared();
+      }
+    });
+  }
+
+  /**
+   * Upload-intent + PUT for teacher materials (file-mode).
+   */
+  async prepareMaterialUpload(form, file) {
+    const intentUrl = form.dataset.intentUrl;
+    if (!intentUrl) throw new Error('missing_intent_url');
+
+    const allowedMime = (form.dataset.allowedMime || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const maxBytes = parseInt(form.dataset.maxBytes || '0', 10);
+    this.validateFile(file, allowedMime, maxBytes);
+
+    const { intent, sha } = await this.requestIntentAndUpload(intentUrl, file, {
+      filename: file.name || 'upload.bin',
+      mime_type: file.type || 'application/octet-stream',
+      size_bytes: file.size
+    });
+    const set = (name, value) => {
+      const el = form.querySelector(`input[name="${name}"]`);
+      if (el) el.value = value;
+    };
+    set('intent_id', intent.intent_id || '');
+    set('sha256', sha);
+    return intent;
+  }
+
+  /**
+   * Zoom toggle for inline file previews (teacher + student).
+   *
+   * Behaviour:
+   * - Click on a .file-preview wrapper toggles file-preview--zoomed.
+   * - Keyboard: Enter/Space on focused wrapper toggles as well.
+   * - Uses event delegation so that HTMX-inserted previews also work.
+   */
+  initFilePreviewZoom() {
+    if (this.filePreviewZoomInit) return;
+    this.filePreviewZoomInit = true;
+
+    const toggleZoom = (wrapper) => {
+      if (!wrapper || !wrapper.classList) return;
+      wrapper.classList.toggle('file-preview--zoomed');
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!target || !target.closest) return;
+      const wrapper = target.closest('.file-preview[data-file-preview="true"]');
+      if (!wrapper) return;
+      // Let native navigation for real links proceed unchanged.
+      const link = target.closest('a[href]');
+      if (link && wrapper.contains(link)) {
+        return;
+      }
+      event.preventDefault();
+      toggleZoom(wrapper);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const target = event.target;
+      if (!target || !target.closest) return;
+      const wrapper = target.closest('.file-preview[data-file-preview="true"]');
+      if (!wrapper) return;
+      // Do not steal keyboard events from interactive children (links, buttons, form fields).
+      const interactive = target.closest('a[href],button,input,textarea,select');
+      if (interactive && interactive !== wrapper) {
+        return;
+      }
+      event.preventDefault();
+      toggleZoom(wrapper);
+    });
+  }
+
+  /**
    * Persist which submission the learner has opened while HTMX polls history fragments.
    *
    * hx-on calls this whenever a <details> toggles. We update data-open-attempt-id
@@ -173,29 +379,15 @@ class Gustav {
     const filename = file.name || 'upload.bin';
     const kind = mime === 'application/pdf' ? 'file' : (mime.startsWith('image/') ? 'image' : 'file');
 
-    // Request upload intent (same-origin; CSRF enforced by Origin header)
-    const intentResp = await fetch(`/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind, filename, mime_type: mime, size_bytes: size })
-    });
-    if (!intentResp.ok) {
-      throw new Error(`intent ${intentResp.status}`);
-    }
-    const intent = await intentResp.json();
-    const putUrl = intent.url;
-    const putHeaders = intent.headers || { 'Content-Type': mime };
+    // Client-side checks mirror server (non-authoritative)
+    this.validateFile(file, ['image/png', 'image/jpeg', 'application/pdf'], 10 * 1024 * 1024);
 
-    // PUT the file to the provided URL (local stub in dev)
-    const putResp = await fetch(putUrl, { method: 'PUT', headers: putHeaders, body: file });
-    if (!putResp.ok) {
-      throw new Error(`put ${putResp.status}`);
-    }
-    const putJson = await putResp.json().catch(() => ({}));
-    let sha256 = putJson.sha256 || '';
-    if (!sha256) {
-      sha256 = await this.hashFileSha256(file);
-    }
+    const { intent, sha, size: sizeBytes } = await this.requestIntentAndUpload(
+      `/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`,
+      file,
+      { kind, filename, mime_type: mime, size_bytes: size }
+    );
+    const sha256 = sha;
 
     // Fill hidden fields — used by the final POST /submissions
     const set = (name, value) => {
@@ -204,7 +396,7 @@ class Gustav {
     };
     set('storage_key', intent.storage_key || '');
     set('mime_type', mime);
-    set('size_bytes', String(size));
+    set('size_bytes', String(sizeBytes));
     set('sha256', sha256);
   }
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import ipaddress
+import socket
 from typing import Dict, Optional
 import base64
 import inspect
@@ -40,14 +41,56 @@ _LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
 
 
 def _is_local_host(host: str) -> bool:
-    """Return True if host resolves to loopback/private or uses .local suffix."""
+    """
+    Return True if host resolves to loopback/private or uses .local suffix.
+
+    Why:
+        The learning worker must talk to Supabase Storage over HTTP in local
+        and Docker-Compose setups, but service-role credentials must never be
+        sent to arbitrary remote hosts. This helper classifies a host as
+        "local" when it clearly resides on loopback/private networks.
+
+    Behavior:
+        - Explicit allowlist for common local hostnames.
+        - Direct IPs: accept loopback/private ranges.
+        - Hostnames:
+            * Accept `.local` suffix (mdns-style) as local.
+            * Otherwise, resolve via DNS and accept only when all resolved
+              addresses are loopback/private.
+    """
+    host = (host or "").strip().lower()
+    if not host:
+        return False
     if host in _LOCAL_HTTP_HOSTS or host.endswith(".local"):
         return True
     try:
-        parsed = ipaddress.ip_address(host)
-        return bool(parsed.is_loopback or parsed.is_private)
+        # Direct IP literal
+        parsed_ip = ipaddress.ip_address(host)
+        return bool(parsed_ip.is_loopback or parsed_ip.is_private)
     except ValueError:
-        return False
+        # Not an IP literal: attempt DNS resolution and require all results
+        # to be loopback/private. Fail closed on unexpected errors.
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except OSError:
+            return False
+        if not infos:
+            return False
+        for family, _socktype, _proto, _canonname, sockaddr in infos:
+            try:
+                if family == socket.AF_INET:
+                    ip_str = sockaddr[0]
+                elif family == socket.AF_INET6:
+                    ip_str = sockaddr[0]
+                else:
+                    # Ignore non-IP families conservatively.
+                    return False
+                parsed = ipaddress.ip_address(ip_str)
+                if not (parsed.is_loopback or parsed.is_private):
+                    return False
+            except Exception:
+                return False
+        return True
 
 
 def _submissions_bucket() -> str:

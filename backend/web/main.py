@@ -25,6 +25,7 @@ from components import (
     MaterialCard,
     TaskCard,
     HistoryEntry,
+    FilePreview,
 )
 from components.markdown import render_markdown_safe
 from components.forms.unit_edit_form import UnitEditForm
@@ -4083,7 +4084,14 @@ async def _fetch_task_detail(unit_id: str, section_id: str, task_id: str, *, ses
     return None
 
 
-def _render_material_detail_page_html(unit_id: str, section_id: str, material: dict, *, csrf_token: str, download_url: str | None = None) -> str:
+def _render_material_detail_page_html(
+    unit_id: str,
+    section_id: str,
+    material: dict,
+    *,
+    csrf_token: str,
+    download_url: str | None = None,
+) -> str:
     title = Component.escape(str(material.get("title") or "Material"))
     body_md = Component.escape(str(material.get("body_md") or ""))
     mid = str(material.get("id") or "")
@@ -4095,10 +4103,26 @@ def _render_material_detail_page_html(unit_id: str, section_id: str, material: d
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'
         f'</form>'
     )
-    download_html = (
-        f'<p><a id="material-download-link" class="btn" href="{Component.escape(download_url)}" target="_blank">Download anzeigen</a></p>'
-        if download_url else ''
-    )
+    # Optional inline preview for file materials using a reusable component.
+    preview_html = ""
+    if download_url:
+        mime = str(material.get("mime_type") or "").lower()
+        kind = str(material.get("kind") or "")
+        # Only attempt a preview for file-like materials with a known MIME type.
+        if kind == "file" and mime:
+            preview_html = FilePreview(
+                url=download_url,
+                mime=mime,
+                title=str(material.get("title") or ""),
+                alt=str(material.get("alt_text") or "") or None,
+            ).render()
+        else:
+            # Fallback: simple download link when we cannot safely embed.
+            if download_url:
+                preview_html = (
+                    f'<p><a id="material-download-link" class="btn" href="{Component.escape(download_url)}"'
+                    f' target="_blank" rel="noopener">Download</a></p>'
+                )
     delete_form = (
         f'<form method="post" action="/units/{unit_id}/sections/{section_id}/materials/{mid}/delete">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
@@ -4109,7 +4133,7 @@ def _render_material_detail_page_html(unit_id: str, section_id: str, material: d
         '<div class="container">'
         f'<h1>Material bearbeiten</h1>'
         f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
-        f'<section class="card">{download_html}{form}{delete_form}</section>'
+        f'<section class="card">{preview_html}{form}{delete_form}</section>'
         '</div>'
     )
 

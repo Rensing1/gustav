@@ -132,7 +132,7 @@ async def test_task_detail_edit_and_delete_prg():
 
 
 @pytest.mark.anyio
-async def test_material_file_detail_shows_download_link():
+async def test_material_file_detail_shows_inline_pdf_preview():
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
     teaching.set_storage_adapter(FakeStorageAdapter())
     sess = main.SESSION_STORE.create(sub="t-entry-file", name="Lehrer File", roles=["teacher"])  # type: ignore
@@ -152,8 +152,40 @@ async def test_material_file_detail_shows_download_link():
 
         page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/materials/{mat['id']}")
         assert page.status_code == 200
-        assert 'id="material-download-link"' in page.text
-        assert 'http://storage.local/download' in page.text
+        html = page.text
+        # Inline-Preview statt Download-Button
+        assert 'id="material-download-link"' not in html
+        assert 'class="file-preview file-preview--pdf"' in html
+        assert '<iframe' in html or '<embed' in html
+        assert 'http://storage.local/download' in html
+
+
+@pytest.mark.anyio
+async def test_material_file_detail_shows_inline_image_preview():
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    teaching.set_storage_adapter(FakeStorageAdapter())
+    sess = main.SESSION_STORE.create(sub="t-entry-file-img", name="Lehrer FileImg", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit = (await c.post("/api/teaching/units", json={"title": "UnitFI"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "SectionFI"})).json()
+        intent = (await c.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "image.png", "mime_type": "image/png", "size_bytes": 1024},
+        )).json()
+        mat = (await c.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={"intent_id": intent["intent_id"], "title": "PNG", "sha256": "f" * 64},
+        )).json()
+
+        page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/materials/{mat['id']}")
+        assert page.status_code == 200
+        html = page.text
+        assert 'id="material-download-link"' not in html
+        # Image-Preview: <img> mit file-preview-Klasse
+        assert 'class="file-preview file-preview--image"' in html
+        assert '<img' in html
+        assert 'http://storage.local/download' in html
 
 
 @pytest.mark.anyio

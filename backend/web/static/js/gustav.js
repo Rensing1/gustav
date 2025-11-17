@@ -242,7 +242,14 @@ class Gustav {
         fileForm.requestSubmit();
       } catch (err) {
         console.error('material upload failed', err);
-        this.showNotification('Upload fehlgeschlagen. Bitte erneut versuchen.', 'error');
+        const code = err && err.message ? String(err.message) : '';
+        if (code === 'mime_not_allowed') {
+          this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
+        } else if (code === 'size_exceeded') {
+          this.showNotification('Datei zu groß. Bitte das Größenlimit beachten.', 'error');
+        } else {
+          this.showNotification('Upload fehlgeschlagen. Bitte erneut versuchen.', 'error');
+        }
         clearPrepared();
       }
     });
@@ -298,6 +305,11 @@ class Gustav {
       if (!target || !target.closest) return;
       const wrapper = target.closest('.file-preview[data-file-preview="true"]');
       if (!wrapper) return;
+      // Let native navigation for real links proceed unchanged.
+      const link = target.closest('a[href]');
+      if (link && wrapper.contains(link)) {
+        return;
+      }
       event.preventDefault();
       toggleZoom(wrapper);
     });
@@ -308,6 +320,11 @@ class Gustav {
       if (!target || !target.closest) return;
       const wrapper = target.closest('.file-preview[data-file-preview="true"]');
       if (!wrapper) return;
+      // Do not steal keyboard events from interactive children (links, buttons, form fields).
+      const interactive = target.closest('a[href],button,input,textarea,select');
+      if (interactive && interactive !== wrapper) {
+        return;
+      }
       event.preventDefault();
       toggleZoom(wrapper);
     });

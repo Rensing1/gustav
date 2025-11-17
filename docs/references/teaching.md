@@ -163,10 +163,23 @@ Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
   - Materialien: `/units/{u}/sections/{s}/materials/new` (Text oder Datei‑Upload mit Intent→Finalize)
   - Aufgaben: `/units/{u}/sections/{s}/tasks/new` (instruction_md, Kriterien[0..10], hints_md, due_at?, max_attempts?)
 - Detailseiten:
-  - Material: `/units/{u}/sections/{s}/materials/{m}` (Bearbeiten/Löschen, „Download anzeigen“ für Datei‑Materialien)
+  - Material: `/units/{u}/sections/{s}/materials/{m}` (Bearbeiten/Löschen, Inline‑Preview für Datei‑Materialien)
   - Aufgabe: `/units/{u}/sections/{s}/tasks/{t}` (Bearbeiten/Löschen)
 - Sicherheit: CSRF in Formularen, `Cache-Control: private, no-store` für SSR, Delegation an API (kein Repo‑Bypass), PRG nach POST.
   - PRG‑Semantik: Erfolgreiche POSTs verwenden `303 See Other` (z. B. `/units`, `/courses`).
+
+#### Datei‑Materialien & FilePreview
+- UI‑Komponente: `backend/web/components/file_preview.py` (`FilePreview`).
+- Verhalten:
+  - `image/*` → Inline‑`<img>` mit begrenzter Höhe (`file-preview file-preview--image`).
+  - `application/pdf` → Inline‑`<iframe>`‑Viewer (`file-preview file-preview--pdf`).
+  - andere MIME‑Typen → Fallback‑Downloadlink (`file-preview file-preview--download`).
+- Sicherheit:
+  - Verwendet ausschließlich kurzlebige Download‑URLs aus der Teaching‑API (`download-url?disposition=inline`); Bucket‑Keys werden nie direkt gerendert.
+  - SSR‑Seiten bleiben `Cache-Control: private, no-store`; Download‑URL‑Antworten behalten ihre eigenen No‑Store‑Header.
+- Accessibility & JS:
+  - Wrapper trägt `data-file-preview="true"`, `role="button"`, `tabindex="0"` und `aria-label="Dateivorschau vergrößern/verkleinern"` als Hook für Tastaturnavigation.
+  - JavaScript (`initFilePreviewZoom`) toggelt `file-preview--zoomed` bei Klick/Enter/Space auf dem Wrapper, lässt aber echte Links innerhalb des Fallback‑Viewers unverändert (keine Blockade von Downloads).
 
 ## Schemas
 - `Course { id, title, subject?, grade_level?, term?, teacher_id, created_at, updated_at }`

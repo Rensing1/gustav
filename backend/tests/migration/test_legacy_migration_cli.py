@@ -77,7 +77,10 @@ def _prepare_tables(conn: psycopg.Connection) -> None:
         "create table if not exists staging.course_students (course_id uuid, student_id uuid, created_at timestamptz)",
         "create table if not exists staging.learning_units (id uuid, title text, description text, creator_id uuid)",
         "create table if not exists staging.unit_sections (id uuid, unit_id uuid, title text, order_in_unit int)",
+        # Clean up any leftover staging.materials_json artifacts from previous runs
+        # (tables or composite types) to keep tests idempotent.
         "drop table if exists staging.materials_json",
+        "drop type if exists staging.materials_json cascade",
         """
         create table if not exists staging.materials_json (
             id uuid,

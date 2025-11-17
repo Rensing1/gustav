@@ -246,6 +246,55 @@ def test_download_accepts_docker_internal_http_host(monkeypatch: pytest.MonkeyPa
     assert reason == "ok"
 
 
+def test_is_local_host_rejects_public_dns_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    A dotless host that resolves only to public IPs must NOT be treated as local.
+
+    This guards against environments where an internal-looking hostname
+    accidentally points to an external address.
+    """
+    import socket
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    # Simulate DNS answers with only public IP addresses.
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("8.8.8.8", 0)),
+            (socket.AF_INET, None, None, "", ("1.1.1.1", 0)),
+        ],
+        raising=False,
+    )
+
+    assert mod._is_local_host("supabase_kong_gustav-alpha2") is False  # type: ignore[attr-defined]
+
+
+def test_is_local_host_rejects_mixed_private_and_public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    A host with mixed private + public DNS answers must be treated as untrusted.
+
+    All resolved IPs need to be private/loopback for the host to count as local.
+    """
+    import socket
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    # Simulate a mix of private and public IPs for the same hostname.
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.5", 0)),
+            (socket.AF_INET, None, None, "", ("8.8.8.8", 0)),
+        ],
+        raising=False,
+    )
+
+    assert mod._is_local_host("supabase_kong_gustav-alpha2") is False  # type: ignore[attr-defined]
+
+
 def test_remote_fetch_aborts_when_download_exceeds_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("STORAGE_VERIFY_ROOT", raising=False)
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")

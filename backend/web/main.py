@@ -1224,6 +1224,38 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 # Render a tiny, safe Markdown subset. Input is escaped first
                 # inside the helper to avoid XSS while keeping formatting.
                 preview_html = render_markdown_safe(str(m.get("body_md") or ""))
+            elif kind == "file":
+                # For file materials, render an inline preview using the shared FilePreview component.
+                # Use a short-lived, signed URL from the teaching storage adapter so buckets remain private.
+                mime = str(m.get("mime_type") or "").lower()
+                storage_key = str(m.get("storage_key") or "")
+                alt_text = str(m.get("alt_text") or "") or None
+                if mime and storage_key:
+                    try:
+                        from teaching.services.materials import MaterialFileSettings  # type: ignore
+                        import routes.teaching as teaching_routes  # type: ignore
+
+                        settings = MaterialFileSettings()
+                        adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
+                        presign = None
+                        if adapter is not None and hasattr(adapter, "presign_download"):
+                            presign = adapter.presign_download(  # type: ignore[call-arg]
+                                bucket=settings.storage_bucket,
+                                key=storage_key,
+                                expires_in=settings.download_url_ttl_seconds,
+                                disposition="inline",
+                            )
+                        url = presign.get("url") if isinstance(presign, dict) else None
+                        if url:
+                            preview_html = FilePreview(
+                                url=str(url),
+                                mime=mime,
+                                title=title,
+                                alt=alt_text,
+                                max_height="480px",
+                            ).render()
+                    except Exception:
+                        preview_html = ""
             card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
             parts.append(card.render())
         # Tasks → TaskCard
@@ -3789,7 +3821,18 @@ async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session
     cleaned: list[dict] = []
     for it in data:
         if isinstance(it, dict):
-            cleaned.append({"id": it.get("id"), "title": it.get("title")})
+            cleaned.append(
+                {
+                    "id": it.get("id"),
+                    "title": it.get("title"),
+                    "kind": it.get("kind"),
+                    "body_md": it.get("body_md"),
+                    "mime_type": it.get("mime_type"),
+                    "storage_key": it.get("storage_key"),
+                    "size_bytes": it.get("size_bytes"),
+                    "alt_text": it.get("alt_text"),
+                }
+            )
     return cleaned
 
 

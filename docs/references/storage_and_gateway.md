@@ -36,6 +36,8 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 - The learning upload proxy (`ENABLE_STORAGE_UPLOAD_PROXY=true`) now validates scheme/host/port against `SUPABASE_URL`, allows HTTP only for localhost/127.0.0.0/8/::1/host.docker.internal, streams request bodies with the central size limit, and forwards presign headers (e.g., `x-upsert`) 1:1 to Supabase to keep parity with direct PUT uploads.
 - Wenn signierte URLs auf `SUPABASE_PUBLIC_URL` umgeschrieben werden (Same-Origin-Workaround), akzeptieren Proxy und Storage-Verifikation sowohl den internen `SUPABASE_URL`-Host als auch den öffentlichen Host und behalten trotzdem die SSRF-Guards bei.
 - Remote Vision fetches reuse the same SUPABASE_URL allowlist and stream-download with `LEARNING_MAX_UPLOAD_BYTES`, aborting early on host mismatches or oversized responses.
+  - Hostklassifizierung via `_is_local_host`: explizite Allowlist (`127.0.0.1`, `localhost`, `::1`, `host.docker.internal`) und `.local`-Suffix gelten als lokal.
+  - Alle anderen Hostnamen (inkl. Docker-Compose-Hosts wie `supabase_kong-gustav-alpha2`) werden per DNS aufgelöst; nur wenn **alle** IPs private/Loopback sind, gilt der Host als lokal. Gemischte oder rein öffentliche Antworten führen zu „untrusted_host“ (fail closed).
 
 ## Governance & Provisioning
 - Quelle der Wahrheit: SQL‑Migrationen legen `materials` und `submissions` privat an.

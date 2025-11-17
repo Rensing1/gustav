@@ -74,6 +74,7 @@ class FilePreview(Component):
                     "data-file-preview": "true",
                     "role": "button",
                     "tabindex": "0",
+                    "aria-label": "Dateivorschau vergrößern/verkleinern",
                 },
             )
         # Images: inline <img> preview

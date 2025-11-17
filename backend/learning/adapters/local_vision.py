@@ -55,8 +55,6 @@ def _is_local_host(host: str) -> bool:
         - Direct IPs: accept loopback/private ranges.
         - Hostnames:
             * Accept `.local` suffix (mdns-style) as local.
-            * As a pragmatic KISS rule, treat bare names without dots
-              (e.g. `supabase_kong-gustav-alpha2`) as local Docker hosts.
             * Otherwise, resolve via DNS and accept only when all resolved
               addresses are loopback/private.
     """
@@ -64,9 +62,6 @@ def _is_local_host(host: str) -> bool:
     if not host:
         return False
     if host in _LOCAL_HTTP_HOSTS or host.endswith(".local"):
-        return True
-    # Docker-compose style hostnames without dots only exist on private networks.
-    if "." not in host:
         return True
     try:
         # Direct IP literal

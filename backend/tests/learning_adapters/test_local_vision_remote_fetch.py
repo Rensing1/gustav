@@ -196,6 +196,104 @@ def test_download_reports_http_status_code(monkeypatch: pytest.MonkeyPatch) -> N
     assert reason == "http_error:403"
 
 
+def test_download_accepts_docker_internal_http_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    HTTP zu einem Docker-internen Supabase-Host (z.B. supabase_kong-gustav-alpha2)
+    soll als "lokal" gelten und nicht als untrusted_host abgewiesen werden.
+
+    Wir simulieren die DNS-Auflösung auf eine private IP und prüfen, dass
+    _download_supabase_object Daten liefert.
+    """
+    import socket
+
+    monkeypatch.delenv("STORAGE_VERIFY_ROOT", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "http://supabase_kong_gustav-alpha2:8000")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    # DNS-Resolution des Docker-Hosts auf eine private Adresse vortäuschen
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("172.18.0.10", 0)),
+        ],
+        raising=False,
+    )
+
+    payload = b"OK"
+
+    class _Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            return _FakeHttpxStream(payload, status_code=200)
+
+    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(Client=lambda **_: _Client()))
+
+    data, reason = mod._download_supabase_object(  # type: ignore[attr-defined]
+        bucket="submissions",
+        object_key="course/task/student/file.png",
+        srk="srk",
+        max_bytes=16,
+    )
+    assert data == payload
+    assert reason == "ok"
+
+
+def test_is_local_host_rejects_public_dns_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    A dotless host that resolves only to public IPs must NOT be treated as local.
+
+    This guards against environments where an internal-looking hostname
+    accidentally points to an external address.
+    """
+    import socket
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    # Simulate DNS answers with only public IP addresses.
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("8.8.8.8", 0)),
+            (socket.AF_INET, None, None, "", ("1.1.1.1", 0)),
+        ],
+        raising=False,
+    )
+
+    assert mod._is_local_host("supabase_kong_gustav-alpha2") is False  # type: ignore[attr-defined]
+
+
+def test_is_local_host_rejects_mixed_private_and_public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    A host with mixed private + public DNS answers must be treated as untrusted.
+
+    All resolved IPs need to be private/loopback for the host to count as local.
+    """
+    import socket
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    # Simulate a mix of private and public IPs for the same hostname.
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.5", 0)),
+            (socket.AF_INET, None, None, "", ("8.8.8.8", 0)),
+        ],
+        raising=False,
+    )
+
+    assert mod._is_local_host("supabase_kong_gustav-alpha2") is False  # type: ignore[attr-defined]
+
 
 def test_remote_fetch_aborts_when_download_exceeds_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("STORAGE_VERIFY_ROOT", raising=False)

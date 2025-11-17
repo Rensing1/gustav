@@ -22,6 +22,7 @@ from .forms import (
     SectionCreateForm,
 )
 from .onpage_nav import OnPageNavigation, OnPageNavItem
+from .file_preview import FilePreview
 
 __all__ = [
     "Component",
@@ -42,4 +43,5 @@ __all__ = [
     "SectionCreateForm",
     "OnPageNavigation",
     "OnPageNavItem",
+    "FilePreview",
 ]

@@ -25,6 +25,7 @@ from components import (
     MaterialCard,
     TaskCard,
     HistoryEntry,
+    FilePreview,
 )
 from components.markdown import render_markdown_safe
 from components.forms.unit_edit_form import UnitEditForm
@@ -1223,6 +1224,38 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 # Render a tiny, safe Markdown subset. Input is escaped first
                 # inside the helper to avoid XSS while keeping formatting.
                 preview_html = render_markdown_safe(str(m.get("body_md") or ""))
+            elif kind == "file":
+                # For file materials, render an inline preview using the shared FilePreview component.
+                # Use a short-lived, signed URL from the teaching storage adapter so buckets remain private.
+                mime = str(m.get("mime_type") or "").lower()
+                storage_key = str(m.get("storage_key") or "")
+                alt_text = str(m.get("alt_text") or "") or None
+                if mime and storage_key:
+                    try:
+                        from teaching.services.materials import MaterialFileSettings  # type: ignore
+                        import routes.teaching as teaching_routes  # type: ignore
+
+                        settings = MaterialFileSettings()
+                        adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
+                        presign = None
+                        if adapter is not None and hasattr(adapter, "presign_download"):
+                            presign = adapter.presign_download(  # type: ignore[call-arg]
+                                bucket=settings.storage_bucket,
+                                key=storage_key,
+                                expires_in=settings.download_url_ttl_seconds,
+                                disposition="inline",
+                            )
+                        url = presign.get("url") if isinstance(presign, dict) else None
+                        if url:
+                            preview_html = FilePreview(
+                                url=str(url),
+                                mime=mime,
+                                title=title,
+                                alt=alt_text,
+                                max_height="480px",
+                            ).render()
+                    except Exception:
+                        preview_html = ""
             card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
             parts.append(card.render())
         # Tasks → TaskCard
@@ -3788,7 +3821,18 @@ async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session
     cleaned: list[dict] = []
     for it in data:
         if isinstance(it, dict):
-            cleaned.append({"id": it.get("id"), "title": it.get("title")})
+            cleaned.append(
+                {
+                    "id": it.get("id"),
+                    "title": it.get("title"),
+                    "kind": it.get("kind"),
+                    "body_md": it.get("body_md"),
+                    "mime_type": it.get("mime_type"),
+                    "storage_key": it.get("storage_key"),
+                    "size_bytes": it.get("size_bytes"),
+                    "alt_text": it.get("alt_text"),
+                }
+            )
     return cleaned
 
 
@@ -3879,33 +3923,57 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
 
 
 def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
-    # Reuse forms prepared earlier, add simple heading and back link
+    """Render create page with toggle Text | Datei (upload-intent handled per JS)."""
+    from teaching.services.materials import MaterialFileSettings
+
+    settings = MaterialFileSettings()
+    allowed_mime = ",".join(settings.accepted_mime_types)
+    max_bytes = settings.max_size_bytes
+    max_mb = round(max_bytes / (1024 * 1024), 2)
+
+    choice = (
+        '<fieldset class="choice-cards" aria-label="Materialart">'
+        '<label class="choice-card"><input type="radio" name="material_mode" value="text" checked>'
+        '<span class="choice-card__title">📝 Text</span></label>'
+        '<label class="choice-card"><input type="radio" name="material_mode" value="file">'
+        f'<span class="choice-card__title">⬆️ Datei</span><span class="choice-card__hint">PDF/PNG/JPEG · bis {max_mb} MB</span></label>'
+        '</fieldset>'
+    )
+
     text_form = (
-        f'<form id="material-create-text" method="post" action="/units/{unit_id}/sections/{section_id}/materials/create">'
+        f'<form id="material-create-text" class="material-form material-form--text" data-mode="text" '
+        f'method="post" action="/units/{unit_id}/sections/{section_id}/materials/create">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
         f'<label>Markdown<textarea class="form-input" name="body_md" required></textarea></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
         f'</form>'
     )
-    upload_intent_form = (
-        f'<form id="material-upload-intent-form" method="post" action="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
-        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
-        f'hx-target="#material-upload-area" hx-swap="outerHTML">'
+
+    file_form = (
+        f'<form id="material-create-file" class="material-form material-form--file" data-mode="file" hidden '
+        f'method="post" action="/units/{unit_id}/sections/{section_id}/materials/finalize" '
+        f'data-intent-url="/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents" '
+        f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Dateiname<input class="form-input" type="text" name="filename" required></label>'
-        f'<label>MIME<input class="form-input" type="text" name="mime_type" value="application/pdf" required></label>'
-        f'<label>Größe (Bytes)<input class="form-input" type="number" name="size_bytes" value="1024" min="1" required></label>'
-        f'<div class="form-actions"><button class="btn" type="submit">Upload vorbereiten</button></div>'
+        f'<input type="hidden" name="intent_id" value="">'
+        f'<input type="hidden" name="sha256" value="">'
+        f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
+        f'<label>Datei auswählen<input class="form-input" type="file" name="upload_file" accept="{Component.escape(allowed_mime)}"></label>'
+        f'<p class="text-muted">Erlaubt: PDF, PNG, JPEG · bis {max_mb} MB. Upload wird automatisch vorbereitet.</p>'
+        f'<label>Alt-Text (optional)<input class="form-input" type="text" name="alt_text" maxlength="500"></label>'
+        f'<div class="form-actions"><button class="btn btn-primary" type="submit" disabled>Anlegen</button></div>'
         f'</form>'
     )
+
     return (
-        '<div class="container">'
+        '<div class="container" data-material-create="true">'
         f'<h1>Material anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
         f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
-        '<div class="two-col">'
-        f'<section class="card"><h2>Text‑Material</h2>{text_form}</section>'
-        f'<section class="card"><h2>Datei‑Material</h2><div id="material-upload-area">{upload_intent_form}</div></section>'
+        f'{choice}'
+        '<div class="stacked-forms">'
+        f'{text_form}'
+        f'{file_form}'
         '</div>'
         '</div>'
     )
@@ -4059,7 +4127,14 @@ async def _fetch_task_detail(unit_id: str, section_id: str, task_id: str, *, ses
     return None
 
 
-def _render_material_detail_page_html(unit_id: str, section_id: str, material: dict, *, csrf_token: str, download_url: str | None = None) -> str:
+def _render_material_detail_page_html(
+    unit_id: str,
+    section_id: str,
+    material: dict,
+    *,
+    csrf_token: str,
+    download_url: str | None = None,
+) -> str:
     title = Component.escape(str(material.get("title") or "Material"))
     body_md = Component.escape(str(material.get("body_md") or ""))
     mid = str(material.get("id") or "")
@@ -4071,10 +4146,26 @@ def _render_material_detail_page_html(unit_id: str, section_id: str, material: d
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'
         f'</form>'
     )
-    download_html = (
-        f'<p><a id="material-download-link" class="btn" href="{Component.escape(download_url)}" target="_blank">Download anzeigen</a></p>'
-        if download_url else ''
-    )
+    # Optional inline preview for file materials using a reusable component.
+    preview_html = ""
+    if download_url:
+        mime = str(material.get("mime_type") or "").lower()
+        kind = str(material.get("kind") or "")
+        # Only attempt a preview for file-like materials with a known MIME type.
+        if kind == "file" and mime:
+            preview_html = FilePreview(
+                url=download_url,
+                mime=mime,
+                title=str(material.get("title") or ""),
+                alt=str(material.get("alt_text") or "") or None,
+            ).render()
+        else:
+            # Fallback: simple download link when we cannot safely embed.
+            if download_url:
+                preview_html = (
+                    f'<p><a id="material-download-link" class="btn" href="{Component.escape(download_url)}"'
+                    f' target="_blank" rel="noopener">Download</a></p>'
+                )
     delete_form = (
         f'<form method="post" action="/units/{unit_id}/sections/{section_id}/materials/{mid}/delete">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
@@ -4085,7 +4176,7 @@ def _render_material_detail_page_html(unit_id: str, section_id: str, material: d
         '<div class="container">'
         f'<h1>Material bearbeiten</h1>'
         f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
-        f'<section class="card">{download_html}{form}{delete_form}</section>'
+        f'<section class="card">{preview_html}{form}{delete_form}</section>'
         '</div>'
     )
 
@@ -4559,7 +4650,12 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
         error = "backend_error"
     materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid or "")
     token = _get_or_create_csrf_token(sid or "")
-    # If finalize failed, we still return the list with an error banner
+    # HTMX: return partial with optional error banner. Non-HTMX: redirect back to section detail on success.
+    if "HX-Request" not in request.headers:
+        if error:
+            # Minimal error surface for classic form posts
+            return HTMLResponse(f"Fehler: {Component.escape(error)}", status_code=400)
+        return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
     return HTMLResponse(_render_material_list_partial(unit_id, section_id, materials, csrf_token=token, error=error))
 
 

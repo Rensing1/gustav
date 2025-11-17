@@ -722,6 +722,36 @@ pre {
   font-size: var(--text-xs);
 }
 
+/* Inline file previews (materials & learning content) */
+.file-preview {
+  margin-bottom: var(--space-4);
+}
+
+.file-preview__image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 480px;
+  border-radius: var(--radius-md);
+}
+
+.file-preview__frame {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+}
+
+/* Zoomed state for inline file previews
+ * Default: compact height (good for iPad-sized viewports)
+ * Zoomed: grow up to viewport height for detailed view
+ */
+.file-preview--zoomed .file-preview__image {
+  max-height: 90vh;
+}
+
+.file-preview--zoomed .file-preview__frame {
+  height: 90vh;
+}
+
 /* Cards - Simple and clean */
 .card {
   background-color: var(--color-bg-surface);

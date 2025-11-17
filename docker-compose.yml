@@ -145,7 +145,7 @@ services:
       context: .
       dockerfile: keycloak/Dockerfile
     container_name: gustav-keycloak
-    command: ["start-dev", "--import-realm"]
+    command: ["start", "--optimized", "--import-realm"]
     env_file:
       - .env
     environment:
@@ -157,8 +157,8 @@ services:
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
       KC_DB_URL_PROPERTIES: ${KC_DB_URL_PROPERTIES:-sslmode=disable}
       KC_PROXY: edge
-      KC_HOSTNAME_URL: https://id.localhost
-      KC_HOSTNAME_ADMIN_URL: https://id.localhost
+      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-https://id.localhost}
+      KC_HOSTNAME_ADMIN_URL: ${KC_HOSTNAME_ADMIN_URL:-https://id.localhost}
     depends_on:
       keycloak-db:
         condition: service_healthy

@@ -25,4 +25,10 @@ COPY --from=bcrypt-provider /tmp/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar 
 # Keycloak will import this on first run with `--import-realm`.
 COPY keycloak/realm-gustav.json /opt/keycloak/data/import/realm-gustav.json
 
-# No ENTRYPOINT/CMD changes: compose provides `start-dev --import-realm`.
+# Build Keycloak in optimized mode for PostgreSQL so that
+# the production `start --optimized` command uses Postgres
+# instead of the default H2 configuration.
+RUN /opt/keycloak/bin/kc.sh build --db=postgres
+
+# No ENTRYPOINT/CMD changes: docker-compose provides the
+# `start --optimized --import-realm` command at runtime.

@@ -217,7 +217,8 @@ async def auth_forgot(request: Request, login_hint: str | None = None):
     base = f"{public_or_internal}/realms/{realm}/login-actions/reset-credentials"
     query = {"login_hint": login_hint} if login_hint else None
     target = f"{base}?{urlencode(query)}" if query else base
-    return RedirectResponse(url=target, status_code=302, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
+    return RedirectResponse(url=target, status_code=302, headers=headers)
 
 
 @auth_router.get("/auth/register")
@@ -276,9 +277,16 @@ async def auth_register(request: Request, login_hint: str | None = None):
         # When an allow-list is configured, reject disallowed or malformed emails early.
         if not _is_allowed_registration_email(login_hint, allowed_domains):
             # Keep error payload aligned with OpenAPI Error schema.
+            base_detail = "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt."
+            # If we have configured domains, include them to guide operators/users.
+            if allowed_domains:
+                domains_str = ", ".join(sorted(allowed_domains))
+                detail = f"{base_detail} Erlaubte Domains: {domains_str}"
+            else:
+                detail = base_detail
             payload = {
                 "error": "invalid_email_domain",
-                "detail": "Die Registrierung ist nur mit deiner IServ-Adresse (@gymalf.de) möglich.",
+                "detail": detail,
             }
             return JSONResponse(status_code=400, content=payload, headers=headers)
         # Security: encode parameter to avoid query injection and preserve special characters

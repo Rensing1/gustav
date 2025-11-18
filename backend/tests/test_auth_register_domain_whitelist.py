@@ -92,7 +92,7 @@ async def test_register_without_login_hint_behaves_as_before(monkeypatch: pytest
 
 @pytest.mark.anyio
 async def test_register_rejects_disallowed_domain(monkeypatch: pytest.MonkeyPatch):
-    """Disallowed domain in login_hint should produce 400 with generic error."""
+    """Disallowed domain in login_hint should produce 400 with config-based error."""
     import sys
 
     sys.path.insert(0, str(WEB_DIR))
@@ -108,9 +108,8 @@ async def test_register_rejects_disallowed_domain(monkeypatch: pytest.MonkeyPatc
     assert resp.headers.get("Vary") == "HX-Request"
     body = resp.json()
     assert body.get("error") == "invalid_email_domain"
-    assert (
-        body.get("detail")
-        == "Die Registrierung ist nur mit deiner IServ-Adresse (@gymalf.de) möglich."
+    assert body.get("detail") == (
+        "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @gymalf.de"
     )
 
 
@@ -130,8 +129,6 @@ async def test_register_rejects_invalid_email(monkeypatch: pytest.MonkeyPatch):
     assert resp.status_code == 400
     body = resp.json()
     assert body.get("error") == "invalid_email_domain"
-    assert (
-        body.get("detail")
-        == "Die Registrierung ist nur mit deiner IServ-Adresse (@gymalf.de) möglich."
+    assert body.get("detail") == (
+        "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @gymalf.de"
     )
-

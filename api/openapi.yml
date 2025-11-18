@@ -2277,16 +2277,14 @@ paths:
               schema:
                 type: string
               example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
             Location:
               schema:
                 type: string
-        
-              examples:
-                rate_limited:
-                  summary: Password reset rate limit hit
-                  value:
-                    error: rate_limited
-                    detail: retry_later
 
 
   /auth/register:
@@ -2364,7 +2362,7 @@ paths:
                   summary: Email domain not allowed for self-service registration
                   value:
                     error: invalid_email_domain
-                    detail: "Die Registrierung ist nur mit deiner IServ-Adresse (@gymalf.de) möglich."
+                    detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @school.example"
 
 
   /api/me:

@@ -3980,6 +3980,13 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
 
 
 def _render_task_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+    from backend.storage.learning_policy import DEFAULT_POLICY
+
+    # Derive allowed MIME types and max size for learning uploads from the central policy.
+    allowed_mime = ",".join(sorted(DEFAULT_POLICY.allowed_mime_types))
+    max_bytes = DEFAULT_POLICY.max_size_bytes
+    max_mb = round(max_bytes / (1024 * 1024), 2)
+
     criteria_inputs = []
     for i in range(10):
         criteria_inputs.append(

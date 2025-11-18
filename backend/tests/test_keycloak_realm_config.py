@@ -78,5 +78,6 @@ def test_realm_configures_smtp_from_address():
     data = json.loads(p.read_text(encoding="utf-8"))
     smtp = data.get("smtpServer") or {}
     assert smtp, "smtpServer block must be present in realm export"
-    assert smtp.get("from") == "hennecke@gymalf.de"
+    # Use a neutral placeholder in the realm export; real deploys must override this.
+    assert smtp.get("from") == "noreply@school.example"
     assert smtp.get("fromDisplayName") == "GUSTAV-Lernplattform"

@@ -35,7 +35,7 @@
             Wenn du dein Passwort nicht zurücksetzen wolltest, kannst du diese E-Mail ignorieren.
           </p>
           <p style="margin: 0 0 8px 0; font-size: 13px; color: #555555;">
-            Bei Fragen melde dich unter: <a href="mailto:hennecke@gymalf.de">hennecke@gymalf.de</a>
+            Bei Fragen melde dich unter: <a href="mailto:support@school.example">support@school.example</a>
           </p>
           <p style="margin: 0; font-size: 12px; color: #888888;">
             GUSTAV – deine KI-unterstützte Lernplattform
@@ -45,4 +45,3 @@
     </table>
   </body>
 </html>
-

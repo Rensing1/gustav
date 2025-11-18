@@ -38,6 +38,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 - Remote Vision fetches reuse the same SUPABASE_URL allowlist and stream-download with `LEARNING_MAX_UPLOAD_BYTES`, aborting early on host mismatches or oversized responses.
   - Hostklassifizierung via `_is_local_host`: explizite Allowlist (`127.0.0.1`, `localhost`, `::1`, `host.docker.internal`) und `.local`-Suffix gelten als lokal.
   - Alle anderen Hostnamen (inkl. Docker-Compose-Hosts wie `supabase_kong-gustav-alpha2`) werden per DNS aufgelöst; nur wenn **alle** IPs private/Loopback sind, gilt der Host als lokal. Gemischte oder rein öffentliche Antworten führen zu „untrusted_host“ (fail closed).
+- Client-seitige Upload-Helfer (`gustav.js`): Fehlerpfade nutzen kurze Codes wie `mime_not_allowed`, `size_exceeded`, `intent_failed_<status>` und `upload_failed_<status>`, die 1:1 auf Benutzertexte gemappt werden können (Vorbereitung für spätere Internationalisierung).
 
 ## Governance & Provisioning
 - Quelle der Wahrheit: SQL‑Migrationen legen `materials` und `submissions` privat an.

@@ -31,6 +31,26 @@ def test_file_preview_pdf_includes_zoom_and_accessibility_attrs() -> None:
     assert '<iframe' in html
 
 
+def test_file_preview_image_includes_zoom_and_accessibility_attrs() -> None:
+    """Image previews should expose zoom hooks and an accessible label."""
+    html = FilePreview(
+        url="http://example.test/image.png",
+        mime="image/png",
+        title="Bildmaterial",
+        alt="Alt-Text",
+    ).render()
+
+    # Wrapper classes / attributes for JS zoom + keyboard interaction
+    assert 'file-preview--image' in html
+    assert 'data-file-preview="true"' in html
+    assert 'role="button"' in html
+    assert 'tabindex="0"' in html
+    assert 'aria-label="Dateivorschau vergrößern/verkleinern"' in html
+    # Image element with alt text should be present
+    assert '<img' in html
+    assert 'alt="Alt-Text"' in html
+
+
 def test_file_preview_download_fallback_wraps_link_with_zoom_hooks() -> None:
     """Unsupported MIME types fall back to a download link with the same wrapper."""
     html = FilePreview(

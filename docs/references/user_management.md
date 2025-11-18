@@ -48,15 +48,18 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 - Optionaler Query-Parameter `login_hint`:
   - Wird als vorausgefüllte E-Mail im Registrierungsformular verwendet.
   - Vor dem Redirect prüft GUSTAV optional die Domain:
-    - Env-Variable `ALLOWED_REGISTRATION_DOMAINS` (kommagetrennt, z. B. `@gymalf.de`)
+    - Env-Variable `ALLOWED_REGISTRATION_DOMAINS` (kommagetrennt, z. B. `@school.example`)
     - Bei erlaubter Domain → normaler Redirect (302/204, je nach HTMX).
-    - Bei nicht erlaubter oder offensichtlich ungültiger E-Mail → `400` mit JSON `{ error: "invalid_email_domain", detail: "Die Registrierung ist nur mit deiner IServ-Adresse (@gymalf.de) möglich." }`.
+    - Bei nicht erlaubter oder offensichtlich ungültiger E-Mail → `400` mit JSON  
+      `{ error: "invalid_email_domain", detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: <Liste aus ALLOWED_REGISTRATION_DOMAINS>" }`.
 - Die eigentliche, verbindliche Domain-Policy muss zusätzlich in Keycloak konfiguriert werden; GUSTAV ist eine vorgeschaltete, nutzerfreundliche Guardrail.
 
 ## E-Mail-Verifikation
 
 - Keycloak-Realm `gustav`:
-  - `verifyEmail=false`, `emailTheme=gustav` (branded Login- und E-Mail-Theme).
+  - Aktueller Übergangszustand: `verifyEmail=false`, `emailTheme=gustav` (branded Login- und E-Mail-Theme).
+  - Begründung: Der E-Mail-/SMTP-Versand ist noch nicht in allen Umgebungen zuverlässig, daher wird die E-Mail-Verifikation im Realm derzeit nicht erzwungen.
+  - Zielbild: Sobald SMTP stabil ist, sollte die Referenzkonfiguration `verifyEmail=true` setzen; neue Deployments können dies als „secure by default“-Empfehlung übernehmen.
   - Keycloak verschickt Verifizierungs- und Passwort-Reset-E-Mails über SMTP (siehe unten), wenn diese Flows im IdP aktiviert sind.
 - GUSTAVs Callback (`/auth/callback`):
   - Liest das Claim `email_verified` zwar aus dem ID-Token, erzwingt aber keinen eigenen Block basierend auf diesem Flag.
@@ -74,13 +77,14 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 
 ### SMTP-Konfiguration (Umgebung)
 
-Die Keycloak-Containerkonfiguration bezieht SMTP-Settings aus Env-Variablen (lokal = Prod, gleiche Namen):
+Die Keycloak-Containerkonfiguration bezieht SMTP-Settings aus Env-Variablen (lokal = Prod, gleiche Namen).  
+Im Repo werden neutrale Platzhalter verwendet; vor Produktivbetrieb müssen diese pro Schule angepasst werden:
 
-- `KC_SMTP_HOST=gymalf.de`
+- `KC_SMTP_HOST=smtp.school.example`
 - `KC_SMTP_PORT=587`
-- `KC_SMTP_USER=hennecke`
+- `KC_SMTP_USER=gustav-smtp-user`
 - `KC_SMTP_PASSWORD=` (leer im Repo; nur in `.env` setzen)
-- `KC_SMTP_FROM=hennecke@gymalf.de`
+- `KC_SMTP_FROM=noreply@school.example`
 - `KC_SMTP_FROM_NAME=GUSTAV-Lernplattform`
 - `KC_SMTP_AUTH=true`
 - `KC_SMTP_STARTTLS=true`
@@ -101,7 +105,7 @@ Diese Werte werden in `docker-compose.yml` auf die Quarkus-/Keycloak-SMTP-Konfig
 - Login-Theme `gustav`:
   - Gemeinsames CSS mit der App (Button-Stile, Typografie, Layout).
   - Deutsche und englische Message-Bundles (`messages_de.properties` / `messages_en.properties`).
-- E-Mail-Theme `gustav`:
+  - E-Mail-Theme `gustav`:
   - HTML-Templates:
     - `email-verification.ftl` (Betreff und Inhalt zur E-Mail-Bestätigung).
     - `password-reset.ftl` (Betreff und Inhalt zum Passwort-Reset).
@@ -109,7 +113,7 @@ Diese Werte werden in `docker-compose.yml` auf die Quarkus-/Keycloak-SMTP-Konfig
     - Logo/Branding „GUSTAV-Lernplattform“.
     - Klarer, minimalistischer Fließtext (Deutsch, freundlich-neutral, gleicher Text für Schüler*innen und Lehrkräfte).
     - Primärer Button mit Aufruf zum Handeln (E-Mail bestätigen / Passwort zurücksetzen).
-    - Footer mit Support-Hinweis: „Bei Fragen melde dich unter: hennecke@gymalf.de“.
+    - Footer mit Support-Hinweis: „Bei Fragen melde dich unter: support@school.example“.
 
 ## Integration in UI
 - Sidebar zeigt den Anzeigenamen (`name`) und die primäre Rolle (Priorität: admin > teacher > student).

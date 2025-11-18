@@ -128,7 +128,7 @@ def test_email_templates_present_for_verification_and_reset():
 def test_email_templates_reference_support_contact():
     """Email templates should mention the support address in the footer."""
     html_root = EMAIL_THEME_ROOT / "html"
-    support_email = "hennecke@gymalf.de"
+    support_email = "support@school.example"
 
     for name in ["email-verification.ftl", "password-reset.ftl"]:
         tpl = html_root / name

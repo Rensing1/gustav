@@ -16,13 +16,13 @@
   "passwordPolicy": "length(8) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1)",
   "duplicateEmailsAllowed": false,
   "smtpServer": {
-    "from": "hennecke@gymalf.de",
+    "from": "noreply@school.example",
     "fromDisplayName": "GUSTAV-Lernplattform",
-    "host": "gymalf.de",
+    "host": "smtp.school.example",
     "port": "587",
     "auth": "true",
     "starttls": "true",
-    "user": "hennecke"
+    "user": "gustav-smtp-user"
   },
   "attributes": {
     "userProfileEnabled": "true"

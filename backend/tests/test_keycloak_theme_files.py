@@ -16,6 +16,7 @@ from pathlib import Path
 
 
 THEME_ROOT = Path("keycloak/themes/gustav/login")
+EMAIL_THEME_ROOT = Path("keycloak/themes/gustav/email")
 
 
 def test_theme_templates_present():
@@ -112,3 +113,25 @@ def test_register_display_name_required_and_styled():
     assert 'class="kc-label"' in text and 'for="display_name"' in text
     # Input uses kc-input and is required
     assert 'id="display_name"' in text and 'class="kc-input"' in text and 'required' in text
+
+
+def test_email_templates_present_for_verification_and_reset():
+    """Email theme must provide HTML templates for verification and reset flows."""
+    html_root = EMAIL_THEME_ROOT / "html"
+    verify_tpl = html_root / "email-verification.ftl"
+    reset_tpl = html_root / "password-reset.ftl"
+
+    assert verify_tpl.exists(), "email-verification.ftl missing for email verification flow"
+    assert reset_tpl.exists(), "password-reset.ftl missing for password reset flow"
+
+
+def test_email_templates_reference_support_contact():
+    """Email templates should mention the support address in the footer."""
+    html_root = EMAIL_THEME_ROOT / "html"
+    support_email = "hennecke@gymalf.de"
+
+    for name in ["email-verification.ftl", "password-reset.ftl"]:
+        tpl = html_root / name
+        assert tpl.exists(), f"{name} missing"
+        text = tpl.read_text(encoding="utf-8")
+        assert support_email in text, f"{name} should include support email {support_email}"

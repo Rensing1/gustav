@@ -15,7 +15,7 @@ Notes:
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import RedirectResponse, Response, HTMLResponse
+from fastapi.responses import RedirectResponse, Response, HTMLResponse, JSONResponse
 from urllib.parse import urlencode
 import os
 import secrets
@@ -33,6 +33,43 @@ logger = logging.getLogger("gustav.web.auth")
 # Keep pattern in sync with OpenAPI (api/openapi.yml)
 INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
 MAX_INAPP_REDIRECT_LEN = 256
+
+
+def _parse_allowed_registration_domains(raw: str | None) -> set[str]:
+    """Parse ALLOWED_REGISTRATION_DOMAINS env var into a normalized set of domains.
+
+    Intent:
+        - Accept a comma-separated list like "@gymalf.de, @example.org".
+        - Normalize by trimming whitespace and lowercasing.
+        - Ignore empty entries so accidental trailing commas are harmless.
+    """
+    if not raw:
+        return set()
+    items = [part.strip().lower() for part in str(raw).split(",")]
+    return {item for item in items if item}
+
+
+def _is_allowed_registration_email(email: str, allowed_domains: set[str]) -> bool:
+    """Return True if the email's domain is in the allowed_domains set.
+
+    Behavior:
+        - Treat an empty allow-list as "no restriction" to keep defaults simple.
+        - Perform a minimal email check: split on the last '@' and compare the
+          domain part (including leading '@') in lowercase.
+        - Invalid emails (no '@' or missing domain) are treated as disallowed.
+    """
+    if not allowed_domains:
+        return True
+    if not isinstance(email, str):
+        return False
+    normalized = email.strip().lower()
+    if "@" not in normalized:
+        return False
+    local, domain = normalized.rsplit("@", 1)
+    if not local or not domain:
+        return False
+    key = f"@{domain}"
+    return key in allowed_domains
 
 
 def _resolve_active_main(request: Request):
@@ -228,14 +265,28 @@ async def auth_register(request: Request, login_hint: str | None = None):
     oidc = OIDCClient(cfg)
     # Include nonce in the authorization request similar to /auth/login
     url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
-    sep = '&' if '?' in url else '?'
+    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
+
+    # Optional: environment-driven domain allow-list for self-service registration.
+    raw_allowed = os.getenv("ALLOWED_REGISTRATION_DOMAINS")
+    allowed_domains = _parse_allowed_registration_domains(raw_allowed)
+
+    sep = "&" if "?" in url else "?"
     if login_hint:
+        # When an allow-list is configured, reject disallowed or malformed emails early.
+        if not _is_allowed_registration_email(login_hint, allowed_domains):
+            # Keep error payload aligned with OpenAPI Error schema.
+            payload = {
+                "error": "invalid_email_domain",
+                "detail": "Die Registrierung ist nur mit deiner IServ-Adresse (@gymalf.de) möglich.",
+            }
+            return JSONResponse(status_code=400, content=payload, headers=headers)
         # Security: encode parameter to avoid query injection and preserve special characters
         from urllib.parse import urlencode
+
         url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
-        sep = '&'
+        sep = "&"
     url = f"{url}{sep}kc_action=register"
-    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
     if request.headers.get("HX-Request"):
         headers["HX-Redirect"] = url
         return Response(status_code=204, headers=headers)

@@ -11,9 +11,19 @@
   "registrationEmailAsUsername": true,
   "loginWithEmailAllowed": true,
   "verifyEmail": false,
-  "resetPasswordAllowed": true,
+  "resetPasswordAllowed": false,
+  "emailTheme": "gustav",
   "passwordPolicy": "length(8) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1)",
   "duplicateEmailsAllowed": false,
+  "smtpServer": {
+    "from": "noreply@school.example",
+    "fromDisplayName": "GUSTAV-Lernplattform",
+    "host": "smtp.school.example",
+    "port": "587",
+    "auth": "true",
+    "starttls": "true",
+    "user": "gustav-smtp-user"
+  },
   "attributes": {
     "userProfileEnabled": "true"
   },

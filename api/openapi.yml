@@ -2255,7 +2255,10 @@ paths:
     get:
       tags: [Auth]
       summary: Redirect to IdP forgot password page
-      description: Redirect to Keycloak password reset page.
+      description: >-
+        Redirect to the Keycloak password reset page. GUSTAV does not send
+        password reset emails itself; the Identity Provider (Keycloak) is
+        responsible for email delivery and rate limiting.
       operationId: forgotPassword
       security: []
       parameters:
@@ -2274,16 +2277,14 @@ paths:
               schema:
                 type: string
               example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
             Location:
               schema:
                 type: string
-        
-              examples:
-                rate_limited:
-                  summary: Password reset rate limit hit
-                  value:
-                    error: rate_limited
-                    detail: retry_later
 
 
   /auth/register:
@@ -2293,7 +2294,9 @@ paths:
       description: >-
         Redirects to Keycloak with `kc_action=register`. The server generates and
         includes a `nonce` parameter (replay protection) in the authorization request,
-        analogous to `/auth/login`.
+        analogous to `/auth/login`. When `ALLOWED_REGISTRATION_DOMAINS` is configured
+        in the environment, the server MAY reject `login_hint` values whose email
+        domain is not on the allow-list and respond with `400` instead of redirecting.
       operationId: startRegistration
       security: []
       parameters:
@@ -2337,6 +2340,29 @@ paths:
             Location:
               schema:
                 type: string
+        '400':
+          description: Invalid or disallowed registration email hint
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_email_domain:
+                  summary: Email domain not allowed for self-service registration
+                  value:
+                    error: invalid_email_domain
+                    detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @school.example"
 
 
   /api/me:

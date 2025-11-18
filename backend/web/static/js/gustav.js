@@ -170,7 +170,14 @@ class Gustav {
           this.showNotification('Upload vorbereitet. Jetzt „Abgeben“ klicken.', 'info', 2500);
         } catch (err) {
           console.error('Upload prepare failed', err);
-          this.showNotification('Upload fehlgeschlagen. Bitte erneut versuchen.', 'error');
+          const code = err && err.message ? String(err.message) : '';
+          if (code === 'mime_not_allowed') {
+            this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
+          } else if (code === 'size_exceeded') {
+            this.showNotification('Datei zu groß. Bitte das Größenlimit beachten.', 'error');
+          } else {
+            this.showNotification('Upload fehlgeschlagen. Bitte erneut versuchen.', 'error');
+          }
           // Clear hidden fields to avoid submitting invalid payload
           ['storage_key','mime_type','size_bytes','sha256'].forEach((name) => {
             const el = form.querySelector(`input[name="${name}"]`);
@@ -379,8 +386,13 @@ class Gustav {
     const filename = file.name || 'upload.bin';
     const kind = mime === 'application/pdf' ? 'file' : (mime.startsWith('image/') ? 'image' : 'file');
 
-    // Client-side checks mirror server (non-authoritative)
-    this.validateFile(file, ['image/png', 'image/jpeg', 'application/pdf'], 10 * 1024 * 1024);
+    // Client-side checks mirror server (non-authoritative).
+    // Types and max size are derived from data attributes that SSR renders from the central policy.
+    const allowedMimeAttr = (form.dataset.allowedMime || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const maxBytesAttr = parseInt(form.dataset.maxBytes || '0', 10);
+    const allowed = allowedMimeAttr.length ? allowedMimeAttr : ['image/png', 'image/jpeg', 'application/pdf'];
+    const maxBytes = maxBytesAttr > 0 ? maxBytesAttr : 10 * 1024 * 1024;
+    this.validateFile(file, allowed, maxBytes);
 
     const { intent, sha, size: sizeBytes } = await this.requestIntentAndUpload(
       `/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`,

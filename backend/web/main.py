@@ -3980,6 +3980,13 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
 
 
 def _render_task_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+    from backend.storage.learning_policy import DEFAULT_POLICY
+
+    # Derive allowed MIME types and max size for learning uploads from the central policy.
+    allowed_mime = ",".join(sorted(DEFAULT_POLICY.allowed_mime_types))
+    max_bytes = DEFAULT_POLICY.max_size_bytes
+    max_mb = round(max_bytes / (1024 * 1024), 2)
+
     criteria_inputs = []
     for i in range(10):
         criteria_inputs.append(
@@ -5015,27 +5022,28 @@ async def about_page(request: Request):
 
 @app.get("/auth/callback")
 async def auth_callback(request: Request, code: str | None = None, state: str | None = None):
+    error_headers = {"Cache-Control": "private, no-store"}
     if not code or not state:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers=error_headers)
     rec = STATE_STORE.pop_valid(state)
     if not rec:
-        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers={"Cache-Control": "private, no-store"})
+        return JSONResponse({"error": "invalid_code_or_state"}, status_code=400, headers=error_headers)
     try:
         tokens = OIDC.exchange_code_for_tokens(code=code, code_verifier=rec.code_verifier)
     except Exception as exc:
         logger.warning("Token exchange failed: %s", exc.__class__.__name__)
-        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers={"Cache-Control": "private, no-store"})
+        return JSONResponse({"error": "token_exchange_failed"}, status_code=400, headers=error_headers)
     id_token = tokens.get("id_token")
     if not id_token or not isinstance(id_token, str):
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "private, no-store"})
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers=error_headers)
     try:
         claims = verify_id_token(id_token=id_token, cfg=OIDC_CFG)
     except IDTokenVerificationError as exc:
         logger.warning("ID token verification failed: %s", exc.code)
-        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers={"Cache-Control": "private, no-store"})
+        return JSONResponse({"error": "invalid_id_token"}, status_code=400, headers=error_headers)
     claim_nonce = claims.get("nonce")
     if getattr(rec, "nonce", None) and claim_nonce != rec.nonce:
-        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers={"Cache-Control": "private, no-store"})
+        return JSONResponse({"error": "invalid_nonce"}, status_code=400, headers=error_headers)
 
     sub = str(claims.get("sub") or "unknown-sub")
     email = claims.get("email") or claims.get("preferred_username") or ""

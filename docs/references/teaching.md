@@ -180,6 +180,7 @@ Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
 - Accessibility & JS:
   - Wrapper trägt `data-file-preview="true"`, `role="button"`, `tabindex="0"` und `aria-label="Dateivorschau vergrößern/verkleinern"` als Hook für Tastaturnavigation.
   - JavaScript (`initFilePreviewZoom`) toggelt `file-preview--zoomed` bei Klick/Enter/Space auf dem Wrapper, lässt aber echte Links innerhalb des Fallback‑Viewers unverändert (keine Blockade von Downloads).
+  - Anfangszustand: SSR rendert nie `file-preview--zoomed`; der Zoom-State wird ausschließlich clientseitig gesetzt.
 
 ## Schemas
 - `Course { id, title, subject?, grade_level?, term?, teacher_id, created_at, updated_at }`

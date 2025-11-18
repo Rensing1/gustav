@@ -159,6 +159,15 @@ services:
       KC_PROXY: edge
       KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-https://id.localhost}
       KC_HOSTNAME_ADMIN_URL: ${KC_HOSTNAME_ADMIN_URL:-https://id.localhost}
+      # Email sender configuration (Quarkus-based) for verification + reset mails
+      KC_SPI_EMAIL_SENDER_DEFAULT_HOST: ${KC_SMTP_HOST:-}
+      KC_SPI_EMAIL_SENDER_DEFAULT_PORT: ${KC_SMTP_PORT:-587}
+      KC_SPI_EMAIL_SENDER_DEFAULT_FROM: ${KC_SMTP_FROM:-}
+      KC_SPI_EMAIL_SENDER_DEFAULT_FROM_DISPLAY_NAME: ${KC_SMTP_FROM_NAME:-GUSTAV-Lernplattform}
+      KC_SPI_EMAIL_SENDER_DEFAULT_USERNAME: ${KC_SMTP_USER:-}
+      KC_SPI_EMAIL_SENDER_DEFAULT_PASSWORD: ${KC_SMTP_PASSWORD:-}
+      KC_SPI_EMAIL_SENDER_DEFAULT_AUTH: ${KC_SMTP_AUTH:-true}
+      KC_SPI_EMAIL_SENDER_DEFAULT_STARTTLS: ${KC_SMTP_STARTTLS:-true}
     depends_on:
       keycloak-db:
         condition: service_healthy

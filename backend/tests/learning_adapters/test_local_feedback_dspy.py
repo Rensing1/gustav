@@ -84,15 +84,25 @@ def test_feedback_prefers_dspy_when_importable(monkeypatch: pytest.MonkeyPatch) 
 
     import importlib
 
+    from backend.learning.adapters.dspy import programs as dspy_programs
+
     monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
-    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+    # Stub structured DSPy helpers to return a minimal criteria.v2 payload
+    # without invoking any Ollama client.
+    def _structured_analysis(**kwargs):  # type: ignore[no-untyped-def]
+        return {
+            "schema": "criteria.v2",
+            "score": 3,
+            "criteria_results": [],
+        }
 
-    def _stub_lm_call(*, prompt: str, timeout: int) -> str:
-        return '{"schema":"criteria.v2","score":3,"criteria_results":[]}'
+    def _structured_feedback(**kwargs):  # type: ignore[no-untyped-def]
+        return "**OK**"
 
-    monkeypatch.setattr(program, "_lm_call", _stub_lm_call)
+    monkeypatch.setattr(dspy_programs, "run_structured_analysis", _structured_analysis, raising=False)
+    monkeypatch.setattr(dspy_programs, "run_structured_feedback", _structured_feedback, raising=False)
 
     mod = importlib.import_module("backend.learning.adapters.local_feedback")
     adapter = mod.build()  # type: ignore[attr-defined]
@@ -178,12 +188,20 @@ def test_feedback_logs_backend_dspy(monkeypatch: pytest.MonkeyPatch, caplog: pyt
 
     import importlib
 
-    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+    from backend.learning.adapters.dspy import programs as dspy_programs
 
-    def _stub_lm_call(*, prompt: str, timeout: int) -> str:
-        return '{"schema":"criteria.v2","score":3,"criteria_results":[],"feedback_md":"**OK**"}'
+    def _structured_analysis(**kwargs):  # type: ignore[no-untyped-def]
+        return {
+            "schema": "criteria.v2",
+            "score": 3,
+            "criteria_results": [],
+        }
 
-    monkeypatch.setattr(program, "_lm_call", _stub_lm_call)
+    def _structured_feedback(**kwargs):  # type: ignore[no-untyped-def]
+        return "**OK**"
+
+    monkeypatch.setattr(dspy_programs, "run_structured_analysis", _structured_analysis, raising=False)
+    monkeypatch.setattr(dspy_programs, "run_structured_feedback", _structured_feedback, raising=False)
 
     monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
@@ -230,6 +248,11 @@ def test_feedback_handles_none_without_ollama(monkeypatch: pytest.MonkeyPatch) -
 
     fake_dspy = SimpleNamespace(__version__="0.0-test")
     monkeypatch.setitem(sys.modules, "dspy", fake_dspy)
+
+    # Ensure DSPy prerequisites are met so that the adapter selects
+    # the DSPy pipeline and does not fall back to Ollama.
+    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
     # Bomb ollama: ensure no fallback is attempted
     class _BombOllamaClient:
@@ -337,15 +360,6 @@ def test_feedback_recovers_when_json_adapter_disabled(monkeypatch: pytest.Monkey
     monkeypatch.setattr(dspy_programs, "run_structured_analysis", _raise_when_adapter_used)
     monkeypatch.setattr(dspy_programs, "run_structured_feedback", _structured_feedback)
 
-    def _bomb_legacy_analysis(**kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("Legacy analysis should not run when JSONAdapter is disabled")
-
-    def _bomb_legacy_feedback(**kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("Legacy feedback should not run when JSONAdapter is disabled")
-
-    monkeypatch.setattr(dspy_feedback, "_run_analysis_model", _bomb_legacy_analysis)
-    monkeypatch.setattr(dspy_feedback, "_run_feedback_model", _bomb_legacy_feedback)
-
     monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
@@ -355,3 +369,43 @@ def test_feedback_recovers_when_json_adapter_disabled(monkeypatch: pytest.Monkey
     result: FeedbackResult = adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
     assert result.feedback_md == "**DSPy Feedback**\n\n- Individuell formuliert."
     assert "Stärken: klar" not in result.feedback_md
+
+
+def test_local_feedback_uses_dspy_without_direct_ollama_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    DSPy-only guard: local adapter must not call ollama directly
+    when the DSPy feedback program is available and succeeds.
+
+    Intent:
+        - Encode the design decision that the feedback pipeline is
+          orchestrated exclusively through DSPy when present.
+        - Any attempt to call `ollama.Client.generate` in this scenario
+          should fail the test.
+    """
+
+    _install_fake_dspy(monkeypatch)
+
+    # Bomb ollama: any direct usage from the adapter must fail this test.
+    _install_bomb_ollama(monkeypatch)
+
+    import importlib
+
+    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+
+    class _StubResult:
+        feedback_md = "DSPy Feedback"
+        analysis_json = {"schema": "criteria.v2", "criteria_results": []}
+        parse_status = "parsed_structured"
+
+    monkeypatch.setattr(program, "analyze_feedback", lambda **_: _StubResult())
+
+    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    result: FeedbackResult = adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert isinstance(result, FeedbackResult)
+    assert result.analysis_json.get("schema") == "criteria.v2"
+    assert result.feedback_md == "DSPy Feedback"

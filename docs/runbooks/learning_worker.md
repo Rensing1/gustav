@@ -26,6 +26,27 @@ Purpose: Operate and troubleshoot the asynchronous learning worker (vision + fee
 - Permanent errors → submission `failed` via `public.learning_worker_update_failed(...)` and job `status=failed`.
 - Completed → `public.learning_worker_update_completed(...)` sets `text_body`, `feedback_md`, and `analysis_json` (schema `criteria.v1` oder `criteria.v2`, abhängig vom Adapter).
 
+### DSPy-basierte Feedback-Pipeline (Überblick für den Worker)
+
+- Primärer Pfad:
+  - Vision-Adapter extrahiert aus Bild/PDF den Text (`VisionResult.text_md`).
+  - Feedback-Adapter (`backend/learning/adapters/local_feedback.py`) ruft, sofern DSPy verfügbar ist, ausschließlich
+    `backend/learning/adapters/dspy/feedback_program.analyze_feedback(...)` auf.
+  - Das DSPy-Programm verwendet Signatures `FeedbackAnalysisSignature` und `FeedbackSynthesisSignature`
+    sowie `run_structured_analysis` / `run_structured_feedback`, um ein `criteria.v2`-Payload und
+    einen Fließtext `feedback_md` zu erzeugen.
+  - Der Worker persistiert das Ergebnis in `public.learning_submissions.analysis_json` und
+    `feedback_md` (siehe auch `docs/references/LLM-Prompts.md`).
+- Fallback-Verhalten:
+  - Wenn DSPy nicht installiert ist oder die benötigten ENV (`AI_FEEDBACK_MODEL`, `OLLAMA_BASE_URL`) fehlen,
+    fällt der lokale Feedback-Adapter auf einen einfachen Ollama-Prompt zurück und erzeugt dennoch ein
+    `criteria.v2`-Objekt plus eine generische Rückmeldung.
+  - Schlägt nur die strukturierte DSPy-Auswertung fehl (Parsing/Modell-Antwort), erzeugt das
+    DSPy-Programm selbst ein deterministisches `criteria.v2`-Default-Objekt und einen neutralen
+    Feedback-Text, ohne zusätzliche LM-Aufrufe. Der Worker sieht in beiden Fällen „completed“
+    mit `analysis_json.schema='criteria.v2'` und kann via `parse_status` / `error_code`
+    unterscheiden, ob es sich um einen Fallback handelt.
+
 ## Observability
 - Gauges/Counters: `analysis_jobs_inflight`, `ai_worker_retry_total{phase}`, `ai_worker_failed_total{error_code}`.
 - Logs should not contain PII; error messages are truncated to 1024 chars.

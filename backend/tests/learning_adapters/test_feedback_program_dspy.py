@@ -52,24 +52,25 @@ def test_program_raises_when_dspy_missing(monkeypatch: pytest.MonkeyPatch) -> No
 def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
+    programs = import_module("backend.learning.adapters.dspy.programs")
 
-    def fake_analysis(*, text_md: str, criteria):
-        return json.dumps(
-            {
-                "score": 4,
-                "criteria_results": [
-                    {"criterion": "Inhalt", "max_score": 10, "score": 8, "explanation_md": "Inhalt stärkt Aufbau"},
-                    {"criterion": "Struktur", "max_score": 10, "score": 6, "explanation_md": "Struktur klar"},
-                ],
-            }
-        )
+    def fake_run_structured_analysis(*, text_md: str, criteria, **_kwargs):
+        return {
+            "schema": "criteria.v2",
+            "score": 4,
+            "criteria_results": [
+                {"criterion": "Inhalt", "max_score": 10, "score": 8, "explanation_md": "Inhalt stärkt Aufbau"},
+                {"criterion": "Struktur", "max_score": 10, "score": 6, "explanation_md": "Struktur klar"},
+            ],
+        }
 
-    def fake_feedback(*, text_md: str, criteria, analysis_json):
+    def fake_run_structured_feedback(*, text_md: str, criteria, analysis_json, **_kwargs):
         assert analysis_json["criteria_results"][0]["criterion"] == "Inhalt"
         return "**LLM**\n\n- Inhalt stark."
 
-    monkeypatch.setattr(prog, "_run_analysis_model", fake_analysis)
-    monkeypatch.setattr(prog, "_run_feedback_model", fake_feedback)
+    monkeypatch.setattr(programs, "run_structured_analysis", fake_run_structured_analysis, raising=False)
+    monkeypatch.setattr(programs, "run_structured_feedback", fake_run_structured_feedback, raising=False)
+
     result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Ein kurzer Text", criteria=["Inhalt", "Struktur"]
     )
@@ -92,12 +93,14 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
 def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
+    programs = import_module("backend.learning.adapters.dspy.programs")
 
-    def fake_lm_call(*, prompt: str, timeout: int) -> str:
-        return json.dumps({"score": 0, "criteria_results": []})
+    def fake_structured_feedback(*, text_md: str, criteria, analysis_json, **_kwargs):
+        assert criteria == []
+        assert analysis_json.schema == "criteria.v2"
+        return "Eine kurze Rückmeldung im Fließtext."
 
-    monkeypatch.setattr(prog, "_run_analysis_model", lambda **_: fake_lm_call(prompt="", timeout=0))
-    monkeypatch.setattr(prog, "_run_feedback_model", lambda **_: "Eine kurze Rückmeldung im Fließtext.")
+    monkeypatch.setattr(programs, "run_structured_feedback", fake_structured_feedback, raising=False)
     result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Nur Text", criteria=[]
     )

@@ -61,15 +61,6 @@ def test_feedback_program_sets_ollama_host(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(dspy_programs, "run_structured_analysis", _structured_analysis)
     monkeypatch.setattr(dspy_programs, "run_structured_feedback", _structured_feedback)
 
-    def _unexpected_legacy_analysis(**kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("legacy analysis not expected")
-
-    def _unexpected_legacy_feedback(**kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("legacy feedback not expected")
-
-    monkeypatch.setattr(feedback_program, "_run_analysis_model", _unexpected_legacy_analysis)
-    monkeypatch.setattr(feedback_program, "_run_feedback_model", _unexpected_legacy_feedback)
-
     result = feedback_program.analyze_feedback(text_md="# Text", criteria=["Inhalt"])
     assert result.feedback_md.startswith("**DSPy Feedback**")
     assert observed["host"] == "http://ollama:11434", "OLLAMA_HOST should mirror the base URL"

@@ -90,6 +90,40 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
     assert 0 <= overall <= 5
 
 
+def test_program_uses_legacy_runners_when_structured_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legacy runners should be called with compatible kwargs when structured DSPy fails."""
+    _install_fake_dspy(monkeypatch)
+    prog = import_module("backend.learning.adapters.dspy.feedback_program")
+    programs = import_module("backend.learning.adapters.dspy.programs")
+
+    # Force structured path to raise so legacy path is exercised.
+    monkeypatch.setattr(programs, "run_structured_analysis", lambda **_: (_ for _ in ()).throw(AttributeError("no Predict")))
+    monkeypatch.setattr(programs, "run_structured_feedback", lambda **_: (_ for _ in ()).throw(AttributeError("no Predict")))
+
+    # Legacy analysis runner with minimal signature (no optional kwargs)
+    def _legacy_analysis(*, text_md: str, criteria):
+        return json.dumps(
+            {
+                "schema": "criteria.v2",
+                "score": 3,
+                "criteria_results": [
+                    {"criterion": criteria[0], "max_score": 10, "score": 9, "explanation_md": "Analyse ok"},
+                ],
+            }
+        )
+
+    def _legacy_feedback(*, text_md: str, criteria, analysis_json):
+        assert analysis_json["criteria_results"][0]["score"] == 9
+        return "**Legacy Feedback**"
+
+    monkeypatch.setattr(prog, "_run_analysis_model", _legacy_analysis)
+    monkeypatch.setattr(prog, "_run_feedback_model", _legacy_feedback)
+
+    result = prog.analyze_feedback(text_md="# Text", criteria=["Inhalt"])  # type: ignore[attr-defined]
+    assert result.analysis_json.get("schema") == "criteria.v2"
+    assert result.feedback_md == "**Legacy Feedback**"
+
+
 def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
     prog = import_module("backend.learning.adapters.dspy.feedback_program")

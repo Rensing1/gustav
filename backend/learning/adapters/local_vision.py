@@ -42,7 +42,7 @@ _LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
 
 def _is_local_host(host: str) -> bool:
     """
-    Return True if host resolves to loopback/private or uses .local suffix.
+    Return True if host resolves to loopback/private.
 
     Why:
         The learning worker must talk to Supabase Storage over HTTP in local
@@ -53,15 +53,14 @@ def _is_local_host(host: str) -> bool:
     Behavior:
         - Explicit allowlist for common local hostnames.
         - Direct IPs: accept loopback/private ranges.
-        - Hostnames:
-            * Accept `.local` suffix (mdns-style) as local.
-            * Otherwise, resolve via DNS and accept only when all resolved
-              addresses are loopback/private.
+        - Hostnames (including `.local`):
+            * Resolve via DNS and accept only when all resolved addresses
+              are loopback/private.
     """
     host = (host or "").strip().lower()
     if not host:
         return False
-    if host in _LOCAL_HTTP_HOSTS or host.endswith(".local"):
+    if host in _LOCAL_HTTP_HOSTS:
         return True
     try:
         # Direct IP literal

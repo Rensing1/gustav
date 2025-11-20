@@ -122,6 +122,15 @@ class _LocalFeedbackAdapter:
                         feedback_trimmed = ""
                     degraded_statuses = {"analysis_fallback", "analysis_error", "analysis_feedback_fallback"}
                     looks_stub = feedback_trimmed.startswith("**Rückmeldung**") and "Stärken:" in feedback_trimmed
+                    if parse_status == "analysis_feedback_fallback":
+                        # DSPy hat bereits ein deterministisches Fallback erzeugt;
+                        # kein zweiter LM-Aufruf via Ollama.
+                        logger.info(
+                            "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
+                            len(criteria),
+                            parse_status,
+                        )
+                        return converted
                     if parse_status in degraded_statuses:
                         logger.info(
                             "learning.feedback.dspy_degraded_to_ollama criteria_count=%s parse_status=%s",

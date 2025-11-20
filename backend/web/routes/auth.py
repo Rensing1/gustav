@@ -49,6 +49,21 @@ def _parse_allowed_registration_domains(raw: str | None) -> set[str]:
     return {item for item in items if item}
 
 
+def _registration_domain_error_payload(allowed_domains: set[str]) -> dict[str, str]:
+    """
+    Build a consistent error payload for disallowed registration domains.
+
+    Keeps messaging aligned across auth route, OpenAPI contract and tests.
+    """
+    base_detail = "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt."
+    if allowed_domains:
+        domains_str = ", ".join(sorted(allowed_domains))
+        detail = f"{base_detail} Erlaubte Domains: {domains_str}"
+    else:
+        detail = base_detail
+    return {"error": "invalid_email_domain", "detail": detail}
+
+
 def _is_allowed_registration_email(email: str, allowed_domains: set[str]) -> bool:
     """Return True if the email's domain is in the allowed_domains set.
 
@@ -277,17 +292,7 @@ async def auth_register(request: Request, login_hint: str | None = None):
         # When an allow-list is configured, reject disallowed or malformed emails early.
         if not _is_allowed_registration_email(login_hint, allowed_domains):
             # Keep error payload aligned with OpenAPI Error schema.
-            base_detail = "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt."
-            # If we have configured domains, include them to guide operators/users.
-            if allowed_domains:
-                domains_str = ", ".join(sorted(allowed_domains))
-                detail = f"{base_detail} Erlaubte Domains: {domains_str}"
-            else:
-                detail = base_detail
-            payload = {
-                "error": "invalid_email_domain",
-                "detail": detail,
-            }
+            payload = _registration_domain_error_payload(allowed_domains)
             return JSONResponse(status_code=400, content=payload, headers=headers)
         # Security: encode parameter to avoid query injection and preserve special characters
         from urllib.parse import urlencode

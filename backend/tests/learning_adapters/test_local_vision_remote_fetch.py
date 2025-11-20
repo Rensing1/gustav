@@ -295,6 +295,35 @@ def test_is_local_host_rejects_mixed_private_and_public_dns(monkeypatch: pytest.
     assert mod._is_local_host("supabase_kong_gustav-alpha2") is False  # type: ignore[attr-defined]
 
 
+def test_is_local_host_accepts_private_dns_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hosts that resolve exclusively to private IPs should be treated as local."""
+    import socket
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.5", 0)),
+            (socket.AF_INET6, None, None, "", ("fd00::1", 0)),
+        ],
+        raising=False,
+    )
+
+    assert mod._is_local_host("supabase_kong_gustav-alpha2") is True  # type: ignore[attr-defined]
+
+
+def test_is_local_host_accepts_local_suffix_without_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`.local` hostnames count as local even if DNS resolution fails."""
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    # Simulate DNS failure
+    monkeypatch.setattr(mod.socket, "getaddrinfo", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("fail")), raising=False)
+
+    assert mod._is_local_host("storage.local") is True  # type: ignore[attr-defined]
+
+
 def test_remote_fetch_aborts_when_download_exceeds_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("STORAGE_VERIFY_ROOT", raising=False)
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")

@@ -300,6 +300,42 @@ def test_feedback_logs_backend_fallback(monkeypatch: pytest.MonkeyPatch, caplog:
     assert _find_backend_marker(caplog, "ollama"), "Fallback backend log missing"
 
 
+def test_feedback_dspy_fallback_does_not_call_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Wenn DSPy ein analysiertes Fallback-Ergebnis liefert, darf der Adapter
+    nicht erneut den Ollama-Pfad triggern, sondern muss das Ergebnis direkt
+    zurückgeben.
+    """
+
+    # DSPy verfügbar machen
+    _install_fake_dspy(monkeypatch)
+    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+    # Ollama darf in diesem Szenario nicht aufgerufen werden.
+    _install_bomb_ollama(monkeypatch)
+
+    import importlib
+
+    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
+
+    class _FallbackResult:
+        feedback_md = "**F**"
+        analysis_json = {"schema": "criteria.v2", "criteria_results": []}
+        parse_status = "analysis_feedback_fallback"
+
+    # DSPy liefert ein fertiges Fallback-Ergebnis
+    monkeypatch.setattr(program, "analyze_feedback", lambda **_: _FallbackResult())
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    result: FeedbackResult = adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert result.analysis_json.get("schema") == "criteria.v2"
+    assert result.feedback_md == "**F**"
+    assert result.parse_status == "analysis_feedback_fallback"
+
+
 def test_feedback_recovers_when_json_adapter_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Regression guard: JSONAdapter failures must not force stub feedback.

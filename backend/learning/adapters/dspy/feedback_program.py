@@ -180,6 +180,7 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
     - items under `criteria_results` or `criteria`
       with keys `criterion|name`, `max_score|max`, `explanation_md|explanation`
     - scores clamped to [0,max_score]
+    - explanations kept verbatim; empty ones get a neutral default
     - ensure each expected criterion appears (fill with defaults if missing)
     Returns:
         Tuple of (analysis_json | None, feedback_md | None).
@@ -220,15 +221,13 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
             sc_i = 0
         if sc_i > max_i:
             sc_i = max_i
-        expl = it.get("explanation_md") or it.get("explanation") or ""
-        # ensure the criterion name appears for clarity
-        if str(name) not in str(expl):
-            expl = f"{expl} (Bezug: {name})".strip()
+        expl = (it.get("explanation_md") or it.get("explanation") or "").strip()
+        # Neutral fallback avoids repeating the criterion title in the body text.
         normalized_item = {
             "criterion": str(name),
             "max_score": max_i,
             "score": sc_i,
-            "explanation_md": str(expl) if expl else f"Bezug zum Kriterium „{name}“",
+            "explanation_md": str(expl) if expl else "Kein Beleg im Schülertext gefunden.",
         }
         by_name[str(name)] = normalized_item
         ordered_items.append(dict(normalized_item))
@@ -256,7 +255,7 @@ def _parse_to_v2(raw: str, *, criteria: Sequence[str]) -> tuple[Dict[str, Any] |
                 "criterion": key,
                 "max_score": 10,
                 "score": 0,
-                "explanation_md": f"Bezug zum Kriterium „{key}“",
+                "explanation_md": "Kein Beleg im Schülertext gefunden.",
             }
         )
 
@@ -302,7 +301,8 @@ def _build_default_analysis(criteria: Sequence[str]) -> Dict[str, Any]:
             "max_score": 10,
             # No assumptions without evidence → start at 0
             "score": 0,
-            "explanation_md": f"Bezug zum Kriterium „{str(name)}“",
+            # Keep fallback concise; the UI already shows the criterion title separately.
+            "explanation_md": "Kein Beleg im Schülertext gefunden.",
         }
         for name in criteria
     ]

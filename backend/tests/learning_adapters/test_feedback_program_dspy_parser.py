@@ -18,6 +18,32 @@ import json
 import pytest
 
 
+def test_parser_does_not_duplicate_criterion_in_explanation() -> None:
+    """Explanations should stay concise and not repeat the criterion name."""
+    from importlib import import_module
+
+    mod = import_module("backend.learning.adapters.dspy.feedback_program")
+
+    raw = json.dumps(
+        {
+            "criteria_results": [
+                {"criterion": "Inhalt", "max_score": 10, "score": 0, "explanation_md": "Kein Beleg gefunden."},
+                {"criterion": "Struktur", "max_score": 10, "score": 5},
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+    analysis, _ = mod._parse_to_v2(raw, criteria=["Inhalt", "Struktur"])  # type: ignore[attr-defined]
+    assert analysis is not None
+    explanations = {item["criterion"]: item["explanation_md"] for item in analysis["criteria_results"]}
+
+    assert explanations["Inhalt"] == "Kein Beleg gefunden."
+    assert "Bezug:" not in explanations["Inhalt"]
+    assert "Bezug" not in explanations["Struktur"]
+    assert explanations["Struktur"] == "Kein Beleg im Schülertext gefunden."
+
+
 def test_parser_accepts_variants_and_clamps() -> None:
     from importlib import import_module
 
@@ -45,8 +71,8 @@ def test_parser_accepts_variants_and_clamps() -> None:
     a, b = items[0], items[1]
     assert a["criterion"] == "Inhalt" and a["max_score"] == 10 and a["score"] == 10
     assert b["criterion"] == "Struktur" and b["max_score"] == 8 and b["score"] == 0
-    assert "Inhalt" in a["explanation_md"]
-    assert "Struktur" in b["explanation_md"]
+    assert a["explanation_md"] == "gut"
+    assert b["explanation_md"] == "verbesserbar"
 
 
 def test_parser_fills_missing_criteria_and_defaults_on_malformed() -> None:
@@ -148,4 +174,3 @@ def test_parser_extracts_json_from_wrapped_text() -> None:
     analysis, _ = mod._parse_to_v2(wrapped, criteria=["Inhalt"])  # type: ignore[attr-defined]
     assert analysis is not None
     assert analysis["criteria_results"][0]["score"] == 7
-

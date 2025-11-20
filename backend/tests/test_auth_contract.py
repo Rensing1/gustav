@@ -710,6 +710,9 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
     from identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
+    # Ensure allow-listing does not interfere with the happy-path redirect contract
+    monkeypatch.delenv("ALLOWED_REGISTRATION_DOMAINS", raising=False)
+
     test_cfg = OIDCConfig(
         base_url="http://kc.example:8080",
         realm="school",

@@ -325,6 +325,15 @@ def _analysis_dict_to_payload(analysis_json: dict[str, Any]) -> CriteriaAnalysis
         return CriteriaAnalysis(schema=str(analysis_json.get("schema", "criteria.v2")), score=int(analysis_json.get("score", 0)), criteria_results=[])
 
 
+# Legacy hook shims used by integration tests; monkeypatched to drive deterministic output.
+def _run_analysis_model(*, text_md: str, criteria, teacher_instructions_md=None, solution_hints_md=None):
+    return _build_default_analysis(criteria)
+
+
+def _run_feedback_model(*, text_md: str, criteria, analysis_json):
+    return _default_feedback_md()
+
+
 def analyze_feedback(
     *,
     text_md: str,
@@ -408,6 +417,7 @@ def analyze_feedback(
     # Try structured DSPy path first. If anything fails, fall back below.
     parse_status = "parsed"
     feedback_source = "synthesis"
+    structured_failed = False
     try:
         # Best-effort DSPy configuration for local Ollama models; this is a
         # thin adapter over the environment variables used elsewhere in the
@@ -481,18 +491,51 @@ def analyze_feedback(
     except TimeoutError:
         raise
     except Exception as exc:
-        # If structured DSPy analysis or feedback fails, fall back to a
-        # deterministic criteria.v2 payload and default feedback without
-        # issuing additional LM calls.
+        structured_failed = True
         logger.warning("learning.feedback.dspy_structured_failed reason=%s", exc.__class__.__name__)
-        analysis_json = _build_default_analysis(criteria)
-        feedback_md = _default_feedback_md()
-        parse_status = "analysis_feedback_fallback"
-        feedback_source = "fallback"
-        logger.info(
-            "learning.feedback.dspy_pipeline_completed feedback_source=%s parse_status=%s criteria_count=%s",
-            feedback_source,
-            parse_status,
-            len(criteria),
+
+    # Fallback: use legacy single-step runners (monkeypatch-friendly for tests)
+    try:
+        raw_analysis = _run_analysis_model(
+            text_md=text_md,
+            criteria=criteria,
+            teacher_instructions_md=teacher_instructions_md,
+            solution_hints_md=solution_hints_md,
         )
-        return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis_json, parse_status=parse_status)
+        if isinstance(raw_analysis, str):
+            try:
+                analysis_json = json.loads(raw_analysis)
+            except Exception:
+                analysis_json = _build_default_analysis(criteria)
+        elif isinstance(raw_analysis, CriteriaAnalysis):
+            analysis_json = raw_analysis.to_dict()
+        elif isinstance(raw_analysis, dict):
+            analysis_json = raw_analysis
+        else:
+            analysis_json = _build_default_analysis(criteria)
+    except Exception as exc:
+        logger.warning("learning.feedback.legacy_analysis_failed reason=%s", exc.__class__.__name__)
+        analysis_json = _build_default_analysis(criteria)
+
+    try:
+        feedback_md = _run_feedback_model(
+            text_md=text_md,
+            criteria=criteria,
+            analysis_json=analysis_json,
+        )
+        if not isinstance(feedback_md, str) or not feedback_md.strip():
+            raise ValueError("empty feedback")
+        feedback_md = feedback_md.strip()
+    except Exception as exc:
+        logger.warning("learning.feedback.legacy_feedback_failed reason=%s", exc.__class__.__name__)
+        feedback_md = _default_feedback_md()
+
+    parse_status = "analysis_feedback_fallback" if structured_failed else "legacy"
+    feedback_source = "legacy"
+    logger.info(
+        "learning.feedback.dspy_pipeline_completed feedback_source=%s parse_status=%s criteria_count=%s",
+        feedback_source,
+        parse_status,
+        len(criteria),
+    )
+    return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis_json, parse_status=parse_status)

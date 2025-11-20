@@ -69,6 +69,18 @@ def test_missing_local_and_remote_is_transient(tmp_path, monkeypatch: pytest.Mon
     # Remote access configured but fetch will 404 via fake httpx
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
+    # Ensure supabase.local resolves to a private host for HTTP fetches
+    import socket
+    import backend.learning.adapters.local_vision as local_vision  # type: ignore
+
+    monkeypatch.setattr(
+        local_vision.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.42", 0)),
+        ],
+        raising=False,
+    )
 
     client = _CapturingClient()
     _install_fake_httpx_and_ollama(monkeypatch, client)

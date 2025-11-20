@@ -26,6 +26,8 @@ def test_file_preview_pdf_includes_zoom_and_accessibility_attrs() -> None:
     assert 'data-file-preview="true"' in html
     assert 'role="button"' in html
     assert 'tabindex="0"' in html
+    assert 'aria-pressed="false"' in html
+    assert 'aria-expanded="false"' in html
     assert 'aria-label="Dateivorschau vergrößern/verkleinern"' in html
     # Embedded viewer element should be present
     assert '<iframe' in html
@@ -45,6 +47,8 @@ def test_file_preview_image_includes_zoom_and_accessibility_attrs() -> None:
     assert 'data-file-preview="true"' in html
     assert 'role="button"' in html
     assert 'tabindex="0"' in html
+    assert 'aria-pressed="false"' in html
+    assert 'aria-expanded="false"' in html
     assert 'aria-label="Dateivorschau vergrößern/verkleinern"' in html
     # Image element with alt text should be present
     assert '<img' in html
@@ -63,4 +67,6 @@ def test_file_preview_download_fallback_wraps_link_with_zoom_hooks() -> None:
     assert 'data-file-preview="true"' in html
     assert 'role="button"' in html
     assert 'tabindex="0"' in html
+    assert 'aria-pressed="false"' in html
+    assert 'aria-expanded="false"' in html
     assert '<a ' in html and 'href="http://example.test/file.bin"' in html

@@ -75,6 +75,9 @@ def test_local_feedback_happy_path_criteria_v1(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_local_feedback_timeout_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Ensure DSPy path is disabled so the Ollama fallback runs.
+    monkeypatch.delenv("AI_FEEDBACK_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     _install_fake_ollama(monkeypatch, mode="timeout")
 
     import importlib
@@ -84,3 +87,30 @@ def test_local_feedback_timeout_is_transient(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(FeedbackTransientError):
         adapter.analyze(text_md="# Answer", criteria=["Inhalt"])  # type: ignore[arg-type]
+
+
+def test_local_feedback_applies_timeout_to_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ollama call should include AI_TIMEOUT_FEEDBACK in options."""
+    monkeypatch.delenv("AI_FEEDBACK_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.setenv("AI_TIMEOUT_FEEDBACK", "15")
+
+    called: dict = {}
+
+    class _CapturingClient:
+        def generate(self, model: str, prompt: str, options: dict | None = None, **_: object) -> dict:
+            called["options"] = options or {}
+            raise TimeoutError("simulated timeout")
+
+    fake_module = SimpleNamespace(Client=lambda base_url=None: _CapturingClient())
+    monkeypatch.setitem(sys.modules, "ollama", fake_module)
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    with pytest.raises(FeedbackTransientError):
+        adapter.analyze(text_md="# Answer", criteria=["Inhalt"])  # type: ignore[arg-type]
+
+    assert called["options"].get("timeout") == 15

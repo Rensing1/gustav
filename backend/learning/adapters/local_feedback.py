@@ -120,15 +120,29 @@ class _LocalFeedbackAdapter:
                     # Treat the literal string "None" as empty to avoid persisting it.
                     if feedback_trimmed.lower() == "none":
                         feedback_trimmed = ""
+                    analysis_dict = converted.analysis_json if isinstance(converted.analysis_json, dict) else None
+                    has_items = bool(analysis_dict and isinstance(analysis_dict.get("criteria_results"), list) and analysis_dict["criteria_results"])
                     degraded_statuses = {"analysis_fallback", "analysis_error", "analysis_feedback_fallback"}
                     looks_stub = feedback_trimmed.startswith("**Rückmeldung**") and "Stärken:" in feedback_trimmed
+                    if parse_status in degraded_statuses and feedback_trimmed and not looks_stub and has_items:
+                        # Degraded Status, aber verwertbares Feedback + Analyse vorhanden → direkt übernehmen.
+                        logger.info(
+                            "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
+                            len(criteria),
+                            parse_status,
+                        )
+                        return FeedbackResult(
+                            feedback_md=feedback_trimmed,
+                            analysis_json=analysis_dict or {},
+                            parse_status=parse_status,
+                        )
                     if parse_status in degraded_statuses:
                         logger.info(
                             "learning.feedback.dspy_degraded_to_ollama criteria_count=%s parse_status=%s",
                             len(criteria),
                             parse_status or "unknown",
                         )
-                        dspy_analysis = converted.analysis_json if isinstance(converted.analysis_json, dict) else None
+                        dspy_analysis = analysis_dict if isinstance(analysis_dict, dict) else None
                         # Switch to Ollama fallback path below
                         use_dspy = False
                     elif not feedback_trimmed or looks_stub:
@@ -209,6 +223,7 @@ class _LocalFeedbackAdapter:
                     prompt=prompt,
                     options={
                         "raw": True,
+                        "timeout": self._timeout,  # enforce AI_TIMEOUT_FEEDBACK at client level
                         # Ensure server template is not applied to avoid template errors
                         "template": "{{ .Prompt }}",
                     },

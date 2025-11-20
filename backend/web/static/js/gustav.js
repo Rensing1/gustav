@@ -304,7 +304,9 @@ class Gustav {
 
     const toggleZoom = (wrapper) => {
       if (!wrapper || !wrapper.classList) return;
-      wrapper.classList.toggle('file-preview--zoomed');
+      const zoomed = wrapper.classList.toggle('file-preview--zoomed');
+      wrapper.setAttribute('aria-pressed', zoomed ? 'true' : 'false');
+      wrapper.setAttribute('aria-expanded', zoomed ? 'true' : 'false');
     };
 
     document.addEventListener('click', (event) => {

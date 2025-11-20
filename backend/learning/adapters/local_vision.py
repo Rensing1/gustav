@@ -42,7 +42,7 @@ _LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
 
 def _is_local_host(host: str) -> bool:
     """
-    Return True if host resolves to loopback/private or uses .local suffix.
+    Return True if host resolves to loopback/private.
 
     Why:
         The learning worker must talk to Supabase Storage over HTTP in local
@@ -53,15 +53,14 @@ def _is_local_host(host: str) -> bool:
     Behavior:
         - Explicit allowlist for common local hostnames.
         - Direct IPs: accept loopback/private ranges.
-        - Hostnames:
-            * Accept `.local` suffix (mdns-style) as local.
-            * Otherwise, resolve via DNS and accept only when all resolved
-              addresses are loopback/private.
+        - Hostnames (including `.local`):
+            * Resolve via DNS and accept only when all resolved addresses
+              are loopback/private.
     """
     host = (host or "").strip().lower()
     if not host:
         return False
-    if host in _LOCAL_HTTP_HOSTS or host.endswith(".local"):
+    if host in _LOCAL_HTTP_HOSTS:
         return True
     try:
         # Direct IP literal
@@ -808,12 +807,25 @@ class _LocalVisionAdapter:
                 raise VisionTransientError("image_unavailable")
 
         prompt = (
-            "Transcribe the exact visible text as Markdown.\n"
-            "- Verbatim OCR: do not summarize or invent structure.\n"
-            "- No placeholders, no fabrications, no disclaimers.\n"
-            "- Preserve line breaks; omit decorative headers/footers.\n\n"
-            f"Input kind: {kind or 'unknown'}; mime: {mime or 'n/a'}.\n"
-            "If the content is an image or a scanned PDF page, return only the text you can read."
+            "Du bist ein OCR-Werkzeug. Übertrage den sichtbaren Inhalt genau in Markdown.\n\n"
+            "Regeln für den Text:\n"
+            "- Schreibe den Text wortgetreu ab (auch Rechtschreibfehler und Zeichensetzung).\n"
+            "- Übersetze nichts und formuliere nicht um.\n"
+            "- Füge keine Erklärungen, Kommentare oder Disclaimer hinzu.\n"
+            "- Wenn eine Stelle handschriftlich oder unscharf ist und du sie nicht sicher lesen kannst,\n"
+            "  markiere sie als [unleserlich] statt zu raten.\n\n"
+            "Regeln für Struktur (Markdown):\n"
+            "- Erhalte Zeilenumbrüche soweit wie möglich.\n"
+            "- Überschriften aus dem Bild kannst du als Markdown-Überschriften mit '# ' notieren.\n"
+            "- Aufzählungen darfst du als '- ' Listen wiedergeben, wenn sie im Bild klar erkennbar sind.\n"
+            "- Tabellen oder Kästchen mit Text gibst du als einfache Markdown-Tabelle wieder.\n"
+            "- Pfeile und einfache Diagramme beschreibst du textuell, z.B.: '- Start -> Schritt 1 -> Schritt 2'.\n\n"
+            "Wichtig:\n"
+            "- Schreibe ausschließlich das Ergebnis in Markdown.\n"
+            "- Füge keine zusätzlichen Sätze hinzu (keine Einleitung, keine Zusammenfassung).\n\n"
+            f"Kontext: Eingabetyp: {kind or 'unknown'}; MIME-Typ: {mime or 'n/a'}.\n"
+            "Wenn Seitenränder, Kopf- oder Fußzeilen mit technischen Metadaten vorhanden sind,\n"
+            "darfst du sie weglassen, solange der eigentliche Schülertext vollständig bleibt."
         )
         if mime == "application/pdf":
             stitched_png = self._ensure_pdf_stitched_png(submission=submission, job_payload=job_payload)

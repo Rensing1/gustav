@@ -74,6 +74,9 @@ class FilePreview(Component):
                     "data-file-preview": "true",
                     "role": "button",
                     "tabindex": "0",
+                    # Initial state: not zoomed; JS toggles these in gustav.js.
+                    "aria-pressed": "false",
+                    "aria-expanded": "false",
                     "aria-label": "Dateivorschau vergrößern/verkleinern",
                 },
             )

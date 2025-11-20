@@ -44,6 +44,18 @@ def test_pdf_remote_fetch_and_render_stitch(tmp_path, monkeypatch: pytest.Monkey
     # Supabase service-role access
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
+    # Ensure supabase.local resolves to a private host for HTTP fetches
+    import socket
+    import backend.learning.adapters.local_vision as local_vision  # type: ignore
+
+    monkeypatch.setattr(
+        local_vision.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.42", 0)),
+        ],
+        raising=False,
+    )
 
     # Fake PDF bytes returned by httpx streaming client
     pdf_bytes = b"%PDF-1.4\n% dummy remote"

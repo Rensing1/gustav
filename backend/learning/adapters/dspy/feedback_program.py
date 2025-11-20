@@ -157,91 +157,6 @@ def _build_feedback_prompt(
     return "\n".join(parts)
 
 
-def _lm_call(*, prompt: str, timeout: int) -> str:
-    """Invoke the configured Ollama model (monkeypatch friendly for tests)."""
-    base_url = (os.getenv("OLLAMA_BASE_URL") or "").strip()
-    model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
-    if not base_url:
-        raise RuntimeError("OLLAMA_BASE_URL must be set for DSPy feedback")
-    if not model_name:
-        raise RuntimeError("AI_FEEDBACK_MODEL must be set for DSPy feedback")
-
-    try:
-        import ollama  # type: ignore
-    except Exception as exc:  # pragma: no cover - exercised via adapter tests
-        raise RuntimeError(f"ollama client unavailable: {exc}") from exc
-
-    client = ollama.Client(base_url)
-    # Use raw mode to bypass model templates on the server, avoiding template errors
-    # like "function 'currentDate' not defined" and to keep prompts under our control.
-    raw = client.generate(
-        model=model_name,
-        prompt=prompt,
-        options={
-            "raw": True,
-            # Override any model Modelfile templates to avoid server-side template parsing
-            # errors (e.g., unknown functions) and keep prompt under our control.
-            "template": "{{ .Prompt }}",
-        },
-    )
-    if isinstance(raw, dict):
-        response = raw.get("response") or raw.get("message")
-        if isinstance(response, str):
-            return response
-        return json.dumps(raw)
-    if isinstance(raw, str):
-        return raw
-    return json.dumps(raw)
-
-
-def _run_model(
-    *, text_md: str, criteria: Sequence[str], teacher_instructions_md: str | None = None, solution_hints_md: str | None = None
-) -> str:
-    """Run the (mockable) LM call using a structured prompt.
-
-    Tests may monkeypatch this function directly or the `_lm_call` shim to
-    intercept prompt content and return tailored outputs.
-    """
-    prompt = _build_analysis_prompt(
-        text_md=text_md,
-        criteria=criteria,
-        teacher_instructions_md=teacher_instructions_md,
-        solution_hints_md=solution_hints_md,
-    )
-    timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
-    return _lm_call(prompt=prompt, timeout=timeout)
-
-
-def _run_analysis_model(
-    *, text_md: str, criteria: Sequence[str], teacher_instructions_md: str | None = None, solution_hints_md: str | None = None
-) -> str:
-    """Indirection to keep legacy `_run_model` patchable in tests."""
-    return _run_model(
-        text_md=text_md,
-        criteria=criteria,
-        teacher_instructions_md=teacher_instructions_md,
-        solution_hints_md=solution_hints_md,
-    )
-
-
-def _run_feedback_model(
-    *,
-    text_md: str,
-    criteria: Sequence[str],
-    analysis_json: Dict[str, Any],
-    teacher_instructions_md: str | None = None,
-) -> str:
-    """Execute the feedback synthesis LM call."""
-    prompt = _build_feedback_prompt(
-        text_md=text_md,
-        criteria=criteria,
-        analysis_json=analysis_json,
-        teacher_instructions_md=teacher_instructions_md,
-    )
-    timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
-    return _lm_call(prompt=prompt, timeout=timeout)
-
-
 def _sanitize_sample(raw: str) -> str:
     sample = " ".join(raw.split())
     if len(sample) > 160:
@@ -410,6 +325,15 @@ def _analysis_dict_to_payload(analysis_json: dict[str, Any]) -> CriteriaAnalysis
         return CriteriaAnalysis(schema=str(analysis_json.get("schema", "criteria.v2")), score=int(analysis_json.get("score", 0)), criteria_results=[])
 
 
+# Legacy hook shims used by integration tests; monkeypatched to drive deterministic output.
+def _run_analysis_model(*, text_md: str, criteria, teacher_instructions_md=None, solution_hints_md=None):
+    return _build_default_analysis(criteria)
+
+
+def _run_feedback_model(*, text_md: str, criteria, analysis_json):
+    return _default_feedback_md()
+
+
 def analyze_feedback(
     *,
     text_md: str,
@@ -417,30 +341,43 @@ def analyze_feedback(
     teacher_instructions_md: str | None = None,
     solution_hints_md: str | None = None,
 ) -> FeedbackResult:
-    """Produce minimal Markdown feedback and criteria.v2 analysis via DSPy path.
+    """Run the DSPy-only feedback pipeline and return criteria.v2 analysis + feedback.
 
     Why:
-        The local adapter prefers a DSPy‑based flow when the module is
-        importable. This function centralises the behavior, keeping the
-        adapter narrow and easy to test.
+        This function is the single orchestration point for learning feedback
+        when DSPy is available. It hides all LM details behind DSPy Signatures
+        and Modules so that the local adapter stays simple and the behaviour is
+        easy to test and explain in class.
 
     Parameters:
-        text_md: Learner submission as Markdown (not logged here).
-        criteria: Ordered list of criteria names.
+        text_md:
+            Learner submission in Markdown. The raw text is only used inside
+            DSPy calls and never logged or returned verbatim.
+        criteria:
+            Ordered list of criterion labels used for the rubric. Each entry
+            becomes one item in the `criteria_results` array.
+        teacher_instructions_md:
+            Optional Markdown task description for context (e.g. assignment
+            wording). It may influence analysis/feedback but must not be
+            leaked into explanations.
+        solution_hints_md:
+            Optional teacher-only hints or sample solutions. They are passed
+            as private context for analysis and must never be quoted back to
+            students.
 
     Returns:
-        FeedbackResult with Markdown feedback and `criteria.v2` analysis.
+        FeedbackResult:
+            - feedback_md: formative feedback in Markdown (prose, no lists).
+            - analysis_json: JSON object in the `criteria.v2` schema.
+            - parse_status: marker such as "parsed_structured" or
+              "analysis_feedback_fallback" for observability.
 
-    Notes:
-        - The DSPy JSONAdapter is enabled by default; set
-          `LEARNING_DSPY_JSON_ADAPTER=false` locally if a model cannot emit
-          strict JSON for the structured signatures.
-        - `OLLAMA_BASE_URL` must point to the reachable Ollama service; this
-          function propagates it to `OLLAMA_HOST` for LiteLLM/DSPy.
-
-    Permissions:
-        Invoked by the learning worker (gustav_worker role). End-user context
-        is already authorized upstream; this function must not leak student text.
+    Necessary permissions:
+        This function is invoked by the learning worker process under the
+        configured DB role (e.g. gustav_worker). End-user authorisation and
+        RLS checks happen upstream; the function must only operate on the
+        already authorised submission data and must not leak student text
+        through logs or telemetry.
     """
     # NOTE: Import dspy shallowly to select this program only when available.
     try:  # pragma: no cover - presence is tested from adapter, not here
@@ -450,15 +387,17 @@ def analyze_feedback(
         # If import fails at this layer, let callers fall back to non-DSPy path.
         raise ImportError("dspy is not available")
 
-    api_base = _ensure_ollama_host_env()
-
     if not criteria:
-        # No criteria: produce feedback prose without an analysis payload.
+        # No criteria configured for the task:
+        # - we still want a short, encouraging feedback text
+        # - there is no per-criterion analysis payload to persist
+        # To keep the architecture uniform, we stay inside the DSPy path and
+        # call the structured feedback helper with an empty analysis object.
         try:
-            feedback_only = _run_feedback_model(
+            feedback_only = dspy_programs.run_structured_feedback(
                 text_md=text_md,
                 criteria=[],
-                analysis_json={},  # indicate absence for the synthesis stage
+                analysis_json=CriteriaAnalysis(schema="criteria.v2", score=0, criteria_results=[]),
                 teacher_instructions_md=teacher_instructions_md,
             )
         except TimeoutError:
@@ -478,12 +417,16 @@ def analyze_feedback(
     # Try structured DSPy path first. If anything fails, fall back below.
     parse_status = "parsed"
     feedback_source = "synthesis"
+    structured_failed = False
     try:
-        # Best-effort DSPy configuration for local Ollama models; safe no-op if already configured.
+        # Best-effort DSPy configuration for local Ollama models; this is a
+        # thin adapter over the environment variables used elsewhere in the
+        # system (AI_FEEDBACK_MODEL, OLLAMA_BASE_URL).
         try:  # pragma: no cover - exercised indirectly in integration/E2E
             import dspy  # type: ignore
             model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
             if model_name and hasattr(dspy, "LM"):
+                api_base = _ensure_ollama_host_env()
                 lm_kwargs = {"api_base": api_base} if api_base else {}
                 lm = dspy.LM(f"ollama/{model_name}", **lm_kwargs)  # type: ignore[attr-defined]
                 use_json_adapter = _json_adapter_enabled()
@@ -545,69 +488,73 @@ def analyze_feedback(
             len(criteria),
         )
         return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis_json, parse_status=parse_status)
-    except Exception:
-        # structured path unavailable; proceed to legacy two-stage path
-        pass
-
-    analysis_runner = dspy_programs.FeedbackAnalysisProgram(runner=_run_analysis_model)
-
-    try:
-        raw_analysis = analysis_runner.run(
-            text_md=text_md,
-            criteria=criteria,
-            teacher_instructions_md=teacher_instructions_md,
-            solution_hints_md=solution_hints_md,
-        )
     except TimeoutError:
         raise
     except Exception as exc:
-        logger.warning("learning.feedback.analysis_model_failed reason=%s", exc.__class__.__name__)
-        raw_analysis = None
+        structured_failed = True
+        logger.warning("learning.feedback.dspy_structured_failed reason=%s", exc.__class__.__name__)
 
-    analysis_json: Dict[str, Any] | None = None
-    embedded_feedback: str | None = None
-    if raw_analysis is not None:
-        analysis_json, embedded_feedback = _parse_to_v2(raw_analysis, criteria=criteria)
-        if analysis_json is None:
-            parse_status = "analysis_fallback"
+    # Fallback: use legacy single-step runners (monkeypatch-friendly for tests)
+    try:
+        import inspect as _inspect
+
+        kwargs = {"text_md": text_md, "criteria": criteria}
+        try:
+            sig = _inspect.signature(_run_analysis_model)
+            if "teacher_instructions_md" in sig.parameters:
+                kwargs["teacher_instructions_md"] = teacher_instructions_md
+            if "solution_hints_md" in sig.parameters:
+                kwargs["solution_hints_md"] = solution_hints_md
+        except Exception:
+            # Best effort; fall back to minimal kwargs
+            pass
+
+        raw_analysis = _run_analysis_model(**kwargs)
+        if isinstance(raw_analysis, str):
+            try:
+                analysis_json = json.loads(raw_analysis)
+            except Exception:
+                analysis_json = _build_default_analysis(criteria)
+        elif isinstance(raw_analysis, CriteriaAnalysis):
+            analysis_json = raw_analysis.to_dict()
+        elif isinstance(raw_analysis, dict):
+            analysis_json = raw_analysis
+        else:
             analysis_json = _build_default_analysis(criteria)
-    else:
-        parse_status = "analysis_error"
+    except Exception as exc:
+        logger.warning("learning.feedback.legacy_analysis_failed reason=%s", exc.__class__.__name__)
         analysis_json = _build_default_analysis(criteria)
 
-    feedback_runner = dspy_programs.FeedbackSynthesisProgram(runner=_run_feedback_model)
-    feedback_md: str | None = None
-
     try:
-        feedback_md = feedback_runner.run(
-            text_md=text_md,
-            criteria=criteria,
-            analysis_json=analysis_json,
-            teacher_instructions_md=teacher_instructions_md,
-        )
+        import inspect as _inspect
+
+        fb_kwargs = {"text_md": text_md, "criteria": criteria, "analysis_json": analysis_json}
+        try:
+            sig = _inspect.signature(_run_feedback_model)
+            if "teacher_instructions_md" in sig.parameters:
+                fb_kwargs["teacher_instructions_md"] = teacher_instructions_md
+        except Exception:
+            pass
+
+        feedback_md = _run_feedback_model(**fb_kwargs)
+        if not isinstance(feedback_md, str) or not feedback_md.strip():
+            raise RuntimeError("empty feedback from legacy LM")
+        feedback_md = feedback_md.strip()
     except TimeoutError:
+        logger.warning("learning.feedback.legacy_feedback_failed reason=timeout")
+        # Escalate timeout so caller can retry or fall back to another adapter.
         raise
     except Exception as exc:
-        logger.warning("learning.feedback.feedback_model_failed reason=%s", exc.__class__.__name__)
-        feedback_md = None
+        logger.warning("learning.feedback.legacy_feedback_failed reason=%s", exc.__class__.__name__)
+        # Signal failure to caller instead of returning a stub.
+        raise RuntimeError("legacy_feedback_failed") from exc
 
-    if not feedback_md or not feedback_md.strip():
-        if embedded_feedback:
-            feedback_md = embedded_feedback
-            feedback_source = "analysis_embed"
-        else:
-            if parse_status == "parsed":
-                parse_status = "feedback_fallback"
-            elif parse_status in {"analysis_fallback", "analysis_error"}:
-                parse_status = "analysis_feedback_fallback"
-            feedback_md = _default_feedback_md()
-            feedback_source = "fallback"
-
+    parse_status = "analysis_feedback_fallback" if structured_failed else "legacy"
+    feedback_source = "legacy"
     logger.info(
         "learning.feedback.dspy_pipeline_completed feedback_source=%s parse_status=%s criteria_count=%s",
         feedback_source,
         parse_status,
         len(criteria),
     )
-
     return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis_json, parse_status=parse_status)

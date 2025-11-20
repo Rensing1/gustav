@@ -1,65 +1,47 @@
 """
-Assert adapters and DSPy program call Ollama with raw=True and without invalid
-server options like "timeout".
+Regression test: Ollama fallback must enforce raw mode and bypass server templates.
 
-Motivation:
-    The Ollama server rejects unknown options (logs: invalid option provided option=timeout)
-    and some model templates may error (e.g., function "currentDate" not defined).
-    Using raw=True bypasses server-side templates and keeps prompts fully under
-    our control.
+Intent:
+    Guard against regressions where the local feedback adapter would allow
+    server-side templates (which can fail on missing functions) or omit the
+    `raw` flag. This keeps behavior deterministic and mirrors earlier fixes.
 """
 
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 from types import SimpleNamespace
 
 import pytest
 
+pytest.importorskip("psycopg")
 
-def test_local_feedback_uses_raw_option(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = {"options": None}
 
-    class _CapturingClient:
-        def generate(self, *, model: str, prompt: str, options: dict | None = None, **_: object):  # type: ignore[no-untyped-def]
-            calls["options"] = dict(options or {})
-            return {"response": "OK"}
+def _install_capturing_ollama(monkeypatch: pytest.MonkeyPatch, calls: list) -> None:
+    class _Client:
+        def generate(self, model: str, prompt: str, options: dict | None = None, **_: object) -> dict:
+            calls.append({"model": model, "prompt": prompt, "options": options or {}})
+            return {"response": "feedback"}
 
-    fake_module = SimpleNamespace(Client=lambda host=None: _CapturingClient())
-    monkeypatch.setitem(sys.modules, "ollama", fake_module)
+    monkeypatch.setitem(sys.modules, "ollama", SimpleNamespace(Client=lambda base_url=None: _Client()))
+
+
+def test_local_feedback_fallback_uses_raw_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Force DSPy path to be skipped (missing model env)
+    monkeypatch.delenv("AI_FEEDBACK_MODEL", raising=False)
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+    calls: list = []
+    _install_capturing_ollama(monkeypatch, calls)
 
     mod = importlib.import_module("backend.learning.adapters.local_feedback")
     adapter = mod.build()  # type: ignore[attr-defined]
 
-    adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    result = adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+    assert result.feedback_md.strip()
 
-    opts = calls["options"] or {}
-    assert "timeout" not in opts
-    assert opts.get("raw") is True
-    assert opts.get("template") == "{{ .Prompt }}"
-
-
-def test_dspy_feedback_program_uses_raw_option(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = {"options": None}
-
-    class _CapturingClient:
-        def generate(self, *, model: str, prompt: str, options: dict | None = None, **_: object):  # type: ignore[no-untyped-def]
-            calls["options"] = dict(options or {})
-            return {"response": "{}"}
-
-    fake_module = SimpleNamespace(Client=lambda host=None: _CapturingClient())
-    monkeypatch.setitem(sys.modules, "ollama", fake_module)
-
-    # Ensure required env so _lm_call doesn't raise
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
-    monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
-
-    program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
-    program._lm_call(prompt="hi", timeout=5)  # type: ignore[attr-defined]
-
-    opts = calls["options"] or {}
-    assert "timeout" not in opts
+    assert len(calls) == 1, "Expected exactly one Ollama generate call"
+    opts = calls[0]["options"]
     assert opts.get("raw") is True
     assert opts.get("template") == "{{ .Prompt }}"

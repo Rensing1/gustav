@@ -57,6 +57,21 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
    - `due_at` akzeptiert ISO-8601 mit Zeitzone, inkl. `Z` (UTC), und wird zu `+00:00` normalisiert.
   - DELETE-Endpunkte liefern `204 No Content` ohne Body.
 
+### Learning: KI-Feedback (DSPy-Pipeline, Überblick)
+- Bounded Context: `learning` verarbeitet Schüler-**Einreichungen** (`learning_submissions`) und ordnet ihnen KI-Analyse und KI-Feedback zu (siehe `docs/bounded_contexts.md`).
+- Schichten:
+  - Worker / Use Case (geplant): holt offene Jobs aus `learning_submissions`, orchestriert Vision- und Feedback-Adapter und schreibt `analysis_json` + `feedback_md` zurück.
+  - Adapter: `backend/learning/adapters/vision_*` (OCR) und `backend/learning/adapters/local_feedback.py` (Feedback).
+  - DSPy-Programm: `backend/learning/adapters/dspy/feedback_program.py` kapselt die eigentliche LLM-Logik.
+- DSPy-only Feedback-Pipeline:
+  - Analyse: `run_structured_analysis(...)` (`programs.py`) ruft `dspy.Predict(FeedbackAnalysisSignature)` auf und liefert ein `CriteriaAnalysis`-Objekt, das in `criteria.v2` normalisiert wird (`_parse_to_v2(...)`).
+  - Feedback: `run_structured_feedback(...)` (`programs.py`) ruft `dspy.Predict(FeedbackSynthesisSignature)` auf und erzeugt einen Fließtext `feedback_md` für Lernende.
+  - Fallbacks: Wenn DSPy-Analyse oder -Feedback fehlschlagen, wird **innerhalb des DSPy-Pfads** ein deterministisches `criteria.v2`-Objekt und ein neutraler Feedback-Text erzeugt (keine zusätzlichen LM-Aufrufe).
+- Adapter-Verhalten:
+  - Der lokale Feedback-Adapter (`local_feedback.py`) ruft vorzugsweise `dspy.feedback_program.analyze_feedback(...)` auf und arbeitet ausschließlich mit dem Port-Typ `FeedbackResult`.
+  - Nur wenn DSPy nicht verfügbar oder nicht konfiguriert ist, fällt der Adapter auf einen einfachen Ollama-Prompt zurück und erzeugt weiterhin ein `criteria.v2`-Payload, damit API-Vertrag und DB-Schema unverändert bleiben.
+  - Dieses Design trennt die fachliche Sicht (Einreichung → Analyse → Feedback) von der technischen LM-Orchestrierung (DSPy), sodass Schüler:innen am Code die Architektur nachvollziehen können, ohne alle LLM-Details kennen zu müssen (siehe `docs/references/LLM-Prompts.md`).
+
 ## Sicherheits- und Caching‑Leitlinien (Web)
 - Personalisierte SSR‑Antworten (Nutzer im `request.state.user`) setzen standardmäßig `Cache-Control: private, no-store` (siehe `_layout_response`).
 - Auth‑Start und -Register: `Vary: HX-Request` wird gesetzt, um Caches zwischen 204‑HTMX und 302‑Redirect zu unterscheiden.

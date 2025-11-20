@@ -111,6 +111,7 @@ async def test_worker_persists_dspy_feedback_without_legacy_calls(monkeypatch: p
     # Verify persistence on the submission row
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (fixture.student_sub,))
             cur.execute(
                 "select feedback_md, analysis_json from public.learning_submissions where id = %s",
                 (submission["id"],),

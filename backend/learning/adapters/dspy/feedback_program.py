@@ -538,11 +538,16 @@ def analyze_feedback(
 
         feedback_md = _run_feedback_model(**fb_kwargs)
         if not isinstance(feedback_md, str) or not feedback_md.strip():
-            raise ValueError("empty feedback")
+            raise RuntimeError("empty feedback from legacy LM")
         feedback_md = feedback_md.strip()
+    except TimeoutError:
+        logger.warning("learning.feedback.legacy_feedback_failed reason=timeout")
+        # Escalate timeout so caller can retry or fall back to another adapter.
+        raise
     except Exception as exc:
         logger.warning("learning.feedback.legacy_feedback_failed reason=%s", exc.__class__.__name__)
-        feedback_md = _default_feedback_md()
+        # Signal failure to caller instead of returning a stub.
+        raise RuntimeError("legacy_feedback_failed") from exc
 
     parse_status = "analysis_feedback_fallback" if structured_failed else "legacy"
     feedback_source = "legacy"

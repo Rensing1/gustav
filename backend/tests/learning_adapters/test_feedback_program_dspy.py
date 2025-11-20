@@ -124,6 +124,31 @@ def test_program_uses_legacy_runners_when_structured_fails(monkeypatch: pytest.M
     assert result.feedback_md == "**Legacy Feedback**"
 
 
+def test_program_legacy_fallback_raises_on_lm_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    If the legacy LM hook fails, the program must not return stub feedback.
+
+    Instead, it should surface the error so the caller can retry or fall back
+    to another adapter (e.g., Ollama).
+    """
+    _install_fake_dspy(monkeypatch)
+    prog = import_module("backend.learning.adapters.dspy.feedback_program")
+    programs = import_module("backend.learning.adapters.dspy.programs")
+
+    # Force structured path to fail and trigger the legacy fallback.
+    monkeypatch.setattr(programs, "run_structured_analysis", lambda **_: (_ for _ in ()).throw(RuntimeError("no predict")))
+    monkeypatch.setattr(programs, "run_structured_feedback", lambda **_: (_ for _ in ()).throw(RuntimeError("no predict")))
+
+    # Legacy LM hook signals a timeout; this must bubble up.
+    def _bomb_feedback_model(**kwargs):  # type: ignore[no-untyped-def]
+        raise TimeoutError("LM timeout in legacy fallback")
+
+    monkeypatch.setattr(prog, "_run_feedback_model", _bomb_feedback_model)
+
+    with pytest.raises(TimeoutError):
+        prog.analyze_feedback(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
+
+
 def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
     prog = import_module("backend.learning.adapters.dspy.feedback_program")

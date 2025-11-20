@@ -223,6 +223,7 @@ class _LocalFeedbackAdapter:
                     prompt=prompt,
                     options={
                         "raw": True,
+                        "timeout": self._timeout,  # enforce AI_TIMEOUT_FEEDBACK at client level
                         # Ensure server template is not applied to avoid template errors
                         "template": "{{ .Prompt }}",
                     },

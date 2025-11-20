@@ -20,6 +20,18 @@ def test_pdf_remote_wrong_content_transient(tmp_path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
+    # Ensure supabase.local resolves to a private host for HTTP fetches
+    import socket
+    import backend.learning.adapters.local_vision as local_vision  # type: ignore
+
+    monkeypatch.setattr(
+        local_vision.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.42", 0)),
+        ],
+        raising=False,
+    )
 
     # Fake httpx streaming client returning HTML bytes with 200
     class _HttpxStream:

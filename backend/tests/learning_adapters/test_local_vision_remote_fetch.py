@@ -82,6 +82,16 @@ def test_remote_fetches_image_and_sends_to_model(monkeypatch: pytest.MonkeyPatch
     # Supabase service-role access
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
+    # Treat supabase.local as private in this test environment
+    import socket
+    monkeypatch.setattr(
+        importlib.import_module("backend.learning.adapters.local_vision").socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.42", 0)),
+        ],
+        raising=False,
+    )
 
     # Prepare a tiny PNG payload returned by the fake httpx client
     png = b"\x89PNG\r\n\x1a\n" + b"x" * 16
@@ -315,11 +325,51 @@ def test_is_local_host_accepts_private_dns_only(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_is_local_host_accepts_local_suffix_without_dns(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`.local` hostnames count as local even if DNS resolution fails."""
+    """`.local` hostnames fail closed when DNS resolution fails."""
     mod = importlib.import_module("backend.learning.adapters.local_vision")
 
     # Simulate DNS failure
     monkeypatch.setattr(mod.socket, "getaddrinfo", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("fail")), raising=False)
+
+    assert mod._is_local_host("storage.local") is False  # type: ignore[attr-defined]
+
+
+def test_is_local_host_rejects_local_suffix_with_public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    `.local` hostnames must resolve only to private/loopback IPs to be trusted.
+
+    A public DNS answer must be rejected despite the suffix.
+    """
+    import socket
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("8.8.8.8", 0)),
+        ],
+        raising=False,
+    )
+
+    assert mod._is_local_host("storage.local") is False  # type: ignore[attr-defined]
+
+
+def test_is_local_host_accepts_local_suffix_with_private_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """.local hostnames with private DNS resolution are trusted."""
+    import socket
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+
+    monkeypatch.setattr(
+        mod.socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.7", 0)),
+        ],
+        raising=False,
+    )
 
     assert mod._is_local_host("storage.local") is True  # type: ignore[attr-defined]
 
@@ -329,6 +379,16 @@ def test_remote_fetch_aborts_when_download_exceeds_limit(monkeypatch: pytest.Mon
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     monkeypatch.setenv("LEARNING_MAX_UPLOAD_BYTES", "32")
+    # supabase.local must resolve to a private host for HTTP fetches
+    import socket
+    monkeypatch.setattr(
+        importlib.import_module("backend.learning.adapters.local_vision").socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.42", 0)),
+        ],
+        raising=False,
+    )
 
     # Prepare payload larger than limit (64 bytes)
     payload = b"\x89PNG\r\n\x1a\n" + (b"z" * 56)
@@ -355,6 +415,16 @@ def test_remote_fetch_logs_success_without_pii(monkeypatch: pytest.MonkeyPatch, 
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     caplog.set_level("INFO")
+    # supabase.local must resolve to a private host for HTTP fetches
+    import socket
+    monkeypatch.setattr(
+        importlib.import_module("backend.learning.adapters.local_vision").socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, None, None, "", ("10.0.0.42", 0)),
+        ],
+        raising=False,
+    )
 
     png = b"\x89PNG\r\n\x1a\n" + b"y" * 32
     client = _CapturingClient()

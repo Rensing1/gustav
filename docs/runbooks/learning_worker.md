@@ -41,10 +41,10 @@ Purpose: Operate and troubleshoot the asynchronous learning worker (vision + fee
   - Wenn DSPy nicht installiert ist oder die benötigten ENV (`AI_FEEDBACK_MODEL`, `OLLAMA_BASE_URL`) fehlen,
     fällt der lokale Feedback-Adapter auf einen einfachen Ollama-Prompt zurück und erzeugt dennoch ein
     `criteria.v2`-Objekt plus eine generische Rückmeldung.
-  - Schlägt nur die strukturierte DSPy-Auswertung fehl (Parsing/Modell-Antwort), erzeugt das
-    DSPy-Programm selbst ein deterministisches `criteria.v2`-Default-Objekt und einen neutralen
-    Feedback-Text, ohne zusätzliche LM-Aufrufe. Der Worker sieht in beiden Fällen „completed“
-    mit `analysis_json.schema='criteria.v2'` und kann via `parse_status` / `error_code`
+  - Schlägt nur die strukturierte DSPy-Auswertung fehl (Parsing/Modell-Antwort), markiert das DSPy-Programm
+    den Status als `analysis_feedback_fallback`; der lokale Adapter ruft dann explizit den Ollama-Fallback
+    auf (kein Stub-Feedback, keine stillen 0er-Scores) und liefert `parse_status=model`.
+    Der Worker sieht weiterhin `analysis_json.schema='criteria.v2'` und kann via `parse_status` / `error_code`
     unterscheiden, ob es sich um einen Fallback handelt.
 
 ## Observability

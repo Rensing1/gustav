@@ -300,40 +300,48 @@ def test_feedback_logs_backend_fallback(monkeypatch: pytest.MonkeyPatch, caplog:
     assert _find_backend_marker(caplog, "ollama"), "Fallback backend log missing"
 
 
-def test_feedback_dspy_fallback_does_not_call_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_feedback_dspy_fallback_degrades_to_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Wenn DSPy ein analysiertes Fallback-Ergebnis liefert, darf der Adapter
-    nicht erneut den Ollama-Pfad triggern, sondern muss das Ergebnis direkt
-    zurückgeben.
+    DSPy-Fallback-Ergebnisse müssen den Ollama-Fallback triggern,
+    statt stubartige 0er-Analysen als final zu speichern.
     """
 
-    # DSPy verfügbar machen
     _install_fake_dspy(monkeypatch)
     monkeypatch.setenv("AI_FEEDBACK_MODEL", "llama3.1")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
-    # Ollama darf in diesem Szenario nicht aufgerufen werden.
-    _install_bomb_ollama(monkeypatch)
+    # Ollama-Aufruf darf stattfinden und wird aufgezeichnet.
+    calls: list[dict] = []
+
+    class _CapturingClient:
+        def generate(self, model: str, prompt: str, options: dict | None = None, **_: object) -> dict:
+            calls.append({"model": model, "prompt": prompt, "options": options or {}})
+            return {"response": "ollama-feedback"}
+
+    import sys
+    from types import SimpleNamespace
+
+    monkeypatch.setitem(sys.modules, "ollama", SimpleNamespace(Client=lambda base_url=None: _CapturingClient()))
 
     import importlib
 
     program = importlib.import_module("backend.learning.adapters.dspy.feedback_program")
 
     class _FallbackResult:
-        feedback_md = "**F**"
+        feedback_md = "Stub aus DSPy"
         analysis_json = {"schema": "criteria.v2", "criteria_results": []}
         parse_status = "analysis_feedback_fallback"
 
-    # DSPy liefert ein fertiges Fallback-Ergebnis
     monkeypatch.setattr(program, "analyze_feedback", lambda **_: _FallbackResult())
 
     mod = importlib.import_module("backend.learning.adapters.local_feedback")
     adapter = mod.build()  # type: ignore[attr-defined]
 
     result: FeedbackResult = adapter.analyze(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
-    assert result.analysis_json.get("schema") == "criteria.v2"
-    assert result.feedback_md == "**F**"
-    assert result.parse_status == "analysis_feedback_fallback"
+
+    assert calls, "Ollama-Fallback wurde nicht aufgerufen"
+    assert result.feedback_md.strip() == "ollama-feedback"
+    assert result.parse_status == "model"
 
 
 def test_feedback_recovers_when_json_adapter_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

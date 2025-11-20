@@ -75,6 +75,9 @@ def test_local_feedback_happy_path_criteria_v1(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_local_feedback_timeout_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Ensure DSPy path is disabled so the Ollama fallback runs.
+    monkeypatch.delenv("AI_FEEDBACK_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     _install_fake_ollama(monkeypatch, mode="timeout")
 
     import importlib

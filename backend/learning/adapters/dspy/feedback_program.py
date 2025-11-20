@@ -496,12 +496,20 @@ def analyze_feedback(
 
     # Fallback: use legacy single-step runners (monkeypatch-friendly for tests)
     try:
-        raw_analysis = _run_analysis_model(
-            text_md=text_md,
-            criteria=criteria,
-            teacher_instructions_md=teacher_instructions_md,
-            solution_hints_md=solution_hints_md,
-        )
+        import inspect as _inspect
+
+        kwargs = {"text_md": text_md, "criteria": criteria}
+        try:
+            sig = _inspect.signature(_run_analysis_model)
+            if "teacher_instructions_md" in sig.parameters:
+                kwargs["teacher_instructions_md"] = teacher_instructions_md
+            if "solution_hints_md" in sig.parameters:
+                kwargs["solution_hints_md"] = solution_hints_md
+        except Exception:
+            # Best effort; fall back to minimal kwargs
+            pass
+
+        raw_analysis = _run_analysis_model(**kwargs)
         if isinstance(raw_analysis, str):
             try:
                 analysis_json = json.loads(raw_analysis)
@@ -518,11 +526,17 @@ def analyze_feedback(
         analysis_json = _build_default_analysis(criteria)
 
     try:
-        feedback_md = _run_feedback_model(
-            text_md=text_md,
-            criteria=criteria,
-            analysis_json=analysis_json,
-        )
+        import inspect as _inspect
+
+        fb_kwargs = {"text_md": text_md, "criteria": criteria, "analysis_json": analysis_json}
+        try:
+            sig = _inspect.signature(_run_feedback_model)
+            if "teacher_instructions_md" in sig.parameters:
+                fb_kwargs["teacher_instructions_md"] = teacher_instructions_md
+        except Exception:
+            pass
+
+        feedback_md = _run_feedback_model(**fb_kwargs)
         if not isinstance(feedback_md, str) or not feedback_md.strip():
             raise ValueError("empty feedback")
         feedback_md = feedback_md.strip()

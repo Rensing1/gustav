@@ -1,45 +1,42 @@
 # Plan: Learning-Worker Parallelisierung mit Ollama
 
-## Ziel
-- Latenz und Durchsatz der KI-Pipeline senken, indem Vision- und Feedback-Aufrufe parallelisiert werden und der Ollama-Server mehrere gleichzeitige Requests abarbeitet.
-- Hardware: AMD Strix Halo (Ryzen AI Max 395, Radeon 8060S iGPU), 128 GB unified RAM. GPU-VRAM knapp, deshalb CPU-first und ggfs. HIP/ROCm-Offload messen.
+Status: In Arbeit (Ticket „Learning-Worker parallelisieren und OCR/Feedback trennen“)
+
+## Ziel (minimalinvasiv, ENV-gesteuert)
+- Latenz und Durchsatz der KI-Pipeline senken, ohne Dev-Hardware zu überlasten. Dev bleibt bei 1, Prod kann parallelisieren.
+- Steuerung ausschließlich per `.env`: Defaults bewahren aktuelles Verhalten (Single-Job, seriell).
 
 ## Ist-Stand (Code)
-- Worker (`backend/learning/workers/process_learning_submission_jobs.py`) verarbeitet genau ein Job pro Prozess: Vision → Feedback → DB-Update, alles blocking.
-- Adapter:
-  - Vision (`backend/learning/adapters/local_vision.py`): ein synchroner Ollama-`generate`-Call, default Modell `AI_VISION_MODEL` (aktuell qwen2.5vl:3b).
-  - Feedback (`backend/learning/adapters/local_feedback.py`): DSPy, sonst synchroner Ollama-`generate`, default `AI_FEEDBACK_MODEL` (gpt-oss:latest).
-- Keine Nutzung von Streaming, kein Request-Pipelining, kein Job-Batching.
+- Worker (`backend/learning/workers/process_learning_submission_jobs.py`) verarbeitet genau einen Job seriell: Lease → Vision → Feedback → Update → delete Job.
+- Adapters: Vision/Feedback synchron (`local_vision.extract`, `local_feedback.analyze`), kein Streaming/Pipelining, kein Job-Batching.
+- Retries wiederholen immer Vision + Feedback (auch wenn OCR schon vorliegt). Status `pending|extracted` wird akzeptiert, aber die Pipeline startet immer vollständig.
 
-## Ansatz 1: Mehrere Worker-Instanzen (keine Code-Änderung)
-- Docker Compose: mehrere Worker-Container starten (`run_forever` + SKIP LOCKED verhindert doppelte Jobs).
-- Ollama-Server-Tuning:
-  - `OLLAMA_NUM_PARALLEL=2-4`
-  - `OLLAMA_MAX_LOADED_MODELS=2`
-  - `OLLAMA_KEEP_ALIVE=5m`
-  - `OLLAMA_KV_CACHE_TYPE=q8_0` oder `q4_0`, `OLLAMA_FLASH_ATTENTION=1`
-  - `OLLAMA_MAX_QUEUE` niedriger setzen, falls Backpressure gewünscht.
-- Modelle quantisiert wählen (Q4/Q5), damit Vision+Feedback parallel im RAM bleiben.
+## Geplante Änderungen (priorisiert, kleinster Eingriff zuerst)
+1) ENV-gesteuerte In-Process-Concurrency
+   - Neue Env `WORKER_CONCURRENCY` (Default 1 → identisch zum Ist). Bei >1 werden pro Tick bis zu N Jobs geleast (SKIP LOCKED) und in kleinem ThreadPool (2–4) abgearbeitet.
+   - Pro Job eigene DB-Connection/Transaktion + eigenes `set_config('app.current_sub', ...)`; keine Connection-Sharing zwischen Threads.
+   - Telemetrie `analysis_jobs_inflight` beibehalten; Backoff/Retry-Logik unverändert.
+   - Dev kann bei 1 bleiben, Prod stellt 2–4 ein.
 
-## Ansatz 2: Parallele Job-Abarbeitung innerhalb eines Workers (Code-Änderung)
-- `run_forever` erweitern: mehrere Jobs leasen und parallel in Thread-/Process-Pool ausführen.
-- Pro Job eigene DB-Connection + eigenes `set_config('app.current_sub', ...)` (nicht teilen).
-- Konfigurierbare Pool-Größe (z. B. `WORKER_CONCURRENCY=2-4`) und Backoff beibehalten.
-- Optionale `num_batch`/`num_thread` per Env in die Adapter-Options übernehmen.
+2) OCR-Ergebnisse wiederverwenden (Feedback-Retries ohne erneutes Vision)
+   - Wenn Submission bereits `analysis_status='extracted'`, Feedback direkt aus gespeichertem OCR-Resultat erzeugen, ohne Vision erneut anzustoßen.
+   - Spart Zeit bei Feedback-Retries und senkt Last ohne Parallelität zu erzwingen. Default-Verhalten bleibt für `pending`.
 
-## Ansatz 3: Vision→Feedback Pipelining (Code-Änderung, optional)
-- Vision-Adapter um Streaming/Chunking ergänzen (OCR liefert Tokens/Absätze fortlaufend).
-- Worker baut eine kleine interne Queue: GPT-OSS startet, sobald erste Vision-Chunks kommen.
-- Backpressure und Timeouts definieren; nur sinnvoll, wenn Vision signifikant langsamer als Feedback ist.
+3) Ops-Option (ohne Code): Mehrere Worker-Instanzen
+   - Compose-Scale >1 nutzt bestehendes SKIP LOCKED. Für Dev 1 Instanz, für Prod 2–4 je nach Kapazität. Overhead: zusätzliche Prozesse/Container.
+
+4) Optionales Adapter-/Ollama-Tuning (nur Prod)
+   - Env: `OLLAMA_NUM_PARALLEL=2-4`, `OLLAMA_MAX_LOADED_MODELS=2`, `OLLAMA_KEEP_ALIVE=5m`, `OLLAMA_KV_CACHE_TYPE=q8_0/q4_0`, `OLLAMA_FLASH_ATTENTION=1`, evtl. `OLLAMA_MAX_QUEUE` für Backpressure.
+   - Modelle quantisiert (Q4/Q5); Adapter-Options `num_batch/num_thread` durchreichen, falls unterstützt.
 
 ## Messplan
-- Metriken: End-to-End-Latenz pro Submission, Tokens/s pro Modell, RAM/VRAM-Auslastung (`ollama ps`), Fehlerrate/Retry.
-- Baseline: aktueller Zustand mit 1 Worker, Standard-Ollama-Settings.
-- Variation A (ohne Code): 2–4 Worker-Instanzen + Ollama Parallel-Settings.
-- Variation B (mit Code): Worker-Concurrency=2–4; messen Impact auf DB/CPU.
-- Variation C (optional): Pipelining-Prototyp mit Streaming Vision.
+- Metriken: End-to-End-Latenz pro Submission, Tokens/s pro Modell, RAM/VRAM (`ollama ps`), Fehlerrate/Retry, Queue-Lag.
+- Baseline: Ist-Zustand (Concurrency=1, 1 Worker-Instanz).
+- Variation A: Nur Concurrency >1 (gleiche Instanzzahl).
+- Variation B: Mehrere Worker-Instanzen (Concurrency=1 oder klein).
+- Variation C (nach Bedarf): Concurrency >1 + mehrere Instanzen.
 
 ## Risiken/Guardrails
-- Parallelität erhöht Kontext-Speicher in Ollama (Kontext * Parallel-Faktor) → KV-Quantisierung Pflicht.
+- Parallelität erhöht KV-Cache- und RAM-Bedarf bei Ollama (Kontext * Parallel-Faktor) → Quantisierung Pflicht.
 - psycopg-Connections strikt nicht zwischen Threads teilen.
-- GPU-VRAM schnell voll: bei ROCm/HIP-Offload sorgfältig messen, sonst CPU-only bleiben.
+- Dev-Hardware schwach: Defaults bleiben 1, damit kein Overhead. Prod stellt explizit höhere Werte ein.

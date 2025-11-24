@@ -178,16 +178,23 @@ import-legacy-all:
 	  "$(WORKDIR)"
 	@echo "[3/5] Import users into Keycloak from legacy DB"
 	set -e; \
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	LEGACY_DSN=postgresql://$(DB_SUPERUSER):$(DB_SUPERPASSWORD)@$(DB_HOST):$(DB_PORT)/$(LEGACY_TMPDB); \
-	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	KC_ADMIN_USER_VAL=$${KC_ADMIN_USERNAME:-$(KC_ADMIN_USER)}; \
+	KC_ADMIN_PASS_VAL=$${KC_ADMIN_PASSWORD:-$(KC_ADMIN_PASS)}; \
+	# Prefer the public/base URL (id.localhost via Caddy) so host calls can resolve TLS + DNS. \
+	KC_BASE_URL_VAL=$${KC_PUBLIC_BASE_URL:-https://id.localhost}; \
+	KC_HOST_HEADER_VAL=$${KC_HOST_HEADER:-id.localhost}; \
+	KC_REALM_VAL=$${KC_REALM:-$(KC_REALM)}; \
+	KEYCLOAK_ADMIN_PASSWORD="$$KC_ADMIN_PASS_VAL" \
 	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
 	./.venv/bin/python -m backend.tools.legacy_user_import \
 	  --legacy-dsn $$LEGACY_DSN \
-	  --kc-base-url $(KC_BASE_URL) \
-	  --kc-host-header $(KC_HOST_HEADER) \
-	  --kc-admin-user $(KC_ADMIN_USER) \
-	  --kc-admin-pass $(KC_ADMIN_PASS) \
-	  --realm $(KC_REALM) \
+	  --kc-base-url $$KC_BASE_URL_VAL \
+	  --kc-host-header $$KC_HOST_HEADER_VAL \
+	  --kc-admin-user $$KC_ADMIN_USER_VAL \
+	  --kc-admin-pass $$KC_ADMIN_PASS_VAL \
+	  --realm $$KC_REALM_VAL \
 	  --force-replace
 	@echo "[4/5] Import domain data (courses, memberships, units, …) into current DB"
 	$(MAKE) import-legacy VERBOSE=$(VERBOSE)

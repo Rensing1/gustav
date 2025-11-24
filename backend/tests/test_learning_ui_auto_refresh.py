@@ -105,6 +105,93 @@ async def test_history_fragment_autopolls_for_in_progress_status(monkeypatch: py
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("status", ["pending", "extracted"])
+async def test_history_fragment_shows_spinner_while_in_progress(monkeypatch: pytest.MonkeyPatch, status: str):
+    """History fragment should render a spinner hint when analysis is pending/extracted."""
+    student = _student_session()
+
+    latest = {
+        "id": str(uuid.uuid4()),
+        "attempt_nr": 1,
+        "kind": "image",
+        "text_body": None,
+        "mime_type": "image/png",
+        "size_bytes": 123,
+        "storage_key": "submissions/c/t/u/key.png",
+        "sha256": "deadbeef",
+        "analysis_status": status,
+        "analysis_json": None,
+        "feedback_md": None,
+        "error_code": None,
+        "created_at": "2025-11-04T12:00:00+00:00",
+        "completed_at": None,
+    }
+
+    def _submissions(_params):
+        return [latest]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history?open_attempt_id=" + latest["id"])  # type: ignore[index]
+    assert r.status_code == 200
+    html = r.text
+    # Spinner hint visible while analysis runs
+    assert "Analyse läuft" in html
+    assert "status-chip" in html
+    assert "spinner" in html
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status", ["completed", "failed"])
+async def test_history_fragment_hides_spinner_when_done_or_failed(monkeypatch: pytest.MonkeyPatch, status: str):
+    """No spinner hint should render for completed or failed submissions."""
+    student = _student_session()
+
+    latest = {
+        "id": str(uuid.uuid4()),
+        "attempt_nr": 2,
+        "kind": "text",
+        "text_body": "Hallo",
+        "mime_type": None,
+        "size_bytes": None,
+        "storage_key": None,
+        "sha256": None,
+        "analysis_status": status,
+        "analysis_json": {"text": "Hallo"} if status == "completed" else None,
+        "feedback_md": "Gut gemacht" if status == "completed" else None,
+        "error_code": "E_GENERIC" if status == "failed" else None,
+        "created_at": "2025-11-04T12:10:00+00:00",
+        "completed_at": "2025-11-04T12:11:00+00:00",
+    }
+
+    def _submissions(_params):
+        return [latest]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history?open_attempt_id=" + latest["id"])  # type: ignore[index]
+    assert r.status_code == 200
+    html = r.text
+    assert "Analyse läuft" not in html
+    assert "status-chip" not in html
+    assert "spinner" not in html
+
+
+@pytest.mark.anyio
 async def test_history_fragment_stops_polling_when_completed(monkeypatch: pytest.MonkeyPatch):
     """When the latest attempt is completed, the fragment must not poll."""
     student = _student_session()
@@ -279,3 +366,60 @@ async def test_unit_page_embeds_autopoll_when_latest_in_progress(monkeypatch: py
     hx_vals = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
     assert hx_vals and hx_vals.group(1) == open_id
     assert "hx-trigger=\"load, every 2s\"" in html or "hx-trigger=\"every 2s\"" in html
+    # Spinner hint visible in the placeholder while analysis runs
+    assert "Analyse läuft" in html
+    assert "status-chip" in html
+    assert "spinner" in html
+
+
+@pytest.mark.anyio
+async def test_unit_page_hides_spinner_when_latest_completed(monkeypatch: pytest.MonkeyPatch):
+    """Unit page should not show the in-progress spinner when latest attempt is done."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    unit_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+    open_id = str(uuid.uuid4())
+
+    def _sections(_params):
+        return [{
+            "section": {"id": "s1", "title": "A", "position": 1, "unit_id": unit_id},
+            "materials": [],
+            "tasks": [{"id": task_id, "instruction_md": "Aufgabe", "criteria": ["K"], "position": 1}],
+        }]
+
+    def _submissions(_params):
+        return [{
+            "id": open_id,
+            "attempt_nr": 1,
+            "kind": "text",
+            "text_body": "Hallo",
+            "mime_type": None,
+            "size_bytes": None,
+            "storage_key": None,
+            "sha256": None,
+            "analysis_status": "completed",
+            "analysis_json": {"text": "Hallo"},
+            "feedback_md": "Gut gemacht",
+            "error_code": None,
+            "created_at": "2025-11-04T12:00:00+00:00",
+            "completed_at": "2025-11-04T12:11:00+00:00",
+        }]
+
+    fake = _FakeAsyncClient({
+        f"/api/learning/courses/{course_id}/units/{unit_id}/sections": _sections,
+        f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    url = f"/learning/courses/{course_id}/units/{unit_id}?show_history_for={task_id}&open_attempt_id={open_id}"
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get(url)
+    assert r.status_code == 200
+    html = r.text
+    assert "Analyse läuft" not in html
+    assert "status-chip" not in html
+    assert "spinner" not in html

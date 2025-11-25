@@ -58,3 +58,4 @@ Status: In Arbeit (Ticket „Learning-Worker parallelisieren und OCR/Feedback tr
 ## Konfiguration (Dev vs. Prod)
 - Defaults bleiben Dev-freundlich (`WORKER_CONCURRENCY=1`). Prod kann auf 2–3 erhöhen.
 - OCR-Reuse liegt im Job-Payload, keine Migration nötig. Feedback-Retries nutzen den Cache automatisch.
+- Hard Cap: `WORKER_CONCURRENCY` wird intern auf 4 begrenzt, um Fehlkonfigurationen (z. B. 10+) abzufangen.

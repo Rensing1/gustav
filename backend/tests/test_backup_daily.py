@@ -1,4 +1,5 @@
 import gzip
+import json
 import os
 import shutil
 import subprocess
@@ -43,6 +44,31 @@ def _read_gzip_text(path: Path) -> str:
         return handle.read()
 
 
+def _make_fake_pg_dump(tmp_path: Path, behavior: str = "ok") -> Path:
+    """
+    Create a fake pg_dump binary.
+
+    behavior:
+        - "ok": writes simple SQL to stdout and exits 0.
+        - "fail": writes error to stderr and exits 1.
+    """
+    script = tmp_path / "pg_dump"
+    script.write_text(
+        "#!/bin/sh\n"
+        'echo "$@" >>"$TMP_PG_DUMP_ARGS"\n'
+        'if [ "$1" = "--format=plain" ]; then\n'
+        "  if [ \"${BEHAVIOR}\" = \"fail\" ]; then\n"
+        "    echo \"pg_dump boom\" 1>&2\n"
+        "    exit 1\n"
+        "  fi\n"
+        "  echo \"-- SQL DUMP --\"; exit 0\n"
+        "fi\n"
+        "exit 1\n"
+    )
+    script.chmod(0o755)
+    return script
+
+
 @pytest.mark.integration
 def test_backup_happy_path_and_retention(tmp_path: Path) -> None:
     _require_cmd("psql")
@@ -72,6 +98,7 @@ def test_backup_happy_path_and_retention(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.update(
         {
+            "SESSION_DATABASE_URL": supabase_db,
             "DATABASE_URL": supabase_db,
             "KC_DB_URL": keycloak_db,
             "BACKUP_DIR": str(backup_dir),
@@ -79,6 +106,8 @@ def test_backup_happy_path_and_retention(tmp_path: Path) -> None:
             "RETENTION_DAYS": "7",
         }
     )
+    # Ensure no conflicting DSNs bleed in from the environment.
+    env.pop("BACKUP_DATABASE_URL", None)
     result = subprocess.run(
         [sys.executable, str(script_path), "--once"],
         env=env,
@@ -122,3 +151,105 @@ def test_backup_requires_env(tmp_path: Path) -> None:
     )
     assert result.returncode != 0
     assert "DATABASE_URL" in result.stderr or "KC_DB_URL" in result.stderr
+
+
+def test_backup_pg_dump_failure_writes_failed_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "backup_daily.py"
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    backup_dir = tmp_path / "backups"
+    (backup_dir / "old").mkdir(parents=True, exist_ok=True)
+
+    args_log = tmp_path / "pg_args.log"
+    fake_pg_dump = _make_fake_pg_dump(tmp_path, behavior="fail")
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ.get('PATH','')}")
+    monkeypatch.setenv("TMP_PG_DUMP_ARGS", str(args_log))
+    args_log.touch()
+    env = os.environ.copy()
+    env.update(
+        {
+            "BACKUP_DIR": str(backup_dir),
+            "SUPABASE_STORAGE_ROOT": str(storage_root),
+            "DATABASE_URL": "postgresql://user:secret@db/supabase",
+            "KC_DB_URL": "postgresql://kc_user:kc_pass@kc-db/keycloak",
+            "BEHAVIOR": "fail",
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--once"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    manifests = list(backup_dir.glob("*/manifest.json"))
+    assert manifests, "manifest should be written on failure"
+    manifest = json.loads(manifests[0].read_text())
+    assert manifest.get("status") == "failed"
+    # Ensure pg_dump was invoked (arguments recorded)
+    assert args_log.read_text().strip() != ""
+
+
+def test_backup_missing_storage_root_marks_failed_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "backup_daily.py"
+    backup_dir = tmp_path / "backups"
+    # Create fake pg_dump that succeeds to reach storage step.
+    args_log = tmp_path / "pg_args.log"
+    _make_fake_pg_dump(tmp_path, behavior="ok")
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ.get('PATH','')}")
+    monkeypatch.setenv("TMP_PG_DUMP_ARGS", str(args_log))
+    env = os.environ.copy()
+    env.update(
+        {
+            "BACKUP_DIR": str(backup_dir),
+            "SUPABASE_STORAGE_ROOT": str(tmp_path / "missing-storage"),
+            "DATABASE_URL": "postgresql://user:secret@db/supabase",
+            "KC_DB_URL": "postgresql://kc_user:kc_pass@kc-db/keycloak",
+            "BEHAVIOR": "ok",
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--once"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    manifests = list(backup_dir.glob("*/manifest.json"))
+    assert manifests, "manifest should be written on failure"
+    manifest = json.loads(manifests[0].read_text())
+    assert manifest.get("status") == "failed"
+
+
+def test_backup_prefers_session_database_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "backup_daily.py"
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    args_log = tmp_path / "pg_args.log"
+    _make_fake_pg_dump(tmp_path, behavior="ok")
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ.get('PATH','')}")
+    monkeypatch.setenv("TMP_PG_DUMP_ARGS", str(args_log))
+    env = os.environ.copy()
+    env.update(
+        {
+            "BACKUP_DIR": str(backup_dir),
+            "SUPABASE_STORAGE_ROOT": str(storage_root),
+            "SESSION_DATABASE_URL": "postgresql://session_user:pass@db/sessiondb",
+            "DATABASE_URL": "postgresql://primary_user:pass@db/primarydb",
+            "KC_DB_URL": "postgresql://kc_user:kc_pass@kc-db/keycloak",
+            "BEHAVIOR": "ok",
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--once"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    # pg_dump called twice; check first recorded URI ends with session DB
+    args_lines = args_log.read_text().strip().splitlines()
+    assert any("sessiondb" in line for line in args_lines), f"args: {args_lines}"

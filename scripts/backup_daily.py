@@ -6,34 +6,37 @@ the Keycloak database, and Supabase storage buckets, placing all artifacts in
 `/backups/<timestamp>/`. Designed for cron execution inside the container.
 
 Inputs (required via environment):
-- DATABASE_URL: Postgres URI with sufficient privileges to dump Supabase DB.
+- SESSION_DATABASE_URL (preferred) or BACKUP_DATABASE_URL or DATABASE_URL: Postgres URI with sufficient privileges to dump Supabase DB (auth schema included).
 - KC_DB_URL: Postgres URI for Keycloak DB (includes credentials).
 - SUPABASE_STORAGE_ROOT: Filesystem root of Supabase storage buckets.
 - BACKUP_DIR: Destination directory for backups (e.g., /backups).
 - RETENTION_DAYS: Number of days to keep backups (default: 7).
+- BACKUP_PG_TIMEOUT_SECONDS: Optional pg_dump timeout (default: 300 seconds).
 
 Behavior:
 - On each run: create timestamped directory, dump Supabase DB and Keycloak DB
   to gzip-compressed plain SQL, archive storage buckets to tar.gz, write a
-  small manifest, then delete backup directories older than RETENTION_DAYS.
+  manifest (ok/failed), then delete backup directories older than RETENTION_DAYS.
 - Fails fast on missing configuration or command errors; exits non-zero when
-  any step fails. Caller must ensure the cron user can read storage and write
-  to BACKUP_DIR.
+  any step fails. Credentials are passed via env (PGPASSWORD) so passwords do
+  not appear in process lists or logs. Caller must ensure the cron user can
+  read storage and write to BACKUP_DIR.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
-import gzip
 import json
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from urllib.parse import urlsplit, urlunsplit
+import gzip
+import time
 
 
 def _require_env(keys: List[str]) -> Dict[str, str]:
@@ -50,22 +53,42 @@ def _require_env(keys: List[str]) -> Dict[str, str]:
     return env
 
 
-def _require_any_env(candidates: List[str]) -> str:
-    for key in candidates:
-        value = os.environ.get(key)
-        if value:
-            return value
-    raise SystemExit(f"Missing required environment variable (tried): {', '.join(candidates)}")
+def _run_pg_dump(uri: str, dest: Path, *, timeout: int, env: Dict[str, str]) -> None:
+    """
+    Stream pg_dump output directly into gzip file without buffering full dump in memory.
 
-
-def _run_pg_dump(uri: str, dest: Path) -> None:
+    Secrets:
+        Passwords are provided via env (PGPASSWORD) instead of embedding them in the URI
+        to avoid leaking them in process lists or logs.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["pg_dump", "--format=plain", "--no-owner", uri]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if proc.returncode != 0:
-        raise RuntimeError(f"pg_dump failed for {uri}: {proc.stderr.decode().strip()}")
-    with gzip.open(dest, "wb") as gz:
-        gz.write(proc.stdout)
+    proc_env = os.environ.copy()
+    proc_env.update(env)
+    start = time.monotonic()
+    with subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=proc_env,
+    ) as proc:
+        with gzip.open(dest, "wb") as gz:
+            while True:
+                if proc.stdout is None:
+                    break
+                chunk = proc.stdout.read(8192)
+                if chunk:
+                    gz.write(chunk)
+                if chunk == b"":
+                    break
+                if time.monotonic() - start > timeout:
+                    proc.kill()
+                    proc.wait()
+                    raise RuntimeError(f"pg_dump timeout after {timeout}s for {uri}")
+        stderr = proc.stderr.read() if proc.stderr else b""
+        ret = proc.wait()
+    if ret != 0:
+        raise RuntimeError(f"pg_dump failed for {uri}: {stderr.decode().strip()}")
 
 
 def _archive_storage(storage_root: Path, dest: Path) -> None:
@@ -85,7 +108,7 @@ def _archive_storage(storage_root: Path, dest: Path) -> None:
 def _write_manifest(target_dir: Path, status: str, extra: Dict[str, str]) -> None:
     manifest = {
         "status": status,
-        "timestamp": dt.datetime.utcnow().isoformat() + "Z",
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
         **extra,
     }
     manifest_path = target_dir / "manifest.json"
@@ -99,31 +122,64 @@ def _cleanup_retention(backup_dir: Path, retention_days: int, now: dt.datetime) 
     for entry in backup_dir.iterdir():
         if not entry.is_dir():
             continue
-        mtime = dt.datetime.fromtimestamp(entry.stat().st_mtime)
+        mtime = dt.datetime.fromtimestamp(entry.stat().st_mtime, tz=dt.timezone.utc)
         if mtime < cutoff:
             shutil.rmtree(entry, ignore_errors=True)
 
 
 def _timestamp() -> str:
-    return dt.datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d_%H%M%S")
 
 
-def _normalize_pg_uri(uri: str, user: str | None = None, password: str | None = None) -> str:
-    # Accept JDBC-prefixed URLs (Keycloak) and inject credentials when missing.
+def _normalize_pg_uri(uri: str, user: str | None = None, password: str | None = None) -> Tuple[str, Dict[str, str]]:
+    """
+    Normalize a Postgres URI:
+    - Accept JDBC prefixes.
+    - Ensure username is present (from URI or explicit user arg).
+    - Strip password from URI; provide it via env (PGPASSWORD) to avoid leaks.
+    """
     raw = uri
     if raw.startswith("jdbc:"):
         raw = raw.removeprefix("jdbc:")
     parts = urlsplit(raw)
-    if (not parts.username) and user:
-        netloc = parts.hostname or ""
-        if parts.port:
-            netloc = f"{netloc}:{parts.port}"
-        auth = user
-        if password:
-            auth = f"{auth}:{password}"
-        netloc = f"{auth}@{netloc}"
-        parts = parts._replace(netloc=netloc)
-    return urlunsplit(parts)
+    username = parts.username or user or ""
+    pwd = parts.password or password
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    netloc = host
+    if username:
+        netloc = f"{username}@{host}"
+    sanitized = urlunsplit(parts._replace(netloc=netloc))
+    env = {"PGPASSWORD": pwd} if pwd else {}
+    return sanitized, env
+
+
+def _redact_uri(uri: str) -> str:
+    """Remove password from URI for logs."""
+    parts = urlsplit(uri)
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    username = parts.username or ""
+    netloc = host
+    if username:
+        netloc = f"{username}@{host}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
+def _select_supabase_uri() -> str:
+    """
+    DSN precedence:
+    1. SESSION_DATABASE_URL (preferred for backup to include auth schema)
+    2. BACKUP_DATABASE_URL (explicit override)
+    3. DATABASE_URL (fallback)
+    """
+    for key in ("SESSION_DATABASE_URL", "BACKUP_DATABASE_URL", "DATABASE_URL"):
+        val = os.environ.get(key)
+        if val:
+            return val
+    raise SystemExit("Missing required environment variable (tried): SESSION_DATABASE_URL, BACKUP_DATABASE_URL, DATABASE_URL")
 
 
 def main() -> int:
@@ -135,7 +191,7 @@ def main() -> int:
 
     try:
         env_required = _require_env(["KC_DB_URL", "SUPABASE_STORAGE_ROOT", "BACKUP_DIR"])
-        db_uri = _require_any_env(["BACKUP_DATABASE_URL", "DATABASE_URL"])
+        db_uri = _select_supabase_uri()
     except SystemExit as exc:
         sys.stderr.write(str(exc) + "\n")
         return 1
@@ -147,14 +203,15 @@ def main() -> int:
     target_dir = backup_dir / stamp
     kc_user = os.environ.get("KC_DB_USERNAME")
     kc_password = os.environ.get("KC_DB_PASSWORD")
-    kc_uri = _normalize_pg_uri(env_required["KC_DB_URL"], kc_user, kc_password)
-    supabase_uri = _normalize_pg_uri(db_uri)
+    kc_uri, kc_env = _normalize_pg_uri(env_required["KC_DB_URL"], kc_user, kc_password)
+    supabase_uri, supabase_env = _normalize_pg_uri(db_uri)
 
-    now = dt.datetime.utcnow()
+    pg_timeout = int(os.environ.get("BACKUP_PG_TIMEOUT_SECONDS", "300"))
+    now = dt.datetime.now(dt.timezone.utc)
+    target_dir.mkdir(parents=True, exist_ok=True)
     try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-        _run_pg_dump(supabase_uri, target_dir / "supabase_db.sql.gz")
-        _run_pg_dump(kc_uri, target_dir / "keycloak_db.sql.gz")
+        _run_pg_dump(_redact_uri(supabase_uri), target_dir / "supabase_db.sql.gz", timeout=pg_timeout, env=supabase_env)
+        _run_pg_dump(_redact_uri(kc_uri), target_dir / "keycloak_db.sql.gz", timeout=pg_timeout, env=kc_env)
         _archive_storage(storage_root, target_dir / "storage_buckets.tar.gz")
         _write_manifest(
             target_dir,
@@ -163,6 +220,11 @@ def main() -> int:
         )
         _cleanup_retention(backup_dir, retention_days, now)
     except Exception as exc:  # noqa: BLE001
+        _write_manifest(
+            target_dir,
+            status="failed",
+            extra={"error": str(exc)},
+        )
         sys.stderr.write(f"backup failed: {exc}\n")
         return 1
 

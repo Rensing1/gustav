@@ -941,3 +941,207 @@ async def test_worker_feedback_retry_uses_cached_ocr(monkeypatch: pytest.MonkeyP
     assert status == "completed"
     assert isinstance(text_body, str) and "Cached OCR" in text_body
     assert _gauge_value("analysis_jobs_inflight") == 0.0
+
+
+@pytest.mark.anyio
+async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.MonkeyPatch):
+    """If processing raises, the job should not remain leased indefinitely."""
+
+    _require_db_or_skip()
+    telemetry.reset_for_tests()
+    monkeypatch.setenv("WORKER_CONCURRENCY", "1")
+    monkeypatch.setenv("WORKER_LEASE_SECONDS", "60")
+
+    worker_dsn = os.getenv("SERVICE_ROLE_DSN") or _dsn()
+    teacher_sub = f"teacher-{uuid.uuid4()}"
+    student_sub = f"student-{uuid.uuid4()}"
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+            cur.execute("select set_config('app.current_sub', %s, false)", (teacher_sub,))
+            cur.execute(
+                "insert into public.courses (title, teacher_id) values (%s, %s) returning id",
+                ("Crash Course", teacher_sub),
+            )
+            course_id = cur.fetchone()[0]
+            cur.execute(
+                "insert into public.units (title, author_id) values (%s, %s) returning id",
+                ("Unit", teacher_sub),
+            )
+            unit_id = cur.fetchone()[0]
+            cur.execute(
+                "insert into public.unit_sections (unit_id, title, position) values (%s, %s, %s) returning id",
+                (unit_id, "Section", 1),
+            )
+            section_id = cur.fetchone()[0]
+            cur.execute(
+                """
+                insert into public.unit_tasks (unit_id, section_id, instruction_md, criteria, position)
+                values (%s, %s, %s, %s::text[], %s) returning id
+                """,
+                (unit_id, section_id, "Beschreibe den Graphen", ["Kriterium A"], 1),
+            )
+            task_id = cur.fetchone()[0]
+
+            submission_id = str(uuid.uuid4())
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                    id, course_id, task_id, student_sub, kind,
+                    text_body, storage_key, mime_type, size_bytes, sha256,
+                    attempt_nr, analysis_status, analysis_json
+                ) values (
+                    %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                    %s, null, null, null, null,
+                    1, 'pending', null
+                )
+                """,
+                (
+                    submission_id,
+                    course_id,
+                    task_id,
+                    student_sub,
+                    "Crash submission",
+                ),
+            )
+            payload = {
+                "submission_id": submission_id,
+                "course_id": str(course_id),
+                "task_id": str(task_id),
+                "student_sub": student_sub,
+                "kind": "text",
+                "attempt_nr": 1,
+                "criteria": ["Kriterium A"],
+            }
+            cur.execute(
+                "insert into public.learning_submission_jobs (submission_id, payload) values (%s::uuid, %s::jsonb)",
+                (submission_id, json.dumps(payload)),
+            )
+        conn.commit()
+
+    def _boom(**kwargs):
+        raise RuntimeError("processing crashed")
+
+    monkeypatch.setattr(worker_module, "_process_job", _boom)
+
+    with pytest.raises(RuntimeError):
+        run_once(
+            dsn=worker_dsn,
+            vision_adapter=_StubVisionAdapter(text_md="# boom"),
+            feedback_adapter=_StubFeedbackAdapter(feedback_md="unused"),
+            now=datetime.now(tz=timezone.utc),
+        )
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select status, lease_key, leased_until
+                  from public.learning_submission_jobs
+                 where submission_id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            status, lease_key, leased_until = cur.fetchone()
+
+    assert status == "queued"
+    assert lease_key is None
+    assert leased_until is None
+
+
+@pytest.mark.anyio
+async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
+    """Extremely high WORKER_CONCURRENCY should be capped to a safe maximum."""
+
+    _require_db_or_skip()
+    telemetry.reset_for_tests()
+    monkeypatch.setenv("WORKER_CONCURRENCY", "10")
+
+    worker_dsn = os.getenv("SERVICE_ROLE_DSN") or _dsn()
+    teacher_sub = f"teacher-{uuid.uuid4()}"
+    student_sub = f"student-{uuid.uuid4()}"
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+            cur.execute("select set_config('app.current_sub', %s, false)", (teacher_sub,))
+            cur.execute(
+                "insert into public.courses (title, teacher_id) values (%s, %s) returning id",
+                ("Capped Concurrency Course", teacher_sub),
+            )
+            course_id = cur.fetchone()[0]
+            cur.execute(
+                "insert into public.units (title, author_id) values (%s, %s) returning id",
+                ("Unit", teacher_sub),
+            )
+            unit_id = cur.fetchone()[0]
+            cur.execute(
+                "insert into public.unit_sections (unit_id, title, position) values (%s, %s, %s) returning id",
+                (unit_id, "Section", 1),
+            )
+            section_id = cur.fetchone()[0]
+            cur.execute(
+                """
+                insert into public.unit_tasks (unit_id, section_id, instruction_md, criteria, position)
+                values (%s, %s, %s, %s::text[], %s) returning id
+                """,
+                (unit_id, section_id, "Beschreibe den Graphen", ["Kriterium A"], 1),
+            )
+            task_id = cur.fetchone()[0]
+
+            submission_ids: list[str] = []
+            for idx in range(6):
+                submission_id = str(uuid.uuid4())
+                submission_ids.append(submission_id)
+                cur.execute(
+                    """
+                    insert into public.learning_submissions (
+                        id, course_id, task_id, student_sub, kind,
+                        text_body, storage_key, mime_type, size_bytes, sha256,
+                        attempt_nr, analysis_status, analysis_json
+                    ) values (
+                        %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                        %s, null, null, null, null,
+                        %s, 'pending', null
+                    )
+                    """,
+                    (
+                        submission_id,
+                        course_id,
+                        task_id,
+                        student_sub,
+                        f"Text answer {idx}",
+                        idx + 1,
+                    ),
+                )
+                payload = {
+                    "submission_id": submission_id,
+                    "course_id": str(course_id),
+                    "task_id": str(task_id),
+                    "student_sub": student_sub,
+                    "kind": "text",
+                    "attempt_nr": idx + 1,
+                    "criteria": ["Kriterium A"],
+                }
+                cur.execute(
+                    "insert into public.learning_submission_jobs (submission_id, payload) values (%s::uuid, %s::jsonb)",
+                    (submission_id, json.dumps(payload)),
+                )
+        conn.commit()
+
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=_StubVisionAdapter(text_md="## Vision Extract\n\nContent."),
+        feedback_adapter=_StubFeedbackAdapter(feedback_md="Feedback"),
+        now=datetime.now(tz=timezone.utc),
+    )
+
+    assert processed is True
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select count(*) from public.learning_submission_jobs")
+            remaining_jobs = int(cur.fetchone()[0])
+
+    assert remaining_jobs >= 2, "concurrency should be capped, leaving some jobs queued"

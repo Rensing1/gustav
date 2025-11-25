@@ -82,6 +82,7 @@ class QueuedJob:
 
 LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "45"))
 MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
+MAX_CONCURRENCY = 4  # hard cap to prevent overload from misconfigured WORKER_CONCURRENCY
 
 
 # Error classes now live in ports and are imported above.
@@ -99,14 +100,16 @@ def _backoff_seconds() -> int:
 
 
 def _concurrency_limit() -> int:
-    """Parse WORKER_CONCURRENCY with sane lower bound."""
+    """Parse WORKER_CONCURRENCY with sane lower/upper bounds."""
     raw = os.getenv("WORKER_CONCURRENCY", "1")
     try:
         value = int(raw)
     except ValueError:
         LOG.warning("Invalid WORKER_CONCURRENCY=%s, defaulting to 1", raw)
         return 1
-    return max(1, value)
+    if value > MAX_CONCURRENCY:
+        LOG.warning("WORKER_CONCURRENCY=%s capped to %s", value, MAX_CONCURRENCY)
+    return max(1, min(value, MAX_CONCURRENCY))
 
 
 def run_once(
@@ -292,26 +295,31 @@ def _process_job_with_new_connection(
     telemetry.adjust_gauge("analysis_jobs_inflight", delta=1)
     conn: Connection | None = None
     try:
-        with psycopg.connect(dsn, row_factory=dict_row) as new_conn:  # type: ignore[arg-type]
-            conn = new_conn
-            new_conn.autocommit = False
-            _process_job(
-                conn=new_conn,
-                job=job,
-                vision_adapter=vision_adapter,
-                feedback_adapter=feedback_adapter,
-                now=now,
-            )
-            new_conn.commit()
+        conn = psycopg.connect(dsn, row_factory=dict_row)  # type: ignore[arg-type]
+        conn.autocommit = False
+        _process_job(
+            conn=conn,
+            job=job,
+            vision_adapter=vision_adapter,
+            feedback_adapter=feedback_adapter,
+            now=now,
+        )
+        conn.commit()
     except Exception:
         try:
             if conn:
                 conn.rollback()
+                _unlease_job(conn=conn, job_id=job.id)
+                conn.commit()
         except Exception:
             pass
         raise
     finally:
-        telemetry.adjust_gauge("analysis_jobs_inflight", delta=-1)
+        try:
+            if conn and hasattr(conn, "close"):
+                conn.close()
+        finally:
+            telemetry.adjust_gauge("analysis_jobs_inflight", delta=-1)
 
 
 def _process_job(
@@ -556,6 +564,23 @@ def _persist_cached_vision(*, conn: Connection, job_id: str, vision_result: Visi
     except (AttributeError, AssertionError):
         # Fallback for monkeypatched or non-DB test connections; caching is optional for tests.
         LOG.debug("Skipping cached vision persistence for job %s (test double without cursor)", job_id)
+
+
+def _unlease_job(*, conn: Connection, job_id: str) -> None:
+    """Return a leased job to the queue after unexpected processing errors."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            update public.learning_submission_jobs
+               set status = 'queued',
+                   lease_key = null,
+                   leased_until = null,
+                   updated_at = now(),
+                   visible_at = now()
+             where id = %s::uuid
+            """,
+            (job_id,),
+        )
 
 
 def _handle_vision_error(

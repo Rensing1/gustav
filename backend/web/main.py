@@ -5028,7 +5028,7 @@ async def about_page(request: Request):
     content = """
     <div class=\"container\">
         <h1>Über GUSTAV</h1>
-        <p>GUSTAV ist eine offene Lernplattform für Schulen.</p>
+        <p>Diese Seite wird demnächst freigeschaltet. Hier findest du Informationen darüber, wie GUSTAV funktioniert und welche Ziele mit dieser Plattform erreicht werden sollen.</p>
     </div>
     """
     layout = Layout(title="Über GUSTAV", content=content, user=user, current_path=request.url.path)

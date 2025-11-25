@@ -50,6 +50,14 @@ def _require_env(keys: List[str]) -> Dict[str, str]:
     return env
 
 
+def _require_any_env(candidates: List[str]) -> str:
+    for key in candidates:
+        value = os.environ.get(key)
+        if value:
+            return value
+    raise SystemExit(f"Missing required environment variable (tried): {', '.join(candidates)}")
+
+
 def _run_pg_dump(uri: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["pg_dump", "--format=plain", "--no-owner", uri]
@@ -126,24 +134,26 @@ def main() -> int:
     _ = args  # currently unused; reserved for future scheduling flags
 
     try:
-        env = _require_env(["DATABASE_URL", "KC_DB_URL", "SUPABASE_STORAGE_ROOT", "BACKUP_DIR"])
+        env_required = _require_env(["KC_DB_URL", "SUPABASE_STORAGE_ROOT", "BACKUP_DIR"])
+        db_uri = _require_any_env(["BACKUP_DATABASE_URL", "DATABASE_URL"])
     except SystemExit as exc:
         sys.stderr.write(str(exc) + "\n")
         return 1
 
     retention_days = int(os.environ.get("RETENTION_DAYS", "7"))
-    backup_dir = Path(env["BACKUP_DIR"])
-    storage_root = Path(env["SUPABASE_STORAGE_ROOT"])
+    backup_dir = Path(env_required["BACKUP_DIR"])
+    storage_root = Path(env_required["SUPABASE_STORAGE_ROOT"])
     stamp = _timestamp()
     target_dir = backup_dir / stamp
     kc_user = os.environ.get("KC_DB_USERNAME")
     kc_password = os.environ.get("KC_DB_PASSWORD")
-    kc_uri = _normalize_pg_uri(env["KC_DB_URL"], kc_user, kc_password)
+    kc_uri = _normalize_pg_uri(env_required["KC_DB_URL"], kc_user, kc_password)
+    supabase_uri = _normalize_pg_uri(db_uri)
 
     now = dt.datetime.utcnow()
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
-        _run_pg_dump(env["DATABASE_URL"], target_dir / "supabase_db.sql.gz")
+        _run_pg_dump(supabase_uri, target_dir / "supabase_db.sql.gz")
         _run_pg_dump(kc_uri, target_dir / "keycloak_db.sql.gz")
         _archive_storage(storage_root, target_dir / "storage_buckets.tar.gz")
         _write_manifest(

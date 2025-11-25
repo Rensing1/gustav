@@ -40,3 +40,22 @@ Status: In Arbeit (Ticket „Learning-Worker parallelisieren und OCR/Feedback tr
 - Parallelität erhöht KV-Cache- und RAM-Bedarf bei Ollama (Kontext * Parallel-Faktor) → Quantisierung Pflicht.
 - psycopg-Connections strikt nicht zwischen Threads teilen.
 - Dev-Hardware schwach: Defaults bleiben 1, damit kein Overhead. Prod stellt explizit höhere Werte ein.
+
+## Scope-Update (heute)
+- Wir setzen nur zwei Punkte um: (a) In-Process-Concurrency per ENV, (b) OCR-Ergebnisse beim Feedback-Retry wiederverwenden.
+- Keine API- oder Schema-Änderungen geplant.
+
+## BDD-Szenarien (Given-When-Then)
+- Concurrency Happy Path  
+  Given 3 queued Jobs und `WORKER_CONCURRENCY=2`, When der Worker einen Tick ausführt, Then werden 2 Jobs mit `skip locked` geleast, parallel verarbeitet und am Ende ist `analysis_jobs_inflight` wieder 0.
+- Concurrency Edge/Fehler  
+  Given ein Job wirft Vision-Transient, When zwei Jobs parallel laufen, Then der Backoff betrifft nur den betroffenen Job und die andere Verarbeitung committet trotzdem.
+- OCR-Reuse Happy Path  
+  Given Submission `analysis_status='extracted'` und Job-Payload enthält `cached_text_md`, When Feedback erneut läuft, Then Vision wird nicht aufgerufen und Feedback nutzt den Cache-Text.
+- OCR-Reuse Fallback  
+  Given Submission `analysis_status='extracted'` ohne Cache, When Job verarbeitet wird, Then Worker ruft Vision normal auf und persistert danach den Cache für spätere Retries.
+
+## Konfiguration (Dev vs. Prod)
+- Defaults bleiben Dev-freundlich (`WORKER_CONCURRENCY=1`). Prod kann auf 2–3 erhöhen.
+- OCR-Reuse liegt im Job-Payload, keine Migration nötig. Feedback-Retries nutzen den Cache automatisch.
+- Hard Cap: `WORKER_CONCURRENCY` wird intern auf 4 begrenzt, um Fehlkonfigurationen (z. B. 10+) abzufangen.

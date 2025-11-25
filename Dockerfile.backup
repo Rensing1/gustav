@@ -1,0 +1,39 @@
+# Backup image with cron and pg_dump for scheduled database/storage backups.
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cron \
+    postgresql-client \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy only the backup script; storage paths and repo content are mounted at runtime.
+COPY scripts/backup_daily.py /app/scripts/backup_daily.py
+
+# Create backup user if not present (builder cache may reuse base with same UID).
+RUN if ! getent passwd backup >/dev/null; then useradd -m -u 10002 backup; fi \
+    && mkdir -p /backups /var/log \
+    && chown -R backup:backup /app /backups /var/log
+# Run cron as root (required to manage crond), but cron jobs call the backup user.
+USER root
+
+# Entry point: install crontab for the backup user and run cron in foreground.
+RUN cat >/entrypoint.sh <<'EOF'
+#!/bin/sh
+set -e
+cat >/tmp/backup.cron <<'CRON'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0 2 * * * su -s /bin/sh backup -c "python /app/scripts/backup_daily.py --once" >>/var/log/backup.log 2>&1
+CRON
+crontab /tmp/backup.cron
+exec cron -f
+EOF
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+ENV PYTHONUNBUFFERED=1
+
+# Cron will be configured by the compose service command to keep timing flexible.
+CMD ["cron", "-f"]

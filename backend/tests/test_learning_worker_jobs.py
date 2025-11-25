@@ -1145,3 +1145,40 @@ async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
             remaining_jobs = int(cur.fetchone()[0])
 
     assert remaining_jobs >= 2, "concurrency should be capped, leaving some jobs queued"
+
+
+@pytest.mark.anyio
+async def test_worker_extends_lease_window(monkeypatch: pytest.MonkeyPatch):
+    """Leased jobs should have a lease_until sufficiently in the future to avoid premature reprocessing."""
+
+    _require_db_or_skip()
+    telemetry.reset_for_tests()
+    monkeypatch.setenv("WORKER_LEASE_SECONDS", "2")
+
+    _fixture, worker_dsn, job_id, _submission_id = await _prepare_submission_with_job(
+        idempotency_key="worker-lease-extend"
+    )
+
+    now = datetime.now(tz=timezone.utc)
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        job = worker_module._lease_next_job(conn, now=now)
+        conn.commit()
+    assert job is not None
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                "select leased_until from public.learning_submission_jobs where id = %s::uuid",
+                (job_id,),
+            )
+            leased_until = cur.fetchone()[0]
+        conn.commit()
+
+    expected_min = now + timedelta(seconds=worker_module._lease_duration_seconds())
+    assert leased_until >= expected_min
+
+    # Cleanup to avoid leaking leased jobs to other tests
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs where id = %s::uuid", (job_id,))
+        conn.commit()

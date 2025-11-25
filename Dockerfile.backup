@@ -25,7 +25,7 @@ set -e
 cat >/tmp/backup.cron <<'CRON'
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-0 2 * * * BACKUP_DATABASE_URL="${BACKUP_DATABASE_URL}" KC_DB_URL="${KC_DB_URL}" KC_DB_USERNAME="${KC_DB_USERNAME}" KC_DB_PASSWORD="${KC_DB_PASSWORD}" SUPABASE_STORAGE_ROOT="${SUPABASE_STORAGE_ROOT}" BACKUP_DIR="${BACKUP_DIR}" RETENTION_DAYS="${RETENTION_DAYS}" su -s /bin/sh backup -c "python /app/scripts/backup_daily.py --once" >>/var/log/backup.log 2>&1
+0 2 * * * su -s /bin/sh backup -c "python /app/scripts/backup_daily.py --once" >>/var/log/backup.log 2>&1
 CRON
 crontab /tmp/backup.cron
 exec cron -f

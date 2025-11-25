@@ -92,6 +92,7 @@ def worker_module(monkeypatch):
         id="job-1", submission_id="sub-1", retry_count=0, payload={"student_sub": "s|1"}
     )
     monkeypatch.setattr(mod, "_lease_next_job", lambda *a, **k: job)
+    monkeypatch.setattr(mod, "_lease_jobs", lambda *a, **k: [job])
 
     class Box:
         pass

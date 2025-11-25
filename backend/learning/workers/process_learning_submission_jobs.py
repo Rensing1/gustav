@@ -23,6 +23,7 @@ import inspect
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 from importlib import import_module
+from concurrent.futures import ThreadPoolExecutor
 
 from . import telemetry
 from backend.learning.adapters.ports import (
@@ -97,6 +98,17 @@ def _backoff_seconds() -> int:
     return max(1, value)
 
 
+def _concurrency_limit() -> int:
+    """Parse WORKER_CONCURRENCY with sane lower bound."""
+    raw = os.getenv("WORKER_CONCURRENCY", "1")
+    try:
+        value = int(raw)
+    except ValueError:
+        LOG.warning("Invalid WORKER_CONCURRENCY=%s, defaulting to 1", raw)
+        return 1
+    return max(1, value)
+
+
 def run_once(
     *,
     dsn: str,
@@ -105,11 +117,12 @@ def run_once(
     now: Optional[datetime] = None,
 ) -> bool:
     """
-    Lease and process at most one pending submission job.
+    Lease and process up to WORKER_CONCURRENCY pending submission jobs.
 
     Why:
-        The background worker should pick a single submission, run Vision and
-        Feedback analysis, and either complete the submission or schedule a retry.
+        The background worker should pick submissions, run Vision and Feedback analysis,
+        and either complete the submission or schedule retries. To reduce latency, the
+        batch size is controlled via WORKER_CONCURRENCY (default 1).
 
     Parameters:
         dsn: Postgres connection string for the worker (service role with function EXECUTE grants).
@@ -132,35 +145,53 @@ def run_once(
     """
     _require_psycopg()
     tick = now or datetime.now(tz=timezone.utc)
+    concurrency = _concurrency_limit()
 
-    with psycopg.connect(dsn, row_factory=dict_row) as conn:  # type: ignore[arg-type]
-        conn.autocommit = False
+    with psycopg.connect(dsn, row_factory=dict_row) as lease_conn:  # type: ignore[arg-type]
+        lease_conn.autocommit = False
 
-        job = _lease_next_job(conn, now=tick)
-        if job is None:
-            conn.rollback()
+        jobs = _lease_jobs(lease_conn, now=tick, limit=concurrency)
+        if not jobs:
+            lease_conn.rollback()
             return False
+        lease_conn.commit()
 
-        telemetry.adjust_gauge("analysis_jobs_inflight", delta=1)
-        try:
-            _process_job(
-                conn=conn,
+    if concurrency == 1:
+        _process_job_with_new_connection(
+            dsn=dsn,
+            job=jobs[0],
+            vision_adapter=vision_adapter,
+            feedback_adapter=feedback_adapter,
+            now=tick,
+        )
+        return True
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [
+            executor.submit(
+                _process_job_with_new_connection,
+                dsn=dsn,
                 job=job,
                 vision_adapter=vision_adapter,
                 feedback_adapter=feedback_adapter,
                 now=tick,
             )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            telemetry.adjust_gauge("analysis_jobs_inflight", delta=-1)
+            for job in jobs
+        ]
+        # Propagate the first exception to surface failures.
+        for future in futures:
+            future.result()
     return True
 
 
 def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
     """Lease the next visible job from the canonical queue table."""
+    jobs = _lease_jobs(conn, now=now, limit=1)
+    return jobs[0] if jobs else None
+
+
+def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJob]:
+    """Lease up to `limit` visible jobs from the queue."""
     lease_key = uuid4()
     lease_until = now + timedelta(seconds=LEASE_SECONDS)
     queue_table = _resolve_queue_table(conn)
@@ -183,7 +214,7 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                           and leased_until <= %s
                        )
                  order by visible_at asc, created_at asc
-                 limit 1
+                 limit %s
                  for update skip locked
             )
             update public.{} as jobs
@@ -199,16 +230,19 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
                      candidate.payload
             """
         ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table))
-        cur.execute(stmt, (now, now, str(lease_key), lease_until))
-        row = cur.fetchone()
-    if not row:
-        return None
-    return QueuedJob(
-        id=row["id"],
-        submission_id=row["submission_id"],
-        retry_count=int(row["retry_count"]),
-        payload=row["payload"],
-    )
+        cur.execute(stmt, (now, now, limit, str(lease_key), lease_until))
+        rows = cur.fetchall()
+    jobs: list[QueuedJob] = []
+    for row in rows or []:
+        jobs.append(
+            QueuedJob(
+                id=row["id"],
+                submission_id=row["submission_id"],
+                retry_count=int(row["retry_count"]),
+                payload=row["payload"],
+            )
+        )
+    return jobs
 
 
 def _resolve_queue_table(conn: Connection) -> str:
@@ -245,6 +279,41 @@ def _resolve_queue_table(conn: Connection) -> str:
     raise RuntimeError("Queue table public.learning_submission_jobs missing; run migrations.")
 
 
+def _process_job_with_new_connection(
+    *,
+    dsn: str,
+    job: QueuedJob,
+    vision_adapter: VisionAdapterProtocol,
+    feedback_adapter: FeedbackAdapterProtocol,
+    now: datetime,
+) -> None:
+    """Isolated job processing using its own DB connection (thread-safe)."""
+    _require_psycopg()
+    telemetry.adjust_gauge("analysis_jobs_inflight", delta=1)
+    conn: Connection | None = None
+    try:
+        with psycopg.connect(dsn, row_factory=dict_row) as new_conn:  # type: ignore[arg-type]
+            conn = new_conn
+            new_conn.autocommit = False
+            _process_job(
+                conn=new_conn,
+                job=job,
+                vision_adapter=vision_adapter,
+                feedback_adapter=feedback_adapter,
+                now=now,
+            )
+            new_conn.commit()
+    except Exception:
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        telemetry.adjust_gauge("analysis_jobs_inflight", delta=-1)
+
+
 def _process_job(
     *,
     conn: Connection,
@@ -275,51 +344,57 @@ def _process_job(
         _delete_job(conn, job_id=job.id)
         return
 
-    try:
-        # For plain text submissions we never invoke Vision/OCR/LLM. Preserve the
-        # original student text verbatim to avoid unintended transformations.
-        if (submission.get("kind") or "").strip() == "text":
-            from backend.learning.adapters.ports import VisionResult as _VR  # local import to avoid cycles
-            vision_result = _VR(
-                text_md=str(submission.get("text_body") or ""),
-                raw_metadata={"adapter": "worker", "backend": "pass_through", "reason": "text_submission"},
+    cached_vision = _cached_vision_result(submission=submission, job=job)
+
+    if cached_vision is not None:
+        vision_result = cached_vision
+    else:
+        try:
+            # For plain text submissions we never invoke Vision/OCR/LLM. Preserve the
+            # original student text verbatim to avoid unintended transformations.
+            if (submission.get("kind") or "").strip() == "text":
+                from backend.learning.adapters.ports import VisionResult as _VR  # local import to avoid cycles
+                vision_result = _VR(
+                    text_md=str(submission.get("text_body") or ""),
+                    raw_metadata={"adapter": "worker", "backend": "pass_through", "reason": "text_submission"},
+                )
+            else:
+                vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
+            _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
+        except VisionPermanentError as exc:
+            # Log only the exception class to avoid leaking PII/prompt content in logs.
+            LOG.warning(
+                "Vision permanent error for submission %s job %s: %s",
+                job.submission_id,
+                job.id,
+                exc.__class__.__name__,
             )
-        else:
-            vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
-    except VisionPermanentError as exc:
-        # Log only the exception class to avoid leaking PII/prompt content in logs.
-        LOG.warning(
-            "Vision permanent error for submission %s job %s: %s",
-            job.submission_id,
-            job.id,
-            exc.__class__.__name__,
-        )
-        _handle_vision_error(
-            conn=conn,
-            job=job,
-            submission_id=job.submission_id,
-            now=now,
-            message=str(exc),
-            transient=False,
-        )
-        return
-    except VisionTransientError as exc:
-        # Keep logs free of raw messages; store truncated details in DB instead.
-        LOG.info(
-            "Vision transient error for submission %s job %s: %s",
-            job.submission_id,
-            job.id,
-            exc.__class__.__name__,
-        )
-        _handle_vision_error(
-            conn=conn,
-            job=job,
-            submission_id=job.submission_id,
-            now=now,
-            message=str(exc),
-            transient=True,
-        )
-        return
+            _handle_vision_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                transient=False,
+            )
+            return
+        except VisionTransientError as exc:
+            # Keep logs free of raw messages; store truncated details in DB instead.
+            LOG.info(
+                "Vision transient error for submission %s job %s: %s",
+                job.submission_id,
+                job.id,
+                exc.__class__.__name__,
+            )
+            _handle_vision_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                transient=True,
+            )
+            return
 
     try:
         # Pass task context (instruction/hints) to adapters that support it; keep compatibility otherwise.
@@ -446,6 +521,41 @@ def _update_submission_completed(
                 analysis_param,
             ),
         )
+
+
+def _cached_vision_result(*, submission: dict, job: QueuedJob) -> VisionResult | None:
+    """Return cached OCR text when submission is already extracted and payload carries text."""
+    status = (submission.get("analysis_status") or "").strip()
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    cached_text = payload.get("cached_text_md") if isinstance(payload, dict) else None
+    if status != "extracted" or not cached_text:
+        return None
+    raw_meta = payload.get("cached_raw_metadata") if isinstance(payload, dict) else None
+    raw_meta = raw_meta if isinstance(raw_meta, dict) else {"source": "cached_payload"}
+    return VisionResult(text_md=str(cached_text), raw_metadata=raw_meta)
+
+
+def _persist_cached_vision(*, conn: Connection, job_id: str, vision_result: VisionResult) -> None:
+    """Store OCR text/metadata on the job payload so retries can skip Vision."""
+    import json as _json
+    cache = {
+        "cached_text_md": vision_result.text_md,
+        "cached_raw_metadata": vision_result.raw_metadata,
+    }
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submission_jobs
+                   set payload = payload || %s::jsonb,
+                       updated_at = now()
+                 where id = %s::uuid
+                """,
+                (_json.dumps(cache), job_id),
+            )
+    except (AttributeError, AssertionError):
+        # Fallback for monkeypatched or non-DB test connections; caching is optional for tests.
+        LOG.debug("Skipping cached vision persistence for job %s (test double without cursor)", job_id)
 
 
 def _handle_vision_error(

@@ -15,7 +15,23 @@ COPY scripts/backup_daily.py /app/scripts/backup_daily.py
 RUN if ! getent passwd backup >/dev/null; then useradd -m -u 10002 backup; fi \
     && mkdir -p /backups /var/log \
     && chown -R backup:backup /app /backups /var/log
-USER backup
+# Run cron as root (required to manage crond), but cron jobs call the backup user.
+USER root
+
+# Entry point: install crontab for the backup user and run cron in foreground.
+RUN cat >/entrypoint.sh <<'EOF'
+#!/bin/sh
+set -e
+cat >/tmp/backup.cron <<'CRON'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0 2 * * * BACKUP_DATABASE_URL="${BACKUP_DATABASE_URL}" KC_DB_URL="${KC_DB_URL}" KC_DB_USERNAME="${KC_DB_USERNAME}" KC_DB_PASSWORD="${KC_DB_PASSWORD}" SUPABASE_STORAGE_ROOT="${SUPABASE_STORAGE_ROOT}" BACKUP_DIR="${BACKUP_DIR}" RETENTION_DAYS="${RETENTION_DAYS}" su -s /bin/sh backup -c "python /app/scripts/backup_daily.py --once" >>/var/log/backup.log 2>&1
+CRON
+crontab /tmp/backup.cron
+exec cron -f
+EOF
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
 ENV PYTHONUNBUFFERED=1
 

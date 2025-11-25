@@ -243,12 +243,6 @@ services:
       - backups:/backups
       - ./scripts:/app/scripts:ro
       - ./supabase:/app/supabase:ro
-    command: >
-      sh -c "echo '0 2 * * * . /etc/environment && python /app/scripts/backup_daily.py --once >>/var/log/backup.log 2>&1' > /etc/cron.d/backup &&
-             chmod 0644 /etc/cron.d/backup &&
-             printenv > /etc/environment &&
-             crontab /etc/cron.d/backup &&
-             cron -f"
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

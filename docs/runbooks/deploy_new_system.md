@@ -199,7 +199,7 @@ sudo ufw status verbose
 - **DNS + Zertifikat**: Wenn echte Domains genutzt werden, erhält Caddy über HTTPS/Aufrufe automatisch Let’s Encrypt-Zertifikate (Ports 80/443 müssen dann offen sein; passe das Compose-Port-Mapping entsprechend an).  
 - **Konfigurationsänderungen**: Nach Änderungen an `.env`, `reverse-proxy/Caddyfile` oder Python-Code den Stack neu starten: `docker compose up -d --build`.  
 - **Statuschecks**: `scripts/preflight.sh` bündelt wichtige Prüfungen (`supabase status`, Healthcheck, Keycloak). Für den vollständigen Ablauf siehe `docs/runbooks/preflight_checklist.md`, u. a. mit OIDC-Check, RLS-Rollenprüfung und Smoke-Tests.  
-- **Backups**: Postgres- und Storage-Dumps per `supabase db dump` bzw. Volume-Backups erstellen (Dokumentation unter `docs/backups/`).  
+- **Backups**: Postgres- und Storage-Dumps per `supabase db dump` bzw. Volume-Backups erstellen (Dokumentation unter `docs/backups/`). Für den laufenden Betrieb: Cron im Container aufsetzen, z. B. `0 2 * * * /usr/bin/python /app/scripts/backup_daily.py --once >>/var/log/backup.log 2>&1`, ENV müssen `DATABASE_URL`, `KC_DB_URL`, `SUPABASE_STORAGE_ROOT`, `BACKUP_DIR=/backups`, `RETENTION_DAYS=7` enthalten.  
 - **Stoppen**: `docker compose down` für den App-Stack, `supabase stop` für die Datenplattform.
 
 ---

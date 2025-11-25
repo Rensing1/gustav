@@ -1,0 +1,20 @@
+# Backup image with cron and pg_dump for scheduled database/storage backups.
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cron \
+    postgresql-client \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy only the backup script; storage paths and repo content are mounted at runtime.
+COPY scripts/backup_daily.py /app/scripts/backup_daily.py
+
+RUN useradd -m -u 10002 backup && mkdir -p /backups /var/log && chown -R backup:backup /app /backups /var/log
+USER backup
+
+ENV PYTHONUNBUFFERED=1
+
+# Cron will be configured by the compose service command to keep timing flexible.
+CMD ["cron", "-f"]

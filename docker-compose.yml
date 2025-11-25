@@ -235,8 +235,8 @@ services:
       BACKUP_DIR: /backups
       SUPABASE_STORAGE_ROOT: /app/supabase/storage
       RETENTION_DAYS: 7
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
-      KC_DB_URL: ${KC_DB_URL:-jdbc:postgresql://keycloak-db:5432/keycloak}
+      BACKUP_DATABASE_URL: postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
     volumes:

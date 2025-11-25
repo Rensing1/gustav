@@ -11,7 +11,10 @@ WORKDIR /app
 # Copy only the backup script; storage paths and repo content are mounted at runtime.
 COPY scripts/backup_daily.py /app/scripts/backup_daily.py
 
-RUN useradd -m -u 10002 backup && mkdir -p /backups /var/log && chown -R backup:backup /app /backups /var/log
+# Create backup user if not present (builder cache may reuse base with same UID).
+RUN if ! getent passwd backup >/dev/null; then useradd -m -u 10002 backup; fi \
+    && mkdir -p /backups /var/log \
+    && chown -R backup:backup /app /backups /var/log
 USER backup
 
 ENV PYTHONUNBUFFERED=1

@@ -224,6 +224,29 @@ services:
       start_period: 90s
       retries: 10
 
+  backup-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    container_name: gustav-backup-cron
+    env_file:
+      - .env
+    environment:
+      BACKUP_DIR: /backups
+      SUPABASE_STORAGE_ROOT: /app/supabase/storage
+      RETENTION_DAYS: 7
+      KC_DB_URL: ${KC_DB_URL:-jdbc:postgresql://keycloak-db:5432/keycloak}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
+    volumes:
+      - backups:/backups
+      - ./scripts:/app/scripts:ro
+      - ./supabase:/app/supabase:ro
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
+      - supabase_network_gustav-alpha2
+
 networks:
   gustav-alpha2-network:
     driver: bridge
@@ -233,4 +256,6 @@ volumes:
   keycloak_pg_data:
     driver: local
   ollama_models:
+    driver: local
+  backups:
     driver: local

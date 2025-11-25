@@ -51,6 +51,7 @@ def _make_fake_pg_dump(tmp_path: Path, behavior: str = "ok") -> Path:
     behavior:
         - "ok": writes simple SQL to stdout and exits 0.
         - "fail": writes error to stderr and exits 1.
+        - "hang": sleeps for HANG_SECONDS (default 5) without producing output.
     """
     script = tmp_path / "pg_dump"
     script.write_text(
@@ -60,6 +61,9 @@ def _make_fake_pg_dump(tmp_path: Path, behavior: str = "ok") -> Path:
         "  if [ \"${BEHAVIOR}\" = \"fail\" ]; then\n"
         "    echo \"pg_dump boom\" 1>&2\n"
         "    exit 1\n"
+        "  elif [ \"${BEHAVIOR}\" = \"hang\" ]; then\n"
+        "    sleep \"${HANG_SECONDS:-5}\"\n"
+        "    exit 0\n"
         "  fi\n"
         "  echo \"-- SQL DUMP --\"; exit 0\n"
         "fi\n"
@@ -253,3 +257,41 @@ def test_backup_prefers_session_database_url(tmp_path: Path, monkeypatch: pytest
     # pg_dump called twice; check first recorded URI ends with session DB
     args_lines = args_log.read_text().strip().splitlines()
     assert any("sessiondb" in line for line in args_lines), f"args: {args_lines}"
+
+
+def test_backup_pg_dump_timeout_marks_failed_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "backup_daily.py"
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    args_log = tmp_path / "pg_args.log"
+    _make_fake_pg_dump(tmp_path, behavior="hang")
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ.get('PATH','')}")
+    monkeypatch.setenv("TMP_PG_DUMP_ARGS", str(args_log))
+    env = os.environ.copy()
+    env.update(
+        {
+            "BACKUP_DIR": str(backup_dir),
+            "SUPABASE_STORAGE_ROOT": str(storage_root),
+            "DATABASE_URL": "postgresql://user:secret@db/supabase",
+            "KC_DB_URL": "postgresql://kc_user:kc_pass@kc-db/keycloak",
+            "BEHAVIOR": "hang",
+            "HANG_SECONDS": "5",
+            "BACKUP_PG_TIMEOUT_SECONDS": "1",
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--once"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=6,
+    )
+    assert result.returncode != 0
+    manifests = list(backup_dir.glob("*/manifest.json"))
+    assert manifests, "manifest should be written on timeout"
+    manifest = json.loads(manifests[0].read_text())
+    assert manifest.get("status") == "failed"
+    assert "timeout" in manifest.get("error", "").lower()

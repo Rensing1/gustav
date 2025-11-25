@@ -37,6 +37,7 @@ from typing import Dict, List, Tuple
 from urllib.parse import urlsplit, urlunsplit
 import gzip
 import time
+import select
 
 
 def _require_env(keys: List[str]) -> Dict[str, str]:
@@ -72,21 +73,39 @@ def _run_pg_dump(uri: str, dest: Path, *, timeout: int, env: Dict[str, str]) -> 
         stderr=subprocess.PIPE,
         env=proc_env,
     ) as proc:
-        with gzip.open(dest, "wb") as gz:
-            while True:
-                if proc.stdout is None:
-                    break
-                chunk = proc.stdout.read(8192)
-                if chunk:
-                    gz.write(chunk)
-                if chunk == b"":
-                    break
-                if time.monotonic() - start > timeout:
-                    proc.kill()
-                    proc.wait()
-                    raise RuntimeError(f"pg_dump timeout after {timeout}s for {uri}")
-        stderr = proc.stderr.read() if proc.stderr else b""
-        ret = proc.wait()
+        try:
+            with gzip.open(dest, "wb") as gz:
+                while True:
+                    if proc.stdout is None:
+                        break
+                    # Wait until stdout is readable or timeout elapses.
+                    ready, _, _ = select.select([proc.stdout], [], [], 0.5)
+                    if ready:
+                        chunk = proc.stdout.read(8192)
+                        if chunk:
+                            gz.write(chunk)
+                            continue
+                        if chunk == b"":
+                            break
+                    if proc.poll() is not None:
+                        break
+                    if time.monotonic() - start > timeout:
+                        proc.kill()
+                        proc.wait()
+                        raise RuntimeError(f"pg_dump timeout after {timeout}s for {uri}")
+            stderr = proc.stderr.read() if proc.stderr else b""
+            ret = proc.wait(timeout=1)
+        except Exception:
+            # Ensure the child process does not linger.
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            try:
+                proc.wait(timeout=1)
+            except Exception:
+                pass
+            raise
     if ret != 0:
         raise RuntimeError(f"pg_dump failed for {uri}: {stderr.decode().strip()}")
 

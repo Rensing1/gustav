@@ -83,6 +83,7 @@ class QueuedJob:
 LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "45"))
 MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
 MAX_CONCURRENCY = 4  # hard cap to prevent overload from misconfigured WORKER_CONCURRENCY
+LEASE_MULTIPLIER = int(os.getenv("WORKER_LEASE_MULTIPLIER", "4"))
 
 
 # Error classes now live in ports and are imported above.
@@ -110,6 +111,15 @@ def _concurrency_limit() -> int:
     if value > MAX_CONCURRENCY:
         LOG.warning("WORKER_CONCURRENCY=%s capped to %s", value, MAX_CONCURRENCY)
     return max(1, min(value, MAX_CONCURRENCY))
+
+
+def _lease_duration_seconds() -> int:
+    """Compute the effective lease window to cover long-running Vision/Feedback jobs."""
+    try:
+        multiplier = max(1, LEASE_MULTIPLIER)
+    except Exception:
+        multiplier = 4
+    return max(LEASE_SECONDS, LEASE_SECONDS * multiplier)
 
 
 def run_once(
@@ -150,6 +160,35 @@ def run_once(
     tick = now or datetime.now(tz=timezone.utc)
     concurrency = _concurrency_limit()
 
+    if concurrency == 1:
+        with psycopg.connect(dsn, row_factory=dict_row) as conn:  # type: ignore[arg-type]
+            conn.autocommit = False
+            job = _lease_next_job(conn, now=tick)
+            if not job:
+                conn.rollback()
+                return False
+            telemetry.adjust_gauge("analysis_jobs_inflight", delta=1)
+            try:
+                _process_job(
+                    conn=conn,
+                    job=job,
+                    vision_adapter=vision_adapter,
+                    feedback_adapter=feedback_adapter,
+                    now=tick,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                try:
+                    _unlease_job(conn=conn, job_id=job.id)
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                raise
+            finally:
+                telemetry.adjust_gauge("analysis_jobs_inflight", delta=-1)
+        return True
+
     with psycopg.connect(dsn, row_factory=dict_row) as lease_conn:  # type: ignore[arg-type]
         lease_conn.autocommit = False
 
@@ -158,16 +197,6 @@ def run_once(
             lease_conn.rollback()
             return False
         lease_conn.commit()
-
-    if concurrency == 1:
-        _process_job_with_new_connection(
-            dsn=dsn,
-            job=jobs[0],
-            vision_adapter=vision_adapter,
-            feedback_adapter=feedback_adapter,
-            now=tick,
-        )
-        return True
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [
@@ -196,7 +225,7 @@ def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
 def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJob]:
     """Lease up to `limit` visible jobs from the queue."""
     lease_key = uuid4()
-    lease_until = now + timedelta(seconds=LEASE_SECONDS)
+    lease_until = now + timedelta(seconds=_lease_duration_seconds())
     queue_table = _resolve_queue_table(conn)
     with conn.cursor() as cur:
         stmt = _sql.SQL(
@@ -237,12 +266,13 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
         rows = cur.fetchall()
     jobs: list[QueuedJob] = []
     for row in rows or []:
+        is_mapping = isinstance(row, dict)
         jobs.append(
             QueuedJob(
-                id=row["id"],
-                submission_id=row["submission_id"],
-                retry_count=int(row["retry_count"]),
-                payload=row["payload"],
+                id=row["id"] if is_mapping else row[0],
+                submission_id=row["submission_id"] if is_mapping else row[1],
+                retry_count=int(row["retry_count"] if is_mapping else row[2]),
+                payload=row["payload"] if is_mapping else row[3],
             )
         )
     return jobs

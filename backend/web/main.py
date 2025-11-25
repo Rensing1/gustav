@@ -784,6 +784,16 @@ def _render_history_entries_html(entries: List[HistoryEntry]) -> str:
         )
     return '<section class="task-panel__history">' + "".join(parts) + "</section>"
 
+
+def _render_analysis_in_progress_hint() -> str:
+    """Render a small spinner hint shown while submission analysis runs."""
+    return (
+        '<div class="status-chip" role="status" aria-live="polite">'
+        '<span class="spinner spinner--sm" aria-hidden="true"></span>'
+        '<span class="status-chip__text">Analyse läuft … wir aktualisieren gleich.</span>'
+        '</div>'
+    )
+
 # --- Page Rendering Helpers -----------------------------------------------------
 
 def _render_course_list_partial(items: list[dict], limit: int, offset: int, has_next: bool, *, csrf_token: str) -> str:
@@ -1331,7 +1341,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                                     f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML" '
                                     f"hx-vals='{payload}' "
                                     'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-                                    f'<div class="text-muted">Lade Verlauf …</div>'
+                                    f'{_render_analysis_in_progress_hint()}'
                                     f'</section>'
                                 )
                             else:
@@ -1675,6 +1685,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 if pending_latest
                 else ""
             )
+            status_hint_html = _render_analysis_in_progress_hint() if pending_latest else ""
             hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
             wrapper_open = (
                 f'<section id="task-history-{Component.escape(task_id)}"'
@@ -1693,7 +1704,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                     inner_html = inner_html[start:end]
                 except Exception:
                     pass
-            return HTMLResponse(content=wrapper_open + inner_html + '</section>', headers=headers)
+            return HTMLResponse(content=wrapper_open + status_hint_html + inner_html + '</section>', headers=headers)
         else:
             # Error path: tell client to show an error and keep fragment unchanged
             headers["HX-Trigger"] = _json.dumps({
@@ -1779,6 +1790,7 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
         if pending_latest
         else ""
     )
+    status_hint_html = _render_analysis_in_progress_hint() if pending_latest else ""
     hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
     wrapper_open = (
         f'<section id="task-history-{Component.escape(task_id)}"'
@@ -1800,7 +1812,7 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
             inner_html = inner_html[start:end]
         except Exception:
             pass
-    html = wrapper_open + inner_html + "</section>"
+    html = wrapper_open + status_hint_html + inner_html + "</section>"
     return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)

@@ -212,6 +212,25 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
     return fixture, worker_dsn, job_id, submission_id
 
 
+def _set_job_visibility(worker_dsn: str, job_id: str, *, visible_at: datetime) -> None:
+    """Pin a job's visibility for deterministic leasing, clearing any previous lease."""
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submission_jobs
+                   set visible_at = %s,
+                       status = 'queued',
+                       lease_key = null,
+                       leased_until = null,
+                       updated_at = now()
+                 where id = %s::uuid
+                """,
+                (visible_at, job_id),
+            )
+        conn.commit()
+
+
 def _force_submission_to_file(worker_dsn: str, submission_id: str) -> None:
     """Switch the stored submission to a non-text kind so Vision adapters run."""
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
@@ -377,7 +396,8 @@ async def test_worker_retries_vision_transient_error(monkeypatch):
     # Deterministic configuration for retries.
     monkeypatch.setenv("WORKER_BACKOFF_SECONDS", "2")
     worker_module.MAX_RETRIES = 3  # type: ignore[attr-defined]
-    tick = datetime.now(tz=timezone.utc)
+    tick = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+    _set_job_visibility(worker_dsn, job_id, visible_at=tick)
 
     processed = run_once(
         dsn=worker_dsn,
@@ -451,7 +471,8 @@ async def test_worker_marks_failed_after_max_retries(monkeypatch):
     monkeypatch.setenv("WORKER_BACKOFF_SECONDS", "1")
     worker_module.MAX_RETRIES = 1  # type: ignore[attr-defined]
 
-    tick = datetime.now(tz=timezone.utc)
+    tick = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+    _set_job_visibility(worker_dsn, job_id, visible_at=tick)
     run_once(
         dsn=worker_dsn,
         vision_adapter=_PermanentVisionAdapter(),
@@ -521,7 +542,8 @@ async def test_worker_retries_feedback_transient_error(monkeypatch):
 
     monkeypatch.setenv("WORKER_BACKOFF_SECONDS", "3")
     worker_module.MAX_RETRIES = 3  # type: ignore[attr-defined]
-    tick = datetime.now(tz=timezone.utc)
+    tick = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+    _set_job_visibility(worker_dsn, job_id, visible_at=tick)
 
     processed = run_once(
         dsn=worker_dsn,
@@ -646,11 +668,12 @@ async def test_worker_success_updates_metrics_and_gauge():
 
     _require_db_or_skip()
     telemetry.reset_for_tests()
-    _fixture, worker_dsn, _job_id, _submission_id = await _prepare_submission_with_job(
+    _fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
         idempotency_key="worker-metrics-success"
     )
 
-    tick = datetime.now(tz=timezone.utc)
+    tick = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+    _set_job_visibility(worker_dsn, job_id, visible_at=tick)
     processed = run_once(
         dsn=worker_dsn,
         vision_adapter=_StubVisionAdapter(text_md="# Metrics Success"),
@@ -669,13 +692,14 @@ async def test_worker_retry_emits_retry_metric_and_warning(caplog: pytest.LogCap
 
     _require_db_or_skip()
     telemetry.reset_for_tests()
-    _fixture, worker_dsn, _job_id, _submission_id = await _prepare_submission_with_job(
+    _fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
         idempotency_key="worker-metrics-retry"
     )
-    _force_submission_to_file(worker_dsn, _submission_id)
+    _force_submission_to_file(worker_dsn, submission_id)
 
     caplog.set_level(logging.INFO, logger=worker_module.LOG.name)
-    tick = datetime.now(tz=timezone.utc)
+    tick = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+    _set_job_visibility(worker_dsn, job_id, visible_at=tick)
     processed = run_once(
         dsn=worker_dsn,
         vision_adapter=_TransientVisionAdapter(message="temporary retry"),

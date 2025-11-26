@@ -2680,7 +2680,9 @@ async def home(request: Request):
     content = """
     <div class=\"container\">
         <h1>Willkommen bei GUSTAV</h1>
-        <p class=\"text-muted\">Offene Lernplattform für Schulen.</p>
+        <p>GUSTAV (Akronym für: Gustav unterstützt Schüler tadellos als Vertretungslehrer) ist eine Lernplattform, die sich derzeit noch in Entwicklung befindet. Dass Fehler vorkommen, ist daher nichts Ungewöhnliches. Bitte melde Fehler direkt an deinen Lehrer. Außerdem sind Ideen zur Verbesserung der Plattform gern gesehen!</p>
+        <p>Klick links in der Navigationsleiste auf „Meine Kurse“ und wähle dort die aktuelle Lerneinheit aus. Dort kannst du zu den Aufgaben deine Lösungen eintippen oder hochladen. Ein KI-Modell wird dann deine Einreichung auswerten und dir eine Rückmeldung geben.</p>
+        <p>Die Plattform ist datenschutzkonform. Deine persönlichen Daten werden zu keinem Zeitpunkt an fremde Server übertragen.</p>
     </div>
     """
     layout = Layout(title="Startseite", content=content, user=user, current_path=request.url.path)
@@ -5026,7 +5028,7 @@ async def about_page(request: Request):
     content = """
     <div class=\"container\">
         <h1>Über GUSTAV</h1>
-        <p>GUSTAV ist eine offene Lernplattform für Schulen.</p>
+        <p>Diese Seite wird demnächst freigeschaltet. Hier findest du Informationen darüber, wie GUSTAV funktioniert und welche Ziele mit dieser Plattform erreicht werden sollen.</p>
     </div>
     """
     layout = Layout(title="Über GUSTAV", content=content, user=user, current_path=request.url.path)

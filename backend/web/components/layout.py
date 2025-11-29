@@ -124,9 +124,9 @@ class Layout(Component):
     <SCRIPT src="/static/js/vendor/sortable.js?v=4"></SCRIPT>
 
     <!-- Minimal custom JavaScript -->
-    <SCRIPT src="/static/js/gustav.js?v=5" defer></SCRIPT>
+    <SCRIPT src="/static/js/gustav.js?v=6" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
-    <SCRIPT src="/static/js/learning_upload.js?v=1" defer></SCRIPT>
+    <SCRIPT src="/static/js/learning_upload.js?v=2" defer></SCRIPT>
     """
 
     def _render_main_inner(self, breadcrumb_html: str) -> str:

@@ -424,10 +424,18 @@ def analyze_feedback(
         # system (AI_FEEDBACK_MODEL, OLLAMA_BASE_URL).
         try:  # pragma: no cover - exercised indirectly in integration/E2E
             import dspy  # type: ignore
+
             model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
             if model_name and hasattr(dspy, "LM"):
                 api_base = _ensure_ollama_host_env()
-                lm_kwargs = {"api_base": api_base} if api_base else {}
+                from backend.learning.adapters.dspy import helpers as dspy_helpers
+
+                think_level = os.getenv("AI_THINK_LEVEL")
+                lm_kwargs = dspy_helpers.build_lm_kwargs(
+                    model_name=model_name,
+                    api_base=api_base,
+                    think_level=think_level,
+                )
                 lm = dspy.LM(f"ollama/{model_name}", **lm_kwargs)  # type: ignore[attr-defined]
                 use_json_adapter = _json_adapter_enabled()
                 adapter_cls = getattr(dspy, "JSONAdapter", None) if use_json_adapter else None

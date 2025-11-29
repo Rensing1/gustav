@@ -78,7 +78,18 @@ class Gustav {
     }
     const intent = await intentResp.json();
     const uploadUrl = intent.url || intent.upload_url;
-    const uploadHeaders = intent.headers || intent.upload_headers || { 'Content-Type': file.type || 'application/octet-stream' };
+    // Normalize headers to avoid duplicate Content-Type entries in browsers
+    const uploadHeaders = new Headers();
+    const rawHeaders = intent.headers || intent.upload_headers || {};
+    if (rawHeaders && typeof rawHeaders === 'object') {
+      Object.keys(rawHeaders).forEach((k) => {
+        const v = rawHeaders[k];
+        if (v !== undefined && v !== null) uploadHeaders.set(k, v);
+      });
+    }
+    if (!uploadHeaders.has('content-type')) {
+      uploadHeaders.set('Content-Type', file.type || 'application/octet-stream');
+    }
     if (!uploadUrl) {
       throw new Error('upload_url_missing');
     }

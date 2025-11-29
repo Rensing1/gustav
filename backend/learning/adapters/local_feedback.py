@@ -18,6 +18,7 @@ import os
 from typing import Sequence
 
 from backend.learning.adapters.ports import FeedbackResult, FeedbackTransientError
+from backend.learning.adapters.dspy import helpers as dspy_helpers
 
 
 logger = logging.getLogger(__name__)
@@ -218,16 +219,21 @@ class _LocalFeedbackAdapter:
                 client = ollama.Client(self._base_url)
                 # Force raw mode to bypass server-side templates that may reference
                 # unavailable functions (e.g., currentDate) and keep behavior stable.
-                raw = client.generate(
-                    model=self._model,
-                    prompt=prompt,
-                    options={
+                think_level = dspy_helpers.resolve_think_level(self._model, os.getenv("AI_THINK_LEVEL"))
+                generate_kwargs = {
+                    "model": self._model,
+                    "prompt": prompt,
+                    "options": {
                         "raw": True,
                         "timeout": self._timeout,  # enforce AI_TIMEOUT_FEEDBACK at client level
                         # Ensure server template is not applied to avoid template errors
                         "template": "{{ .Prompt }}",
                     },
-                )
+                }
+                if think_level:
+                    generate_kwargs["think"] = think_level
+
+                raw = client.generate(**generate_kwargs)
                 if isinstance(raw, dict):
                     val = raw.get("response") or raw.get("message")
                     feedback_md_from_ollama = str(val or "").strip() if val is not None else None

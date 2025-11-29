@@ -113,9 +113,8 @@
     }
     const intent = await intentResp.json();
     const url = intent.url;
-    const headers = intent.headers || { 'Content-Type': file.type };
-    // Upload to storage
-    const putResp = await fetch(url, { method: 'PUT', headers: headers, body: file });
+    // Upload to storage (let the browser set Content-Type for the Blob)
+    const putResp = await fetch(url, { method: 'PUT', body: file });
     if (!putResp.ok) {
       e.preventDefault();
       return false;

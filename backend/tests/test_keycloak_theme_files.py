@@ -28,14 +28,25 @@ def test_theme_templates_present():
         "login.ftl": (THEME_ROOT / "login.ftl").exists(),
         "register.ftl": (THEME_ROOT / "register.ftl").exists(),
         "login-reset-password.ftl": (THEME_ROOT / "login-reset-password.ftl").exists(),
+        "update-password.ftl": (THEME_ROOT / "update-password.ftl").exists(),
+        "login-update-password.ftl": (THEME_ROOT / "login-update-password.ftl").exists(),
     }
     tmpl_dir = THEME_ROOT / "templates"
     dir_files = {
         "login.ftl": (tmpl_dir / "login.ftl").exists(),
         "register.ftl": (tmpl_dir / "register.ftl").exists(),
         "login-reset-password.ftl": (tmpl_dir / "login-reset-password.ftl").exists(),
+        "update-password.ftl": (tmpl_dir / "update-password.ftl").exists(),
+        "login-update-password.ftl": (tmpl_dir / "login-update-password.ftl").exists(),
     }
-    for name in ["login.ftl", "register.ftl", "login-reset-password.ftl"]:
+    for name in [
+        "login.ftl",
+        "register.ftl",
+        "login-reset-password.ftl",
+        # Keycloak default uses login-update-password.ftl; allow update-password.ftl alias.
+        "update-password.ftl",
+        "login-update-password.ftl",
+    ]:
         assert root_files[name] or dir_files[name], f"{name} missing"
 
 
@@ -50,6 +61,7 @@ def test_theme_messages_de_present_and_has_keys():
         "doForgotPassword=",
         "usernameOrEmail=",
         "password=",
+        "rememberMe=",
     ]:
         assert key in content, f"Missing i18n key: {key}"
 
@@ -82,6 +94,20 @@ def test_login_username_input_is_email():
     assert 'autocomplete="email"' in text, "username input should have autocomplete=email"
 
 
+def test_login_has_conditional_remember_me_checkbox():
+    """Login template should support Keycloak's remember-me feature in a minimal way.
+
+    We expect a conditional block guarded by realm.rememberMe and a semantic checkbox
+    with the standard rememberMe name so that IdP session lifetimes can be extended.
+    """
+    tpl = (THEME_ROOT / "login.ftl")
+    assert tpl.exists(), "login.ftl missing"
+    text = tpl.read_text(encoding="utf-8")
+    assert "realm.rememberMe" in text, "rememberMe block should be conditional on realm.rememberMe"
+    assert 'name="rememberMe"' in text, "rememberMe checkbox name must be rememberMe"
+    assert 'type="checkbox"' in text, "rememberMe control must be a checkbox input"
+
+
 def test_messages_en_present_and_has_email_label():
     """English message bundle should exist and use email-only label."""
     msgs = THEME_ROOT / "messages" / "messages_en.properties"
@@ -89,6 +115,8 @@ def test_messages_en_present_and_has_email_label():
     content = msgs.read_text(encoding="utf-8")
     # Ensure the login label prefers email-only wording
     assert "usernameOrEmail=Email address" in content
+    # Remember-me label should be present so the checkbox is announced correctly
+    assert "rememberMe=" in content, "Missing i18n key: rememberMe="
 
 
 def test_register_uses_display_name_only():

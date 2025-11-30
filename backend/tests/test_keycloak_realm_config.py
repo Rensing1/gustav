@@ -45,11 +45,11 @@ def test_gustav_web_client_exports_roles_in_id_token():
 
 
 def test_realm_requires_email_verification_and_email_theme():
-    """Realm must use the gustav email theme (email verification is IdP-only).
+    """Realm must use the gustav email theme; email verification is IdP-side only for now.
 
     Why:
-        - verifyEmail=true ensures that new users must confirm their address
-          before they can log in to the learning platform.
+        - verifyEmail=false reflects the current transitional realm setup; Keycloak
+          (or admin workflows) handle verification, GUSTAV does not enforce it.
         - emailTheme='gustav' makes Keycloak use our branded email templates,
           so verification/reset mails match the app's UI and footer text.
     """

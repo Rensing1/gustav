@@ -95,7 +95,11 @@
         "https://localhost/*",
         "https://app.localhost/*"
       ],
-      "webOrigins": ["*"],
+      "webOrigins": [
+        "https://gustav-lernplattform.de",
+        "https://localhost/*",
+        "https://app.localhost/*"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }

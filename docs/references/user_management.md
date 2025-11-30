@@ -41,11 +41,15 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 - `state` und `nonce` im Login‑Flow; `nonce` wird gegen ID‑Token geprüft.
 - Cookies httpOnly; in PROD optional `Max-Age=<TTL>`; Flags bleiben `Secure; SameSite=lax` (host‑only).
 - Open Redirects verhindert: In‑App‑Pfadprüfung für Redirect‑Parameter.
+- Keycloak-Client `gustav-web`:
+  - `webOrigins` soll nur explizite Origins (z. B. `https://gustav-lernplattform.de`, `https://localhost/*`, `https://app.localhost/*`) enthalten – niemals `*`.
+  - Das Plan-Dokument `docs/plan/2025-11-30-PR-fix.md` dokumentiert den Must-Fix, die Referenz-`realm-gustav.json` an dieser Stelle auf konkrete Origins umzustellen.
 
 ## Remember-me (IdP-Session vs. App-Session)
 
 - Keycloak-Feature „Remember me“:
   - Wird im Realm `gustav` optional aktiviert und steuert eine verlängerte IdP-Session (Keycloak-Sitzung).
+  - In der Referenzrealm `gustav` ist Remember-me aktuell aktiviert; andere Deployments können das Feature in Keycloak nach Bedarf ein- oder ausschalten.
   - Die GUSTAV-Login-Seite zeigt in diesem Fall eine Checkbox „Angemeldet bleiben“ unterhalb des Passwortfeldes.
   - Standardzustand: Die Checkbox ist nicht vorausgewählt, insbesondere um sichere Defaults auf gemeinsam genutzten Geräten zu wahren.
 - Wirkung auf Sessions:
@@ -83,9 +87,10 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 ## Passwort-Reset-Flow
 
 - „Passwort vergessen?“:
-  - Self-Service-Reset per E-Mail ist im Realm `gustav` deaktiviert (`resetPasswordAllowed=false`), damit Passwörter kontrolliert über das Admin-Panel verwaltet werden können.
-  - Der Endpunkt `/auth/forgot` existiert weiterhin als technischer Redirect-Helfer in GUSTAV, wird aber in der Standard-Login-UI nicht prominent verlinkt.
-- Passwort-Resets für Schüler*innen/Lehrkräfte erfolgen in der Praxis über Keycloak-Admin-Aktionen (z. B. „Execute actions › UPDATE_PASSWORD“); GUSTAV sendet keine eigenen Passwort-Reset-E-Mails.
+  - Self-Service-Reset per E-Mail ist im Realm `gustav` aktiviert (`resetPasswordAllowed=true`).
+  - Der Endpunkt `/auth/forgot` leitet auf die Keycloak-Reset-Credentials-Seite; Keycloak verschickt die Passwort-Reset-E-Mail.
+  - Der Link in der E-Mail führt auf die „Neues Passwort setzen“-Seite im GUSTAV-Login-Theme (Update-Password-Template).
+- Zusätzlich können Admins bei Bedarf über Keycloak-Admin-Aktionen (z. B. „Execute actions › UPDATE_PASSWORD“) ein Reset erzwingen; GUSTAV sendet weiterhin keine eigenen Passwort-Reset-E-Mails.
 
 ## SMTP & E-Mail-Theme (Keycloak)
 

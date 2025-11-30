@@ -28,8 +28,8 @@
       </#if>
 
       <form id="kc-passwd-update-form" action="${url.loginAction}" method="post" class="kc-form">
-        <label class="kc-label" for="password">${msg("password")}</label>
-        <input class="kc-input" id="password" name="password" type="password" autocomplete="new-password" autofocus>
+        <label class="kc-label" for="password-new">${msg("password")}</label>
+        <input class="kc-input" id="password-new" name="password-new" type="password" autocomplete="new-password" autofocus>
 
         <label class="kc-label" for="password-confirm">${msg("passwordConfirm")}</label>
         <input class="kc-input" id="password-confirm" name="password-confirm" type="password" autocomplete="new-password">
@@ -44,4 +44,3 @@
   </main>
 </body>
 </html>
-

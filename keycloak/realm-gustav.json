@@ -10,7 +10,7 @@
   "registrationAllowed": true,
   "registrationEmailAsUsername": true,
   "loginWithEmailAllowed": true,
-  "verifyEmail": false,
+  "verifyEmail": true,
   "resetPasswordAllowed": true,
   "rememberMe": true,
   "emailTheme": "gustav",
@@ -92,6 +92,7 @@
     }
   ],
       "redirectUris": [
+        "https://gustav-lernplattform.de/*",
         "https://localhost/*",
         "https://app.localhost/*"
       ],

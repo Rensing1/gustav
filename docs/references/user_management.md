@@ -52,6 +52,9 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
   - In der Referenzrealm `gustav` ist Remember-me aktuell aktiviert; andere Deployments können das Feature in Keycloak nach Bedarf ein- oder ausschalten.
   - Die GUSTAV-Login-Seite zeigt in diesem Fall eine Checkbox „Angemeldet bleiben“ unterhalb des Passwortfeldes.
   - Standardzustand: Die Checkbox ist nicht vorausgewählt, insbesondere um sichere Defaults auf gemeinsam genutzten Geräten zu wahren.
+- Policy-Hinweis:
+  - Empfehlung: Nur auf privaten Geräten aktivieren; auf Schul-/Shared-Geräten deaktiviert lassen.
+  - Admins können das Feature im Realm abschalten, falls das Sicherheitskonzept kürzere Sitzungen erzwingt.
 - Wirkung auf Sessions:
   - „Angemeldet bleiben“ verlängert ausschließlich die IdP-Session nach Keycloak-Konfiguration (z. B. `SSO Session Max` vs. `SSO Session Idle` mit Remember-me-Werten).
   - Die GUSTAV-App-Session im Cookie `gustav_session` behält ihre eigene, meist kürzere TTL; sie kann unabhängig von der IdP-Session auslaufen.

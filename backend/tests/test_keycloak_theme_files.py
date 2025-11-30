@@ -23,6 +23,8 @@ def test_theme_templates_present():
     """Templates may be stored at theme root or under a templates/ subdir.
 
     Accept either layout to avoid coupling tests to folder structure.
+    We ship both Keycloak names (login-update-password.ftl is the default; update-password.ftl is an alias),
+    so both files must exist either at root or under templates/.
     """
     root_files = {
         "login.ftl": (THEME_ROOT / "login.ftl").exists(),
@@ -127,6 +129,19 @@ def test_update_password_templates_use_login_css_hooks():
             "kc-message",
         ]:
             assert cls in text, f"{name} should contain CSS hook {cls}"
+
+
+def test_update_password_templates_use_keycloak_field_names():
+    """Update-password form must use Keycloak's expected field names and autocomplete hints."""
+    for name in ["update-password.ftl", "login-update-password.ftl"]:
+        root_tpl = THEME_ROOT / name
+        dir_tpl = (THEME_ROOT / "templates" / name)
+        tpl = root_tpl if root_tpl.exists() else dir_tpl
+        assert tpl.exists(), f"{name} missing"
+        text = tpl.read_text(encoding="utf-8")
+        assert 'name="password-new"' in text, f"{name} must post password-new"
+        assert 'name="password-confirm"' in text, f"{name} must post password-confirm"
+        assert 'autocomplete="new-password"' in text, f"{name} should set autocomplete=new-password"
 
 
 def test_messages_en_present_and_has_email_label():

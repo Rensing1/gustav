@@ -106,6 +106,27 @@ def test_login_has_conditional_remember_me_checkbox():
     assert "realm.rememberMe" in text, "rememberMe block should be conditional on realm.rememberMe"
     assert 'name="rememberMe"' in text, "rememberMe checkbox name must be rememberMe"
     assert 'type="checkbox"' in text, "rememberMe control must be a checkbox input"
+    assert "checked" not in text, "rememberMe checkbox must not be preselected by default"
+
+
+def test_update_password_templates_use_login_css_hooks():
+    """Update-password templates should reuse the login layout hooks for consistency."""
+    for name in ["update-password.ftl", "login-update-password.ftl"]:
+        root_tpl = THEME_ROOT / name
+        dir_tpl = (THEME_ROOT / "templates" / name)
+        tpl = root_tpl if root_tpl.exists() else dir_tpl
+        assert tpl.exists(), f"{name} missing"
+        text = tpl.read_text(encoding="utf-8")
+        for cls in [
+            "kc-card",
+            "kc-title",
+            "kc-form",
+            "kc-label",
+            "kc-input",
+            "kc-submit",
+            "kc-message",
+        ]:
+            assert cls in text, f"{name} should contain CSS hook {cls}"
 
 
 def test_messages_en_present_and_has_email_label():

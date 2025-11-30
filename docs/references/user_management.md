@@ -42,6 +42,20 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 - Cookies httpOnly; in PROD optional `Max-Age=<TTL>`; Flags bleiben `Secure; SameSite=lax` (host‑only).
 - Open Redirects verhindert: In‑App‑Pfadprüfung für Redirect‑Parameter.
 
+## Remember-me (IdP-Session vs. App-Session)
+
+- Keycloak-Feature „Remember me“:
+  - Wird im Realm `gustav` optional aktiviert und steuert eine verlängerte IdP-Session (Keycloak-Sitzung).
+  - Die GUSTAV-Login-Seite zeigt in diesem Fall eine Checkbox „Angemeldet bleiben“ unterhalb des Passwortfeldes.
+  - Standardzustand: Die Checkbox ist nicht vorausgewählt, insbesondere um sichere Defaults auf gemeinsam genutzten Geräten zu wahren.
+- Wirkung auf Sessions:
+  - „Angemeldet bleiben“ verlängert ausschließlich die IdP-Session nach Keycloak-Konfiguration (z. B. `SSO Session Max` vs. `SSO Session Idle` mit Remember-me-Werten).
+  - Die GUSTAV-App-Session im Cookie `gustav_session` behält ihre eigene, meist kürzere TTL; sie kann unabhängig von der IdP-Session auslaufen.
+  - Praktisch bedeutet das: Auf privaten Geräten führt Remember-me dazu, dass der erneute Login seltener nötig ist; auf geteilten Geräten sollte die Option nicht genutzt werden.
+- UX-Hinweis:
+  - In der UI kann ein kurzer Text unter der Checkbox darauf hinweisen, dass „Angemeldet bleiben“ nur auf privaten Geräten verwendet werden sollte.
+  - Lehrkräfte können diesen Unterschied (IdP-Session vs. App-Session) im Support-Kontext erklären, ohne technische Details zur Token-Lebensdauer kennen zu müssen.
+
 ## Registrierung & Domain-Whitelist
 
 - Registrierung findet ausschließlich bei Keycloak statt (`/auth/register` → Authorization-Endpunkt mit `kc_action=register`).

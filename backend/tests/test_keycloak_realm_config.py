@@ -59,10 +59,17 @@ def test_realm_requires_email_verification_and_email_theme():
 
     # Email verification is handled IdP-seitig; GUSTAV erzwingt sie nicht mehr.
     assert data.get("verifyEmail") is False
-    # Self-service password reset via E-Mail ist deaktiviert; Admin-Panel bleibt zuständig.
-    assert data.get("resetPasswordAllowed", False) is False
+    # Self-service password reset via E-Mail ist aktiviert, damit der Link sichtbar ist.
+    assert data.get("resetPasswordAllowed", False) is True
     # Email theme must be explicitly set so Keycloak renders our templates.
     assert data.get("emailTheme") == "gustav", "emailTheme should be set to 'gustav'"
+
+
+def test_realm_enables_remember_me():
+    """Realm should allow remember-me so the checkbox renders when desired."""
+    p = Path("keycloak/realm-gustav.json")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    assert data.get("rememberMe", False) is True, "rememberMe should be enabled to render the checkbox"
 
 
 def test_realm_configures_smtp_from_address():

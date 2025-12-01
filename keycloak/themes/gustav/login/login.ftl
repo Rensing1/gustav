@@ -34,6 +34,13 @@
         <label class="kc-label" for="password">${msg("password")}</label>
         <input class="kc-input" id="password" name="password" type="password" autocomplete="current-password">
 
+        <#if realm.rememberMe>
+          <div class="kc-remember-me">
+            <input id="rememberMe" name="rememberMe" type="checkbox">
+            <label for="rememberMe">${msg("rememberMe")}</label>
+          </div>
+        </#if>
+
         <button class="btn btn-primary kc-submit" type="submit">${msg("doLogIn")}</button>
       </form>
 

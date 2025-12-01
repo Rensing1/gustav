@@ -11,6 +11,9 @@ import json
 from pathlib import Path
 
 
+REALM_EXPORT_PATH = Path("keycloak/realm-gustav.json")
+
+
 def test_realm_uses_email_as_username():
     p = Path("keycloak/realm-gustav.json")
     assert p.exists(), "realm-gustav.json missing"
@@ -24,8 +27,7 @@ def test_realm_uses_email_as_username():
 
 
 def test_gustav_web_client_exports_roles_in_id_token():
-    p = Path("keycloak/realm-gustav.json")
-    data = json.loads(p.read_text(encoding="utf-8"))
+    data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
     clients = data.get("clients", [])
     client = next((c for c in clients if c.get("clientId") == "gustav-web"), None)
     assert client is not None, "gustav-web client definition missing"
@@ -45,24 +47,28 @@ def test_gustav_web_client_exports_roles_in_id_token():
 
 
 def test_realm_requires_email_verification_and_email_theme():
-    """Realm must use the gustav email theme (email verification is IdP-only).
+    """Realm must enforce email verification and use the gustav email theme.
 
     Why:
-        - verifyEmail=true ensures that new users must confirm their address
-          before they can log in to the learning platform.
-        - emailTheme='gustav' makes Keycloak use our branded email templates,
-          so verification/reset mails match the app's UI and footer text.
+        - verifyEmail=true blocks unverified accounts from logging in and reduces
+          account-takeover/phishing risk.
+        - emailTheme='gustav' keeps verification/reset mails aligned with our UI/branding.
     """
-    p = Path("keycloak/realm-gustav.json")
-    assert p.exists(), "realm-gustav.json missing"
-    data = json.loads(p.read_text(encoding="utf-8"))
+    assert REALM_EXPORT_PATH.exists(), "realm-gustav.json missing"
+    data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
 
-    # Email verification is handled IdP-seitig; GUSTAV erzwingt sie nicht mehr.
-    assert data.get("verifyEmail") is False
-    # Self-service password reset via E-Mail ist deaktiviert; Admin-Panel bleibt zuständig.
-    assert data.get("resetPasswordAllowed", False) is False
+    # Enforce verification for all registrations (IdP-side enforcement only).
+    assert data.get("verifyEmail") is True
+    # Self-service password reset via email is enabled so the link stays visible.
+    assert data.get("resetPasswordAllowed", False) is True
     # Email theme must be explicitly set so Keycloak renders our templates.
     assert data.get("emailTheme") == "gustav", "emailTheme should be set to 'gustav'"
+
+
+def test_realm_enables_remember_me():
+    """Realm should allow remember-me so the checkbox renders when desired."""
+    data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
+    assert data.get("rememberMe", False) is True, "rememberMe should be enabled to render the checkbox"
 
 
 def test_realm_configures_smtp_from_address():
@@ -70,14 +76,28 @@ def test_realm_configures_smtp_from_address():
 
     Why:
         When importing the realm into a fresh Keycloak instance (local = prod),
-        password reset and verification emails must work ohne manuelle
-        Nachkonfiguration im Admin-UI. A missing or empty `from` value causes
+        password reset and verification emails must work without manual
+        post-configuration in the admin UI. A missing or empty `from` value causes
         `EmailException: Please provide a valid address` in Keycloak.
     """
-    p = Path("keycloak/realm-gustav.json")
-    data = json.loads(p.read_text(encoding="utf-8"))
+    data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
     smtp = data.get("smtpServer") or {}
     assert smtp, "smtpServer block must be present in realm export"
     # Use a neutral placeholder in the realm export; real deploys must override this.
     assert smtp.get("from") == "noreply@school.example"
     assert smtp.get("fromDisplayName") == "GUSTAV-Lernplattform"
+
+
+def test_realm_allows_prod_redirect_uri():
+    """Realm export must include the prod web redirect URI.
+
+    Why:
+        - Importing the realm in prod without the prod redirect breaks the OIDC flow
+          with "Invalid redirect URI".
+    """
+    data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
+    clients = data.get("clients", [])
+    client = next((c for c in clients if c.get("clientId") == "gustav-web"), None)
+    assert client, "gustav-web client definition missing"
+    redirect_uris = client.get("redirectUris", [])
+    assert "https://gustav-lernplattform.de/*" in redirect_uris, "prod redirect URI missing"

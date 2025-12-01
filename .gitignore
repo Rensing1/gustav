@@ -17,6 +17,7 @@ legacy-code-alpha1/
 __pycache__/
 *.pyc
 .env*
+.venv
 !.env.example
 .envrc
 .direnv/

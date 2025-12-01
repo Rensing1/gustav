@@ -41,7 +41,7 @@ services:
       # Internal Supabase gateway (Kong) reachable via shared network
       - SUPABASE_URL=http://supabase_kong_gustav-alpha2:8000
       # Browser-facing public Supabase base (used in signed URLs)
-      - SUPABASE_PUBLIC_URL=https://app.localhost
+      - SUPABASE_PUBLIC_URL=${SUPABASE_PUBLIC_URL:-https://app.localhost}
       # Same-origin proxy for Storage uploads to avoid browser CORS issues
       - ENABLE_STORAGE_UPLOAD_PROXY=false
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}

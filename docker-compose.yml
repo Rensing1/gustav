@@ -207,6 +207,13 @@ services:
       - ollama_models:/root/.ollama
     # GPU device/group wiring is optional. Remove group_add/devices by default
     # to improve portability; add them locally when ROCm is available.
+    group_add:
+      # Host groups for GPU devices; numeric to avoid name lookup issues in container
+      - "44"   # video
+      - "992"  # render
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
     environment:
       # Optional ROCm tuning. Leave empty by default to auto-detect.
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}

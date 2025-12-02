@@ -25,3 +25,7 @@ supabase==2.6.0
 Pillow==10.4.0
 # PDF rendering backend (required for PDF → images in worker)
 pypdfium2==4.30.0
+
+# Markdown rendering (tables) and sanitizing
+markdown-it-py==3.0.0
+bleach==6.1.0

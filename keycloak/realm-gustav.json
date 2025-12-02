@@ -10,9 +10,8 @@
   "registrationAllowed": true,
   "registrationEmailAsUsername": true,
   "loginWithEmailAllowed": true,
-  "verifyEmail": true,
-  "resetPasswordAllowed": true,
-  "rememberMe": true,
+  "verifyEmail": false,
+  "resetPasswordAllowed": false,
   "emailTheme": "gustav",
   "passwordPolicy": "length(8) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1)",
   "duplicateEmailsAllowed": false,
@@ -92,15 +91,10 @@
     }
   ],
       "redirectUris": [
-        "https://gustav-lernplattform.de/*",
         "https://localhost/*",
         "https://app.localhost/*"
       ],
-      "webOrigins": [
-        "https://gustav-lernplattform.de",
-        "https://localhost/*",
-        "https://app.localhost/*"
-      ],
+      "webOrigins": ["*"],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }

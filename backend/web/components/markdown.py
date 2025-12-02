@@ -1,71 +1,95 @@
 """
-Minimal, safe Markdown renderer for student-facing UI.
+Safe Markdown renderer for student-facing UI with table support.
 
 Why:
-- Avoid external dependencies and keep rendering predictable and secure.
-- Only support a small subset needed for materials and task instructions.
+- Keep rendering predictable and secure while supporting common markdown patterns
+  teachers use in materials (headings, emphasis, tables).
 
 Security model:
-- Escape the input first to neutralize any HTML.
-- Replace simple markdown patterns with corresponding tags we control.
-- Supported: headings (#..######), strong (**text**), emphasis (*text*),
-  and paragraphs. Newlines inside a paragraph become <br>.
+- Let a markdown parser build the HTML (with HTML input disabled).
+- Sanitize the output via a small whitelist so only known-safe tags remain.
 """
 from __future__ import annotations
 
-from html import escape as _escape
-import re
+from markdown_it import MarkdownIt
+import bleach
 
 
-_RE_HEADING = re.compile(r"^(#{1,6})\s+(.+)$", flags=re.MULTILINE)
-_RE_STRONG = re.compile(r"\*\*(.+?)\*\*")
-_RE_EM = re.compile(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)")
+_ALLOWED_TAGS = [
+    "p",
+    "br",
+    "strong",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "ul",
+    "ol",
+    "li",
+    "code",
+    "pre",
+    "blockquote",
+    "a",
+]
 
+_ALLOWED_ATTRIBUTES = {
+    "a": ["href", "title"],
+}
 
-def _render_inline(text: str) -> str:
-    # strong first, then em to avoid overlapping markers
-    text = _RE_STRONG.sub(r"<strong>\1</strong>", text)
-    text = _RE_EM.sub(r"<em>\1</em>", text)
-    return text
+_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+
+# Parser configuration:
+# - html=False: do not render raw HTML from input.
+# - linkify=False: avoid auto-linking plain URLs.
+# - typographer=False: keep output deterministic (no auto smart quotes).
+# - breaks=True: keep single newlines as <br> similar to previous behaviour.
+_MD = MarkdownIt(
+    "commonmark",
+    {
+        "html": False,
+        "linkify": False,
+        "typographer": False,
+        "breaks": True,
+    },
+).enable("table")
 
 
 def render_markdown_safe(src: str) -> str:
-    """Render a tiny markdown subset to safe HTML.
+    """Render teacher-authored markdown to safe HTML for students.
 
+    Why:
+        - Students should see formatted text (headings, emphasis, tables) without
+          exposing them to XSS via untrusted input.
     Parameters:
-        src: Raw markdown string. May be empty.
-
+        src: Raw markdown string (may be empty).
     Returns:
-        Safe HTML string containing only tags we emit.
-
-    Notes:
-        - This function is intentionally small. Extend carefully as needed.
+        Sanitised HTML limited to a small whitelist of tags (headings, emphasis,
+        paragraphs, lists, tables). Raw HTML in the source is treated as text.
+    Permissions:
+        - Caller must already have ensured the viewer may see the content
+          (e.g., section is released to the course); this helper performs no auth.
     """
     if not src:
         return ""
 
-    # Escape everything first for safety
-    escaped = _escape(str(src))
+    # Parse markdown to HTML with tables enabled and HTML input disabled.
+    html = _MD.render(str(src))
 
-    # Headings at line start
-    def _h(m: re.Match[str]) -> str:
-        level = min(len(m.group(1)), 6)
-        inner = _render_inline(m.group(2))
-        return f"<h{level}>{inner}</h{level}>"
-
-    with_headings = _RE_HEADING.sub(_h, escaped)
-
-    # Split into paragraphs on blank lines
-    paragraphs = [p for p in re.split(r"\n\s*\n", with_headings) if p.strip()]
-    rendered_parts: list[str] = []
-    for chunk in paragraphs:
-        stripped = chunk.strip()
-        if re.fullmatch(r"<h[1-6]>.*</h[1-6]>", stripped):
-            # Heading already rendered as block-level tag
-            rendered_parts.append(stripped)
-            continue
-        # Convert single newlines to <br>
-        chunk = chunk.replace("\n", "<br>")
-        rendered_parts.append(f"<p>{_render_inline(chunk)}</p>")
-
-    return "".join(rendered_parts)
+    # Sanitize to a minimal whitelist to keep XSS surface small.
+    cleaned = bleach.clean(
+        html,
+        tags=_ALLOWED_TAGS,
+        attributes=_ALLOWED_ATTRIBUTES,
+        protocols=_ALLOWED_PROTOCOLS,
+        strip=False,
+    )
+    return cleaned.strip()

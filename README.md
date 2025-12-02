@@ -1,20 +1,20 @@
 # GUSTAV – KI‑gestützte Lernplattform für Schulen
 
-GUSTAV ist eine KI‑gestützte Lernplattform für Schulen. Lehrkräfte erstellen Lerneinheiten inkl. Material und Aufgaben, Schüler bearbeiten diese im Browser und bekommen automatisches, formatives Feedback. Das Projekt ist offen entwickelt – du kannst den Code lesen, verstehen und selbst mitentwickeln.
+GUSTAV (**G**USTAV **u**nterstützt **S**chüler **t**adellos **a**ls **V**ertretungslehrer) ist eine KI-gestützte Lernplattform, die ich für den Einsatz in meinem eigenen Unterricht an einer weiterführenden Schule einsetze. Damit verfolge ich konkret zwei Ziele:
+1. Schüler erhalten für ihre Aufgaben zeitnahes pädagogisches Feedback.
+2. Lehrer erhalten einen schnellen Überblick über den Lernstand einer Klasse.
+Weitere Funktionalitäten (z. B. Karteikarten, Datenvisualisierung) sind geplant, aber die Umsetzung ist neben den anderen unterrichtsbezogenen Aufgaben recht zeitintensiv. Über Unterstützung bin ich daher recht dankbar!
 
----
+--- 
 
 ## Schnellstart (lokale Demo)
-
 **Voraussetzungen**
-
 - aktuelle Linux-Distribution
 - Docker & Docker Compose
 - Supabase
 - Ports `80` und `443` sind frei (für `https://app.localhost`)
 
 **Demo in wenigen Schritten starten**
-
 ```bash
 git clone https://github.com/Rensing1/gustav.git gustav
 cd gustav
@@ -29,12 +29,9 @@ docker compose up -d --build
 ```
 
 Dann im Browser öffnen:
-
 - App: `https://app.localhost`
 - (Keycloak-Login ist im Demo-Setup vorkonfiguriert; Details siehe `docs/runbooks/deploy_new_system.md`.)
-
 Für eine produktionsnahe Installation auf einem Schulserver nutze bitte das Runbook:
-
 - `docs/runbooks/deploy_new_system.md`
 
 ---
@@ -55,7 +52,7 @@ Weitere Ordner (z. B. `keycloak/`, `reverse-proxy/`) enthalten die Infrastrukt
 
 ## Tests & Qualität
 
-Wir entwickeln nach dem Prinzip „Contract‑First“ und setzen stark auf automatisierte Tests:
+GUSTAV wird entwickelt nach dem Prinzip „Contract‑First“ und setzt stark auf automatisierte Tests:
 
 - Unit- und Integrationstests:
   - `make test`
@@ -69,12 +66,6 @@ Mehr zur Architektur und zu Clean‑Code‑Prinzipien findest du in:
 
 - `docs/ARCHITECTURE.md`
 - `docs/bounded_contexts.md`
-
----
-
-## Mitmachen / Contributing
-
-Aktuell bearbeite ich das Projekt alleine. Über Unterstützung freue ich mich gerne! 
 
 ---
 
@@ -111,12 +102,3 @@ Nutze die README als Wegweiser. Details stehen hier:
 - Healthcheck-Endpunkt: `GET /health` → `{ "status": "healthy" }`
 - Für einen vollständigen Systemcheck (inkl. Supabase, Keycloak, RLS) siehe:
   - `docs/runbooks/preflight_checklist.md`
-
----
-
-## Warum dieses Projekt spannend für dich ist
-
-- Du arbeitest an einem echten Produkt, das im Unterricht eingesetzt wird.
-- Du lernst moderne Webentwicklung mit Python, FastAPI, Supabase und HTMX – mit Fokus auf Sicherheit und Datenschutz.
-- Du siehst, wie KI verantwortungsvoll im Unterrichtskontext eingesetzt werden kann (Ollama, DSPy, lokale Modelle).
-- Du kannst eigene Ideen für Lerninhalte, UI oder Auswertungen einbringen und direkt im Code umsetzen.

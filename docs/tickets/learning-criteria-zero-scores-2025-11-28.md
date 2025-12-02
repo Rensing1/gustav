@@ -272,15 +272,16 @@ Die Daten für den 28.11. und die Logs sprechen eher für ein **Bewertungs-/Pars
      - Standardtext „Kein Beleg im Schülertext gefunden“,
      - `max_score=10`, `schema='criteria.v2'`.
 
-4. **Strenge „evidence-only“-Logik der Signature:**  
-   - Die `FeedbackAnalysisSignature` zwingt das Modell:
-     - nur explizite Belege im Schülertext zu berücksichtigen,
-     - bei fehlenden Belegen `score=0` zu setzen und explizit zu notieren, dass kein Beleg gefunden wurde.
-   - In Kombination mit `_parse_to_v2` (das bei fehlenden/inkonsistenten Feldern ebenfalls 0 + „Kein Beleg...“ setzt) entsteht eine sehr konservative Pipeline:
-     - Modellantwort + Parser führen bei leichten Abweichungen oder uneindeutigen Textpassagen dazu, dass ganze Kriterienblöcke (oder im Extremfall alle Kriterien) auf 0 fallen.
+4. **JSONAdapter war bereits deaktiviert:**  
+   - Bei den vorliegenden Läufen (vgl. Ollama-Trace 29.11.) war `LEARNING_DSPY_JSON_ADAPTER=false`. Die strikte JSON-Adapter-Hypothese entfällt damit als Hauptursache.
 
-5. **Timeouts / Thinking-Tokens als Hauptursache unwahrscheinlich:**  
-   - Timeouts/500er sind in den Runbooks dokumentiert, aber:
+5. **Strenge „evidence-only“-Logik + Parser-Fallback greifen auch ohne JSONAdapter:**  
+   - `FeedbackAnalysisSignature` verlangt explizite Belege; liefert die strukturierte Analyse weniger oder unpassende Items, füllt `_parse_to_v2` deterministisch mit 0 + Standardtext auf.
+   - `parse_status` bleibt dabei ggf. `parsed_structured`, auch wenn Items aufgefüllt werden → UI kann Fallback nicht erkennen.
+   - Bei nicht parsebarer Antwort setzt `_parse_to_v2` komplett `_build_default_analysis` (alle 0) und meldet `analysis_fallback`; der lokale Adapter kann dann auf Ollama springen, übernimmt aber das 0er-Analysis-JSON und speichert es als „completed“.
+
+6. **Timeouts / Thinking-Tokens als Hauptursache unwahrscheinlich:**  
+   - Timeouts/500er sind in Runbooks dokumentiert, aber:
      - sie würden eher zu `analysis_status='failed'` oder Retries führen,
      - nicht zu formal vollständigen `criteria.v2`-Analysen mit 0-Scores.
    - Die Zero-Fälle am 28.11. sind `completed` und haben saubere JSON-Strukturen → spricht gegen eine unmittelbare Timeout-Ursache.
@@ -302,23 +303,24 @@ Die Daten für den 28.11. und die Logs sprechen eher für ein **Bewertungs-/Pars
 1. **Instrumentierung / Observability nachschärfen**
 
 - In `feedback_program.py`:
-  - explizite Logs, wenn `_build_default_analysis(criteria)` verwendet wird, z.B.:
-    - `event=default_analysis`, `reason=parsing_failed|legacy_fallback`, `criteria_count`, optional: Submission-/Task-spezifischer Hash (ohne PII).
+  - explizite Logs, wenn `_build_default_analysis(criteria)` verwendet wird oder Kriterien aufgefüllt werden:
+    - `event=default_analysis` | `analysis_items_filled`, `reason=parsing_failed|missing_items`, `criteria_count`.
   - Logs bei `_parse_to_v2`, wenn:
     - `analysis_json is None` (JSON nicht interpretierbar),
-    - `criteria_results` leer sind, obwohl Kriterien vorhanden sind.
+    - `criteria_results` leer oder kürzer sind als die erwartete Kriterienliste.
 - Ziel: Auf Applikationsebene sichtbar machen, **wann** und **wie oft** die Pipeline in den 0-Fallback geht.
 
 2. **Fallback-Strategie überarbeiten**
 
 - Statt sofort auf „alle Kriterien 0, Kein Beleg im Schülertext gefunden“ zu gehen:
   - Zwischenfälle markieren:
-    - `parse_status="analysis_fallback"` oder ähnlich,
-    - optional zusätzliche Felder wie `fallback_reason`.
+    - `parse_status="analysis_fallback"` oder `analysis_items_filled`,
+    - optional zusätzliches Feld `fallback_reason`.
   - UI und/oder Datenmodell so erweitern, dass Lehrkräfte erkennen:
-    - „Dieses Ergebnis ist ein technischer Fallback, keine echte inhaltliche Bewertung.“
+    - „Dieses Ergebnis ist ein technischer Fallback / unvollständige Analyse, keine echte inhaltliche Bewertung.“
 - Minimaler technischer Schritt:
-  - `_build_default_analysis(criteria)` mit einer neutraleren `explanation_md` versehen, z.B. „Automatisierte Auswertung nicht möglich – bitte manuell prüfen.“ und **nicht** zwingend alle Scores auf 0 setzen (z.B. Scores auf `null` lassen).
+  - `_build_default_analysis(criteria)` mit einer neutraleren `explanation_md` versehen („Automatisierte Auswertung nicht möglich – bitte manuell prüfen.“) und Scores auf `null` lassen, statt 0 zu forcieren.
+  - Persistenz von `parse_status`/`fallback_reason` in `learning_submissions`, damit UI/Support unterscheiden können.
 
 3. **Parser-Toleranz und Signature-Text überprüfen**
 
@@ -353,6 +355,6 @@ Die Daten für den 28.11. und die Logs sprechen eher für ein **Bewertungs-/Pars
 - Im Code existiert klarer Logging-Support, der Fallback-Fälle von „echten“ 0-Bewertungen unterscheidbar macht.
 - Die Zero-Fallback-Strategie ist so angepasst, dass:
   - Lehrkräfte im UI erkennen können, wenn eine Bewertung nicht zuverlässig war,
-  - und nicht pauschal alle Kriterien mit 0/10 dargestellt werden, nur weil der Parser/Adapter unsicher war.
+  - und nicht pauschal alle Kriterien mit 0/10 dargestellt werden, nur weil der Parser/Adapter unsicher war (Scores dürfen `null` sein, Hinweistext ist neutral).
+ - Optional: `parse_status`/`fallback_reason` wird in `learning_submissions` gespeichert; DB-/UI-Auswertungen können Fallbacks zählen/markieren.
 - Optional (Nacharbeit): Zero-Fälle aus dem Zeitraum 2025-11-27/28 werden nach einem Fix in einer Staging-Umgebung neu bewertet, um das neue Verhalten zu validieren, bevor eine eventuelle Reanalyse in Prod diskutiert wird.
-

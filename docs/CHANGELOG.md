@@ -18,6 +18,7 @@
 - ui(learning): Task-Formular sendet per HTMX und tauscht nur das Verlaufs-Fragment (kein Full-Page-Reload). PRG-Fallback ohne HTMX bleibt erhalten; Erfolgsbanner via HX-Trigger.
 - ui(learning): Verlauf aktualisiert sich automatisch (hx-trigger="every 2s") solange der neueste Versuch pending ist; Polling stoppt bei completed.
 - ui(learning): HTML5 `required` am Textfeld entfernt, damit Upload-Modus den Submit nicht clientseitig blockiert; Servervalidierung greift weiter für leeren Text.
+- ui(markdown): Student Materials render markdown tables using `markdown-it-py` + `bleach` (HTML disabled, sanitized whitelist); bold/italic remain supported; regressions guarded by renderer + SSR tests.
 
 ### AI
 - ai(vision): Local-Vision-Adapter übergibt bei JPEG/PNG Bilddaten base64-kodiert über das `images`-Argument an den Ollama-Client (falls unterstützt). Fallback ohne `images`, wenn die Client-Signatur es nicht kennt. Reduziert generische Modell-Ablehnungen bei Bildabgaben deutlich.

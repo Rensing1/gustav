@@ -136,6 +136,62 @@ async def test_student_unit_page_uses_cards_and_renders_markdown():
     assert "**Inhalt**" not in html
 
 
+@pytest.mark.anyio
+async def test_student_unit_page_renders_markdown_table():
+    """Markdown tables in materials render as HTML tables on the student page."""
+
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-ui-table", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-ui-table", name="Schüler", roles=["student"])  # type: ignore
+
+    table_md = """|                                              | Familie Groborz | Familie Jensen |
+|----------------------------------------------|------------------|----------------|
+| **Gesamtbelastung durch Emissionshandel 2025** | 1.153 €          | 1.509 €        |
+| **Entlastung durch Klimageld von 139 €**       | × 3 = 417 €      | × 5 = 695 €    |
+| **Entlastung durch Klimageld von 317 €**       | × 3 = 951 €      | × 5 = 1.585 €  |"""
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(c, "Kurs Tabellen")
+        unit = await _create_unit(c, "Unit Tabellen")
+        section = await _create_section(c, unit["id"], "Tabellen")
+        await _add_material_md(
+            c,
+            unit["id"],
+            section["id"],
+            title="Tabelle",
+            body=table_md,
+        )
+        module = await _attach_unit(c, course_id, unit["id"])
+        await c.patch(_visibility_path(course_id, module["id"], section["id"]), json={"visible": True})
+        await _add_member(c, course_id, student.sub)
+
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(f"/learning/courses/{course_id}/units/{unit['id']}")
+        assert r.status_code == 200
+        html = r.text
+
+    assert "<table" in html
+    assert "<th>Familie Groborz</th>" in html
+    assert "<th>Familie Jensen</th>" in html
+    assert "<td>1.153 €</td>" in html
+    assert "<td>1.509 €</td>" in html
+    assert "<strong>Gesamtbelastung durch Emissionshandel 2025</strong>" in html
+    # Pipes should not remain in rendered HTML
+    assert "| Familie Groborz | Familie Jensen |" not in html
+
+
 class _FakeStorageAdapter:
     """Minimal storage adapter stub for file material tests.
 

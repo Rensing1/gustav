@@ -43,6 +43,7 @@ from pydantic.functional_validators import field_validator
 from teaching.services.materials import MaterialFileSettings, MaterialsService
 from teaching.services.tasks import TasksService
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
+from backend.storage.config import get_submissions_bucket
 from .security import _is_same_origin
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -4003,9 +4004,21 @@ async def get_latest_submission_detail(
                             return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
                         helper_ok = True
                         try:
+                            # SECURITY DEFINER helper encapsulates owner checks and RLS-aware access
                             cur.execute(
                                 """
-                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind, text_body, mime_type, size_bytes, storage_key
+                                select id::text,
+                                       task_id::text,
+                                       student_sub::text,
+                                       created_at,
+                                       completed_at,
+                                       kind,
+                                       text_body,
+                                       mime_type,
+                                       size_bytes,
+                                       storage_key,
+                                       feedback_md,
+                                       analysis_json
                                   from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s)
                                 """,
                                 (sub, course_id, unit_id, task_id, student_sub),
@@ -4013,10 +4026,11 @@ async def get_latest_submission_detail(
                         except Exception as exc:
                             logger.warning("latest submission helper unavailable — %s", exc)
                             helper_ok = False
-                            # Safe fallback under RLS with strict relation + owner scope
+                            # Safe fallback under RLS with strict relation + owner scope; may still be restricted
                             cur.execute(
                                 """
-                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind, text_body, mime_type, size_bytes, storage_key
+                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
+                                       text_body, mime_type, size_bytes, storage_key, feedback_md, analysis_json
                                   from public.learning_submissions
                                  where course_id = %s
                                    and task_id = %s::uuid
@@ -4040,6 +4054,8 @@ async def get_latest_submission_detail(
                             mime_type,
                             size_bytes,
                             storage_key,
+                            feedback_md,
+                            analysis_json,
                         ) = row
                         def_kind = str(kind or "text")
                         # Derive a more specific kind for PDFs if possible
@@ -4053,12 +4069,136 @@ async def get_latest_submission_detail(
                             "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
                             "kind": def_kind,
                         }
-                        if def_kind == "text" and isinstance(text_body, str) and text_body:
+                        if isinstance(text_body, str) and text_body:
                             # Keep it simple; truncation for safety
                             payload["text_body"] = text_body[:1000]
+                        if isinstance(feedback_md, str) and feedback_md:
+                            payload["feedback_md"] = feedback_md
+                        if analysis_json is not None:
+                            try:
+                                payload["analysis_json"] = analysis_json
+                            except Exception:
+                                pass
+                        files: list[dict[str, Any]] = []
+                        if def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
+                            try:
+                                # Prefer learning storage adapter (submissions bucket), fallback to teaching adapter.
+                                try:
+                                    import routes.learning as learning_routes  # type: ignore
+                                    adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
+                                except Exception:
+                                    adapter = STORAGE_ADAPTER
+                                presign = adapter.presign_download(  # type: ignore[union-attr]
+                                    bucket=get_submissions_bucket(),
+                                    key=str(storage_key),
+                                    expires_in=900,
+                                    disposition="inline",
+                                )
+                                url = presign.get("url") if isinstance(presign, dict) else None
+                                if url:
+                                    files.append(
+                                        {
+                                            "mime": str(mime_type or ""),
+                                            "size": int(size_bytes) if size_bytes is not None else None,
+                                            "url": str(url),
+                                        }
+                                    )
+                            except Exception:
+                                files = []
+                        if files:
+                            payload["files"] = files
                         return _json_private(payload, status_code=200, vary_origin=True)
     except Exception as exc:
         logger.warning("latest submission query failed — %s", exc, extra={"course_id": course_id, "task_id": task_id})
+        # Defensive fallback: when helper or extended query fails (e.g. during migrations),
+        # try a minimal direct lookup that only relies on the core columns.
+        try:
+            from teaching.repo_db import DBTeachingRepo  # type: ignore
+            if isinstance(repo, DBTeachingRepo):
+                import psycopg  # type: ignore
 
-    # Fallback when DB path not available
+                dsn = getattr(repo, "_dsn", None)
+                if dsn:
+                    with psycopg.connect(dsn) as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                            cur.execute(
+                                """
+                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
+                                       text_body, mime_type, size_bytes, storage_key
+                                  from public.learning_submissions
+                                 where course_id = %s
+                                   and task_id = %s::uuid
+                                   and student_sub = %s
+                                 order by created_at desc
+                                 limit 1
+                                """,
+                                (course_id, task_id, student_sub),
+                            )
+                            row = cur.fetchone()
+                        if not row:
+                            return Response(
+                                status_code=204,
+                                headers={"Cache-Control": "private, no-store", "Vary": "Origin"},
+                            )
+                        (
+                            sid,
+                            tid,
+                            ssub,
+                            created_at,
+                            completed_at,
+                            kind,
+                            text_body,
+                            mime_type,
+                            size_bytes,
+                            storage_key,
+                        ) = row
+                        def_kind = str(kind or "text")
+                        if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
+                            def_kind = "pdf"
+                        payload: dict[str, Any] = {
+                            "id": str(sid),
+                            "task_id": str(tid),
+                            "student_sub": str(ssub),
+                            "created_at": created_at.astimezone(timezone.utc).isoformat(),
+                            "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
+                            "kind": def_kind,
+                        }
+                        if isinstance(text_body, str) and text_body:
+                            payload["text_body"] = text_body[:1000]
+                        # For the minimal fallback we only attach files when possible; feedback/analysis
+                        # may be temporarily unavailable when migrations are in progress.
+                        files: list[dict[str, Any]] = []
+                        if def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
+                            try:
+                                try:
+                                    import routes.learning as learning_routes  # type: ignore
+                                    adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
+                                except Exception:
+                                    adapter = STORAGE_ADAPTER
+                                presign = adapter.presign_download(  # type: ignore[union-attr]
+                                    bucket=get_submissions_bucket(),
+                                    key=str(storage_key),
+                                    expires_in=900,
+                                    disposition="inline",
+                                )
+                                url = presign.get("url") if isinstance(presign, dict) else None
+                                if url:
+                                    files.append(
+                                        {
+                                            "mime": str(mime_type or ""),
+                                            "size": int(size_bytes) if size_bytes is not None else None,
+                                            "url": str(url),
+                                        }
+                                    )
+                            except Exception:
+                                files = []
+                        if files:
+                            payload["files"] = files
+                        return _json_private(payload, status_code=200, vary_origin=True)
+        except Exception:
+            # Conservatively fall through to 204 when even the direct lookup fails.
+            pass
+
+    # Fallback when DB path not available or no submission was found
     return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})

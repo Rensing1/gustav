@@ -3355,7 +3355,16 @@ async def teaching_unit_live_detail_partial(
 
     created = Component.escape(str(data.get("created_at") or ""))
     kind = Component.escape(str(data.get("kind") or ""))
-    body = Component.escape(str(data.get("text_body") or ""))
+    body_raw = str(data.get("text_body") or "")
+    body = Component.escape(body_raw)
+    feedback_md = str(data.get("feedback_md") or "")
+    analysis_json = data.get("analysis_json")
+    files = [f for f in (data.get("files") or []) if isinstance(f, dict)]
+    file = files[0] if files else {}
+    file_url = Component.escape(str(file.get("url") or ""))
+    file_mime = str(file.get("mime") or "")
+    file_size = file.get("size")
+
     # Resolve student display name (dir → name; fallback email prefix when username is email)
     try:
         from routes import teaching as teaching_routes  # type: ignore
@@ -3366,12 +3375,137 @@ async def teaching_unit_live_detail_partial(
         display_name = Component.escape(n or str(student_sub))
     except Exception:
         display_name = Component.escape(str(student_sub))
-    snippet = f"<pre class=\"text-sm\">{body}</pre>" if body else ""
+
+    def _panel(name: str, inner: str, active: bool) -> str:
+        hidden_attr = "" if active else " hidden"
+        return f"<div class=\"tab-panel\" data-panel=\"{Component.escape(name)}\" role=\"tabpanel\"{hidden_attr}>{inner}</div>"
+
+    def _render_text_panel(active: bool) -> str:
+        if not body:
+            return _panel("text", "<p class=\"text-muted\">Kein Text vorhanden.</p>", active)
+        return _panel("text", f"<pre class=\"submission-body\">{body}</pre>", active)
+
+    def _render_file_panel(active: bool) -> str:
+        if not file_url:
+            return _panel("file", "<p class=\"text-muted\">Originaldatei nicht verfügbar.</p>", active)
+        inner_parts: list[str] = []
+        if "image" in file_mime:
+            inner_parts.append(f"<img class=\"submission-preview\" src=\"{file_url}\" alt=\"Originaldatei\">")
+        elif "pdf" in file_mime:
+            inner_parts.append(f"<a class=\"btn\" href=\"{file_url}\" target=\"_blank\" rel=\"noopener\">PDF in neuem Tab öffnen</a>")
+        else:
+            inner_parts.append(f"<a class=\"btn\" href=\"{file_url}\" target=\"_blank\" rel=\"noopener\">Datei ansehen</a>")
+        meta = f"{Component.escape(file_mime or 'Datei')}"
+        if file_size:
+            meta += f" · {Component.escape(str(file_size))} Bytes"
+        inner_parts.append(f"<p class=\"text-muted\">{meta}</p>")
+        return _panel("file", "".join(inner_parts), active)
+
+    # Teacher view should mirror the learner semantics:
+    # - "Rückmeldung" shows feedback_md and optional collapsible criteria block.
+    # - "Auswertung" shows the criteria cards rendered from analysis_json.
+    criteria_html = ""
+    if isinstance(analysis_json, dict):
+        try:
+            criteria_html = _render_analysis_criteria_section(analysis_json)
+        except Exception:
+            criteria_html = ""
+
+    def _render_feedback_panel(active: bool) -> str:
+        inner_sections: list[str] = []
+        has_feedback = bool(feedback_md)
+        has_criteria = bool(criteria_html)
+        if has_feedback:
+            criteria_block = ""
+            if has_criteria:
+                # Same structure as learner view: feedback plus collapsible "Auswertung anzeigen".
+                criteria_block = (
+                    '<details class="analysis-feedback__details">'
+                    '<summary class="analysis-feedback__summary">'
+                    "<span>Auswertung anzeigen</span>"
+                    '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+                    "</summary>"
+                    f"{criteria_html}"
+                    "</details>"
+                )
+            inner_sections.append(
+                '<section class="analysis-feedback">'
+                '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
+                f'{render_markdown_safe(str(feedback_md))}'
+                f"{criteria_block}"
+                "</section>"
+            )
+        elif has_criteria:
+            # Kein Feedback, aber Kriterien verfügbar – wie in der Schüleransicht nur eine Auswertung-Details-Box.
+            inner_sections.append(
+                '<details class="analysis-feedback__details">'
+                '<summary class="analysis-feedback__summary">'
+                "<span>Auswertung anzeigen</span>"
+                '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+                "</summary>"
+                f"{criteria_html}"
+                "</details>"
+            )
+        else:
+            inner_sections.append("<p class=\"text-muted\">Keine Rückmeldung vorhanden.</p>")
+        return _panel("feedback", "".join(inner_sections), active)
+
+    def _render_analysis_panel(active: bool) -> str:
+        if criteria_html:
+            return _panel("analysis", criteria_html, active)
+        return _panel("analysis", "<p class=\"text-muted\">Keine Auswertung vorhanden.</p>", active)
+
+    tabs: list[tuple[str, str]] = [("text", "Text")]
+    if kind != "text":
+        tabs.append(("file", "Datei"))
+    has_feedback = bool(feedback_md)
+    has_analysis = bool(criteria_html)
+    # For teachers it is often more useful to see the structured Auswertung first.
+    if has_analysis:
+        tabs.append(("analysis", "Auswertung"))
+    if has_feedback:
+        tabs.append(("feedback", "Rückmeldung"))
+
+    active_key = "text"
+    if len(tabs) > 1:
+        tabs_html = ['<div class="tab-header" role="tablist">']
+        for key, label in tabs:
+            active = key == active_key
+            tabs_html.append(
+                f'<button type="button" class="tab-btn{" active" if active else ""}" data-view-tab="{key}" role="tab" aria-selected="{str(active).lower()}">{Component.escape(label)}</button>'
+            )
+        tabs_html.append("</div>")
+        panels_html = ['<div class="tab-panels">']
+        for key, _label in tabs:
+            if key == "text":
+                panels_html.append(_render_text_panel(active=key == active_key))
+            elif key == "file":
+                panels_html.append(_render_file_panel(active=key == active_key))
+            elif key == "feedback":
+                panels_html.append(_render_feedback_panel(active=key == active_key))
+            elif key == "analysis":
+                panels_html.append(_render_analysis_panel(active=key == active_key))
+        panels_html.append("</div>")
+        tabs_script = (
+            "<script>"
+            "(function(){const card=document.currentScript.closest('.card');"
+            "if(!card)return;const buttons=card.querySelectorAll('[data-view-tab]');"
+            "const panels=card.querySelectorAll('[data-panel]');"
+            "buttons.forEach(btn=>btn.addEventListener('click',()=>{const tgt=btn.getAttribute('data-view-tab');"
+            "buttons.forEach(b=>{const on=b===btn;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});"
+            "panels.forEach(p=>{const on=p.getAttribute('data-panel')===tgt;p.hidden=!on;});"
+            "}));})();"
+            "</script>"
+        )
+        content = "".join(tabs_html + panels_html) + tabs_script
+    else:
+        content = _render_text_panel(active=True)
+
     detail_html = (
         f"<div class=\"card\">"
         f"<h3>Einreichung von {display_name}</h3>"
         f"<p class=\"text-muted\">Typ: {kind} · erstellt: {created}</p>"
-        f"{snippet}"
+        f"{content}"
         f"</div>"
     )
     return HTMLResponse(detail_html, status_code=200, headers={"Cache-Control": "private, no-store"})

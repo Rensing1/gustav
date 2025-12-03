@@ -1026,6 +1026,16 @@ components:
                 type: string
                 format: uri
                 description: Signed, short-lived URL (do not cache beyond TTL)
+        feedback_md:
+          type: string
+          nullable: true
+          description: Markdown feedback for the learner (owner-visible); present when analysis is completed.
+        analysis_json:
+          nullable: true
+          description: Optional structured analysis payload (read-only excerpt for the Auswertung-Tab).
+          oneOf:
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
 
     LearningCourse:
       type: object

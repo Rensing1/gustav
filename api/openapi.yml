@@ -1007,10 +1007,15 @@ components:
           enum: [text, image, pdf, file]
         text_body:
           type: string
-          description: Optional; may be truncated to protect bandwidth.
+          description: |
+            Best-effort extracted text, even for file/image/pdf submissions once
+            processing has completed; may be truncated to protect bandwidth.
           nullable: true
         files:
           type: array
+          description: |
+            Original upload(s) with signed, short-lived URLs. Present for
+            file/image/pdf submissions; empty for text submissions.
           items:
             type: object
             required: [mime, size, url]

@@ -493,6 +493,174 @@ async def test_ui_history_fragment_renders_criteria_v2_badges_accessible():
 
 
 @pytest.mark.anyio
+async def test_ui_history_feedback_wraps_collapsible_analysis_toggle():
+    """Feedback block should contain a closed accordion to reveal criteria."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Toggle Feedback"},
+            headers={"Origin": "http://test"},
+        )
+        assert resp.status_code == 202
+        sub_id = resp.json().get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate worker completion")
+
+    feedback_md = "### Rückmeldung\n\n- Weiter so!"
+    analysis = {
+        "schema": "criteria.v2",
+        "criteria_results": [
+            {"criterion": "Struktur", "score": 8, "explanation_md": "Gut gegliedert."},
+            {"criterion": "Sprache", "score": 6, "explanation_md": "Überwiegend flüssig."},
+        ],
+    }
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id,
+                    "Toggle Feedback",
+                    feedback_md,
+                    json.dumps(analysis),
+                ),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": sub_id},
+        )
+    assert r.status_code == 200
+    html = r.text
+
+    assert '<section class="analysis-feedback">' in html
+    assert "Rückmeldung" in html
+    assert "Auswertung anzeigen" in html
+
+    feedback_pos = html.index('<section class="analysis-feedback">')
+    toggle_pos = html.index("Auswertung anzeigen", feedback_pos)
+    criteria_pos = html.index('<section class="analysis-criteria">', toggle_pos)
+    assert "<details" in html[feedback_pos:criteria_pos]
+    assert "<summary" in html[feedback_pos:criteria_pos]
+    # Criteria should appear after the toggle, inside the same block
+    assert toggle_pos < criteria_pos
+
+
+@pytest.mark.anyio
+async def test_ui_history_hides_analysis_toggle_when_no_criteria():
+    """No accordion should render when feedback exists without criteria."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Feedback only"},
+            headers={"Origin": "http://test"},
+        )
+        assert resp.status_code == 202
+        sub_id = resp.json().get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to set submission state")
+
+    feedback_md = "### Rückmeldung\n\n- Nur Feedback, keine Kriterien."
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'completed',
+                       feedback_md = %s,
+                       analysis_json = null
+                 where id = %s::uuid
+                """,
+                (feedback_md, sub_id),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": sub_id},
+        )
+    assert r.status_code == 200
+    html = r.text
+
+    assert '<section class="analysis-feedback">' in html
+    assert "Rückmeldung" in html
+    assert "Auswertung anzeigen" not in html
+    assert '<section class="analysis-criteria"' not in html
+
+
+@pytest.mark.anyio
+async def test_ui_history_shows_collapsible_analysis_even_without_feedback():
+    """Kriterien sollen zugänglich bleiben, auch wenn feedback_md fehlt."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        resp = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json={"kind": "text", "text_body": "Nur Analyse"},
+            headers={"Origin": "http://test"},
+        )
+        assert resp.status_code == 202
+        sub_id = resp.json().get("id")
+        assert sub_id
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to set submission state")
+
+    analysis = {
+        "schema": "criteria.v2",
+        "criteria_results": [{"criterion": "Inhalt", "score": 5, "explanation_md": "Solide."}],
+    }
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'completed',
+                       feedback_md = null,
+                       analysis_json = %s::jsonb
+                 where id = %s::uuid
+                """,
+                (json.dumps(analysis), sub_id),
+            )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(
+            f"/learning/courses/{course_id}/tasks/{task_id}/history",
+            params={"open_attempt_id": sub_id},
+        )
+    assert r.status_code == 200
+    html = r.text
+
+    assert "Auswertung anzeigen" in html
+    assert '<section class="analysis-criteria"' in html
+    assert "Inhalt" in html
+    # Rückmeldung fehlt, aber die Auswertung bleibt erreichbar
+    assert "Rückmeldung" not in html
+
+
+@pytest.mark.anyio
 async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
     student = main.SESSION_STORE.get(sid)

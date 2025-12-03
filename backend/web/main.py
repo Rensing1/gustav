@@ -593,8 +593,9 @@ def _build_history_entry_from_record(
     feedback_src = record.get("feedback_md") or record.get("feedback")
 
     # Render criteria cards (criteria.v1/v2) via helper for clarity.
+    # Skip criteria when the analysis failed so we don't show partial data.
     criteria_html = ""
-    if isinstance(analysis, dict):
+    if status != "failed" and isinstance(analysis, dict):
         criteria_html = _render_analysis_criteria_section(analysis)
 
     feedback_sections: List[str] = []
@@ -612,15 +613,43 @@ def _build_history_entry_from_record(
             f'<p class="analysis-error__message">{detail_html}</p>'
             "</section>"
         )
-    if criteria_html:
-        feedback_sections.append(criteria_html)
-    if feedback_src:
+
+    has_feedback = bool(feedback_src)
+    has_criteria = bool(criteria_html)
+
+    if has_feedback:
+        # Wrap criteria inside a collapsible toggle beneath the feedback text.
+        criteria_block = ""
+        if has_criteria:
+            criteria_block = (
+                '<details class="analysis-feedback__details">'
+                '<summary class="analysis-feedback__summary">'
+                "<span>Auswertung anzeigen</span>"
+                '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+                "</summary>"
+                f"{criteria_html}"
+                "</details>"
+            )
+
         feedback_sections.append(
             '<section class="analysis-feedback">'
             '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
             f'{render_markdown_safe(str(feedback_src))}'
+            f"{criteria_block}"
             "</section>"
         )
+    elif has_criteria:
+        # No feedback available, but keep analysis accessible via a toggle.
+        feedback_sections.append(
+            '<details class="analysis-feedback__details">'
+            '<summary class="analysis-feedback__summary">'
+            "<span>Auswertung anzeigen</span>"
+            '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+            "</summary>"
+            f"{criteria_html}"
+            "</details>"
+        )
+
     feedback_html = "".join(feedback_sections)
     # Telemetry card removed per product decision; keep section empty for learners.
     telemetry_html = ""

@@ -230,17 +230,17 @@ async def test_detail_partial_file_submission_shows_text_and_file_tab():
 
 @pytest.mark.anyio
 async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
-    """SSR soll Tabs „Rückmeldung“ und „Auswertung“ ohne doppelten Accordion-Toggle anzeigen.
+    """SSR should show separate \"Feedback\" and \"Analysis\" tabs for teachers.
 
     Given:
-        - Eine textbasierte Einreichung mit feedback_md und criteria-Analyse in der DB.
+        - A text submission with stored feedback_md and a criteria-based analysis_json in the DB.
     When:
-        - Die Lehrkraft die Detailansicht im Live-View öffnet.
+        - The teacher opens the live detail view for that submission.
     Then:
-        - Tabs „Auswertung“ und „Rückmeldung“ sind vorhanden (Auswertung vor Rückmeldung).
-        - Die Auswertung wird im eigenen Tab gerendert.
-        - Im Rückmeldung-Tab gibt es keinen zusätzlichen „Auswertung anzeigen“-Accordion-Toggle,
-          dieser bleibt der Schüleransicht vorbehalten.
+        - Tabs \"Auswertung\" (analysis) and \"Rückmeldung\" (feedback) are present, with analysis first.
+        - The analysis content is rendered in its own tab using criteria cards.
+        - The feedback tab does not contain an extra \"Auswertung anzeigen\" accordion toggle; that
+          interaction pattern remains reserved for the learner history view.
     """
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -251,8 +251,9 @@ async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
         import psycopg  # type: ignore
+        from psycopg.types.json import Json  # type: ignore  # noqa: E402
     except Exception:
-        pytest.skip("DB-backed repos required for SSR Auswertung test")
+        pytest.skip("DB-backed repos required for SSR analysis/feedback test")
 
     def _dsn() -> str:
         host = os.getenv("TEST_DB_HOST", "127.0.0.1")
@@ -311,7 +312,7 @@ async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
                     learner.sub,
                     "Antwort mit Feedback",
                     feedback_md,
-                    analysis_payload,
+                    Json(analysis_payload),
                 ),
             )
         conn.commit()

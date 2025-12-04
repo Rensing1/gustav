@@ -74,9 +74,9 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 - RLS bleibt aktiv; die Helper prüfen Ownership und Kurs/Unit/Task‑Relationen.
 - Defensiver Fallback:
   - Primär wird immer über die Helper gearbeitet.
-  - Falls der Helper vorübergehend nicht verfügbar ist (z.B. während einer Migration), fällt der Teaching‑Detail‑Endpunkt auf eine stark eingegrenzte Abfrage gegen `public.learning_submissions` zurück.
+  - Falls der Helper vorübergehend nicht verfügbar ist (z.B. während einer Migration), fällt der Teaching‑Detail‑Endpunkt auf eine stark eingegrenzte Abfrage gegen `public.learning_submissions` zurück. Vor dem Fallback-SELECT wird derselbe Relation‑Check (`task ∈ unit ∈ course`) wie im Primärpfad erneut durchgeführt; bei einer ungültigen Kombination liefert der Endpunkt weiterhin `404`.
   - Dabei bleiben Ownership/Relationen und `app.current_sub` erhalten; das Domain‑Objekt (`text_body`, `feedback_md`, normalisiertes `analysis_json`) bleibt vollständig, nur `files[]` kann entfallen (oder als leere Liste erscheinen, wenn keine Dateien aufgelöst werden konnten).
-  - Ältere Analyseformate (z.B. `summary`/`criteria` ohne `schema`) werden intern in ein criteria.v1/v2‑Objekt überführt; nach außen sehen Clients immer ein `analysis_json` mit `schema` und optionalen `criteria_results`.
+  - Ältere Analyseformate (z.B. `summary`/`criteria` ohne `schema`) werden intern in ein criteria.v1/v2‑Objekt überführt; nach außen sehen Clients immer ein `analysis_json` mit `schema` und optionalen `criteria_results`. Für Analyse‑Payloads mit einem nicht abbildbaren Shape schreibt der Endpoint einen anonymisierten Log‑Eintrag (`analysis_json_unhandled_shape`), ohne PII oder Inhalte zu protokollieren.
 
 ## Tests (pytest)
 

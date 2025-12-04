@@ -372,6 +372,108 @@ async def test_latest_detail_includes_feedback_and_analysis():
 
 
 @pytest.mark.anyio
+async def test_latest_detail_logs_unhandled_analysis_shape(caplog: pytest.LogCaptureFixture):
+    """When analysis_json has an unknown shape, the endpoint should log a diagnostic event.
+
+    Given:
+        - A text submission with feedback_md and an analysis_json dict that does not match
+          the supported criteria.v1/v2 or legacy summary/criteria shapes.
+    When:
+        - The teacher requests the latest-detail endpoint for this submission.
+    Then:
+        - The API still returns 200 (domain object intact), but the teaching logger emits
+          a structured info log about the unhandled analysis_json shape.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+        from psycopg.types.json import Json  # type: ignore  # noqa: E402
+    except Exception:
+        pytest.skip("DB-backed repos and psycopg required for analysis logging test")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-detail-log-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-detail-log", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs Detail Logging")
+        unit = await _create_unit(c_owner, "Einheit Detail Logging")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe Logging")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+    submission_id = str(uuid.uuid4())
+    feedback_md = "## Feedback\nMit unbekannter Analyse-Form."
+    # Deliberately unsupported shape: no schema, criteria_results, summary or criteria list.
+    analysis_payload = {
+        "raw_scores": {"k1": 0.5},
+        "meta": {"version": "x"},
+    }
+    with psycopg.connect(_dsn()) as conn:  # type: ignore
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, student_sub, kind,
+                  text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s, 1, 'completed', now(), %s, %s
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task["id"],
+                    learner.sub,
+                    "Antwort für Logging",
+                    feedback_md,
+                    Json(analysis_payload),
+                ),
+            )
+        conn.commit()
+
+    with caplog.at_level("INFO", logger="gustav.web.teaching"):
+        async with (await _client()) as c_owner:
+            c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            r_detail = await c_owner.get(
+                f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
+            )
+
+    assert r_detail.status_code == 200
+    body = r_detail.json()
+    assert body["id"] == submission_id
+    # analysis_json may be omitted for unknown shapes; contract is best-effort.
+    assert "analysis_json" not in body or body.get("analysis_json") is None
+    # Logger should record that an unhandled analysis_json shape was encountered.
+    assert "analysis_json_unhandled_shape" in caplog.text
+
+@pytest.mark.anyio
 async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
     """File submissions: files[].size must always be an integer.
 
@@ -716,3 +818,115 @@ async def test_latest_detail_falls_back_to_learning_submissions_when_primary_que
     assert isinstance(results, list) and len(results) >= 1
     # Fallback-Pfad baut keine Dateien (include_files=False im Fallback)
     assert "files" not in body or body.get("files") in (None, [])
+
+
+@pytest.mark.anyio
+async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fallback path must not return submissions when task does not belong to the requested unit.
+
+    Given:
+        - Two units attached to the same course.
+        - A submission for task A in unit A.
+        - The primary DB connection in the detail endpoint fails once, so the outer fallback is used.
+    When:
+        - The teacher requests the latest-detail endpoint with unit B and task A.
+    Then:
+        - The endpoint must not return the submission for the mismatched unit and should respond 404.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+        from psycopg.types.json import Json  # type: ignore  # noqa: E402
+    except Exception:
+        pytest.skip("DB-backed repos and psycopg required for fallback relation test")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-detail-fallback-rel-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-detail-fallback-rel", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs Detail Fallback Relation")
+        unit_a = await _create_unit(c_owner, "Einheit A")
+        unit_b = await _create_unit(c_owner, "Einheit B")
+        section_a = await _create_section(c_owner, unit_a["id"], "S1")
+        task_a = await _create_task(c_owner, unit_a["id"], section_a["id"], "### Aufgabe in Einheit A")
+        module_a = await _attach_unit(c_owner, cid, unit_a["id"])
+        module_b = await _attach_unit(c_owner, cid, unit_b["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        # Only section in unit A is made visible; unit B has no tasks.
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module_a['id']}/sections/{section_a['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+        assert module_b["unit_id"] == unit_b["id"]
+
+    submission_id = str(uuid.uuid4())
+    feedback_md = "## Feedback\nFallback relation mismatch."
+    analysis_payload = {"summary": "ok", "criteria": [{"title": "Kriterium 1", "comment": "passt", "score": "7"}]}
+
+    # Seed a submission for task A in unit A.
+    with psycopg.connect(_dsn()) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, student_sub, kind,
+                  text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s, 1, 'completed', now(), %s, %s
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task_a["id"],
+                    learner.sub,
+                    "Antwort für Fallback Relation",
+                    feedback_md,
+                    Json(analysis_payload),
+                ),
+            )
+        conn.commit()
+
+    # Patch psycopg.connect so that the first connection attempt inside the endpoint fails
+    # and the outer fallback path is exercised.
+    original_connect = psycopg.connect
+    call_counter = {"n": 0}
+
+    def _failing_once_connect(*args, **kwargs):
+        call_counter["n"] += 1
+        if call_counter["n"] == 1:
+            raise Exception("simulate primary helper connection failure (relation test)")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(psycopg, "connect", _failing_once_connect)
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        # Intentionally request unit B (without task_a) while pointing to task_a.
+        r_detail = await c_owner.get(
+            f"/api/teaching/courses/{cid}/units/{unit_b['id']}/tasks/{task_a['id']}/students/{learner.sub}/submissions/latest"
+        )
+
+    assert r_detail.status_code == 404

@@ -273,6 +273,7 @@ async def test_latest_detail_includes_feedback_and_analysis():
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
         import psycopg  # type: ignore
+        from psycopg.types.json import Json  # type: ignore  # noqa: E402
     except Exception:
         pytest.skip("DB-backed repos and psycopg required for feedback test")
 
@@ -338,7 +339,7 @@ async def test_latest_detail_includes_feedback_and_analysis():
                     learner.sub,
                     "Antwort für Feedback",
                     feedback_md,
-                    analysis_payload,
+                    Json(analysis_payload),
                 ),
             )
         conn.commit()

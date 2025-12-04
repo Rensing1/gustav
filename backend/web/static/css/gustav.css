@@ -1024,11 +1024,13 @@ pre {
   font-weight: 600;
 }
 
-.material-entry__details {
+.material-entry__details,
+.analysis-feedback__details {
   margin-top: var(--space-3);
 }
 
-.material-entry__summary {
+.material-entry__summary,
+.analysis-feedback__summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1040,15 +1042,18 @@ pre {
   color: var(--color-text-heading);
 }
 
-.material-entry__summary::-webkit-details-marker {
+.material-entry__summary::-webkit-details-marker,
+.analysis-feedback__summary::-webkit-details-marker {
   display: none;
 }
 
-.material-entry__summary-icon {
+.material-entry__summary-icon,
+.analysis-feedback__summary-icon {
   transition: transform var(--transition-fast);
 }
 
-.material-entry__details[open] .material-entry__summary-icon {
+.material-entry__details[open] .material-entry__summary-icon,
+.analysis-feedback__details[open] .analysis-feedback__summary-icon {
   transform: rotate(180deg);
 }
 
@@ -2294,6 +2299,52 @@ form.task-submit-form[data-mode="upload"] .fields-upload { display: block; }
     border-bottom: none;
 }
 
+
+/* Live detail: tabs and wrapped submission content */
+.tab-header {
+    display: inline-flex;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+
+.tab-btn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-bg-overlay);
+    color: var(--color-text);
+}
+
+.tab-btn.active {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(40, 105, 131, 0.15);
+}
+
+.tab-panels {
+    display: block;
+}
+
+.tab-panel[hidden] {
+    display: none;
+}
+
+.submission-body {
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-overlay);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-size: 0.95rem;
+}
+
+.submission-preview {
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    margin-bottom: 0.5rem;
+}
 
 /* Smooth transitions for theme switching */
 body,

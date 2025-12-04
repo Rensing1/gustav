@@ -95,7 +95,8 @@ async def test_sidebar_for_teacher_contains_expected_items_in_order():
         "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
     ]
     for label in forbidden:
-        assert label not in html
+        # Only check sidebar labels (nav-text), not arbitrary page content.
+        assert _pos(html, label) == -1
 
 
 @pytest.mark.anyio

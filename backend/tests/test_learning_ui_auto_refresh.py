@@ -372,6 +372,8 @@ async def test_unit_page_embeds_autopoll_when_latest_in_progress(monkeypatch: py
     assert "spinner" in html
 
 
+
+
 @pytest.mark.anyio
 async def test_unit_page_hides_spinner_when_latest_completed(monkeypatch: pytest.MonkeyPatch):
     """Unit page should not show the in-progress spinner when latest attempt is done."""

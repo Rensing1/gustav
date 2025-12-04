@@ -425,11 +425,11 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) 
     """Build the task submission form HTML (text/upload Choice Cards) for learners.
 
     Why:
-        The learner unit page renders a TaskCard per Aufgabe, each with a
-        submit form that supports two modes: plain text and file/image upload.
-        Both the normal Learning-API path and the Teaching-repo fallback should
-        render the exact same form structure so tests (und Nutzer:innen) immer
-        denselben Contract sehen.
+        The learner unit page renders a TaskCard per task, each with a submit
+        form that supports two modes: plain text and file/image upload. Both
+        the normal Learning-API path and the Teaching-repo fallback should
+        render the exact same form structure so tests and users always see the
+        same contract.
 
     Parameters:
         course_id: ID of the learning course context.

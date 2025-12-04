@@ -1015,7 +1015,11 @@ components:
           type: array
           description: |
             Original upload(s) with signed, short-lived URLs. Present for
-            file/image/pdf submissions; empty for text submissions.
+            file/image/pdf submissions; empty for text submissions in the normal
+            case. In rare fallback situations (e.g. when Storage or helper
+            functions are temporarily unavailable) the field may be omitted, while
+            the rest of the domain object (`text_body`, `feedback_md`,
+            `analysis_json`) remains available.
           items:
             type: object
             required: [mime, size, url]

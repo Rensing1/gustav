@@ -4010,7 +4010,19 @@ async def get_latest_submission_detail(
                 results.append(result)
             if results:
                 return {"schema": "criteria.v2", "criteria_results": results}
-
+        # At this point the payload shape is not one of the supported variants.
+        # Log a minimal, non-PII diagnostic so worker/schema regressions remain observable.
+        try:
+            logger.info(
+                "analysis_json_unhandled_shape",
+                extra={
+                    "schema": str(schema or ""),
+                    "keys": sorted([str(k) for k in raw.keys()])[:10],
+                },
+            )
+        except Exception:
+            # Logging must never break the endpoint; ignore logging failures defensively.
+            pass
         return None
 
     def _build_latest_submission_payload(
@@ -4273,6 +4285,26 @@ async def get_latest_submission_detail(
                     with psycopg.connect(dsn) as conn:
                         with conn.cursor() as cur:
                             cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                            # Re-apply the strict task ∈ unit ∈ course relation check in the
+                            # fallback path as well so mismatched unit/task combinations still
+                            # fail with 404 instead of accidentally leaking submissions.
+                            cur.execute(
+                                """
+                                select 1
+                                  from public.unit_tasks t
+                                  join public.unit_sections s on s.id = t.section_id
+                                  join public.course_modules m on m.unit_id = s.unit_id
+                                 where m.course_id = %s
+                                   and s.unit_id = %s::uuid
+                                   and t.id = %s::uuid
+                                 limit 1
+                                """,
+                                (course_id, unit_id, task_id),
+                            )
+                            if cur.fetchone() is None:
+                                return _private_error(
+                                    {"error": "not_found"}, status_code=404, vary_origin=True
+                                )
                             cur.execute(
                                 """
                                 select id::text,

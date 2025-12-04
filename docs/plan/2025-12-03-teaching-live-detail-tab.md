@@ -56,9 +56,10 @@ Aus UX‑Sicht sollen Lehrkräfte zwischen **„extrahierter Text“**, **„Ori
     - `kind ∈ {"image","file","pdf"}` → „Text“ + „Datei“ (+ „Auswertung“, wenn Feedback vorliegt).  
   - **Default:** Tab „Text“ aktiv.
 
-- **Inhaltspanel**
+  - **Inhaltspanel**
   - `view="text"`  
-    - Nutzt `TeachingLatestSubmission.text_body` (Fallback: `analysis_json.text`).  
+    - Nutzt `TeachingLatestSubmission.text_body`.  
+    - *Hinweis (aktualisiert am 2025‑12‑04): Der hier ursprünglich skizzierte Fallback `text_body ← analysis_json.text` ist durch den Plan `2025-12-04-PR-fix.md` obsolet. Im implementierten System wird kein `text_body` aus `analysis_json.text` abgeleitet; stattdessen gilt die Invariante, dass eine vorhandene Auswertung immer aus einer passenden Textrepräsentation hervorgeht.*
     - Markdown‑Rendering, feste Max‑Breite, automatischer Zeilenumbruch (`overflow-wrap: anywhere`).  
   - `view="file"`  
     - Nutzt `TeachingLatestSubmission.files[]`.  
@@ -82,7 +83,7 @@ Aus UX‑Sicht sollen Lehrkräfte zwischen **„extrahierter Text“**, **„Ori
 | Änderung | Beschreibung |
 |---------|--------------|
 | **Payload‑Erweiterung** | `text_body` wird gesetzt, wenn ein sinnvoller Text existiert, unabhängig von `kind`. |
-| **Fallback‑Logik** | Leeres `text_body` → prüfe `analysis_json.text`. |
+| **Fallback‑Logik** | (Obsolet, siehe Plan `2025-12-04-PR-fix.md`.) Kein Fallback mehr von `analysis_json.text` nach `text_body`; eine vorhandene Auswertung impliziert eine passende Textrepräsentation. |
 | **Files‑Array** | Für Datei‑/Bild‑Einreichungen wird `files[]` mit signierten URLs befüllt (Learning‑Storage‑Adapter, Submissions‑Bucket). |
 | **Auswertung** | Liefert `feedback_md` und ggf. kompaktes `analysis`‑Snippet für den Auswertungstab. |
 | **Sicherheit** | Route bleibt auf Kurs‑Owner beschränkt; URLs sind kurzlebig, `private, no‑store`. |

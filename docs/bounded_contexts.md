@@ -80,7 +80,7 @@ Der Lernen-Kontext muss an den Diagnostik-Kontext weitergeben:
 
 Außerdem muss der Lernen-Kontext auch an den Unterricht-Kontext weitergeben (für die Live-Unterrichts-Ansicht):
 - Einreichungen der Schüler
-- KI-Analyse und KI-Feedback
+- KI-Analyse und KI-Feedback (in der Implementierung vor allem als `analysis_json` und `feedback_md` im Contract `TeachingLatestSubmission`)
 
 ### **Context Map**
 
@@ -107,4 +107,3 @@ graph TD
 
     %% Die NEUE Feedback-Schleife für die Live-Ansicht
     Lernen -- EinreichungsdatenDTO (Echtzeit) --> Unterrichten
-

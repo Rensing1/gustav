@@ -219,6 +219,8 @@ async def test_detail_partial_file_submission_shows_text_and_file_tab():
         assert "Extrahierter Text" in html
         assert "tab-btn" in html  # tabs present
         assert "submission-body" in html  # wrapped text container
+        # Dateigröße wird als Integer-Byteswert angezeigt
+        assert "1234 Bytes" in html
     finally:
         teaching.set_storage_adapter(original_teaching_adapter)
         learning.set_storage_adapter(original_learning_adapter)
@@ -226,7 +228,18 @@ async def test_detail_partial_file_submission_shows_text_and_file_tab():
 
 @pytest.mark.anyio
 async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
-    """SSR soll Tabs „Rückmeldung“ und „Auswertung“ analog zur Schüleransicht anzeigen."""
+    """SSR soll Tabs „Rückmeldung“ und „Auswertung“ ohne doppelten Accordion-Toggle anzeigen.
+
+    Given:
+        - Eine textbasierte Einreichung mit feedback_md und criteria-Analyse in der DB.
+    When:
+        - Die Lehrkraft die Detailansicht im Live-View öffnet.
+    Then:
+        - Tabs „Auswertung“ und „Rückmeldung“ sind vorhanden (Auswertung vor Rückmeldung).
+        - Die Auswertung wird im eigenen Tab gerendert.
+        - Im Rückmeldung-Tab gibt es keinen zusätzlichen „Auswertung anzeigen“-Accordion-Toggle,
+          dieser bleibt der Schüleransicht vorbehalten.
+    """
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -320,3 +333,6 @@ async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
     idx_analysis = html.index('data-view-tab="analysis"')
     idx_feedback = html.index('data-view-tab="feedback"')
     assert idx_analysis < idx_feedback
+    # Kein doppelter Accordion-Toggle wie in der Schüleransicht
+    assert "Auswertung anzeigen" not in html
+    assert "analysis-feedback__details" not in html

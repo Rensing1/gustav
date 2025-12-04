@@ -3940,6 +3940,184 @@ async def get_latest_submission_detail(
         to the course (best-effort verification). Returns 204 when no
         submission exists.
     """
+    def _normalise_analysis_json(raw: Any) -> Optional[Dict[str, Any]]:
+        """Normalise a persisted analysis_json payload into a criteria.v1/v2-compatible dict.
+
+        Why:
+            Older rows and legacy workers may store analysis results in slightly different
+            shapes (e.g. with a free-form `summary` field or without an explicit schema
+            tag). The Teaching API, however, promises that `TeachingLatestSubmission.analysis_json`
+            follows the criteria.v1/v2 contracts so that the Auswertung-Tab can render
+            criteria cards generically.
+
+        Args:
+            raw:
+                Value fetched from `learning_submissions.analysis_json`. May be `None`,
+                a dict in criteria.v1/v2 form, or a legacy/alternative shape.
+
+        Returns:
+            A dict that satisfies the criteria.v1/v2 expectations (`schema` tag and,
+            for v2, an optional `criteria_results` list) or `None` when no safe mapping
+            is possible.
+
+        Permissions:
+            Caller must ensure that the surrounding DB access already enforced RLS and
+            ownership checks (e.g. via `get_latest_submission_for_owner`). This helper
+            only reshapes already authorised data and never performs I/O on its own.
+        """
+        if not isinstance(raw, dict):
+            return None
+
+        schema = raw.get("schema")
+        if schema in ("criteria.v1", "criteria.v2"):
+            # Already a known criteria payload; ensure criteria_results is at least a list.
+            if "criteria_results" in raw and not isinstance(raw.get("criteria_results"), list):
+                return {**raw, "criteria_results": []}
+            return raw
+
+        # Legacy payloads that already expose criteria_results but no schema tag.
+        if "criteria_results" in raw and schema is None:
+            results = raw.get("criteria_results") or []
+            return {"schema": "criteria.v2", "criteria_results": results}
+
+        # Summary/criteria shape: {"summary": "...", "criteria": [{...}]}
+        summary = raw.get("summary")
+        criteria_items = raw.get("criteria")
+        if isinstance(criteria_items, list) and criteria_items:
+            results: List[Dict[str, Any]] = []
+            for item in criteria_items:
+                if not isinstance(item, dict):
+                    continue
+                title = item.get("title") or item.get("criterion") or summary or "Kriterium"
+                comment = item.get("comment") or item.get("explanation_md") or summary or ""
+                result: Dict[str, Any] = {"criterion": str(title)}
+                if comment:
+                    result["explanation_md"] = str(comment)
+                raw_score = item.get("score")
+                try:
+                    if raw_score is not None:
+                        score_int = int(raw_score)
+                        score_int = max(0, min(score_int, 10))
+                        result["score"] = score_int
+                except (TypeError, ValueError):
+                    # Non-numeric scores are ignored; criteria remain visible without badges.
+                    pass
+                results.append(result)
+            if results:
+                return {"schema": "criteria.v2", "criteria_results": results}
+
+        return None
+
+    def _build_latest_submission_payload(
+        *,
+        sid: Any,
+        tid: Any,
+        ssub: Any,
+        created_at: Any,
+        completed_at: Any,
+        kind: Any,
+        text_body: Any,
+        mime_type: Any,
+        size_bytes: Any,
+        storage_key: Any,
+        feedback_md: Any = None,
+        analysis_json: Any = None,
+        include_files: bool = True,
+    ) -> Dict[str, Any]:
+        """Build a TeachingLatestSubmission response payload from a DB row.
+
+        Why:
+            The Teaching-Detail endpoint has two DB code paths (helper + defensive
+            fallback). This helper centralises the mapping from row tuple to the
+            public `TeachingLatestSubmission` contract so that Auswertung/Feedback
+            and Dateien stets konsistent serialisiert werden.
+
+        Parameters:
+            sid, tid, ssub:
+                Identifiers of the submission and task/owner as fetched from the DB.
+            created_at, completed_at:
+                Timestamps used for the submission metadata.
+            kind, text_body, mime_type, size_bytes, storage_key:
+                Raw submission fields describing the content and optional file upload.
+            feedback_md, analysis_json:
+                Optional formative feedback and structured criteria-based analysis
+                attached to the submission.
+            include_files:
+                When `True`, the helper attempts to resolve a signed download URL and
+                attaches a `files[]` array with integer `size`. When `False`, the
+                payload omits `files[]` entirely (graceful degradation when Storage
+                is unavailable).
+
+        Returns:
+            A dict shaped like `TeachingLatestSubmission` that can be JSON-serialised
+            directly as API response body.
+
+        Permissions:
+            The surrounding route must already have verified that the caller is a
+            teacher and course owner and that RLS is in effect. This helper performs
+            no authorisation on its own and only formats data that has passed those
+            checks.
+        """
+        def_kind = str(kind or "text")
+        if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
+            def_kind = "pdf"
+
+        payload: Dict[str, Any] = {
+            "id": str(sid),
+            "task_id": str(tid),
+            "student_sub": str(ssub),
+            "created_at": created_at.astimezone(timezone.utc).isoformat(),
+            "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
+            "kind": def_kind,
+        }
+        if isinstance(text_body, str) and text_body:
+            payload["text_body"] = text_body[:1000]
+        if isinstance(feedback_md, str) and feedback_md:
+            payload["feedback_md"] = feedback_md
+
+        normalised = _normalise_analysis_json(analysis_json)
+        if normalised is not None:
+            payload["analysis_json"] = normalised
+
+        files: List[Dict[str, Any]] = []
+        if include_files and def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
+            try:
+                # Prefer learning storage adapter (submissions bucket), fallback to teaching adapter.
+                try:
+                    import routes.learning as learning_routes  # type: ignore
+
+                    adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
+                except Exception:
+                    adapter = STORAGE_ADAPTER
+                presign = adapter.presign_download(  # type: ignore[union-attr]
+                    bucket=get_submissions_bucket(),
+                    key=str(storage_key),
+                    expires_in=900,
+                    disposition="inline",
+                )
+                url = presign.get("url") if isinstance(presign, dict) else None
+                if url and size_bytes is not None:
+                    try:
+                        size_int = int(size_bytes)
+                        if size_int < 0:
+                            size_int = 0
+                        files.append(
+                            {
+                                "mime": str(mime_type or ""),
+                                "size": size_int,
+                                "url": str(url),
+                            }
+                        )
+                    except (TypeError, ValueError):
+                        # When size cannot be determined, we omit the file entry
+                        # to keep the API contract (size must be an integer).
+                        files = []
+            except Exception:
+                files = []
+        if files:
+            payload["files"] = files
+        return payload
+
     repo = _get_repo()
     user, forbidden = _require_teacher(request)
     if forbidden:
@@ -4057,56 +4235,21 @@ async def get_latest_submission_detail(
                             feedback_md,
                             analysis_json,
                         ) = row
-                        def_kind = str(kind or "text")
-                        # Derive a more specific kind for PDFs if possible
-                        if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
-                            def_kind = "pdf"
-                        payload: dict[str, Any] = {
-                            "id": str(sid),
-                            "task_id": str(tid),
-                            "student_sub": str(ssub),
-                            "created_at": created_at.astimezone(timezone.utc).isoformat(),
-                            "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
-                            "kind": def_kind,
-                        }
-                        if isinstance(text_body, str) and text_body:
-                            # Keep it simple; truncation for safety
-                            payload["text_body"] = text_body[:1000]
-                        if isinstance(feedback_md, str) and feedback_md:
-                            payload["feedback_md"] = feedback_md
-                        if analysis_json is not None:
-                            try:
-                                payload["analysis_json"] = analysis_json
-                            except Exception:
-                                pass
-                        files: list[dict[str, Any]] = []
-                        if def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
-                            try:
-                                # Prefer learning storage adapter (submissions bucket), fallback to teaching adapter.
-                                try:
-                                    import routes.learning as learning_routes  # type: ignore
-                                    adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
-                                except Exception:
-                                    adapter = STORAGE_ADAPTER
-                                presign = adapter.presign_download(  # type: ignore[union-attr]
-                                    bucket=get_submissions_bucket(),
-                                    key=str(storage_key),
-                                    expires_in=900,
-                                    disposition="inline",
-                                )
-                                url = presign.get("url") if isinstance(presign, dict) else None
-                                if url:
-                                    files.append(
-                                        {
-                                            "mime": str(mime_type or ""),
-                                            "size": int(size_bytes) if size_bytes is not None else None,
-                                            "url": str(url),
-                                        }
-                                    )
-                            except Exception:
-                                files = []
-                        if files:
-                            payload["files"] = files
+                        payload = _build_latest_submission_payload(
+                            sid=sid,
+                            tid=tid,
+                            ssub=ssub,
+                            created_at=created_at,
+                            completed_at=completed_at,
+                            kind=kind,
+                            text_body=text_body,
+                            mime_type=mime_type,
+                            size_bytes=size_bytes,
+                            storage_key=storage_key,
+                            feedback_md=feedback_md,
+                            analysis_json=analysis_json,
+                            include_files=True,
+                        )
                         return _json_private(payload, status_code=200, vary_origin=True)
     except Exception as exc:
         logger.warning("latest submission query failed — %s", exc, extra={"course_id": course_id, "task_id": task_id})
@@ -4124,8 +4267,18 @@ async def get_latest_submission_detail(
                             cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
                             cur.execute(
                                 """
-                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
-                                       text_body, mime_type, size_bytes, storage_key
+                                select id::text,
+                                       task_id::text,
+                                       student_sub::text,
+                                       created_at,
+                                       completed_at,
+                                       kind,
+                                       text_body,
+                                       mime_type,
+                                       size_bytes,
+                                       storage_key,
+                                       feedback_md,
+                                       analysis_json
                                   from public.learning_submissions
                                  where course_id = %s
                                    and task_id = %s::uuid
@@ -4152,49 +4305,24 @@ async def get_latest_submission_detail(
                             mime_type,
                             size_bytes,
                             storage_key,
+                            feedback_md,
+                            analysis_json,
                         ) = row
-                        def_kind = str(kind or "text")
-                        if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
-                            def_kind = "pdf"
-                        payload: dict[str, Any] = {
-                            "id": str(sid),
-                            "task_id": str(tid),
-                            "student_sub": str(ssub),
-                            "created_at": created_at.astimezone(timezone.utc).isoformat(),
-                            "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
-                            "kind": def_kind,
-                        }
-                        if isinstance(text_body, str) and text_body:
-                            payload["text_body"] = text_body[:1000]
-                        # For the minimal fallback we only attach files when possible; feedback/analysis
-                        # may be temporarily unavailable when migrations are in progress.
-                        files: list[dict[str, Any]] = []
-                        if def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
-                            try:
-                                try:
-                                    import routes.learning as learning_routes  # type: ignore
-                                    adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
-                                except Exception:
-                                    adapter = STORAGE_ADAPTER
-                                presign = adapter.presign_download(  # type: ignore[union-attr]
-                                    bucket=get_submissions_bucket(),
-                                    key=str(storage_key),
-                                    expires_in=900,
-                                    disposition="inline",
-                                )
-                                url = presign.get("url") if isinstance(presign, dict) else None
-                                if url:
-                                    files.append(
-                                        {
-                                            "mime": str(mime_type or ""),
-                                            "size": int(size_bytes) if size_bytes is not None else None,
-                                            "url": str(url),
-                                        }
-                                    )
-                            except Exception:
-                                files = []
-                        if files:
-                            payload["files"] = files
+                        payload = _build_latest_submission_payload(
+                            sid=sid,
+                            tid=tid,
+                            ssub=ssub,
+                            created_at=created_at,
+                            completed_at=completed_at,
+                            kind=kind,
+                            text_body=text_body,
+                            mime_type=mime_type,
+                            size_bytes=size_bytes,
+                            storage_key=storage_key,
+                            feedback_md=feedback_md,
+                            analysis_json=analysis_json,
+                            include_files=False,
+                        )
                         return _json_private(payload, status_code=200, vary_origin=True)
         except Exception:
             # Conservatively fall through to 204 when even the direct lookup fails.

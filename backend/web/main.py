@@ -1501,9 +1501,11 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
                         history_placeholder_html = (
                             f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                            f' data-pending="false" data-open_attempt_id="{Component.escape(open_attempt_id_qp)}" '
-                            f' hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
-                            f' hx-target="this" hx-swap="outerHTML" hx-vals=\'{hx_vals_payload}\'></section>'
+                            f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                            f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
+                            f'hx-target="this" hx-swap="outerHTML" '
+                            f"hx-vals='{hx_vals_payload}' "
+                            'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)"></section>'
                         )
                         banner_html = (
                             '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>'

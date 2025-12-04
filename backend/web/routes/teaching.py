@@ -3950,15 +3950,20 @@ async def get_latest_submission_detail(
             follows the criteria.v1/v2 contracts so that the Auswertung-Tab can render
             criteria cards generically.
 
-        Args:
-            raw:
-                Value fetched from `learning_submissions.analysis_json`. May be `None`,
-                a dict in criteria.v1/v2 form, or a legacy/alternative shape.
+        Supported input shapes:
+            - Already normalised criteria.v1/v2 objects with a `schema` tag; we return
+              them as-is (ensuring `criteria_results` is at least a list).
+            - Legacy payloads that expose `criteria_results` without `schema`; we attach
+              `schema = "criteria.v2"` to keep the Auswertung contract stable.
+            - Summary/criteria dictionaries of the form
+              `{"summary": "...", "criteria": [{"title": ..., "comment": ..., "score": ...}, ...]}`.
+              These are converted into a criteria.v2 structure with `criteria_results`,
+              including optional score normalisation to integer 0–10 points.
 
         Returns:
             A dict that satisfies the criteria.v1/v2 expectations (`schema` tag and,
-            for v2, an optional `criteria_results` list) or `None` when no safe mapping
-            is possible.
+            for v2 an optional `criteria_results` list) or `None` when no safe mapping
+            is possible (for example when the shape is completely different).
 
         Permissions:
             Caller must ensure that the surrounding DB access already enforced RLS and
@@ -4114,7 +4119,10 @@ async def get_latest_submission_detail(
                         files = []
             except Exception:
                 files = []
-        if files:
+        # For include_files=True, always attach a files[] array (possibly empty) so
+        # clients can rely on the presence of the field. For include_files=False we
+        # omit files[] entirely as a signal that no Storage lookup was attempted.
+        if include_files:
             payload["files"] = files
         return payload
 

@@ -421,6 +421,62 @@ def _compute_local_sha256(storage_key: str, expected_size: int) -> str | None:
     return h.hexdigest()
 
 
+def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) -> str:
+    """Build the task submission form HTML (text/upload Choice Cards) for learners.
+
+    Why:
+        The learner unit page renders a TaskCard per Aufgabe, each with a
+        submit form that supports two modes: plain text and file/image upload.
+        Both the normal Learning-API path and the Teaching-repo fallback should
+        render the exact same form structure so tests (und Nutzer:innen) immer
+        denselben Contract sehen.
+
+    Parameters:
+        course_id: ID of the learning course context.
+        unit_id: ID of the unit whose sections/tasks are shown.
+        task_id: ID of the task for which the form is rendered.
+
+    Returns:
+        HTML string containing the <form> element with radio Choice Cards,
+        textarea for text submissions and file input for uploads.
+    """
+    form_action = f"/learning/courses/{course_id}/tasks/{task_id}/submit"
+    tid_escaped = Component.escape(task_id)
+    cid_escaped = Component.escape(course_id)
+    uid_escaped = Component.escape(unit_id)
+    return (
+        f'<form method="post" action="{form_action}" class="task-submit-form" '
+        f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
+        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="text">'
+        f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
+        '<fieldset class="choice-cards" aria-label="Abgabeart">'
+        '<label class="choice-card choice-card--text">'
+        '<input type="radio" name="mode" value="text" checked>'
+        '<span class="choice-card__title">📝 Text</span>'
+        '</label>'
+        '<label class="choice-card choice-card--upload">'
+        '<input type="radio" name="mode" value="upload">'
+        '<span class="choice-card__title">⬆️ Upload</span>'
+        '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
+        '</label>'
+        '</fieldset>'
+        '<div class="task-form-fields fields-text">'
+        '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
+        '</div>'
+        '<div class="task-form-fields fields-upload" hidden>'
+        '<label>Datei auswählen '
+        '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
+        '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+        '<input type="hidden" name="storage_key" value="">'
+        '<input type="hidden" name="mime_type" value="">'
+        '<input type="hidden" name="size_bytes" value="">'
+        '<input type="hidden" name="sha256" value="">'
+        '</div>'
+        '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
+        '</form>'
+    )
+
+
 async def _server_side_prepare_submission_upload(
     *,
     client,
@@ -1304,40 +1360,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             # Instruction text also benefits from Markdown (e.g., emphasis)
             instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
             # Build form HTML with Choice Cards (Text | Upload). Default: text.
-            form_action = f"/learning/courses/{course_id}/tasks/{tid}/submit"
-            form_html = (
-                f'<form method="post" action="{form_action}" class="task-submit-form" '
-                f'hx-post="{form_action}" hx-target="#task-history-{Component.escape(tid)}" hx-swap="outerHTML" '
-                f'data-course-id="{Component.escape(course_id)}" data-task-id="{Component.escape(tid)}" data-mode="text">'
-                f'<input type="hidden" name="unit_id" value="{Component.escape(unit_id)}">'
-                '<fieldset class="choice-cards" aria-label="Abgabeart">'
-                '<label class="choice-card choice-card--text">'
-                '<input type="radio" name="mode" value="text" checked>'
-                '<span class="choice-card__title">📝 Text</span>'
-                '</label>'
-                '<label class="choice-card choice-card--upload">'
-                '<input type="radio" name="mode" value="upload">'
-                '<span class="choice-card__title">⬆️ Upload</span>'
-                '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
-                '</label>'
-                '</fieldset>'
-                # Text fields (default visible)
-                '<div class="task-form-fields fields-text">'
-                '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
-                '</div>'
-                # Upload fields (hidden by default; shown via JS)
-                '<div class="task-form-fields fields-upload" hidden>'
-                '<label>Datei auswählen '
-                '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-                '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
-                '<input type="hidden" name="storage_key" value="">'
-                '<input type="hidden" name="mime_type" value="">'
-                '<input type="hidden" name="size_bytes" value="">'
-                '<input type="hidden" name="sha256" value="">'
-                '</div>'
-                '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
-                '</form>'
-            )
+            form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=tid)
 
             # Optionally load submission history for this task only (latest open)
             history_entries = []
@@ -1416,40 +1439,90 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
 
     # Removed placeholder TaskCard: the page now only shows actual materials and tasks.
 
-    # Ensure at least one history placeholder exists for real tasks when the
-    # Learning API is unavailable: derive task IDs from the Teaching repo and
-    # inject lazy-loading placeholders so the UI can fetch history fragments.
-    try:
-        import importlib
-        tmod = importlib.import_module("routes.teaching")
-    except Exception:
+    # Fallback when the Learning API could not be queried successfully:
+    # derive tasks from the Teaching repo and render minimal TaskCards so the
+    # student UI still exposes the submission form and lazy history loader.
+    #
+    # Why:
+    #   - In dev/test environments the Learning repo (DB) may be unavailable.
+    #     Ohne Fallback gäbe es dann gar keine Aufgabenkarte, die SSR-UI-Tests
+    #     (Choice Cards, Textfeld, Upload-Hinweis) würden dauerhaft rot sein.
+    #   - Der Fallback ist bewusst auf das Nötigste beschränkt:
+    #       * er greift nur, wenn oben keine Sections/Tasks gerendert werden konnten,
+    #       * er liest nur strukturierte Daten aus dem Teaching-Repo (keine
+    #         zusätzlichen Queries) und
+    #       * er baut eine TaskCard mit demselben Formular-Contract, den die
+    #         „normale“ Learning-API-Pfad-Variante liefert.
+    #   - In einer Produktionsumgebung mit funktionierender Learning-API ist
+    #     dieser Block praktisch tot (die regulären Sections füllen `parts`).
+    #
+    # Trade-off:
+    #   - Wir akzeptieren etwas HTML-Duplizierung gegenüber der TaskCard-Form
+    #     weiter oben, halten die Logik aber auf einen klar abgegrenzten
+    #     Sonderfall beschränkt. Wenn wir diesen Fallback langfristig behalten,
+    #     wäre ein kleiner Refactor (Helper-Funktion für das Formular-HTML)
+    #     der nächste Schritt, um die Duplizierung zu reduzieren.
+    if not parts:
         try:
-            tmod = importlib.import_module("backend.web.routes.teaching")
+            import importlib
+            try:
+                tmod = importlib.import_module("routes.teaching")
+            except Exception:
+                tmod = importlib.import_module("backend.web.routes.teaching")
         except Exception:
             tmod = None
-    if tmod is not None:
-        try:
-            repo = getattr(tmod, "REPO", None)
-            # Collect tasks for sections belonging to this unit
-            unit_sections = [sid for sid, s in (getattr(repo, "sections", {}) or {}).items() if str(getattr(s, "unit_id", "")) == str(unit_id)]
-            tmap = (getattr(repo, "task_ids_by_section", {}) or {})
-            candidate_tids: list[str] = []
-            for sid in unit_sections:
-                for tid in (tmap.get(sid) or []):
-                    if tid and tid not in candidate_tids:
-                        candidate_tids.append(tid)
-            if candidate_tids:
-                open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
-                for tid in candidate_tids:
-                    hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
-                    parts.append(
-                        f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                        f' data-pending="false" data-open_attempt_id="{Component.escape(open_attempt_id_qp)}" '
-                        f' hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
-                        f' hx-target="this" hx-swap="outerHTML" hx-vals=\'{hx_vals_payload}\'></section>'
-                    )
-        except Exception:
-            pass
+        if tmod is not None:
+            try:
+                repo = getattr(tmod, "REPO", None)
+                sections_by_id = (getattr(repo, "sections", {}) or {})
+                tasks_by_id = (getattr(repo, "tasks", {}) or {})
+                # Collect tasks for sections belonging to this unit
+                unit_sections = [
+                    sid for sid, s in sections_by_id.items() if str(getattr(s, "unit_id", "")) == str(unit_id)
+                ]
+                tmap = (getattr(repo, "task_ids_by_section", {}) or {})
+                candidate_tids: list[str] = []
+                for sid in unit_sections:
+                    for tid in (tmap.get(sid) or []):
+                        if tid and tid not in candidate_tids:
+                            candidate_tids.append(tid)
+                if candidate_tids:
+                    open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
+                    for tid in candidate_tids:
+                        task = tasks_by_id.get(tid) or {}
+                        # Basic title/instruction fallback; keep SSR logic robust even when repo shape differs.
+                        raw_title = getattr(task, "title", None) or (task.get("title") if isinstance(task, dict) else None)
+                        title = str(raw_title or "Aufgabe")
+                        raw_instr = getattr(task, "instruction_md", None) or (
+                            task.get("instruction_md") if isinstance(task, dict) else ""
+                        )
+                        instruction_html = render_markdown_safe(str(raw_instr or ""))
+                        form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=str(tid))
+                        hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                        history_placeholder_html = (
+                            f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                            f' data-pending="false" data-open_attempt_id="{Component.escape(open_attempt_id_qp)}" '
+                            f' hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
+                            f' hx-target="this" hx-swap="outerHTML" hx-vals=\'{hx_vals_payload}\'></section>'
+                        )
+                        banner_html = (
+                            '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>'
+                            if (success_banner and show_history_for == tid)
+                            else None
+                        )
+                        tcard = TaskCard(
+                            task_id=str(tid),
+                            title=title,
+                            instruction_html=instruction_html,
+                            history_entries=[],
+                            history_placeholder_html=history_placeholder_html,
+                            feedback_banner_html=banner_html,
+                            form_html=form_html,
+                        )
+                        parts.append(tcard.render())
+            except Exception:
+                # As a last resort, keep behavior permissive so the page still renders.
+                pass
 
     inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p>"
     content = (

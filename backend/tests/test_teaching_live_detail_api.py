@@ -114,11 +114,15 @@ async def test_latest_detail_happy_path_and_no_content_cases():
         module = await _attach_unit(c_owner, cid, unit["id"])
         await _add_member(c_owner, cid, learner.sub)
 
-        # Initially: 204 No Content
+        # Initially: 204 No Content (or 404 when relation/ownership checks fail)
         r_none = await c_owner.get(
             f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
         )
         assert r_none.status_code in (204, 404)
+        if r_none.status_code == 204:
+            # 204-Pfade sollen private Cache-Header setzen (Owner-spezifische Daten)
+            assert r_none.headers.get("Cache-Control") == "private, no-store"
+            assert "Origin" in (r_none.headers.get("Vary") or "")
 
         # Release & student submits a text
         r_vis = await c_owner.patch(
@@ -252,17 +256,17 @@ async def test_latest_detail_includes_text_and_files_for_pdf_submission():
 
 @pytest.mark.anyio
 async def test_latest_detail_includes_feedback_and_analysis():
-    """Auswertungstab: feedback_md und kriteriumsbasierte analysis_json (criteria.v2) sollen geliefert werden.
+    """Detail view: latest submission should expose feedback_md and criteria-based analysis_json.
 
     Given:
-        - Eine textbasierte Einreichung mit gespeicherter Rückmeldung (feedback_md).
-        - Ein legacy-artiges Analyse-JSON mit `summary` und einer einfachen Kriterienliste.
+        - A text submission with stored feedback_md.
+        - A legacy-style analysis_json with a free-form `summary` and a simple `criteria` list.
     When:
-        - Die Lehrkraft den Latest-Detail-Endpunkt für diese Einreichung abruft.
+        - The teacher requests the latest-detail endpoint for this submission.
     Then:
-        - Die API liefert `feedback_md` unverändert zurück.
-        - `analysis_json` wird in ein criteria.v2-kompatibles Objekt mit `schema` und `criteria_results`
-          überführt (kein freies `summary`-Dict mehr im Contract).
+        - The API returns `feedback_md` unchanged.
+        - `analysis_json` is normalised into a criteria.v1/v2-compatible object with `schema`
+          and `criteria_results` (no raw `summary` dict in the public contract).
     """
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -308,7 +312,7 @@ async def test_latest_detail_includes_feedback_and_analysis():
 
     submission_id = str(uuid.uuid4())
     feedback_md = "## Feedback\nGute Arbeit."
-    # Legacy/alternatives Format: freies Dict mit summary + einfacher Kriterienliste.
+    # Legacy/alternative format: free-form dict with summary + simple criteria list.
     analysis_payload = {
         "summary": "ok",
         "criteria": [
@@ -357,26 +361,26 @@ async def test_latest_detail_includes_feedback_and_analysis():
 
     analysis = body.get("analysis_json")
     assert isinstance(analysis, dict)
-    # Contract: criteria.v1/v2-Objekt mit Schema-Tag und Kriterienliste
+    # Contract: criteria.v1/v2 object with schema tag and criteria list
     assert analysis.get("schema") in ("criteria.v1", "criteria.v2")
     results = analysis.get("criteria_results")
     assert isinstance(results, list) and len(results) >= 1
     first = results[0]
     assert first.get("criterion") == "Kriterium 1"
-    # Kommentar/Erklärung aus dem Legacy-Format wird übernommen
+    # Explanation from the legacy format is preserved
     assert "passt" in str(first.get("explanation_md") or "")
 
 
 @pytest.mark.anyio
 async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
-    """Datei-Einreichungen: files[].size muss immer ein Integer sein.
+    """File submissions: files[].size must always be an integer.
 
     Given:
-        - Eine PDF-Einreichung mit gesetztem size_bytes in der DB.
+        - A PDF submission with size_bytes set in the database.
     When:
-        - Die Lehrkraft den Latest-Detail-Endpunkt abruft.
+        - The teacher calls the latest-detail endpoint.
     Then:
-        - Die API liefert in files[0].size einen Integer (keine Nullwerte).
+        - The API returns an integer in files[0].size (no null values).
     """
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -480,15 +484,15 @@ async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
 
 @pytest.mark.anyio
 async def test_latest_detail_omits_files_when_size_unknown():
-    """Datei-Einreichungen ohne size_bytes sollen keine invalide files[].size liefern.
+    """File submissions without size_bytes must not yield invalid files[].size.
 
     Given:
-        - Eine Datei-Einreichung mit fehlender Größe (size_bytes = NULL) in der DB.
+        - A file submission with missing size (size_bytes = NULL) in the database.
     When:
-        - Die Lehrkraft den Latest-Detail-Endpunkt abruft.
+        - The teacher calls the latest-detail endpoint.
     Then:
-        - Entweder ist das files-Array leer/fehlend oder alle enthaltenen Einträge
-          besitzen ein Integer-`size` (kein `null` im Contract).
+        - The field `files` always exists as a list; when the size is unknown it is empty
+          (no entry with `size = null`).
     """
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -579,10 +583,136 @@ async def test_latest_detail_omits_files_when_size_unknown():
         assert r_detail.status_code == 200
         body = r_detail.json()
         assert body["id"] == submission_id
-        files = body.get("files") or []
-        # Entweder keine Dateien oder alle haben integer size
-        for f in files:
-            assert isinstance(f.get("size"), int)
+        files = body.get("files")
+        # Das Feld files ist immer eine Liste; für fehlende Größe erwarten wir eine leere Liste
+        assert isinstance(files, list)
+        assert files == []
     finally:
         teaching.set_storage_adapter(original_teaching_adapter)
         learning.set_storage_adapter(original_learning_adapter)
+
+
+@pytest.mark.anyio
+async def test_latest_detail_falls_back_to_learning_submissions_when_primary_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Defensive DB fallback: still return a domain object when the primary query fails.
+
+    Given:
+        - A text submission with feedback_md and legacy-style analysis_json persisted in the DB.
+        - The first DB connection inside the teaching-detail endpoint fails (e.g. during a migration).
+    When:
+        - The teacher calls the latest-detail endpoint.
+    Then:
+        - The API falls back to public.learning_submissions, returns a complete domain object
+          (id, text_body, feedback_md, normalised analysis_json) and omits files[].
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+        from psycopg.types.json import Json  # type: ignore  # noqa: E402
+    except Exception:
+        pytest.skip("DB-backed repos and psycopg required for fallback detail test")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-detail-fallback-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-detail-fallback", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs Detail Fallback")
+        unit = await _create_unit(c_owner, "Einheit Detail Fallback")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe Fallback")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+    submission_id = str(uuid.uuid4())
+    feedback_md = "## Feedback\nFallback response."
+    legacy_analysis = {
+        "summary": "ok",
+        "criteria": [
+            {"title": "Kriterium 1", "comment": "passt", "score": "7"},
+        ],
+    }
+
+    # Seed submission row directly in learning_submissions via service/test DSN
+    import psycopg  # type: ignore  # noqa: E402  # re-import for mypy
+
+    with psycopg.connect(_dsn()) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, student_sub, kind,
+                  text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s, 1, 'completed', now(), %s, %s
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task["id"],
+                    learner.sub,
+                    "Antwort für Fallback",
+                    feedback_md,
+                    Json(legacy_analysis),
+                ),
+            )
+        conn.commit()
+
+    # Patch psycopg.connect so that the first connection attempt in the teaching-detail endpoint fails.
+    original_connect = psycopg.connect
+    call_counter = {"n": 0}
+
+    def _failing_once_connect(*args, **kwargs):
+        call_counter["n"] += 1
+        if call_counter["n"] == 1:
+            raise Exception("simulate primary helper connection failure")
+        return original_connect(*args, **kwargs)
+
+    monkeypatch.setattr(psycopg, "connect", _failing_once_connect)
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_detail = await c_owner.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
+        )
+
+    assert r_detail.status_code == 200
+    body = r_detail.json()
+    assert body["id"] == submission_id
+    # Domain fields are kept intact
+    assert body.get("feedback_md", "").startswith("## Feedback")
+    analysis = body.get("analysis_json")
+    assert isinstance(analysis, dict)
+    assert analysis.get("schema") in ("criteria.v1", "criteria.v2")
+    results = analysis.get("criteria_results") or []
+    assert isinstance(results, list) and len(results) >= 1
+    # Fallback-Pfad baut keine Dateien (include_files=False im Fallback)
+    assert "files" not in body or body.get("files") in (None, [])

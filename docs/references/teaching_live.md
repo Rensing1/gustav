@@ -56,6 +56,12 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 - Endpoint: `GET /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest`
 - Antworten: `200` (Schema `TeachingLatestSubmission`), `204` (keine Abgabe), `404` (Relation ungültig), `403/401` (Auth).
 - Sicherheit: Kurs‑Ownership erforderlich; die Einheit muss am Kurs hängen; die Aufgabe muss zur Einheit gehören. `Cache-Control: private, no-store`, `Vary: Origin`.
+- Semantik:
+  - `text_body`: Best‑Effort‑Textrepräsentation der Abgabe, unabhängig vom `kind` (Text/PDF/Bild/Datei).
+  - `feedback_md`: Formatives Feedback („Rückmeldung“) in Markdown; wird angezeigt im Tab „Rückmeldung“.
+  - `analysis_json`: Strukturierte Kriterien‑Auswertung („Auswertung“) im Schema `AnalysisJsonCriteriaV1|V2` (insb. `criteria.v2` mit `criteria_results`).
+  - `files[]`: Enthält Original‑Upload(s) mit signierten URLs. Jedes Element besitzt eine ganzzahlige `size` in Bytes; wenn die Größe nicht zuverlässig ermittelt werden kann, wird die Datei nicht in `files[]` aufgenommen.
+  - Fallback: Bei Infrastrukturproblemen (Storage/Helper) wird nach Möglichkeit weiterhin ein vollständiges Domain‑Objekt (`text_body`, `feedback_md`, `analysis_json`) geliefert; nur `files[]` kann temporär leer sein.
 
 ## DB & RLS
 

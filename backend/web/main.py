@@ -3401,8 +3401,8 @@ async def teaching_unit_live_detail_partial(
         inner_parts.append(f"<p class=\"text-muted\">{meta}</p>")
         return _panel("file", "".join(inner_parts), active)
 
-    # Teacher view should mirror the learner semantics:
-    # - "Rückmeldung" shows feedback_md and optional collapsible criteria block.
+    # Teacher view separates feedback and analysis:
+    # - "Rückmeldung" shows feedback_md only (no accordion).
     # - "Auswertung" shows the criteria cards rendered from analysis_json.
     criteria_html = ""
     if isinstance(analysis_json, dict):
@@ -3414,37 +3414,12 @@ async def teaching_unit_live_detail_partial(
     def _render_feedback_panel(active: bool) -> str:
         inner_sections: list[str] = []
         has_feedback = bool(feedback_md)
-        has_criteria = bool(criteria_html)
         if has_feedback:
-            criteria_block = ""
-            if has_criteria:
-                # Same structure as learner view: feedback plus collapsible "Auswertung anzeigen".
-                criteria_block = (
-                    '<details class="analysis-feedback__details">'
-                    '<summary class="analysis-feedback__summary">'
-                    "<span>Auswertung anzeigen</span>"
-                    '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
-                    "</summary>"
-                    f"{criteria_html}"
-                    "</details>"
-                )
             inner_sections.append(
                 '<section class="analysis-feedback">'
                 '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
                 f'{render_markdown_safe(str(feedback_md))}'
-                f"{criteria_block}"
                 "</section>"
-            )
-        elif has_criteria:
-            # Kein Feedback, aber Kriterien verfügbar – wie in der Schüleransicht nur eine Auswertung-Details-Box.
-            inner_sections.append(
-                '<details class="analysis-feedback__details">'
-                '<summary class="analysis-feedback__summary">'
-                "<span>Auswertung anzeigen</span>"
-                '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
-                "</summary>"
-                f"{criteria_html}"
-                "</details>"
             )
         else:
             inner_sections.append("<p class=\"text-muted\">Keine Rückmeldung vorhanden.</p>")

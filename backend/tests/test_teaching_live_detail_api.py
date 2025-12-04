@@ -252,7 +252,18 @@ async def test_latest_detail_includes_text_and_files_for_pdf_submission():
 
 @pytest.mark.anyio
 async def test_latest_detail_includes_feedback_and_analysis():
-    """Auswertungstab: feedback_md und analysis_json sollen geliefert werden."""
+    """Auswertungstab: feedback_md und kriteriumsbasierte analysis_json (criteria.v2) sollen geliefert werden.
+
+    Given:
+        - Eine textbasierte Einreichung mit gespeicherter Rückmeldung (feedback_md).
+        - Ein legacy-artiges Analyse-JSON mit `summary` und einer einfachen Kriterienliste.
+    When:
+        - Die Lehrkraft den Latest-Detail-Endpunkt für diese Einreichung abruft.
+    Then:
+        - Die API liefert `feedback_md` unverändert zurück.
+        - `analysis_json` wird in ein criteria.v2-kompatibles Objekt mit `schema` und `criteria_results`
+          überführt (kein freies `summary`-Dict mehr im Contract).
+    """
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -296,7 +307,17 @@ async def test_latest_detail_includes_feedback_and_analysis():
 
     submission_id = str(uuid.uuid4())
     feedback_md = "## Feedback\nGute Arbeit."
-    analysis_payload = {"summary": "ok", "criteria": [{"title": "Kriterium", "comment": "passt", "score": "ok"}]}
+    # Legacy/alternatives Format: freies Dict mit summary + einfacher Kriterienliste.
+    analysis_payload = {
+        "summary": "ok",
+        "criteria": [
+            {
+                "title": "Kriterium 1",
+                "comment": "passt",
+                "score": "ok",
+            }
+        ],
+    }
     with psycopg.connect(_dsn()) as conn:  # type: ignore
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
@@ -330,6 +351,237 @@ async def test_latest_detail_includes_feedback_and_analysis():
     assert r_detail.status_code == 200
     body = r_detail.json()
     assert body["id"] == submission_id
+    # Feedback wird unverändert zurückgegeben
     assert body.get("feedback_md", "").startswith("## Feedback")
-    assert isinstance(body.get("analysis_json"), dict)
-    assert body["analysis_json"].get("summary") == "ok"
+
+    analysis = body.get("analysis_json")
+    assert isinstance(analysis, dict)
+    # Contract: criteria.v1/v2-Objekt mit Schema-Tag und Kriterienliste
+    assert analysis.get("schema") in ("criteria.v1", "criteria.v2")
+    results = analysis.get("criteria_results")
+    assert isinstance(results, list) and len(results) >= 1
+    first = results[0]
+    assert first.get("criterion") == "Kriterium 1"
+    # Kommentar/Erklärung aus dem Legacy-Format wird übernommen
+    assert "passt" in str(first.get("explanation_md") or "")
+
+
+@pytest.mark.anyio
+async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
+    """Datei-Einreichungen: files[].size muss immer ein Integer sein.
+
+    Given:
+        - Eine PDF-Einreichung mit gesetztem size_bytes in der DB.
+    When:
+        - Die Lehrkraft den Latest-Detail-Endpunkt abruft.
+    Then:
+        - Die API liefert in files[0].size einen Integer (keine Nullwerte).
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos and psycopg required for file size detail test")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    class _FakeStorageAdapter:
+        def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
+            return {"url": f"https://storage.test/{bucket}/{key}", "headers": {}, "method": "GET"}
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-detail-file-size-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-detail-file-size", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs Detail File Size")
+        unit = await _create_unit(c_owner, "Einheit Detail File Size")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Datei-Aufgabe")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+    submission_id = str(uuid.uuid4())
+    storage_key = f"submissions/{cid}/{task['id']}/{learner.sub}/orig/sample.pdf"
+    with psycopg.connect(_dsn()) as conn:  # type: ignore
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, student_sub, kind,
+                  storage_key, mime_type, size_bytes, sha256, attempt_nr,
+                  text_body, analysis_status, completed_at
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s, %s, %s, %s, 1,
+                  %s, 'completed', now()
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task["id"],
+                    learner.sub,
+                    storage_key,
+                    "application/pdf",
+                    1234,
+                    "0" * 64,
+                    "Extrahierter Text aus PDF",
+                ),
+            )
+        conn.commit()
+
+    original_teaching_adapter = teaching.STORAGE_ADAPTER
+    original_learning_adapter = learning.STORAGE_ADAPTER
+    teaching.set_storage_adapter(_FakeStorageAdapter())
+    learning.set_storage_adapter(_FakeStorageAdapter())
+    try:
+        async with (await _client()) as c_owner:
+            c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            r_detail = await c_owner.get(
+                f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
+            )
+        assert r_detail.status_code == 200
+        body = r_detail.json()
+        assert body["id"] == submission_id
+        files = body.get("files") or []
+        assert isinstance(files, list) and len(files) >= 1
+        first = files[0]
+        assert isinstance(first.get("size"), int)
+        assert first["size"] == 1234
+        assert "storage.test" in str(first.get("url"))
+    finally:
+        teaching.set_storage_adapter(original_teaching_adapter)
+        learning.set_storage_adapter(original_learning_adapter)
+
+
+@pytest.mark.anyio
+async def test_latest_detail_omits_files_when_size_unknown():
+    """Datei-Einreichungen ohne size_bytes sollen keine invalide files[].size liefern.
+
+    Given:
+        - Eine Datei-Einreichung mit fehlender Größe (size_bytes = NULL) in der DB.
+    When:
+        - Die Lehrkraft den Latest-Detail-Endpunkt abruft.
+    Then:
+        - Entweder ist das files-Array leer/fehlend oder alle enthaltenen Einträge
+          besitzen ein Integer-`size` (kein `null` im Contract).
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos and psycopg required for file size degradation test")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    class _FakeStorageAdapter:
+        def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
+            return {"url": f"https://storage.test/{bucket}/{key}", "headers": {}, "method": "GET"}
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-detail-file-size-missing-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-detail-file-size-missing", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs Detail File Size Missing")
+        unit = await _create_unit(c_owner, "Einheit Detail File Size Missing")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Datei-Aufgabe ohne Größe")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+    submission_id = str(uuid.uuid4())
+    storage_key = f"submissions/{cid}/{task['id']}/{learner.sub}/orig/sample-unknown-size.pdf"
+    with psycopg.connect(_dsn()) as conn:  # type: ignore
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            # size_bytes explizit als NULL setzen
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, student_sub, kind,
+                  storage_key, mime_type, size_bytes, sha256, attempt_nr,
+                  text_body, analysis_status, completed_at
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s, %s, NULL, %s, 1,
+                  %s, 'completed', now()
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task["id"],
+                    learner.sub,
+                    storage_key,
+                    "application/pdf",
+                    "0" * 64,
+                    "Extrahierter Text aus PDF ohne Größe",
+                ),
+            )
+        conn.commit()
+
+    original_teaching_adapter = teaching.STORAGE_ADAPTER
+    original_learning_adapter = learning.STORAGE_ADAPTER
+    teaching.set_storage_adapter(_FakeStorageAdapter())
+    learning.set_storage_adapter(_FakeStorageAdapter())
+    try:
+        async with (await _client()) as c_owner:
+            c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            r_detail = await c_owner.get(
+                f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
+            )
+        assert r_detail.status_code == 200
+        body = r_detail.json()
+        assert body["id"] == submission_id
+        files = body.get("files") or []
+        # Entweder keine Dateien oder alle haben integer size
+        for f in files:
+            assert isinstance(f.get("size"), int)
+    finally:
+        teaching.set_storage_adapter(original_teaching_adapter)
+        learning.set_storage_adapter(original_learning_adapter)

@@ -2782,7 +2782,7 @@ async def home(request: Request):
     content = """
     <div class=\"container\">
         <h1>Willkommen bei GUSTAV</h1>
-        <p>GUSTAV (Akronym für: Gustav unterstützt Schüler tadellos als Vertretungslehrer) ist eine Lernplattform, die sich derzeit noch in Entwicklung befindet. Dass Fehler vorkommen, ist daher nichts Ungewöhnliches. Bitte melde Fehler direkt an deinen Lehrer. Außerdem sind Ideen zur Verbesserung der Plattform gern gesehen!</p>
+        <p>GUSTAV (Akronym für: Gustav unterstützt Lernende tadellos als Vertretungslehrer) ist eine Lernplattform, die sich derzeit noch in Entwicklung befindet. Dass Fehler vorkommen, ist daher nichts Ungewöhnliches. Bitte melde Fehler direkt an deine Lehrkraft. Außerdem sind Ideen zur Verbesserung der Plattform gern gesehen!</p>
         <p>Klick links in der Navigationsleiste auf „Meine Kurse“ und wähle dort die aktuelle Lerneinheit aus. Dort kannst du zu den Aufgaben deine Lösungen eintippen oder hochladen. Ein KI-Modell wird dann deine Einreichung auswerten und dir eine Rückmeldung geben.</p>
         <p>Die Plattform ist datenschutzkonform. Deine persönlichen Daten werden zu keinem Zeitpunkt an fremde Server übertragen.</p>
     </div>

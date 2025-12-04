@@ -6,11 +6,13 @@ no submission exists and shows a text excerpt when a text submission exists.
 """
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import uuid
+
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import os
 
 pytestmark = pytest.mark.anyio("asyncio")
 

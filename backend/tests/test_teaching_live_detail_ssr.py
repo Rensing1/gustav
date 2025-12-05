@@ -6,11 +6,13 @@ no submission exists and shows a text excerpt when a text submission exists.
 """
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import uuid
+
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import os
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -121,3 +123,219 @@ async def test_detail_partial_empty_and_then_text_excerpt():
         assert r_detail.status_code == 200
         assert "Einreichung" in r_detail.text
         assert "Antwort" in r_detail.text
+
+
+@pytest.mark.anyio
+async def test_detail_partial_file_submission_shows_text_and_file_tab():
+    """File/PDF submissions should render tabs and the extracted text in SSR."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos required for SSR detail tests")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    class _FakeStorageAdapter:
+        def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
+            return {"url": f"https://storage.test/{bucket}/{key}", "headers": {}, "method": "GET"}
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-detail-file-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ssr-detail-file", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs SSR File Detail")
+        unit = await _create_unit(c_owner, "Einheit SSR File Detail")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Datei-Aufgabe")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+    submission_id = str(uuid.uuid4())
+    storage_key = f"submissions/{cid}/{task['id']}/{learner.sub}/orig/sample.pdf"
+    with psycopg.connect(_dsn()) as conn:  # type: ignore
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, student_sub, kind,
+                  storage_key, mime_type, size_bytes, sha256, attempt_nr,
+                  text_body, analysis_status, completed_at
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s, %s, %s, %s, 1,
+                  %s, 'completed', now()
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task["id"],
+                    learner.sub,
+                    storage_key,
+                    "application/pdf",
+                    1234,
+                    "0" * 64,
+                    "Extrahierter Text aus PDF",
+                ),
+            )
+        conn.commit()
+
+    original_teaching_adapter = teaching.STORAGE_ADAPTER
+    original_learning_adapter = learning.STORAGE_ADAPTER
+    teaching.set_storage_adapter(_FakeStorageAdapter())
+    learning.set_storage_adapter(_FakeStorageAdapter())
+    try:
+        async with (await _client()) as c_owner:
+            c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            r_detail = await c_owner.get(
+                f"/teaching/courses/{cid}/units/{unit['id']}/live/detail",
+                params={"student_sub": learner.sub, "task_id": task["id"]},
+            )
+        assert r_detail.status_code == 200
+        html = r_detail.text
+        assert "Text" in html and "Datei" in html
+        assert "Extrahierter Text" in html
+        assert "tab-btn" in html  # tabs present
+        assert "submission-body" in html  # wrapped text container
+        # Dateigröße wird als Integer-Byteswert angezeigt
+        assert "1234 Bytes" in html
+    finally:
+        teaching.set_storage_adapter(original_teaching_adapter)
+        learning.set_storage_adapter(original_learning_adapter)
+
+
+@pytest.mark.anyio
+async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
+    """SSR should show separate \"Feedback\" and \"Analysis\" tabs for teachers.
+
+    Given:
+        - A text submission with stored feedback_md and a criteria-based analysis_json in the DB.
+    When:
+        - The teacher opens the live detail view for that submission.
+    Then:
+        - Tabs \"Auswertung\" (analysis) and \"Rückmeldung\" (feedback) are present, with analysis first.
+        - The analysis content is rendered in its own tab using criteria cards.
+        - The feedback tab does not contain an extra \"Auswertung anzeigen\" accordion toggle; that
+          interaction pattern remains reserved for the learner history view.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+        from psycopg.types.json import Json  # type: ignore  # noqa: E402
+    except Exception:
+        pytest.skip("DB-backed repos required for SSR analysis/feedback test")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-detail-feedback-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ssr-detail-feedback", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs SSR Feedback Detail")
+        unit = await _create_unit(c_owner, "Einheit SSR Feedback Detail")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Feedback-Aufgabe")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+    submission_id = str(uuid.uuid4())
+    feedback_md = "### Rückmeldung\nSehr gut."
+    analysis_payload = {
+        "schema": "criteria.v1",
+        "criteria_results": [
+            {"criterion": "Kriterium 1", "score": 1, "max_score": 2, "explanation_md": "Begründung."},
+        ],
+    }
+    with psycopg.connect(_dsn()) as conn:  # type: ignore
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, student_sub, kind,
+                  text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s, 1, 'completed', now(), %s, %s
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task["id"],
+                    learner.sub,
+                    "Antwort mit Feedback",
+                    feedback_md,
+                    Json(analysis_payload),
+                ),
+            )
+        conn.commit()
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_detail = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/detail",
+            params={"student_sub": learner.sub, "task_id": task["id"]},
+        )
+    assert r_detail.status_code == 200
+    html = r_detail.text
+    # Tabs für Rückmeldung und Auswertung vorhanden
+    assert "Rückmeldung" in html
+    assert "Auswertung" in html
+    assert "tab-btn" in html
+    # Inhalt wie in der Schüleransicht: Rückmeldungstext und Auswertungsheading
+    assert "Sehr gut." in html
+    assert "analysis-criteria__heading" in html or "<strong>Auswertung</strong>" in html
+    # Tab-Reihenfolge: Auswertung vor Rückmeldung (für Lehrkraft sinnvoll)
+    idx_analysis = html.index('data-view-tab="analysis"')
+    idx_feedback = html.index('data-view-tab="feedback"')
+    assert idx_analysis < idx_feedback
+    # Kein doppelter Accordion-Toggle wie in der Schüleransicht
+    assert "Auswertung anzeigen" not in html
+    assert "analysis-feedback__details" not in html

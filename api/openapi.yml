@@ -1007,10 +1007,19 @@ components:
           enum: [text, image, pdf, file]
         text_body:
           type: string
-          description: Optional; may be truncated to protect bandwidth.
+          description: |
+            Best-effort extracted text, even for file/image/pdf submissions once
+            processing has completed; may be truncated to protect bandwidth.
           nullable: true
         files:
           type: array
+          description: |
+            Original upload(s) with signed, short-lived URLs. Present for
+            file/image/pdf submissions; empty for text submissions in the normal
+            case. In rare fallback situations (e.g. when Storage or helper
+            functions are temporarily unavailable) the field may be omitted, while
+            the rest of the domain object (`text_body`, `feedback_md`,
+            `analysis_json`) remains available.
           items:
             type: object
             required: [mime, size, url]
@@ -1021,6 +1030,16 @@ components:
                 type: string
                 format: uri
                 description: Signed, short-lived URL (do not cache beyond TTL)
+        feedback_md:
+          type: string
+          nullable: true
+          description: Markdown feedback for the learner (owner-visible); present when analysis is completed.
+        analysis_json:
+          nullable: true
+          description: Optional structured analysis payload (read-only excerpt for the Auswertung-Tab).
+          oneOf:
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV1'
+            - $ref: '#/components/schemas/AnalysisJsonCriteriaV2'
 
     LearningCourse:
       type: object

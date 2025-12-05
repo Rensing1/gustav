@@ -421,6 +421,62 @@ def _compute_local_sha256(storage_key: str, expected_size: int) -> str | None:
     return h.hexdigest()
 
 
+def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) -> str:
+    """Build the task submission form HTML (text/upload Choice Cards) for learners.
+
+    Why:
+        The learner unit page renders a TaskCard per task, each with a submit
+        form that supports two modes: plain text and file/image upload. Both
+        the normal Learning-API path and the Teaching-repo fallback should
+        render the exact same form structure so tests and users always see the
+        same contract.
+
+    Parameters:
+        course_id: ID of the learning course context.
+        unit_id: ID of the unit whose sections/tasks are shown.
+        task_id: ID of the task for which the form is rendered.
+
+    Returns:
+        HTML string containing the <form> element with radio Choice Cards,
+        textarea for text submissions and file input for uploads.
+    """
+    form_action = f"/learning/courses/{course_id}/tasks/{task_id}/submit"
+    tid_escaped = Component.escape(task_id)
+    cid_escaped = Component.escape(course_id)
+    uid_escaped = Component.escape(unit_id)
+    return (
+        f'<form method="post" action="{form_action}" class="task-submit-form" '
+        f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
+        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="text">'
+        f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
+        '<fieldset class="choice-cards" aria-label="Abgabeart">'
+        '<label class="choice-card choice-card--text">'
+        '<input type="radio" name="mode" value="text" checked>'
+        '<span class="choice-card__title">📝 Text</span>'
+        '</label>'
+        '<label class="choice-card choice-card--upload">'
+        '<input type="radio" name="mode" value="upload">'
+        '<span class="choice-card__title">⬆️ Upload</span>'
+        '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
+        '</label>'
+        '</fieldset>'
+        '<div class="task-form-fields fields-text">'
+        '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
+        '</div>'
+        '<div class="task-form-fields fields-upload" hidden>'
+        '<label>Datei auswählen '
+        '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
+        '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+        '<input type="hidden" name="storage_key" value="">'
+        '<input type="hidden" name="mime_type" value="">'
+        '<input type="hidden" name="size_bytes" value="">'
+        '<input type="hidden" name="sha256" value="">'
+        '</div>'
+        '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
+        '</form>'
+    )
+
+
 async def _server_side_prepare_submission_upload(
     *,
     client,
@@ -593,8 +649,9 @@ def _build_history_entry_from_record(
     feedback_src = record.get("feedback_md") or record.get("feedback")
 
     # Render criteria cards (criteria.v1/v2) via helper for clarity.
+    # Skip criteria when the analysis failed so we don't show partial data.
     criteria_html = ""
-    if isinstance(analysis, dict):
+    if status != "failed" and isinstance(analysis, dict):
         criteria_html = _render_analysis_criteria_section(analysis)
 
     feedback_sections: List[str] = []
@@ -612,15 +669,43 @@ def _build_history_entry_from_record(
             f'<p class="analysis-error__message">{detail_html}</p>'
             "</section>"
         )
-    if criteria_html:
-        feedback_sections.append(criteria_html)
-    if feedback_src:
+
+    has_feedback = bool(feedback_src)
+    has_criteria = bool(criteria_html)
+
+    if has_feedback:
+        # Wrap criteria inside a collapsible toggle beneath the feedback text.
+        criteria_block = ""
+        if has_criteria:
+            criteria_block = (
+                '<details class="analysis-feedback__details">'
+                '<summary class="analysis-feedback__summary">'
+                "<span>Auswertung anzeigen</span>"
+                '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+                "</summary>"
+                f"{criteria_html}"
+                "</details>"
+            )
+
         feedback_sections.append(
             '<section class="analysis-feedback">'
             '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
             f'{render_markdown_safe(str(feedback_src))}'
+            f"{criteria_block}"
             "</section>"
         )
+    elif has_criteria:
+        # No feedback available, but keep analysis accessible via a toggle.
+        feedback_sections.append(
+            '<details class="analysis-feedback__details">'
+            '<summary class="analysis-feedback__summary">'
+            "<span>Auswertung anzeigen</span>"
+            '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+            "</summary>"
+            f"{criteria_html}"
+            "</details>"
+        )
+
     feedback_html = "".join(feedback_sections)
     # Telemetry card removed per product decision; keep section empty for learners.
     telemetry_html = ""
@@ -1275,40 +1360,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             # Instruction text also benefits from Markdown (e.g., emphasis)
             instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
             # Build form HTML with Choice Cards (Text | Upload). Default: text.
-            form_action = f"/learning/courses/{course_id}/tasks/{tid}/submit"
-            form_html = (
-                f'<form method="post" action="{form_action}" class="task-submit-form" '
-                f'hx-post="{form_action}" hx-target="#task-history-{Component.escape(tid)}" hx-swap="outerHTML" '
-                f'data-course-id="{Component.escape(course_id)}" data-task-id="{Component.escape(tid)}" data-mode="text">'
-                f'<input type="hidden" name="unit_id" value="{Component.escape(unit_id)}">'
-                '<fieldset class="choice-cards" aria-label="Abgabeart">'
-                '<label class="choice-card choice-card--text">'
-                '<input type="radio" name="mode" value="text" checked>'
-                '<span class="choice-card__title">📝 Text</span>'
-                '</label>'
-                '<label class="choice-card choice-card--upload">'
-                '<input type="radio" name="mode" value="upload">'
-                '<span class="choice-card__title">⬆️ Upload</span>'
-                '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
-                '</label>'
-                '</fieldset>'
-                # Text fields (default visible)
-                '<div class="task-form-fields fields-text">'
-                '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
-                '</div>'
-                # Upload fields (hidden by default; shown via JS)
-                '<div class="task-form-fields fields-upload" hidden>'
-                '<label>Datei auswählen '
-                '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-                '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
-                '<input type="hidden" name="storage_key" value="">'
-                '<input type="hidden" name="mime_type" value="">'
-                '<input type="hidden" name="size_bytes" value="">'
-                '<input type="hidden" name="sha256" value="">'
-                '</div>'
-                '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
-                '</form>'
-            )
+            form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=tid)
 
             # Optionally load submission history for this task only (latest open)
             history_entries = []
@@ -1387,40 +1439,92 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
 
     # Removed placeholder TaskCard: the page now only shows actual materials and tasks.
 
-    # Ensure at least one history placeholder exists for real tasks when the
-    # Learning API is unavailable: derive task IDs from the Teaching repo and
-    # inject lazy-loading placeholders so the UI can fetch history fragments.
-    try:
-        import importlib
-        tmod = importlib.import_module("routes.teaching")
-    except Exception:
+    # Fallback when the Learning API could not be queried successfully:
+    # derive tasks from the Teaching repo and render minimal TaskCards so the
+    # student UI still exposes the submission form and lazy history loader.
+    #
+    # Why:
+    #   - In dev/test environments the Learning repo (DB) may be unavailable.
+    #     Ohne Fallback gäbe es dann gar keine Aufgabenkarte, die SSR-UI-Tests
+    #     (Choice Cards, Textfeld, Upload-Hinweis) würden dauerhaft rot sein.
+    #   - Der Fallback ist bewusst auf das Nötigste beschränkt:
+    #       * er greift nur, wenn oben keine Sections/Tasks gerendert werden konnten,
+    #       * er liest nur strukturierte Daten aus dem Teaching-Repo (keine
+    #         zusätzlichen Queries) und
+    #       * er baut eine TaskCard mit demselben Formular-Contract, den die
+    #         „normale“ Learning-API-Pfad-Variante liefert.
+    #   - In einer Produktionsumgebung mit funktionierender Learning-API ist
+    #     dieser Block praktisch tot (die regulären Sections füllen `parts`).
+    #
+    # Trade-off:
+    #   - Wir akzeptieren etwas HTML-Duplizierung gegenüber der TaskCard-Form
+    #     weiter oben, halten die Logik aber auf einen klar abgegrenzten
+    #     Sonderfall beschränkt. Wenn wir diesen Fallback langfristig behalten,
+    #     wäre ein kleiner Refactor (Helper-Funktion für das Formular-HTML)
+    #     der nächste Schritt, um die Duplizierung zu reduzieren.
+    if not parts:
         try:
-            tmod = importlib.import_module("backend.web.routes.teaching")
+            import importlib
+            try:
+                tmod = importlib.import_module("routes.teaching")
+            except Exception:
+                tmod = importlib.import_module("backend.web.routes.teaching")
         except Exception:
             tmod = None
-    if tmod is not None:
-        try:
-            repo = getattr(tmod, "REPO", None)
-            # Collect tasks for sections belonging to this unit
-            unit_sections = [sid for sid, s in (getattr(repo, "sections", {}) or {}).items() if str(getattr(s, "unit_id", "")) == str(unit_id)]
-            tmap = (getattr(repo, "task_ids_by_section", {}) or {})
-            candidate_tids: list[str] = []
-            for sid in unit_sections:
-                for tid in (tmap.get(sid) or []):
-                    if tid and tid not in candidate_tids:
-                        candidate_tids.append(tid)
-            if candidate_tids:
-                open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
-                for tid in candidate_tids:
-                    hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
-                    parts.append(
-                        f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                        f' data-pending="false" data-open_attempt_id="{Component.escape(open_attempt_id_qp)}" '
-                        f' hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
-                        f' hx-target="this" hx-swap="outerHTML" hx-vals=\'{hx_vals_payload}\'></section>'
-                    )
-        except Exception:
-            pass
+        if tmod is not None:
+            try:
+                repo = getattr(tmod, "REPO", None)
+                sections_by_id = (getattr(repo, "sections", {}) or {})
+                tasks_by_id = (getattr(repo, "tasks", {}) or {})
+                # Collect tasks for sections belonging to this unit
+                unit_sections = [
+                    sid for sid, s in sections_by_id.items() if str(getattr(s, "unit_id", "")) == str(unit_id)
+                ]
+                tmap = (getattr(repo, "task_ids_by_section", {}) or {})
+                candidate_tids: list[str] = []
+                for sid in unit_sections:
+                    for tid in (tmap.get(sid) or []):
+                        if tid and tid not in candidate_tids:
+                            candidate_tids.append(tid)
+                if candidate_tids:
+                    open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
+                    for tid in candidate_tids:
+                        task = tasks_by_id.get(tid) or {}
+                        # Basic title/instruction fallback; keep SSR logic robust even when repo shape differs.
+                        raw_title = getattr(task, "title", None) or (task.get("title") if isinstance(task, dict) else None)
+                        title = str(raw_title or "Aufgabe")
+                        raw_instr = getattr(task, "instruction_md", None) or (
+                            task.get("instruction_md") if isinstance(task, dict) else ""
+                        )
+                        instruction_html = render_markdown_safe(str(raw_instr or ""))
+                        form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=str(tid))
+                        hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                        history_placeholder_html = (
+                            f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                            f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                            f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
+                            f'hx-target="this" hx-swap="outerHTML" '
+                            f"hx-vals='{hx_vals_payload}' "
+                            'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)"></section>'
+                        )
+                        banner_html = (
+                            '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>'
+                            if (success_banner and show_history_for == tid)
+                            else None
+                        )
+                        tcard = TaskCard(
+                            task_id=str(tid),
+                            title=title,
+                            instruction_html=instruction_html,
+                            history_entries=[],
+                            history_placeholder_html=history_placeholder_html,
+                            feedback_banner_html=banner_html,
+                            form_html=form_html,
+                        )
+                        parts.append(tcard.render())
+            except Exception:
+                # As a last resort, keep behavior permissive so the page still renders.
+                pass
 
     inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p>"
     content = (
@@ -3326,7 +3430,16 @@ async def teaching_unit_live_detail_partial(
 
     created = Component.escape(str(data.get("created_at") or ""))
     kind = Component.escape(str(data.get("kind") or ""))
-    body = Component.escape(str(data.get("text_body") or ""))
+    body_raw = str(data.get("text_body") or "")
+    body = Component.escape(body_raw)
+    feedback_md = str(data.get("feedback_md") or "")
+    analysis_json = data.get("analysis_json")
+    files = [f for f in (data.get("files") or []) if isinstance(f, dict)]
+    file = files[0] if files else {}
+    file_url = Component.escape(str(file.get("url") or ""))
+    file_mime = str(file.get("mime") or "")
+    file_size = file.get("size")
+
     # Resolve student display name (dir → name; fallback email prefix when username is email)
     try:
         from routes import teaching as teaching_routes  # type: ignore
@@ -3337,12 +3450,112 @@ async def teaching_unit_live_detail_partial(
         display_name = Component.escape(n or str(student_sub))
     except Exception:
         display_name = Component.escape(str(student_sub))
-    snippet = f"<pre class=\"text-sm\">{body}</pre>" if body else ""
+
+    def _panel(name: str, inner: str, active: bool) -> str:
+        hidden_attr = "" if active else " hidden"
+        return f"<div class=\"tab-panel\" data-panel=\"{Component.escape(name)}\" role=\"tabpanel\"{hidden_attr}>{inner}</div>"
+
+    def _render_text_panel(active: bool) -> str:
+        if not body:
+            return _panel("text", "<p class=\"text-muted\">Kein Text vorhanden.</p>", active)
+        return _panel("text", f"<pre class=\"submission-body\">{body}</pre>", active)
+
+    def _render_file_panel(active: bool) -> str:
+        if not file_url:
+            return _panel("file", "<p class=\"text-muted\">Originaldatei nicht verfügbar.</p>", active)
+        inner_parts: list[str] = []
+        if "image" in file_mime:
+            inner_parts.append(f"<img class=\"submission-preview\" src=\"{file_url}\" alt=\"Originaldatei\">")
+        elif "pdf" in file_mime:
+            inner_parts.append(f"<a class=\"btn\" href=\"{file_url}\" target=\"_blank\" rel=\"noopener\">PDF in neuem Tab öffnen</a>")
+        else:
+            inner_parts.append(f"<a class=\"btn\" href=\"{file_url}\" target=\"_blank\" rel=\"noopener\">Datei ansehen</a>")
+        meta = f"{Component.escape(file_mime or 'Datei')}"
+        if file_size:
+            meta += f" · {Component.escape(str(file_size))} Bytes"
+        inner_parts.append(f"<p class=\"text-muted\">{meta}</p>")
+        return _panel("file", "".join(inner_parts), active)
+
+    # Teacher view separates feedback and analysis:
+    # - "Rückmeldung" shows feedback_md only (no accordion).
+    # - "Auswertung" shows the criteria cards rendered from analysis_json.
+    criteria_html = ""
+    if isinstance(analysis_json, dict):
+        try:
+            criteria_html = _render_analysis_criteria_section(analysis_json)
+        except Exception:
+            criteria_html = ""
+
+    def _render_feedback_panel(active: bool) -> str:
+        inner_sections: list[str] = []
+        has_feedback = bool(feedback_md)
+        if has_feedback:
+            inner_sections.append(
+                '<section class="analysis-feedback">'
+                '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
+                f'{render_markdown_safe(str(feedback_md))}'
+                "</section>"
+            )
+        else:
+            inner_sections.append("<p class=\"text-muted\">Keine Rückmeldung vorhanden.</p>")
+        return _panel("feedback", "".join(inner_sections), active)
+
+    def _render_analysis_panel(active: bool) -> str:
+        if criteria_html:
+            return _panel("analysis", criteria_html, active)
+        return _panel("analysis", "<p class=\"text-muted\">Keine Auswertung vorhanden.</p>", active)
+
+    tabs: list[tuple[str, str]] = [("text", "Text")]
+    if kind != "text":
+        tabs.append(("file", "Datei"))
+    has_feedback = bool(feedback_md)
+    has_analysis = bool(criteria_html)
+    # For teachers it is often more useful to see the structured Auswertung first.
+    if has_analysis:
+        tabs.append(("analysis", "Auswertung"))
+    if has_feedback:
+        tabs.append(("feedback", "Rückmeldung"))
+
+    active_key = "text"
+    if len(tabs) > 1:
+        tabs_html = ['<div class="tab-header" role="tablist">']
+        for key, label in tabs:
+            active = key == active_key
+            tabs_html.append(
+                f'<button type="button" class="tab-btn{" active" if active else ""}" data-view-tab="{key}" role="tab" aria-selected="{str(active).lower()}">{Component.escape(label)}</button>'
+            )
+        tabs_html.append("</div>")
+        panels_html = ['<div class="tab-panels">']
+        for key, _label in tabs:
+            if key == "text":
+                panels_html.append(_render_text_panel(active=key == active_key))
+            elif key == "file":
+                panels_html.append(_render_file_panel(active=key == active_key))
+            elif key == "feedback":
+                panels_html.append(_render_feedback_panel(active=key == active_key))
+            elif key == "analysis":
+                panels_html.append(_render_analysis_panel(active=key == active_key))
+        panels_html.append("</div>")
+        tabs_script = (
+            "<script>"
+            "(function(){const card=document.currentScript.closest('.card');"
+            "if(!card)return;const buttons=card.querySelectorAll('[data-view-tab]');"
+            "const panels=card.querySelectorAll('[data-panel]');"
+            "buttons.forEach(btn=>btn.addEventListener('click',()=>{const tgt=btn.getAttribute('data-view-tab');"
+            "buttons.forEach(b=>{const on=b===btn;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});"
+            "panels.forEach(p=>{const on=p.getAttribute('data-panel')===tgt;p.hidden=!on;});"
+            "}));})();"
+            "</script>"
+        )
+        content = "".join(tabs_html + panels_html) + tabs_script
+    else:
+        content = _render_text_panel(active=True)
+
     detail_html = (
         f"<div class=\"card\">"
         f"<h3>Einreichung von {display_name}</h3>"
         f"<p class=\"text-muted\">Typ: {kind} · erstellt: {created}</p>"
-        f"{snippet}"
+        f"{content}"
         f"</div>"
     )
     return HTMLResponse(detail_html, status_code=200, headers={"Cache-Control": "private, no-store"})

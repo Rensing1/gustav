@@ -115,6 +115,52 @@ async def test_live_page_teacher_only_and_renders_table():
 
 
 @pytest.mark.anyio
+async def test_live_page_includes_status_cursor_and_polling_attributes():
+    """Live page should expose a status cursor and HTMX polling hook.
+
+    Why:
+        The UI relies on periodic polling of the SSR delta fragment to keep
+        the matrix up to date. The page must therefore render:
+        - a status element with a `data-updated-since` ISO timestamp, and
+        - an element with `hx-get`/`hx-trigger` that calls the delta route.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-poll-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        cid = await _create_course(c_owner, "Kurs UI Polling")
+        unit = await _create_unit(c_owner, "Einheit Polling")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        mod = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, "s-ui-poll-learner")
+        # Release section to allow submissions later (same setup wie Haupttest)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r = await c_owner.get(f"/teaching/courses/{cid}/units/{unit['id']}/live")
+        assert r.status_code == 200
+        html = r.text
+
+        # Statusleiste mit Cursor
+        assert 'id="live-status"' in html
+        assert "data-updated-since=\"" in html
+
+        # Polling-Hook: Live-Section ruft Delta-Route periodisch auf
+        delta_path = f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta"
+        assert delta_path in html
+        assert f'hx-get="{delta_path}"' in html
+        # Polling-Intervall (3s) ist im Trigger kodiert
+        assert 'hx-trigger="every 3s"' in html
+
+
+@pytest.mark.anyio
 async def test_matrix_fragment_renders_initial_summary_and_cell_ids():
     _require_db_or_skip()
 
@@ -244,3 +290,62 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
         assert "hx-swap-oob=\"true\"" in html
         assert f"cell-{learner.sub}-{task['id']}" in html
         assert "✅" in html
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_sets_cursor_via_hx_trigger():
+    """Delta fragment should emit HX-Trigger with a cursor for the client.
+
+    Why:
+        The browser needs a monotonically increasing cursor to pass as
+        `updated_since` on subsequent polls. The SSR delta route should
+        expose the next cursor via HX-Trigger so JS can update the status.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-cursor-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ui-delta-cursor-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs UI Delta Cursor")
+        unit = await _create_unit(c_owner, "Einheit Delta Cursor")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        # Release section for submissions
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+
+        # Student submits once to create at least eine Änderung
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Lösung"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+
+        r_delta = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 200
+        trigger = r_delta.headers.get("HX-Trigger")
+        assert trigger, "expected HX-Trigger header for live cursor update"
+
+        import json as _json
+
+        data = _json.loads(trigger)
+        assert "liveCursorUpdated" in data
+        cursor = data["liveCursorUpdated"].get("cursor")
+        assert isinstance(cursor, str) and cursor, "cursor must be a non-empty string"

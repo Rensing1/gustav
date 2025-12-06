@@ -3111,12 +3111,27 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
     # Render sections release panel
     sections_panel_html = await _render_sections_release_panel(request, course_id, unit_id, module_id)
 
+    # Initial cursor for live polling: use current server time in UTC.
+    # The client will send this value as `updated_since` and advance it using
+    # the HX-Trigger emitted by the delta fragment.
+    cursor_iso = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    status_html = (
+        f'<div id="live-status" class="text-muted" data-updated-since="{Component.escape(cursor_iso)}">'
+        "Letzte Aktualisierung: jetzt"
+        "</div>"
+    )
+    delta_path = f"/teaching/courses/{course_id}/units/{unit_id}/live/matrix/delta"
+
     content = (
         '<div class="container">'
         f'<h1>Unterricht – Live</h1>'
         f'<p class="text-muted">{Component.escape(course_title)} · {Component.escape(unit_title)}</p>'
         f'{sections_panel_html}'
-        f'<section class="card" id="live-section"><div id="live-status" class="text-muted">Letzte Aktualisierung: jetzt</div>{matrix_html}</section>'
+        f'<section class="card" id="live-section" '
+        f'hx-get="{Component.escape(delta_path)}" '
+        'hx-trigger="every 3s" '
+        'hx-swap="none">'
+        f'{status_html}{matrix_html}</section>'
         '<div id="live-detail"></div>'
         '</div>'
     )
@@ -3536,18 +3551,7 @@ async def teaching_unit_live_detail_partial(
             elif key == "analysis":
                 panels_html.append(_render_analysis_panel(active=key == active_key))
         panels_html.append("</div>")
-        tabs_script = (
-            "<script>"
-            "(function(){const card=document.currentScript.closest('.card');"
-            "if(!card)return;const buttons=card.querySelectorAll('[data-view-tab]');"
-            "const panels=card.querySelectorAll('[data-panel]');"
-            "buttons.forEach(btn=>btn.addEventListener('click',()=>{const tgt=btn.getAttribute('data-view-tab');"
-            "buttons.forEach(b=>{const on=b===btn;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});"
-            "panels.forEach(p=>{const on=p.getAttribute('data-panel')===tgt;p.hidden=!on;});"
-            "}));})();"
-            "</script>"
-        )
-        content = "".join(tabs_html + panels_html) + tabs_script
+        content = "".join(tabs_html + panels_html)
     else:
         content = _render_text_panel(active=True)
 
@@ -3607,6 +3611,7 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
         return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
     parts: list[str] = []
+    max_changed_dt: datetime | None = None
     for c in cells:
         sub = Component.escape(str(c.get("student_sub") or ""))
         task_id = Component.escape(str(c.get("task_id") or ""))
@@ -3614,8 +3619,30 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
         content = "✅" if has else "—"
         cell_id = f"cell-{sub}-{task_id}"
         parts.append(f'<td id="{cell_id}" hx-swap-oob="true">{content}</td>')
+
+        # Track the latest changed_at timestamp for cursor advancement.
+        changed_raw = c.get("changed_at")
+        if isinstance(changed_raw, str):
+            try:
+                normalized = changed_raw.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(normalized)
+            except Exception:
+                dt = None
+            if dt is not None:
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.astimezone(timezone.utc)
+                if max_changed_dt is None or dt > max_changed_dt:
+                    max_changed_dt = dt
+
     html = "".join(parts)
-    return HTMLResponse(content=html, status_code=200, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+    headers: dict[str, str] = {"Cache-Control": "private, no-store", "Vary": "Origin"}
+    if max_changed_dt is not None:
+        import json as _json
+
+        cursor_iso = max_changed_dt.isoformat(timespec="microseconds")
+        headers["HX-Trigger"] = _json.dumps({"liveCursorUpdated": {"cursor": cursor_iso}})
+    return HTMLResponse(content=html, status_code=200, headers=headers)
 
 @app.get("/courses", response_class=HTMLResponse)
 async def courses_index(request: Request):

@@ -48,6 +48,7 @@ class Gustav {
     this.initLearningTaskForms(); // Progressive enhancement for student task forms
     this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
     this.initFilePreviewZoom(); // Zoom toggle for inline file previews
+    this.initTeachingLivePolling(); // Auto-refresh for teaching live matrix
   }
 
   /**
@@ -384,6 +385,64 @@ class Gustav {
   }
 
   /**
+   * Initialise polling for the teacher Live matrix.
+   *
+   * Behaviour:
+   * - Reads the current cursor from #live-status[data-updated-since].
+   * - Writes it into hx-vals on #live-section so HTMX sends updated_since.
+   * - Listens for the custom HX-Trigger event "liveCursorUpdated" to advance
+   *   the cursor and update the visible status text.
+   */
+  initTeachingLivePolling() {
+    const statusEl = document.getElementById('live-status');
+    const section = document.getElementById('live-section');
+    if (!statusEl || !section) return;
+
+    const cursor = statusEl.getAttribute('data-updated-since');
+    if (!cursor) return;
+
+    // Seed hx-vals so the first poll sends the initial cursor.
+    try {
+      section.setAttribute('hx-vals', JSON.stringify({ updated_since: cursor }));
+    } catch (err) {
+      console.warn('Failed to initialise live polling cursor', err);
+    }
+
+    // Listen once for cursor updates; the event is fired via HX-Trigger header.
+    if (!this._livePollingBound) {
+      this._livePollingBound = true;
+      document.body.addEventListener('liveCursorUpdated', (evt) => {
+        const detail = evt.detail || {};
+        const nextCursor = detail.cursor || detail.updated_since;
+        if (!nextCursor) return;
+
+        // Update data-updated-since and human-readable timestamp.
+        statusEl.setAttribute('data-updated-since', nextCursor);
+        try {
+          const d = new Date(nextCursor);
+          if (!Number.isNaN(d.getTime())) {
+            const timeLabel = d.toLocaleTimeString('de-DE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit'
+            });
+            statusEl.textContent = `Letzte Aktualisierung: ${timeLabel}`;
+          }
+        } catch (err) {
+          // Fallback: keep existing label when parsing fails.
+        }
+
+        // Advance hx-vals so the next poll starts from the latest cursor.
+        try {
+          section.setAttribute('hx-vals', JSON.stringify({ updated_since: nextCursor }));
+        } catch (err) {
+          console.warn('Failed to update live polling cursor', err);
+        }
+      });
+    }
+  }
+
+  /**
    * Execute the client-side upload prepare flow for learning submissions.
    * 1) POST upload-intent → get storage_key + PUT URL
    * 2) PUT file to returned URL
@@ -544,6 +603,8 @@ class Gustav {
       this.restoreSidebarState();
       this.initSidebarAccessibility();
       this.initSidebarGestures();
+      this.initTeachingLivePolling();
+      this.initTeachingLiveTabs(evt.target || document);
     });
 
     // Ensure sidebar state restoration after OOB sidebar replacement
@@ -554,6 +615,8 @@ class Gustav {
         this.restoreSidebarState();
         this.initSidebarAccessibility();
         this.initSidebarGestures();
+        this.initTeachingLivePolling();
+        this.initTeachingLiveTabs(document);
       });
     });
 
@@ -563,6 +626,8 @@ class Gustav {
       this.restoreSidebarState();
       this.initSidebarAccessibility();
       this.initSidebarGestures();
+      this.initTeachingLivePolling();
+      this.initTeachingLiveTabs(document);
     });
 
     document.body.addEventListener('htmx:sendError', (evt) => {
@@ -586,6 +651,47 @@ class Gustav {
     document.body.addEventListener('showMessage', (evt) => {
       const detail = evt.detail || {};
       this.showNotification(detail.message || 'Aktion ausgeführt', detail.type || 'info');
+    });
+  }
+
+  /**
+   * Teaching Live detail tabs (Text / Datei / Auswertung / Rückmeldung).
+   *
+   * Behaviour:
+   * - Binds click handlers to buttons with data-view-tab inside the given root.
+   * - Toggles the "active" class and aria-selected on tab buttons.
+   * - Shows the matching panel (data-panel) and hides the others via hidden.
+   *
+   * This function is CSP-safe because it does not rely on inline scripts.
+   */
+  initTeachingLiveTabs(root) {
+    const scope = root && root.querySelector ? root : document;
+    const card = scope.querySelector('#live-detail .card');
+    if (!card) return;
+
+    const buttons = Array.from(card.querySelectorAll('[data-view-tab]'));
+    const panels = Array.from(card.querySelectorAll('[data-panel]'));
+    if (!buttons.length || !panels.length) return;
+
+    buttons.forEach((btn) => {
+      if (btn._tabsBound) return;
+      btn._tabsBound = true;
+      btn.addEventListener('click', () => {
+        const targetKey = btn.getAttribute('data-view-tab');
+        if (!targetKey) return;
+
+        buttons.forEach((b) => {
+          const isActive = b === btn;
+          b.classList.toggle('active', isActive);
+          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        panels.forEach((panel) => {
+          const panelKey = panel.getAttribute('data-panel');
+          const show = panelKey === targetKey;
+          panel.hidden = !show;
+        });
+      });
     });
   }
 

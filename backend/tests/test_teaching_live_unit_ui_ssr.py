@@ -390,3 +390,11 @@ async def test_delta_fragment_sets_cursor_via_hx_trigger():
         assert "liveCursorUpdated" in data
         cursor = data["liveCursorUpdated"].get("cursor")
         assert isinstance(cursor, str) and cursor, "cursor must be a non-empty string"
+
+        # The cursor should be a parseable ISO timestamp in UTC and
+        # monotonically >= the base timestamp used for the delta request.
+        base_dt = datetime.fromisoformat(base_ts)
+        cursor_dt = datetime.fromisoformat(cursor)
+        assert cursor_dt.tzinfo is not None, "cursor must carry timezone information"
+        # Allow equality to avoid flakiness when timestamps are very close.
+        assert cursor_dt >= base_dt, "cursor must not go backwards in time"

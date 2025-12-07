@@ -115,6 +115,133 @@ async def test_live_page_teacher_only_and_renders_table():
 
 
 @pytest.mark.anyio
+async def test_live_page_includes_status_cursor_and_polling_attributes():
+    """Live page should expose a status cursor and HTMX polling hook.
+
+    Why:
+        The UI relies on periodic polling of the SSR delta fragment to keep
+        the matrix up to date. The page must therefore render:
+        - a status element with a `data-updated-since` ISO timestamp, and
+        - an element with `hx-get`/`hx-trigger` that calls the delta route.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-poll-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        cid = await _create_course(c_owner, "Kurs UI Polling")
+        unit = await _create_unit(c_owner, "Einheit Polling")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        mod = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, "s-ui-poll-learner")
+        # Release section to allow submissions later (same setup wie Haupttest)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r = await c_owner.get(f"/teaching/courses/{cid}/units/{unit['id']}/live")
+        assert r.status_code == 200
+        html = r.text
+
+        # Statusleiste mit Cursor
+        assert 'id="live-status"' in html
+        assert "data-updated-since=\"" in html
+
+        # Polling-Hook: Live-Section ruft Delta-Route periodisch auf
+        delta_path = f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta"
+        assert delta_path in html
+        assert f'hx-get="{delta_path}"' in html
+        # Polling-Intervall (3s) ist im Trigger kodiert
+        assert 'hx-trigger="every 3s"' in html
+
+
+@pytest.mark.anyio
+async def test_live_page_respects_poll_interval_constant():
+    """Live page should derive the polling interval from the main module constant.
+
+    This keeps the interval adjustable via configuration while tests can still
+    override it directly on the imported main module.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-poll-override-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        cid = await _create_course(c_owner, "Kurs UI Poll Override")
+        unit = await _create_unit(c_owner, "Einheit Poll Override")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        mod = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, "s-ui-poll-override-learner")
+
+        # Release section to allow submissions later
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        # Override polling interval for this test only.
+        original = getattr(main, "TEACHING_LIVE_POLL_INTERVAL_SECONDS", 3)
+        try:
+            main.TEACHING_LIVE_POLL_INTERVAL_SECONDS = 5  # type: ignore[attr-defined]
+
+            r = await c_owner.get(f"/teaching/courses/{cid}/units/{unit['id']}/live")
+            assert r.status_code == 200
+            html = r.text
+            assert 'hx-trigger="every 5s"' in html
+        finally:
+            main.TEACHING_LIVE_POLL_INTERVAL_SECONDS = original  # type: ignore[attr-defined]
+
+
+def test_poll_interval_env_config_clamps_invalid_values(monkeypatch):
+    """Polling interval config should clamp invalid env values to a safe default.
+
+    Why:
+        Ops may accidentally set GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS to 0,
+        a negative number or a non-integer string. The web adapter should handle
+        this defensively so the Live polling hook never renders an unusable
+        hx-trigger interval.
+    """
+    # Import the already-loaded main module; in the test environment this
+    # corresponds to backend.web.main thanks to the sys.modules aliasing.
+    import main as main_mod  # type: ignore
+
+    # Helper to evaluate the helper function with a specific env value.
+    def _with(value: str | None) -> int:
+        if value is None:
+            monkeypatch.delenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", raising=False)
+        else:
+            monkeypatch.setenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", value)
+        return int(main_mod._load_poll_interval_from_env())
+
+    # Default when env is unset → 3 seconds.
+    default_val = _with(None)
+    assert default_val == 3
+
+    # Non-integer value → fall back to default (3s).
+    non_int_val = _with("not-an-int")
+    assert non_int_val == 3
+
+    # Zero and negative values should be clamped to at least 1s.
+    zero_val = _with("0")
+    assert zero_val == 1
+    negative_val = _with("-5")
+    assert negative_val == 1
+
+    # Excessively large values should be capped to a sensible upper bound (e.g. 60s).
+    large_val = _with("600")
+    assert large_val == 60
+
+
+@pytest.mark.anyio
 async def test_matrix_fragment_renders_initial_summary_and_cell_ids():
     _require_db_or_skip()
 
@@ -244,3 +371,268 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
         assert "hx-swap-oob=\"true\"" in html
         assert f"cell-{learner.sub}-{task['id']}" in html
         assert "✅" in html
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_sets_cursor_via_hx_trigger():
+    """Delta fragment should emit HX-Trigger with a cursor for the client.
+
+    Why:
+        The browser needs a monotonically increasing cursor to pass as
+        `updated_since` on subsequent polls. The SSR delta route should
+        expose the next cursor via HX-Trigger so JS can update the status.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-cursor-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ui-delta-cursor-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs UI Delta Cursor")
+        unit = await _create_unit(c_owner, "Einheit Delta Cursor")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        # Release section for submissions
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+
+        # Student submits once to create at least eine Änderung
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Lösung"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+
+        r_delta = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 200
+        trigger = r_delta.headers.get("HX-Trigger")
+        assert trigger, "expected HX-Trigger header for live cursor update"
+
+        import json as _json
+
+        data = _json.loads(trigger)
+        assert "liveCursorUpdated" in data
+        cursor = data["liveCursorUpdated"].get("cursor")
+        assert isinstance(cursor, str) and cursor, "cursor must be a non-empty string"
+
+        # The cursor should be a parseable ISO timestamp in UTC and
+        # monotonically >= the base timestamp used for the delta request.
+        base_dt = datetime.fromisoformat(base_ts)
+        cursor_dt = datetime.fromisoformat(cursor)
+        assert cursor_dt.tzinfo is not None, "cursor must carry timezone information"
+        # Allow equality to avoid flakiness when timestamps are very close.
+        assert cursor_dt >= base_dt, "cursor must not go backwards in time"
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_error_responses_set_private_cache_headers(monkeypatch):
+    """Delta fragment should set private, no-store cache headers even on error."""
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-cache-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        # Trigger a fast-path 400 by sending an empty updated_since. The route
+        # must still mark the response as private and non-cacheable.
+        r_delta = await c_owner.get(
+            "/teaching/courses/any/units/any/live/matrix/delta",
+            params={"updated_since": ""},
+        )
+        assert r_delta.status_code == 400
+        cache = r_delta.headers.get("Cache-Control", "")
+        vary = r_delta.headers.get("Vary", "")
+        assert "no-store" in cache and "private" in cache
+        assert "Origin" in vary
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_propagates_upstream_http_error_with_private_cache(monkeypatch):
+    """Delta fragment should propagate non-200 upstream HTTP status with private cache headers."""
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-upstream-http-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    # Stub internal API client to return a 503 error from the JSON delta endpoint.
+    def _stub_internal_api_client():
+        class _StubResponse:
+            def __init__(self) -> None:
+                self.status_code = 503
+
+            def json(self) -> dict:
+                return {}
+
+        class _StubClient:
+            def __init__(self) -> None:
+                class _Cookies:
+                    def set(self, _name: str, _value: str) -> None:
+                        return None
+
+                self.cookies = _Cookies()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url: str, params: dict | None = None):
+                assert "/submissions/delta" in url
+                return _StubResponse()
+
+        return _StubClient()
+
+    monkeypatch.setattr(main, "_internal_api_client", _stub_internal_api_client)
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+        r_delta = await c_owner.get(
+            "/teaching/courses/dummy/units/dummy/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 503
+        cache = r_delta.headers.get("Cache-Control", "")
+        vary = r_delta.headers.get("Vary", "")
+        assert "no-store" in cache and "private" in cache
+        assert "Origin" in vary
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_emits_cursor_even_when_changed_at_missing(monkeypatch):
+    """Delta fragment should still emit a cursor when changed_at is missing.
+
+    Why:
+        In case the JSON delta endpoint returns cells without a changed_at
+        field (or with malformed timestamps), the SSR route must still provide
+        a monotonically increasing cursor via HX-Trigger so the client can
+        advance its polling window and avoid repeating the same OOB updates.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-missing-ts-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    # Monkeypatch the internal API client used by the delta fragment so we can
+    # control the JSON payload without going through the full Teaching repo.
+    def _stub_internal_api_client():
+        class _StubResponse:
+            def __init__(self) -> None:
+                self.status_code = 200
+
+            def json(self) -> dict:
+                # Single cell without a changed_at field; this is the case we
+                # want the SSR route to handle gracefully.
+                return {
+                    "cells": [
+                        {"student_sub": "s1", "task_id": "t1", "has_submission": True},
+                        ]
+                    }
+
+        class _StubClient:
+            def __init__(self) -> None:
+                class _Cookies:
+                    def set(self, _name: str, _value: str) -> None:
+                        # No-op: the stubbed client does not persist cookies,
+                        # but the interface must match httpx.AsyncClient.
+                        return None
+
+                self.cookies = _Cookies()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url: str, params: dict | None = None):
+                assert "/submissions/delta" in url
+                return _StubResponse()
+
+        return _StubClient()
+
+    monkeypatch.setattr(main, "_internal_api_client", _stub_internal_api_client)
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+        r_delta = await c_owner.get(
+            "/teaching/courses/dummy/units/dummy/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 200
+        trigger = r_delta.headers.get("HX-Trigger")
+        assert trigger, "expected HX-Trigger header even when changed_at is missing"
+
+        import json as _json
+
+        data = _json.loads(trigger)
+        assert "liveCursorUpdated" in data
+        cursor = data["liveCursorUpdated"].get("cursor")
+        assert isinstance(cursor, str) and cursor
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_returns_502_on_upstream_request_error(monkeypatch):
+    """Delta fragment should return 502 when the internal JSON delta endpoint is unreachable."""
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-upstream-error-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    # Simulate an httpx.RequestError being raised inside the internal API client.
+    import httpx
+
+    class _ErroringClient:
+        def __init__(self) -> None:
+            class _Cookies:
+                def set(self, _name: str, _value: str) -> None:
+                    return None
+
+            self.cookies = _Cookies()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, params: dict | None = None):
+            raise httpx.RequestError("boom", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(main, "_internal_api_client", lambda: _ErroringClient())
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+        r_delta = await c_owner.get(
+            "/teaching/courses/dummy/units/dummy/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 502
+        cache = r_delta.headers.get("Cache-Control", "")
+        vary = r_delta.headers.get("Vary", "")
+        assert "no-store" in cache and "private" in cache
+        assert "Origin" in vary

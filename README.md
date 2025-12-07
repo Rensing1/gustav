@@ -59,6 +59,7 @@ GUSTAV wird entwickelt nach dem Prinzip „Contract‑First“ und setzt stark a
   - oder `.venv/bin/pytest -q`
   - `make test-supabase`
   - `make test-ollama && make test-ollama-vision`
+  - Für die JS-Behaviour-Tests (Teaching-Live-UI in `gustav.js`) wird eine aktuelle Node.js-Installation benötigt; in CI sollte Node verfügbar sein, damit diese Tests nicht dauerhaft „skipped“ laufen.
 - API-Verhalten wird gegen den OpenAPI-Vertrag in `api/openapi.yml` geprüft.
 - Für neue Features sind Tests und Dokumentation Teil der Definition of Done.
 

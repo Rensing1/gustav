@@ -398,3 +398,27 @@ async def test_delta_fragment_sets_cursor_via_hx_trigger():
         assert cursor_dt.tzinfo is not None, "cursor must carry timezone information"
         # Allow equality to avoid flakiness when timestamps are very close.
         assert cursor_dt >= base_dt, "cursor must not go backwards in time"
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_error_responses_set_private_cache_headers(monkeypatch):
+    """Delta fragment should set private, no-store cache headers even on error."""
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-cache-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        # Trigger a fast-path 400 by sending an empty updated_since. The route
+        # must still mark the response as private and non-cacheable.
+        r_delta = await c_owner.get(
+            "/teaching/courses/any/units/any/live/matrix/delta",
+            params={"updated_since": ""},
+        )
+        assert r_delta.status_code == 400
+        cache = r_delta.headers.get("Cache-Control", "")
+        vary = r_delta.headers.get("Vary", "")
+        assert "no-store" in cache and "private" in cache
+        assert "Origin" in vary

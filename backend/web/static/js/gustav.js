@@ -401,6 +401,10 @@ class Gustav {
     const cursor = statusEl.getAttribute('data-updated-since');
     if (!cursor) return;
 
+    // Normalise the initial label so it matches the format used after
+    // cursor updates, using the server-provided timestamp.
+    this.updateLiveStatusTimestamp(statusEl, cursor);
+
     // Seed hx-vals so the first poll sends the initial cursor.
     try {
       section.setAttribute('hx-vals', JSON.stringify({ updated_since: cursor }));
@@ -416,21 +420,14 @@ class Gustav {
         const nextCursor = detail.cursor || detail.updated_since;
         if (!nextCursor) return;
 
+        // Resolve current elements on each event to work with
+        // HTMX-driven DOM replacements (navigation between units/courses).
+        const statusEl = document.getElementById('live-status');
+        const section = document.getElementById('live-section');
+        if (!statusEl || !section) return;
+
         // Update data-updated-since and human-readable timestamp.
-        statusEl.setAttribute('data-updated-since', nextCursor);
-        try {
-          const d = new Date(nextCursor);
-          if (!Number.isNaN(d.getTime())) {
-            const timeLabel = d.toLocaleTimeString('de-DE', {
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit'
-            });
-            statusEl.textContent = `Letzte Aktualisierung: ${timeLabel}`;
-          }
-        } catch (err) {
-          // Fallback: keep existing label when parsing fails.
-        }
+        this.updateLiveStatusTimestamp(statusEl, nextCursor);
 
         // Advance hx-vals so the next poll starts from the latest cursor.
         try {
@@ -439,6 +436,58 @@ class Gustav {
           console.warn('Failed to update live polling cursor', err);
         }
       });
+    }
+  }
+
+  /**
+   * Helper to update the visible Live status timestamp from a cursor.
+   */
+  updateLiveStatusTimestamp(statusEl, cursor) {
+    if (!statusEl || !cursor) return;
+    statusEl.setAttribute('data-updated-since', cursor);
+    try {
+      const d = new Date(cursor);
+      if (!Number.isNaN(d.getTime())) {
+        const timeLabel = d.toLocaleTimeString('de-DE', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        statusEl.textContent = `Letzte Aktualisierung: ${timeLabel}`;
+      }
+    } catch (err) {
+      // Fallback: keep existing label when parsing fails.
+    }
+  }
+
+  /**
+   * Update the Live status bar text when an HTMX error relates to the
+   * Live matrix delta route.
+   *
+   * Behaviour:
+   * - Only touches #live-status when the failing request originates from
+   *   #live-section or targets the /live/matrix/delta path.
+   */
+  updateLiveStatusForError(evt, message) {
+    const statusEl = document.getElementById('live-status');
+    if (!statusEl) return;
+
+    const detail = (evt && evt.detail) || {};
+
+    // Fast path: check the source element of the HTMX request.
+    const elt = detail.elt;
+    if (elt && elt.closest && elt.closest('#live-section')) {
+      statusEl.textContent = message;
+      statusEl.classList.add('text-danger');
+      return;
+    }
+
+    // Fallback: inspect path information if available.
+    const pathInfo = detail.pathInfo || {};
+    const path = pathInfo.requestPath || pathInfo.path || '';
+    if (typeof path === 'string' && path.indexOf('/live/matrix/delta') !== -1) {
+      statusEl.textContent = message;
+      statusEl.classList.add('text-danger');
     }
   }
 
@@ -632,15 +681,17 @@ class Gustav {
 
     document.body.addEventListener('htmx:sendError', (evt) => {
       this.showNotification('Network error. Please try again.', 'error');
+      this.updateLiveStatusForError(evt, 'Live-Ansicht: Verbindung unterbrochen.');
     });
 
     document.body.addEventListener('htmx:responseError', (evt) => {
       const status = evt.detail.xhr.status;
       const message = status === 404 ? 'Resource not found' :
                       status === 403 ? 'Access denied' :
-                      status === 500 ? 'Server error' :
-                      'Request failed';
+                       status === 500 ? 'Server error' :
+                       'Request failed';
       this.showNotification(message, 'error');
+      this.updateLiveStatusForError(evt, 'Live-Ansicht: Verbindung unterbrochen.');
     });
 
     // Custom HTMX events from server
@@ -666,31 +717,38 @@ class Gustav {
    */
   initTeachingLiveTabs(root) {
     const scope = root && root.querySelector ? root : document;
-    const card = scope.querySelector('#live-detail .card');
-    if (!card) return;
+    const container = scope.querySelector('#live-detail');
+    if (!container) return;
+    if (container._tabsDelegationReady) return;
+    container._tabsDelegationReady = true;
 
-    const buttons = Array.from(card.querySelectorAll('[data-view-tab]'));
-    const panels = Array.from(card.querySelectorAll('[data-panel]'));
-    if (!buttons.length || !panels.length) return;
+    container.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!target || !target.closest) return;
 
-    buttons.forEach((btn) => {
-      if (btn._tabsBound) return;
-      btn._tabsBound = true;
-      btn.addEventListener('click', () => {
-        const targetKey = btn.getAttribute('data-view-tab');
-        if (!targetKey) return;
+      const btn = target.closest('[data-view-tab]');
+      if (!btn || !container.contains(btn)) return;
 
-        buttons.forEach((b) => {
-          const isActive = b === btn;
-          b.classList.toggle('active', isActive);
-          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
-        });
+      const card = btn.closest('.card');
+      if (!card) return;
 
-        panels.forEach((panel) => {
-          const panelKey = panel.getAttribute('data-panel');
-          const show = panelKey === targetKey;
-          panel.hidden = !show;
-        });
+      const buttons = Array.from(card.querySelectorAll('[data-view-tab]'));
+      const panels = Array.from(card.querySelectorAll('[data-panel]'));
+      if (!buttons.length || !panels.length) return;
+
+      const targetKey = btn.getAttribute('data-view-tab');
+      if (!targetKey) return;
+
+      buttons.forEach((b) => {
+        const isActive = b === btn;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+
+      panels.forEach((panel) => {
+        const panelKey = panel.getAttribute('data-panel');
+        const show = panelKey === targetKey;
+        panel.hidden = !show;
       });
     });
   }
@@ -706,14 +764,6 @@ class Gustav {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification alert alert-${type}`;
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 9999;
-      min-width: 250px;
-      animation: slideIn 0.3s ease;
-    `;
     notification.textContent = message;
 
     // Add to page
@@ -721,7 +771,7 @@ class Gustav {
 
     // Auto-remove after duration
     setTimeout(() => {
-      notification.style.animation = 'slideOut 0.3s ease';
+      notification.classList.add('notification--exit');
       setTimeout(() => notification.remove(), 300);
     }, duration);
   }
@@ -1182,41 +1232,6 @@ class Gustav {
       timeout = setTimeout(later, wait);
     };
   }
-}
-
-// CSS for animations (injected once)
-if (!document.querySelector('#gustav-animations')) {
-  const style = document.createElement('style');
-  style.id = 'gustav-animations';
-  style.textContent = `
-    @keyframes slideIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    @keyframes slideOut {
-      from {
-        transform: translateX(0);
-        opacity: 1;
-      }
-      to {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
 }
 
 // Initialize GUSTAV

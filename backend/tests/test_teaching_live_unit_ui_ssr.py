@@ -161,6 +161,47 @@ async def test_live_page_includes_status_cursor_and_polling_attributes():
 
 
 @pytest.mark.anyio
+async def test_live_page_respects_poll_interval_constant():
+    """Live page should derive the polling interval from the main module constant.
+
+    This keeps the interval adjustable via configuration while tests can still
+    override it directly on the imported main module.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-poll-override-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        cid = await _create_course(c_owner, "Kurs UI Poll Override")
+        unit = await _create_unit(c_owner, "Einheit Poll Override")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        mod = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, "s-ui-poll-override-learner")
+
+        # Release section to allow submissions later
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        # Override polling interval for this test only.
+        original = getattr(main, "TEACHING_LIVE_POLL_INTERVAL_SECONDS", 3)
+        try:
+            main.TEACHING_LIVE_POLL_INTERVAL_SECONDS = 5  # type: ignore[attr-defined]
+
+            r = await c_owner.get(f"/teaching/courses/{cid}/units/{unit['id']}/live")
+            assert r.status_code == 200
+            html = r.text
+            assert 'hx-trigger="every 5s"' in html
+        finally:
+            main.TEACHING_LIVE_POLL_INTERVAL_SECONDS = original  # type: ignore[attr-defined]
+
+
+@pytest.mark.anyio
 async def test_matrix_fragment_renders_initial_summary_and_cell_ids():
     _require_db_or_skip()
 

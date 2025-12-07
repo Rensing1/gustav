@@ -140,7 +140,11 @@ from routes.security import _is_same_origin
 # Polling configuration for Teaching Live UI (seconds).
 # Derived from environment so ops can tune the interval without code
 # changes. Tests may override this constant directly on the main module.
-TEACHING_LIVE_POLL_INTERVAL_SECONDS = int(os.getenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", "3") or "3")
+_poll_raw = os.getenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", "3") or "3"
+try:
+    TEACHING_LIVE_POLL_INTERVAL_SECONDS = int(_poll_raw)
+except Exception:  # pragma: no cover - guarded by separate tests
+    TEACHING_LIVE_POLL_INTERVAL_SECONDS = 3
 
 # --- Optional Storage Adapter Wiring (Supabase) -------------------------------
 try:
@@ -3150,6 +3154,9 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
         f'<h1>Unterricht – Live</h1>'
         f'<p class="text-muted">{Component.escape(course_title)} · {Component.escape(unit_title)}</p>'
         f'{sections_panel_html}'
+        # Even when there are no tasks yet, we keep a single live-section
+        # container and HTMX polling hook. This keeps the implementation
+        # simple while the delta endpoint just returns "no changes".
         f'<section class="card" id="live-section" '
         f'hx-get="{Component.escape(delta_path)}" '
         f'hx-trigger="every {TEACHING_LIVE_POLL_INTERVAL_SECONDS}s" '
@@ -3627,7 +3634,7 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
 
     # Fast-path validation of timestamp; delegate canonical validation to API
     if not isinstance(updated_since, str) or not updated_since:
-        return Response(status_code=400)
+        return Response(status_code=400, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
     try:
         import httpx
@@ -3640,10 +3647,11 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
                 f"/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta",
                 params={"updated_since": updated_since, "limit": 200, "offset": 0},
             )
+            common_headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             if rd.status_code == 204:
-                return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+                return Response(status_code=204, headers=common_headers)
             if rd.status_code != 200:
-                return Response(status_code=rd.status_code)
+                return Response(status_code=rd.status_code, headers=common_headers)
             raw = rd.json()
             data = raw if isinstance(raw, dict) else {}
             cells = [c for c in (data.get("cells") or []) if isinstance(c, dict)]

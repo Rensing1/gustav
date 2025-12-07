@@ -33,6 +33,7 @@ def _run_node(script: str) -> dict:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     assert proc.returncode == 0, f"node script failed: {proc.stderr}"
     out = (proc.stdout or "").strip()
@@ -275,3 +276,59 @@ console.log(JSON.stringify(result));
     hx_vals = json.loads(data["hxVals"])
     assert hx_vals["updated_since"] == data["nextCursor"]
 
+
+def test_teaching_live_status_updates_on_htmx_error():
+    """Live status text should change when HTMX errors relate to the live delta route."""
+    script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const path = require('path');
+
+const src = fs.readFileSync(path.join('backend','web','static','js','gustav.js'), 'utf8');
+
+const sandbox = {
+  console,
+  setTimeout: (fn, ms) => 0,
+  clearTimeout: () => {},
+};
+
+sandbox.document = {
+  readyState: 'loading',
+  addEventListener: () => {},
+};
+sandbox.window = sandbox;
+sandbox.document.body = { addEventListener: () => {} };
+
+const statusEl = {
+  textContent: 'Letzte Aktualisierung: 12:00:00',
+  classList: { added: [], add(name) { this.added.push(name); } }
+};
+
+sandbox.document.getElementById = (id) => {
+  if (id === 'live-status') return statusEl;
+  return null;
+};
+
+vm.runInNewContext(src, sandbox);
+const gustav = sandbox.window.gustav;
+
+// Simulate an HTMX responseError event coming from the live delta route.
+const evt = {
+  detail: {
+    elt: { closest: (sel) => (sel === '#live-section' ? {} : null) },
+    pathInfo: { requestPath: '/teaching/courses/1/units/1/live/matrix/delta' }
+  }
+};
+
+gustav.updateLiveStatusForError(evt, 'Live-Ansicht: Verbindung unterbrochen.');
+
+const result = {
+  text: statusEl.textContent,
+  classes: statusEl.classList.added
+};
+
+console.log(JSON.stringify(result));
+    """
+    data = _run_node(script)
+    assert data["text"] == "Live-Ansicht: Verbindung unterbrochen."
+    assert "text-danger" in data["classes"]

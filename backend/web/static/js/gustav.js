@@ -9,6 +9,13 @@
  * - Keyboard shortcuts
  */
 
+// Teaching Live UI constants: shared IDs and custom event names used by
+// server-rendered HTML, client-side JS and tests. Keeping them in one place
+// makes refactors easier and avoids string mismatches.
+const LIVE_STATUS_ID = 'live-status';
+const LIVE_SECTION_ID = 'live-section';
+const LIVE_CURSOR_EVENT = 'liveCursorUpdated';
+
 class Gustav {
   constructor() {
     // Available themes
@@ -394,8 +401,8 @@ class Gustav {
    *   the cursor and update the visible status text.
    */
   initTeachingLivePolling() {
-    const statusEl = document.getElementById('live-status');
-    const section = document.getElementById('live-section');
+    const statusEl = document.getElementById(LIVE_STATUS_ID);
+    const section = document.getElementById(LIVE_SECTION_ID);
     if (!statusEl || !section) return;
 
     const cursor = statusEl.getAttribute('data-updated-since');
@@ -415,15 +422,15 @@ class Gustav {
     // Listen once for cursor updates; the event is fired via HX-Trigger header.
     if (!this._livePollingBound) {
       this._livePollingBound = true;
-      document.body.addEventListener('liveCursorUpdated', (evt) => {
+      document.body.addEventListener(LIVE_CURSOR_EVENT, (evt) => {
         const detail = evt.detail || {};
         const nextCursor = detail.cursor || detail.updated_since;
         if (!nextCursor) return;
 
         // Resolve current elements on each event to work with
         // HTMX-driven DOM replacements (navigation between units/courses).
-        const statusEl = document.getElementById('live-status');
-        const section = document.getElementById('live-section');
+        const statusEl = document.getElementById(LIVE_STATUS_ID);
+        const section = document.getElementById(LIVE_SECTION_ID);
         if (!statusEl || !section) return;
 
         // Update data-updated-since and human-readable timestamp.
@@ -469,14 +476,14 @@ class Gustav {
    *   #live-section or targets the /live/matrix/delta path.
    */
   updateLiveStatusForError(evt, message) {
-    const statusEl = document.getElementById('live-status');
+    const statusEl = document.getElementById(LIVE_STATUS_ID);
     if (!statusEl) return;
 
     const detail = (evt && evt.detail) || {};
 
     // Fast path: check the source element of the HTMX request.
     const elt = detail.elt;
-    if (elt && elt.closest && elt.closest('#live-section')) {
+    if (elt && elt.closest && elt.closest(`#${LIVE_SECTION_ID}`)) {
       statusEl.textContent = message;
       statusEl.classList.add('text-danger');
       return;
@@ -680,6 +687,9 @@ class Gustav {
     });
 
     const liveStatusErrorMessage = 'Live-Ansicht: Verbindung unterbrochen.';
+    // Note: Toast notifications remain English for now, while the
+    // teacher-facing Live status message is German. Once a proper
+    // i18n strategy is introduced, these strings will be aligned.
 
     document.body.addEventListener('htmx:sendError', (evt) => {
       this.showNotification('Network error. Please try again.', 'error');

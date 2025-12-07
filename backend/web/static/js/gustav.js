@@ -9,6 +9,13 @@
  * - Keyboard shortcuts
  */
 
+// Teaching Live UI constants: shared IDs and custom event names used by
+// server-rendered HTML, client-side JS and tests. Keeping them in one place
+// makes refactors easier and avoids string mismatches.
+const LIVE_STATUS_ID = 'live-status';
+const LIVE_SECTION_ID = 'live-section';
+const LIVE_CURSOR_EVENT = 'liveCursorUpdated';
+
 class Gustav {
   constructor() {
     // Available themes
@@ -48,6 +55,7 @@ class Gustav {
     this.initLearningTaskForms(); // Progressive enhancement for student task forms
     this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
     this.initFilePreviewZoom(); // Zoom toggle for inline file previews
+    this.initTeachingLivePolling(); // Auto-refresh for teaching live matrix
   }
 
   /**
@@ -384,6 +392,118 @@ class Gustav {
   }
 
   /**
+   * Initialise polling for the teacher Live matrix.
+   *
+   * Behaviour:
+   * - Reads the current cursor from #live-status[data-updated-since].
+   * - Writes it into hx-vals on #live-section so HTMX sends updated_since.
+   * - Listens for the custom HX-Trigger event "liveCursorUpdated" to advance
+   *   the cursor and update the visible status text.
+   */
+  initTeachingLivePolling() {
+    const statusEl = document.getElementById(LIVE_STATUS_ID);
+    const section = document.getElementById(LIVE_SECTION_ID);
+    if (!statusEl || !section) return;
+
+    const cursor = statusEl.getAttribute('data-updated-since');
+    if (!cursor) return;
+
+    // Normalise the initial label so it matches the format used after
+    // cursor updates, using the server-provided timestamp.
+    this.updateLiveStatusTimestamp(statusEl, cursor);
+
+    // Seed hx-vals so the first poll sends the initial cursor.
+    try {
+      section.setAttribute('hx-vals', JSON.stringify({ updated_since: cursor }));
+    } catch (err) {
+      console.warn('Failed to initialise live polling cursor', err);
+    }
+
+    // Listen once for cursor updates; the event is fired via HX-Trigger header.
+    if (!this._livePollingBound) {
+      this._livePollingBound = true;
+      document.body.addEventListener(LIVE_CURSOR_EVENT, (evt) => {
+        const detail = evt.detail || {};
+        const nextCursor = detail.cursor || detail.updated_since;
+        if (!nextCursor) return;
+
+        // Resolve current elements on each event to work with
+        // HTMX-driven DOM replacements (navigation between units/courses).
+        const statusEl = document.getElementById(LIVE_STATUS_ID);
+        const section = document.getElementById(LIVE_SECTION_ID);
+        if (!statusEl || !section) return;
+
+        // Update data-updated-since and human-readable timestamp.
+        this.updateLiveStatusTimestamp(statusEl, nextCursor);
+
+        // Advance hx-vals so the next poll starts from the latest cursor.
+        try {
+          section.setAttribute('hx-vals', JSON.stringify({ updated_since: nextCursor }));
+        } catch (err) {
+          console.warn('Failed to update live polling cursor', err);
+        }
+      });
+    }
+  }
+
+  /**
+   * Helper to update the visible Live status timestamp from a cursor.
+   */
+  updateLiveStatusTimestamp(statusEl, cursor) {
+    if (!statusEl || !cursor) return;
+    statusEl.setAttribute('data-updated-since', cursor);
+    try {
+      const d = new Date(cursor);
+      if (!Number.isNaN(d.getTime())) {
+        const timeLabel = d.toLocaleTimeString('de-DE', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        statusEl.textContent = `Letzte Aktualisierung: ${timeLabel}`;
+        // Clear error styling once we have a fresh, valid timestamp so the
+        // UI reflects that polling has recovered after a previous failure.
+        if (statusEl.classList && statusEl.classList.remove) {
+          statusEl.classList.remove('text-danger');
+        }
+      }
+    } catch (err) {
+      // Fallback: keep existing label when parsing fails.
+    }
+  }
+
+  /**
+   * Update the Live status bar text when an HTMX error relates to the
+   * Live matrix delta route.
+   *
+   * Behaviour:
+   * - Only touches #live-status when the failing request originates from
+   *   #live-section or targets the /live/matrix/delta path.
+   */
+  updateLiveStatusForError(evt, message) {
+    const statusEl = document.getElementById(LIVE_STATUS_ID);
+    if (!statusEl) return;
+
+    const detail = (evt && evt.detail) || {};
+
+    // Fast path: check the source element of the HTMX request.
+    const elt = detail.elt;
+    if (elt && elt.closest && elt.closest(`#${LIVE_SECTION_ID}`)) {
+      statusEl.textContent = message;
+      statusEl.classList.add('text-danger');
+      return;
+    }
+
+    // Fallback: inspect path information if available.
+    const pathInfo = detail.pathInfo || {};
+    const path = pathInfo.requestPath || pathInfo.path || '';
+    if (typeof path === 'string' && path.indexOf('/live/matrix/delta') !== -1) {
+      statusEl.textContent = message;
+      statusEl.classList.add('text-danger');
+    }
+  }
+
+  /**
    * Execute the client-side upload prepare flow for learning submissions.
    * 1) POST upload-intent → get storage_key + PUT URL
    * 2) PUT file to returned URL
@@ -544,6 +664,8 @@ class Gustav {
       this.restoreSidebarState();
       this.initSidebarAccessibility();
       this.initSidebarGestures();
+      this.initTeachingLivePolling();
+      this.initTeachingLiveTabs(evt.target || document);
     });
 
     // Ensure sidebar state restoration after OOB sidebar replacement
@@ -554,6 +676,8 @@ class Gustav {
         this.restoreSidebarState();
         this.initSidebarAccessibility();
         this.initSidebarGestures();
+        this.initTeachingLivePolling();
+        this.initTeachingLiveTabs(document);
       });
     });
 
@@ -563,19 +687,28 @@ class Gustav {
       this.restoreSidebarState();
       this.initSidebarAccessibility();
       this.initSidebarGestures();
+      this.initTeachingLivePolling();
+      this.initTeachingLiveTabs(document);
     });
+
+    const liveStatusErrorMessage = 'Live-Ansicht: Verbindung unterbrochen.';
+    // Note: Toast notifications remain English for now, while the
+    // teacher-facing Live status message is German. Once a proper
+    // i18n strategy is introduced, these strings will be aligned.
 
     document.body.addEventListener('htmx:sendError', (evt) => {
       this.showNotification('Network error. Please try again.', 'error');
+      this.updateLiveStatusForError(evt, liveStatusErrorMessage);
     });
 
     document.body.addEventListener('htmx:responseError', (evt) => {
       const status = evt.detail.xhr.status;
       const message = status === 404 ? 'Resource not found' :
                       status === 403 ? 'Access denied' :
-                      status === 500 ? 'Server error' :
-                      'Request failed';
+                       status === 500 ? 'Server error' :
+                       'Request failed';
       this.showNotification(message, 'error');
+      this.updateLiveStatusForError(evt, liveStatusErrorMessage);
     });
 
     // Custom HTMX events from server
@@ -590,6 +723,54 @@ class Gustav {
   }
 
   /**
+   * Teaching Live detail tabs (Text / Datei / Auswertung / Rückmeldung).
+   *
+   * Behaviour:
+   * - Binds click handlers to buttons with data-view-tab inside the given root.
+   * - Toggles the "active" class and aria-selected on tab buttons.
+   * - Shows the matching panel (data-panel) and hides the others via hidden.
+   *
+   * This function is CSP-safe because it does not rely on inline scripts.
+   */
+  initTeachingLiveTabs(root) {
+    const scope = root && root.querySelector ? root : document;
+    const container = scope.querySelector('#live-detail');
+    if (!container) return;
+    if (container._tabsDelegationReady) return;
+    container._tabsDelegationReady = true;
+
+    container.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!target || !target.closest) return;
+
+      const btn = target.closest('[data-view-tab]');
+      if (!btn || !container.contains(btn)) return;
+
+      const card = btn.closest('.card');
+      if (!card) return;
+
+      const buttons = Array.from(card.querySelectorAll('[data-view-tab]'));
+      const panels = Array.from(card.querySelectorAll('[data-panel]'));
+      if (!buttons.length || !panels.length) return;
+
+      const targetKey = btn.getAttribute('data-view-tab');
+      if (!targetKey) return;
+
+      buttons.forEach((b) => {
+        const isActive = b === btn;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+
+      panels.forEach((panel) => {
+        const panelKey = panel.getAttribute('data-panel');
+        const show = panelKey === targetKey;
+        panel.hidden = !show;
+      });
+    });
+  }
+
+  /**
    * Show notification banner
    */
   showNotification(message, type = 'info', duration = 3000) {
@@ -600,14 +781,6 @@ class Gustav {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification alert alert-${type}`;
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 9999;
-      min-width: 250px;
-      animation: slideIn 0.3s ease;
-    `;
     notification.textContent = message;
 
     // Add to page
@@ -615,7 +788,7 @@ class Gustav {
 
     // Auto-remove after duration
     setTimeout(() => {
-      notification.style.animation = 'slideOut 0.3s ease';
+      notification.classList.add('notification--exit');
       setTimeout(() => notification.remove(), 300);
     }, duration);
   }
@@ -1076,41 +1249,6 @@ class Gustav {
       timeout = setTimeout(later, wait);
     };
   }
-}
-
-// CSS for animations (injected once)
-if (!document.querySelector('#gustav-animations')) {
-  const style = document.createElement('style');
-  style.id = 'gustav-animations';
-  style.textContent = `
-    @keyframes slideIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    @keyframes slideOut {
-      from {
-        transform: translateX(0);
-        opacity: 1;
-      }
-      to {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
 }
 
 // Initialize GUSTAV

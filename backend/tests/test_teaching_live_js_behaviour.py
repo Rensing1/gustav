@@ -332,3 +332,72 @@ console.log(JSON.stringify(result));
     data = _run_node(script)
     assert data["text"] == "Live-Ansicht: Verbindung unterbrochen."
     assert "text-danger" in data["classes"]
+
+
+def test_teaching_live_status_clears_error_on_success():
+    """Live status should clear error styling when a valid cursor update arrives."""
+    script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const path = require('path');
+
+const src = fs.readFileSync(path.join('backend','web','static','js','gustav.js'), 'utf8');
+
+const sandbox = {
+  console,
+  setTimeout: (fn, ms) => 0,
+  clearTimeout: () => {},
+};
+
+sandbox.document = {
+  readyState: 'loading',
+  addEventListener: () => {},
+};
+sandbox.window = sandbox;
+sandbox.document.body = { addEventListener: () => {} };
+
+const statusEl = {
+  attrs: { 'data-updated-since': '2025-01-02T03:04:05.000000+00:00' },
+  textContent: 'Live-Ansicht: Verbindung unterbrochen.',
+  classList: {
+    classes: new Set(['text-danger']),
+    add(name) { this.classes.add(name); },
+    remove(name) { this.classes.delete(name); },
+    has(name) { return this.classes.has(name); }
+  },
+  setAttribute(name, value) { this.attrs[name] = value; },
+  getAttribute(name) { return this.attrs[name]; }
+};
+
+const sectionEl = {
+  attrs: {},
+  setAttribute(name, value) { this.attrs[name] = value; },
+  getAttribute(name) { return this.attrs[name]; }
+};
+
+sandbox.document.getElementById = (id) => {
+  if (id === 'live-status') return statusEl;
+  if (id === 'live-section') return sectionEl;
+  return null;
+};
+
+vm.runInNewContext(src, sandbox);
+const gustav = sandbox.window.gustav;
+
+// Initial polling binds the event listener and normalises the label.
+gustav.initTeachingLivePolling();
+
+// Simulate a successful cursor update after an earlier error.
+const evt = { detail: { cursor: '2025-01-02T03:05:06.000000+00:00' } };
+gustav.updateLiveStatusTimestamp(statusEl, evt.detail.cursor);
+
+const result = {
+  text: statusEl.textContent,
+  hasDanger: statusEl.classList.has('text-danger')
+};
+
+console.log(JSON.stringify(result));
+    """
+    data = _run_node(script)
+    assert data["text"].startswith("Letzte Aktualisierung:")
+    assert data["hasDanger"] is False

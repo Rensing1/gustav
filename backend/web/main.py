@@ -51,6 +51,45 @@ if __name__ == "main":
 elif __name__ == "backend.web.main":
     _sys.modules["main"] = _sys.modules[__name__]
 
+
+def _normalize_changed_at_to_utc(changed_raw: str) -> datetime | None:
+    """Parse a `changed_at` ISO timestamp and normalise it to UTC.
+
+    This helper is intentionally defensive:
+    - Accepts timestamps with or without trailing "Z".
+    - Ensures a tz-aware datetime (assumes UTC when missing).
+    - Returns None when parsing fails, so callers can ignore bad values.
+    """
+    try:
+        normalized = changed_raw.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+    except (TypeError, ValueError):  # pragma: no cover - errors treated as "no cursor"
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _load_poll_interval_from_env() -> int:
+    """Load and clamp the Teaching Live polling interval from environment.
+
+    Behavior:
+        - Reads GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS (seconds).
+        - Falls back to 3 when unset or non-integer.
+        - Clamps the value to a sane range [1, 60] to avoid unusable HTMX
+          triggers (0s / negative) and extreme intervals that hide updates.
+    """
+    raw = os.getenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", "3") or "3"
+    try:
+        value = int(raw)
+    except Exception:  # pragma: no cover - guarded by dedicated tests
+        return 3
+    if value < 1:
+        return 1
+    if value > 60:
+        return 60
+    return value
+
 def _should_load_dotenv() -> bool:
     """Decide if we should load a local .env file.
 
@@ -118,6 +157,11 @@ from routes.teaching import teaching_router
 from routes.users import users_router
 from routes.operations import operations_router
 from routes.security import _is_same_origin
+
+# Polling configuration for Teaching Live UI (seconds).
+# Derived from environment so ops can tune the interval without code
+# changes. Tests may override this constant directly on the main module.
+TEACHING_LIVE_POLL_INTERVAL_SECONDS = _load_poll_interval_from_env()
 
 # --- Optional Storage Adapter Wiring (Supabase) -------------------------------
 try:
@@ -3111,12 +3155,30 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
     # Render sections release panel
     sections_panel_html = await _render_sections_release_panel(request, course_id, unit_id, module_id)
 
+    # Initial cursor for live polling: use current server time in UTC.
+    # The client will send this value as `updated_since` and advance it using
+    # the HX-Trigger emitted by the delta fragment.
+    cursor_iso = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    status_html = (
+        f'<div id="live-status" class="text-muted" data-updated-since="{Component.escape(cursor_iso)}">'
+        "Letzte Aktualisierung: jetzt"
+        "</div>"
+    )
+    delta_path = f"/teaching/courses/{course_id}/units/{unit_id}/live/matrix/delta"
+
     content = (
         '<div class="container">'
         f'<h1>Unterricht – Live</h1>'
         f'<p class="text-muted">{Component.escape(course_title)} · {Component.escape(unit_title)}</p>'
         f'{sections_panel_html}'
-        f'<section class="card" id="live-section"><div id="live-status" class="text-muted">Letzte Aktualisierung: jetzt</div>{matrix_html}</section>'
+        # Even when there are no tasks yet, we keep a single live-section
+        # container and HTMX polling hook. This keeps the implementation
+        # simple while the delta endpoint just returns "no changes".
+        f'<section class="card" id="live-section" '
+        f'hx-get="{Component.escape(delta_path)}" '
+        f'hx-trigger="every {TEACHING_LIVE_POLL_INTERVAL_SECONDS}s" '
+        'hx-swap="none">'
+        f'{status_html}{matrix_html}</section>'
         '<div id="live-detail"></div>'
         '</div>'
     )
@@ -3536,18 +3598,7 @@ async def teaching_unit_live_detail_partial(
             elif key == "analysis":
                 panels_html.append(_render_analysis_panel(active=key == active_key))
         panels_html.append("</div>")
-        tabs_script = (
-            "<script>"
-            "(function(){const card=document.currentScript.closest('.card');"
-            "if(!card)return;const buttons=card.querySelectorAll('[data-view-tab]');"
-            "const panels=card.querySelectorAll('[data-panel]');"
-            "buttons.forEach(btn=>btn.addEventListener('click',()=>{const tgt=btn.getAttribute('data-view-tab');"
-            "buttons.forEach(b=>{const on=b===btn;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});"
-            "panels.forEach(p=>{const on=p.getAttribute('data-panel')===tgt;p.hidden=!on;});"
-            "}));})();"
-            "</script>"
-        )
-        content = "".join(tabs_html + panels_html) + tabs_script
+        content = "".join(tabs_html + panels_html)
     else:
         content = _render_text_panel(active=True)
 
@@ -3563,13 +3614,32 @@ async def teaching_unit_live_detail_partial(
 
 @app.get("/teaching/courses/{course_id}/units/{unit_id}/live/matrix/delta", response_class=HTMLResponse)
 async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: str, unit_id: str, updated_since: str):
-    """SSR fragment: out-of-band <td> updates for changed cells since a timestamp.
+    """SSR delta fragment for the teacher Live matrix.
+
+    Why:
+        The browser renders the initial matrix as a full SSR table and then
+        applies periodic polling via HTMX. Each delta response:
+        - calls the internal JSON delta endpoint to fetch changed cells,
+        - renders only the affected <td> elements with hx-swap-oob="true",
+        - emits an HX-Trigger header with a monotonically increasing
+          `liveCursorUpdated.cursor` ISO timestamp when at least one cell
+          changed.
 
     Behavior:
-        - Calls the JSON `delta` endpoint with `updated_since`.
-        - When no changes: returns 204 No Content.
-        - When there are changes: returns a concatenation of
-          `<td id="cell-{sub}-{task}" hx-swap-oob="true">…</td>` snippets.
+        - If the caller is not a teacher in the course, respond with 303
+          redirect to the dashboard (same guard as the main Live view).
+        - If `updated_since` is missing/empty, respond with 400 (client error).
+        - If the JSON delta endpoint returns 204 or no valid `cells`, respond
+          with 204 to indicate "no changes".
+        - If there are changes, return 200 with:
+            * HTML body containing only OOB <td> updates, and
+            * HX-Trigger header so the client can advance its polling cursor.
+
+    Security and caching:
+        - Delegates Row-Level Security and authorization to the internal
+          Teaching API; this route only forwards the caller's session cookie.
+        - All responses are private and non-cacheable:
+          `Cache-Control: private, no-store`, `Vary: Origin`.
     """
     user = getattr(request.state, "user", None)
     if not user:
@@ -3581,8 +3651,12 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
 
     # Fast-path validation of timestamp; delegate canonical validation to API
     if not isinstance(updated_since, str) or not updated_since:
-        return Response(status_code=400)
+        return Response(status_code=400, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
+    # All responses from this point on are private and must not be cached by
+    # shared proxies. The client-side delta polling is the only mechanism that
+    # should ever refresh this state.
+    common_headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
     try:
         import httpx
         from httpx import ASGITransport
@@ -3594,19 +3668,29 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
                 f"/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta",
                 params={"updated_since": updated_since, "limit": 200, "offset": 0},
             )
-            if rd.status_code == 204:
-                return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
-            if rd.status_code != 200:
-                return Response(status_code=rd.status_code)
-            data = rd.json() if isinstance(rd.json(), dict) else {}
-            cells = [c for c in (data.get("cells") or []) if isinstance(c, dict)]
-    except Exception:
-        cells = []
+    except httpx.RequestError as exc:  # type: ignore[name-defined]
+        logger.warning("Teaching Live delta upstream request failed", exc_info=exc)
+        return Response(status_code=502, headers=common_headers)
+
+    if rd.status_code == 204:
+        return Response(status_code=204, headers=common_headers)
+    if rd.status_code != 200:
+        return Response(status_code=rd.status_code, headers=common_headers)
+
+    try:
+        raw = rd.json()
+    except ValueError as exc:
+        logger.warning("Teaching Live delta JSON decode failed", exc_info=exc)
+        return Response(status_code=502, headers=common_headers)
+
+    data = raw if isinstance(raw, dict) else {}
+    cells = [c for c in (data.get("cells") or []) if isinstance(c, dict)]
 
     if not cells:
         return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
     parts: list[str] = []
+    max_changed_dt: datetime | None = None
     for c in cells:
         sub = Component.escape(str(c.get("student_sub") or ""))
         task_id = Component.escape(str(c.get("task_id") or ""))
@@ -3614,8 +3698,28 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
         content = "✅" if has else "—"
         cell_id = f"cell-{sub}-{task_id}"
         parts.append(f'<td id="{cell_id}" hx-swap-oob="true">{content}</td>')
+
+        # Track the latest changed_at timestamp for cursor advancement.
+        changed_raw = c.get("changed_at")
+        if isinstance(changed_raw, str):
+            dt = _normalize_changed_at_to_utc(changed_raw)
+            if dt is not None and (max_changed_dt is None or dt > max_changed_dt):
+                max_changed_dt = dt
+
     html = "".join(parts)
-    return HTMLResponse(content=html, status_code=200, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+    headers: dict[str, str] = {"Cache-Control": "private, no-store", "Vary": "Origin"}
+
+    # Derive a cursor for the client:
+    # - Prefer the latest changed_at value from the delta payload.
+    # - If none are present or parseable, fall back to "now" in UTC so the
+    #   client can still advance its polling window and avoid re-sending the
+    #   same OOB updates on the next request.
+    import json as _json
+
+    cursor_dt = max_changed_dt or datetime.now(timezone.utc)
+    cursor_iso = cursor_dt.isoformat(timespec="microseconds")
+    headers["HX-Trigger"] = _json.dumps({"liveCursorUpdated": {"cursor": cursor_iso}})
+    return HTMLResponse(content=html, status_code=200, headers=headers)
 
 @app.get("/courses", response_class=HTMLResponse)
 async def courses_index(request: Request):

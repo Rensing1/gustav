@@ -1476,6 +1476,20 @@ form.task-submit-form[data-mode="upload"] .fields-upload { display: block; }
   border-color: var(--color-primary);
 }
 
+/* Floating notifications (JS-driven) */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  min-width: 250px;
+  animation: slideIn 0.3s ease;
+}
+
+.notification--exit {
+  animation: slideOut 0.3s ease;
+}
+
 /* Inline note box used inside cards */
 .tip-box {
   background-color: var(--color-bg-hover);
@@ -1583,6 +1597,28 @@ form.task-submit-form[data-mode="upload"] .fields-upload { display: block; }
 .spinner--muted {
   border-color: var(--color-border);
   border-top-color: var(--color-text-muted);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 }
 
 @keyframes spin {

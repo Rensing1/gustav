@@ -339,3 +339,5 @@ async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
     # Kein doppelter Accordion-Toggle wie in der Schüleransicht
     assert "Auswertung anzeigen" not in html
     assert "analysis-feedback__details" not in html
+    # CSP-sicher: das Detail-Fragment selbst enthält kein Inline-Skript
+    assert "<script" not in html

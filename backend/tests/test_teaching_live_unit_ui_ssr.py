@@ -465,6 +465,60 @@ async def test_delta_fragment_error_responses_set_private_cache_headers(monkeypa
 
 
 @pytest.mark.anyio
+async def test_delta_fragment_propagates_upstream_http_error_with_private_cache(monkeypatch):
+    """Delta fragment should propagate non-200 upstream HTTP status with private cache headers."""
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-upstream-http-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    # Stub internal API client to return a 503 error from the JSON delta endpoint.
+    def _stub_internal_api_client():
+        class _StubResponse:
+            def __init__(self) -> None:
+                self.status_code = 503
+
+            def json(self) -> dict:
+                return {}
+
+        class _StubClient:
+            def __init__(self) -> None:
+                class _Cookies:
+                    def set(self, _name: str, _value: str) -> None:
+                        return None
+
+                self.cookies = _Cookies()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url: str, params: dict | None = None):
+                assert "/submissions/delta" in url
+                return _StubResponse()
+
+        return _StubClient()
+
+    monkeypatch.setattr(main, "_internal_api_client", _stub_internal_api_client)
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+        r_delta = await c_owner.get(
+            "/teaching/courses/dummy/units/dummy/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 503
+        cache = r_delta.headers.get("Cache-Control", "")
+        vary = r_delta.headers.get("Vary", "")
+        assert "no-store" in cache and "private" in cache
+        assert "Origin" in vary
+
+
+@pytest.mark.anyio
 async def test_delta_fragment_emits_cursor_even_when_changed_at_missing(monkeypatch):
     """Delta fragment should still emit a cursor when changed_at is missing.
 
@@ -537,3 +591,48 @@ async def test_delta_fragment_emits_cursor_even_when_changed_at_missing(monkeypa
         assert "liveCursorUpdated" in data
         cursor = data["liveCursorUpdated"].get("cursor")
         assert isinstance(cursor, str) and cursor
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_returns_502_on_upstream_request_error(monkeypatch):
+    """Delta fragment should return 502 when the internal JSON delta endpoint is unreachable."""
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-upstream-error-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    # Simulate an httpx.RequestError being raised inside the internal API client.
+    import httpx
+
+    class _ErroringClient:
+        def __init__(self) -> None:
+            class _Cookies:
+                def set(self, _name: str, _value: str) -> None:
+                    return None
+
+            self.cookies = _Cookies()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, params: dict | None = None):
+            raise httpx.RequestError("boom", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(main, "_internal_api_client", lambda: _ErroringClient())
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+        r_delta = await c_owner.get(
+            "/teaching/courses/dummy/units/dummy/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 502
+        cache = r_delta.headers.get("Cache-Control", "")
+        vary = r_delta.headers.get("Vary", "")
+        assert "no-store" in cache and "private" in cache
+        assert "Origin" in vary

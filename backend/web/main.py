@@ -63,7 +63,7 @@ def _normalize_changed_at_to_utc(changed_raw: str) -> datetime | None:
     try:
         normalized = changed_raw.replace("Z", "+00:00")
         dt = datetime.fromisoformat(normalized)
-    except Exception:  # pragma: no cover - errors treated as "no cursor"
+    except (TypeError, ValueError):  # pragma: no cover - errors treated as "no cursor"
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -3653,6 +3653,10 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
     if not isinstance(updated_since, str) or not updated_since:
         return Response(status_code=400, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
+    # All responses from this point on are private and must not be cached by
+    # shared proxies. The client-side delta polling is the only mechanism that
+    # should ever refresh this state.
+    common_headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
     try:
         import httpx
         from httpx import ASGITransport
@@ -3664,16 +3668,23 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
                 f"/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta",
                 params={"updated_since": updated_since, "limit": 200, "offset": 0},
             )
-            common_headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
-            if rd.status_code == 204:
-                return Response(status_code=204, headers=common_headers)
-            if rd.status_code != 200:
-                return Response(status_code=rd.status_code, headers=common_headers)
-            raw = rd.json()
-            data = raw if isinstance(raw, dict) else {}
-            cells = [c for c in (data.get("cells") or []) if isinstance(c, dict)]
-    except Exception:
-        cells = []
+    except httpx.RequestError as exc:  # type: ignore[name-defined]
+        logger.warning("Teaching Live delta upstream request failed", exc_info=exc)
+        return Response(status_code=502, headers=common_headers)
+
+    if rd.status_code == 204:
+        return Response(status_code=204, headers=common_headers)
+    if rd.status_code != 200:
+        return Response(status_code=rd.status_code, headers=common_headers)
+
+    try:
+        raw = rd.json()
+    except ValueError as exc:
+        logger.warning("Teaching Live delta JSON decode failed", exc_info=exc)
+        return Response(status_code=502, headers=common_headers)
+
+    data = raw if isinstance(raw, dict) else {}
+    cells = [c for c in (data.get("cells") or []) if isinstance(c, dict)]
 
     if not cells:
         return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})

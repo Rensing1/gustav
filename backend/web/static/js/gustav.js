@@ -461,6 +461,11 @@ class Gustav {
           second: '2-digit'
         });
         statusEl.textContent = `Letzte Aktualisierung: ${timeLabel}`;
+        // Clear error styling once we have a fresh, valid timestamp so the
+        // UI reflects that polling has recovered after a previous failure.
+        if (statusEl.classList && statusEl.classList.remove) {
+          statusEl.classList.remove('text-danger');
+        }
       }
     } catch (err) {
       // Fallback: keep existing label when parsing fails.

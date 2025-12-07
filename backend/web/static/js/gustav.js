@@ -679,9 +679,11 @@ class Gustav {
       this.initTeachingLiveTabs(document);
     });
 
+    const liveStatusErrorMessage = 'Live-Ansicht: Verbindung unterbrochen.';
+
     document.body.addEventListener('htmx:sendError', (evt) => {
       this.showNotification('Network error. Please try again.', 'error');
-      this.updateLiveStatusForError(evt, 'Live-Ansicht: Verbindung unterbrochen.');
+      this.updateLiveStatusForError(evt, liveStatusErrorMessage);
     });
 
     document.body.addEventListener('htmx:responseError', (evt) => {
@@ -691,7 +693,7 @@ class Gustav {
                        status === 500 ? 'Server error' :
                        'Request failed';
       this.showNotification(message, 'error');
-      this.updateLiveStatusForError(evt, 'Live-Ansicht: Verbindung unterbrochen.');
+      this.updateLiveStatusForError(evt, liveStatusErrorMessage);
     });
 
     // Custom HTMX events from server

@@ -51,6 +51,24 @@ if __name__ == "main":
 elif __name__ == "backend.web.main":
     _sys.modules["main"] = _sys.modules[__name__]
 
+
+def _normalize_changed_at_to_utc(changed_raw: str) -> datetime | None:
+    """Parse a `changed_at` ISO timestamp and normalise it to UTC.
+
+    This helper is intentionally defensive:
+    - Accepts timestamps with or without trailing "Z".
+    - Ensures a tz-aware datetime (assumes UTC when missing).
+    - Returns None when parsing fails, so callers can ignore bad values.
+    """
+    try:
+        normalized = changed_raw.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+    except Exception:  # pragma: no cover - errors treated as "no cursor"
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
 def _should_load_dotenv() -> bool:
     """Decide if we should load a local .env file.
 
@@ -3572,13 +3590,32 @@ async def teaching_unit_live_detail_partial(
 
 @app.get("/teaching/courses/{course_id}/units/{unit_id}/live/matrix/delta", response_class=HTMLResponse)
 async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: str, unit_id: str, updated_since: str):
-    """SSR fragment: out-of-band <td> updates for changed cells since a timestamp.
+    """SSR delta fragment for the teacher Live matrix.
+
+    Why:
+        The browser renders the initial matrix as a full SSR table and then
+        applies periodic polling via HTMX. Each delta response:
+        - calls the internal JSON delta endpoint to fetch changed cells,
+        - renders only the affected <td> elements with hx-swap-oob="true",
+        - emits an HX-Trigger header with a monotonically increasing
+          `liveCursorUpdated.cursor` ISO timestamp when at least one cell
+          changed.
 
     Behavior:
-        - Calls the JSON `delta` endpoint with `updated_since`.
-        - When no changes: returns 204 No Content.
-        - When there are changes: returns a concatenation of
-          `<td id="cell-{sub}-{task}" hx-swap-oob="true">…</td>` snippets.
+        - If the caller is not a teacher in the course, respond with 303
+          redirect to the dashboard (same guard as the main Live view).
+        - If `updated_since` is missing/empty, respond with 400 (client error).
+        - If the JSON delta endpoint returns 204 or no valid `cells`, respond
+          with 204 to indicate "no changes".
+        - If there are changes, return 200 with:
+            * HTML body containing only OOB <td> updates, and
+            * HX-Trigger header so the client can advance its polling cursor.
+
+    Security and caching:
+        - Delegates Row-Level Security and authorization to the internal
+          Teaching API; this route only forwards the caller's session cookie.
+        - All responses are private and non-cacheable:
+          `Cache-Control: private, no-store`, `Vary: Origin`.
     """
     user = getattr(request.state, "user", None)
     if not user:
@@ -3629,17 +3666,9 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
         # Track the latest changed_at timestamp for cursor advancement.
         changed_raw = c.get("changed_at")
         if isinstance(changed_raw, str):
-            try:
-                normalized = changed_raw.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(normalized)
-            except Exception:
-                dt = None
-            if dt is not None:
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                dt = dt.astimezone(timezone.utc)
-                if max_changed_dt is None or dt > max_changed_dt:
-                    max_changed_dt = dt
+            dt = _normalize_changed_at_to_utc(changed_raw)
+            if dt is not None and (max_changed_dt is None or dt > max_changed_dt):
+                max_changed_dt = dt
 
     html = "".join(parts)
     headers: dict[str, str] = {"Cache-Control": "private, no-store", "Vary": "Origin"}

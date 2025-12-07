@@ -69,6 +69,27 @@ def _normalize_changed_at_to_utc(changed_raw: str) -> datetime | None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
 
+
+def _load_poll_interval_from_env() -> int:
+    """Load and clamp the Teaching Live polling interval from environment.
+
+    Behavior:
+        - Reads GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS (seconds).
+        - Falls back to 3 when unset or non-integer.
+        - Clamps the value to a sane range [1, 60] to avoid unusable HTMX
+          triggers (0s / negative) and extreme intervals that hide updates.
+    """
+    raw = os.getenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", "3") or "3"
+    try:
+        value = int(raw)
+    except Exception:  # pragma: no cover - guarded by dedicated tests
+        return 3
+    if value < 1:
+        return 1
+    if value > 60:
+        return 60
+    return value
+
 def _should_load_dotenv() -> bool:
     """Decide if we should load a local .env file.
 
@@ -140,11 +161,7 @@ from routes.security import _is_same_origin
 # Polling configuration for Teaching Live UI (seconds).
 # Derived from environment so ops can tune the interval without code
 # changes. Tests may override this constant directly on the main module.
-_poll_raw = os.getenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", "3") or "3"
-try:
-    TEACHING_LIVE_POLL_INTERVAL_SECONDS = int(_poll_raw)
-except Exception:  # pragma: no cover - guarded by separate tests
-    TEACHING_LIVE_POLL_INTERVAL_SECONDS = 3
+TEACHING_LIVE_POLL_INTERVAL_SECONDS = _load_poll_interval_from_env()
 
 # --- Optional Storage Adapter Wiring (Supabase) -------------------------------
 try:
@@ -3680,11 +3697,17 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
 
     html = "".join(parts)
     headers: dict[str, str] = {"Cache-Control": "private, no-store", "Vary": "Origin"}
-    if max_changed_dt is not None:
-        import json as _json
 
-        cursor_iso = max_changed_dt.isoformat(timespec="microseconds")
-        headers["HX-Trigger"] = _json.dumps({"liveCursorUpdated": {"cursor": cursor_iso}})
+    # Derive a cursor for the client:
+    # - Prefer the latest changed_at value from the delta payload.
+    # - If none are present or parseable, fall back to "now" in UTC so the
+    #   client can still advance its polling window and avoid re-sending the
+    #   same OOB updates on the next request.
+    import json as _json
+
+    cursor_dt = max_changed_dt or datetime.now(timezone.utc)
+    cursor_iso = cursor_dt.isoformat(timespec="microseconds")
+    headers["HX-Trigger"] = _json.dumps({"liveCursorUpdated": {"cursor": cursor_iso}})
     return HTMLResponse(content=html, status_code=200, headers=headers)
 
 @app.get("/courses", response_class=HTMLResponse)

@@ -201,6 +201,46 @@ async def test_live_page_respects_poll_interval_constant():
             main.TEACHING_LIVE_POLL_INTERVAL_SECONDS = original  # type: ignore[attr-defined]
 
 
+def test_poll_interval_env_config_clamps_invalid_values(monkeypatch):
+    """Polling interval config should clamp invalid env values to a safe default.
+
+    Why:
+        Ops may accidentally set GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS to 0,
+        a negative number or a non-integer string. The web adapter should handle
+        this defensively so the Live polling hook never renders an unusable
+        hx-trigger interval.
+    """
+    # Import the already-loaded main module; in the test environment this
+    # corresponds to backend.web.main thanks to the sys.modules aliasing.
+    import main as main_mod  # type: ignore
+
+    # Helper to evaluate the helper function with a specific env value.
+    def _with(value: str | None) -> int:
+        if value is None:
+            monkeypatch.delenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", raising=False)
+        else:
+            monkeypatch.setenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", value)
+        return int(main_mod._load_poll_interval_from_env())
+
+    # Default when env is unset → 3 seconds.
+    default_val = _with(None)
+    assert default_val == 3
+
+    # Non-integer value → fall back to default (3s).
+    non_int_val = _with("not-an-int")
+    assert non_int_val == 3
+
+    # Zero and negative values should be clamped to at least 1s.
+    zero_val = _with("0")
+    assert zero_val == 1
+    negative_val = _with("-5")
+    assert negative_val == 1
+
+    # Excessively large values should be capped to a sensible upper bound (e.g. 60s).
+    large_val = _with("600")
+    assert large_val == 60
+
+
 @pytest.mark.anyio
 async def test_matrix_fragment_renders_initial_summary_and_cell_ids():
     _require_db_or_skip()
@@ -422,3 +462,78 @@ async def test_delta_fragment_error_responses_set_private_cache_headers(monkeypa
         vary = r_delta.headers.get("Vary", "")
         assert "no-store" in cache and "private" in cache
         assert "Origin" in vary
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_emits_cursor_even_when_changed_at_missing(monkeypatch):
+    """Delta fragment should still emit a cursor when changed_at is missing.
+
+    Why:
+        In case the JSON delta endpoint returns cells without a changed_at
+        field (or with malformed timestamps), the SSR route must still provide
+        a monotonically increasing cursor via HX-Trigger so the client can
+        advance its polling window and avoid repeating the same OOB updates.
+    """
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-missing-ts-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    # Monkeypatch the internal API client used by the delta fragment so we can
+    # control the JSON payload without going through the full Teaching repo.
+    def _stub_internal_api_client():
+        class _StubResponse:
+            def __init__(self) -> None:
+                self.status_code = 200
+
+            def json(self) -> dict:
+                # Single cell without a changed_at field; this is the case we
+                # want the SSR route to handle gracefully.
+                return {
+                    "cells": [
+                        {"student_sub": "s1", "task_id": "t1", "has_submission": True},
+                        ]
+                    }
+
+        class _StubClient:
+            def __init__(self) -> None:
+                class _Cookies:
+                    def set(self, _name: str, _value: str) -> None:
+                        # No-op: the stubbed client does not persist cookies,
+                        # but the interface must match httpx.AsyncClient.
+                        return None
+
+                self.cookies = _Cookies()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url: str, params: dict | None = None):
+                assert "/submissions/delta" in url
+                return _StubResponse()
+
+        return _StubClient()
+
+    monkeypatch.setattr(main, "_internal_api_client", _stub_internal_api_client)
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+        r_delta = await c_owner.get(
+            "/teaching/courses/dummy/units/dummy/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 200
+        trigger = r_delta.headers.get("HX-Trigger")
+        assert trigger, "expected HX-Trigger header even when changed_at is missing"
+
+        import json as _json
+
+        data = _json.loads(trigger)
+        assert "liveCursorUpdated" in data
+        cursor = data["liveCursorUpdated"].get("cursor")
+        assert isinstance(cursor, str) and cursor

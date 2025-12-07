@@ -29,3 +29,7 @@ Vor Inbetriebnahme validieren, dass alle Abhängigkeiten erreichbar und korrekt 
 ## Tools
 - `scripts/preflight.sh` für automatisierte Aggregation der Checks.
 
+## CI-spezifische Hinweise
+- CI-Läufer stellen eine aktuelle Node.js-Version bereit, damit die
+  JS-Behaviour-Tests für die Teaching-Live-UI (`backend/web/static/js/gustav.js`)
+  nicht dauerhaft übersprungen werden (`pytest`-Skip bei fehlendem `node`).

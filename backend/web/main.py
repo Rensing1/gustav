@@ -119,6 +119,11 @@ from routes.users import users_router
 from routes.operations import operations_router
 from routes.security import _is_same_origin
 
+# Polling configuration for Teaching Live UI (seconds).
+# Derived from environment so ops can tune the interval without code
+# changes. Tests may override this constant directly on the main module.
+TEACHING_LIVE_POLL_INTERVAL_SECONDS = int(os.getenv("GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS", "3") or "3")
+
 # --- Optional Storage Adapter Wiring (Supabase) -------------------------------
 try:
     from backend.web.storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
@@ -3129,7 +3134,7 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
         f'{sections_panel_html}'
         f'<section class="card" id="live-section" '
         f'hx-get="{Component.escape(delta_path)}" '
-        'hx-trigger="every 3s" '
+        f'hx-trigger="every {TEACHING_LIVE_POLL_INTERVAL_SECONDS}s" '
         'hx-swap="none">'
         f'{status_html}{matrix_html}</section>'
         '<div id="live-detail"></div>'
@@ -3602,7 +3607,8 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
                 return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
             if rd.status_code != 200:
                 return Response(status_code=rd.status_code)
-            data = rd.json() if isinstance(rd.json(), dict) else {}
+            raw = rd.json()
+            data = raw if isinstance(raw, dict) else {}
             cells = [c for c in (data.get("cells") or []) if isinstance(c, dict)]
     except Exception:
         cells = []

@@ -505,7 +505,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) 
         '</label>'
         '</fieldset>'
         '<div class="task-form-fields fields-text">'
-        '<label>Antwort<textarea class="form-input" name="text_body" maxlength="10000"></textarea></label>'
+        '<label>Antwort<textarea class="form-input" name="text_body" maxlength="65536"></textarea></label>'
         '</div>'
         '<div class="task-form-fields fields-upload" hidden>'
         '<label>Datei auswählen '

@@ -1007,9 +1007,12 @@ components:
           enum: [text, image, pdf, file]
         text_body:
           type: string
+          maxLength: 65536
           description: |
             Best-effort extracted text, even for file/image/pdf submissions once
-            processing has completed; may be truncated to protect bandwidth.
+            processing has completed. The content matches the learner-facing
+            text_body representation and is only shortened to the global
+            text_body limit defined by the Learning API (currently 64k characters, i.e. 65,536).
           nullable: true
         files:
           type: array
@@ -1968,7 +1971,7 @@ paths:
                     text_body:
                       type: string
                       minLength: 1
-                      maxLength: 10000
+                      maxLength: 65536
                 - type: object
                   required: [kind, storage_key, mime_type, size_bytes, sha256]
                   properties:

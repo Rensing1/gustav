@@ -619,7 +619,8 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
             # Harmonize with API contract: return generic invalid_input
             raise ValueError("invalid_input")
         # Optional guardrail: prevent oversized payloads from overloading DB
-        if len(text_body) > 10_000:
+        # Global limit: allow up to 64k characters for text submissions.
+        if len(text_body) > 65_536:
             raise ValueError("invalid_input")
         return kind, {"text_body": text_body.strip()}
     elif kind == "image":

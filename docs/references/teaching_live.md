@@ -60,7 +60,7 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
   - Tabs für „Text“ (Auszug aus `text_body`) und bei Datei-Abgaben zusätzlich „Datei“ mit Inline-Vorschau.
   - Wenn Analyse/Feedback vorliegen, erscheinen zusätzliche Tabs „Auswertung“ (Kriterienkarten aus `analysis_json`) und „Rückmeldung“ (Markdown aus `feedback_md`), in dieser Reihenfolge.
 - Semantik:
-  - `text_body`: Best‑Effort‑Textrepräsentation der Abgabe, unabhängig vom `kind` (Text/PDF/Bild/Datei). Aus Gründen der Bandbreite kann der Text serverseitig gekürzt werden (aktuell ca. 1000 Zeichen).
+  - `text_body`: Best‑Effort‑Textrepräsentation der Abgabe, unabhängig vom `kind` (Text/PDF/Bild/Datei). Die Lehrkraft sieht hier denselben Text wie der Schüler im Learning‑Bereich; die Länge ist nur durch das globale `text_body`‑Limit (aktuell 65.536 Zeichen ≙ 64k) begrenzt.
   - `feedback_md`: Formatives Feedback („Rückmeldung“) in Markdown; wird angezeigt im Tab „Rückmeldung“.
   - `analysis_json`: Strukturierte Kriterien‑Auswertung („Auswertung“) im Schema `AnalysisJsonCriteriaV1|V2` (insb. `criteria.v2` mit `criteria_results`).
   - `files[]`: Enthält Original‑Upload(s) mit signierten URLs. Jedes Element besitzt eine ganzzahlige `size` in Bytes; wenn die Größe nicht zuverlässig ermittelt werden kann, wird die Datei nicht in `files[]` aufgenommen.

@@ -4088,7 +4088,7 @@ async def get_latest_submission_detail(
             "kind": def_kind,
         }
         if isinstance(text_body, str) and text_body:
-            payload["text_body"] = text_body[:1000]
+            payload["text_body"] = text_body
         if isinstance(feedback_md, str) and feedback_md:
             payload["feedback_md"] = feedback_md
 

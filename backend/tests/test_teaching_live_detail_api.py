@@ -152,6 +152,74 @@ async def test_latest_detail_happy_path_and_no_content_cases():
 
 
 @pytest.mark.anyio
+async def test_latest_detail_long_text_body_matches_learning():
+    """Teaching latest-detail must expose full text_body (no 1k truncation).
+
+    Given:
+        - A text submission with a body longer than 1000 characters but well below
+          the global text_body limit.
+    When:
+        - The teacher requests the latest-detail endpoint.
+    Then:
+        - The API returns the full text_body without additional truncation compared
+          to the learner-facing API.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for detail tests")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-detail-long-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-detail-long-learner", name="L", roles=["student"])  # type: ignore
+
+    long_text = "x" * 2000
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs Detail Long Text")
+        unit = await _create_unit(c_owner, "Einheit Detail Long Text")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe Long Text")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": long_text},
+        )
+        # Async submission acceptance
+        assert r_sub.status_code in (200, 201, 202)
+
+        r_detail = await c_owner.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
+        )
+
+    assert r_detail.status_code == 200
+    body = r_detail.json()
+    assert body["kind"] == "text"
+    text = body.get("text_body") or ""
+    assert isinstance(text, str)
+    # Teaching should expose full text_body, not a 1k snippet.
+    assert text == long_text
+    assert len(text) == len(long_text) == 2000
+
+
+@pytest.mark.anyio
 async def test_latest_detail_includes_text_and_files_for_pdf_submission():
     """File/PDF submissions should expose extracted text and signed file URLs."""
     _require_db_or_skip()

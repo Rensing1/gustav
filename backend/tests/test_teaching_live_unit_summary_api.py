@@ -12,6 +12,7 @@ Covers:
 """
 from __future__ import annotations
 
+import json
 import os
 import uuid
 import pytest
@@ -206,6 +207,104 @@ async def test_summary_happy_path_minimal_status_matrix_and_headers():
         s2_cells = {c["task_id"]: c for c in rows[s2.sub]["tasks"]}
         assert s2_cells[t1["id"]]["has_submission"] is False
         assert s2_cells[t2["id"]]["has_submission"] is False
+
+
+@pytest.mark.anyio
+async def test_summary_includes_average_score_for_completed_analysis():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos required for summary average score test")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-score-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-live-score-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Live Kurs Scores")
+        unit = await _create_unit(c_owner, "Live Einheit Scores")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        t1 = await _create_task(c_owner, unit["id"], section["id"], "### A1")
+        t2 = await _create_task(c_owner, unit["id"], section["id"], "### A2")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r_sub1 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{t1['id']}/submissions",
+            json={"kind": "text", "text_body": "Score A1"},
+        )
+        assert r_sub1.status_code in (200, 201, 202)
+        sub_id_1 = r_sub1.json().get("id")
+        assert sub_id_1
+
+        r_sub2 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{t2['id']}/submissions",
+            json={"kind": "text", "text_body": "Score A2"},
+        )
+        assert r_sub2.status_code in (200, 201, 202)
+        sub_id_2 = r_sub2.json().get("id")
+        assert sub_id_2
+
+    analysis_payload = {
+        "schema": "criteria.v2",
+        "criteria_results": [
+            {"criterion": "K1", "score": 4, "max_score": 5},
+            {"criterion": "K2", "score": 8, "max_score": 10},
+        ],
+    }
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id_1,
+                    "Matrix Analysis",
+                    "Feedback",
+                    json.dumps(analysis_payload),
+                ),
+            )
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c_owner.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary",
+            params={"limit": 100, "offset": 0},
+        )
+    assert r.status_code == 200
+    body = r.json()
+    rows = {row["student"]["sub"]: row for row in body["rows"]}
+    cells = {c["task_id"]: c for c in rows[learner.sub]["tasks"]}
+    avg = cells[t1["id"]]["average_score"]
+    assert isinstance(avg, float)
+    assert avg == pytest.approx(8.0)
+    assert cells[t2["id"]]["average_score"] is None
 
 
 @pytest.mark.anyio

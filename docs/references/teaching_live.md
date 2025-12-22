@@ -7,7 +7,10 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
 ## Endpunkte (API)
 
 - GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary`
-  - Liefert die Aufgaben der Einheit (`tasks[]`) und optional die Schülerzeilen (`rows[]`) mit Minimalstatus je Zelle: `{ task_id, has_submission }`.
+  - Liefert die Aufgaben der Einheit (`tasks[]`) und optional die Schülerzeilen (`rows[]`) mit Minimalstatus je Zelle:
+    `{ task_id, has_submission, average_score }`.
+  - `average_score` ist ein optionaler Float (0..10) für den Durchschnitt der Kriterien-Scores der
+    neuesten Einreichung; `null` wenn keine abgeschlossene Auswertung vorliegt.
   - Query:
     - `include_students` (bool, default true): Wenn `false`, werden nur `tasks[]` geliefert (Startoptimierung in der UI).
     - `limit`/`offset`: Paginierung der Schülerliste.
@@ -19,9 +22,10 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
     - `updated_since` (ISO‑Zeitstempel, required): Cursor; nur Änderungen NACH diesem Zeitpunkt.
     - `limit`/`offset`: Paginierung der Änderungen.
   - Antwort:
-    - 200 `{ cells: [{ student_sub, task_id, has_submission, changed_at }] }`
+    - 200 `{ cells: [{ student_sub, task_id, has_submission, average_score, changed_at }] }`
     - 204 No Content (keine Änderungen seit Cursor)
-  - Sicherheit: Owner‑Only; `private, no-store`, `Vary: Origin`. Es werden keine Inhalte (Text/Bilder) übertragen.
+  - Sicherheit: Owner‑Only; `private, no-store`, `Vary: Origin`. Es werden keine Inhalte (Text/Bilder) übertragen,
+    nur ein optionaler, aggregierter Score.
 
 - PATCH `/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility`
   - Schaltet die Sichtbarkeit eines Abschnitts für den Kurs um (`visible=true|false`).

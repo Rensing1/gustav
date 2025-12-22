@@ -284,11 +284,11 @@ Solche Optimierungen sind bewusst **nicht** Teil der ersten Implementierung; sie
   - Summary/Delta liefern `average_score` als Float (0..10) oder `null`; Berechnung erfolgt auf Basis der neuesten Submission.
   - Live‑Matrix und Delta‑Fragment rendern bei vorhandenem Score eine Badge (gerundete Anzeige, Banding wie Kriterienkarten).
   - Durchschnitts‑Berechnung respektiert RLS durch per‑Student‑Lookup der `analysis_json`.
+  - HTMX‑Delta‑Fix: OOB‑Zellen behalten `hx-get`/`hx-target`/`hx-swap` sowie `data-*`‑Attribute und bleiben klickbar.
 - Tests:
   - Neue pytest‑Tests für Summary/Delta, SSR‑Matrix/Delta und Helper `compute_average_score_from_analysis`.
   - Lokale Tests grün (DB‑abhängige Tests laufen nur mit Service‑DSN).
 - Offen:
-  - HTMX‑Delta‑Fix für klickbare Zellen (siehe Abschnitt „Bekannter Bug“).
   - Markdown‑Rendering in der Lehrkraft‑Detailansicht (siehe letzter Abschnitt).
 
 ## Bekannter Bug: Häkchen nach Delta nicht mehr klickbar

@@ -3724,12 +3724,21 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
     parts: list[str] = []
     max_changed_dt: datetime | None = None
     for c in cells:
-        sub = Component.escape(str(c.get("student_sub") or ""))
-        task_id = Component.escape(str(c.get("task_id") or ""))
+        raw_sub = str(c.get("student_sub") or "")
+        raw_task_id = str(c.get("task_id") or "")
+        sub = Component.escape(raw_sub)
+        task_id = Component.escape(raw_task_id)
         has = bool(c.get("has_submission"))
         content = _render_live_cell_content(has, c.get("average_score"))
-        cell_id = f"cell-{sub}-{task_id}"
-        parts.append(f'<td id="{cell_id}" hx-swap-oob="true">{content}</td>')
+        cell_id = f"cell-{raw_sub}-{raw_task_id}"
+        hx_href = (
+            f"/teaching/courses/{course_id}/units/{unit_id}/live/detail?student_sub={sub}&task_id={task_id}"
+        )
+        parts.append(
+            f"<td id=\"{cell_id}\" data-sub=\"{sub}\" data-task=\"{task_id}\" "
+            f"hx-get=\"{hx_href}\" hx-target=\"#live-detail\" hx-swap=\"innerHTML\" "
+            f"hx-swap-oob=\"true\">{content}</td>"
+        )
 
         # Track the latest changed_at timestamp for cursor advancement.
         changed_raw = c.get("changed_at")

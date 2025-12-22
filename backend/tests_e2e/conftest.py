@@ -2,22 +2,17 @@
 Pytest configuration for E2E tests.
 
 Behavior:
-- Loads .env so that KC_BASE/WEB_BASE/KEYCLOAK_ADMIN etc. are taken from the
-  project's environment file, matching docker-compose settings.
-- Skips the entire E2E test suite unless RUN_E2E=1 is set. This keeps the
-  default developer/CI workflow fast and deterministic. When running locally
-  against docker-compose, export RUN_E2E=1 to enable these tests.
+- Loads `.env` (if present) so that `KC_BASE`, `WEB_BASE`, `KEYCLOAK_ADMIN`, etc.
+  are taken from the project's environment file, matching docker-compose settings.
 """
 import sys
 from pathlib import Path
 import os
 import pytest
-import requests
 
 try:
     from dotenv import load_dotenv  # type: ignore
-    if os.getenv("RUN_E2E", "0") == "1":
-        load_dotenv()
+    load_dotenv()
 except Exception:
     pass
 
@@ -54,22 +49,3 @@ def _derive_kc_base() -> str:
     if pub:
         return pub.rstrip("/")
     return "https://id.localhost"
-
-
-def pytest_collection_modifyitems(config, items):
-    """Gate E2E tests behind an explicit flag RUN_E2E=1.
-
-    Rationale: Prevent accidental hangs/flakes by only running E2E when the
-    developer intentionally enables them. No additional env toggles are used.
-    """
-    pkg_dir = Path(__file__).parent.resolve()
-    if os.getenv("RUN_E2E", "0") == "1":
-        return
-    skip = pytest.mark.skip(reason="E2E tests disabled; set RUN_E2E=1 to enable")
-    for item in items:
-        try:
-            if Path(str(item.fspath)).resolve().is_relative_to(pkg_dir):
-                item.add_marker(skip)
-        except Exception:
-            if str(item.fspath).startswith(str(pkg_dir)):
-                item.add_marker(skip)

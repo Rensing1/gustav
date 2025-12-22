@@ -3015,6 +3015,37 @@ async def teaching_live_open(request: Request, course_id: str | None = None, uni
     return RedirectResponse(url=f"/teaching/courses/{course_id}/units/{unit_id}/live", status_code=303)
 
 
+def _live_score_badge_variant(score: int) -> str:
+    """Pick a badge variant for a 0..10 score, aligned with existing banding."""
+    if score <= 3:
+        return "badge-error"
+    if score <= 7:
+        return "badge-warning"
+    return "badge-success"
+
+
+def _render_live_average_score_badge(raw_score: object) -> str:
+    """Render a compact score badge for the live matrix; return empty string if invalid."""
+    if raw_score is None:
+        return ""
+    try:
+        score_val = float(raw_score)
+    except (TypeError, ValueError):
+        return ""
+    score_val = max(0.0, min(10.0, score_val))
+    display = int(score_val + 0.5)
+    variant = _live_score_badge_variant(display)
+    return f'<span class="badge {variant}" aria-label="Durchschnitt {display} von 10">{display}</span>'
+
+
+def _render_live_cell_content(has_submission: bool, average_score: object) -> str:
+    """Render badge or fallback symbol for a live matrix cell."""
+    badge = _render_live_average_score_badge(average_score)
+    if badge:
+        return badge
+    return "✅" if has_submission else "—"
+
+
 def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: list[dict]) -> str:
     """Render the Live matrix table (students × tasks) with deterministic IDs.
 
@@ -3026,7 +3057,8 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
     Behavior:
         - Columns are ordered as provided by `tasks` (already position-sorted).
         - Header uses short labels A1, A2, … for compactness.
-        - A cell renders '✅' when `has_submission` is true, else '—'.
+        - A cell renders a badge when `average_score` is present; otherwise
+          it falls back to '✅' for submissions or '—' for empty cells.
     """
     # Header
     header_cells = ["<th scope=\"col\">Schüler</th>"]
@@ -3053,7 +3085,7 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
             tid = str(t.get("id") or "")
             cell = cells_by_task.get(tid) or {}
             has = bool(cell.get("has_submission"))
-            content = "✅" if has else "—"
+            content = _render_live_cell_content(has, cell.get("average_score"))
             cell_id = f"cell-{sub}-{tid}"
             # Clicking a cell loads the detail pane below the matrix
             hx_href = (
@@ -3493,7 +3525,6 @@ async def teaching_unit_live_detail_partial(
     created = Component.escape(str(data.get("created_at") or ""))
     kind = Component.escape(str(data.get("kind") or ""))
     body_raw = str(data.get("text_body") or "")
-    body = Component.escape(body_raw)
     feedback_md = str(data.get("feedback_md") or "")
     analysis_json = data.get("analysis_json")
     files = [f for f in (data.get("files") or []) if isinstance(f, dict)]
@@ -3518,9 +3549,15 @@ async def teaching_unit_live_detail_partial(
         return f"<div class=\"tab-panel\" data-panel=\"{Component.escape(name)}\" role=\"tabpanel\"{hidden_attr}>{inner}</div>"
 
     def _render_text_panel(active: bool) -> str:
-        if not body:
+        text_src = body_raw
+        if not text_src.strip() and isinstance(analysis_json, dict):
+            extracted = str(analysis_json.get("text") or "").strip()
+            if extracted:
+                text_src = extracted
+        text_html = render_markdown_safe(text_src)
+        if not text_html:
             return _panel("text", "<p class=\"text-muted\">Kein Text vorhanden.</p>", active)
-        return _panel("text", f"<pre class=\"submission-body\">{body}</pre>", active)
+        return _panel("text", f"<div class=\"submission-body\">{text_html}</div>", active)
 
     def _render_file_panel(active: bool) -> str:
         if not file_url:
@@ -3692,12 +3729,21 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
     parts: list[str] = []
     max_changed_dt: datetime | None = None
     for c in cells:
-        sub = Component.escape(str(c.get("student_sub") or ""))
-        task_id = Component.escape(str(c.get("task_id") or ""))
+        raw_sub = str(c.get("student_sub") or "")
+        raw_task_id = str(c.get("task_id") or "")
+        sub = Component.escape(raw_sub)
+        task_id = Component.escape(raw_task_id)
         has = bool(c.get("has_submission"))
-        content = "✅" if has else "—"
-        cell_id = f"cell-{sub}-{task_id}"
-        parts.append(f'<td id="{cell_id}" hx-swap-oob="true">{content}</td>')
+        content = _render_live_cell_content(has, c.get("average_score"))
+        cell_id = f"cell-{raw_sub}-{raw_task_id}"
+        hx_href = (
+            f"/teaching/courses/{course_id}/units/{unit_id}/live/detail?student_sub={sub}&task_id={task_id}"
+        )
+        parts.append(
+            f"<td id=\"{cell_id}\" data-sub=\"{sub}\" data-task=\"{task_id}\" "
+            f"hx-get=\"{hx_href}\" hx-target=\"#live-detail\" hx-swap=\"innerHTML\" "
+            f"hx-swap-oob=\"true\">{content}</td>"
+        )
 
         # Track the latest changed_at timestamp for cursor advancement.
         changed_raw = c.get("changed_at")

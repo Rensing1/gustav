@@ -10,6 +10,7 @@ services:
     depends_on:
       - web
       - keycloak
+      - h5p
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
@@ -80,6 +81,23 @@ services:
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2
+
+  h5p:
+    build:
+      context: ./h5p-service
+    container_name: gustav-h5p
+    # behind proxy; no direct host port mapping
+    environment:
+      # Service listens on this port inside the compose network
+      - PORT=3000
+      # Internal URL to validate gustav_session via /api/me (cookie forwarded)
+      - GUSTAV_WEB_INTERNAL_BASE=http://gustav-alpha2:8000
+      - SESSION_COOKIE_NAME=gustav_session
+      # Small cache to reduce load on /api/me during editor/player asset bursts
+      - AUTH_CACHE_TTL_SECONDS=30
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
 
   learning-worker:
     build: .

@@ -1147,6 +1147,84 @@ def _guard_course_owner(course_id: str, owner_sub: str):
     return None
 
 
+def compute_average_score_from_analysis(analysis: object) -> float | None:
+    """Compute the average criteria score on a 0..10 scale from analysis_json.
+
+    Rules:
+        - Only criteria with numeric `score` values are considered.
+        - `max_score` normalises each criterion to a 0..10 scale (default: 10).
+        - Returns None when no valid numeric scores are present.
+    """
+    if not isinstance(analysis, dict):
+        return None
+
+    criteria = analysis.get("criteria_results")
+    if not isinstance(criteria, list):
+        return None
+
+    normalized: list[float] = []
+    for item in criteria:
+        if not isinstance(item, dict):
+            continue
+        raw_score = item.get("score")
+        if raw_score is None:
+            continue
+        try:
+            score_val = float(raw_score)
+        except (TypeError, ValueError):
+            continue
+
+        raw_max = item.get("max_score")
+        try:
+            max_val = float(raw_max)
+        except (TypeError, ValueError):
+            max_val = 10.0
+        if max_val <= 0:
+            max_val = 10.0
+
+        scaled = score_val if max_val == 10.0 else (score_val / max_val * 10.0)
+        scaled = max(0.0, min(10.0, scaled))
+        normalized.append(scaled)
+
+    if not normalized:
+        return None
+    return sum(normalized) / len(normalized)
+
+
+def _load_average_scores_by_submission_id(
+    cur,
+    owner_sub: str,
+    submission_ids_by_student: dict[str, list[str]],
+) -> dict[str, float | None]:
+    """Load analysis_json for submissions via RLS by impersonating each student."""
+    if not submission_ids_by_student:
+        return {}
+    out: dict[str, float | None] = {}
+    try:
+        for student_sub, submission_ids in submission_ids_by_student.items():
+            if not submission_ids:
+                continue
+            cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+            try:
+                cur.execute(
+                    """
+                    select id::text, analysis_json
+                      from public.learning_submissions
+                     where id = any(%s)
+                    """,
+                    (submission_ids,),
+                )
+                rows = cur.fetchall() or []
+            except Exception as exc:
+                logger.warning("Unit live average score lookup failed — %s", exc)
+                rows = []
+            for submission_id, analysis_json in rows:
+                out[str(submission_id)] = compute_average_score_from_analysis(analysis_json)
+    finally:
+        cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+    return out
+
+
 # --- User directory adapter (mockable) ------------------------------------------
 
 def resolve_student_names(subs: list[str]) -> dict[str, str]:
@@ -3613,6 +3691,7 @@ async def get_unit_live_summary(
         names = resolve_student_names(member_subs)
 
         has_map: set[tuple[str, str]] = set()
+        avg_map: dict[tuple[str, str], float | None] = {}
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
@@ -3624,11 +3703,22 @@ async def get_unit_live_summary(
                             cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
                             try:
                                 cur.execute(
-                                    "select student_sub::text, task_id::text from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)",
+                                    """
+                                    select student_sub::text,
+                                           task_id::text,
+                                           submission_id::text
+                                      from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
+                                    """,
                                     (sub, course_id, unit_id, updated_since_dt, int(limit), int(offset)),
                                 )
                                 rows = cur.fetchall() or []
                                 has_map = {(r[0], r[1]) for r in rows}
+                                submission_ids_by_student: dict[str, list[str]] = {}
+                                for student_sub, _task_id, submission_id in rows:
+                                    if submission_id:
+                                        submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
+                                avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
+                                avg_map = {(r[0], r[1]): avg_by_id.get(r[2]) for r in rows}
                             except Exception as exc:
                                 logger.warning(
                                     "Unit summary fallback: helper get_unit_latest_submissions_for_owner unavailable — %s",
@@ -3669,12 +3759,18 @@ async def get_unit_live_summary(
                                     cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
         except Exception:
             has_map = set()
+            avg_map = {}
 
         for sid in member_subs:
             row = {
                 "student": {"sub": sid, "name": names.get(sid, sid)},
                 "tasks": [
-                    {"task_id": t["id"], "has_submission": ((sid, t["id"]) in has_map)} for t in tasks
+                    {
+                        "task_id": t["id"],
+                        "has_submission": ((sid, t["id"]) in has_map),
+                        "average_score": (avg_map.get((sid, t["id"])) if ((sid, t["id"]) in has_map) else None),
+                    }
+                    for t in tasks
                 ],
             }
             rows_out.append(row)
@@ -3780,6 +3876,7 @@ async def get_unit_live_delta(
                     with conn.cursor() as cur:
                         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
                         helper_ok = True
+                        avg_by_id: dict[str, float | None] = {}
                         try:
                             cur.execute(
                                 """
@@ -3789,6 +3886,11 @@ async def get_unit_live_delta(
                                 (sub, course_id, unit_id, db_lower_bound, int(limit), int(offset)),
                             )
                             rows = cur.fetchall() or []
+                            submission_ids_by_student: dict[str, list[str]] = {}
+                            for student_sub, _task_id, submission_id, _created_iso, _completed_iso in rows:
+                                if submission_id:
+                                    submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
+                            avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
                         except Exception as exc:
                             logger.warning(
                                 "Unit delta fallback: helper unavailable — %s",
@@ -3853,11 +3955,13 @@ async def get_unit_live_delta(
                             emit_dt = (
                                 (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
                             )
+                            avg_score = avg_by_id.get(submission_id) if submission_id else None
                             cells.append(
                                 {
                                     "student_sub": student_sub,
                                     "task_id": task_id,
                                     "has_submission": bool(submission_id),
+                                    "average_score": avg_score,
                                     "changed_at": emit_dt.isoformat(timespec="microseconds"),
                                 }
                             )
@@ -3900,6 +4004,7 @@ async def get_unit_live_delta(
                                         "student_sub": student_sub,
                                         "task_id": task_id,
                                         "has_submission": True,
+                                        "average_score": None,
                                         "changed_at": changed_iso,
                                     }
                                 )

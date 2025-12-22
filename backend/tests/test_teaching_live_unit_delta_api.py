@@ -7,6 +7,7 @@ earlier SSE stream. The endpoint returns only changed submission cells since
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 import logging
@@ -199,3 +200,96 @@ async def test_delta_returns_cells_after_submission():
             params={"updated_since": next_ts},
         )
         assert r_again.status_code == 204
+
+
+@pytest.mark.anyio
+async def test_delta_includes_average_score_for_completed_analysis():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos required for delta average score test")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-delta-score-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-delta-score-learner", name="Student", roles=["student"])  # type: ignore
+
+    async with (await _client()) as owner_client, (await _client()) as student_client:
+        owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        student_client.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        course_id = await _create_course(owner_client, "Delta Kurs Scores")
+        unit = await _create_unit(owner_client, "Delta Einheit Scores")
+        section = await _create_section(owner_client, unit["id"], "Abschnitt")
+        task = await _create_task(owner_client, unit["id"], section["id"], "### Aufgabe")
+        module = await _attach_unit(owner_client, course_id, unit["id"])
+        await _add_member(owner_client, course_id, learner.sub)
+
+        r_vis = await owner_client.patch(
+            f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+
+        r_sub = await student_client.post(
+            f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Matrix Score"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+        sub_id = r_sub.json().get("id")
+        assert sub_id
+
+    analysis_payload = {
+        "schema": "criteria.v2",
+        "criteria_results": [
+            {"criterion": "K1", "score": 4, "max_score": 5},
+            {"criterion": "K2", "score": 8, "max_score": 10},
+        ],
+    }
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id,
+                    "Matrix Analysis",
+                    "Feedback",
+                    json.dumps(analysis_payload),
+                ),
+            )
+
+    async with (await _client()) as owner_client:
+        owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_delta = await owner_client.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/delta",
+            params={"updated_since": base_ts},
+        )
+    assert r_delta.status_code == 200
+    body = r_delta.json()
+    cell = next(
+        c for c in body["cells"]
+        if c["student_sub"] == learner.sub and c["task_id"] == task["id"]
+    )
+    assert cell["has_submission"] is True
+    avg = cell["average_score"]
+    assert isinstance(avg, float)
+    assert avg == pytest.approx(8.0)

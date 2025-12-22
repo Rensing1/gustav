@@ -1102,6 +1102,15 @@ components:
         has_submission:
           type: boolean
           description: True if at least one submission exists for this student and task
+        average_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 10
+          nullable: true
+          description: >
+            Optional average criteria score (0..10) for the latest submission.
+            Null when no completed analysis is available.
     TeachingUnitLiveRow:
       type: object
       required: [student, tasks]
@@ -1129,6 +1138,16 @@ components:
         has_submission:
           type: boolean
           description: True if at least one submission exists after the change; false when none exist.
+        average_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 10
+          nullable: true
+          description: >
+            Optional average criteria score (0..10) for the latest submission
+            at the time of this change. Null when no completed analysis
+            is available.
         changed_at:
           type: string
           format: date-time

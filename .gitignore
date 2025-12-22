@@ -1,5 +1,9 @@
 # Backup
 0_backup/
+backups/
+
+# Git worktrees (local only)
+.worktrees/
 
 # Agents
 AGENTS.md

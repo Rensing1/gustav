@@ -126,6 +126,59 @@ async def test_detail_partial_empty_and_then_text_excerpt():
 
 
 @pytest.mark.anyio
+async def test_detail_partial_renders_markdown_for_teacher():
+    """Teacher detail should render markdown as HTML, not raw text."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for SSR detail tests")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-detail-md-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ssr-detail-md", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs SSR Detail Markdown")
+        unit = await _create_unit(c_owner, "Einheit SSR Detail Markdown")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        md_text = "### Ueberschrift\n\nEin **fetter** Text."
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": md_text},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+
+        r_detail = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/detail",
+            params={"student_sub": learner.sub, "task_id": task["id"]},
+        )
+        assert r_detail.status_code == 200
+        html = r_detail.text
+        assert "<h3>Ueberschrift</h3>" in html
+        assert "<strong>fetter</strong>" in html
+        assert "### Ueberschrift" not in html
+
+
+@pytest.mark.anyio
 async def test_detail_partial_file_submission_shows_text_and_file_tab():
     """File/PDF submissions should render tabs and the extracted text in SSR."""
     _require_db_or_skip()

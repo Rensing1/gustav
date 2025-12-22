@@ -3525,7 +3525,6 @@ async def teaching_unit_live_detail_partial(
     created = Component.escape(str(data.get("created_at") or ""))
     kind = Component.escape(str(data.get("kind") or ""))
     body_raw = str(data.get("text_body") or "")
-    body = Component.escape(body_raw)
     feedback_md = str(data.get("feedback_md") or "")
     analysis_json = data.get("analysis_json")
     files = [f for f in (data.get("files") or []) if isinstance(f, dict)]
@@ -3550,9 +3549,15 @@ async def teaching_unit_live_detail_partial(
         return f"<div class=\"tab-panel\" data-panel=\"{Component.escape(name)}\" role=\"tabpanel\"{hidden_attr}>{inner}</div>"
 
     def _render_text_panel(active: bool) -> str:
-        if not body:
+        text_src = body_raw
+        if not text_src.strip() and isinstance(analysis_json, dict):
+            extracted = str(analysis_json.get("text") or "").strip()
+            if extracted:
+                text_src = extracted
+        text_html = render_markdown_safe(text_src)
+        if not text_html:
             return _panel("text", "<p class=\"text-muted\">Kein Text vorhanden.</p>", active)
-        return _panel("text", f"<pre class=\"submission-body\">{body}</pre>", active)
+        return _panel("text", f"<div class=\"submission-body\">{text_html}</div>", active)
 
     def _render_file_panel(active: bool) -> str:
         if not file_url:

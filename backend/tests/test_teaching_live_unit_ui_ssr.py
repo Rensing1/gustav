@@ -375,6 +375,58 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
 
 
 @pytest.mark.anyio
+async def test_delta_fragment_keeps_clickable_cell_attributes():
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-htmx-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ui-delta-htmx-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs UI Delta HTMX")
+        unit = await _create_unit(c_owner, "Einheit Delta HTMX")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Lösung"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+
+        r_delta = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 200
+        html = r_delta.text
+
+        expected_href = (
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/detail"
+            f"?student_sub={learner.sub}&task_id={task['id']}"
+        )
+        assert f'hx-get="{expected_href}"' in html
+        assert 'hx-target="#live-detail"' in html
+        assert 'hx-swap="innerHTML"' in html
+        assert f'data-sub="{learner.sub}"' in html
+        assert f'data-task="{task["id"]}"' in html
+        assert 'hx-swap-oob="true"' in html
+
+
+@pytest.mark.anyio
 async def test_matrix_fragment_renders_average_score_badge():
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402

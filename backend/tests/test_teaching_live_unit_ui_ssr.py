@@ -12,6 +12,7 @@ Covers:
 """
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -371,6 +372,178 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
         assert "hx-swap-oob=\"true\"" in html
         assert f"cell-{learner.sub}-{task['id']}" in html
         assert "✅" in html
+
+
+@pytest.mark.anyio
+async def test_matrix_fragment_renders_average_score_badge():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos required for SSR average score test")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-score-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ui-score-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs UI Score")
+        unit = await _create_unit(c_owner, "Einheit UI Score")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Matrix Score"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+        sub_id = r_sub.json().get("id")
+        assert sub_id
+
+    analysis_payload = {
+        "schema": "criteria.v2",
+        "criteria_results": [
+            {"criterion": "K1", "score": 4, "max_score": 5},
+            {"criterion": "K2", "score": 8, "max_score": 10},
+        ],
+    }
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id,
+                    "Matrix Analysis",
+                    "Feedback",
+                    json.dumps(analysis_payload),
+                ),
+            )
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c_owner.get(f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix")
+    assert r.status_code == 200
+    html = r.text
+    assert 'class="badge badge-success"' in html
+    assert ">8<" in html
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_renders_average_score_badge():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos required for SSR delta score test")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-score-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ui-delta-score-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs UI Delta Score")
+        unit = await _create_unit(c_owner, "Einheit UI Delta Score")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe 1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Matrix Score"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+        sub_id = r_sub.json().get("id")
+        assert sub_id
+
+    analysis_payload = {
+        "schema": "criteria.v2",
+        "criteria_results": [
+            {"criterion": "K1", "score": 4, "max_score": 5},
+            {"criterion": "K2", "score": 8, "max_score": 10},
+        ],
+    }
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select public.learning_worker_update_completed(
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s::jsonb
+                )
+                """,
+                (
+                    sub_id,
+                    "Matrix Analysis",
+                    "Feedback",
+                    json.dumps(analysis_payload),
+                ),
+            )
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_delta = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+    assert r_delta.status_code == 200
+    html = r_delta.text
+    assert "hx-swap-oob=\"true\"" in html
+    assert f"cell-{learner.sub}-{task['id']}" in html
+    assert 'class="badge badge-success"' in html
 
 
 @pytest.mark.anyio

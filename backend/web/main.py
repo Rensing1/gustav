@@ -3015,6 +3015,37 @@ async def teaching_live_open(request: Request, course_id: str | None = None, uni
     return RedirectResponse(url=f"/teaching/courses/{course_id}/units/{unit_id}/live", status_code=303)
 
 
+def _live_score_badge_variant(score: int) -> str:
+    """Pick a badge variant for a 0..10 score, aligned with existing banding."""
+    if score <= 3:
+        return "badge-error"
+    if score <= 7:
+        return "badge-warning"
+    return "badge-success"
+
+
+def _render_live_average_score_badge(raw_score: object) -> str:
+    """Render a compact score badge for the live matrix; return empty string if invalid."""
+    if raw_score is None:
+        return ""
+    try:
+        score_val = float(raw_score)
+    except (TypeError, ValueError):
+        return ""
+    score_val = max(0.0, min(10.0, score_val))
+    display = int(score_val + 0.5)
+    variant = _live_score_badge_variant(display)
+    return f'<span class="badge {variant}" aria-label="Durchschnitt {display} von 10">{display}</span>'
+
+
+def _render_live_cell_content(has_submission: bool, average_score: object) -> str:
+    """Render badge or fallback symbol for a live matrix cell."""
+    badge = _render_live_average_score_badge(average_score)
+    if badge:
+        return badge
+    return "✅" if has_submission else "—"
+
+
 def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: list[dict]) -> str:
     """Render the Live matrix table (students × tasks) with deterministic IDs.
 
@@ -3026,7 +3057,8 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
     Behavior:
         - Columns are ordered as provided by `tasks` (already position-sorted).
         - Header uses short labels A1, A2, … for compactness.
-        - A cell renders '✅' when `has_submission` is true, else '—'.
+        - A cell renders a badge when `average_score` is present; otherwise
+          it falls back to '✅' for submissions or '—' for empty cells.
     """
     # Header
     header_cells = ["<th scope=\"col\">Schüler</th>"]
@@ -3053,7 +3085,7 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
             tid = str(t.get("id") or "")
             cell = cells_by_task.get(tid) or {}
             has = bool(cell.get("has_submission"))
-            content = "✅" if has else "—"
+            content = _render_live_cell_content(has, cell.get("average_score"))
             cell_id = f"cell-{sub}-{tid}"
             # Clicking a cell loads the detail pane below the matrix
             hx_href = (
@@ -3695,7 +3727,7 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
         sub = Component.escape(str(c.get("student_sub") or ""))
         task_id = Component.escape(str(c.get("task_id") or ""))
         has = bool(c.get("has_submission"))
-        content = "✅" if has else "—"
+        content = _render_live_cell_content(has, c.get("average_score"))
         cell_id = f"cell-{sub}-{task_id}"
         parts.append(f'<td id="{cell_id}" hx-swap-oob="true">{content}</td>')
 

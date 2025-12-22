@@ -47,7 +47,7 @@ Die Matrix zeigt nur „hat eingereicht / hat nicht eingereicht“. Die Lehrkraf
   **und** `criteria_results[]` enthält mehrere Kriterien mit gültigen `score`‑Werten (0–10),
 - **When** die Lehrkraft die Live‑Ansicht für diese Lerneinheit öffnet,  
   **Then** wird in der Matrix‑Zelle für diesen Schüler und diese Aufgabe eine Badge angezeigt,  
-  **und** die Badge zeigt den gerundeten Durchschnitt der Kriterien‑Scores (z. B. `7/10`),  
+  **und** die Badge zeigt den gerundeten Durchschnitt der Kriterien‑Scores (z. B. `7`, nicht `7/10`),  
   **und** die Badge‑Farbe folgt dem bestehenden Banding (`badge-error` für niedrige, `badge-warning` für mittlere, `badge-success` für hohe Scores).
 
 ### 2. Happy Path – Einreichung ohne abgeschlossene Auswertung (nur Häkchen)
@@ -66,7 +66,7 @@ Die Matrix zeigt nur „hat eingereicht / hat nicht eingereicht“. Die Lehrkraf
   **When** die Live‑Matrix den Durchschnittswert berechnet,  
   **Then** werden die Einzelwerte zunächst auf eine gemeinsame 0–10‑Skala normalisiert (z. B. 4/5 → 8/10),  
   **und** der Durchschnitt wird aus diesen normalisierten Werten gebildet,  
-  **und** die Badge zeigt den gerundeten Durchschnitt auf Basis dieser normierten Skala (z. B. `8/10`).
+  **und** die Badge zeigt den gerundeten Durchschnitt auf Basis dieser normierten Skala (z. B. `8`).
 
 *(Hinweis: Konkrete Normalisierungsstrategie muss im DB‑/Backend‑Entwurf festgelegt werden; hier wird nur die Erwartung skizziert, dass unterschiedliche Maxima fair aggregiert werden.)*
 
@@ -276,6 +276,20 @@ Solche Optimierungen sind bewusst **nicht** Teil der ersten Implementierung; sie
 5. **Dokumentation:**  
    - `docs/references/teaching_live.md` um den neuen Badge‑Score in der Matrix ergänzen.  
    - Kurze Beschreibung der Semantik („Durchschnitt der Kriterien‑Scores“, 0–10‑Skala, Farbbanding) für Lehrkräfte.
+
+## Statusupdate 2025-12-22
+
+- Implementiert:
+  - OpenAPI erweitert (`TeachingUnitTaskCell.average_score`, `TeachingUnitDeltaCell.average_score`) + Referenzdoku aktualisiert.
+  - Summary/Delta liefern `average_score` als Float (0..10) oder `null`; Berechnung erfolgt auf Basis der neuesten Submission.
+  - Live‑Matrix und Delta‑Fragment rendern bei vorhandenem Score eine Badge (gerundete Anzeige, Banding wie Kriterienkarten).
+  - Durchschnitts‑Berechnung respektiert RLS durch per‑Student‑Lookup der `analysis_json`.
+- Tests:
+  - Neue pytest‑Tests für Summary/Delta, SSR‑Matrix/Delta und Helper `compute_average_score_from_analysis`.
+  - Lokale Tests grün (DB‑abhängige Tests laufen nur mit Service‑DSN).
+- Offen:
+  - HTMX‑Delta‑Fix für klickbare Zellen (siehe Abschnitt „Bekannter Bug“).
+  - Markdown‑Rendering in der Lehrkraft‑Detailansicht (siehe letzter Abschnitt).
 
 ## Bekannter Bug: Häkchen nach Delta nicht mehr klickbar
 

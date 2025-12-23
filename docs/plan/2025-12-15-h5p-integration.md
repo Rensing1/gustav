@@ -321,7 +321,8 @@ Status (2025‑12‑23):
   - Test: `backend/tests_e2e/test_h5p_roundtrip_e2e.py` (opt‑in via `RUN_E2E=1`)
   - Fixture: `backend/tests_e2e/fixtures/h5p/minimal/…`
 - ✅ Security: Import/Export/Write‑Actions sind Teacher‑only + CSRF Same‑Origin (Origin/Referer) + Upload‑Limit.
-- ⏳ Browser‑UX: echte Editor‑UI (Lumi Web Components) + H5P core/editor assets sauber provisionieren.
+- ✅ Browser‑UX (Player): H5P core assets sind provisioniert (`h5p-service/vendor/h5p/core`, aus `h5p-php-library` tag `1.27.0`) und werden über `/h5p/core/*` ausgeliefert (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py`).
+- ⏳ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) + H5P editor core assets (`h5p-service/vendor/h5p/editor`) sauber provisionieren.
 
 ### Phase 2 – Teaching UI (2–3 Tage)
 - SSR‑Seite für H5P Editor in GUSTAV; speichern liefert `content_id`.
@@ -359,6 +360,7 @@ Status (2025‑12‑23):
 2) **CSP**: PoC/MVP akzeptiert permissive CSP **nur** auf `/h5p/*` (Hardening folgt in Phase 5).
 3) **Phase‑1 Proof für Save**: “Save” wird in Phase 1 deterministisch über Export→Re‑Import→Reload nachgewiesen (ohne Browser‑Automation).
 4) **Security model**: Trusted‑Content – alle Lehrkräfte (`teacher`, inkl. Admin) dürfen H5P Packages/Libraries importieren; Schüler konsumieren nur kuratierten Content (Packages gelten als Code‑Supply‑Chain).
+5) **Core Assets**: H5P core files werden aus `h5p-php-library` tag `1.27.0` vendored in `h5p-service/vendor/h5p/core`, damit `/h5p/core/*` im Browser zuverlässig funktioniert (ohne Runtime‑Downloads).
 
 ## Offene Fragen
 1) **CSP Hardening**: Welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).

@@ -256,6 +256,26 @@ Und wir erweitern `LearningSubmission.kind` um `h5p` und ergänzen `score_raw/sc
 - Caddy: `/h5p/*` → `h5p` upstream.
 - Healthcheck `/h5p/healthz`.
 
+Status (2025‑12‑22):
+- ✅ `h5p` Service ist als eigener Compose‑Service vorhanden (Phase‑0 Skeleton).
+- ✅ Caddy routet `/h5p/*` auf `h5p:3000` (Path‑Prefix wird via `handle_path` entfernt).
+- ✅ `GET /h5p/healthz` liefert `200` (Proxy + Service “liveness” verifiziert).
+- ✅ `GET /h5p/auth/me` liefert ohne Session `401` (fail‑closed).
+- ✅ `GET /h5p/editor` und `GET /h5p/player` liefern ohne Session `401` (fail‑closed).
+- ✅ E2E‑Smoke inkl. OIDC Login ist erfolgreich (siehe “Verifikation” unten).
+
+Verifikation (lokal):
+1) Infrastruktur starten:
+   - `docker compose up -d --build caddy web keycloak h5p`
+2) Smoke per curl (TLS‑verify aus):
+   - `curl -k -i https://app.localhost/h5p/healthz`
+   - `curl -k -i https://app.localhost/h5p/auth/me`  (erwartet `401`)
+   - `curl -k -i https://app.localhost/h5p/editor`   (erwartet `401`)
+   - `curl -k -i https://app.localhost/h5p/player`   (erwartet `401`)
+3) E2E (mit OIDC) inkl. TLS‑Trust für Python `requests`:
+   - Caddy Root‑CA exportieren: `docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt`
+   - Ausführen: `RUN_E2E=1 REQUESTS_CA_BUNDLE=.tmp/caddy-root.crt .venv/bin/pytest -q -m e2e backend/tests_e2e`
+
 ### Phase 2 – Teaching UI (2–3 Tage)
 - SSR‑Seite für H5P Editor in GUSTAV; speichern liefert `content_id`.
 - Task‑Konfiguration speichert `unit_tasks.kind='h5p'` + `h5p_content_id`.
@@ -291,4 +311,3 @@ Und wir erweitern `LearningSubmission.kind` um `h5p` und ergänzen `score_raw/sc
 3) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
 4) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).
 5) **Versuchszählung**: Semantik von `max_attempts` bei H5P (nur „completed“ zählt vs. auch Retry‑UI).
-

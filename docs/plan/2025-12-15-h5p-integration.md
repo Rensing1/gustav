@@ -64,7 +64,7 @@ Non‑Goals (MVP):
 - **Learning Worker** bleibt unverändert das zentrale Element für KI‑Feedback (DSPy/Ollama).
 - **Neuer H5P‑Service (Node/Express)** als dedizierter Service mit Lumi‑Libraries:
   - `@lumieducation/h5p-server`, `@lumieducation/h5p-express`, `@lumieducation/h5p-webcomponents`
-  - Storage: initial *Filesystem + MongoDB* (oder Mongo+S3/MinIO, siehe Open Questions)
+  - Storage (decision): *Filesystem (bind mount)* unter `./supabase/storage/h5p` (single-host, no extra DB service, large packages OK, included in backups via `SUPABASE_STORAGE_ROOT`)
   - optional: `@lumieducation/h5p-svg-sanitizer`, `@lumieducation/h5p-clamav-scanner`, später `@lumieducation/h5p-redis-lock`
 - **Reverse Proxy (Caddy)** routet `/h5p/*` auf den H5P‑Service (same‑origin unter `app.localhost`).
 
@@ -277,7 +277,9 @@ Verifikation (lokal):
 
 ### Phase 1 – Lumi PoC (Editor/Player) + Storage (2–3 Tage)
 - Lumi Library minimal lauffähig (Editor/Player) im `h5p` Service (nicht nur Platzhalter‑Routen).
-- Storage‑Entscheidung (Supabase‑kompatibel): wo liegen Content‑Binaries/Assets, wie wird lokal=prod umgesetzt?
+- Storage (decided): bind mount `./supabase/storage/h5p` → `/data/h5p` im Container; Unterpfade `libraries/`, `content/`, `tmp/`.
+- Keine separate DB‑Instanz: wenn die Lumi‑Libs persistente Metadaten benötigen, werden sie entweder file‑basiert abgelegt oder (falls zwingend) in Postgres/Supabase integriert – aber nicht in Mongo.
+- Upload‑Größen: Limits werden in Proxy/Service (Caddy/Node) definiert, nicht in Supabase Storage Buckets.
 - Minimal‑Persistenz: Content erstellen/speichern/laden; Assets lokal ausliefern (keine externen Requests notwendig).
 - AuthZ: Editor nur `teacher`; Player `student` + `teacher` (Preview) – jeweils “fail‑closed”.
 - E2E: Login → Editor‑Page lädt (teacher), Player‑Page lädt (student), keine 500/502.
@@ -312,7 +314,7 @@ Verifikation (lokal):
 ---
 
 ## Open Questions / Entscheidungen
-1) **Storage**: FS‑Volume vs MinIO (S3) vs Supabase S3‑Compat (lokal=prod‑Tauglichkeit prüfen).
+1) **Storage (decided)**: Filesystem bind mount unter `./supabase/storage/h5p` (single-host, keine zusätzliche DB‑Instanz; Upload‑Limits via Caddy/Node).
 2) **CSP**: PoC/MVP akzeptiert permissive `/h5p`‑CSP; welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).
 3) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
 4) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).

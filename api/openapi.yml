@@ -81,6 +81,42 @@ components:
           type: string
         detail:
           type: string
+    H5PStorageReadiness:
+      type: object
+      required: [ok, root]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+        root:
+          type: string
+        error:
+          type: string
+          nullable: true
+          description: Optional diagnostic string when storage is not writable/ready.
+    H5PHealth:
+      type: object
+      required: [status, service, time, storage]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        service:
+          type: string
+        time:
+          type: string
+          format: date-time
+        storage:
+          $ref: '#/components/schemas/H5PStorageReadiness'
+    H5PContentImportResponse:
+      type: object
+      required: [content_id]
+      additionalProperties: false
+      properties:
+        content_id:
+          type: string
+          description: Opaque identifier of the imported H5P content in the H5P service.
     LearningWorkerHealthCheck:
       type: object
       required: [check, status]
@@ -1179,6 +1215,256 @@ paths:
                   status:
                     type: string
                     example: healthy
+  /h5p/healthz:
+    get:
+      tags: [H5P]
+      summary: H5P service health check (proxy + storage readiness)
+      description: >-
+        Lightweight readiness probe for the H5P sidecar service behind the reverse proxy.
+        Returns basic filesystem storage readiness for `/data/h5p` (bind mount).
+      operationId: getH5PHealth
+      security: []
+      responses:
+        '200':
+          description: H5P service healthy (storage writable)
+          headers:
+            Cache-Control:
+              description: Security — not cacheable.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PHealth'
+        '503':
+          description: H5P service unhealthy (storage not ready)
+          headers:
+            Cache-Control:
+              description: Security — not cacheable.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PHealth'
+  /h5p/auth/me:
+    get:
+      tags: [H5P]
+      summary: Resolve current principal for H5P (cookie forwarded to /api/me)
+      description: >-
+        Validates the `gustav_session` cookie by forwarding it to the web app's
+        `GET /api/me` endpoint and mirroring its JSON response.
+      operationId: getH5PMe
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current session principal
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '502':
+          description: Upstream unavailable (web service could not be reached)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/editor:
+    get:
+      tags: [H5P]
+      summary: H5P editor page (trusted teachers only)
+      description: >-
+        Serves the H5P editor UI. Access is restricted to trusted content
+        authors (GUSTAV role `teacher` or `admin`).
+      operationId: getH5PEditorPage
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: HTML editor page
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+  /h5p/player:
+    get:
+      tags: [H5P]
+      summary: H5P player page (students and teachers)
+      description: Serves the H5P player UI for viewing/playing H5P content.
+      operationId: getH5PPlayerPage
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: content_id
+          required: false
+          schema:
+            type: string
+          description: Optional content id to load in the player.
+      responses:
+        '200':
+          description: HTML player page
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+  /h5p/contents/import:
+    post:
+      tags: [H5P]
+      summary: Import an H5P package (.h5p) into the H5P service
+      description: >-
+        Trusted content model: only teachers/admins may import packages. The
+        server stores content and libraries under `/data/h5p` (filesystem).
+        Browser clients MUST pass same-origin indicators (Origin/Referer).
+      operationId: importH5PContent
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ".h5p ZIP package"
+      responses:
+        '201':
+          description: Content imported
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentImportResponse'
+        '400':
+          description: Invalid package
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/contents/{content_id}/export:
+    get:
+      tags: [H5P]
+      summary: Export an H5P content item as a .h5p package
+      description: "Trusted content model: only teachers/admins may export packages."
+      operationId: exportH5PContent
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ".h5p ZIP package"
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Content-Disposition:
+              description: Download filename
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /internal/health/learning-worker:
     get:
       tags: [Operations]

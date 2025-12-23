@@ -44,5 +44,16 @@ docs/migration/.tmp/
 docs/migration/tmp/
 docs/migration/storage_raw/
 
+# Supabase bind-mount storage (runtime data; must not be committed)
+supabase/storage/h5p/**
+!supabase/storage/h5p/.gitkeep
+
 # Backup files
 *.bak
+
+# Node (H5P service)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tgz

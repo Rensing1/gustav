@@ -321,7 +321,7 @@ Status (2025‑12‑23):
   - Test: `backend/tests_e2e/test_h5p_roundtrip_e2e.py` (opt‑in via `RUN_E2E=1`)
   - Fixture: `backend/tests_e2e/fixtures/h5p/minimal/…`
 - ✅ Security: Import/Export/Write‑Actions sind Teacher‑only + CSRF Same‑Origin (Origin/Referer) + Upload‑Limit.
-- ⏳ Browser‑UX: echte Editor‑UI (Lumi Web Components) + H5P core/editor assets sauber provisionieren (siehe “Nächste Schritte”).
+- ⏳ Browser‑UX: echte Editor‑UI (Lumi Web Components) + H5P core/editor assets sauber provisionieren.
 
 ### Phase 2 – Teaching UI (2–3 Tage)
 - SSR‑Seite für H5P Editor in GUSTAV; speichern liefert `content_id`.

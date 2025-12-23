@@ -58,7 +58,9 @@ const authCache = new Map();
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "no-referrer",
+  // Needed so browser form submits include a same-origin Referer header.
+  // We still avoid leaking Referer cross-origin.
+  "Referrer-Policy": "same-origin",
   // Intentionally permissive CSP for `/h5p` (same-origin H5P requires JS).
   // Tightening requires a content-type whitelist and real-world CSP testing.
   "Content-Security-Policy":
@@ -484,6 +486,17 @@ async function main() {
         );
         sendJson(res, 201, { content_id: String(contentId) }, { Vary: "Origin" });
       } catch (err) {
+        // Make missing library errors actionable for teachers (common for
+        // content-only hub exports without `libraries/*`).
+        const errorId = err?.errorId;
+        const missingLibraries = err?.replacements?.libraries;
+        if (errorId === "install-missing-libraries") {
+          const detail = missingLibraries
+            ? `Missing H5P libraries: ${missingLibraries}`
+            : "Missing H5P libraries.";
+          sendJson(res, 400, { error: "missing_libraries", detail }, { Vary: "Origin" });
+          return;
+        }
         sendJson(res, 400, { error: "invalid_package" });
       } finally {
         try {

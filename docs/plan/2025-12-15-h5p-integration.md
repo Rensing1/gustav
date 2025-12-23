@@ -17,7 +17,7 @@ Kontext:
 
 Non‑Goals (MVP):
 - Vollständiges LRS (Learning Record Store) / detaillierte Event‑Analytics für *alle* xAPI Events.
-- Unterstützung *aller* H5P Content Types ohne Governance/Whitelist.
+- Content‑Type Governance/Whitelist (MVP erlaubt alle Content Types; Hardening/Policies folgen später).
 - Mehrbenutzer‑Co‑Authoring in H5P oder komplexe Versions-/Fork‑Workflows.
 
 ---
@@ -247,17 +247,16 @@ Und wir erweitern `LearningSubmission.kind` um `h5p` und ergänzen `score_raw/sc
 
 ## Umsetzung in Iterationen (1–2 Wochen PoC → MVP)
 
-### Phase 0 – Verifikation (1–2 Tage)
-- Lumi Library minimal lauffähig (Editor/Player) in eigenem Node‑Service.
-- Entscheidung Storage‑Variante (FS vs MinIO/S3) anhand lokaler Compose‑Machbarkeit.
-
-### Phase 1 – Service & Proxy (2–3 Tage)
-- Neuer Compose Service: `h5p` + `mongo` (und optional `clamav`, später `redis`).
-- Caddy: `/h5p/*` → `h5p` upstream.
-- Healthcheck `/h5p/healthz`.
+### Phase 0 – Service & Proxy Smoke (1–2 Tage)
+- Neuer Compose Service: `h5p` (Phase‑0 Skeleton).
+- Caddy: `/h5p/*` → `h5p` upstream (Path‑Prefix wird entfernt).
+- Route‑spezifische CSP für `/h5p/*` (bewusst permissiver für “alle Content Types”).
+- Healthcheck `GET /h5p/healthz`.
+- Auth‑Plumbing `GET /h5p/auth/me` (Session‑Cookie wird an `web:/api/me` weitergereicht).
+- E2E‑Smoke (opt‑in via `RUN_E2E=1`) für Proxy/Auth.
 
 Status (2025‑12‑22):
-- ✅ `h5p` Service ist als eigener Compose‑Service vorhanden (Phase‑0 Skeleton).
+- ✅ `h5p` Service ist als eigener Compose‑Service vorhanden (Phase 0).
 - ✅ Caddy routet `/h5p/*` auf `h5p:3000` (Path‑Prefix wird via `handle_path` entfernt).
 - ✅ `GET /h5p/healthz` liefert `200` (Proxy + Service “liveness” verifiziert).
 - ✅ `GET /h5p/auth/me` liefert ohne Session `401` (fail‑closed).
@@ -276,6 +275,13 @@ Verifikation (lokal):
    - Caddy Root‑CA exportieren: `docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt`
    - Ausführen: `RUN_E2E=1 REQUESTS_CA_BUNDLE=.tmp/caddy-root.crt .venv/bin/pytest -q -m e2e backend/tests_e2e`
 
+### Phase 1 – Lumi PoC (Editor/Player) + Storage (2–3 Tage)
+- Lumi Library minimal lauffähig (Editor/Player) im `h5p` Service (nicht nur Platzhalter‑Routen).
+- Storage‑Entscheidung (Supabase‑kompatibel): wo liegen Content‑Binaries/Assets, wie wird lokal=prod umgesetzt?
+- Minimal‑Persistenz: Content erstellen/speichern/laden; Assets lokal ausliefern (keine externen Requests notwendig).
+- AuthZ: Editor nur `teacher`; Player `student` + `teacher` (Preview) – jeweils “fail‑closed”.
+- E2E: Login → Editor‑Page lädt (teacher), Player‑Page lädt (student), keine 500/502.
+
 ### Phase 2 – Teaching UI (2–3 Tage)
 - SSR‑Seite für H5P Editor in GUSTAV; speichern liefert `content_id`.
 - Task‑Konfiguration speichert `unit_tasks.kind='h5p'` + `h5p_content_id`.
@@ -289,7 +295,7 @@ Verifikation (lokal):
 - `evaluation_mode=ai/hybrid`: Worker‑Queue + KI‑Feedback; hybrid speichert Score zusätzlich.
 
 ### Phase 5 – Security Hardening (laufend, vor Pilot)
-- Route‑spezifische CSP für H5P‑Pages (Player + Editor), ohne global CSP zu lockern.
+- CSP‑Tightening: von permissiver `/h5p`‑CSP → minimal nötige Direktiven (Player + Editor), ohne global CSP zu lockern.
 - Library Governance: install/update nur Admin/Trusted Teachers; initiale Whitelist.
 - Upload scanning: SVG sanitizer + ClamAV (wenn Uploads im Editor erlaubt).
 - Logging/Audit: Content create/import/update/delete mit `sub` + timestamp, ohne PII.
@@ -307,7 +313,7 @@ Verifikation (lokal):
 
 ## Open Questions / Entscheidungen
 1) **Storage**: FS‑Volume vs MinIO (S3) vs Supabase S3‑Compat (lokal=prod‑Tauglichkeit prüfen).
-2) **CSP**: Welche minimalen Direktiven benötigen die ausgewählten Content Types? (eval/inline/workers).
+2) **CSP**: PoC/MVP akzeptiert permissive `/h5p`‑CSP; welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).
 3) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
 4) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).
 5) **Versuchszählung**: Semantik von `max_attempts` bei H5P (nur „completed“ zählt vs. auch Retry‑UI).

@@ -10,6 +10,7 @@ Kontext:
 
 ## Scope & Prinzipien
 - KISS, Security‑first, DSGVO: Self‑hosting, keine 3rd‑party Requests im Default, klare Rollen-/Rechte‑Checks.
+- Security model (PoC/MVP): **Trusted content** – H5P Libraries/Packages werden als ausführbarer Code betrachtet und nur von **Lehrkräften (`teacher`, inkl. Admin)** importiert/aktualisiert; Schüler konsumieren ausschließlich kuratierten Content.
 - Contract‑First & TDD: Änderungen zuerst in `api/openapi.yml`, dann failing `pytest`, dann minimaler Code (Red‑Green‑Refactor).
 - Clean Architecture: Fachlogik bleibt im Python‑Use‑Case‑Layer; H5P‑Service ist ein isolierter Adapter/Driver.
 - Local = Prod: Docker Compose, Migrationen und ENV gelten in beiden Umgebungen identisch (keine Dev‑Sonderpfade).
@@ -64,9 +65,31 @@ Non‑Goals (MVP):
 - **Learning Worker** bleibt unverändert das zentrale Element für KI‑Feedback (DSPy/Ollama).
 - **Neuer H5P‑Service (Node/Express)** als dedizierter Service mit Lumi‑Libraries:
   - `@lumieducation/h5p-server`, `@lumieducation/h5p-express`, `@lumieducation/h5p-webcomponents`
-  - Storage (implemented): *Filesystem (bind mount)* `./supabase/storage/h5p` → `/data/h5p` (`H5P_STORAGE_ROOT=/data/h5p`; single-host, no extra DB service, included in backups via `SUPABASE_STORAGE_ROOT`)
+  - Storage (decision; implemented in Phase 0): *Filesystem (bind mount)* `./supabase/storage/h5p` → `/data/h5p` (`H5P_STORAGE_ROOT=/data/h5p`; single-host, no extra DB service, included in backups via `SUPABASE_STORAGE_ROOT`)
   - optional: `@lumieducation/h5p-svg-sanitizer`, `@lumieducation/h5p-clamav-scanner`, später `@lumieducation/h5p-redis-lock`
 - **Reverse Proxy (Caddy)** routet `/h5p/*` auf den H5P‑Service (same‑origin unter `app.localhost`).
+
+### Storage – Optionen & Entscheidung (Stand 2025‑12‑23)
+Anforderungen:
+- Prod bleibt single-host.
+- Möglichst wenig separate Services/DB‑Instanzen.
+- Große H5P‑Pakete sind ok (Storage verfügbar).
+- Supabase‑kompatibel (Self‑hosted Compose).
+
+Optionen (Kurzvergleich):
+
+| Option | Wo liegen die H5P Daten? | Vorteile | Nachteile / Risiken | Fit |
+| --- | --- | --- | --- | --- |
+| A) Filesystem bind mount (gewählt) | Host‑FS: `./supabase/storage/h5p` → Container: `/data/h5p` | sehr simpel; keine neuen Services; große Files ok; Backup über vorhandenen Storage‑Backup‑Pfad | skaliert nicht über mehrere Hosts (später Migration nötig) | ✅ |
+| B) Supabase Storage (Bucket/API) | über Supabase Storage (S3‑API) | perspektivisch multi-host‑fähig; klarer “object storage” Vertrag | Service‑Key/Token‑Handling + mehr IO‑Overhead; für PoC unnötige Komplexität | ⚠️ später |
+| C) Externer Object Store (S3/MinIO extra) | eigener Storage‑Service | skalierbar | zusätzlicher Service; widerspricht “wenig Instanzen” | ❌ |
+| D) Separate DB (Mongo/GridFS) | MongoDB o. ä. | passt zu manchen H5P‑Stacks | zusätzlicher DB‑Service + Operations/Backup; widerspricht Präferenz | ❌ |
+| E) Postgres (bytea/json) | Supabase DB | keine extra Services | DB‑Bloat/Performance/Backup‑Kosten bei großen Paketen | ❌ |
+
+Entscheidung:
+- Wir speichern H5P Libraries/Content/Temp als Dateien unter `/data/h5p` (bind mount in `./supabase/storage/h5p`).
+- Metadaten/Referenzen (z. B. `h5p_content_id` ↔ Task) bleiben in Postgres/Supabase.
+- Falls wir später multi-host brauchen: Migration zu Option B (Supabase Storage Bucket) mit Adapter‑Wechsel im H5P‑Service.
 
 ### AuthN/AuthZ (entscheidungsreif, aber verifizierungsbedürftig)
 Wir vermeiden neue Tokens im Browser und nutzen das bestehende Cookie‑Session‑Modell:
@@ -277,21 +300,38 @@ Verifikation (lokal):
    - Ausführen: `RUN_E2E=1 REQUESTS_CA_BUNDLE=.tmp/caddy-root.crt .venv/bin/pytest -q -m e2e backend/tests_e2e`
 
 ### Phase 1 – Lumi PoC (Editor/Player) + Storage (2–3 Tage)
+- `h5p-service` wird ein “echtes” Node‑Projekt (Lockfile + `npm ci` im Dockerfile), damit Lumi‑Dependencies reproduzierbar sind.
 - Lumi Library minimal lauffähig (Editor/Player) im `h5p` Service (nicht nur Platzhalter‑Routen).
-- Storage (implemented): bind mount `./supabase/storage/h5p` → `/data/h5p`; Unterpfade `libraries/`, `content/`, `tmp/` (inkl. Readiness Probe in `GET /h5p/healthz`).
+- Storage‑Foundation ist vorhanden: bind mount `./supabase/storage/h5p` → `/data/h5p`; in Phase 1 wird Lumi so konfiguriert, dass `libraries/`, `content/`, `tmp/` dort liegen (inkl. Readiness Probe in `GET /h5p/healthz`).
 - Keine separate DB‑Instanz: wenn die Lumi‑Libs persistente Metadaten benötigen, werden sie entweder file‑basiert abgelegt oder (falls zwingend) in Postgres/Supabase integriert – aber nicht in Mongo.
 - Upload‑Größen: Limits werden in Proxy/Service (Caddy/Node) definiert, nicht in Supabase Storage Buckets.
-- Minimal‑Persistenz: Content erstellen/speichern/laden; Assets lokal ausliefern (keine externen Requests notwendig).
+- Minimal‑Persistenz: Content **create/save/load** ist wirklich lauffähig (nicht nur UI‑Smoke) und wird deterministisch über Import/Export nachgewiesen:
+  - Create: Import eines kleinen Fixture‑`.h5p` Pakets (Teacher) erzeugt eine neue `content_id` und persistiert unter `/data/h5p`.
+  - Load: Player rendert den importierten Content (Student/Teacher) ohne Default‑3rd‑party Requests.
+  - Save (Proof‑Strategy): Export→Re‑Import (Teacher) und danach erneut Load (Student). So wird “Save” ohne Browser‑Automation testbar.
 - AuthZ: Editor nur `teacher`; Player `student` + `teacher` (Preview) – jeweils “fail‑closed”.
-- E2E: Login → Editor‑Page lädt (teacher), Player‑Page lädt (student), keine 500/502.
+- E2E: Login → (Teacher) importiert kleines Fixture‑`.h5p` → Player lädt (Student) → Export/Reload ok; keine 500/502 (Teacher‑Rolle wird im Test via Keycloak Admin API gesetzt).
+- E2E‑Fixture: kleines, deterministisches `.h5p` Paket liegt im Repo (z. B. `backend/tests_e2e/fixtures/h5p/…`), damit Phase 1 ohne Internet/Hub verifizierbar bleibt.
+- Security in Phase 1: Import/Export/Update sind “write routes” → nur Teacher (inkl. Admin) + Origin/Referer‑Checks (CSRF‑Guard) + Upload‑Size‑Limits.
+
+Status (2025‑12‑23):
+- ✅ `h5p-service` ist ein echtes Node‑Projekt (`h5p-service/package.json`, `h5p-service/package-lock.json`) und wird via `npm ci` im Dockerfile gebaut.
+- ✅ API‑Contract für `/h5p/*` ist in `api/openapi.yml` ergänzt (Health/Auth/Editor/Player/Import/Export).
+- ✅ Create/Save/Load ist E2E‑verifiziert über Import→Player→Export→Re‑Import→Player:
+  - Test: `backend/tests_e2e/test_h5p_roundtrip_e2e.py` (opt‑in via `RUN_E2E=1`)
+  - Fixture: `backend/tests_e2e/fixtures/h5p/minimal/…`
+- ✅ Security: Import/Export/Write‑Actions sind Teacher‑only + CSRF Same‑Origin (Origin/Referer) + Upload‑Limit.
+- ⏳ Browser‑UX: echte Editor‑UI (Lumi Web Components) + H5P core/editor assets sauber provisionieren (siehe “Nächste Schritte”).
 
 ### Phase 2 – Teaching UI (2–3 Tage)
 - SSR‑Seite für H5P Editor in GUSTAV; speichern liefert `content_id`.
 - Task‑Konfiguration speichert `unit_tasks.kind='h5p'` + `h5p_content_id`.
+- Contract‑First/TDD: `api/openapi.yml` + Supabase‑Migration + `pytest` grün für `unit_tasks` (inkl. `h5p`‑Objekt in Task Create/Update/Read).
 
 ### Phase 3 – Learning UI + xAPI ingest (2–3 Tage)
 - Student‑Seite rendert Player; Listener POSTet Completion an Learning‑API.
 - Abgabe‑Historie zeigt Score/Status.
+- Contract‑First/TDD: `api/openapi.yml` + Supabase‑Migration + `pytest` grün für `learning_submissions.kind='h5p'` und H5P Completion ingest (Idempotency, max_attempts, auto/ai/hybrid).
 
 ### Phase 4 – Feedback‑Modi (2–3 Tage)
 - `evaluation_mode=auto`: sofortige Abgabe‑Finalisierung (ohne Worker).
@@ -299,7 +339,7 @@ Verifikation (lokal):
 
 ### Phase 5 – Security Hardening (laufend, vor Pilot)
 - CSP‑Tightening: von permissiver `/h5p`‑CSP → minimal nötige Direktiven (Player + Editor), ohne global CSP zu lockern.
-- Library Governance: install/update nur Admin/Trusted Teachers; initiale Whitelist.
+- Library Governance (Trusted‑Content): install/update nur Teacher (inkl. Admin); Provenance/Version‑Pinning + Audit‑Log (wer hat welches Paket wann importiert/aktualisiert).
 - Upload scanning: SVG sanitizer + ClamAV (wenn Uploads im Editor erlaubt).
 - Logging/Audit: Content create/import/update/delete mit `sub` + timestamp, ohne PII.
 
@@ -314,9 +354,15 @@ Verifikation (lokal):
 
 ---
 
-## Open Questions / Entscheidungen
-1) **Storage (implemented)**: Filesystem bind mount `./supabase/storage/h5p` → `/data/h5p` (single-host, keine zusätzliche DB‑Instanz; Upload‑Limits via Caddy/Node).
-2) **CSP**: PoC/MVP akzeptiert permissive `/h5p`‑CSP; welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).
-3) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
-4) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).
-5) **Versuchszählung**: Semantik von `max_attempts` bei H5P (nur „completed“ zählt vs. auch Retry‑UI).
+## Entscheidungen (Stand 2025‑12‑23)
+1) **Storage**: Filesystem bind mount `./supabase/storage/h5p` → `/data/h5p` (siehe “Storage – Optionen & Entscheidung”).
+2) **CSP**: PoC/MVP akzeptiert permissive CSP **nur** auf `/h5p/*` (Hardening folgt in Phase 5).
+3) **Phase‑1 Proof für Save**: “Save” wird in Phase 1 deterministisch über Export→Re‑Import→Reload nachgewiesen (ohne Browser‑Automation).
+4) **Security model**: Trusted‑Content – alle Lehrkräfte (`teacher`, inkl. Admin) dürfen H5P Packages/Libraries importieren; Schüler konsumieren nur kuratierten Content (Packages gelten als Code‑Supply‑Chain).
+
+## Offene Fragen
+1) **CSP Hardening**: Welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).
+2) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
+3) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).
+4) **Versuchszählung**: Semantik von `max_attempts` bei H5P (nur „completed“ zählt vs. auch Retry‑UI).
+5) **Library‑Provisioning**: Wie “alle Content Types” bereitstellen/aktualisieren (Hub‑Sync vs. Import von `.h5p` Paketen), ohne Default‑3rd‑party Requests?

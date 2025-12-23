@@ -2,8 +2,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Phase-0 spike: no external dependencies yet (keeps build deterministic).
+COPY package.json package-lock.json /app/
+RUN npm ci --omit=dev
+
 COPY server.mjs /app/server.mjs
+COPY vendor /app/vendor
 
 ENV PORT=3000
 EXPOSE 3000

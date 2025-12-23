@@ -324,7 +324,21 @@ Status (2025‑12‑23):
 - ✅ Import‑Fehler sind “actionable”: Content‑only Pakete ohne `libraries/*` liefern `400 missing_libraries` + `detail` mit der Liste fehlender Libraries (E2E: `backend/tests_e2e/test_h5p_import_errors_e2e.py`).
 - ✅ Browser‑UX (Player): H5P core assets sind provisioniert (`h5p-service/vendor/h5p/core`, aus `h5p-php-library` tag `1.27.0`) und werden über `/h5p/core/*` ausgeliefert (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py`).
 - ✅ Library Provisioning (Trusted‑Content): Lehrkräfte können Content‑Type Libraries installieren via `POST /h5p/libraries/import` (Upload `.h5p`), und installierte Libraries via `GET /h5p/libraries` prüfen.
+- ✅ Library Provisioning ist in der Praxis verifiziert: Ein offizieller H5P.org‑Export (z. B. Multiple Choice) enthält Libraries **inkl.** Assets wie Fonts; Upload via `/h5p/libraries/import` installiert die enthaltenen Libraries. Danach lassen sich “content‑only” Pakete ohne `missing_libraries` importieren.
 - ⏳ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) + H5P editor core assets (`h5p-service/vendor/h5p/editor`) sauber provisionieren.
+
+Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoice)
+1) Beispiel‑`.h5p` (enthält Libraries) herunterladen:
+   - `curl -L -o .tmp/multiple-choice-713.h5p https://h5p.org/sites/default/files/h5p/exports/multiple-choice-713.h5p`
+2) Als Lehrkraft in der UI Libraries installieren:
+   - `https://app.localhost/h5p/editor` → “Install library package (.h5p)”
+   - Hinweis: `POST /h5p/libraries/import` ist Teacher‑only + Same‑Origin‑CSRF (Origin/Referer).
+3) Installation prüfen:
+   - UI: `https://app.localhost/h5p/libraries` (erwartet u. a. `H5P.MultiChoice-1.16`)
+   - oder Dateisystem: `ls -1 supabase/storage/h5p/libraries | rg 'H5P\\.MultiChoice-1\\.16'`
+4) Content importieren und Player öffnen:
+   - Content‑Import: `https://app.localhost/h5p/editor` → “Import .h5p”
+   - Player: `https://app.localhost/h5p/player?content_id=<id>`
 
 ### Phase 2 – Teaching UI (2–3 Tage)
 - SSR‑Seite für H5P Editor in GUSTAV; speichern liefert `content_id`.
@@ -364,6 +378,8 @@ Status (2025‑12‑23):
 4) **Security model**: Trusted‑Content – alle Lehrkräfte (`teacher`, inkl. Admin) dürfen H5P Packages/Libraries importieren; Schüler konsumieren nur kuratierten Content (Packages gelten als Code‑Supply‑Chain).
 5) **Core Assets**: H5P core files werden aus `h5p-php-library` tag `1.27.0` vendored in `h5p-service/vendor/h5p/core`, damit `/h5p/core/*` im Browser zuverlässig funktioniert (ohne Runtime‑Downloads).
 6) **Library Provisioning (MVP)**: Libraries werden initial per Upload installiert (`POST /h5p/libraries/import`), damit “content-only” Pakete importierbar sind (ohne Hub/Internet im Default‑Betrieb).
+   - Praxis: Libraries können aus offiziellen H5P.org‑Exports stammen (Examples & downloads), die die Library‑Ordner bereits enthalten.
+   - Hinweis: Der Default‑Endpoint `https://api.h5p.org/v1/content-types/` liefert aktuell (2025‑12‑23) `404`, daher ist Hub‑Sync in Phase 1 bewusst deaktiviert (`fetchingDisabled=1`).
 
 ## Offene Fragen
 1) **CSP Hardening**: Welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).

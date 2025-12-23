@@ -117,6 +117,40 @@ components:
         content_id:
           type: string
           description: Opaque identifier of the imported H5P content in the H5P service.
+    H5PLibrarySummary:
+      type: object
+      required: [ubername, machine_name, major_version, minor_version]
+      additionalProperties: false
+      properties:
+        ubername:
+          type: string
+          description: H5P library "ubername" (folder name), e.g. `H5P.MultiChoice-1.16`.
+        machine_name:
+          type: string
+          description: H5P machine name, e.g. `H5P.MultiChoice`.
+        major_version:
+          type: integer
+        minor_version:
+          type: integer
+    H5PLibrariesResponse:
+      type: object
+      required: [libraries]
+      additionalProperties: false
+      properties:
+        libraries:
+          type: array
+          items:
+            $ref: '#/components/schemas/H5PLibrarySummary'
+    H5PLibraryImportResponse:
+      type: object
+      required: [installed]
+      additionalProperties: false
+      properties:
+        installed:
+          type: array
+          description: Newly installed library ubernamen (may be empty if everything was already present).
+          items:
+            type: string
     LearningWorkerHealthCheck:
       type: object
       required: [check, status]
@@ -1345,6 +1379,107 @@ paths:
           $ref: '#/components/responses/Unauthorized401'
         '403':
           $ref: '#/components/responses/Forbidden403'
+  /h5p/libraries:
+    get:
+      tags: [H5P]
+      summary: List installed H5P content-type libraries (trusted teachers only)
+      description: >-
+        Returns the list of installed H5P libraries in the H5P service storage.
+        Trusted-content model: access is restricted to role `teacher` (or `admin`).
+      operationId: listH5PLibraries
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Installed libraries
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PLibrariesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+  /h5p/libraries/import:
+    post:
+      tags: [H5P]
+      summary: Install/import an H5P content-type library package (.h5p) into the H5P service
+      description: >-
+        Trusted content model: only teachers/admins may install libraries.
+        Browser clients MUST pass same-origin indicators (Origin/Referer).
+      operationId: importH5PLibrary
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may install content-type libraries (treated as executable code)."
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ".h5p ZIP package containing libraries"
+      responses:
+        '200':
+          description: Library package installed/imported
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PLibraryImportResponse'
+        '400':
+          description: Invalid library package
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /h5p/contents/import:
     post:
       tags: [H5P]
@@ -1356,6 +1491,9 @@ paths:
       operationId: importH5PContent
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may import packages (treated as executable code)."
       requestBody:
         required: true
         content:

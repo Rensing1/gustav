@@ -13,6 +13,8 @@
  *   - `GET /auth/me` mirrors `GET <GUSTAV_WEB_INTERNAL_BASE>/api/me` (cookie forwarded).
  *   - `POST /contents/import` (teacher/admin only) imports a `.h5p` package and returns `content_id`.
  *   - `GET /contents/:contentId/export` (teacher/admin only) exports a `.h5p` package.
+ *   - `GET /libraries` (teacher/admin only) lists installed content-type libraries.
+ *   - `POST /libraries/import` (teacher/admin only) installs a content-type library package.
  *   - `GET /player?content_id=...` (student/teacher/admin) renders the H5P player.
  *   - `GET /editor` (teacher/admin) is a minimal Phase-1 UI (import form).
  *
@@ -26,7 +28,7 @@
  */
 
 import path from "node:path";
-import { access, mkdir, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
 import multer from "multer";
@@ -253,6 +255,28 @@ function getMainLibraryUbername(metadata) {
   return `${machineName} ${found.majorVersion}.${found.minorVersion}`;
 }
 
+async function listInstalledLibraries() {
+  try {
+    const entries = await readdir(storageDirs.libraries, { withFileTypes: true });
+    const libs = [];
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue;
+      const m = /^(.+)-(\d+)\.(\d+)$/.exec(ent.name);
+      if (!m) continue;
+      libs.push({
+        ubername: ent.name,
+        machine_name: m[1],
+        major_version: Number.parseInt(m[2], 10),
+        minor_version: Number.parseInt(m[3], 10),
+      });
+    }
+    libs.sort((a, b) => a.ubername.localeCompare(b.ubername));
+    return libs;
+  } catch {
+    return [];
+  }
+}
+
 const uploadImport = multer({
   storage: multer.diskStorage({
     destination: storageDirs.uploads,
@@ -395,6 +419,14 @@ async function main() {
         "</head><body>",
         "<h1>H5P Editor (Phase 1 – import-based)</h1>",
         "<p>This is a minimal Phase-1 UI. Use the import endpoint to create content.</p>",
+        "<h2>1) Install content-type libraries (required once)</h2>",
+        "<p>If you see <code>missing_libraries</code> on import, install the missing libraries first.</p>",
+        "<form method=\"post\" enctype=\"multipart/form-data\" action=\"/h5p/libraries/import\">",
+        "<input type=\"file\" name=\"file\" accept=\".h5p,application/zip\" required />",
+        "<button type=\"submit\">Install library package (.h5p)</button>",
+        "</form>",
+        "<p><a href=\"/h5p/libraries\">List installed libraries</a></p>",
+        "<h2>2) Import content package</h2>",
         "<form method=\"post\" enctype=\"multipart/form-data\" action=\"/h5p/contents/import\">",
         "<input type=\"file\" name=\"file\" accept=\".h5p,application/zip\" required />",
         "<button type=\"submit\">Import .h5p</button>",
@@ -403,6 +435,73 @@ async function main() {
       ].join(""),
     );
   });
+
+  app.get("/libraries", requireTeacher, async (_req, res) => {
+    const storage = await probeStorage();
+    if (!storage.ok) {
+      sendJson(res, 503, { error: "storage_unavailable" });
+      return;
+    }
+    const libraries = await listInstalledLibraries();
+    sendJson(res, 200, { libraries });
+  });
+
+  app.post(
+    "/libraries/import",
+    requireTeacher,
+    requireSameOrigin,
+    uploadImport.single("file"),
+    async (req, res) => {
+      const file = req.file;
+      if (!file?.path) {
+        sendJson(res, 400, { error: "invalid_request" });
+        return;
+      }
+
+      const before = new Set((await listInstalledLibraries()).map((l) => l.ubername));
+      try {
+        await h5pAjax.postAjax(
+          "library-upload",
+          req.body ?? {},
+          req.query.language ?? req.language,
+          req.user,
+          undefined,
+          undefined,
+          req.t,
+          {
+            mimetype: file.mimetype,
+            name: file.originalname,
+            size: file.size,
+            tempFilePath: file.path,
+          },
+          undefined,
+        );
+        const after = await listInstalledLibraries();
+        const installed = after
+          .map((l) => l.ubername)
+          .filter((u) => !before.has(u))
+          .sort((a, b) => a.localeCompare(b));
+        sendJson(res, 200, { installed }, { Vary: "Origin" });
+      } catch (err) {
+        if (err?.httpStatusCode) {
+          sendJson(
+            res,
+            err.httpStatusCode,
+            { error: err.errorId || "h5p_error" },
+            { Vary: "Origin" },
+          );
+          return;
+        }
+        sendJson(res, 400, { error: "invalid_package" }, { Vary: "Origin" });
+      } finally {
+        try {
+          await unlink(file.path);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    },
+  );
 
   app.get("/player", async (req, res) => {
     const contentId = req.query.content_id;
@@ -491,9 +590,10 @@ async function main() {
         const errorId = err?.errorId;
         const missingLibraries = err?.replacements?.libraries;
         if (errorId === "install-missing-libraries") {
+          const help = "Install content-type libraries first via /h5p/libraries/import (teacher-only).";
           const detail = missingLibraries
-            ? `Missing H5P libraries: ${missingLibraries}`
-            : "Missing H5P libraries.";
+            ? `Missing H5P libraries: ${missingLibraries}. ${help}`
+            : `Missing H5P libraries. ${help}`;
           sendJson(res, 400, { error: "missing_libraries", detail }, { Vary: "Origin" });
           return;
         }

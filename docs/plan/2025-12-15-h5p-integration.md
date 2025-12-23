@@ -316,13 +316,14 @@ Verifikation (lokal):
 
 Status (2025‑12‑23):
 - ✅ `h5p-service` ist ein echtes Node‑Projekt (`h5p-service/package.json`, `h5p-service/package-lock.json`) und wird via `npm ci` im Dockerfile gebaut.
-- ✅ API‑Contract für `/h5p/*` ist in `api/openapi.yml` ergänzt (Health/Auth/Editor/Player/Import/Export).
+- ✅ API‑Contract für `/h5p/*` ist in `api/openapi.yml` ergänzt (Health/Auth/Editor/Player/Libraries/Import/Export).
 - ✅ Create/Save/Load ist E2E‑verifiziert über Import→Player→Export→Re‑Import→Player:
   - Test: `backend/tests_e2e/test_h5p_roundtrip_e2e.py` (opt‑in via `RUN_E2E=1`)
   - Fixture: `backend/tests_e2e/fixtures/h5p/minimal/…`
 - ✅ Security: Import/Export/Write‑Actions sind Teacher‑only + CSRF Same‑Origin (Origin/Referer) + Upload‑Limit.
 - ✅ Import‑Fehler sind “actionable”: Content‑only Pakete ohne `libraries/*` liefern `400 missing_libraries` + `detail` mit der Liste fehlender Libraries (E2E: `backend/tests_e2e/test_h5p_import_errors_e2e.py`).
 - ✅ Browser‑UX (Player): H5P core assets sind provisioniert (`h5p-service/vendor/h5p/core`, aus `h5p-php-library` tag `1.27.0`) und werden über `/h5p/core/*` ausgeliefert (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py`).
+- ✅ Library Provisioning (Trusted‑Content): Lehrkräfte können Content‑Type Libraries installieren via `POST /h5p/libraries/import` (Upload `.h5p`), und installierte Libraries via `GET /h5p/libraries` prüfen.
 - ⏳ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) + H5P editor core assets (`h5p-service/vendor/h5p/editor`) sauber provisionieren.
 
 ### Phase 2 – Teaching UI (2–3 Tage)
@@ -362,10 +363,11 @@ Status (2025‑12‑23):
 3) **Phase‑1 Proof für Save**: “Save” wird in Phase 1 deterministisch über Export→Re‑Import→Reload nachgewiesen (ohne Browser‑Automation).
 4) **Security model**: Trusted‑Content – alle Lehrkräfte (`teacher`, inkl. Admin) dürfen H5P Packages/Libraries importieren; Schüler konsumieren nur kuratierten Content (Packages gelten als Code‑Supply‑Chain).
 5) **Core Assets**: H5P core files werden aus `h5p-php-library` tag `1.27.0` vendored in `h5p-service/vendor/h5p/core`, damit `/h5p/core/*` im Browser zuverlässig funktioniert (ohne Runtime‑Downloads).
+6) **Library Provisioning (MVP)**: Libraries werden initial per Upload installiert (`POST /h5p/libraries/import`), damit “content-only” Pakete importierbar sind (ohne Hub/Internet im Default‑Betrieb).
 
 ## Offene Fragen
 1) **CSP Hardening**: Welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).
 2) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
 3) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).
 4) **Versuchszählung**: Semantik von `max_attempts` bei H5P (nur „completed“ zählt vs. auch Retry‑UI).
-5) **Library‑Provisioning**: Wie “alle Content Types” bereitstellen/aktualisieren (Hub‑Sync vs. Import von `.h5p` Paketen), ohne Default‑3rd‑party Requests?
+5) **Library‑Provisioning**: MVP‑fähig ist “manual install” via `POST /h5p/libraries/import`. Offen bleibt: Wie stellen wir “alle Content Types” effizient bereit/aktualisieren (Hub‑Sync Job / pinned snapshot), ohne Default‑3rd‑party Requests im Live‑Betrieb?

@@ -149,6 +149,16 @@ def test_h5p_healthz_and_auth_me():
     _wait_for(f"{WEB_BASE}/health")
     _wait_for(f"{WEB_BASE}/h5p/healthz")
 
+    # Health payload should include basic storage readiness information.
+    r_health = requests.get(f"{WEB_BASE}/h5p/healthz", timeout=10)
+    assert r_health.status_code == 200
+    health_body = r_health.json()
+    assert isinstance(health_body, dict)
+    assert health_body.get("status") == "healthy"
+    assert "storage" in health_body and isinstance(health_body["storage"], dict)
+    assert health_body["storage"].get("ok") is True
+    assert isinstance(health_body["storage"].get("root"), str) and health_body["storage"]["root"]
+
     # Unauthenticated: H5P service must fail-closed
     r0 = requests.get(f"{WEB_BASE}/h5p/auth/me", timeout=10)
     assert r0.status_code == 401

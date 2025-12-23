@@ -18,11 +18,21 @@
  */
 
 import http from "node:http";
+import { access, mkdir } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
 const sessionCookieName = process.env.SESSION_COOKIE_NAME || "gustav_session";
 const authCacheTtlSeconds = Number.parseInt(process.env.AUTH_CACHE_TTL_SECONDS || "30", 10);
+const storageRoot = process.env.H5P_STORAGE_ROOT || "/data/h5p";
+
+const storageDirs = {
+  root: storageRoot,
+  libraries: `${storageRoot}/libraries`,
+  content: `${storageRoot}/content`,
+  tmp: `${storageRoot}/tmp`,
+};
 
 /**
  * Cache auth lookups for short bursts (editor/player loads many assets quickly).
@@ -87,6 +97,18 @@ function rolesAllowStudentOrTeacher(roles) {
   return roles.includes("admin") || roles.includes("teacher") || roles.includes("student");
 }
 
+async function probeStorage() {
+  try {
+    await mkdir(storageDirs.libraries, { recursive: true });
+    await mkdir(storageDirs.content, { recursive: true });
+    await mkdir(storageDirs.tmp, { recursive: true });
+    await access(storageDirs.tmp, fsConstants.W_OK);
+    return { ok: true, root: storageDirs.root };
+  } catch (err) {
+    return { ok: false, root: storageDirs.root, error: String(err) };
+  }
+}
+
 async function fetchGustavMe(cookieHeader) {
   const url = `${gustavWebInternalBase.replace(/\/+$/, "")}/api/me`;
   const r = await fetch(url, {
@@ -139,7 +161,12 @@ const server = http.createServer(async (req, res) => {
   const path = url.pathname;
 
   if (method === "GET" && path === "/healthz") {
-    sendJson(res, 200, { status: "healthy", service: "gustav-h5p", time: new Date().toISOString() });
+    const storage = await probeStorage();
+    sendJson(
+      res,
+      storage.ok ? 200 : 503,
+      { status: storage.ok ? "healthy" : "unhealthy", service: "gustav-h5p", time: new Date().toISOString(), storage },
+    );
     return;
   }
 

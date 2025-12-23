@@ -64,7 +64,7 @@ Non‑Goals (MVP):
 - **Learning Worker** bleibt unverändert das zentrale Element für KI‑Feedback (DSPy/Ollama).
 - **Neuer H5P‑Service (Node/Express)** als dedizierter Service mit Lumi‑Libraries:
   - `@lumieducation/h5p-server`, `@lumieducation/h5p-express`, `@lumieducation/h5p-webcomponents`
-  - Storage (decision): *Filesystem (bind mount)* unter `./supabase/storage/h5p` (single-host, no extra DB service, large packages OK, included in backups via `SUPABASE_STORAGE_ROOT`)
+  - Storage (implemented): *Filesystem (bind mount)* `./supabase/storage/h5p` → `/data/h5p` (`H5P_STORAGE_ROOT=/data/h5p`; single-host, no extra DB service, included in backups via `SUPABASE_STORAGE_ROOT`)
   - optional: `@lumieducation/h5p-svg-sanitizer`, `@lumieducation/h5p-clamav-scanner`, später `@lumieducation/h5p-redis-lock`
 - **Reverse Proxy (Caddy)** routet `/h5p/*` auf den H5P‑Service (same‑origin unter `app.localhost`).
 
@@ -252,13 +252,14 @@ Und wir erweitern `LearningSubmission.kind` um `h5p` und ergänzen `score_raw/sc
 - Caddy: `/h5p/*` → `h5p` upstream (Path‑Prefix wird entfernt).
 - Route‑spezifische CSP für `/h5p/*` (bewusst permissiver für “alle Content Types”).
 - Healthcheck `GET /h5p/healthz`.
+- Filesystem Storage: bind mount `./supabase/storage/h5p` → `/data/h5p` + Readiness Probe in `GET /h5p/healthz`.
 - Auth‑Plumbing `GET /h5p/auth/me` (Session‑Cookie wird an `web:/api/me` weitergereicht).
 - E2E‑Smoke (opt‑in via `RUN_E2E=1`) für Proxy/Auth.
 
-Status (2025‑12‑22):
+Status (2025‑12‑23):
 - ✅ `h5p` Service ist als eigener Compose‑Service vorhanden (Phase 0).
 - ✅ Caddy routet `/h5p/*` auf `h5p:3000` (Path‑Prefix wird via `handle_path` entfernt).
-- ✅ `GET /h5p/healthz` liefert `200` (Proxy + Service “liveness” verifiziert).
+- ✅ `GET /h5p/healthz` liefert `200` inkl. Storage‑Readiness (`storage.ok=true`).
 - ✅ `GET /h5p/auth/me` liefert ohne Session `401` (fail‑closed).
 - ✅ `GET /h5p/editor` und `GET /h5p/player` liefern ohne Session `401` (fail‑closed).
 - ✅ E2E‑Smoke inkl. OIDC Login ist erfolgreich (siehe “Verifikation” unten).
@@ -267,7 +268,7 @@ Verifikation (lokal):
 1) Infrastruktur starten:
    - `docker compose up -d --build caddy web keycloak h5p`
 2) Smoke per curl (TLS‑verify aus):
-   - `curl -k -i https://app.localhost/h5p/healthz`
+   - `curl -k -i https://app.localhost/h5p/healthz` (erwartet `storage.ok=true`)
    - `curl -k -i https://app.localhost/h5p/auth/me`  (erwartet `401`)
    - `curl -k -i https://app.localhost/h5p/editor`   (erwartet `401`)
    - `curl -k -i https://app.localhost/h5p/player`   (erwartet `401`)
@@ -277,7 +278,7 @@ Verifikation (lokal):
 
 ### Phase 1 – Lumi PoC (Editor/Player) + Storage (2–3 Tage)
 - Lumi Library minimal lauffähig (Editor/Player) im `h5p` Service (nicht nur Platzhalter‑Routen).
-- Storage (decided): bind mount `./supabase/storage/h5p` → `/data/h5p` im Container; Unterpfade `libraries/`, `content/`, `tmp/`.
+- Storage (implemented): bind mount `./supabase/storage/h5p` → `/data/h5p`; Unterpfade `libraries/`, `content/`, `tmp/` (inkl. Readiness Probe in `GET /h5p/healthz`).
 - Keine separate DB‑Instanz: wenn die Lumi‑Libs persistente Metadaten benötigen, werden sie entweder file‑basiert abgelegt oder (falls zwingend) in Postgres/Supabase integriert – aber nicht in Mongo.
 - Upload‑Größen: Limits werden in Proxy/Service (Caddy/Node) definiert, nicht in Supabase Storage Buckets.
 - Minimal‑Persistenz: Content erstellen/speichern/laden; Assets lokal ausliefern (keine externen Requests notwendig).
@@ -314,7 +315,7 @@ Verifikation (lokal):
 ---
 
 ## Open Questions / Entscheidungen
-1) **Storage (decided)**: Filesystem bind mount unter `./supabase/storage/h5p` (single-host, keine zusätzliche DB‑Instanz; Upload‑Limits via Caddy/Node).
+1) **Storage (implemented)**: Filesystem bind mount `./supabase/storage/h5p` → `/data/h5p` (single-host, keine zusätzliche DB‑Instanz; Upload‑Limits via Caddy/Node).
 2) **CSP**: PoC/MVP akzeptiert permissive `/h5p`‑CSP; welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).
 3) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
 4) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).

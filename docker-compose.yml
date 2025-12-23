@@ -87,6 +87,9 @@ services:
       context: ./h5p-service
     container_name: gustav-h5p
     # behind proxy; no direct host port mapping
+    volumes:
+      # H5P content/libraries (single-host, included in backup-cron via SUPABASE_STORAGE_ROOT)
+      - ./supabase/storage/h5p:/data/h5p:z
     environment:
       # Service listens on this port inside the compose network
       - PORT=3000
@@ -95,6 +98,8 @@ services:
       - SESSION_COOKIE_NAME=gustav_session
       # Small cache to reduce load on /api/me during editor/player asset bursts
       - AUTH_CACHE_TTL_SECONDS=30
+      # Filesystem-based storage root (mounted from repo under supabase/storage)
+      - H5P_STORAGE_ROOT=/data/h5p
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

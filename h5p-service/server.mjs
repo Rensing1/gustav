@@ -88,7 +88,7 @@ function rolesAllowStudentOrTeacher(roles) {
 }
 
 async function fetchGustavMe(cookieHeader) {
-  const url = `${gustavWebInternalBase.replace(/\\/$/, "")}/api/me`;
+  const url = `${gustavWebInternalBase.replace(/\/+$/, "")}/api/me`;
   const r = await fetch(url, {
     method: "GET",
     headers: {
@@ -205,4 +205,3 @@ server.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`gustav-h5p listening on :${port} (web=${gustavWebInternalBase})`);
 });
-

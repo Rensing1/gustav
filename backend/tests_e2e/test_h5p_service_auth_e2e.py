@@ -163,6 +163,16 @@ def test_h5p_healthz_and_auth_me():
     _login_via_oidc(sess, email=email, password=password)
     r1 = sess.get(f"{WEB_BASE}/h5p/auth/me", timeout=10)
     assert r1.status_code == 200, f"/h5p/auth/me failed: {r1.status_code} {r1.text}"
-    body = r1.json()
-    assert body.get("email") == email
-    assert isinstance(body.get("roles", []), list)
+    body_h5p = r1.json()
+    assert isinstance(body_h5p, dict)
+    assert "email" not in body_h5p, "/api/me must not leak email; /h5p/auth/me mirrors it"
+    assert "sub" in body_h5p and isinstance(body_h5p["sub"], str)
+    assert "roles" in body_h5p and isinstance(body_h5p["roles"], list)
+    assert "name" in body_h5p and isinstance(body_h5p["name"], str)
+    assert "expires_at" in body_h5p and (body_h5p["expires_at"] is None or isinstance(body_h5p["expires_at"], str))
+
+    # Ensure the H5P service forwards the same principal data as the web app.
+    r2 = sess.get(f"{WEB_BASE}/api/me", timeout=10)
+    assert r2.status_code == 200, f"/api/me failed: {r2.status_code} {r2.text}"
+    body_me = r2.json()
+    assert body_h5p == body_me

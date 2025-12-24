@@ -380,10 +380,10 @@ Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoi
 6) **Library Provisioning (MVP)**: Libraries werden initial per Upload installiert (`POST /h5p/libraries/import`), damit “content-only” Pakete importierbar sind (ohne Hub/Internet im Default‑Betrieb).
    - Praxis: Libraries können aus offiziellen H5P.org‑Exports stammen (Examples & downloads), die die Library‑Ordner bereits enthalten.
    - Hinweis: Der Default‑Endpoint `https://api.h5p.org/v1/content-types/` liefert aktuell (2025‑12‑23) `404`, daher ist Hub‑Sync in Phase 1 bewusst deaktiviert (`fetchingDisabled=1`).
+7) **Libraries sind admin‑verwaltet (Betrieb)**: Welche Content Types installiert sind, entscheidet der Admin (bzw. eine dafür verantwortliche Lehrkraft). GUSTAV liefert in Phase 1 keine “install all libraries” Automatik; fehlende Libraries werden beim Import als `missing_libraries` zurückgemeldet und dann gezielt per Upload nachinstalliert.
 
 ## Offene Fragen
 1) **CSP Hardening**: Welche minimalen Direktiven brauchen wir für Pilot/Hardening? (eval/inline/workers).
 2) **AI‑Scope**: Welche H5P Content Types werden für `evaluation_mode=ai` initial erlaubt (Essay/ShortAnswer)?
 3) **Event‑Retention**: Speichern wir nur Completion oder auch answered‑Events? Wie lange? (DSGVO/Datensparsamkeit).
 4) **Versuchszählung**: Semantik von `max_attempts` bei H5P (nur „completed“ zählt vs. auch Retry‑UI).
-5) **Library‑Provisioning**: MVP‑fähig ist “manual install” via `POST /h5p/libraries/import`. Offen bleibt: Wie stellen wir “alle Content Types” effizient bereit/aktualisieren (Hub‑Sync Job / pinned snapshot), ohne Default‑3rd‑party Requests im Live‑Betrieb?

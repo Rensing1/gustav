@@ -348,6 +348,11 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
         "__gustav_h5p_editor_init_ok" in r_editor.text
     ), "Editor page should expose an init flag so we can detect partial JS failures"
 
+    # The editor page inlines JS. We rely on line breaks because the script
+    # contains `//` comments (without newlines they'd comment out the rest).
+    assert "\n" in r_editor.text
+    assert "\n    // Workaround:" in r_editor.text
+
     assert 'type="importmap"' in r_editor.text, "Editor must ship an import map for bare imports"
     assert "deepmerge" in r_editor.text
     assert "await-lock" in r_editor.text

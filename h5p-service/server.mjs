@@ -648,7 +648,10 @@ async function main() {
         "</script>",
         "</div>",
         "</body></html>",
-      ].join(""),
+      // IMPORTANT: keep line breaks in the HTML so `//` comments inside the
+      // inline `<script type="module">` do not swallow the remainder of the
+      // module (the browser treats the whole script as a single line otherwise).
+      ].join("\n"),
     );
   });
 

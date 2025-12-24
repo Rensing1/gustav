@@ -777,22 +777,11 @@ async function main() {
 
       const before = new Set((await listInstalledLibraries()).map((l) => l.ubername));
       try {
-        await h5pAjax.postAjax(
-          "library-upload",
-          req.body ?? {},
-          req.query.language ?? req.language,
-          req.user,
-          undefined,
-          undefined,
-          req.t,
-          {
-            mimetype: file.mimetype,
-            name: file.originalname,
-            size: file.size,
-            tempFilePath: file.path,
-          },
-          undefined,
-        );
+        // Install libraries from a package *without* requiring `h5p.json` / `content/*`.
+        // This enables admin-managed "library-only" packages as well as full
+        // exports that embed the library folders at the ZIP root.
+        await h5pEditor.uploadPackage(file.path, req.user, { onlyInstallLibraries: true });
+
         const after = await listInstalledLibraries();
         const installed = after
           .map((l) => l.ubername)

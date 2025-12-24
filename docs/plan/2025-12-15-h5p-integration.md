@@ -329,7 +329,8 @@ Status (2025‑12‑24):
   - Editor core assets sind provisioniert (`h5p-service/vendor/h5p/editor`) und werden same‑origin via `/h5p/editor-assets/*` ausgeliefert.
   - Webcomponents werden via `/h5p/webcomponents/*` ausgeliefert, inkl. `.js`‑Fallback für extensionless Imports.
     - Robustheit: Lumi’s ES2015 build enthält bare imports (`deepmerge`, `await-lock`). Zusätzlich zu Import‑Maps liefern wir daher zwei kleine browser‑kompatible Overrides aus (`h5p-service/vendor/webcomponents/overrides/{h5p-utils.js,dom-utils.js}`), die nur relative Imports nutzen → der Editor bleibt auch ohne Import‑Map‑Support funktionsfähig (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
-  - ✅ Editor‑Robustheit: `GET /h5p/editor` enthält ein sichtbares Status‑Element und eine Init‑Flagge (`window.__gustav_h5p_editor_init_ok`) für Debugging; außerdem werden HTML‑Linebreaks bewusst beibehalten, damit `//` Kommentare im inline ES‑Module Script nicht den Rest des Scripts “wegkommentieren” (E2E Regression: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
+  - ✅ Editor‑Robustheit: `GET /h5p/editor` enthält ein sichtbares Status‑Element und eine Init‑Flagge (`window.__gustav_h5p_editor_init_ok`) für Debugging; außerdem werden HTML‑Linebreaks bewusst beibehalten, damit `//` Kommentare im inline ES‑Module Script nicht den Rest des Scripts “wegkommentieren” (Fix für „Buttons reagieren nicht“ / „module load failed“, E2E Regression: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
+  - ✅ Cache‑Robustheit (Editor): `/h5p/webcomponents/*` und `/h5p/webcomponents/vendor/*` werden mit `maxAge=0` ausgeliefert (always revalidate), damit nach Rebuild/Deploy keine stale JS‑Bundles den Editor “halb kaputt” machen.
   - Known UX pitfall fixed: Loading an existing content id from the initial `new` state requires forcing a re-render; the Phase-1 page does this via a small `setEditorContentId()` helper (same E2E regression as above).
 
 Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoice)
@@ -344,6 +345,8 @@ Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoi
 4) Content importieren und Player öffnen:
    - Content‑Import: `https://app.localhost/h5p/editor` → “Import .h5p”
    - Player: `https://app.localhost/h5p/player?content_id=<id>`
+5) Editor‑Smoke (New/Load/Save):
+   - `https://app.localhost/h5p/editor` → Status sollte `Ready.` anzeigen; Klick auf Buttons muss den Status aktualisieren (wenn nicht: DevTools Console öffnen, dort sieht man i. d. R. das erste JS‑Load‑Problem).
 
 ### Phase 2 – Teaching UI (2–3 Tage)
 - SSR‑Seite für H5P Editor in GUSTAV; speichern liefert `content_id`.

@@ -343,6 +343,9 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
     assert 'type="importmap"' in r_editor.text, "Editor must ship an import map for bare imports"
     assert "deepmerge" in r_editor.text
     assert "await-lock" in r_editor.text
+    assert (
+        "editor.contentId = undefined;" in r_editor.text
+    ), "Editor must force a reload when switching from 'new' to an existing content id"
 
     # Requests as the browser would do when evaluating the module graph.
     paths = [

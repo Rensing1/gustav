@@ -314,7 +314,7 @@ Verifikation (lokal):
 - E2E‑Fixture: kleines, deterministisches `.h5p` Paket liegt im Repo (z. B. `backend/tests_e2e/fixtures/h5p/…`), damit Phase 1 ohne Internet/Hub verifizierbar bleibt.
 - Security in Phase 1: Import/Export/Update sind “write routes” → nur Teacher (inkl. Admin) + Origin/Referer‑Checks (CSRF‑Guard) + Upload‑Size‑Limits.
 
-Status (2025‑12‑23):
+Status (2025‑12‑24):
 - ✅ `h5p-service` ist ein echtes Node‑Projekt (`h5p-service/package.json`, `h5p-service/package-lock.json`) und wird via `npm ci` im Dockerfile gebaut.
 - ✅ API‑Contract für `/h5p/*` ist in `api/openapi.yml` ergänzt (Health/Auth/Editor/Player/Libraries/Import/Export).
 - ✅ Create/Save/Load ist E2E‑verifiziert über Import→Player→Export→Re‑Import→Player:
@@ -329,6 +329,7 @@ Status (2025‑12‑23):
   - Editor core assets sind provisioniert (`h5p-service/vendor/h5p/editor`) und werden same‑origin via `/h5p/editor-assets/*` ausgeliefert.
   - Webcomponents werden via `/h5p/webcomponents/*` ausgeliefert, inkl. `.js`‑Fallback für extensionless Imports.
     - Robustheit: Lumi’s ES2015 build enthält bare imports (`deepmerge`, `await-lock`). Zusätzlich zu Import‑Maps liefern wir daher zwei kleine browser‑kompatible Overrides aus (`h5p-service/vendor/webcomponents/overrides/{h5p-utils.js,dom-utils.js}`), die nur relative Imports nutzen → der Editor bleibt auch ohne Import‑Map‑Support funktionsfähig (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
+  - ✅ Editor‑Robustheit: `GET /h5p/editor` enthält ein sichtbares Status‑Element und eine Init‑Flagge (`window.__gustav_h5p_editor_init_ok`) für Debugging; außerdem werden HTML‑Linebreaks bewusst beibehalten, damit `//` Kommentare im inline ES‑Module Script nicht den Rest des Scripts “wegkommentieren” (E2E Regression: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
   - Known UX pitfall fixed: Loading an existing content id from the initial `new` state requires forcing a re-render; the Phase-1 page does this via a small `setEditorContentId()` helper (same E2E regression as above).
 
 Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoice)

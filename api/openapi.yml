@@ -151,6 +151,70 @@ components:
           description: Newly installed library ubernamen (may be empty if everything was already present).
           items:
             type: string
+    H5PEditorContentParams:
+      type: object
+      required: [params, metadata]
+      additionalProperties: false
+      properties:
+        params:
+          type: object
+          description: H5P content parameters (content.json).
+          additionalProperties: true
+        metadata:
+          type: object
+          description: H5P content metadata (h5p.json).
+          additionalProperties: true
+    H5PEditorModelResponse:
+      type: object
+      required: [integration, scripts, styles]
+      additionalProperties: false
+      properties:
+        integration:
+          type: object
+          description: H5PIntegration object used by the editor/player runtime.
+          additionalProperties: true
+        scripts:
+          type: array
+          items:
+            type: string
+        styles:
+          type: array
+          items:
+            type: string
+        library:
+          type: string
+          nullable: true
+          description: Main library ubername (only present when loading existing content).
+        metadata:
+          type: object
+          nullable: true
+          description: Content metadata (only present when loading existing content).
+          additionalProperties: true
+        params:
+          type: object
+          nullable: true
+          description: Content parameters (only present when loading existing content).
+          additionalProperties: true
+    H5PContentSaveRequest:
+      type: object
+      required: [library, params]
+      additionalProperties: false
+      properties:
+        library:
+          type: string
+          description: Main library ubername with whitespace separator, e.g. `H5P.MultiChoice 1.16`.
+        params:
+          $ref: '#/components/schemas/H5PEditorContentParams'
+    H5PContentSaveResponse:
+      type: object
+      required: [content_id, metadata]
+      additionalProperties: false
+      properties:
+        content_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
     LearningWorkerHealthCheck:
       type: object
       required: [check, status]
@@ -1347,6 +1411,53 @@ paths:
           $ref: '#/components/responses/Unauthorized401'
         '403':
           $ref: '#/components/responses/Forbidden403'
+  /h5p/editor/model:
+    get:
+      tags: [H5P]
+      summary: H5P editor model (trusted teachers only)
+      description: >-
+        Returns the JSON model needed to render the H5P editor in a browser
+        (H5PIntegration + core script/style lists). If `content_id` is given,
+        includes the current library/metadata/params for editing existing content.
+      operationId: getH5PEditorModel
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: content_id
+          required: false
+          schema:
+            type: string
+          description: Optional existing content id to load.
+      responses:
+        '200':
+          description: Editor model JSON
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PEditorModelResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /h5p/player:
     get:
       tags: [H5P]
@@ -1551,6 +1662,162 @@ paths:
               schema:
                 type: string
                 example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/contents:
+    post:
+      tags: [H5P]
+      summary: Create H5P content from editor params (trusted teachers only)
+      description: >-
+        Stores a new H5P content item using editor parameters (content.json + h5p.json metadata).
+        Trusted content model: only teachers/admins may create content. Browser clients MUST pass
+        same-origin indicators (Origin/Referer).
+      operationId: createH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may create content (treated as executable code)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/H5PContentSaveRequest'
+      responses:
+        '201':
+          description: Content created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentSaveResponse'
+        '400':
+          description: Invalid request
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/contents/{content_id}:
+    patch:
+      tags: [H5P]
+      summary: Update H5P content from editor params (trusted teachers only)
+      description: >-
+        Updates an existing H5P content item using editor parameters (content.json + h5p.json metadata).
+        Trusted content model: only teachers/admins may update content. Browser clients MUST pass
+        same-origin indicators (Origin/Referer).
+      operationId: updateH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may update content (treated as executable code)."
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/H5PContentSaveRequest'
+      responses:
+        '200':
+          description: Content updated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentSaveResponse'
+        '400':
+          description: Invalid request
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
           content:
             application/json:
               schema:

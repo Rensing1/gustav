@@ -335,6 +335,12 @@ async function main() {
   const configStorage = await fsImplementations.JsonStorage.create(configPath);
   const h5pConfig = new H5PConfig(configStorage, {
     baseUrl: "/h5p",
+    // Avoid conflicting with the human-facing editor page at GET /editor.
+    // The H5P editor core files are served under this URL instead.
+    editorLibraryUrl: "/editor-assets",
+    // Avoid embedding external hub URLs into HTML/JSON responses (offline-first).
+    // Hub fetching remains disabled in Phase 1.
+    contentHubContentEndpoint: "/h5p/hub-api",
     // Hard-disable all automatic hub fetching in Phase 1 (offline-first).
     fetchingDisabled: 1,
     // Allow large packages if storage permits (still bounded by service limits).
@@ -374,6 +380,14 @@ async function main() {
   );
   const h5pAjax = new H5PAjaxEndpoint(h5pEditor);
 
+  // We don't use the built-in SSR renderer. Instead, we expose editor/player pages
+  // that use Lumi's web components and a small JSON "editor model" endpoint.
+  h5pEditor.setRenderer((model) => ({
+    integration: model.integration,
+    scripts: model.scripts,
+    styles: model.styles,
+  }));
+
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", true);
@@ -403,6 +417,31 @@ async function main() {
   app.use(requireAuth);
   app.use(requireStudentOrTeacher);
 
+  // Serve Lumi web components (ES modules).
+  app.use(
+    "/webcomponents",
+    express.static(
+      path.join("/app", "node_modules", "@lumieducation", "h5p-webcomponents", "build", "es2015"),
+      // Note: Lumi's ES2015 build uses extensionless relative imports like
+      // `import ... from './h5p-editor'`. Browsers do not auto-append `.js`,
+      // so we enable a `.js` fallback to make those imports resolve.
+      { cacheControl: true, etag: true, lastModified: true, maxAge: 31536000000, extensions: ["js"] },
+    ),
+  );
+
+  // Vendor shims required by the webcomponents when used directly in a browser
+  // (without a bundler). The upstream build has bare imports like `deepmerge`
+  // and `await-lock`, which must be resolved via an import map.
+  app.use(
+    "/webcomponents/vendor",
+    express.static(path.join("/app", "vendor", "webcomponents"), {
+      cacheControl: true,
+      etag: true,
+      lastModified: true,
+      maxAge: 31536000000,
+    }),
+  );
+
   app.get("/auth/me", (req, res) => {
     sendJson(res, 200, req.gustavMe);
   });
@@ -416,24 +455,231 @@ async function main() {
         "<html><head><meta charset=\"utf-8\" />",
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />",
         "<title>H5P Editor (Phase 1)</title>",
+        "<style>",
+        "body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;line-height:1.35;padding:16px;max-width:980px;margin:0 auto}",
+        "code{background:#f5f5f5;padding:0 4px;border-radius:4px}",
+        "input,button{font:inherit}",
+        ".row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}",
+        ".box{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}",
+        ".muted{color:#666}",
+        "</style>",
         "</head><body>",
-        "<h1>H5P Editor (Phase 1 – import-based)</h1>",
-        "<p>This is a minimal Phase-1 UI. Use the import endpoint to create content.</p>",
-        "<h2>1) Install content-type libraries (required once)</h2>",
+        "<h1>H5P Editor (Phase 1)</h1>",
+        "<p class=\"muted\">Trusted-content model: only <code>teacher</code>/<code>admin</code> may install libraries and create/update content.</p>",
+        "<div class=\"box\">",
+        "<h2>1) Install content-type libraries (admin-managed)</h2>",
         "<p>If you see <code>missing_libraries</code> on import, install the missing libraries first.</p>",
         "<form method=\"post\" enctype=\"multipart/form-data\" action=\"/h5p/libraries/import\">",
         "<input type=\"file\" name=\"file\" accept=\".h5p,application/zip\" required />",
         "<button type=\"submit\">Install library package (.h5p)</button>",
         "</form>",
         "<p><a href=\"/h5p/libraries\">List installed libraries</a></p>",
-        "<h2>2) Import content package</h2>",
+        "</div>",
+        "<div class=\"box\">",
+        "<h2>2) Import content package (.h5p)</h2>",
         "<form method=\"post\" enctype=\"multipart/form-data\" action=\"/h5p/contents/import\">",
         "<input type=\"file\" name=\"file\" accept=\".h5p,application/zip\" required />",
         "<button type=\"submit\">Import .h5p</button>",
         "</form>",
+        "</div>",
+        "<div class=\"box\">",
+        "<h2>3) Create / edit content (web editor)</h2>",
+        "<div class=\"row\">",
+        "<label>Content ID <input id=\"contentId\" placeholder=\"(empty = new)\" size=\"22\" /></label>",
+        "<button id=\"loadNew\" type=\"button\">New</button>",
+        "<button id=\"loadExisting\" type=\"button\">Load</button>",
+        "<button id=\"save\" type=\"button\">Save</button>",
+        "</div>",
+        "<p id=\"status\" class=\"muted\"></p>",
+        "<h5p-editor id=\"h5pEditor\" content-id=\"new\"></h5p-editor>",
+        "<script type=\"importmap\">",
+        JSON.stringify({
+          imports: {
+            deepmerge: "/h5p/webcomponents/vendor/deepmerge.js",
+            "await-lock": "/h5p/webcomponents/vendor/await-lock.js",
+          },
+        }),
+        "</script>",
+        "<script type=\"module\">",
+        "import { defineElements } from '/h5p/webcomponents/index.js';",
+        "defineElements(['h5p-editor']);",
+        "",
+        "const editor = document.getElementById('h5pEditor');",
+        "const status = document.getElementById('status');",
+        "const contentIdInput = document.getElementById('contentId');",
+        "const setStatus = (msg) => { status.textContent = msg || ''; };",
+        "",
+        "editor.loadContentCallback = async (contentId) => {",
+        "  const url = new URL('/h5p/editor/model', window.location.origin);",
+        "  if (contentId) url.searchParams.set('content_id', contentId);",
+        "  const r = await fetch(url.toString(), { credentials: 'include' });",
+        "  if (!r.ok) {",
+        "    let msg = `HTTP ${r.status}`;",
+        "    try { const j = await r.json(); msg = j?.error || msg; } catch {}",
+        "    throw new Error(msg);",
+        "  }",
+        "  return await r.json();",
+        "};",
+        "",
+        "editor.saveContentCallback = async (contentId, requestBody) => {",
+        "  const isUpdate = Boolean(contentId);",
+        "  const url = isUpdate ? `/h5p/contents/${encodeURIComponent(contentId)}` : '/h5p/contents';",
+        "  const method = isUpdate ? 'PATCH' : 'POST';",
+        "  const r = await fetch(url, {",
+        "    method,",
+        "    credentials: 'include',",
+        "    headers: { 'Content-Type': 'application/json' },",
+        "    body: JSON.stringify(requestBody),",
+        "  });",
+        "  const data = await r.json().catch(() => ({}));",
+        "  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);",
+        "  return { contentId: data.content_id, metadata: data.metadata };",
+        "};",
+        "",
+        "document.getElementById('loadNew').addEventListener('click', () => {",
+        "  contentIdInput.value = '';",
+        "  editor.contentId = 'new';",
+        "  setStatus('Creating new content…');",
+        "});",
+        "document.getElementById('loadExisting').addEventListener('click', () => {",
+        "  const cid = (contentIdInput.value || '').trim();",
+        "  if (!cid) { setStatus('Enter a content id first.'); return; }",
+        "  editor.contentId = cid;",
+        "  setStatus(`Loading content ${cid}…`);",
+        "});",
+        "editor.addEventListener('editorloaded', (ev) => {",
+        "  setStatus(`Editor loaded (${ev?.detail?.ubername || 'unknown library'}).`);",
+        "});",
+        "editor.addEventListener('saved', (ev) => {",
+        "  const cid = ev?.detail?.contentId;",
+        "  contentIdInput.value = cid || '';",
+        "  status.textContent = '';",
+        "  if (!cid) { status.textContent = 'Saved.'; return; }",
+        "  const code = document.createElement('code');",
+        "  code.textContent = cid;",
+        "  status.append('Saved content ', code, '. ');",
+        "  const a = document.createElement('a');",
+        "  a.href = '/h5p/player?content_id=' + encodeURIComponent(cid);",
+        "  a.textContent = 'Open player';",
+        "  status.append(a);",
+        "});",
+        "editor.addEventListener('save-error', (ev) => {",
+        "  setStatus(`Save error: ${ev?.detail?.message || 'unknown'}`);",
+        "});",
+        "editor.addEventListener('validation-error', (ev) => {",
+        "  setStatus(`Validation error: ${ev?.detail?.message || 'unknown'}`);",
+        "});",
+        "document.getElementById('save').addEventListener('click', async () => {",
+        "  try {",
+        "    setStatus('Saving…');",
+        "    await editor.save();",
+        "  } catch (e) {",
+        "    setStatus(String(e?.message || e));",
+        "  }",
+        "});",
+        "</script>",
+        "</div>",
         "</body></html>",
       ].join(""),
     );
+  });
+
+  app.get("/editor/model", requireTeacher, async (req, res) => {
+    const contentId =
+      typeof req.query.content_id === "string" ? req.query.content_id : undefined;
+    if (req.query.content_id !== undefined && !contentId) {
+      sendJson(res, 400, { error: "invalid_request" });
+      return;
+    }
+
+    try {
+      const language = typeof req.query.language === "string" ? req.query.language : req.language;
+      const model = await h5pEditor.render(contentId, language, req.user);
+      const out = { ...model };
+      if (contentId) {
+        const content = await h5pEditor.getContent(contentId, req.user);
+        out.library = content.library;
+        out.metadata = content.h5p;
+        out.params = content.params.params;
+      }
+      sendJson(res, 200, out);
+    } catch (err) {
+      if (err?.httpStatusCode === 404) {
+        sendJson(res, 404, { error: "not_found" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" });
+    }
+  });
+
+  app.post("/contents", requireTeacher, requireSameOrigin, async (req, res) => {
+    const library = req.body?.library;
+    const params = req.body?.params;
+    const parameters = params?.params;
+    const metadata = params?.metadata;
+    if (typeof library !== "string" || !library || typeof parameters !== "object" || !parameters) {
+      sendJson(res, 400, { error: "invalid_request" }, { Vary: "Origin" });
+      return;
+    }
+    if (typeof metadata !== "object" || !metadata) {
+      sendJson(res, 400, { error: "invalid_request" }, { Vary: "Origin" });
+      return;
+    }
+
+    try {
+      const result = await h5pEditor.saveOrUpdateContentReturnMetaData(
+        undefined,
+        parameters,
+        metadata,
+        library,
+        req.user,
+      );
+      sendJson(res, 201, { content_id: String(result.id), metadata: result.metadata }, { Vary: "Origin" });
+    } catch (err) {
+      if (err?.httpStatusCode) {
+        sendJson(res, err.httpStatusCode, { error: err.errorId || "h5p_error" }, { Vary: "Origin" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" }, { Vary: "Origin" });
+    }
+  });
+
+  app.patch("/contents/:contentId", requireTeacher, requireSameOrigin, async (req, res) => {
+    const { contentId } = req.params;
+    if (!(await contentStorage.contentExists(contentId))) {
+      sendJson(res, 404, { error: "not_found" }, { Vary: "Origin" });
+      return;
+    }
+
+    const library = req.body?.library;
+    const params = req.body?.params;
+    const parameters = params?.params;
+    const metadata = params?.metadata;
+    if (typeof library !== "string" || !library || typeof parameters !== "object" || !parameters) {
+      sendJson(res, 400, { error: "invalid_request" }, { Vary: "Origin" });
+      return;
+    }
+    if (typeof metadata !== "object" || !metadata) {
+      sendJson(res, 400, { error: "invalid_request" }, { Vary: "Origin" });
+      return;
+    }
+
+    try {
+      const result = await h5pEditor.saveOrUpdateContentReturnMetaData(
+        contentId,
+        parameters,
+        metadata,
+        library,
+        req.user,
+      );
+      sendJson(res, 200, { content_id: String(result.id), metadata: result.metadata }, { Vary: "Origin" });
+    } catch (err) {
+      if (err?.httpStatusCode) {
+        sendJson(res, err.httpStatusCode, { error: err.errorId || "h5p_error" }, { Vary: "Origin" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" }, { Vary: "Origin" });
+    }
   });
 
   app.get("/libraries", requireTeacher, async (_req, res) => {
@@ -687,12 +933,12 @@ async function main() {
   // We disable:
   // - POST /ajax: implemented above with role + CSRF checks
   // - GET /download: we expose export under `/contents/:id/export` (teacher-only)
-  // - editor core files: avoid a route conflict with `GET /editor` in Phase 1
+  // - editor core files: served under /editor-assets (see config.editorLibraryUrl)
   const ajaxRouter = h5pAjaxExpressRouter(
     h5pEditor,
     path.join("/app", "vendor", "h5p", "core"),
     path.join("/app", "vendor", "h5p", "editor"),
-    { routePostAjax: false, routeGetDownload: false, routeEditorCoreFiles: false },
+    { routePostAjax: false, routeGetDownload: false, routeEditorCoreFiles: true },
     "en",
   );
   app.use(ajaxRouter);

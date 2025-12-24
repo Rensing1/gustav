@@ -279,7 +279,7 @@ Und wir erweitern `LearningSubmission.kind` um `h5p` und ergänzen `score_raw/sc
 - Auth‑Plumbing `GET /h5p/auth/me` (Session‑Cookie wird an `web:/api/me` weitergereicht).
 - E2E‑Smoke (opt‑in via `RUN_E2E=1`) für Proxy/Auth.
 
-Status (2025‑12‑23):
+Status (2025‑12‑24):
 - ✅ `h5p` Service ist als eigener Compose‑Service vorhanden (Phase 0).
 - ✅ Caddy routet `/h5p/*` auf `h5p:3000` (Path‑Prefix wird via `handle_path` entfernt).
 - ✅ `GET /h5p/healthz` liefert `200` inkl. Storage‑Readiness (`storage.ok=true`).
@@ -325,7 +325,9 @@ Status (2025‑12‑23):
 - ✅ Browser‑UX (Player): H5P core assets sind provisioniert (`h5p-service/vendor/h5p/core`, aus `h5p-php-library` tag `1.27.0`) und werden über `/h5p/core/*` ausgeliefert (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py`).
 - ✅ Library Provisioning (Trusted‑Content): Lehrkräfte können Content‑Type Libraries installieren via `POST /h5p/libraries/import` (Upload `.h5p`), und installierte Libraries via `GET /h5p/libraries` prüfen.
 - ✅ Library Provisioning ist in der Praxis verifiziert: Ein offizieller H5P.org‑Export (z. B. Multiple Choice) enthält Libraries **inkl.** Assets wie Fonts; Upload via `/h5p/libraries/import` installiert die enthaltenen Libraries. Danach lassen sich “content‑only” Pakete ohne `missing_libraries` importieren.
-- ⏳ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) + H5P editor core assets (`h5p-service/vendor/h5p/editor`) sauber provisionieren.
+- ✅ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) ist verfügbar via `GET /h5p/editor` inkl. New/Load/Save.
+  - Editor core assets sind provisioniert (`h5p-service/vendor/h5p/editor`) und werden same‑origin via `/h5p/editor-assets/*` ausgeliefert.
+  - Webcomponents werden via `/h5p/webcomponents/*` ausgeliefert, inkl. `.js`‑Fallback für extensionless Imports und Import‑Map‑Shims für `deepmerge` + `await-lock` (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
 
 Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoice)
 1) Beispiel‑`.h5p` (enthält Libraries) herunterladen:

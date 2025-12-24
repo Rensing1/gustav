@@ -340,6 +340,10 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
     assert r_editor.status_code == 200
     assert "h5p-editor" in r_editor.text
 
+    assert (
+        "Waiting for editor JS" in r_editor.text
+    ), "Editor page should show a visible placeholder when JS fails to load"
+
     assert 'type="importmap"' in r_editor.text, "Editor must ship an import map for bare imports"
     assert "deepmerge" in r_editor.text
     assert "await-lock" in r_editor.text
@@ -370,3 +374,7 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
         r = teacher_sess.get(f"{WEB_BASE}{p}", timeout=20)
         assert r.status_code == 200, f"Webcomponent asset must be served: {p} -> {r.status_code}"
         assert r.content, f"Webcomponent asset must not be empty: {p}"
+        assert "javascript" in (r.headers.get("content-type") or "").lower(), (
+            "Webcomponent modules must be served with a JS MIME type so browsers execute them. "
+            f"{p} -> {r.headers.get('content-type')}"
+        )

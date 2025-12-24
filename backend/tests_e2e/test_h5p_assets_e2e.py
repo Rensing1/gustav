@@ -344,6 +344,10 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
         "Waiting for editor JS" in r_editor.text
     ), "Editor page should show a visible placeholder when JS fails to load"
 
+    assert (
+        "__gustav_h5p_editor_init_ok" in r_editor.text
+    ), "Editor page should expose an init flag so we can detect partial JS failures"
+
     assert 'type="importmap"' in r_editor.text, "Editor must ship an import map for bare imports"
     assert "deepmerge" in r_editor.text
     assert "await-lock" in r_editor.text

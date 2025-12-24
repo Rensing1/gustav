@@ -417,6 +417,19 @@ async function main() {
   app.use(requireAuth);
   app.use(requireStudentOrTeacher);
 
+  // Overrides for Lumi webcomponents to keep browser ESM compatible without a bundler.
+  // These files remove bare imports like `deepmerge` and `await-lock`.
+  app.use(
+    "/webcomponents",
+    express.static(path.join("/app", "vendor", "webcomponents", "overrides"), {
+      cacheControl: true,
+      etag: true,
+      lastModified: true,
+      maxAge: 31536000000,
+      extensions: ["js"],
+    }),
+  );
+
   // Serve Lumi web components (ES modules).
   app.use(
     "/webcomponents",

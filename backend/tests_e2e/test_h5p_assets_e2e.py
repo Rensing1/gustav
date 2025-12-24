@@ -347,6 +347,16 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
         "editor.contentId = undefined;" in r_editor.text
     ), "Editor must force a reload when switching from 'new' to an existing content id"
 
+    r_utils = teacher_sess.get(f"{WEB_BASE}/h5p/webcomponents/h5p-utils.js", timeout=20)
+    assert r_utils.status_code == 200
+    assert "from './vendor/deepmerge.js'" in r_utils.text
+    assert "from 'deepmerge'" not in r_utils.text
+
+    r_dom = teacher_sess.get(f"{WEB_BASE}/h5p/webcomponents/dom-utils.js", timeout=20)
+    assert r_dom.status_code == 200
+    assert "from './vendor/await-lock.js'" in r_dom.text
+    assert "from 'await-lock'" not in r_dom.text
+
     # Requests as the browser would do when evaluating the module graph.
     paths = [
         "/h5p/webcomponents/index.js",

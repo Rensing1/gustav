@@ -327,7 +327,8 @@ Status (2025‑12‑23):
 - ✅ Library Provisioning ist in der Praxis verifiziert: Ein offizieller H5P.org‑Export (z. B. Multiple Choice) enthält Libraries **inkl.** Assets wie Fonts; Upload via `/h5p/libraries/import` installiert die enthaltenen Libraries. Danach lassen sich “content‑only” Pakete ohne `missing_libraries` importieren.
 - ✅ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) ist verfügbar via `GET /h5p/editor` inkl. New/Load/Save.
   - Editor core assets sind provisioniert (`h5p-service/vendor/h5p/editor`) und werden same‑origin via `/h5p/editor-assets/*` ausgeliefert.
-  - Webcomponents werden via `/h5p/webcomponents/*` ausgeliefert, inkl. `.js`‑Fallback für extensionless Imports und Import‑Map‑Shims für `deepmerge` + `await-lock` (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
+  - Webcomponents werden via `/h5p/webcomponents/*` ausgeliefert, inkl. `.js`‑Fallback für extensionless Imports.
+    - Robustheit: Lumi’s ES2015 build enthält bare imports (`deepmerge`, `await-lock`). Zusätzlich zu Import‑Maps liefern wir daher zwei kleine browser‑kompatible Overrides aus (`h5p-service/vendor/webcomponents/overrides/{h5p-utils.js,dom-utils.js}`), die nur relative Imports nutzen → der Editor bleibt auch ohne Import‑Map‑Support funktionsfähig (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
   - Known UX pitfall fixed: Loading an existing content id from the initial `new` state requires forcing a re-render; the Phase-1 page does this via a small `setEditorContentId()` helper (same E2E regression as above).
 
 Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoice)

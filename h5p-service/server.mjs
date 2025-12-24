@@ -425,7 +425,8 @@ async function main() {
       cacheControl: true,
       etag: true,
       lastModified: true,
-      maxAge: 31536000000,
+      // Not versioned → always revalidate (prevents stale JS after redeploys).
+      maxAge: 0,
       extensions: ["js"],
     }),
   );
@@ -438,7 +439,8 @@ async function main() {
       // Note: Lumi's ES2015 build uses extensionless relative imports like
       // `import ... from './h5p-editor'`. Browsers do not auto-append `.js`,
       // so we enable a `.js` fallback to make those imports resolve.
-      { cacheControl: true, etag: true, lastModified: true, maxAge: 31536000000, extensions: ["js"] },
+      // Not versioned → always revalidate (prevents stale JS after redeploys).
+      { cacheControl: true, etag: true, lastModified: true, maxAge: 0, extensions: ["js"] },
     ),
   );
 
@@ -451,7 +453,8 @@ async function main() {
       cacheControl: true,
       etag: true,
       lastModified: true,
-      maxAge: 31536000000,
+      // Not versioned → always revalidate (prevents stale JS after redeploys).
+      maxAge: 0,
     }),
   );
 
@@ -503,8 +506,28 @@ async function main() {
         "<button id=\"loadExisting\" type=\"button\">Load</button>",
         "<button id=\"save\" type=\"button\">Save</button>",
         "</div>",
-        "<p id=\"status\" class=\"muted\"></p>",
+        "<p id=\"status\" class=\"muted\">Waiting for editor JS…</p>",
         "<h5p-editor id=\"h5pEditor\" content-id=\"new\"></h5p-editor>",
+        "<script>",
+        "(() => {",
+        "  const el = document.getElementById('status');",
+        "  const set = (msg) => { if (el) el.textContent = msg || ''; };",
+        "  set('Loading editor UI…');",
+        "  window.addEventListener('error', (ev) => {",
+        "    const msg = ev?.message || ev?.type || 'unknown error';",
+        "    set('JS error: ' + msg);",
+        "  });",
+        "  window.addEventListener('unhandledrejection', (ev) => {",
+        "    const reason = ev?.reason?.message || String(ev?.reason || 'unknown rejection');",
+        "    set('JS rejection: ' + reason);",
+        "  });",
+        "  setTimeout(() => {",
+        "    if (!window.customElements?.get('h5p-editor')) {",
+        "      set('Editor JS did not initialize (module load failed). Open DevTools Console.');",
+        "    }",
+        "  }, 1500);",
+        "})();",
+        "</script>",
         "<script type=\"importmap\">",
         JSON.stringify({
           imports: {
@@ -521,6 +544,7 @@ async function main() {
         "const status = document.getElementById('status');",
         "const contentIdInput = document.getElementById('contentId');",
         "const setStatus = (msg) => { status.textContent = msg || ''; };",
+        "setStatus('Ready.');",
         "",
         "// Workaround: the Lumi webcomponent deliberately does NOT re-render when switching",
         "// from content-id='new' to an existing id (to avoid flicker when saving new content).",

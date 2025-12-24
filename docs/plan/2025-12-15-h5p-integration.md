@@ -328,6 +328,7 @@ Status (2025‑12‑23):
 - ✅ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) ist verfügbar via `GET /h5p/editor` inkl. New/Load/Save.
   - Editor core assets sind provisioniert (`h5p-service/vendor/h5p/editor`) und werden same‑origin via `/h5p/editor-assets/*` ausgeliefert.
   - Webcomponents werden via `/h5p/webcomponents/*` ausgeliefert, inkl. `.js`‑Fallback für extensionless Imports und Import‑Map‑Shims für `deepmerge` + `await-lock` (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py::test_h5p_editor_webcomponents_modules_are_resolvable`).
+  - Known UX pitfall fixed: Loading an existing content id from the initial `new` state requires forcing a re-render; the Phase-1 page does this via a small `setEditorContentId()` helper (same E2E regression as above).
 
 Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoice)
 1) Beispiel‑`.h5p` (enthält Libraries) herunterladen:

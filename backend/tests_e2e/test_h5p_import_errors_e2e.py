@@ -264,7 +264,10 @@ def test_install_library_then_content_only_import_succeeds():
     _login_via_oidc(sess, email=teacher_email, password=teacher_pw)
 
     headers = {"Origin": WEB_BASE, "Referer": f"{WEB_BASE}/h5p/editor"}
-    minor = int(time.time())
+    # H5P validates library versions; minor must be <= 99999 (schema constraint).
+    # We still want uniqueness to avoid collisions across local runs, so we
+    # derive a stable-ish number from the current time.
+    minor = int(time.time() * 1000) % 90000 + 1000
 
     lib_pkg = _build_library_h5p_bytes(major=1, minor=minor)
     r_lib = sess.post(

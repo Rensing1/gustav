@@ -324,7 +324,9 @@ Status (2025‑12‑24):
 - ✅ Import‑Fehler sind “actionable”: Content‑only Pakete ohne `libraries/*` liefern `400 missing_libraries` + `detail` mit der Liste fehlender Libraries (E2E: `backend/tests_e2e/test_h5p_import_errors_e2e.py`).
 - ✅ Browser‑UX (Player): H5P core assets sind provisioniert (`h5p-service/vendor/h5p/core`, aus `h5p-php-library` tag `1.27.0`) und werden über `/h5p/core/*` ausgeliefert (E2E: `backend/tests_e2e/test_h5p_assets_e2e.py`).
 - ✅ Library Provisioning (Trusted‑Content): Lehrkräfte können Content‑Type Libraries installieren via `POST /h5p/libraries/import` (Upload `.h5p`), und installierte Libraries via `GET /h5p/libraries` prüfen.
-- ✅ Library Provisioning ist in der Praxis verifiziert: Ein offizieller H5P.org‑Export (z. B. Multiple Choice) enthält Libraries **inkl.** Assets wie Fonts; Upload via `/h5p/libraries/import` installiert die enthaltenen Libraries. Danach lassen sich “content‑only” Pakete ohne `missing_libraries` importieren.
+- ✅ Library Provisioning ist E2E + in der Praxis verifiziert:
+  - `POST /h5p/libraries/import` installiert Libraries auch aus **library‑only** Paketen (ohne `h5p.json`/`content/*`) sowie aus vollständigen Export‑Paketen mit eingebetteten Library‑Ordnern.
+  - “content‑only” Pakete (z. B. Hub‑Downloads ohne eingebettete Libraries) liefern erwartungsgemäß `missing_libraries` und können nach Installation der fehlenden Libraries importiert werden.
 - ✅ Browser‑UX (Editor): echte Editor‑UI (Lumi Web Components) ist verfügbar via `GET /h5p/editor` inkl. New/Load/Save.
   - Editor core assets sind provisioniert (`h5p-service/vendor/h5p/editor`) und werden same‑origin via `/h5p/editor-assets/*` ausgeliefert.
   - Webcomponents werden via `/h5p/webcomponents/*` ausgeliefert, inkl. `.js`‑Fallback für extensionless Imports.
@@ -334,18 +336,20 @@ Status (2025‑12‑24):
   - Known UX pitfall fixed: Loading an existing content id from the initial `new` state requires forcing a re-render; the Phase-1 page does this via a small `setEditorContentId()` helper (same E2E regression as above).
 
 Verifikation (lokal): Content‑Type Libraries installieren (Beispiel: MultiChoice)
-1) Beispiel‑`.h5p` (enthält Libraries) herunterladen:
+1) Beispiel‑Content herunterladen (oft **content‑only**, ohne eingebettete Libraries):
    - `curl -L -o .tmp/multiple-choice-713.h5p https://h5p.org/sites/default/files/h5p/exports/multiple-choice-713.h5p`
-2) Als Lehrkraft in der UI Libraries installieren:
+2) Library‑Paket beschaffen (admin‑verwaltet):
+   - Erkennbar daran, dass im ZIP auf Root‑Ebene Ordner wie `H5P.MultiChoice-1.16/` enthalten sind (nicht nur `content/` + `h5p.json`).
+3) Als Lehrkraft in der UI Libraries installieren:
    - `https://app.localhost/h5p/editor` → “Install library package (.h5p)”
    - Hinweis: `POST /h5p/libraries/import` ist Teacher‑only + Same‑Origin‑CSRF (Origin/Referer).
-3) Installation prüfen:
+4) Installation prüfen:
    - UI: `https://app.localhost/h5p/libraries` (erwartet u. a. `H5P.MultiChoice-1.16`)
    - oder Dateisystem: `ls -1 supabase/storage/h5p/libraries | rg 'H5P\\.MultiChoice-1\\.16'`
-4) Content importieren und Player öffnen:
+5) Content importieren und Player öffnen:
    - Content‑Import: `https://app.localhost/h5p/editor` → “Import .h5p”
    - Player: `https://app.localhost/h5p/player?content_id=<id>`
-5) Editor‑Smoke (New/Load/Save):
+6) Editor‑Smoke (New/Load/Save):
    - `https://app.localhost/h5p/editor` → Status sollte `Ready.` anzeigen; Klick auf Buttons muss den Status aktualisieren (wenn nicht: DevTools Console öffnen, dort sieht man i. d. R. das erste JS‑Load‑Problem).
 
 ### Phase 2 – Teaching UI (2–3 Tage)

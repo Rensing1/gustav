@@ -272,3 +272,88 @@ def test_h5p_player_serves_core_and_library_assets():
         r = student_sess.get(urljoin(f"{WEB_BASE}/", asset_url.lstrip("/")), timeout=20)
         assert r.status_code == 200, f"Asset fetch failed {asset_url}: {r.status_code}"
         assert r.content, f"Asset must not be empty: {asset_url}"
+
+
+def test_h5p_editor_model_serves_editor_core_assets():
+    _wait_for(f"{KC_BASE}/realms/{REALM}/.well-known/openid-configuration")
+    _wait_for(f"{WEB_BASE}/health")
+    _wait_for(f"{WEB_BASE}/h5p/healthz")
+
+    token = _kc_admin_token()
+
+    teacher_email = f"e2e_teacher_editor_assets_{int(time.time())}@example.com"
+    teacher_pw = "Passw0rd!e2e"
+    teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
+    _kc_add_realm_role(token, teacher_id, "teacher")
+
+    teacher_sess = requests.Session()
+    _login_via_oidc(teacher_sess, email=teacher_email, password=teacher_pw)
+
+    r_model = teacher_sess.get(f"{WEB_BASE}/h5p/editor/model", timeout=30)
+    assert r_model.status_code == 200, f"Editor model failed: {r_model.status_code} {r_model.text}"
+    model = r_model.json()
+
+    scripts = model.get("scripts") or []
+    styles = model.get("styles") or []
+    assert isinstance(scripts, list) and scripts
+    assert isinstance(styles, list) and styles
+
+    urls = [u for u in scripts + styles if isinstance(u, str)]
+    core_assets = _pick_sample(urls, prefix="/h5p/core/", limit=3)
+    editor_assets = _pick_sample(urls, prefix="/h5p/editor-assets/", limit=3)
+
+    assert core_assets, "Editor model must reference /h5p/core/* assets"
+    assert editor_assets, "Editor model must reference /h5p/editor-assets/* assets"
+
+    for asset_url in core_assets + editor_assets:
+        r = teacher_sess.get(urljoin(f"{WEB_BASE}/", asset_url.lstrip("/")), timeout=20)
+        assert r.status_code == 200, f"Asset fetch failed {asset_url}: {r.status_code}"
+        assert r.content, f"Asset must not be empty: {asset_url}"
+
+
+def test_h5p_editor_webcomponents_modules_are_resolvable():
+    """
+    Regression: The Phase-1 editor page uses ES module webcomponents.
+
+    Browser ESM has two pitfalls we want to guard against:
+    1) Extensionless relative imports (e.g. `./h5p-editor`) must still resolve.
+    2) Bare specifiers (e.g. `deepmerge`, `await-lock`) require an import map.
+
+    If either breaks, the inline module script fails early and the UI buttons
+    appear "dead" because event listeners are never attached.
+    """
+    _wait_for(f"{KC_BASE}/realms/{REALM}/.well-known/openid-configuration")
+    _wait_for(f"{WEB_BASE}/health")
+    _wait_for(f"{WEB_BASE}/h5p/healthz")
+
+    token = _kc_admin_token()
+
+    teacher_email = f"e2e_teacher_webcomponents_{int(time.time())}@example.com"
+    teacher_pw = "Passw0rd!e2e"
+    teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
+    _kc_add_realm_role(token, teacher_id, "teacher")
+
+    teacher_sess = requests.Session()
+    _login_via_oidc(teacher_sess, email=teacher_email, password=teacher_pw)
+
+    r_editor = teacher_sess.get(f"{WEB_BASE}/h5p/editor", timeout=30)
+    assert r_editor.status_code == 200
+    assert "h5p-editor" in r_editor.text
+
+    assert 'type="importmap"' in r_editor.text, "Editor must ship an import map for bare imports"
+    assert "deepmerge" in r_editor.text
+    assert "await-lock" in r_editor.text
+
+    # Requests as the browser would do when evaluating the module graph.
+    paths = [
+        "/h5p/webcomponents/index.js",
+        "/h5p/webcomponents/h5p-editor",
+        "/h5p/webcomponents/h5p-utils",
+        "/h5p/webcomponents/dom-utils",
+        "/h5p/webcomponents/vendor/deepmerge.js",
+        "/h5p/webcomponents/vendor/await-lock.js",
+    ]
+    for p in paths:
+        r = teacher_sess.get(f"{WEB_BASE}{p}", timeout=20)
+        assert r.status_code == 200, f"Webcomponent asset must be served: {p} -> {r.status_code}"
+        assert r.content, f"Webcomponent asset must not be empty: {p}"

@@ -1,23 +1,45 @@
-# Host-based routing with TLS for local development
-# Access via:
-#   - https://app.localhost → GUSTAV web
-#   - https://id.localhost  → Keycloak
+{
+  email {$LETSENCRYPT_EMAIL}
+}
 
-app.localhost:443 {
-  tls internal
+(app_proxy) {
   # Same-origin path proxy for Supabase Storage (dev = prod)
   @storage_path path /storage/v1/*
   handle @storage_path {
     # Kong routes often match on Host; set upstream Host to the public
     # supabase host to ensure the route is found, while keeping the
-    # browser-facing origin on app.localhost (same-origin).
+    # browser-facing origin on the app domain (same-origin).
     reverse_proxy {
       to supabase_kong_gustav-alpha2:8000
       header_up Host supabase.localhost
     }
   }
+
   # Default app backend
   reverse_proxy gustav-alpha2:8000
+}
+
+# Production domains (Let’s Encrypt)
+app.{$DOMAIN_NAME}:443 {
+  import app_proxy
+}
+
+id.{$DOMAIN_NAME}:443 {
+  reverse_proxy keycloak:8080
+}
+
+{$DOMAIN_NAME}:443 {
+  redir https://app.{$DOMAIN_NAME}{uri} permanent
+}
+
+www.{$DOMAIN_NAME}:443 {
+  redir https://app.{$DOMAIN_NAME}{uri} permanent
+}
+
+# Local development / fallback (internal CA)
+app.localhost:443 {
+  tls internal
+  import app_proxy
 }
 
 localhost:443 {

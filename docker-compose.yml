@@ -5,8 +5,13 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
     volumes:
       - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - web
       - keycloak
@@ -265,4 +270,8 @@ volumes:
   ollama_models:
     driver: local
   backups:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
     driver: local

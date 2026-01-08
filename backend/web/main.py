@@ -4374,7 +4374,7 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         "</label>"
         '<p id="task-kind-hint" class="text-muted">'
         "Normal: Markdown‑Aufgabe mit Kriterien. "
-        "H5P: Interaktive Übung (Editor öffnet sich nach dem Anlegen). "
+        "H5P: Interaktive Übung (Editor wird direkt eingeblendet). "
         "Visual: wie Normal, aber Abgabe nur als Bild/PDF."
         "</p>"
     )
@@ -4394,6 +4394,24 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
         f'<label>Lösungshinweise<textarea class="form-input" name="hints_md"></textarea></label>'
         "</div>"
+        '<div id="h5p-task-fields" hidden>'
+        f'<input type="hidden" name="h5p_content_id" id="h5p_content_id" value="">'
+        f'<div class="h5p-task-editor" data-h5p-task-editor="true" '
+        f'data-unit-id="{Component.escape(unit_id)}" '
+        f'data-section-id="{Component.escape(section_id)}" '
+        f'data-task-id="" data-content-id="">'
+        '<div class="row" style="gap:12px;flex-wrap:wrap;align-items:center">'
+        '<label>Content ID <input class="form-input" id="h5pContentId" placeholder="(leer = neu)" size="22" /></label>'
+        '<button class="btn" id="h5pNew" type="button">New</button>'
+        '<button class="btn" id="h5pLoad" type="button">Load</button>'
+        '<button class="btn btn-primary" id="h5pSave" type="button">Save</button>'
+        "</div>"
+        '<p id="h5pStatus" class="text-muted">Loading editor…</p>'
+        '<h5p-editor id="h5pEditor" content-id="new"></h5p-editor>'
+        "</div>"
+        '<p class="text-muted">Tipp: Speichere zuerst im H5P‑Editor (Save), '
+        'dann klicke „Anlegen“, damit die Aufgabe direkt mit der Content‑ID verknüpft ist.</p>'
+        "</div>"
         f'<label>Fällig bis (ISO 8601)<input class="form-input" type="text" name="due_at" placeholder="2025-01-01T10:00:00+00:00"></label>'
         f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" min="1"></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
@@ -4404,18 +4422,22 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         "(() => {"
         "  const sel = document.getElementById('task_kind');"
         "  const native = document.getElementById('native-task-fields');"
+        "  const h5p = document.getElementById('h5p-task-fields');"
         "  const instr = document.getElementById('instruction_md');"
-        "  if (!sel || !native || !instr) return;"
+        "  if (!sel || !native || !h5p || !instr) return;"
         "  const apply = () => {"
         "    const kind = (sel.value || 'native');"
         "    const showNativeFields = kind !== 'h5p';"
+        "    const showH5PFields = kind === 'h5p';"
         "    native.hidden = !showNativeFields;"
+        "    h5p.hidden = !showH5PFields;"
         "    instr.required = showNativeFields;"
         "  };"
         "  sel.addEventListener('change', apply);"
         "  apply();"
         "})();"
         "</script>"
+        '<script type="module" src="/static/js/h5p_task_editor.js?v=20260108"></script>'
     )
     return (
         '<div class="container">'
@@ -4607,6 +4629,7 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
     if kind == "h5p":
         h5p_cfg = task.get("h5p") if isinstance(task.get("h5p"), dict) else {}
         content_id = str(h5p_cfg.get("content_id") or "") if isinstance(h5p_cfg, dict) else ""
+        editor_content_id_attr = content_id or "new"
         due_at = Component.escape(str(task.get("due_at") or ""))
         max_attempts = Component.escape(str(task.get("max_attempts") or ""))
         settings_form = (
@@ -4634,10 +4657,10 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
             '<button class="btn btn-primary" id="h5pSave" type="button">Save</button>'
             "</div>"
             '<p id="h5pStatus" class="text-muted">Loading editor…</p>'
-            '<h5p-editor id="h5pEditor" content-id="new"></h5p-editor>'
+            f'<h5p-editor id="h5pEditor" content-id="{Component.escape(editor_content_id_attr)}"></h5p-editor>'
             "</div>"
             # Module script is kept external to avoid inline-minify pitfalls.
-            '<script type="module" src="/static/js/h5p_task_editor.js"></script>'
+            '<script type="module" src="/static/js/h5p_task_editor.js?v=20260108"></script>'
         )
 
         delete_form = (
@@ -4981,10 +5004,11 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
             if task_kind == "h5p":
                 # H5P tasks do not use instruction/criteria/hints in the UI, but
                 # the DB contract requires a non-empty instruction_md.
+                h5p_content_id = str(form.get("h5p_content_id") or "").strip() or None
                 payload["instruction_md"] = "H5P task"
                 payload["criteria"] = []
                 payload["hints_md"] = None
-                payload["h5p"] = {"content_id": None, "display_options": {}}
+                payload["h5p"] = {"content_id": h5p_content_id, "display_options": {}}
             elif task_kind == "visual":
                 payload["visual"] = {}
             resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)

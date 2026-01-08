@@ -675,6 +675,24 @@ def _build_history_entry_from_record(
     submission_id = str(record.get("id") or "")
     expanded = bool(open_attempt_id and submission_id == open_attempt_id) or (not open_attempt_id and index == 0)
 
+    # H5P submissions: no text/upload body, only scores (raw/max).
+    if str(record.get("kind") or "") == "h5p":
+        raw = record.get("score_raw")
+        max_ = record.get("score_max")
+        score_html = '<p class="text-muted">Keine Punkte verfügbar.</p>'
+        try:
+            if raw is not None and max_ is not None:
+                score_html = f"<p><strong>Punkte:</strong> {Component.escape(str(int(raw)))}/{Component.escape(str(int(max_)))}</p>"
+        except Exception:
+            score_html = '<p class="text-muted">Keine Punkte verfügbar.</p>'
+        return HistoryEntry(
+            label=label,
+            timestamp=timestamp,
+            content_html=f'<div class="analysis-text">{score_html}</div>',
+            expanded=expanded,
+            submission_id=submission_id,
+        )
+
     status = str(record.get("analysis_status") or "")
     analysis = record.get("analysis_json")
 
@@ -1350,6 +1368,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     # Build HTML without section titles; separate groups with <hr>
     # For readability, render each material and each task as its own card.
     parts: list[str] = []
+    needs_h5p_player_js = False
     for idx, entry in enumerate(sections):
         mats = entry.get("materials", []) if isinstance(entry, dict) else []
         tasks = entry.get("tasks", []) if isinstance(entry, dict) else []
@@ -1401,10 +1420,33 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
         for t in tasks:
             tid = str(t.get("id") or "")
             title = str(t.get("title") or "Aufgabe")
-            # Instruction text also benefits from Markdown (e.g., emphasis)
-            instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
-            # Build form HTML with Choice Cards (Text | Upload). Default: text.
-            form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=tid)
+            task_kind = str(t.get("kind") or "native")
+
+            if task_kind == "h5p":
+                # H5P tasks are solved directly inside the embedded player; there
+                # is no GUSTAV submit form and no additional instruction text.
+                needs_h5p_player_js = True
+                instruction_html = ""
+                content_id = ""
+                h5p_cfg = t.get("h5p") if isinstance(t.get("h5p"), dict) else {}
+                if isinstance(h5p_cfg, dict):
+                    content_id = str(h5p_cfg.get("content_id") or "")
+                if not content_id:
+                    form_html = '<p class="text-muted">Kein H5P-Inhalt verknüpft.</p>'
+                else:
+                    form_html = (
+                        f'<div class="h5p-task-player" data-h5p-task-player="true" '
+                        f'data-course-id="{Component.escape(course_id)}" '
+                        f'data-task-id="{Component.escape(tid)}" '
+                        f'data-content-id="{Component.escape(content_id)}">'
+                        f'<p class="text-muted" data-h5p-status>Initialisiere H5P …</p>'
+                        "</div>"
+                    )
+            else:
+                # Instruction text also benefits from Markdown (e.g., emphasis)
+                instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
+                # Build form HTML with Choice Cards (Text | Upload). Default: text.
+                form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=tid)
 
             # Optionally load submission history for this task only (latest open)
             history_entries = []
@@ -1571,11 +1613,17 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 pass
 
     inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p>"
+    h5p_script = (
+        '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
+        if needs_h5p_player_js
+        else ""
+    )
     content = (
         "<div class=\"container\">"
         f"<h1>{Component.escape(unit_title)}</h1>"
         f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
         f"<section class=\"card\" id=\"student-unit-sections\">{inner}</section>"
+        f"{h5p_script}"
         "</div>"
     )
     layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)

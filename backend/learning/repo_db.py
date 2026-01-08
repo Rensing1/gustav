@@ -107,6 +107,8 @@ class SubmissionInput:
     mime_type: Optional[str]
     size_bytes: Optional[int]
     sha256: Optional[str]
+    score_raw: Optional[int]
+    score_max: Optional[int]
     idempotency_key: Optional[str]
 
 
@@ -361,6 +363,9 @@ class DBLearningRepo:
                        hints_md,
                        due_at_iso,
                        max_attempts,
+                       kind,
+                       h5p_content_id,
+                       h5p_display_options,
                        task_position,
                        created_at_iso,
                        updated_at_iso
@@ -371,6 +376,16 @@ class DBLearningRepo:
             rows = cur.fetchall()
         tasks: List[dict] = []
         for row in rows:
+            kind = str(row[6] or "native")
+            h5p_content_id = row[7]
+            h5p_display_options = row[8]
+            display_options = h5p_display_options if isinstance(h5p_display_options, dict) else {}
+            h5p = None
+            visual = None
+            if kind == "h5p":
+                h5p = {"content_id": (str(h5p_content_id) if h5p_content_id is not None else None), "display_options": display_options}
+            elif kind == "visual":
+                visual = {}
             tasks.append(
                 {
                     "id": row[0],
@@ -379,10 +394,12 @@ class DBLearningRepo:
                     "hints_md": row[3],
                     "due_at": row[4],
                     "max_attempts": row[5],
-                    "position": int(row[6]) if row[6] is not None else None,
-                    "created_at": row[7],
-                    "updated_at": row[8],
-                    "kind": "native",
+                    "kind": kind,
+                    "h5p": h5p,
+                    "visual": visual,
+                    "position": int(row[9]) if row[9] is not None else None,
+                    "created_at": row[10],
+                    "updated_at": row[11],
                 }
             )
         return tasks
@@ -519,6 +536,8 @@ class DBLearningRepo:
                         select id::text,
                                attempt_nr,
                                kind,
+                               score_raw,
+                               score_max,
                                text_body,
                                mime_type,
                                size_bytes,
@@ -551,6 +570,8 @@ class DBLearningRepo:
                     select task_id::text,
                            section_id::text,
                            unit_id::text,
+                           kind,
+                           h5p_content_id,
                            max_attempts,
                            coalesce(criteria, array[]::text[])
                       from public.get_task_metadata_for_student(%s, %s, %s)
@@ -560,17 +581,30 @@ class DBLearningRepo:
                 meta = cur.fetchone()
                 if not meta:
                     raise LookupError("task_not_visible")
-                max_attempts = meta[3]
+                task_kind = str(meta[3] or "native")
+                max_attempts = meta[5]
                 # Rubric criteria come from the helper (already filtered by RLS).
-                raw_criteria = list(meta[4] or [])
+                raw_criteria = list(meta[6] or [])
                 criteria = [str(entry).strip() for entry in raw_criteria if str(entry).strip()]
+
+                # Guard against mixing task types and submission types.
+                # This prevents students from spoofing a different submission kind.
+                if task_kind == "h5p":
+                    if data.kind != "h5p":
+                        raise ValueError("invalid_input")
+                    if data.score_raw is None or data.score_max is None:
+                        raise ValueError("invalid_h5p_payload")
+                else:
+                    if data.kind == "h5p":
+                        raise ValueError("invalid_h5p_payload")
 
                 cur.execute(
                     "select public.next_attempt_nr(%s, %s, %s)",
                     (course_uuid, task_uuid, data.student_sub),
                 )
                 attempt_nr = int(cur.fetchone()[0])
-                if max_attempts is not None and attempt_nr > int(max_attempts):
+                # H5P attempts are not limited at the GUSTAV DB layer (H5P can enforce its own limits).
+                if task_kind != "h5p" and max_attempts is not None and attempt_nr > int(max_attempts):
                     raise ValueError("max_attempts_exceeded")
 
                 try:
@@ -588,66 +622,128 @@ class DBLearningRepo:
                                   f"{course_uuid}:{task_uuid}:{data.student_sub}:{norm_key}")
                         )
 
-                    cur.execute(
-                        """
-                        insert into public.learning_submissions (
-                            id,
-                            course_id,
-                            task_id,
-                            student_sub,
-                            kind,
-                            text_body,
-                            storage_key,
-                            mime_type,
-                            size_bytes,
-                            sha256,
-                            attempt_nr,
-                            analysis_status,
-                            analysis_json,
-                            feedback_md,
-                            error_code,
-                            idempotency_key
+                    if data.kind == "h5p":
+                        cur.execute(
+                            """
+                            insert into public.learning_submissions (
+                                id,
+                                course_id,
+                                task_id,
+                                student_sub,
+                                kind,
+                                score_raw,
+                                score_max,
+                                attempt_nr,
+                                analysis_status,
+                                analysis_json,
+                                feedback_md,
+                                error_code,
+                                idempotency_key,
+                                completed_at
+                            )
+                            values (coalesce(%s::uuid, gen_random_uuid()),
+                                    %s::uuid, %s::uuid, %s, %s,
+                                    %s, %s,
+                                    %s,
+                                    'completed', null, null, null, %s, now())
+                            on conflict (course_id, task_id, student_sub, idempotency_key)
+                            do nothing
+                            returning id::text,
+                                      attempt_nr,
+                                      kind,
+                                      score_raw,
+                                      score_max,
+                                      text_body,
+                                      mime_type,
+                                      size_bytes,
+                                      storage_key,
+                                      sha256,
+                                      analysis_status,
+                                      analysis_json,
+                                      feedback_md,
+                                      error_code,
+                                      coalesce(vision_attempts, 0),
+                                      vision_last_error,
+                                      to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      feedback_last_error,
+                                      to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                            """,
+                            (
+                                deterministic_id,
+                                course_uuid,
+                                task_uuid,
+                                data.student_sub,
+                                data.kind,
+                                int(data.score_raw),
+                                int(data.score_max),
+                                attempt_nr,
+                                norm_key,
+                            ),
                         )
-                        values (coalesce(%s::uuid, gen_random_uuid()),
-                                %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s,
-                                %s,
-                                'pending', null, null, null, %s)
-                        on conflict (course_id, task_id, student_sub, idempotency_key)
-                        do nothing
-                        returning id::text,
-                                  attempt_nr,
-                                  kind,
-                                  text_body,
-                                  mime_type,
-                                  size_bytes,
-                                  storage_key,
-                                  sha256,
-                                  analysis_status,
-                                  analysis_json,
-                                  feedback_md,
-                                  error_code,
-                                  coalesce(vision_attempts, 0),
-                                  vision_last_error,
-                                  to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                  feedback_last_error,
-                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                  to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                        """,
-                        (
-                            deterministic_id,
-                            course_uuid,
-                            task_uuid,
-                            data.student_sub,
-                            data.kind,
-                            data.text_body,
-                            data.storage_key,
-                            data.mime_type,
-                            data.size_bytes,
-                            data.sha256,
-                            attempt_nr,
-                            norm_key,
-                        ),
-                    )
+                    else:
+                        cur.execute(
+                            """
+                            insert into public.learning_submissions (
+                                id,
+                                course_id,
+                                task_id,
+                                student_sub,
+                                kind,
+                                text_body,
+                                storage_key,
+                                mime_type,
+                                size_bytes,
+                                sha256,
+                                attempt_nr,
+                                analysis_status,
+                                analysis_json,
+                                feedback_md,
+                                error_code,
+                                idempotency_key
+                            )
+                            values (coalesce(%s::uuid, gen_random_uuid()),
+                                    %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s,
+                                    %s,
+                                    'pending', null, null, null, %s)
+                            on conflict (course_id, task_id, student_sub, idempotency_key)
+                            do nothing
+                            returning id::text,
+                                      attempt_nr,
+                                      kind,
+                                      score_raw,
+                                      score_max,
+                                      text_body,
+                                      mime_type,
+                                      size_bytes,
+                                      storage_key,
+                                      sha256,
+                                      analysis_status,
+                                      analysis_json,
+                                      feedback_md,
+                                      error_code,
+                                      coalesce(vision_attempts, 0),
+                                      vision_last_error,
+                                      to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      feedback_last_error,
+                                      to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                            """,
+                            (
+                                deterministic_id,
+                                course_uuid,
+                                task_uuid,
+                                data.student_sub,
+                                data.kind,
+                                data.text_body,
+                                data.storage_key,
+                                data.mime_type,
+                                data.size_bytes,
+                                data.sha256,
+                                attempt_nr,
+                                norm_key,
+                            ),
+                        )
                     row = cur.fetchone()
                     if row is None and norm_key:
                         # Conflict occurred; fetch existing row by idempotency key
@@ -656,6 +752,8 @@ class DBLearningRepo:
                             select id::text,
                                    attempt_nr,
                                    kind,
+                                   score_raw,
+                                   score_max,
                                    text_body,
                                    mime_type,
                                    size_bytes,
@@ -677,6 +775,9 @@ class DBLearningRepo:
                             (course_uuid, task_uuid, data.student_sub, norm_key),
                         )
                         row = cur.fetchone()
+                    if data.kind == "h5p":
+                        conn.commit()
+                        return self._row_to_submission(row)
                     submission_id = row[0]
                     # Enrich job payload with task instruction and optional hints for the Feedback adapter
                     instruction_md: str | None = None
@@ -738,6 +839,8 @@ class DBLearningRepo:
                                 select id::text,
                                        attempt_nr,
                                        kind,
+                                       score_raw,
+                                       score_max,
                                        text_body,
                                        mime_type,
                                        size_bytes,
@@ -822,6 +925,8 @@ class DBLearningRepo:
                     select id::text,
                            attempt_nr,
                            kind,
+                           score_raw,
+                           score_max,
                            text_body,
                            mime_type,
                            size_bytes,
@@ -977,6 +1082,8 @@ class DBLearningRepo:
             submission_id,
             attempt_nr,
             kind,
+            score_raw,
+            score_max,
             text_body,
             mime_type,
             size_bytes,
@@ -993,7 +1100,9 @@ class DBLearningRepo:
             created_at,
             completed_at,
         ) = list(row)
-        if status != "completed":
+        if kind == "h5p":
+            analysis_payload = None
+        elif status != "completed":
             analysis_payload = None
         else:
             analysis_payload = analysis_raw
@@ -1020,6 +1129,8 @@ class DBLearningRepo:
             "id": submission_id,
             "attempt_nr": int(attempt_nr),
             "kind": kind,
+            "score_raw": score_raw,
+            "score_max": score_max,
             "text_body": text_body,
             "mime_type": mime_type,
             "size_bytes": size_bytes,

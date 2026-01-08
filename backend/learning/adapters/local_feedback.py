@@ -13,6 +13,7 @@ Privacy:
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 from typing import Sequence
@@ -280,6 +281,93 @@ class _LocalFeedbackAdapter:
             parse_status,
         )
         return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis, parse_status=parse_status)
+
+    def analyze_visual(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        submission: dict,
+        job_payload: dict,
+        criteria: Sequence[str],
+        instruction_md: str | None = None,
+        hints_md: str | None = None,
+    ) -> FeedbackResult:
+        """Run the Visual DSPy pipeline (image/PDF → criteria.v2 + feedback).
+
+        Why:
+            Visual tasks (`Task.kind="visual"`) are designed for handwritten
+            solutions, sketches and diagrams. Their evaluation must be based
+            on the visual input directly (VLM), not on an OCR transcript.
+
+        Parameters:
+            submission: Submission row snapshot (expects kind, mime_type, ids).
+            job_payload: Worker payload (expects mime_type, storage_key, sha256, size_bytes).
+            criteria: Rubric criteria list (ordered).
+            instruction_md: Optional teacher task instruction (context).
+            hints_md: Optional teacher-only hints (context).
+
+        Behavior:
+            - Loads the uploaded file bytes (image/jpeg|image/png|application/pdf).
+            - For PDFs, uses the existing PDF→PNG stitching logic (shared with Vision).
+            - Converts the visual input to a data-URI string and calls the DSPy program.
+        """
+        from backend.learning.adapters.ports import FeedbackPermanentError  # local import to avoid cycles
+        from backend.learning.adapters.local_vision import (  # type: ignore
+            VisionPermanentError,
+            VisionTransientError,
+            _LocalVisionAdapter,
+            _resolve_submission_image_bytes,
+            _submissions_bucket,
+            get_learning_max_upload_bytes,
+        )
+
+        mime = (job_payload or {}).get("mime_type") or (submission or {}).get("mime_type") or ""
+        mime = str(mime or "").strip().lower()
+        bucket = _submissions_bucket()
+        max_download_bytes = get_learning_max_upload_bytes()
+
+        image_data_uri: str | None = None
+        try:
+            if mime in {"image/jpeg", "image/png"}:
+                meta: dict = {}
+                image_b64 = _resolve_submission_image_bytes(
+                    submission=submission,
+                    job_payload=job_payload,
+                    bucket=bucket,
+                    max_download_bytes=max_download_bytes,
+                    meta=meta,
+                )
+                if not image_b64:
+                    raise FeedbackTransientError("image_unavailable")
+                image_data_uri = f"data:{mime};base64,{image_b64}"
+            elif mime == "application/pdf":
+                stitched = _LocalVisionAdapter()._ensure_pdf_stitched_png(  # noqa: SLF001
+                    submission=submission, job_payload=job_payload
+                )
+                if not stitched:
+                    raise FeedbackTransientError("pdf_images_unavailable")
+                image_data_uri = "data:image/png;base64," + base64.b64encode(stitched).decode("ascii")
+            else:
+                raise FeedbackPermanentError("unsupported_mime")
+        except VisionPermanentError as exc:
+            raise FeedbackPermanentError(str(exc)) from exc
+        except VisionTransientError as exc:
+            raise FeedbackTransientError(str(exc)) from exc
+
+        if not image_data_uri:
+            raise FeedbackTransientError("image_unavailable")
+
+        try:
+            from backend.learning.adapters.dspy import visual_feedback_program as prog
+
+            return prog.analyze_visual_feedback(
+                image_data_uri=image_data_uri,
+                criteria=criteria,
+                teacher_instructions_md=instruction_md,
+                solution_hints_md=hints_md,
+            )
+        except ImportError as exc:
+            # Visual tasks require a vision-capable model; without DSPy we fail closed.
+            raise FeedbackPermanentError("dspy_unavailable") from exc
 
     def _dspy_prerequisites_met(self) -> tuple[bool, str | None]:
         """Check whether env/config allow the DSPy path."""

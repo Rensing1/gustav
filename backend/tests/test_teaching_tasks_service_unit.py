@@ -45,6 +45,9 @@ class FakeTasksRepo(TasksRepoProtocol):
         hints_md: Optional[str],
         due_at: Optional[datetime],
         max_attempts: Optional[int],
+        kind: str,
+        h5p_content_id: Optional[str],
+        h5p_display_options: Dict[str, Any],
     ) -> dict:
         self.created_payload = {
             "unit_id": unit_id,
@@ -55,6 +58,9 @@ class FakeTasksRepo(TasksRepoProtocol):
             "hints_md": hints_md,
             "due_at": due_at,
             "max_attempts": max_attempts,
+            "kind": kind,
+            "h5p_content_id": h5p_content_id,
+            "h5p_display_options": h5p_display_options,
         }
         task = {
             "id": "task-1",
@@ -68,8 +74,12 @@ class FakeTasksRepo(TasksRepoProtocol):
             "position": 1,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "kind": "native",
+            "kind": kind,
         }
+        if kind == "h5p":
+            task["h5p"] = {"content_id": h5p_content_id, "display_options": h5p_display_options}
+        elif kind == "visual":
+            task["visual"] = {}
         self.tasks[task["id"]] = task
         return task
 
@@ -85,6 +95,9 @@ class FakeTasksRepo(TasksRepoProtocol):
         hints_md: Any = _UNSET,
         due_at: Any = _UNSET,
         max_attempts: Any = _UNSET,
+        kind: Any = _UNSET,
+        h5p_content_id: Any = _UNSET,
+        h5p_display_options: Any = _UNSET,
     ) -> Optional[dict]:
         if task_id not in self.tasks:
             return None
@@ -94,6 +107,9 @@ class FakeTasksRepo(TasksRepoProtocol):
             "hints_md": hints_md,
             "due_at": due_at,
             "max_attempts": max_attempts,
+            "kind": kind,
+            "h5p_content_id": h5p_content_id,
+            "h5p_display_options": h5p_display_options,
         }
         task = dict(self.tasks[task_id])
         if instruction_md is not _UNSET:
@@ -106,6 +122,16 @@ class FakeTasksRepo(TasksRepoProtocol):
             task["due_at"] = due_at.isoformat() if due_at else None
         if max_attempts is not _UNSET:
             task["max_attempts"] = max_attempts
+        if kind is not _UNSET:
+            task["kind"] = kind
+            task.pop("h5p", None)
+            task.pop("visual", None)
+        if h5p_content_id is not _UNSET or h5p_display_options is not _UNSET:
+            # minimal emulation: when h5p fields are updated, expose nested config
+            task["h5p"] = {
+                "content_id": None if h5p_content_id is _UNSET else h5p_content_id,
+                "display_options": {} if h5p_display_options is _UNSET else h5p_display_options,
+            }
         self.tasks[task_id] = task
         return task
 
@@ -220,6 +246,9 @@ def test_update_task_delegates_only_provided_fields(service: TasksService, repo:
         "hints_md": _UNSET,
         "due_at": _UNSET,
         "max_attempts": 5,
+        "kind": _UNSET,
+        "h5p_content_id": _UNSET,
+        "h5p_display_options": _UNSET,
     }
     assert updated["criteria"] == ["Analysiere"]
     assert updated["max_attempts"] == 5

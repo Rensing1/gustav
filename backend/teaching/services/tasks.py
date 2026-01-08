@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Protocol, Sequence
+from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
 
 class TasksRepoProtocol(Protocol):
@@ -31,6 +31,9 @@ class TasksRepoProtocol(Protocol):
         hints_md: Optional[str],
         due_at: Optional[datetime],
         max_attempts: Optional[int],
+        kind: str,
+        h5p_content_id: Optional[str],
+        h5p_display_options: Dict[str, Any],
     ) -> dict:
         ...
 
@@ -46,6 +49,9 @@ class TasksRepoProtocol(Protocol):
         hints_md: Any,
         due_at: Any,
         max_attempts: Any,
+        kind: Any,
+        h5p_content_id: Any,
+        h5p_display_options: Any,
     ) -> Optional[dict]:
         ...
 
@@ -133,6 +139,37 @@ def _normalize_max_attempts(value: object) -> Optional[int]:
     return attempts
 
 
+def _normalize_h5p_config(value: object) -> Tuple[Optional[str], Dict[str, Any]]:
+    if not isinstance(value, dict):
+        raise ValueError("invalid_h5p_config")
+    allowed = {"content_id", "display_options"}
+    if any(k not in allowed for k in value.keys()):
+        raise ValueError("invalid_h5p_config")
+    raw_content_id = value.get("content_id")
+    content_id: Optional[str]
+    if raw_content_id is None:
+        content_id = None
+    elif isinstance(raw_content_id, str):
+        trimmed = raw_content_id.strip()
+        content_id = trimmed or None
+    else:
+        raise ValueError("invalid_h5p_config")
+
+    raw_display = value.get("display_options", {})
+    if raw_display is None:
+        raw_display = {}
+    if not isinstance(raw_display, dict):
+        raise ValueError("invalid_h5p_config")
+    return content_id, dict(raw_display)
+
+
+def _normalize_visual_config(value: object) -> None:
+    if not isinstance(value, dict):
+        raise ValueError("invalid_visual_config")
+    if value:
+        raise ValueError("invalid_visual_config")
+
+
 @dataclass
 class TasksService:
     """Use cases for teaching tasks (framework-independent)."""
@@ -155,6 +192,8 @@ class TasksService:
         hints_md: object = None,
         due_at: object = None,
         max_attempts: object = None,
+        h5p: object | None = None,
+        visual: object | None = None,
     ) -> dict:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
@@ -163,6 +202,18 @@ class TasksService:
         hints = _normalize_hints(hints_md)
         due_dt = _parse_due_at(due_at)
         attempts = _normalize_max_attempts(max_attempts)
+        if h5p is not None and visual is not None:
+            raise ValueError("invalid_task_kind_config")
+        if h5p is not None:
+            h5p_content_id, h5p_display_options = _normalize_h5p_config(h5p)
+            kind = "h5p"
+        elif visual is not None:
+            _normalize_visual_config(visual)
+            h5p_content_id, h5p_display_options = None, {}
+            kind = "visual"
+        else:
+            h5p_content_id, h5p_display_options = None, {}
+            kind = "native"
         return self.repo.create_task(
             unit_id,
             section_id,
@@ -172,6 +223,9 @@ class TasksService:
             hints_md=hints,
             due_at=due_dt,
             max_attempts=attempts,
+            kind=kind,
+            h5p_content_id=h5p_content_id,
+            h5p_display_options=h5p_display_options,
         )
 
     def update_task(
@@ -186,6 +240,8 @@ class TasksService:
         hints_md: object = _UNSET,
         due_at: object = _UNSET,
         max_attempts: object = _UNSET,
+        h5p: object = _UNSET,
+        visual: object = _UNSET,
     ) -> dict:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
@@ -200,6 +256,28 @@ class TasksService:
             repo_kwargs["due_at"] = _parse_due_at(due_at)
         if max_attempts is not _UNSET:
             repo_kwargs["max_attempts"] = _normalize_max_attempts(max_attempts)
+        if h5p is not _UNSET and visual is not _UNSET:
+            raise ValueError("invalid_task_kind_config")
+        if h5p is not _UNSET:
+            if h5p is None:
+                repo_kwargs["kind"] = "native"
+                repo_kwargs["h5p_content_id"] = None
+                repo_kwargs["h5p_display_options"] = {}
+            else:
+                h5p_content_id, h5p_display_options = _normalize_h5p_config(h5p)
+                repo_kwargs["kind"] = "h5p"
+                repo_kwargs["h5p_content_id"] = h5p_content_id
+                repo_kwargs["h5p_display_options"] = h5p_display_options
+        if visual is not _UNSET:
+            if visual is None:
+                repo_kwargs["kind"] = "native"
+                repo_kwargs["h5p_content_id"] = None
+                repo_kwargs["h5p_display_options"] = {}
+            else:
+                _normalize_visual_config(visual)
+                repo_kwargs["kind"] = "visual"
+                repo_kwargs["h5p_content_id"] = None
+                repo_kwargs["h5p_display_options"] = {}
         result = self.repo.update_task(
             unit_id,
             section_id,

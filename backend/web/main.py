@@ -4364,6 +4364,21 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
     max_bytes = DEFAULT_POLICY.max_size_bytes
     max_mb = round(max_bytes / (1024 * 1024), 2)
 
+    kind_selector = (
+        '<label>Aufgabentyp'
+        '<select class="form-input" id="task_kind" name="task_kind">'
+        '<option value="native" selected>Normal</option>'
+        '<option value="h5p">H5P (interaktiv)</option>'
+        '<option value="visual">Visual (Upload‑Only)</option>'
+        "</select>"
+        "</label>"
+        '<p id="task-kind-hint" class="text-muted">'
+        "Normal: Markdown‑Aufgabe mit Kriterien. "
+        "H5P: Interaktive Übung (Editor öffnet sich nach dem Anlegen). "
+        "Visual: wie Normal, aber Abgabe nur als Bild/PDF."
+        "</p>"
+    )
+
     criteria_inputs = []
     for i in range(10):
         criteria_inputs.append(
@@ -4373,19 +4388,40 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
     form = (
         f'<form id="task-create-form" method="post" action="/units/{unit_id}/sections/{section_id}/tasks/create">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Anweisung<textarea class="form-input" name="instruction_md" required></textarea></label>'
+        f"{kind_selector}"
+        '<div id="native-task-fields">'
+        f'<label>Anweisung<textarea class="form-input" id="instruction_md" name="instruction_md" required></textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
         f'<label>Lösungshinweise<textarea class="form-input" name="hints_md"></textarea></label>'
+        "</div>"
         f'<label>Fällig bis (ISO 8601)<input class="form-input" type="text" name="due_at" placeholder="2025-01-01T10:00:00+00:00"></label>'
         f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" min="1"></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
         f'</form>'
     )
+    kind_toggle_js = (
+        "<script>"
+        "(() => {"
+        "  const sel = document.getElementById('task_kind');"
+        "  const native = document.getElementById('native-task-fields');"
+        "  const instr = document.getElementById('instruction_md');"
+        "  if (!sel || !native || !instr) return;"
+        "  const apply = () => {"
+        "    const kind = (sel.value || 'native');"
+        "    const showNativeFields = kind !== 'h5p';"
+        "    native.hidden = !showNativeFields;"
+        "    instr.required = showNativeFields;"
+        "  };"
+        "  sel.addEventListener('change', apply);"
+        "  apply();"
+        "})();"
+        "</script>"
+    )
     return (
         '<div class="container">'
         f'<h1>Aufgabe anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
         f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
-        f'<section class="card">{form}</section>'
+        f'<section class="card">{form}{kind_toggle_js}</section>'
         '</div>'
     )
 
@@ -4566,8 +4602,59 @@ def _render_material_detail_page_html(
 
 
 def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, csrf_token: str) -> str:
-    instr = Component.escape(str(task.get("instruction_md") or ""))
     tid = str(task.get("id") or "")
+    kind = str(task.get("kind") or "native")
+    if kind == "h5p":
+        h5p_cfg = task.get("h5p") if isinstance(task.get("h5p"), dict) else {}
+        content_id = str(h5p_cfg.get("content_id") or "") if isinstance(h5p_cfg, dict) else ""
+        due_at = Component.escape(str(task.get("due_at") or ""))
+        max_attempts = Component.escape(str(task.get("max_attempts") or ""))
+        settings_form = (
+            f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/{tid}/update">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+            "<p class=\"text-muted\">H5P‑Aufgaben verwenden den H5P‑Editor. "
+            "Fälligkeitsdatum und max. Versuche gelten weiterhin auf Task‑Ebene.</p>"
+            f'<label>Fällig bis<input class="form-input" type="text" name="due_at" value="{due_at}"></label>'
+            f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" value="{max_attempts}" min="1"></label>'
+            f'<div class="form-actions"><button class="btn btn-primary" type="submit">Einstellungen speichern</button></div>'
+            "</form>"
+        )
+
+        # Keep IDs stable: JS integration reads these to wire the editor callbacks.
+        editor_block = (
+            f'<div class="h5p-task-editor" data-h5p-task-editor="true" '
+            f'data-unit-id="{Component.escape(unit_id)}" '
+            f'data-section-id="{Component.escape(section_id)}" '
+            f'data-task-id="{Component.escape(tid)}" '
+            f'data-content-id="{Component.escape(content_id)}">'
+            '<div class="row" style="gap:12px;flex-wrap:wrap;align-items:center">'
+            '<label>Content ID <input class="form-input" id="h5pContentId" placeholder="(leer = neu)" size="22" /></label>'
+            '<button class="btn" id="h5pNew" type="button">New</button>'
+            '<button class="btn" id="h5pLoad" type="button">Load</button>'
+            '<button class="btn btn-primary" id="h5pSave" type="button">Save</button>'
+            "</div>"
+            '<p id="h5pStatus" class="text-muted">Loading editor…</p>'
+            '<h5p-editor id="h5pEditor" content-id="new"></h5p-editor>'
+            "</div>"
+            # Module script is kept external to avoid inline-minify pitfalls.
+            '<script type="module" src="/static/js/h5p_task_editor.js"></script>'
+        )
+
+        delete_form = (
+            f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/{tid}/delete">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+            f'<button class="btn btn-danger" type="submit">Löschen</button>'
+            f"</form>"
+        )
+        return (
+            '<div class="container">'
+            f"<h1>H5P‑Aufgabe bearbeiten</h1>"
+            f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+            f'<section class="card">{settings_form}{editor_block}{delete_form}</section>'
+            "</div>"
+        )
+
+    instr = Component.escape(str(task.get("instruction_md") or ""))
     criteria = task.get("criteria") or []
     crit_inputs = []
     for i in range(10):
@@ -4847,10 +4934,11 @@ async def materials_reorder(request: Request, unit_id: str, section_id: str):
 
 @app.post("/units/{unit_id}/sections/{section_id}/tasks/create", response_class=HTMLResponse)
 async def tasks_create(request: Request, unit_id: str, section_id: str):
-    """Create a native task via the API and return the updated list partial.
+    """Create a task via the Teaching API and return the updated list partial.
 
     Parameters form fields:
     - instruction_md: Required Markdown instruction
+    - task_kind: Optional task type selector (native|h5p|visual)
     - csrf_token: Required
 
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
@@ -4862,6 +4950,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
+    task_kind = str(form.get("task_kind") or "native").strip().lower()
     instruction_md = str(form.get("instruction_md", ""))
     # Collect up to 10 non-empty criteria from repeated fields
     criteria = [c.strip() for c in form.getlist("criteria") if isinstance(c, str) and c.strip()]
@@ -4877,6 +4966,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
         except Exception:
             max_attempts = None
     error: str | None = None
+    created_task_id: str | None = None
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -4888,15 +4978,39 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
                 "due_at": due_at,
                 "max_attempts": max_attempts,
             }
+            if task_kind == "h5p":
+                # H5P tasks do not use instruction/criteria/hints in the UI, but
+                # the DB contract requires a non-empty instruction_md.
+                payload["instruction_md"] = "H5P task"
+                payload["criteria"] = []
+                payload["hints_md"] = None
+                payload["h5p"] = {"content_id": None, "display_options": {}}
+            elif task_kind == "visual":
+                payload["visual"] = {}
             resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)
             if resp.status_code >= 400:
                 error = _extract_api_error_detail(resp)
+            else:
+                try:
+                    body = resp.json()
+                    if isinstance(body, dict):
+                        created_task_id = str(body.get("id") or "") or None
+                except Exception:
+                    created_task_id = None
     except Exception:
         error = "backend_error"
     if "HX-Request" not in request.headers:
+        if task_kind == "h5p" and created_task_id:
+            return RedirectResponse(
+                url=f"/units/{unit_id}/sections/{section_id}/tasks/{created_task_id}",
+                status_code=303,
+            )
         return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
     tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid or "")
     token = _get_or_create_csrf_token(sid or "")
+    # For HTMX requests we can redirect to the H5P editor detail page (smooth UX).
+    if task_kind == "h5p" and created_task_id:
+        return HTMLResponse("", status_code=200, headers={"HX-Redirect": f"/units/{unit_id}/sections/{section_id}/tasks/{created_task_id}"})
     return HTMLResponse(_render_task_list_partial(unit_id, section_id, tasks, csrf_token=token, error=error))
 
 

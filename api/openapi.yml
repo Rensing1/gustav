@@ -654,6 +654,24 @@ components:
           type: string
           format: date-time
           description: ISO timestamp when the download URL expires
+    H5PTaskConfig:
+      type: object
+      additionalProperties: false
+      description: Configuration for an H5P task (auto-scorable in MVP).
+      properties:
+        content_id:
+          type: string
+          nullable: true
+          description: Opaque identifier of the H5P content item (may be null for drafts).
+        display_options:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Optional display flags passed to the H5P runtime.
+    VisualTaskConfig:
+      type: object
+      additionalProperties: false
+      description: Marker config for upload-only visual tasks. Empty object in MVP.
     Task:
       type: object
       required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
@@ -698,8 +716,14 @@ components:
           readOnly: true
           default: native
           description: >-
-            Task type (forward-compat). MVP returns "native". This field is
-            read-only and must not be provided by clients.
+            Task type (native|h5p|visual). This field is read-only and must not
+            be provided by clients.
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -734,6 +758,14 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+          description: Optional. When set, creates an H5P task. Mutually exclusive with `visual`.
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+          description: Optional. When set, creates a visual task. Mutually exclusive with `h5p`.
     TaskUpdate:
       type: object
       properties:
@@ -758,6 +790,14 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+          description: Optional. When set, updates the H5P configuration. Mutually exclusive with `visual`.
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+          description: Optional. When set, updates the visual configuration. Mutually exclusive with `h5p`.
     TaskReorder:
       type: object
       required: [task_ids]
@@ -4150,6 +4190,9 @@ paths:
               - invalid_due_at
               - invalid_max_attempts
               - invalid_hints_md
+              - invalid_h5p_config
+              - invalid_visual_config
+              - invalid_task_kind_config
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -4161,6 +4204,9 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+                invalid_h5p_config: { value: { error: bad_request, detail: invalid_h5p_config } }
+                invalid_visual_config: { value: { error: bad_request, detail: invalid_visual_config } }
+                invalid_task_kind_config: { value: { error: bad_request, detail: invalid_task_kind_config } }
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4227,6 +4273,9 @@ paths:
               - invalid_due_at
               - invalid_max_attempts
               - invalid_hints_md
+              - invalid_h5p_config
+              - invalid_visual_config
+              - invalid_task_kind_config
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -4240,6 +4289,9 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+                invalid_h5p_config: { value: { error: bad_request, detail: invalid_h5p_config } }
+                invalid_visual_config: { value: { error: bad_request, detail: invalid_visual_config } }
+                invalid_task_kind_config: { value: { error: bad_request, detail: invalid_task_kind_config } }
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

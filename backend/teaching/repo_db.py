@@ -12,6 +12,7 @@ Design:
 from __future__ import annotations
 
 from typing import Any, List, Tuple, Optional, Dict
+import json
 import os
 import re
 import logging
@@ -30,6 +31,10 @@ else:  # pragma: no cover - import errors handled above
         from psycopg.errors import UniqueViolation  # type: ignore
     except Exception:  # pragma: no cover - fallback when errors module unavailable
         UniqueViolation = None  # type: ignore
+    try:
+        from psycopg.types.json import Json  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency
+        Json = None  # type: ignore
 
 LOG = logging.getLogger(__name__)
 
@@ -127,11 +132,23 @@ _TASK_COLUMNS_SQL = """
     max_attempts,
     position,
     to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-    to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+    to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+    kind,
+    h5p_content_id,
+    h5p_display_options
 """
 
 
 def _task_row_to_dict(row: Tuple) -> Dict[str, Any]:
+    kind = str(row[11] or "native")
+    h5p_content_id = row[12]
+    h5p_display_options = row[13] or {}
+    h5p = None
+    visual = None
+    if kind == "h5p":
+        h5p = {"content_id": h5p_content_id, "display_options": dict(h5p_display_options)}
+    elif kind == "visual":
+        visual = {}
     return {
         "id": row[0],
         "unit_id": row[1],
@@ -144,7 +161,9 @@ def _task_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "position": int(row[8]) if row[8] is not None else None,
         "created_at": row[9],
         "updated_at": row[10],
-        "kind": "native",
+        "kind": kind,
+        "h5p": h5p,
+        "visual": visual,
     }
 
 
@@ -1520,6 +1539,9 @@ class DBTeachingRepo:
         hints_md: str | None,
         due_at,
         max_attempts: int | None,
+        kind: str,
+        h5p_content_id: str | None,
+        h5p_display_options: dict[str, Any],
     ) -> dict:
         """Create a task at the next position within the section."""
         if not instruction_md or not isinstance(instruction_md, str):
@@ -1549,12 +1571,34 @@ class DBTeachingRepo:
                 cur.execute(
                     f"""
                     insert into public.unit_tasks (
-                      unit_id, section_id, instruction_md, criteria, hints_md, due_at, max_attempts, position
+                      unit_id,
+                      section_id,
+                      instruction_md,
+                      criteria,
+                      hints_md,
+                      due_at,
+                      max_attempts,
+                      position,
+                      kind,
+                      h5p_content_id,
+                      h5p_display_options
                     )
-                    values (%s, %s, %s, %s, %s, %s, %s, %s)
+                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     returning {_TASK_COLUMNS_SQL}
                     """,
-                    (unit_id, section_id, instruction, criteria, hints_md, due_at, max_attempts, next_pos),
+                    (
+                        unit_id,
+                        section_id,
+                        instruction,
+                        criteria,
+                        hints_md,
+                        due_at,
+                        max_attempts,
+                        next_pos,
+                        kind,
+                        h5p_content_id,
+                        Json(h5p_display_options) if Json is not None else json.dumps(h5p_display_options),
+                    ),
                 )
                 row = cur.fetchone()
                 if not row:
@@ -1574,6 +1618,9 @@ class DBTeachingRepo:
         hints_md=_UNSET,
         due_at=_UNSET,
         max_attempts=_UNSET,
+        kind=_UNSET,
+        h5p_content_id=_UNSET,
+        h5p_display_options=_UNSET,
     ) -> Optional[dict]:
         """Update mutable task fields when owned by the caller."""
         with psycopg.connect(self._dsn) as conn:
@@ -1610,6 +1657,17 @@ class DBTeachingRepo:
                 if max_attempts is not _UNSET:
                     updates.append("max_attempts")
                     params.append(max_attempts)
+                if kind is not _UNSET:
+                    updates.append("kind")
+                    params.append(kind)
+                if h5p_content_id is not _UNSET:
+                    updates.append("h5p_content_id")
+                    params.append(h5p_content_id)
+                if h5p_display_options is not _UNSET:
+                    updates.append("h5p_display_options")
+                    params.append(
+                        Json(h5p_display_options) if Json is not None else json.dumps(h5p_display_options)
+                    )
                 if not updates:
                     conn.rollback()
                     return _task_row_to_dict(existing)

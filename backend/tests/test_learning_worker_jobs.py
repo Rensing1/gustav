@@ -195,6 +195,8 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key=idempotency_key,
         )
     )
@@ -229,7 +231,13 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
 
 
 def _set_job_visibility(worker_dsn: str, job_id: str, *, visible_at: datetime) -> None:
-    """Pin a job's visibility for deterministic leasing, clearing any previous lease."""
+    """Pin a job's visibility for deterministic leasing, clearing previous processing state.
+
+    Why:
+        Worker tests should not depend on external worker processes or a previous
+        retry attempt. We reset `retry_count` and `error_code` so the next
+        `run_once()` call always exercises the "first retry" path deterministically.
+    """
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute(
@@ -237,6 +245,8 @@ def _set_job_visibility(worker_dsn: str, job_id: str, *, visible_at: datetime) -
                 update public.learning_submission_jobs
                    set visible_at = %s,
                        status = 'queued',
+                       retry_count = 0,
+                       error_code = null,
                        lease_key = null,
                        leased_until = null,
                        updated_at = now()
@@ -307,6 +317,8 @@ async def test_worker_processes_pending_submission_to_completed():
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key="worker-happy-path",
         )
     )

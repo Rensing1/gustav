@@ -16,6 +16,7 @@
  *   - `GET /libraries` (teacher/admin only) lists installed content-type libraries.
  *   - `POST /libraries/import` (teacher/admin only) installs a content-type library package.
  *   - `GET /player?content_id=...` (student/teacher/admin) renders the H5P player.
+ *   - `GET /player/model?content_id=...` (student/teacher/admin) returns the JSON model for `<h5p-player>`.
  *   - `GET /editor` (teacher/admin) is a minimal Phase-1 UI (import form).
  *
  * Security notes:
@@ -57,6 +58,12 @@ const storageDirs = {
  * Key: session id. Value: { expiresAtMs, payload }
  */
 const authCache = new Map();
+
+/**
+ * Cache H5P content authorization lookups (student scope).
+ * Key: `${session_id}|${course_id}`. Value: { expiresAtMs, allowedContentIds: Set<string> }
+ */
+const courseH5PAuthCache = new Map();
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -182,6 +189,38 @@ async function fetchGustavMe(cookieHeader) {
   }
   const payload = await r.json();
   return { ok: true, payload };
+}
+
+async function fetchAllowedH5PContentIdsForCourse(courseId, cookieHeader) {
+  const base = gustavWebInternalBase.replace(/\/+$/, "");
+  const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/sections?include=tasks&limit=100&offset=0`;
+  const r = await fetch(url, {
+    method: "GET",
+    headers: {
+      cookie: cookieHeader,
+      "cache-control": "no-store",
+    },
+  });
+  if (r.status !== 200) {
+    return { ok: false, status: r.status };
+  }
+  const payload = await r.json();
+  const allowed = new Set();
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      const tasks = entry?.tasks;
+      if (!Array.isArray(tasks)) continue;
+      for (const t of tasks) {
+        const kind = t?.kind;
+        if (kind !== "h5p") continue;
+        // Contract: LearningTask.h5p.content_id (preferred). Keep a tolerant
+        // fallback for transitional payloads.
+        const cid = t?.h5p?.content_id || t?.h5p_content_id || null;
+        if (typeof cid === "string" && cid) allowed.add(cid);
+      }
+    }
+  }
+  return { ok: true, allowedContentIds: allowed };
 }
 
 async function requireAuth(req, res, next) {
@@ -386,6 +425,15 @@ async function main() {
     integration: model.integration,
     scripts: model.scripts,
     styles: model.styles,
+  }));
+  h5pPlayer.setRenderer((model) => ({
+    contentId: String(model.contentId),
+    embedTypes: model.embedTypes,
+    integration: model.integration,
+    scripts: model.scripts,
+    styles: model.styles,
+    translations: model.translations,
+    user: model.user,
   }));
 
   const app = express();
@@ -683,6 +731,83 @@ async function main() {
     }
   });
 
+  app.get("/player/model", async (req, res) => {
+    const contentId =
+      typeof req.query.content_id === "string" ? req.query.content_id : undefined;
+    if (!contentId) {
+      sendJson(res, 400, { error: "invalid_request" });
+      return;
+    }
+
+    const courseId =
+      typeof req.query.course_id === "string" ? req.query.course_id : undefined;
+    const contextId =
+      typeof req.query.context_id === "string" ? req.query.context_id : undefined;
+    const asUserId =
+      typeof req.query.as_user_id === "string" ? req.query.as_user_id : undefined;
+    const readOnlyStateRaw =
+      typeof req.query.read_only_state === "string" ? req.query.read_only_state : undefined;
+    const readOnlyState = readOnlyStateRaw === "true";
+
+    // For student requests we require a course scope so we can verify that the
+    // content is part of a released H5P task for this course (fail-closed).
+    const roles = req.gustavMe?.roles;
+    const isTeacher = rolesAllowTeacher(roles);
+    const isStudent = Array.isArray(roles) && roles.includes("student") && !isTeacher;
+    if (isStudent) {
+      if (!courseId) {
+        sendJson(res, 403, { error: "forbidden" });
+        return;
+      }
+      const cookieHeader = req.get("cookie") || "";
+      const cookies = parseCookies(cookieHeader);
+      const sid = cookies[sessionCookieName] || "";
+      const cacheKey = `${sid}|${courseId}`;
+      const cached = courseH5PAuthCache.get(cacheKey);
+      const now = Date.now();
+      let allowedSet = null;
+      if (cached && cached.expiresAtMs > now) {
+        allowedSet = cached.allowedContentIds;
+      } else {
+        const fetched = await fetchAllowedH5PContentIdsForCourse(courseId, cookieHeader);
+        if (!fetched.ok) {
+          // Upstream errors: treat as forbidden in student context to avoid leaks.
+          sendJson(res, fetched.status === 401 ? 401 : 403, { error: "forbidden" });
+          return;
+        }
+        allowedSet = fetched.allowedContentIds;
+        courseH5PAuthCache.set(cacheKey, {
+          expiresAtMs: now + authCacheTtlSeconds * 1000,
+          allowedContentIds: allowedSet,
+        });
+      }
+      if (!allowedSet || !allowedSet.has(contentId)) {
+        sendJson(res, 403, { error: "forbidden" });
+        return;
+      }
+    }
+
+    try {
+      const language = typeof req.query.language === "string" ? req.query.language : req.language;
+      const model = await h5pPlayer.render(contentId, req.user, language, {
+        showDownloadButton: false,
+        showEmbedButton: false,
+        showCopyButton: false,
+        showLicenseButton: false,
+        contextId,
+        asUserId,
+        readOnlyState,
+      });
+      sendJson(res, 200, model);
+    } catch (err) {
+      if (err?.httpStatusCode === 404) {
+        sendJson(res, 404, { error: "not_found" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" });
+    }
+  });
+
   app.post("/contents", requireTeacher, requireSameOrigin, async (req, res) => {
     const library = req.body?.library;
     const params = req.body?.params;
@@ -810,51 +935,79 @@ async function main() {
   );
 
   app.get("/player", async (req, res) => {
-    const contentId = req.query.content_id;
-    if (!contentId || typeof contentId !== "string") {
-      sendHtml(
-        res,
-        200,
-        [
-          "<!doctype html>",
-          "<html><head><meta charset=\"utf-8\" />",
-          "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />",
-          "<title>H5P Player</title>",
-          "</head><body>",
-          "<h1>H5P Player</h1>",
-          "<p>Missing query param: <code>content_id</code>.</p>",
-          "</body></html>",
-        ].join(""),
-      );
-      return;
-    }
-
-    try {
-      const snippet = await h5pPlayer.render(contentId, req.user, "en", {
-        showDownloadButton: false,
-        showEmbedButton: false,
-        showCopyButton: false,
-      });
-      sendHtml(
-        res,
-        200,
-        [
-          "<!doctype html>",
-          "<html><head><meta charset=\"utf-8\" />",
-          "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />",
-          "<title>H5P Player</title>",
-          "</head><body>",
-          typeof snippet === "string" ? snippet : JSON.stringify(snippet),
-          "</body></html>",
-        ].join(""),
-      );
-    } catch (err) {
-      if (err?.httpStatusCode === 404) {
-        sendJson(res, 404, { error: "not_found" });
-        return;
-      }
-      sendJson(res, 500, { error: "internal_error" });
-    }
+    const initialContentId =
+      typeof req.query.content_id === "string" ? req.query.content_id : "";
+    // NOTE: This debug page uses the same webcomponents + model endpoint as the
+    // embedded GUSTAV UI. Teachers can load any content id; students must
+    // provide a course id so `/player/model` can verify visibility.
+    sendHtml(
+      res,
+      200,
+      [
+        "<!doctype html>",
+        "<html><head><meta charset=\"utf-8\" />",
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />",
+        "<title>H5P Player</title>",
+        "</head><body>",
+        "<h1>H5P Player</h1>",
+        "<p class=\"text-muted\">Debug UI. The real integration lives inside GUSTAV pages.</p>",
+        "<div style=\"display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap;\">",
+        `  <label>Content ID <input id="contentId" value="${String(initialContentId).replace(/\"/g, "&quot;")}" /></label>`,
+        "  <label>Course ID (students) <input id=\"courseId\" value=\"\" /></label>",
+        "  <button id=\"loadBtn\" type=\"button\">Load</button>",
+        "  <span id=\"status\" style=\"margin-left:8px;color:#555\"></span>",
+        "</div>",
+        "<div id=\"playerRoot\"></div>",
+        "<script type=\"module\">",
+        "(() => {",
+        "  const statusEl = document.getElementById('status');",
+        "  const contentEl = document.getElementById('contentId');",
+        "  const courseEl = document.getElementById('courseId');",
+        "  const root = document.getElementById('playerRoot');",
+        "  const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg || ''; };",
+        "",
+        "  const renderPlayer = async (cid) => {",
+        "    if (!cid) { setStatus('Missing content id.'); return; }",
+        "    setStatus('Loading webcomponents…');",
+        "    const { defineElements } = await import('/h5p/webcomponents/index.js');",
+        "    defineElements(['h5p-player']);",
+        "",
+        "    const player = document.createElement('h5p-player');",
+        "    player.setAttribute('content-id', cid);",
+        "    player.loadContentCallback = async (contentId, contextId, asUserId, readOnlyState) => {",
+        "      const url = new URL('/h5p/player/model', window.location.origin);",
+        "      url.searchParams.set('content_id', contentId);",
+        "      const courseId = (courseEl?.value || '').trim();",
+        "      if (courseId) url.searchParams.set('course_id', courseId);",
+        "      if (contextId) url.searchParams.set('context_id', contextId);",
+        "      if (asUserId) url.searchParams.set('as_user_id', asUserId);",
+        "      if (readOnlyState) url.searchParams.set('read_only_state', 'true');",
+        "      const r = await fetch(url.toString(), { credentials: 'include' });",
+        "      const data = await r.json().catch(() => ({}));",
+        "      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);",
+        "      return data;",
+        "    };",
+        "    player.addEventListener('xAPI', (ev) => {",
+        "      // Debug: log statements to console",
+        "      console.log('xAPI', ev?.detail?.statement);",
+        "    });",
+        "",
+        "    root.innerHTML = '';",
+        "    root.appendChild(player);",
+        "    setStatus('Ready.');",
+        "  };",
+        "",
+        "  document.getElementById('loadBtn')?.addEventListener('click', () => {",
+        "    renderPlayer((contentEl?.value || '').trim()).catch((e) => setStatus(String(e?.message || e)));",
+        "  });",
+        "",
+        "  const initial = (contentEl?.value || '').trim();",
+        "  if (initial) renderPlayer(initial).catch((e) => setStatus(String(e?.message || e)));",
+        "})();",
+        "</script>",
+        "</body></html>",
+      ].join("\n"),
+    );
   });
 
   app.post(

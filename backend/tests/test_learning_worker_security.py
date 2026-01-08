@@ -96,6 +96,8 @@ async def _create_pending_submission(*, idempotency_key: str) -> tuple[str, str,
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key=unique_key,
         )
     )

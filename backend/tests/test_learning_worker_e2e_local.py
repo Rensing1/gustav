@@ -156,6 +156,8 @@ async def test_e2e_local_ai_text_submission_completed_v2_with_dspy(monkeypatch: 
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key="e2e-local-text-dspy",
         )
     )
@@ -306,6 +308,8 @@ async def test_e2e_local_ai_text_submission_without_json_adapter(monkeypatch: py
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key="e2e-local-text-no-json-adapter",
         )
     )
@@ -384,6 +388,8 @@ async def test_e2e_local_ai_image_submission_completed_v2(monkeypatch: pytest.Mo
             mime_type="image/jpeg",
             size_bytes=1024,
             sha256="0" * 64,
+            score_raw=None,
+            score_max=None,
             idempotency_key="e2e-local-image",
         )
     )

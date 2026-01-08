@@ -592,7 +592,7 @@ async def list_unit_sections(
 
 
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Validate and normalize the submission payload (text/image/file).
+    """Validate and normalize the submission payload (text/image/file/h5p).
 
     Why:
         Keep FastAPI layer thin, but ensure inputs are sane before invoking
@@ -601,17 +601,17 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         the OpenAPI contract for precise client handling.
 
     Returns:
-        (kind, clean_payload) where kind in {text,image,file} and
+        (kind, clean_payload) where kind in {text,image,file,h5p} and
         clean_payload contains the normalized fields for the given kind.
 
     Errors:
         Raises ValueError with one of: 'invalid_input', 'invalid_image_payload',
-        'invalid_file_payload'.
+        'invalid_file_payload', 'invalid_h5p_payload'.
     """
     if not isinstance(payload, dict):
         raise ValueError("invalid_input")
     kind = payload.get("kind")
-    if kind not in ("text", "image", "file"):
+    if kind not in ("text", "image", "file", "h5p"):
         raise ValueError("invalid_input")
     if kind == "text":
         text_body = payload.get("text_body")
@@ -623,6 +623,18 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         if len(text_body) > 65_536:
             raise ValueError("invalid_input")
         return kind, {"text_body": text_body.strip()}
+    elif kind == "h5p":
+        required = {"score_raw", "score_max"}
+        if not required.issubset(payload.keys()):
+            raise ValueError("invalid_h5p_payload")
+        try:
+            raw_int = int(payload.get("score_raw"))
+            max_int = int(payload.get("score_max"))
+        except (TypeError, ValueError):
+            raise ValueError("invalid_h5p_payload") from None
+        if raw_int < 0 or max_int < 0 or raw_int > max_int:
+            raise ValueError("invalid_h5p_payload")
+        return kind, {"score_raw": raw_int, "score_max": max_int}
     elif kind == "image":
         # Image submissions require finalized storage metadata
         required = {"storage_key", "mime_type", "size_bytes", "sha256"}
@@ -776,6 +788,8 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         mime_type=clean_payload.get("mime_type"),
         size_bytes=clean_payload.get("size_bytes"),
         sha256=clean_payload.get("sha256"),
+        score_raw=clean_payload.get("score_raw"),
+        score_max=clean_payload.get("score_max"),
         idempotency_key=idempotency_key,
     )
 
@@ -827,12 +841,14 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
             "id": str(_uuid4()),
             "attempt_nr": 1,
             "kind": kind,
+            "score_raw": clean_payload.get("score_raw"),
+            "score_max": clean_payload.get("score_max"),
             "text_body": clean_payload.get("text_body"),
             "mime_type": clean_payload.get("mime_type"),
             "size_bytes": clean_payload.get("size_bytes"),
             "storage_key": clean_payload.get("storage_key"),
             "sha256": clean_payload.get("sha256"),
-            "analysis_status": "pending",
+            "analysis_status": "completed" if kind == "h5p" else "pending",
             "error_code": None,
             "analysis_json": None,
             "feedback_md": None,

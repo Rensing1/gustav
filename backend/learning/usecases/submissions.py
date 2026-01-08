@@ -33,6 +33,8 @@ class CreateSubmissionInput:
     mime_type: Optional[str]
     size_bytes: Optional[int]
     sha256: Optional[str]
+    score_raw: Optional[int]
+    score_max: Optional[int]
     idempotency_key: Optional[str]
 
 
@@ -72,6 +74,8 @@ class CreateSubmissionUseCase:
                 mime_type=req.mime_type,
                 size_bytes=req.size_bytes,
                 sha256=req.sha256,
+                score_raw=req.score_raw,
+                score_max=req.score_max,
                 idempotency_key=req.idempotency_key,
             )
         )

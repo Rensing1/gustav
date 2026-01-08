@@ -8,8 +8,9 @@ Kontext:
 
 ## Executive Summary (Stand 2026‑01‑08)
 - Umgesetzt (fertig): Phase 0 + Phase 1 (H5P‑Service als eigener Compose‑Service inkl. Proxy/CSP, Storage, Auth‑Plumbing, Editor/Player, Library‑Import, E2E‑Smoke).
-- Umgesetzt (teilweise): Phase 2 (DB + Teaching‑API: `Task.kind` + `h5p`/`visual` Konfiguration inkl. Migration + OpenAPI + Tests; Teaching‑UI: H5P‑Editor ersetzt den normalen Aufgabeneditor für `Task.kind="h5p"`).
-- Nächste Meilensteine: Phase 3 (Learning‑Integration: xAPI ingest + Scores + Visual‑Tasks via VLM), Phase 4 (UX/Reporting), Phase 5 (Hardening).
+- Umgesetzt (weitgehend): Phase 2 (DB + Teaching‑API: `Task.kind` + `h5p`/`visual` Konfiguration inkl. Migration + OpenAPI + Tests; Teaching‑UI: H5P‑Editor ersetzt den normalen Aufgabeneditor für `Task.kind="h5p"`).
+- Umgesetzt (teilweise): Phase 3 (Learning‑Integration für H5P: eingebetteter Player + Score‑Ingest; Visual‑Tasks via VLM sind noch offen).
+- Nächste Meilensteine: Phase 3 (Visual‑Tasks), Phase 4 (UX/Reporting), Phase 5 (Hardening).
 - Kurzcheck lokal: `docker compose up -d --build caddy web keycloak h5p` → `curl -k -i https://app.localhost/h5p/healthz` → optional `RUN_E2E=1 ... pytest -m e2e ...` (Details: Appendix A).
 
 ---
@@ -58,9 +59,10 @@ Non‑Goals (MVP):
 #### Learning – Ergebnis/Abgabe erzeugen (xAPI)
 - Given ein Schüler **versucht** eine H5P‑Aufgabe und der Player emittiert ein xAPI Statement **mit Score** (typisch Verb `answered`, ggf. `completed`), When das Frontend dieses Statement an `POST /api/learning/.../submissions` sendet, Then entsteht eine neue `Submission` (idempotent via `Idempotency-Key=statement.id`) und wird als `completed` gespeichert (inkl. `score_raw/score_max`).
 - Given dasselbe scored Statement wird erneut gesendet (Reload/Retry/Netzfehler), When `Idempotency-Key` identisch ist, Then wird die bestehende Abgabe wiederverwendet (keine Duplikate).
-- Given `max_attempts` ist konfiguriert und erreicht (optional), When ein weiteres scored Statement gesendet wird, Then 400 `max_attempts_exceeded`.
-- Given mindestens ein scored Statement hat `score_raw == score_max` (und `score_max > 0`), Then gilt die Aufgabe als **korrekt abgeschlossen** (voller Punktestand, unabhängig von der Anzahl der Versuche).
-- Given eine Aufgabe ist `Task.kind="h5p"`, When ich eine Submission als `kind=text|image|file` sende, Then 400 (z. B. `invalid_submission_kind_for_task`).
+- Given `max_attempts` ist in der Task gesetzt, When ein weiteres scored Statement gesendet wird, Then wird es **trotzdem akzeptiert** (GUSTAV enforced `max_attempts` nicht für H5P; H5P kann eigene Limits haben).
+- Given mindestens eine H5P‑Submission existiert, aber keine hat volle Punktzahl, Then gilt die Aufgabe als **bearbeitet**.
+- Given mindestens eine H5P‑Submission hat `score_raw == score_max` (und `score_max > 0`), Then gilt die Aufgabe als **abgeschlossen** (volle Punktzahl, unabhängig von der Anzahl der Versuche).
+- Given eine Aufgabe ist `Task.kind="h5p"`, When ich eine Submission als `kind=text|image|file` sende, Then 400 (`invalid_input`).
 
 ### Visual (Teaching + Learning)
 #### Teaching – Visual Task anlegen/konfigurieren
@@ -263,7 +265,8 @@ components:
 ```
 
 ### Learning Submissions: H5P xAPI ingest (scored statements)
-Wir erweitern den bestehenden Abgabe‑Endpoint um einen neuen Body‑Zweig:
+Wir erweitern den bestehenden Abgabe‑Endpoint um einen neuen Body‑Zweig.
+Wichtig: Wir persistieren im MVP nur den **Score** (raw/max); das xAPI Statement bleibt client‑seitig, und die Statement‑ID wird als `Idempotency-Key` verwendet.
 ```yaml
 paths:
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions:
@@ -277,14 +280,11 @@ paths:
               oneOf:
                 # existing text/image/file…
                 - type: object
-                  required: [kind, content_id, statement]
+                  required: [kind, score_raw, score_max]
                   properties:
                     kind: { type: string, enum: [h5p] }
-                    content_id: { type: string, minLength: 1 }
-                    statement:
-                      type: object
-                      description: Full xAPI statement (JSON)
-                      additionalProperties: true
+                    score_raw: { type: integer, minimum: 0 }
+                    score_max: { type: integer, minimum: 0 }
 ```
 
 Und wir erweitern `LearningSubmission.kind` um `h5p` und ergänzen `score_raw/score_max` als optionale Felder.
@@ -303,7 +303,7 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 
 2) **DB‑Integration Tests**
 - Migrationen werden in Test‑DB angewendet; Tests schreiben/lesen echte Tabellen.
-- Szenarien: idempotent ingest (Idempotency‑Key), max_attempts, `abgeschlossen`/`korrekt_abgeschlossen` (volle Punktzahl).
+- Szenarien: idempotent ingest (Idempotency‑Key), **keine** `max_attempts`‑Enforcement für H5P, Status „bearbeitet“/„abgeschlossen“ (volle Punktzahl).
 - Visual‑Szenarien: `Task.kind="visual"` akzeptiert `image|file`, lehnt `text` ab (400); Worker erzeugt `analysis_json` + `feedback_md` (wie bei `native`).
 
 3) **Worker/Adapter Tests**
@@ -352,12 +352,12 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 ### Phase 3 – Learning UI + xAPI ingest (2–3 Tage)
 - Student‑Seite rendert Player; Listener POSTet scored Statement an Learning‑API.
 - Abgabe‑Historie zeigt Score/Status.
-- Contract‑First/TDD: `api/openapi.yml` + Supabase‑Migration + `pytest` grün für `learning_submissions.kind='h5p'` und H5P xAPI ingest (Idempotency, max_attempts, `abgeschlossen`/`korrekt_abgeschlossen`).
+- Contract‑First/TDD: `api/openapi.yml` + Supabase‑Migration + `pytest` grün für `learning_submissions.kind='h5p'` und H5P Score‑Ingest (Idempotency, **kein** `max_attempts`‑Enforcement, „bearbeitet“/„abgeschlossen“).
 - Visual‑Tasks: Student‑UI zeigt Upload‑Form (Bild/PDF) und Backend validiert upload‑only; Worker erstellt Kriterien‑Analyse + Feedback via VLM (Option A).
 
 ### Phase 4 – UX & Reporting (1–2 Tage)
-- Student‑UI zeigt klar „versucht“ vs. „korrekt gelöst“ (volle Punktzahl) für H5P Tasks.
-- Teacher‑Übersicht zeigt pro Schüler/Task mind. den Status „versucht“/„korrekt gelöst“ + letzten Score.
+- Student‑UI zeigt für H5P Tasks klar „bearbeitet“ (nicht volle Punktzahl) vs. „abgeschlossen“ (volle Punktzahl) + letzten Score.
+- Teacher‑Übersicht zeigt pro Schüler/Task mind. den Status „bearbeitet“/„abgeschlossen“ + letzten Score.
 
 ### Phase 5 – Security Hardening (laufend, vor Pilot)
 - CSP‑Tightening: von permissiver `/h5p`‑CSP → minimal nötige Direktiven (Player + Editor), ohne global CSP zu lockern.
@@ -371,13 +371,13 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 - Lehrkraft kann eine H5P Multiple‑Choice Aufgabe erstellen, Task referenziert `h5p_content_id`.
 - Schüler kann Task in einem freigegebenen Abschnitt öffnen und lösen.
 - Ein scored xAPI Statement erzeugt genau **eine** Abgabe (idempotent), Score wird gespeichert und sichtbar.
-- Lehrkraft sieht im Kurs die letzte Abgabe pro Schüler/Task (inkl. Score) und erkennt „versucht“ vs. „korrekt gelöst“ (volle Punktzahl).
+- Lehrkraft sieht im Kurs die letzte Abgabe pro Schüler/Task (inkl. Score) und erkennt „bearbeitet“ vs. „abgeschlossen“ (volle Punktzahl).
 - Visual: Lehrkraft kann eine Visual‑Aufgabe anlegen; Schüler kann ein Bild/PDF hochladen und erhält Kriterien‑Analyse + Feedback (wie bei `native`), aber erzeugt durch ein VLM (kein OCR‑Only).
 - Keine externen Requests im Default (CSP blockt connect/src außerhalb `self`; Ausnahmen nur bewusst).
 
 ---
 
-## Entscheidungen (Stand 2026‑01‑05)
+## Entscheidungen (Stand 2026‑01‑08)
 1) **Storage**: Filesystem bind mount `./supabase/storage/h5p` → `/data/h5p` (siehe “Storage – Optionen & Entscheidung”).
 2) **CSP**: PoC/MVP akzeptiert permissive CSP **nur** auf `/h5p/*` (Hardening folgt in Phase 5).
 3) **Phase‑1 Proof für Save**: “Save” wird in Phase 1 deterministisch über Export→Re‑Import→Reload nachgewiesen (ohne Browser‑Automation).
@@ -388,8 +388,8 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
    - Hinweis: Der Default‑Endpoint `https://api.h5p.org/v1/content-types/` liefert aktuell (2025‑12‑23) `404`, daher ist Hub‑Sync in Phase 1 bewusst deaktiviert (`fetchingDisabled=1`).
 7) **Libraries sind admin‑verwaltet (Betrieb)**: Welche Content Types installiert sind, entscheidet der Admin (bzw. eine dafür verantwortliche Lehrkraft). GUSTAV liefert in Phase 1 keine “install all libraries” Automatik; fehlende Libraries werden beim Import als `missing_libraries` zurückgemeldet und dann gezielt per Upload nachinstalliert.
 8) **Auswertungs‑Semantik (MVP, auto‑scorable Tasks)**:
-   - `abgeschlossen = versucht`: Es existiert mindestens eine scored H5P‑Submission (xAPI Statement mit `result.score`).
-   - `korrekt_abgeschlossen = volle Punktzahl`: Es existiert mindestens eine Submission mit `score_raw == score_max` (und `score_max > 0`) – unabhängig davon, wie viele Versuche der Schüler brauchte.
+   - `bearbeitet`: Es existiert mindestens eine scored H5P‑Submission, aber keine mit voller Punktzahl.
+   - `abgeschlossen = volle Punktzahl`: Es existiert mindestens eine Submission mit `score_raw == score_max` (und `score_max > 0`) – unabhängig davon, wie viele Versuche der Schüler brauchte.
    - “Fortsetzen können”: H5P Content User Data (User State) bleibt aktiviert, damit Schüler beim erneuten Aufruf ihre Eingabe wiedersehen und weiterarbeiten können.
 9) **Scope (MVP)**: Wir nutzen H5P in GUSTAV ausschließlich für **auto‑scorable** Übungsaufgaben (Quiz‑Typen). KI‑Bewertung/„hybrid“ ist nicht Teil dieses MVP‑Plans.
 10) **H5P Task‑UI**: Für `Task.kind="h5p"` gibt es keinen zusätzlichen GUSTAV‑Aufgabentext über dem Player/Editor. `instruction_md` bleibt aus DB‑Gründen Pflicht und wird serverseitig mit einem neutralen Platzhalter befüllt, aber im UI nicht gerendert.
@@ -491,4 +491,11 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 - ✅ Tests: `backend/tests/test_teaching_tasks_h5p_visual_api.py` (DB‑Integration) + `backend/tests/test_teaching_tasks_service_unit.py` (Unit).
 - ✅ Teaching‑UI (Teacher): Beim Anlegen einer Aufgabe kann `H5P` gewählt werden; die Detailseite rendert den eingebetteten `<h5p-editor>` und ersetzt damit den normalen Aufgabeneditor (kein iFrame, keine Extra‑Seite).
 - ✅ UI‑Smoke‑Test: `backend/tests/test_teaching_entry_detail_ui.py::test_h5p_task_detail_embeds_h5p_editor_instead_of_markdown_editor`.
-- ⏳ Teaching‑UI (Student): `<h5p-player>` in der Schüler‑Ansicht der Aufgabe einbetten (Phase 3; inkl. Ergebnis‑Ingest).
+
+### Phase 3 – Status (2026‑01‑08)
+- ✅ DB‑Migration: `supabase/migrations/20260108203000_learning_h5p_scoring_and_task_kind.sql` (H5P‑Scores in `learning_submissions`, Helper liefern `task.kind` + H5P‑Config).
+- ✅ OpenAPI (Contract‑First): H5P‑Submission Body `kind=h5p` mit `score_raw/score_max`; `LearningSubmission` enthält `score_raw/score_max`; neuer Endpoint `GET /h5p/player/model`.
+- ✅ H5P‑Service: `GET /h5p/player/model` liefert Player‑Model JSON; AuthZ für Schüler prüft, dass `content_id` im freigegebenen Kurs‑Scope liegt (fail‑closed).
+- ✅ Learning‑Backend: H5P‑Submissions werden synchron als `completed` gespeichert (kein Worker‑Job); `max_attempts` wird für H5P nicht enforced.
+- ✅ Student‑UI (embedded, no iframe): H5P‑Tasks werden im Kurs direkt gerendert, Listener erfasst xAPI Score und POSTet an Learning‑API.
+- ✅ Tests: `backend/tests/test_learning_h5p_scoring_api.py`, `backend/tests/test_openapi_h5p_player_model_contract.py` (+ Regression‑Fixes in Worker/Mapping Tests).

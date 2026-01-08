@@ -195,6 +195,33 @@ components:
           nullable: true
           description: Content parameters (only present when loading existing content).
           additionalProperties: true
+    H5PPlayerModelResponse:
+      type: object
+      required: [integration, scripts, styles, contentId, embedTypes]
+      additionalProperties: true
+      description: JSON model required by the `<h5p-player>` webcomponent.
+      properties:
+        contentId:
+          type: string
+          description: Opaque H5P content id.
+        embedTypes:
+          type: array
+          items:
+            type: string
+            enum: [iframe, div]
+          description: Allowed embed types for this content (prefer `div` when present).
+        integration:
+          type: object
+          description: H5PIntegration object used by the editor/player runtime.
+          additionalProperties: true
+        scripts:
+          type: array
+          items:
+            type: string
+        styles:
+          type: array
+          items:
+            type: string
     H5PContentSaveRequest:
       type: object
       required: [library, params]
@@ -939,7 +966,7 @@ components:
           nullable: true
     LearningTask:
       type: object
-      required: [id, instruction_md, criteria]
+      required: [id, instruction_md, criteria, kind]
       properties:
         id:
           type: string
@@ -968,8 +995,14 @@ components:
           nullable: true
         kind:
           type: string
+          enum: [native, h5p, visual]
+          description: Backend task type identifier.
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
-          description: Backend task type identifier (e.g., "native")
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
     LearningSection:
       type: object
       required: [section, materials, tasks]
@@ -1103,7 +1136,17 @@ components:
               minimum: 1
             kind:
               type: string
-              enum: [text, image, file]
+              enum: [text, image, file, h5p]
+            score_raw:
+              type: integer
+              nullable: true
+              minimum: 0
+              description: Raw score reported by the H5P runtime for `kind=h5p`.
+            score_max:
+              type: integer
+              nullable: true
+              minimum: 0
+              description: Maximum score reported by the H5P runtime for `kind=h5p`.
             text_body:
               type: string
               nullable: true
@@ -1530,6 +1573,66 @@ paths:
           $ref: '#/components/responses/Unauthorized401'
         '403':
           $ref: '#/components/responses/Forbidden403'
+  /h5p/player/model:
+    get:
+      tags: [H5P]
+      summary: H5P player model (students and teachers)
+      description: >-
+        Returns the JSON model needed to render the H5P player in a browser
+        (H5PIntegration + core script/style lists). Used by the embedded
+        `<h5p-player>` webcomponent.
+      operationId: getH5PPlayerModel
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: content_id
+          required: true
+          schema:
+            type: string
+          description: H5P content id to load.
+        - in: query
+          name: context_id
+          required: false
+          schema:
+            type: string
+          description: Optional context id to isolate user state per task instance.
+        - in: query
+          name: course_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional course id used for authorization checks.
+      responses:
+        '200':
+          description: Player model JSON
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PPlayerModelResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /h5p/libraries:
     get:
       tags: [H5P]
@@ -2760,6 +2863,18 @@ paths:
                     sha256:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
+                - type: object
+                  required: [kind, score_raw, score_max]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [h5p]
+                    score_raw:
+                      type: integer
+                      minimum: 0
+                    score_max:
+                      type: integer
+                      minimum: 0
       responses:
         '202':
           description: Submission accepted; analysis scheduled asynchronously (default response).
@@ -2786,7 +2901,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '400':
-          description: Bad request (invalid_input | invalid_image_payload | invalid_file_payload | max_attempts_exceeded | invalid_uuid)
+          description: Bad request (invalid_input | invalid_image_payload | invalid_file_payload | invalid_h5p_payload | max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

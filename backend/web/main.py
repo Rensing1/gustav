@@ -719,20 +719,49 @@ def _build_history_entry_from_record(
             submission_id=submission_id,
         )
 
+    def _is_ocr_placeholder(text: str) -> bool:
+        """Return True when the text is our legacy OCR/PDF placeholder stub."""
+        t = (text or "").strip()
+        return t.startswith("OCR placeholder for ") or t.startswith("PDF text placeholder for ")
+
     status = str(record.get("analysis_status") or "")
     analysis = record.get("analysis_json")
 
-    # Prefer stored text_body; fall back to extracted analysis text for uploads
+    kind = str(record.get("kind") or "")
+    mime = str(record.get("mime_type") or "").lower()
+    file_url = str(record.get("file_url") or "").strip()
+
+    # Prefer stored text_body; for uploads fall back to extracted analysis text only
+    # when it is not the legacy placeholder.
     text_src = str(record.get("text_body") or "")
-    if not text_src.strip():
-        if isinstance(analysis, dict):
-            extracted = str(analysis.get("text") or "").strip()
-            if extracted:
-                text_src = extracted
+    if not text_src.strip() and isinstance(analysis, dict):
+        extracted = str(analysis.get("text") or "").strip()
+        if extracted and not _is_ocr_placeholder(extracted):
+            text_src = extracted
+
     text_html = render_markdown_safe(text_src)
-    if not text_html:
-        text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
-    content_html = f'<div class="analysis-text">{text_html}</div>'
+    preview_html = ""
+    if file_url and kind in {"image", "file"}:
+        safe_url = Component.escape(file_url)
+        if mime.startswith("image/"):
+            preview_html = f'<img class="submission-preview" src="{safe_url}" alt="Deine Abgabe">'
+        elif "pdf" in mime:
+            preview_html = (
+                f'<a class="btn" href="{safe_url}" target="_blank" rel="noopener">PDF öffnen</a>'
+            )
+        else:
+            preview_html = (
+                f'<a class="btn" href="{safe_url}" target="_blank" rel="noopener">Datei öffnen</a>'
+            )
+
+    parts: list[str] = []
+    if preview_html:
+        parts.append(preview_html)
+    if text_html:
+        parts.append(text_html)
+    if not parts:
+        parts.append('<p class="text-muted">Keine Antwort hinterlegt.</p>')
+    content_html = '<div class="analysis-text">' + "".join(parts) + "</div>"
 
     feedback_src = record.get("feedback_md") or record.get("feedback")
 
@@ -966,6 +995,59 @@ def _render_analysis_in_progress_hint() -> str:
         '<span class="status-chip__text">Analyse läuft … wir aktualisieren gleich.</span>'
         '</div>'
     )
+
+
+def _enrich_submission_records_with_file_urls(records: list[dict]) -> None:
+    """Attach presigned download URLs to upload submissions for SSR previews.
+
+    Why:
+        The Learning API intentionally returns only storage metadata (storage_key,
+        sha256, mime_type). For the learner history UI we still want to show the
+        actual uploaded artifact (image/PDF). We therefore presign a short-lived
+        download URL server-side and pass it into the rendering helper as an
+        extra key (`file_url`).
+
+    Security:
+        This runs only after the records have been fetched via the Learning API
+        using the current session cookie, so the caller is already authorised to
+        see the submission metadata. The presigned URL is short-lived and scoped
+        to the object key.
+    """
+    try:
+        import routes.learning as learning_routes  # type: ignore
+        from backend.storage.config import get_submissions_bucket
+
+        adapter = getattr(learning_routes, "STORAGE_ADAPTER", None)
+        if adapter is None or not hasattr(adapter, "presign_download"):
+            return
+        bucket = get_submissions_bucket()
+    except Exception:
+        return
+
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("file_url"):
+            continue
+        kind = str(rec.get("kind") or "")
+        if kind not in {"image", "file"}:
+            continue
+        storage_key = str(rec.get("storage_key") or "").strip()
+        mime_type = str(rec.get("mime_type") or "").strip()
+        if not storage_key or not mime_type:
+            continue
+        try:
+            presign = adapter.presign_download(  # type: ignore[call-arg]
+                bucket=bucket,
+                key=storage_key,
+                expires_in=120,
+                disposition="inline",
+            )
+            url = presign.get("url") if isinstance(presign, dict) else None
+            if isinstance(url, str) and url.strip():
+                rec["file_url"] = url.strip()
+        except Exception:
+            continue
 
 # --- Page Rendering Helpers -----------------------------------------------------
 
@@ -1489,8 +1571,11 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             f"/api/learning/courses/{course_id}/tasks/{tid}/submissions",
                             params={"limit": 10, "offset": 0},
                         )
-                        if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
+                    if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
                             records = r_hist.json()
+                            _enrich_submission_records_with_file_urls(
+                                [rec for rec in records if isinstance(rec, dict)]
+                            )
                             # If latest attempt is still in progress, prefer a polling placeholder to auto-refresh
                             latest_status = None
                             if records:
@@ -1897,6 +1982,8 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                     items = r.json() if r.status_code == 200 else []
             except Exception:
                 items = []
+            if isinstance(items, list):
+                _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
             entries = [
                 _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
                 for index, rec in enumerate(items if isinstance(items, list) else [])
@@ -1999,6 +2086,8 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
             items = r.json() if r.status_code == 200 else []
     except Exception:
         items = []
+    if isinstance(items, list):
+        _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
     # Build minimal fragment matching TaskCard._render_history structure
     open_attempt_id = str(request.query_params.get("open_attempt_id") or "")
     entries = [

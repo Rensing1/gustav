@@ -139,6 +139,8 @@ class TaskData:
     created_at: str
     updated_at: str
     kind: str = "native"
+    h5p_content_id: Optional[str] | None = None
+    h5p_display_options: Dict[str, Any] | None = None
 
 
 class _Repo:
@@ -679,6 +681,9 @@ class _Repo:
         hints_md: str | None = None,
         due_at=None,
         max_attempts: int | None = None,
+        kind: str = "native",
+        h5p_content_id: str | None = None,
+        h5p_display_options: Dict[str, Any] | None = None,
     ) -> TaskData:
         if not self.section_exists_for_author(unit_id, section_id, author_id):
             raise PermissionError("section_forbidden")
@@ -707,6 +712,9 @@ class _Repo:
             position=pos,
             created_at=now,
             updated_at=now,
+            kind=kind,
+            h5p_content_id=h5p_content_id,
+            h5p_display_options=dict(h5p_display_options or {}),
         )
         self.tasks[tid] = task
         bucket = self.task_ids_by_section.setdefault(section_id, [])
@@ -725,6 +733,9 @@ class _Repo:
         hints_md=_UNSET,
         due_at=_UNSET,
         max_attempts=_UNSET,
+        kind=_UNSET,
+        h5p_content_id=_UNSET,
+        h5p_display_options=_UNSET,
     ) -> TaskData | None:
         task = self.tasks.get(task_id)
         if not task or task.unit_id != unit_id or task.section_id != section_id:
@@ -756,6 +767,12 @@ class _Repo:
                 task.due_at = due_at
         if max_attempts is not _UNSET:
             task.max_attempts = max_attempts
+        if kind is not _UNSET:
+            task.kind = str(kind or "native")
+        if h5p_content_id is not _UNSET:
+            task.h5p_content_id = None if h5p_content_id is None else str(h5p_content_id)
+        if h5p_display_options is not _UNSET:
+            task.h5p_display_options = dict(h5p_display_options or {})
         task.updated_at = datetime.now(timezone.utc).isoformat()
         self.tasks[task_id] = task
         return task
@@ -1582,6 +1599,8 @@ class TaskCreatePayload(BaseModel):
     hints_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
+    h5p: object | None = None
+    visual: object | None = None
 
 
 class TaskUpdatePayload(BaseModel):
@@ -1590,6 +1609,8 @@ class TaskUpdatePayload(BaseModel):
     hints_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
+    h5p: object | None = None
+    visual: object | None = None
 
 
 class TaskReorderPayload(BaseModel):
@@ -2127,6 +2148,8 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             hints_md=payload.hints_md,
             due_at=payload.due_at,
             max_attempts=payload.max_attempts,
+            h5p=payload.h5p,
+            visual=payload.visual,
         )
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
@@ -2138,6 +2161,9 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             "invalid_due_at",
             "invalid_max_attempts",
             "invalid_hints_md",
+            "invalid_h5p_config",
+            "invalid_visual_config",
+            "invalid_task_kind_config",
         }:
             detail = "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
@@ -2186,6 +2212,10 @@ async def update_section_task(
         kwargs["due_at"] = raw_updates["due_at"]
     if "max_attempts" in raw_updates:
         kwargs["max_attempts"] = raw_updates["max_attempts"]
+    if "h5p" in raw_updates:
+        kwargs["h5p"] = raw_updates["h5p"]
+    if "visual" in raw_updates:
+        kwargs["visual"] = raw_updates["visual"]
     try:
         updated = _get_tasks_service().update_task(
             unit_id,
@@ -2202,6 +2232,9 @@ async def update_section_task(
             "invalid_due_at",
             "invalid_max_attempts",
             "invalid_hints_md",
+            "invalid_h5p_config",
+            "invalid_visual_config",
+            "invalid_task_kind_config",
         }:
             detail = "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
@@ -3349,9 +3382,31 @@ def _serialize_task(t) -> dict:
             "created_at": getattr(t, "created_at", None),
             "updated_at": getattr(t, "updated_at", None),
         }
-    data.setdefault("kind", "native")
+    kind = str(data.get("kind") or "native")
+    data["kind"] = kind
     if data.get("criteria") is None:
         data["criteria"] = []
+    # Normalize optional task kind configs to match the OpenAPI contract.
+    if kind == "h5p":
+        h5p_cfg = data.get("h5p")
+        if not isinstance(h5p_cfg, dict):
+            content_id = data.get("h5p_content_id")
+            display_options = data.get("h5p_display_options") or {}
+            if not isinstance(display_options, dict):
+                display_options = {}
+            h5p_cfg = {"content_id": content_id, "display_options": display_options}
+        data["h5p"] = h5p_cfg
+        data["visual"] = None
+    elif kind == "visual":
+        visual_cfg = data.get("visual")
+        data["visual"] = visual_cfg if isinstance(visual_cfg, dict) else {}
+        data["h5p"] = None
+    else:
+        data.setdefault("h5p", None)
+        data.setdefault("visual", None)
+    # Do not expose internal storage columns; the API uses nested objects.
+    data.pop("h5p_content_id", None)
+    data.pop("h5p_display_options", None)
     return data
 
 

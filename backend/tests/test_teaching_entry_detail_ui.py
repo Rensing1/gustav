@@ -244,6 +244,49 @@ async def test_tasks_due_and_max_attempts_in_create_and_edit():
         assert task2.get("due_at", "").startswith("2025-02-02T12:00:00")
         assert task2.get("max_attempts") == 5
 
+
+@pytest.mark.anyio
+async def test_h5p_task_detail_embeds_h5p_editor_instead_of_markdown_editor():
+    """H5P tasks should render the embedded H5P editor (no markdown/criteria form)."""
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    sess = main.SESSION_STORE.create(sub="t-entry-task-h5p", name="Lehrer H5P", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit = (await c.post("/api/teaching/units", json={"title": "UnitH5P"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "SectionH5P"})).json()
+
+        # Create an H5P task via the UI create route (kind selection).
+        new_page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/new")
+        token = _extract_csrf_token(new_page.text) or ""
+        resp = await c.post(
+            f"/units/{unit['id']}/sections/{section['id']}/tasks/create",
+            data={
+                "task_kind": "h5p",
+                "csrf_token": token,
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303)
+        loc = resp.headers.get("location") or ""
+        assert f"/units/{unit['id']}/sections/{section['id']}/tasks/" in loc
+
+        # The task detail page must embed the H5P editor webcomponent and
+        # must not render the markdown instruction editor.
+        page = await c.get(loc)
+        assert page.status_code == 200
+        html = page.text
+        assert "<h5p-editor" in html
+        assert 'name="instruction_md"' not in html
+        # The page must load our integration script (keeps behaviour stable).
+        assert "/static/js/h5p_task_editor.js" in html
+
+        # Sanity: the stored task is indeed of kind h5p.
+        lst = await c.get(f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks")
+        assert lst.status_code == 200
+        tasks = lst.json()
+        assert isinstance(tasks, list) and tasks
+        assert tasks[0].get("kind") == "h5p"
+
 class FakeStorageAdapter:
     def presign_upload(self, **kwargs):
         return {

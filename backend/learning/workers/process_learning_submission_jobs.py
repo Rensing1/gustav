@@ -382,6 +382,79 @@ def _process_job(
         _delete_job(conn, job_id=job.id)
         return
 
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    task_kind = str(payload.get("task_kind") or "").strip().lower()
+
+    # Visual tasks are evaluated from the visual input (image/PDF). They do not
+    # run the OCR/text Vision pipeline by default.
+    if task_kind == "visual":
+        try:
+            analyze_visual = getattr(feedback_adapter, "analyze_visual", None)
+            if not callable(analyze_visual):
+                raise FeedbackPermanentError("missing_visual_feedback_adapter")
+
+            analyze_kwargs = {
+                "submission": submission,
+                "job_payload": job.payload,
+                "criteria": payload.get("criteria", []),
+            }
+            if payload:
+                instr = payload.get("instruction_md")
+                hints = payload.get("hints_md")
+                sig = None
+                try:
+                    sig = inspect.signature(analyze_visual)
+                except Exception:
+                    sig = None
+                if sig and "instruction_md" in sig.parameters and "hints_md" in sig.parameters:
+                    analyze_kwargs["instruction_md"] = instr
+                    analyze_kwargs["hints_md"] = hints
+
+            feedback_result = analyze_visual(**analyze_kwargs)
+        except FeedbackPermanentError as exc:
+            LOG.warning(
+                "Feedback permanent error for submission %s job %s: %s",
+                job.submission_id,
+                job.id,
+                exc.__class__.__name__,
+            )
+            _handle_feedback_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                transient=False,
+            )
+            return
+        except FeedbackTransientError as exc:
+            LOG.info(
+                "Feedback transient error for submission %s job %s: %s",
+                job.submission_id,
+                job.id,
+                exc.__class__.__name__,
+            )
+            _handle_feedback_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                transient=True,
+            )
+            return
+
+        _update_submission_completed(
+            conn=conn,
+            submission_id=job.submission_id,
+            text_md="",
+            analysis_json=feedback_result.analysis_json,
+            feedback_md=feedback_result.feedback_md,
+        )
+        telemetry.increment_counter("ai_worker_processed_total", status="completed")
+        _delete_job(conn, job_id=job.id)
+        return
+
     cached_vision = _cached_vision_result(submission=submission, job=job)
 
     if cached_vision is not None:

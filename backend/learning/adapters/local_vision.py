@@ -376,6 +376,9 @@ class _LocalVisionAdapter:
 
     def __init__(self) -> None:
         self._model = os.getenv("AI_VISION_MODEL", os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision"))
+        # Visual tasks (upload-only) may require a dedicated VLM prompt/model to
+        # interpret graphical content beyond OCR-style extraction.
+        self._visual_model = (os.getenv("AI_VISUAL_MODEL") or "").strip() or self._model
         raw_base_url = os.getenv("OLLAMA_BASE_URL")
         # Mirror the feedback adapter behaviour: prefer explicit base URL and
         # fall back to the docker-compose default host when unset.
@@ -806,27 +809,42 @@ class _LocalVisionAdapter:
             if mime in {"image/jpeg", "image/png"} and not image_b64:
                 raise VisionTransientError("image_unavailable")
 
-        prompt = (
-            "Du bist ein OCR-Werkzeug. Übertrage den sichtbaren Inhalt genau in Markdown.\n\n"
-            "Regeln für den Text:\n"
-            "- Schreibe den Text wortgetreu ab (auch Rechtschreibfehler und Zeichensetzung).\n"
-            "- Übersetze nichts und formuliere nicht um.\n"
-            "- Füge keine Erklärungen, Kommentare oder Disclaimer hinzu.\n"
-            "- Wenn eine Stelle handschriftlich oder unscharf ist und du sie nicht sicher lesen kannst,\n"
-            "  markiere sie als [unleserlich] statt zu raten.\n\n"
-            "Regeln für Struktur (Markdown):\n"
-            "- Erhalte Zeilenumbrüche soweit wie möglich.\n"
-            "- Überschriften aus dem Bild kannst du als Markdown-Überschriften mit '# ' notieren.\n"
-            "- Aufzählungen darfst du als '- ' Listen wiedergeben, wenn sie im Bild klar erkennbar sind.\n"
-            "- Tabellen oder Kästchen mit Text gibst du als einfache Markdown-Tabelle wieder.\n"
-            "- Pfeile und einfache Diagramme beschreibst du textuell, z.B.: '- Start -> Schritt 1 -> Schritt 2'.\n\n"
-            "Wichtig:\n"
-            "- Schreibe ausschließlich das Ergebnis in Markdown.\n"
-            "- Füge keine zusätzlichen Sätze hinzu (keine Einleitung, keine Zusammenfassung).\n\n"
-            f"Kontext: Eingabetyp: {kind or 'unknown'}; MIME-Typ: {mime or 'n/a'}.\n"
-            "Wenn Seitenränder, Kopf- oder Fußzeilen mit technischen Metadaten vorhanden sind,\n"
-            "darfst du sie weglassen, solange der eigentliche Schülertext vollständig bleibt."
-        )
+        task_kind = str(job_payload.get("task_kind") or "").strip().lower()
+        model = self._model
+        if task_kind == "visual":
+            model = self._visual_model
+            prompt = (
+                "Du bist ein Vision Language Model. Interpretiere die folgende Schüler-Einreichung (Bild/PDF)\n"
+                "und gib eine knappe, strukturierte Beschreibung in Markdown zurück.\n\n"
+                "Regeln:\n"
+                "- Wenn Text vorhanden ist, transkribiere ihn soweit lesbar.\n"
+                "- Beschreibe auch relevante Grafiken/Diagramme/Markierungen (nicht nur Text).\n"
+                "- Erfinde keine Inhalte; bei Unsicherheit markiere [unklar].\n"
+                "- Keine zusätzlichen Kommentare oder Disclaimer.\n\n"
+                f"Kontext: Eingabetyp: {kind or 'unknown'}; MIME-Typ: {mime or 'n/a'}."
+            )
+        else:
+            prompt = (
+                "Du bist ein OCR-Werkzeug. Übertrage den sichtbaren Inhalt genau in Markdown.\n\n"
+                "Regeln für den Text:\n"
+                "- Schreibe den Text wortgetreu ab (auch Rechtschreibfehler und Zeichensetzung).\n"
+                "- Übersetze nichts und formuliere nicht um.\n"
+                "- Füge keine Erklärungen, Kommentare oder Disclaimer hinzu.\n"
+                "- Wenn eine Stelle handschriftlich oder unscharf ist und du sie nicht sicher lesen kannst,\n"
+                "  markiere sie als [unleserlich] statt zu raten.\n\n"
+                "Regeln für Struktur (Markdown):\n"
+                "- Erhalte Zeilenumbrüche soweit wie möglich.\n"
+                "- Überschriften aus dem Bild kannst du als Markdown-Überschriften mit '# ' notieren.\n"
+                "- Aufzählungen darfst du als '- ' Listen wiedergeben, wenn sie im Bild klar erkennbar sind.\n"
+                "- Tabellen oder Kästchen mit Text gibst du als einfache Markdown-Tabelle wieder.\n"
+                "- Pfeile und einfache Diagramme beschreibst du textuell, z.B.: '- Start -> Schritt 1 -> Schritt 2'.\n\n"
+                "Wichtig:\n"
+                "- Schreibe ausschließlich das Ergebnis in Markdown.\n"
+                "- Füge keine zusätzlichen Sätze hinzu (keine Einleitung, keine Zusammenfassung).\n\n"
+                f"Kontext: Eingabetyp: {kind or 'unknown'}; MIME-Typ: {mime or 'n/a'}.\n"
+                "Wenn Seitenränder, Kopf- oder Fußzeilen mit technischen Metadaten vorhanden sind,\n"
+                "darfst du sie weglassen, solange der eigentliche Schülertext vollständig bleibt."
+            )
         if mime == "application/pdf":
             stitched_png = self._ensure_pdf_stitched_png(submission=submission, job_payload=job_payload)
             if not stitched_png:
@@ -835,7 +853,7 @@ class _LocalVisionAdapter:
             text = _call_model(
                 mime=mime,
                 prompt=prompt,
-                model=self._model,
+                model=model,
                 base_url=self._base_url,
                 timeout=self._timeout,
                 image_b64=None,
@@ -848,7 +866,7 @@ class _LocalVisionAdapter:
         text = _call_model(
             mime=mime,
             prompt=prompt,
-            model=self._model,
+            model=model,
             base_url=self._base_url,
             timeout=self._timeout,
             image_b64=image_b64,

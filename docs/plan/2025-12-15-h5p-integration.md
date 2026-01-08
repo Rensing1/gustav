@@ -9,7 +9,7 @@ Kontext:
 ## Executive Summary (Stand 2026‑01‑08)
 - Umgesetzt (fertig): Phase 0 + Phase 1 (H5P‑Service als eigener Compose‑Service inkl. Proxy/CSP, Storage, Auth‑Plumbing, Editor/Player, Library‑Import, E2E‑Smoke).
 - Umgesetzt (weitgehend): Phase 2 (DB + Teaching‑API: `Task.kind` + `h5p`/`visual` Konfiguration inkl. Migration + OpenAPI + Tests; Teaching‑UI: H5P‑Editor ersetzt den normalen Aufgabeneditor für `Task.kind="h5p"`).
-- Umgesetzt (teilweise): Phase 3 (Learning‑Integration für H5P: eingebetteter Player + Score‑Ingest; Visual‑Tasks via VLM sind noch offen).
+- Umgesetzt (teilweise): Phase 3 (Learning‑Integration für H5P: eingebetteter Player + Score‑Ingest; Visual‑Tasks: upload‑only UI/Backend + `task_kind`‑Plumbing, VLM‑Adapter‑Wahl über `AI_VISUAL_MODEL` – tieferes VLM‑Scoring/Feedback kann in Phase 3/4 weiter ausgebaut werden).
 - Nächste Meilensteine: Phase 3 (Visual‑Tasks), Phase 4 (UX/Reporting), Phase 5 (Hardening).
 - Kurzcheck lokal: `docker compose up -d --build caddy web keycloak h5p` → `curl -k -i https://app.localhost/h5p/healthz` → optional `RUN_E2E=1 ... pytest -m e2e ...` (Details: Appendix A).
 
@@ -71,7 +71,7 @@ Non‑Goals (MVP):
 
 #### Learning – Visual Task lösen (Upload‑Only)
 - Given ich bin eingeschriebener Schüler und der Abschnitt ist freigegeben, When ich eine Visual‑Task‑Seite öffne, Then sehe ich den Aufgabentext (`instruction_md`) und ein Upload‑Formular (nur Bild/PDF, genau eine Datei pro Abgabe).
-- Given eine Aufgabe ist `Task.kind="visual"`, When ich eine Abgabe als `kind=text` sende, Then 400 (z. B. `invalid_submission_kind_for_task`).
+- Given eine Aufgabe ist `Task.kind="visual"`, When ich eine Abgabe als `kind=text` sende, Then 400 (`invalid_input`).
 - Given eine Aufgabe ist `Task.kind="visual"`, When ich eine Abgabe als `kind=image|file` sende, Then wird eine Submission erstellt, ein Worker‑Job gequeued und nach Verarbeitung existieren `analysis_json` + `feedback_md` (analog zu `native`).
 
 #### Learning Worker – Visual Auswertung (VLM, Option A)

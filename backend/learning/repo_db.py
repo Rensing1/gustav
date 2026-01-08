@@ -594,6 +594,10 @@ class DBLearningRepo:
                         raise ValueError("invalid_input")
                     if data.score_raw is None or data.score_max is None:
                         raise ValueError("invalid_h5p_payload")
+                elif task_kind == "visual":
+                    # Visual tasks are upload-only. Text or H5P payloads are rejected.
+                    if data.kind not in ("image", "file"):
+                        raise ValueError("invalid_input")
                 else:
                     if data.kind == "h5p":
                         raise ValueError("invalid_h5p_payload")
@@ -806,6 +810,7 @@ class DBLearningRepo:
                         "submission_id": submission_id,
                         "course_id": course_uuid,
                         "task_id": task_uuid,
+                        "task_kind": task_kind,
                         "student_sub": data.student_sub,
                         "kind": data.kind,
                         "attempt_nr": attempt_nr,

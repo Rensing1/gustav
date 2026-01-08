@@ -3120,8 +3120,33 @@ def _render_live_average_score_badge(raw_score: object) -> str:
     return f'<span class="badge {variant}" aria-label="Durchschnitt {display} von 10">{display}</span>'
 
 
-def _render_live_cell_content(has_submission: bool, average_score: object) -> str:
-    """Render badge or fallback symbol for a live matrix cell."""
+def _render_live_cell_content(
+    *,
+    task_kind: object,
+    has_submission: bool,
+    average_score: object,
+    h5p_completed: object,
+) -> str:
+    """Render badge or status symbol for a live matrix cell.
+
+    Why:
+        The live matrix is a high-signal classroom view:
+        - Native/visual tasks can show an average 0..10 badge once analysis exists.
+        - H5P tasks are auto-scorable and should be displayed as a simple 3-state
+          indicator (—/•/✓) instead of a numeric badge.
+    """
+    kind = str(task_kind or "")
+
+    # H5P tasks: show only bearbeitet/abgeschlossen.
+    is_h5p = (kind == "h5p") or (h5p_completed is True) or (h5p_completed is False)
+    if is_h5p:
+        if not has_submission:
+            return "—"
+        if h5p_completed is True:
+            return '<span aria-label="Abgeschlossen">✓</span>'
+        return '<span aria-label="Bearbeitet">•</span>'
+
+    # Native/visual tasks: prefer numeric badge, otherwise a simple presence marker.
     badge = _render_live_average_score_badge(average_score)
     if badge:
         return badge
@@ -3167,7 +3192,12 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
             tid = str(t.get("id") or "")
             cell = cells_by_task.get(tid) or {}
             has = bool(cell.get("has_submission"))
-            content = _render_live_cell_content(has, cell.get("average_score"))
+            content = _render_live_cell_content(
+                task_kind=t.get("kind"),
+                has_submission=has,
+                average_score=cell.get("average_score"),
+                h5p_completed=cell.get("h5p_completed"),
+            )
             cell_id = f"cell-{sub}-{tid}"
             # Clicking a cell loads the detail pane below the matrix
             hx_href = (
@@ -3816,7 +3846,12 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
         sub = Component.escape(raw_sub)
         task_id = Component.escape(raw_task_id)
         has = bool(c.get("has_submission"))
-        content = _render_live_cell_content(has, c.get("average_score"))
+        content = _render_live_cell_content(
+            task_kind=None,
+            has_submission=has,
+            average_score=c.get("average_score"),
+            h5p_completed=c.get("h5p_completed"),
+        )
         cell_id = f"cell-{raw_sub}-{raw_task_id}"
         hx_href = (
             f"/teaching/courses/{course_id}/units/{unit_id}/live/detail?student_sub={sub}&task_id={task_id}"

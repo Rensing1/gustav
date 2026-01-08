@@ -3712,6 +3712,7 @@ async def get_unit_live_summary(
                         # API contract: tasks carry instruction_md (not a separate title)
                         "instruction_md": t.get("instruction_md") or "",
                         "position": int(t.get("position") or 0),
+                        "kind": str(t.get("kind") or "native"),
                     })
         else:
             # In-memory repo fallback
@@ -3725,6 +3726,7 @@ async def get_unit_live_summary(
                         "id": td.id,
                         "instruction_md": td.instruction_md or "",
                         "position": int(td.position),
+                        "kind": str(getattr(td, "kind", "native") or "native"),
                     })
     except Exception:
         tasks = []
@@ -3747,6 +3749,7 @@ async def get_unit_live_summary(
 
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}
+        h5p_map: dict[tuple[str, str], bool] = {}
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
@@ -3761,7 +3764,8 @@ async def get_unit_live_summary(
                                     """
                                     select student_sub::text,
                                            task_id::text,
-                                           submission_id::text
+                                           submission_id::text,
+                                           h5p_completed
                                       from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
                                     """,
                                     (sub, course_id, unit_id, updated_since_dt, int(limit), int(offset)),
@@ -3769,11 +3773,17 @@ async def get_unit_live_summary(
                                 rows = cur.fetchall() or []
                                 has_map = {(r[0], r[1]) for r in rows}
                                 submission_ids_by_student: dict[str, list[str]] = {}
-                                for student_sub, _task_id, submission_id in rows:
+                                for student_sub, _task_id, submission_id, _h5p_completed in rows:
                                     if submission_id:
                                         submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
                                 avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
                                 avg_map = {(r[0], r[1]): avg_by_id.get(r[2]) for r in rows}
+                                # Only present for Task.kind="h5p"; null for other tasks.
+                                h5p_map = {
+                                    (r[0], r[1]): bool(r[3])
+                                    for r in rows
+                                    if (len(r) > 3 and r[3] is not None)
+                                }
                             except Exception as exc:
                                 logger.warning(
                                     "Unit summary fallback: helper get_unit_latest_submissions_for_owner unavailable — %s",
@@ -3815,18 +3825,26 @@ async def get_unit_live_summary(
         except Exception:
             has_map = set()
             avg_map = {}
+            h5p_map = {}
 
         for sid in member_subs:
+            task_cells: list[dict] = []
+            for t in tasks:
+                tid = t["id"]
+                has = ((sid, tid) in has_map)
+                cell: dict = {
+                    "task_id": tid,
+                    "has_submission": has,
+                    "average_score": (avg_map.get((sid, tid)) if has else None),
+                }
+                # H5P tasks are auto-scorable; for the live matrix we only need
+                # a binary "completed" flag (full score at least once).
+                if (t.get("kind") == "h5p") and has:
+                    cell["h5p_completed"] = h5p_map.get((sid, tid), False)
+                task_cells.append(cell)
             row = {
                 "student": {"sub": sid, "name": names.get(sid, sid)},
-                "tasks": [
-                    {
-                        "task_id": t["id"],
-                        "has_submission": ((sid, t["id"]) in has_map),
-                        "average_score": (avg_map.get((sid, t["id"])) if ((sid, t["id"]) in has_map) else None),
-                    }
-                    for t in tasks
-                ],
+                "tasks": task_cells,
             }
             rows_out.append(row)
 
@@ -3935,14 +3953,19 @@ async def get_unit_live_delta(
                         try:
                             cur.execute(
                                 """
-                                select student_sub::text, task_id::text, submission_id::text, created_at_iso, completed_at_iso
+                                select student_sub::text,
+                                       task_id::text,
+                                       submission_id::text,
+                                       created_at_iso,
+                                       completed_at_iso,
+                                       h5p_completed
                                   from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
                                 """,
                                 (sub, course_id, unit_id, db_lower_bound, int(limit), int(offset)),
                             )
                             rows = cur.fetchall() or []
                             submission_ids_by_student: dict[str, list[str]] = {}
-                            for student_sub, _task_id, submission_id, _created_iso, _completed_iso in rows:
+                            for student_sub, _task_id, submission_id, _created_iso, _completed_iso, _h5p_completed in rows:
                                 if submission_id:
                                     submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
                             avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
@@ -3954,7 +3977,7 @@ async def get_unit_live_delta(
                             )
                             rows = []
                             helper_ok = False
-                        for student_sub, task_id, submission_id, created_iso, completed_iso in rows:
+                        for student_sub, task_id, submission_id, created_iso, completed_iso, h5p_completed in rows:
                             cur.execute(
                                 """
                                 select greatest(created_at, coalesce(completed_at, created_at))
@@ -4011,15 +4034,16 @@ async def get_unit_live_delta(
                                 (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
                             )
                             avg_score = avg_by_id.get(submission_id) if submission_id else None
-                            cells.append(
-                                {
-                                    "student_sub": student_sub,
-                                    "task_id": task_id,
-                                    "has_submission": bool(submission_id),
-                                    "average_score": avg_score,
-                                    "changed_at": emit_dt.isoformat(timespec="microseconds"),
-                                }
-                            )
+                            cell: dict = {
+                                "student_sub": student_sub,
+                                "task_id": task_id,
+                                "has_submission": bool(submission_id),
+                                "average_score": avg_score,
+                                "changed_at": emit_dt.isoformat(timespec="microseconds"),
+                            }
+                            if h5p_completed is not None:
+                                cell["h5p_completed"] = bool(h5p_completed)
+                            cells.append(cell)
 
                         if not helper_ok:
                             # Fallback to bulk query when helper missing. Return a real timestamptz

@@ -1322,6 +1322,12 @@ components:
         has_submission:
           type: boolean
           description: True if at least one submission exists for this student and task
+        h5p_completed:
+          type: boolean
+          nullable: true
+          description: >
+            Only for H5P tasks. True when the student has at least one H5P submission
+            with full score (score_raw == score_max and score_max > 0). Null for non-H5P tasks.
         average_score:
           type: number
           format: float
@@ -1358,6 +1364,12 @@ components:
         has_submission:
           type: boolean
           description: True if at least one submission exists after the change; false when none exist.
+        h5p_completed:
+          type: boolean
+          nullable: true
+          description: >
+            Only for H5P tasks. True when the student has at least one H5P submission
+            with full score (score_raw == score_max and score_max > 0). Null for non-H5P tasks.
         average_score:
           type: number
           format: float
@@ -6001,12 +6013,16 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [id, instruction_md, position]
+                      required: [id, instruction_md, position, kind]
                       additionalProperties: false
                       properties:
                         id: { type: string, format: uuid }
                         instruction_md: { type: string, description: Task instruction (Markdown) }
                         position: { type: integer }
+                        kind:
+                          type: string
+                          enum: [native, h5p, visual]
+                          description: Backend task type identifier.
                   rows:
                     type: array
                     items:

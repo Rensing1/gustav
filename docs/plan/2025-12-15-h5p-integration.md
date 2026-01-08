@@ -513,4 +513,5 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 - ✅ H5P‑Service: `GET /h5p/player/model` liefert Player‑Model JSON; AuthZ für Schüler prüft, dass `content_id` im freigegebenen Kurs‑Scope liegt (fail‑closed).
 - ✅ Learning‑Backend: H5P‑Submissions werden synchron als `completed` gespeichert (kein Worker‑Job); `max_attempts` wird für H5P nicht enforced.
 - ✅ Student‑UI (embedded, no iframe): H5P‑Tasks werden im Kurs direkt gerendert, Listener erfasst xAPI Score und POSTet an Learning‑API.
+- ✅ Student‑UI (Visual/Uploads): In der Abgabe‑Historie wird bei `kind=image|file` die hochgeladene Datei als Vorschau angezeigt (Bild inline, PDF als Link) statt eines verwirrenden „OCR placeholder …“‑Texts.
 - ✅ Tests: `backend/tests/test_learning_h5p_scoring_api.py`, `backend/tests/test_openapi_h5p_player_model_contract.py` (+ Regression‑Fixes in Worker/Mapping Tests).

@@ -29,6 +29,7 @@
  */
 
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { access, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
@@ -117,6 +118,56 @@ function rolesAllowTeacher(roles) {
 function rolesAllowStudentOrTeacher(roles) {
   if (!Array.isArray(roles)) return false;
   return roles.includes("admin") || roles.includes("teacher") || roles.includes("student");
+}
+
+function parseOriginForForwarding(req) {
+  // We need a stable public origin for forwarding requests back into the GUSTAV
+  // web service, because the Learning API enforces strict same-origin CSRF checks.
+  // Using the browser-provided Origin/Referer keeps local = prod semantics.
+  const origin = req.get("origin") || "";
+  if (origin) {
+    try {
+      const u = new URL(origin);
+      const scheme = String(u.protocol || "").replace(/:$/, "").toLowerCase() || "http";
+      const host = String(u.hostname || "").toLowerCase();
+      const port = u.port ? String(u.port) : scheme === "https" ? "443" : "80";
+      if (!host) return null;
+      return { origin: `${scheme}://${u.host}`, scheme, host, port };
+    } catch {
+      return null;
+    }
+  }
+  const referer = req.get("referer") || "";
+  if (referer) {
+    try {
+      const u = new URL(referer);
+      const scheme = String(u.protocol || "").replace(/:$/, "").toLowerCase() || "http";
+      const host = String(u.hostname || "").toLowerCase();
+      const port = u.port ? String(u.port) : scheme === "https" ? "443" : "80";
+      if (!host) return null;
+      return { origin: `${scheme}://${u.host}`, scheme, host, port };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function h5pFinishedIdempotencyKey({ userId, courseId, taskId, contentId, opened, finished, score, maxScore }) {
+  const raw = [
+    "h5p_finished_v1",
+    String(userId || ""),
+    String(courseId || ""),
+    String(taskId || ""),
+    String(contentId || ""),
+    String(opened || ""),
+    String(finished || ""),
+    String(score || ""),
+    String(maxScore || ""),
+  ].join("|");
+  const digest = createHash("sha256").update(raw, "utf8").digest("hex");
+  // Must satisfy Learning API: [A-Za-z0-9_-]{1,64}
+  return `h5pf_${digest.slice(0, 56)}`;
 }
 
 function getPublicOrigin(req) {
@@ -798,6 +849,21 @@ async function main() {
         asUserId,
         readOnlyState,
       });
+      // Robust progress ingest:
+      // Attach course/task context to the `setFinished` endpoint so the H5P
+      // service can persist a `learning_submissions(kind='h5p')` row server-side.
+      // This avoids relying solely on browser xAPI events (which can be flaky).
+      if (courseId && contextId && model?.integration?.ajax?.setFinished) {
+        try {
+          const base = "http://local.invalid";
+          const u = new URL(String(model.integration.ajax.setFinished), base);
+          u.searchParams.set("course_id", String(courseId));
+          u.searchParams.set("task_id", String(contextId));
+          model.integration.ajax.setFinished = `${u.pathname}${u.search || ""}`;
+        } catch {
+          // Do not fail content loading when URL parsing fails.
+        }
+      }
       sendJson(res, 200, model);
     } catch (err) {
       if (err?.httpStatusCode === 404) {
@@ -1140,6 +1206,120 @@ async function main() {
       if (libraryUploadFile?.tempFilePath) cleanup.push(unlink(libraryUploadFile.tempFilePath));
       await Promise.allSettled(cleanup);
     }
+  });
+
+  // H5P "finished" reporting: called by the H5P client when a user completed a run.
+  //
+  // Why we override:
+  // - Lumi's default router persists finished data for "resume" and basic stats.
+  // - GUSTAV's Teacher Live-Matrix reads progress from `learning_submissions`,
+  //   which must be written even when browser xAPI events do not fire reliably.
+  //
+  // Security:
+  // - Requires a valid `gustav_session` cookie (handled by requireAuth).
+  // - Enforces strict same-origin (Origin/Referer) to reduce CSRF surface.
+  //
+  // Note: We implement this route *before* mounting Lumi's ajax router so it
+  // takes precedence over the default FinishedDataExpressRouter.
+  app.post("/finishedData", async (req, res) => {
+    requireSameOrigin(req, res, () => {});
+    if (res.headersSent) return;
+
+    const body = req.body || {};
+    const contentId = body.contentId;
+    const score = body.score;
+    const maxScore = body.maxScore;
+    const opened = body.opened;
+    const finished = body.finished;
+    const time = body.time;
+    if (contentId === undefined || score === undefined || maxScore === undefined) {
+      sendJson(res, 400, { error: "invalid_request" }, { Vary: "Origin" });
+      return;
+    }
+
+    try {
+      // 1) Persist finished state in the H5P storage backend (resume + stats).
+      await h5pEditor.contentUserDataManager.setFinished(
+        contentId,
+        score,
+        maxScore,
+        opened,
+        finished,
+        time,
+        req.user,
+      );
+    } catch (err) {
+      if (err?.httpStatusCode) {
+        sendJson(res, err.httpStatusCode, { error: err.errorId || "h5p_error" }, { Vary: "Origin" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" }, { Vary: "Origin" });
+      return;
+    }
+
+    // 2) Persist a Learning submission so Teacher dashboards can read progress.
+    const courseId = typeof req.query.course_id === "string" ? req.query.course_id : "";
+    const taskId = typeof req.query.task_id === "string" ? req.query.task_id : "";
+    if (courseId && taskId) {
+      try {
+        const rawNum = Number(score);
+        const maxNum = Number(maxScore);
+        if (Number.isFinite(rawNum) && Number.isFinite(maxNum)) {
+          const scoreRaw = Math.max(0, Math.trunc(rawNum));
+          const scoreMax = Math.max(0, Math.trunc(maxNum));
+          if (scoreRaw <= scoreMax) {
+            const cookieHeader = req.get("cookie") || "";
+            const originInfo = parseOriginForForwarding(req);
+            const idem = h5pFinishedIdempotencyKey({
+              userId: req.user?.id,
+              courseId,
+              taskId,
+              contentId,
+              opened,
+              finished,
+              score: scoreRaw,
+              maxScore: scoreMax,
+            });
+
+            const base = gustavWebInternalBase.replace(/\/+$/, "");
+            const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(taskId)}/submissions`;
+
+            const headers = {
+              cookie: cookieHeader,
+              "content-type": "application/json",
+              "idempotency-key": idem,
+              // CSRF same-origin for internal call: mimic the reverse-proxy headers
+              // so the Learning API validates against the public origin.
+              ...(originInfo
+                ? {
+                    origin: originInfo.origin,
+                    "x-forwarded-proto": originInfo.scheme,
+                    "x-forwarded-host": originInfo.host,
+                    "x-forwarded-port": originInfo.port,
+                  }
+                : {}),
+            };
+
+            const r = await fetch(url, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
+            });
+            if (!r.ok) {
+              const payload = await r.text().catch(() => "");
+              // eslint-disable-next-line no-console
+              console.warn(`h5p finishedData → learning submission failed: ${r.status} ${payload}`);
+            }
+          }
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`h5p finishedData → learning submission exception: ${String(err)}`);
+      }
+    }
+
+    // Match upstream semantics: a successful Ajax response is `{ success: true }`.
+    sendJson(res, 200, { success: true }, { Vary: "Origin" });
   });
 
   // Mount the Lumi Express router for all read endpoints (libraries/content/params/core/userdata/finished).

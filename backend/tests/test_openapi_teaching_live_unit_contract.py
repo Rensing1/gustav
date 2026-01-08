@@ -27,6 +27,10 @@ def test_openapi_has_unit_live_summary_path_and_cache_header():
     schema = resp200["content"]["application/json"]["schema"]
     assert schema["type"] == "object"
     assert set(schema["required"]) >= {"tasks", "rows"}
+    # Task list in the summary must include the task kind so UIs can render
+    # H5P cells differently from native/visual tasks.
+    task_items = schema["properties"]["tasks"]["items"]
+    assert "kind" in task_items.get("required", []), "summary tasks must include kind"
 
 
 def test_openapi_has_unit_live_delta_path():
@@ -49,3 +53,9 @@ def test_openapi_teaching_live_schemas_present():
     assert "TeachingUnitTaskCell" in schemas
     assert "TeachingUnitLiveRow" in schemas
     assert "TeachingUnitDeltaCell" in schemas
+
+    # H5P tasks use a binary completion flag in the matrix (bearbeitet vs abgeschlossen).
+    task_cell = schemas["TeachingUnitTaskCell"]
+    assert "h5p_completed" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose h5p_completed"
+    delta_cell = schemas["TeachingUnitDeltaCell"]
+    assert "h5p_completed" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose h5p_completed"

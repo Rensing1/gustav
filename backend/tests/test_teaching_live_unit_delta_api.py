@@ -293,3 +293,81 @@ async def test_delta_includes_average_score_for_completed_analysis():
     avg = cell["average_score"]
     assert isinstance(avg, float)
     assert avg == pytest.approx(8.0)
+
+
+@pytest.mark.anyio
+async def test_delta_includes_h5p_completed_flag_for_h5p_tasks():
+    """Delta cells must include h5p_completed so the UI can render —/•/✓ for H5P tasks."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for delta H5P test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-delta-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-delta-h5p-learner", name="Student", roles=["student"])  # type: ignore
+
+    async with (await _client()) as owner_client, (await _client()) as student_client:
+        owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        student_client.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        course_id = await _create_course(owner_client, "Delta Kurs H5P")
+        unit = await _create_unit(owner_client, "Delta Einheit H5P")
+        section = await _create_section(owner_client, unit["id"], "Abschnitt")
+
+        # Create an H5P task
+        r_task = await owner_client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={
+                "instruction_md": "H5P",
+                "criteria": [],
+                "max_attempts": 3,
+                "h5p": {"content_id": "delta-h5p", "display_options": {}},
+            },
+        )
+        assert r_task.status_code == 201
+        task = r_task.json()
+
+        module = await _attach_unit(owner_client, course_id, unit["id"])
+        await _add_member(owner_client, course_id, learner.sub)
+
+        r_vis = await owner_client.patch(
+            f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+
+        # Student does partial, then full score, then partial again.
+        r1 = await student_client.post(
+            f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert r1.status_code in (200, 201, 202)
+        r2 = await student_client.post(
+            f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 1, "score_max": 1},
+        )
+        assert r2.status_code in (200, 201, 202)
+        r3 = await student_client.post(
+            f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert r3.status_code in (200, 201, 202)
+
+        r_delta = await owner_client.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta.status_code == 200
+        body = r_delta.json()
+        cell = next(c for c in body["cells"] if c["student_sub"] == learner.sub and c["task_id"] == task["id"])
+        assert cell["has_submission"] is True
+        assert cell.get("h5p_completed") is True

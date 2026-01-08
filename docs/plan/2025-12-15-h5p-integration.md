@@ -349,8 +349,19 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 - Teaching‑UI erweitert Task‑Erstellung um `visual` (upload‑only) als zusätzlicher Task‑Typ: `unit_tasks.kind='visual'`.
 - Contract‑First/TDD: `api/openapi.yml` + Supabase‑Migration + `pytest` grün für `unit_tasks` (inkl. `h5p`‑Objekt in Task Create/Update/Read).
 
-### Phase 3 – Learning UI + xAPI ingest (2–3 Tage)
-- Student‑Seite rendert Player; Listener POSTet scored Statement an Learning‑API.
+### Phase 3 – Learning UI + Progress‑Ingest (2–3 Tage)
+- Student‑Seite rendert Player (Web Component, eingebettet in die GUSTAV‑Seite).
+- Progress/Score‑Persistenz (wichtig für Teacher‑Status + Live‑Matrix):
+  - **Primärsignal: `finished`‑Report** des H5P‑Clients (`POST /h5p/finishedData`).
+    - Hintergrund: Der H5P‑Service speichert “Fortsetzen” (User State) und “finished” zuverlässig serverseitig.
+      In der Praxis kann es aber vorkommen, dass im Browser kein scored `xAPI`‑Event bei uns ankommt
+      (z. B. wegen Embed‑Typ `iframe`/Timing/Listener‑Problemen).
+    - Lösung: Beim `GET /h5p/player/model` wird die H5P‑`ajax.setFinished` URL um `course_id` + `task_id`
+      ergänzt, damit der H5P‑Service beim `finished`‑Call den Kontext kennt.
+      Der H5P‑Service persistiert dann serverseitig zusätzlich eine `learning_submissions(kind='h5p')`
+      via `POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions` (Cookie‑Forwarding + Same‑Origin‑Header),
+      damit Teacher‑Status/Livesicht nicht von Frontend‑Events abhängt.
+  - Optional: `xAPI`‑Listener im Browser kann weiterhin Status‑Text setzen, ist aber nicht die einzige Quelle der Wahrheit.
 - Abgabe‑Historie zeigt Score/Status.
 - Contract‑First/TDD: `api/openapi.yml` + Supabase‑Migration + `pytest` grün für `learning_submissions.kind='h5p'` und H5P Score‑Ingest (Idempotency, **kein** `max_attempts`‑Enforcement, „bearbeitet“/„abgeschlossen“).
 - Visual‑Tasks: Student‑UI zeigt Upload‑Form (Bild/PDF) und Backend validiert upload‑only; Worker erstellt Kriterien‑Analyse + Feedback via VLM (Option A).
@@ -358,6 +369,10 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 ### Phase 4 – UX & Reporting (1–2 Tage)
 - Student‑UI zeigt für H5P Tasks klar „bearbeitet“ (nicht volle Punktzahl) vs. „abgeschlossen“ (volle Punktzahl) + letzten Score.
 - Teacher‑Übersicht zeigt pro Schüler/Task mind. den Status „bearbeitet“/„abgeschlossen“ + letzten Score.
+- Live‑Unterrichts‑Matrix (Teacher): Für `Task.kind="h5p"` zeigen wir **keine** Score‑Badges, sondern ein klares 3‑Zustände‑Signal:
+  - `—` = keine Bearbeitung (keine H5P‑Submission)
+  - `•` = bearbeitet (mindestens eine H5P‑Submission, aber nie volle Punktzahl)
+  - `✓` = abgeschlossen (mindestens eine H5P‑Submission mit `score_raw == score_max` und `score_max > 0` – unabhängig von späteren Versuchen)
 
 ### Phase 5 – Security Hardening (laufend, vor Pilot)
 - CSP‑Tightening: von permissiver `/h5p`‑CSP → minimal nötige Direktiven (Player + Editor), ohne global CSP zu lockern.
@@ -370,7 +385,7 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 ## Abnahmekriterien (MVP)
 - Lehrkraft kann eine H5P Multiple‑Choice Aufgabe erstellen, Task referenziert `h5p_content_id`.
 - Schüler kann Task in einem freigegebenen Abschnitt öffnen und lösen.
-- Ein scored xAPI Statement erzeugt genau **eine** Abgabe (idempotent), Score wird gespeichert und sichtbar.
+- Ein H5P `finished`‑Report (Score/MaxScore) erzeugt genau **eine** Abgabe (idempotent), Score wird gespeichert und sichtbar (unabhängig davon, ob ein Browser‑`xAPI`‑Event zuverlässig ankommt).
 - Lehrkraft sieht im Kurs die letzte Abgabe pro Schüler/Task (inkl. Score) und erkennt „bearbeitet“ vs. „abgeschlossen“ (volle Punktzahl).
 - Visual: Lehrkraft kann eine Visual‑Aufgabe anlegen; Schüler kann ein Bild/PDF hochladen und erhält Kriterien‑Analyse + Feedback (wie bei `native`), aber erzeugt durch ein VLM (kein OCR‑Only).
 - Keine externen Requests im Default (CSP blockt connect/src außerhalb `self`; Ausnahmen nur bewusst).

@@ -465,13 +465,16 @@ def _compute_local_sha256(storage_key: str, expected_size: int) -> str | None:
     return h.hexdigest()
 
 
-def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) -> str:
-    """Build the task submission form HTML (text/upload Choice Cards) for learners.
+def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, task_kind: str = "native") -> str:
+    """Build the task submission form HTML for learners.
 
     Why:
         The learner unit page renders a TaskCard per task, each with a submit
-        form that supports two modes: plain text and file/image upload. Both
-        the normal Learning-API path and the Teaching-repo fallback should
+        form. Most tasks support two modes (plain text and upload). Visual
+        tasks are upload-only by design to keep the student workflow aligned
+        with VLM-based analysis.
+
+        Both the normal Learning-API path and the Teaching-repo fallback should
         render the exact same form structure so tests and users always see the
         same contract.
 
@@ -479,15 +482,38 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) 
         course_id: ID of the learning course context.
         unit_id: ID of the unit whose sections/tasks are shown.
         task_id: ID of the task for which the form is rendered.
+        task_kind: Optional task type selector (native|h5p|visual).
 
     Returns:
-        HTML string containing the <form> element with radio Choice Cards,
-        textarea for text submissions and file input for uploads.
+        HTML string containing the <form> element.
     """
     form_action = f"/learning/courses/{course_id}/tasks/{task_id}/submit"
     tid_escaped = Component.escape(task_id)
     cid_escaped = Component.escape(course_id)
     uid_escaped = Component.escape(unit_id)
+    kind_norm = (task_kind or "native").strip().lower()
+
+    if kind_norm == "visual":
+        # Visual tasks are upload-only: no mode switch and no textarea.
+        return (
+            f'<form method="post" action="{form_action}" class="task-submit-form" '
+            f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
+            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="upload">'
+            f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
+            '<input type="hidden" name="mode" value="upload">'
+            '<div class="task-form-fields fields-upload">'
+            '<label>Datei auswählen '
+            '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
+            '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+            '<input type="hidden" name="storage_key" value="">'
+            '<input type="hidden" name="mime_type" value="">'
+            '<input type="hidden" name="size_bytes" value="">'
+            '<input type="hidden" name="sha256" value="">'
+            "</div>"
+            '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
+            "</form>"
+        )
+
     return (
         f'<form method="post" action="{form_action}" class="task-submit-form" '
         f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
@@ -1446,7 +1472,9 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 # Instruction text also benefits from Markdown (e.g., emphasis)
                 instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
                 # Build form HTML with Choice Cards (Text | Upload). Default: text.
-                form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=tid)
+                form_html = _build_task_submit_form_html(
+                    course_id=course_id, unit_id=unit_id, task_id=tid, task_kind=task_kind
+                )
 
             # Optionally load submission history for this task only (latest open)
             history_entries = []
@@ -1583,7 +1611,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             task.get("instruction_md") if isinstance(task, dict) else ""
                         )
                         instruction_html = render_markdown_safe(str(raw_instr or ""))
-                        form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=str(tid))
+                        raw_kind = getattr(task, "kind", None) or (
+                            task.get("kind") if isinstance(task, dict) else None
+                        )
+                        task_kind = str(raw_kind or "native")
+                        form_html = _build_task_submit_form_html(
+                            course_id=course_id, unit_id=unit_id, task_id=str(tid), task_kind=task_kind
+                        )
                         hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
                         history_placeholder_html = (
                             f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '

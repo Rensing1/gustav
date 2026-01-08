@@ -698,7 +698,10 @@ components:
     VisualTaskConfig:
       type: object
       additionalProperties: false
-      description: Marker config for upload-only visual tasks. Empty object in MVP.
+      description: >-
+        Marker config for upload-only visual tasks. Students submit exactly one
+        file (image/jpeg|image/png|application/pdf). Text submissions are
+        rejected (400 invalid_input). Empty object in MVP.
     Task:
       type: object
       required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
@@ -2776,6 +2779,11 @@ paths:
         image or PDF file. All submissions enter an asynchronous analysis pipeline; clients
         poll submission detail endpoints to observe status changes. Duplicate requests can
         be avoided using the optional Idempotency-Key header.
+        
+        Task-type rules:
+        - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).
+        - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously.
+        
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is
         absent (some browsers), the server falls back to validating the `Referer` origin.

@@ -276,6 +276,7 @@ async def test_h5p_task_detail_embeds_h5p_editor_instead_of_markdown_editor():
         assert page.status_code == 200
         html = page.text
         assert "<h5p-editor" in html
+        assert html.count("<h5p-editor") == 1
         assert 'name="instruction_md"' not in html
         # The page must load our integration script (keeps behaviour stable).
         assert "/static/js/h5p_task_editor.js" in html
@@ -286,6 +287,63 @@ async def test_h5p_task_detail_embeds_h5p_editor_instead_of_markdown_editor():
         tasks = lst.json()
         assert isinstance(tasks, list) and tasks
         assert tasks[0].get("kind") == "h5p"
+
+
+@pytest.mark.anyio
+async def test_h5p_task_create_page_shows_embedded_editor_when_needed():
+    """The task create page should already contain the H5P editor block (hidden by default)."""
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    sess = main.SESSION_STORE.create(sub="t-entry-task-h5p-create", name="Lehrer H5P Create", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit = (await c.post("/api/teaching/units", json={"title": "UnitH5P2"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "SectionH5P2"})).json()
+
+        page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/new")
+        assert page.status_code == 200
+        html = page.text
+        assert "<h5p-editor" in html
+        assert 'name="h5p_content_id"' in html
+        assert "/static/js/h5p_task_editor.js" in html
+
+
+@pytest.mark.anyio
+async def test_h5p_task_create_uses_h5p_content_id_from_form():
+    """When the UI submits a content id, it must be stored on the task config."""
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    sess = main.SESSION_STORE.create(sub="t-entry-task-h5p-bind", name="Lehrer H5P Bind", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit = (await c.post("/api/teaching/units", json={"title": "UnitBind"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "SectionBind"})).json()
+
+        new_page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/new")
+        token = _extract_csrf_token(new_page.text) or ""
+
+        resp = await c.post(
+            f"/units/{unit['id']}/sections/{section['id']}/tasks/create",
+            data={
+                "task_kind": "h5p",
+                "h5p_content_id": "content-123",
+                "csrf_token": token,
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303)
+
+        lst = await c.get(f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks")
+        assert lst.status_code == 200
+        tasks = lst.json()
+        assert isinstance(tasks, list) and tasks
+        assert tasks[0].get("kind") == "h5p"
+        assert (tasks[0].get("h5p") or {}).get("content_id") == "content-123"
+
+        # Detail page should advertise the content id for the embedded editor JS.
+        tid = str(tasks[0].get("id") or "")
+        page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/{tid}")
+        assert page.status_code == 200
+        assert 'data-content-id="content-123"' in page.text
+        assert 'content-id="content-123"' in page.text
 
 class FakeStorageAdapter:
     def presign_upload(self, **kwargs):

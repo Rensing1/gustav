@@ -50,3 +50,11 @@ def test_h5p_theme_css_exists_and_uses_tokens() -> None:
     # (otherwise focusing a field brings back light backgrounds).
     assert ".h5peditor-widget-active" in css
     assert ".cke_chrome" in css
+
+    # Student runtime uses H5P.JoubelUI buttons across many question types.
+    # Without this, the UI stays bright blue/white in Dark Mode.
+    assert ".h5p-joubelui-button" in css
+
+    # MultiChoice is a core autoscorable type we actively use; ensure we
+    # override its light surfaces so it looks native in Dark Mode.
+    assert ".h5p-multichoice" in css

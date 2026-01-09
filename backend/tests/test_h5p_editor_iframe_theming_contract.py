@@ -42,3 +42,8 @@ def test_h5p_task_editor_js_contains_iframe_theme_hook() -> None:
 
     # The iframe document must not apply upstream layout constraints (e.g. max-width: 960px).
     assert "maxWidth" in js
+
+    # Rich-text fields in the H5P editor use CKEditor, which renders its editable
+    # surface in a nested iframe. We theme that nested iframe too, otherwise
+    # focusing a text field reintroduces white backgrounds in Dark Mode.
+    assert "cke_wysiwyg_frame" in js

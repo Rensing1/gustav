@@ -91,6 +91,86 @@
     }
   };
 
+  const CKEDITOR_WYSIWYG_IFRAME_SELECTOR = 'iframe.cke_wysiwyg_frame';
+
+  const ensureCkeditorThemeInDocument = (doc) => {
+    const head = doc.head || doc.getElementsByTagName('head')[0] || null;
+    if (!head) return;
+
+    const selector = 'style[data-gustav-ckeditor-theme="true"]';
+    if (head.querySelector(selector)) return;
+
+    // CKEditor renders the editable surface inside a nested iframe. This style
+    // keeps the *editable document* in sync with GUSTAV tokens.
+    const style = doc.createElement('style');
+    style.setAttribute('data-gustav-ckeditor-theme', 'true');
+    style.textContent = `
+      html, body {
+        background: var(--color-bg-base) !important;
+        color: var(--color-text) !important;
+        font-family: var(--font-base) !important;
+      }
+      a { color: var(--color-primary) !important; }
+      :focus-visible {
+        outline: var(--focus-ring-width) solid var(--color-focus-ring);
+        outline-offset: var(--focus-ring-offset);
+      }
+    `;
+    head.appendChild(style);
+  };
+
+  const applyThemeToCkeditorIframe = (iframeEl) => {
+    if (!iframeEl) return false;
+    let doc = null;
+    try {
+      doc = iframeEl.contentDocument;
+    } catch {
+      return false;
+    }
+    if (!doc) return false;
+    applyThemeTokensToIframe(doc);
+    ensureCkeditorThemeInDocument(doc);
+    return true;
+  };
+
+  const applyThemeToCkeditorIframesInEditorIframe = (iframeDoc) => {
+    if (!iframeDoc) return;
+    iframeDoc.querySelectorAll(CKEDITOR_WYSIWYG_IFRAME_SELECTOR).forEach((el) => {
+      applyThemeToCkeditorIframe(el);
+      // Re-apply when the nested iframe reloads (CKEditor can reinit the frame).
+      try {
+        if (!el.dataset.gustavCkThemeHook) {
+          el.dataset.gustavCkThemeHook = '1';
+          el.addEventListener('load', () => applyThemeToCkeditorIframe(el));
+        }
+      } catch {
+        // Best-effort only.
+      }
+    });
+  };
+
+  const ensureCkeditorObserverInstalled = (editorIframeEl, editorIframeDoc) => {
+    const body = editorIframeDoc?.body || null;
+    if (!body) return;
+
+    const currentDoc = editorIframeEl.__gustavCkThemeDoc || null;
+    if (currentDoc === editorIframeDoc && editorIframeEl.__gustavCkThemeObserver) return;
+
+    try {
+      editorIframeEl.__gustavCkThemeObserver?.disconnect?.();
+    } catch {
+      // Best-effort only.
+    }
+
+    const obs = new MutationObserver(() => {
+      applyThemeToCkeditorIframesInEditorIframe(editorIframeDoc);
+    });
+    obs.observe(body, { childList: true, subtree: true });
+
+    editorIframeEl.__gustavCkThemeDoc = editorIframeDoc;
+    editorIframeEl.__gustavCkThemeObserver = obs;
+  };
+
   const ensureThemeStylesheetStaysLastInIframeHead = (iframeEl, iframeDoc) => {
     const head = iframeDoc.head || iframeDoc.getElementsByTagName('head')[0] || null;
     if (!head) return;
@@ -135,6 +215,8 @@
     applyThemeTokensToIframe(iframeDoc);
     ensureThemeStylesheetInIframe(iframeDoc);
     ensureThemeStylesheetStaysLastInIframeHead(iframe, iframeDoc);
+    applyThemeToCkeditorIframesInEditorIframe(iframeDoc);
+    ensureCkeditorObserverInstalled(iframe, iframeDoc);
 
     // Re-apply when the iframe reloads (some editor actions can trigger this).
     try {

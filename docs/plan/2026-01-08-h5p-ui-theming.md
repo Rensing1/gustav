@@ -88,6 +88,16 @@ Lösung (Option 1, GUSTAV‑seitig):
   - Bei Theme‑Toggle (MutationObserver auf `document.documentElement[data-theme]`) erneut anwenden.
 - Sicherheits-/Robustheitsprinzip: best‑effort – Fehler im Theming dürfen den Editor nicht brechen.
 
+### 2c) CKEditor‑White‑On‑Focus (Rich‑Text‑Felder)
+Beobachtung:
+- Einige H5P‑Felder (z. B. „Question“) sind Rich‑Text und nutzen CKEditor.
+- Beim Fokus wird das Feld „aktiv“ und wird upstream wieder sehr hell/weiß (unpassend im Dark‑Mode).
+- Zusätzlich rendert CKEditor die eigentliche Text‑Fläche in einem **weiteren (nested) iframe** → normales CSS im Editor‑iframe reicht nicht.
+
+Lösung:
+- Theme‑CSS überschreibt die CKEditor‑„Chrome“‑Flächen (Toolbars/Rahmen) token‑basiert und verhindert den weißen Active‑State (`.h5peditor-widget-active`, `.cke_*`).
+- Ein kleiner JS‑Hook themed das **nested CKEditor iframe** (Tokens kopieren + minimale Styles für `html/body`), und beobachtet DOM‑Änderungen, damit es auch beim späteren Initialisieren greift.
+
 ### 3) GUSTAV‑Wrapper‑Styles (klein, lokal)
 - In `backend/web/static/css/gustav.css` nur die Container (`.h5p-task-player`, `.h5p-task-editor`) so stylen, dass sie wie Karten/Panels wirken (Spacing/Border/Radius), ohne H5P intern zu „zerlegen“.
 

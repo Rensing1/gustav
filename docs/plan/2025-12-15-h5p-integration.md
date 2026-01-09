@@ -377,6 +377,7 @@ Für `Task.kind="visual"` gibt es keinen neuen Submission‑Body: wir verwenden 
 
 ### Phase 5 – Security Hardening (laufend, vor Pilot)
 - CSP‑Tightening: von permissiver `/h5p`‑CSP → minimal nötige Direktiven (Player + Editor), ohne global CSP zu lockern.
+  - Detaillierter Plan: `docs/plan/2026-01-09-h5p-csp-hardening.md`
 - Library Governance (Trusted‑Content): install/update nur Teacher (inkl. Admin); Provenance/Version‑Pinning + Audit‑Log (wer hat welches Paket wann importiert/aktualisiert).
 - Upload scanning: SVG sanitizer + ClamAV (wenn Uploads im Editor erlaubt).
 - Logging/Audit: Content create/import/update/delete mit `sub` + timestamp, ohne PII.

@@ -1,0 +1,328 @@
+/*
+ * GUSTAV H5P Theme (Native Look)
+ *
+ * Why:
+ *   H5P ships with a fixed light UI (white surfaces, blue accents). In GUSTAV
+ *   we want H5P Player + Editor to feel like first-class GUSTAV UI and follow
+ *   the active Light/Dark theme.
+ *
+ * How:
+ *   - Token-based: uses GUSTAV design tokens (`--color-*`, `--space-*`, etc.).
+ *   - No hard-coded hex colors (keeps Dark Mode robust).
+ *   - Served by the H5P service under `/h5p/theme/h5p-gustav.css`.
+ *   - Appended as last stylesheet in `/h5p/player/model` (order matters).
+ *   - Injected into the editor iframe by `backend/web/static/js/h5p_task_editor.js`
+ *     because the H5P editor renders its UI inside an iframe.
+ *
+ * Scope:
+ *   Player + Editor (Hub + Form) overrides. This is more than "minimal",
+ *   because the goal is a native GUSTAV look.
+ */
+
+:root {
+  /* Debug marker: useful for verifying that the theme is loaded. */
+  --gustav-h5p-theme-loaded: 1;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Player (runtime)                                                           */
+/* -------------------------------------------------------------------------- */
+
+.h5p-container,
+.h5p-content {
+  font-family: var(--font-base);
+  color: var(--color-text);
+}
+
+.h5p-content {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border);
+}
+
+.h5p-content a {
+  color: var(--color-primary);
+}
+
+.h5p-content :focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+button.h5p-core-button:visited,
+button.h5p-core-button:link,
+button.h5p-core-button {
+  font-family: var(--font-base);
+  background: var(--color-primary);
+  color: var(--color-bg-base);
+  border-radius: var(--radius-full);
+}
+
+button.h5p-core-button:hover {
+  filter: brightness(0.95);
+}
+
+button.h5p-core-button:active {
+  filter: brightness(0.9);
+}
+
+button.h5p-core-button:focus {
+  background: var(--color-primary);
+}
+
+button.h5p-core-cancel-button:visited,
+button.h5p-core-cancel-button:link,
+button.h5p-core-cancel-button {
+  color: var(--color-error);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Editor                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/* H5P Hub (library selection / install UI used by the editor) */
+.h5p-hub {
+  font-family: var(--font-base);
+  color: var(--color-text);
+}
+
+.h5p-hub a {
+  color: var(--color-primary);
+}
+
+.h5p-hub .panel {
+  background: var(--color-bg-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-lg);
+}
+
+.h5p-hub button,
+.h5p-hub .button {
+  font-family: var(--font-base);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-overlay);
+  color: var(--color-text);
+}
+
+.h5p-hub button:hover,
+.h5p-hub .button:hover {
+  background: var(--color-bg-hover);
+}
+
+.h5p-hub button:focus-visible,
+.h5p-hub .button:focus-visible {
+  border-color: var(--color-border-focus);
+  box-shadow:
+    0 0 0 1px var(--color-border-focus),
+    0 0 0 4px var(--color-bg-focus);
+}
+
+.h5p-hub input,
+.h5p-hub textarea,
+.h5p-hub select {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+}
+
+/* Library selector extras (rendered by H5PEditor.LibrarySelector) */
+.h5p-tutorial-url,
+.h5p-example-url {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  margin-right: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--text-sm);
+}
+
+.h5p-tutorial-url:hover,
+.h5p-example-url:hover {
+  background: var(--color-bg-hover);
+}
+
+.h5peditor-copypaste-wrap {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-left: var(--space-2);
+}
+
+.h5peditor-copy-button,
+.h5peditor-paste-button {
+  border-radius: var(--radius-full) !important;
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-bg-surface) !important;
+  color: var(--color-text) !important;
+  font-family: var(--font-base) !important;
+}
+
+.h5peditor-copy-button:hover,
+.h5peditor-paste-button:hover {
+  background: var(--color-bg-hover) !important;
+}
+
+.h5peditor-form {
+  background: var(--color-bg-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-lg);
+}
+
+.h5peditor-form.h5peditor-form-manager > .tree,
+.h5peditor-form.h5peditor-form-manager > .common,
+.h5peditor-form.h5peditor-form-manager > .field {
+  max-width: none !important;
+  margin: var(--space-4) 0 !important;
+  padding: 0 var(--space-4) !important;
+}
+
+.h5peditor-form.h5peditor-semi-fullscreen {
+  background: var(--color-bg-base) !important;
+}
+
+.h5peditor {
+  font-family: var(--font-base);
+  color: var(--color-text);
+}
+
+.h5peditor,
+.h5p-hub {
+  background-color: var(--color-bg-surface);
+}
+
+.h5peditor a {
+  color: var(--color-primary);
+}
+
+.h5peditor input,
+.h5peditor textarea,
+.h5peditor select,
+.h5peditor .h5peditor-text,
+.h5peditor .ckeditor {
+  width: 100%;
+  background-color: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  box-shadow: none;
+  font-size: var(--text-base);
+  padding: var(--space-2) var(--space-3);
+}
+
+.h5peditor input[type="checkbox"],
+.h5peditor input[type="radio"] {
+  width: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.h5peditor input::placeholder,
+.h5peditor textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+.h5peditor input:focus-visible,
+.h5peditor textarea:focus-visible,
+.h5peditor select:focus-visible,
+.h5peditor .h5peditor-text:focus-visible,
+.h5peditor .ckeditor:focus-visible {
+  border-color: var(--color-border-focus);
+  box-shadow:
+    0 0 0 1px var(--color-border-focus),
+    0 0 0 4px var(--color-bg-focus);
+}
+
+.h5peditor button,
+.h5peditor input[type="button"],
+.h5peditor input[type="submit"] {
+  font-family: var(--font-base);
+  border-radius: var(--radius-md);
+}
+
+.h5p-hub .h5peditor-copy-button,
+.h5p-hub .h5peditor-paste-button,
+.h5peditor button:not(.h5p-core-button) {
+  background-color: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.h5peditor button:not(.h5p-core-button):hover {
+  background-color: var(--color-bg-hover);
+}
+
+.h5peditor .h5peditor-button-collapse {
+  border-radius: var(--radius-full);
+  border-color: var(--color-border);
+  background-color: var(--color-bg-surface);
+  color: var(--color-text);
+}
+
+.h5peditor .h5peditor-button-collapse:hover:not([disabled]) {
+  background-color: var(--color-bg-hover);
+}
+
+.h5peditor .group > .title,
+.h5peditor .h5p-li > .list-item-title-bar,
+.h5peditor .common > .h5peditor-label {
+  background-color: var(--color-bg-overlay);
+  border-color: var(--color-border);
+  color: var(--color-text-heading);
+}
+
+.h5peditor .group.importance-high > .title,
+.h5peditor .h5p-li > .list-item-title-bar.importance-high {
+  background-color: var(--color-primary);
+  border-color: var(--color-border-focus);
+  color: var(--color-bg-base);
+}
+
+/*
+ * Upstream H5P editor CSS creates "zebra" nesting by alternating white and
+ * near-white backgrounds for `.content` wrappers (and does so
+ * recursively for arbitrary depth).
+ *
+ * In Dark Mode this results in glaring white islands. We keep the surrounding
+ * surfaces (`.h5peditor-form`, `.group > .content`) and make nested wrappers
+ * transparent so the parent surface controls the look consistently.
+ */
+.h5peditor .content {
+  background-color: transparent !important;
+}
+
+.h5peditor .group > .content {
+  background-color: var(--color-bg-surface) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text);
+}
+
+.h5peditor :focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.h5peditor .h5peditor-form-manager-head {
+  background: var(--color-bg-overlay);
+  color: var(--color-text);
+  border-bottom-color: var(--color-border);
+}
+
+.h5peditor .h5peditor-form-manager-button {
+  color: var(--color-text);
+}
+
+.h5peditor .h5peditor-form-manager-proceed {
+  background: var(--color-primary);
+  color: var(--color-bg-base);
+  border-radius: var(--radius-md);
+}
+
+.h5peditor .field.importance-high > .h5peditor-label-wrapper > .h5peditor-label {
+  color: var(--color-primary);
+}

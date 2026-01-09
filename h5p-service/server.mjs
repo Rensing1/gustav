@@ -44,6 +44,7 @@ const uploadMaxBytes = Number.parseInt(
   process.env.H5P_MAX_UPLOAD_BYTES || String(512 * 1024 * 1024),
   10,
 );
+const themeStylesheetPath = "/h5p/theme/h5p-gustav.css";
 
 const storageDirs = {
   root: storageRoot,
@@ -82,6 +83,12 @@ const SECURITY_HEADERS = {
     "frame-src *; " +
     "font-src * data: blob:;",
 };
+
+function ensureThemeStylesLast(styles) {
+  const arr = Array.isArray(styles) ? styles.filter((s) => s !== themeStylesheetPath) : [];
+  arr.push(themeStylesheetPath);
+  return arr;
+}
 
 function sendJson(res, statusCode, body, headers = {}) {
   res.status(statusCode);
@@ -543,6 +550,19 @@ async function main() {
     ),
   );
 
+  // Global H5P theme overrides (Option B).
+  app.use(
+    "/theme",
+    express.static(path.join("/app", "vendor", "theme"), {
+      cacheControl: true,
+      etag: true,
+      lastModified: true,
+      // Not versioned → always revalidate (prevents stale CSS after redeploys).
+      maxAge: 0,
+      extensions: ["css"],
+    }),
+  );
+
   // Vendor shims required by the webcomponents when used directly in a browser
   // (without a bundler). The upstream build has bare imports like `deepmerge`
   // and `await-lock`, which must be resolved via an import map.
@@ -765,7 +785,7 @@ async function main() {
     try {
       const language = typeof req.query.language === "string" ? req.query.language : req.language;
       const model = await h5pEditor.render(contentId, language, req.user);
-      const out = { ...model };
+      const out = { ...model, styles: ensureThemeStylesLast(model?.styles) };
       if (contentId) {
         const content = await h5pEditor.getContent(contentId, req.user);
         out.library = content.library;
@@ -849,22 +869,23 @@ async function main() {
         asUserId,
         readOnlyState,
       });
+      const out = { ...model, styles: ensureThemeStylesLast(model?.styles) };
       // Robust progress ingest:
       // Attach course/task context to the `setFinished` endpoint so the H5P
       // service can persist a `learning_submissions(kind='h5p')` row server-side.
       // This avoids relying solely on browser xAPI events (which can be flaky).
-      if (courseId && contextId && model?.integration?.ajax?.setFinished) {
+      if (courseId && contextId && out?.integration?.ajax?.setFinished) {
         try {
           const base = "http://local.invalid";
-          const u = new URL(String(model.integration.ajax.setFinished), base);
+          const u = new URL(String(out.integration.ajax.setFinished), base);
           u.searchParams.set("course_id", String(courseId));
           u.searchParams.set("task_id", String(contextId));
-          model.integration.ajax.setFinished = `${u.pathname}${u.search || ""}`;
+          out.integration.ajax.setFinished = `${u.pathname}${u.search || ""}`;
         } catch {
           // Do not fail content loading when URL parsing fails.
         }
       }
-      sendJson(res, 200, model);
+      sendJson(res, 200, out);
     } catch (err) {
       if (err?.httpStatusCode === 404) {
         sendJson(res, 404, { error: "not_found" });

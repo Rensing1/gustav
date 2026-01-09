@@ -14,6 +14,172 @@
 
 (() => {
   /**
+   * H5P Editor theming note (important):
+   * - Lumi's `<h5p-editor>` renders the actual editor UI inside an iframe.
+   * - CSS from the parent document does not apply inside the iframe.
+   * - Therefore we inject our theme stylesheet into the iframe and copy the
+   *   required GUSTAV design tokens (CSS variables) into the iframe root.
+   */
+
+  const H5P_THEME_CSS_HREF = '/h5p/theme/h5p-gustav.css';
+
+  const readThemeTokensFromDocument = () => {
+    const src = getComputedStyle(document.documentElement);
+    const out = new Map();
+    // Copy all CSS custom properties (design tokens) so the iframe can use the
+    // exact same token set as the GUSTAV page (colors, spacing, typography, ...).
+    for (let i = 0; i < src.length; i++) {
+      const name = src[i];
+      if (!name || !name.startsWith('--')) continue;
+      const val = (src.getPropertyValue(name) || '').trim();
+      if (val) out.set(name, val);
+    }
+    return out;
+  };
+
+  const ensureThemeStylesheetInIframe = (iframeDoc) => {
+    const head = iframeDoc.head || iframeDoc.getElementsByTagName('head')[0] || null;
+    if (!head) return;
+
+    const selector = 'link[data-gustav-h5p-theme="true"]';
+    const existing = head.querySelector(selector);
+    if (existing) {
+      // Move to the end of <head> to keep it last (override order matters).
+      existing.setAttribute('href', H5P_THEME_CSS_HREF);
+      head.appendChild(existing);
+      return;
+    }
+
+    const link = iframeDoc.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', H5P_THEME_CSS_HREF);
+    link.setAttribute('data-gustav-h5p-theme', 'true');
+    head.appendChild(link);
+  };
+
+  const applyThemeTokensToIframe = (iframeDoc) => {
+    const root = iframeDoc.documentElement;
+    if (!root) return;
+    const tokens = readThemeTokensFromDocument();
+    for (const [name, val] of tokens.entries()) {
+      root.style.setProperty(name, val);
+    }
+  };
+
+  const applyIframeBaseLayoutPatches = (iframeDoc) => {
+    // Upstream editor CSS constrains the iframe document to max-width: 960px,
+    // which feels "foreign" inside the GUSTAV card layout. We remove those
+    // constraints and let the parent container control sizing.
+    try {
+      const html = iframeDoc.documentElement;
+      const body = iframeDoc.body;
+      if (html) {
+        html.style.maxWidth = 'none';
+        html.style.background = 'transparent';
+        html.style.margin = '0';
+        html.style.padding = '0';
+      }
+      if (body) {
+        body.style.maxWidth = 'none';
+        body.style.width = '100%';
+        body.style.background = 'transparent';
+        body.style.margin = '0';
+        body.style.padding = '0';
+      }
+    } catch {
+      // Best-effort only.
+    }
+  };
+
+  const ensureThemeStylesheetStaysLastInIframeHead = (iframeEl, iframeDoc) => {
+    const head = iframeDoc.head || iframeDoc.getElementsByTagName('head')[0] || null;
+    if (!head) return;
+
+    // The H5P editor appends additional styles dynamically while the user interacts.
+    // To keep our theme overrides effective, we force our theme <link> to be the
+    // last node in <head> whenever <head> changes.
+    const currentHead = iframeEl.__gustavH5pThemeHead || null;
+    if (currentHead === head && iframeEl.__gustavH5pThemeHeadObserver) return;
+
+    try {
+      iframeEl.__gustavH5pThemeHeadObserver?.disconnect?.();
+    } catch {
+      // Best-effort only.
+    }
+
+    const obs = new MutationObserver(() => {
+      const link = head.querySelector('link[data-gustav-h5p-theme="true"]');
+      if (!link) return;
+      if (head.lastElementChild !== link) head.appendChild(link);
+    });
+    obs.observe(head, { childList: true });
+
+    iframeEl.__gustavH5pThemeHead = head;
+    iframeEl.__gustavH5pThemeHeadObserver = obs;
+  };
+
+  const applyThemeToEditorIframe = (editorEl) => {
+    if (!editorEl || !(editorEl instanceof Element)) return false;
+    const iframe = editorEl.querySelector('.h5p-editor-iframe');
+    if (!iframe) return false;
+
+    let iframeDoc = null;
+    try {
+      iframeDoc = iframe.contentDocument;
+    } catch {
+      return false;
+    }
+    if (!iframeDoc) return false;
+
+    applyIframeBaseLayoutPatches(iframeDoc);
+    applyThemeTokensToIframe(iframeDoc);
+    ensureThemeStylesheetInIframe(iframeDoc);
+    ensureThemeStylesheetStaysLastInIframeHead(iframe, iframeDoc);
+
+    // Re-apply when the iframe reloads (some editor actions can trigger this).
+    try {
+      if (!iframe.dataset.gustavH5pThemeHook) {
+        iframe.dataset.gustavH5pThemeHook = '1';
+        iframe.addEventListener('load', () => {
+          // The iframe can navigate and create a *new* document. Therefore we
+          // always resolve `contentDocument` again instead of reusing a stale
+          // reference captured at init time.
+          applyThemeToEditorIframeWithRetry(editorEl);
+        });
+      }
+    } catch {
+      // Ignore: theming should never break the editor.
+    }
+
+    return true;
+  };
+
+  const applyThemeToEditorIframeWithRetry = (editorEl, remaining = 15) => {
+    if (applyThemeToEditorIframe(editorEl)) return;
+    if (remaining <= 0) return;
+    setTimeout(() => applyThemeToEditorIframeWithRetry(editorEl, remaining - 1), 100);
+  };
+
+  const applyThemeToAllH5PEditors = () => {
+    document.querySelectorAll('[data-h5p-task-editor="true"]').forEach((root) => {
+      const editorEl = root.querySelector('h5p-editor');
+      if (!editorEl) return;
+      applyThemeToEditorIframeWithRetry(editorEl);
+    });
+  };
+
+  const ensureThemeObserverInstalled = () => {
+    if (globalThis.__gustav_h5p_editor_theme_observer_installed) return;
+    globalThis.__gustav_h5p_editor_theme_observer_installed = true;
+    const obs = new MutationObserver(() => {
+      applyThemeToAllH5PEditors();
+    });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  };
+
+  ensureThemeObserverInstalled();
+
+  /**
    * Initialize all embedded H5P editors in a given DOM subtree.
    *
    * Notes about robustness:
@@ -168,6 +334,7 @@
         newEl.saveContentCallback = saveContentCallback;
         newEl.addEventListener('editorloaded', (ev) => {
           ensureNoDuplicateTemplates(newEl);
+          applyThemeToEditorIframeWithRetry(newEl);
           setStatus(`Editor loaded (${ev?.detail?.ubername || 'unknown library'}).`);
         });
 

@@ -10,6 +10,7 @@ Kontext:
 - Umgesetzt (fertig): Phase 0 + Phase 1 (H5P‑Service als eigener Compose‑Service inkl. Proxy/CSP, Storage, Auth‑Plumbing, Editor/Player, Library‑Import, E2E‑Smoke).
 - Umgesetzt (weitgehend): Phase 2 (DB + Teaching‑API: `Task.kind` + `h5p`/`visual` Konfiguration inkl. Migration + OpenAPI + Tests; Teaching‑UI: H5P‑Editor ersetzt den normalen Aufgabeneditor für `Task.kind="h5p"`).
 - Umgesetzt (weitgehend): Phase 3 (Learning‑Integration für H5P: eingebetteter Player + Score‑Ingest; Visual‑Tasks: upload‑only UI/Backend + `task_kind`‑Plumbing + **DSPy‑Image‑Pipeline**: Analyse + Feedback laufen direkt auf dem visuellen Input via `dspy.Image` (Modelwahl `AI_VISUAL_MODEL` → Fallback `AI_VISION_MODEL`)).
+- UI‑Theming (neu, geplant): H5P‑UI an GUSTAV‑Theme anpassen (Dark/Light, Tokens) → `docs/plan/2026-01-08-h5p-ui-theming.md`.
 - Nächste Meilensteine: Phase 3 (Visual‑Tasks), Phase 4 (UX/Reporting), Phase 5 (Hardening).
 - Kurzcheck lokal: `docker compose up -d --build caddy web keycloak h5p` → `curl -k -i https://app.localhost/h5p/healthz` → optional `RUN_E2E=1 ... pytest -m e2e ...` (Details: Appendix A).
 

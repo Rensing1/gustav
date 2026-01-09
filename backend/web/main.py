@@ -4643,7 +4643,7 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         "  apply();"
         "})();"
         "</script>"
-        '<script type="module" src="/static/js/h5p_task_editor.js?v=20260108"></script>'
+        '<script type="module" src="/static/js/h5p_task_editor.js?v=20260109-2"></script>'
     )
     return (
         '<div class="container">'
@@ -4866,7 +4866,7 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
             f'<h5p-editor id="h5pEditor" content-id="{Component.escape(editor_content_id_attr)}"></h5p-editor>'
             "</div>"
             # Module script is kept external to avoid inline-minify pitfalls.
-            '<script type="module" src="/static/js/h5p_task_editor.js?v=20260108"></script>'
+            '<script type="module" src="/static/js/h5p_task_editor.js?v=20260109-2"></script>'
         )
 
         delete_form = (

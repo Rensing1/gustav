@@ -1241,6 +1241,21 @@ pre {
   gap: var(--space-4);
 }
 
+/* H5P (embedded, no iframe) */
+.h5p-task-player,
+.h5p-task-editor {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg-overlay);
+}
+
+.h5p-task-player .h5p-content {
+  border-radius: var(--radius-md);
+}
+
 /* Choice Cards (Text | Upload) */
 fieldset.choice-cards {
   display: grid;

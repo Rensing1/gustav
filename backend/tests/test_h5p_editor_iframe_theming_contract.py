@@ -47,3 +47,8 @@ def test_h5p_task_editor_js_contains_iframe_theme_hook() -> None:
     # surface in a nested iframe. We theme that nested iframe too, otherwise
     # focusing a text field reintroduces white backgrounds in Dark Mode.
     assert "cke_wysiwyg_frame" in js
+
+    # Prefer CKEditor-native hooks when possible; they are more robust than
+    # DOM-only patching because CKEditor can re-create its iframe dynamically.
+    assert "CKEDITOR" in js
+    assert "addCss" in js

@@ -35,8 +35,8 @@
 }
 
 .h5p-content {
-  background: var(--color-bg-surface);
-  border-color: var(--color-border);
+  background: var(--color-bg-surface) !important;
+  border-color: var(--color-border) !important;
 }
 
 .h5p-content a {
@@ -73,6 +73,105 @@ button.h5p-core-cancel-button:visited,
 button.h5p-core-cancel-button:link,
 button.h5p-core-cancel-button {
   color: var(--color-error);
+}
+
+/* H5P.JoubelUI (shared UI for many question types) */
+.h5p-joubelui-button,
+.h5peditor .h5p-joubelui-button {
+  font-family: var(--font-base) !important;
+  border-radius: var(--radius-full) !important;
+  background: var(--color-primary) !important;
+  color: var(--color-bg-base) !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: none !important;
+}
+
+.h5p-joubelui-button:hover,
+.h5p-joubelui-button:focus,
+.h5peditor .h5p-joubelui-button:hover,
+.h5peditor .h5p-joubelui-button:focus {
+  filter: brightness(0.95);
+}
+
+.h5p-joubelui-button:active,
+.h5peditor .h5p-joubelui-button:active {
+  filter: brightness(0.9);
+  box-shadow: none !important;
+}
+
+.h5p-joubelui-button:focus-visible,
+.h5peditor .h5p-joubelui-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* H5P.MultiChoice (autoscorable) */
+.h5p-multichoice .h5p-alternative-container {
+  background: var(--color-bg-overlay) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: none !important;
+  color: var(--color-text) !important;
+}
+
+.h5p-multichoice .h5p-answer .h5p-alternative-container:before {
+  color: var(--color-text-muted) !important;
+}
+
+.h5p-multichoice .h5p-answer:not([aria-disabled="true"]):hover .h5p-alternative-container {
+  background: var(--color-bg-hover) !important;
+}
+
+.h5p-multichoice .h5p-answer:not([aria-disabled="true"]):focus .h5p-alternative-container {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.h5p-multichoice .h5p-answer[aria-checked="true"] .h5p-alternative-container {
+  background: var(--color-bg-focus) !important;
+  border-color: var(--color-border-focus) !important;
+  box-shadow: none !important;
+  color: var(--color-text) !important;
+}
+
+.h5p-multichoice .h5p-answer.h5p-correct .h5p-alternative-container,
+.h5p-multichoice .h5p-answer.h5p-correct:hover .h5p-alternative-container {
+  background: color-mix(in oklab, var(--color-success) 22%, var(--color-bg-base)) !important;
+  border-color: var(--color-success) !important;
+  color: var(--color-text) !important;
+  box-shadow: none !important;
+}
+
+.h5p-multichoice .h5p-answer.h5p-wrong .h5p-alternative-container,
+.h5p-multichoice .h5p-answer.h5p-wrong:hover .h5p-alternative-container {
+  background: color-mix(in oklab, var(--color-error) 18%, var(--color-bg-base)) !important;
+  border-color: var(--color-error) !important;
+  color: var(--color-text) !important;
+  box-shadow: none !important;
+}
+
+.h5p-multichoice .h5p-correct .h5p-answer-icon:before {
+  color: var(--color-success) !important;
+}
+
+.h5p-multichoice .h5p-wrong .h5p-answer-icon:before {
+  color: var(--color-error) !important;
+}
+
+.h5p-multichoice .feedback-text {
+  color: var(--color-success) !important;
+}
+
+.h5p-multichoice .feedback-text.h5p-failed {
+  color: var(--color-error) !important;
+}
+
+.h5p-multichoice .feedback-text.h5p-almost {
+  color: var(--color-text-muted) !important;
+}
+
+.h5p-multichoice .feedback-text.h5p-passed {
+  color: var(--color-success) !important;
 }
 
 /* -------------------------------------------------------------------------- */

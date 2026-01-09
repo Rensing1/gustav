@@ -105,6 +105,8 @@ Lösung:
 ## Risiken & Fallbacks
 - Der H5P‑Editor ist ein Dritt‑UI (inkl. Hub + CKEditor) → ein „native“ Look braucht **viele** Overrides und ist bei Upstream‑Updates potentiell wartungsintensiv.
 - Manche H5P‑Libraries bringen harte Farben/Inline‑Styles → es kann library‑spezifische Nacharbeit geben.
+  - Pragmatiker‑Ansatz (KISS): Wir priorisieren **gemeinsame UI‑Libraries** zuerst (z. B. `H5P.JoubelUI` Buttons), weil sie viele Content‑Types gleichzeitig verbessern.
+  - Danach gezielt die „Top‑Autoscorer“ (z. B. `H5P.MultiChoice`), statt „alles“ perfekt themen zu wollen.
 
 ## Done‑Definition (für Option B)
 - Player:

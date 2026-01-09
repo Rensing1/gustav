@@ -129,6 +129,61 @@
     head.appendChild(style);
   };
 
+  const ensureCkeditorAddCssHookInstalled = (editorIframeEl) => {
+    // CKEditor provides a native hook to inject CSS into the editable iframe.
+    // This is more reliable than DOM-only patching because CKEditor can
+    // recreate its iframe while the user interacts with the form.
+    let win = null;
+    try {
+      win = editorIframeEl?.contentWindow || null;
+    } catch {
+      return;
+    }
+    const CKEDITOR = win?.CKEDITOR || null;
+    if (!CKEDITOR) return;
+
+    // Install once per CKEDITOR global (the editor iframe can reload).
+    if (CKEDITOR.__gustavThemeHookInstalled) return;
+    CKEDITOR.__gustavThemeHookInstalled = true;
+
+    try {
+      CKEDITOR.addCss(`
+        html, body {
+          background: var(--color-bg-base) !important;
+          color: var(--color-text) !important;
+          font-family: var(--font-base) !important;
+        }
+        body.cke_editable {
+          background: var(--color-bg-base) !important;
+          color: var(--color-text) !important;
+        }
+        a { color: var(--color-primary) !important; }
+      `);
+    } catch {
+      // Best-effort only.
+    }
+
+    try {
+      CKEDITOR.on('instanceReady', (ev) => {
+        try {
+          const doc = ev?.editor?.document?.$ || null;
+          if (!doc) return;
+          applyThemeTokensToIframe(doc);
+          ensureCkeditorThemeInDocument(doc);
+
+          // Absolute last-resort: enforce background via inline styles.
+          doc.documentElement?.style?.setProperty('background', 'var(--color-bg-base)', 'important');
+          doc.body?.style?.setProperty('background', 'var(--color-bg-base)', 'important');
+          doc.body?.style?.setProperty('color', 'var(--color-text)', 'important');
+        } catch {
+          // Best-effort only.
+        }
+      });
+    } catch {
+      // Best-effort only.
+    }
+  };
+
   const ensureCkeditorThemeStaysLastInHead = (iframeEl, iframeDoc) => {
     const head = iframeDoc.head || iframeDoc.getElementsByTagName('head')[0] || null;
     if (!head) return;
@@ -251,6 +306,7 @@
     applyThemeTokensToIframe(iframeDoc);
     ensureThemeStylesheetInIframe(iframeDoc);
     ensureThemeStylesheetStaysLastInIframeHead(iframe, iframeDoc);
+    ensureCkeditorAddCssHookInstalled(iframe);
     applyThemeToCkeditorIframesInEditorIframe(iframeDoc);
     ensureCkeditorObserverInstalled(iframe, iframeDoc);
 

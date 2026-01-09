@@ -305,32 +305,62 @@ button.h5p-core-cancel-button {
   border-color: var(--color-border) !important;
 }
 
-.h5peditor .cke_chrome {
+.h5peditor .cke_chrome,
+.cke_chrome {
   background: var(--color-bg-surface) !important;
   border-color: var(--color-border) !important;
   border-radius: var(--radius-md);
 }
 
 .h5peditor .cke_top,
-.h5peditor .cke_bottom {
+.h5peditor .cke_bottom,
+.cke_top,
+.cke_bottom {
   background: var(--color-bg-overlay) !important;
   border-color: var(--color-border) !important;
 }
 
 .h5peditor .cke_toolgroup,
-.h5peditor .cke_combo_button {
+.h5peditor .cke_combo_button,
+.cke_toolgroup,
+.cke_combo_button {
   background: var(--color-bg-surface) !important;
   border-color: var(--color-border) !important;
 }
 
 .h5peditor .cke_combo_text,
-.h5peditor .cke_button_label {
+.h5peditor .cke_button_label,
+.cke_combo_text,
+.cke_button_label {
   color: var(--color-text) !important;
 }
 
-.h5peditor .cke_contents {
+.h5peditor .cke_contents,
+.cke_contents {
   background: var(--color-bg-base) !important;
   border-color: var(--color-border) !important;
+}
+
+.h5peditor iframe.cke_wysiwyg_frame,
+iframe.cke_wysiwyg_frame {
+  background: var(--color-bg-base) !important;
+  border-color: var(--color-border) !important;
+  border-radius: var(--radius-sm);
+}
+
+.h5peditor .cke_button,
+.h5peditor a.cke_button,
+.cke_button,
+a.cke_button {
+  background: var(--color-bg-surface) !important;
+  border-color: var(--color-border) !important;
+}
+
+.h5peditor .cke_button:hover,
+.h5peditor a.cke_button:hover,
+.cke_button:hover,
+a.cke_button:hover {
+  background: var(--color-bg-hover) !important;
 }
 
 /*

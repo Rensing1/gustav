@@ -96,7 +96,8 @@ Beobachtung:
 
 Lösung:
 - Theme‑CSS überschreibt die CKEditor‑„Chrome“‑Flächen (Toolbars/Rahmen) token‑basiert und verhindert den weißen Active‑State (`.h5peditor-widget-active`, `.cke_*`).
-- Ein kleiner JS‑Hook themed das **nested CKEditor iframe** (Tokens kopieren + minimale Styles für `html/body`), und beobachtet DOM‑Änderungen, damit es auch beim späteren Initialisieren greift.
+- Ein kleiner JS‑Hook themed das **nested CKEditor iframe** (Tokens kopieren + minimale Styles für `html/body`/`.cke_editable`) und hält dieses Style‑Snippet per MutationObserver **immer als letztes** im iframe‑`<head>` (CKEditor/H5P laden teils Styles nach).
+- Praxis‑Hinweis: CKEditor‑Markup ist nicht in allen Fällen zuverlässig unter `.h5peditor` verschachtelt → Theme‑CSS sollte `.cke_*` auch ohne `.h5peditor`‑Prefix abdecken.
 
 ### 3) GUSTAV‑Wrapper‑Styles (klein, lokal)
 - In `backend/web/static/css/gustav.css` nur die Container (`.h5p-task-player`, `.h5p-task-editor`) so stylen, dass sie wie Karten/Panels wirken (Spacing/Border/Radius), ohne H5P intern zu „zerlegen“.

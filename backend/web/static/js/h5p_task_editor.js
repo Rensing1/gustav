@@ -98,7 +98,12 @@
     if (!head) return;
 
     const selector = 'style[data-gustav-ckeditor-theme="true"]';
-    if (head.querySelector(selector)) return;
+    const existing = head.querySelector(selector);
+    if (existing) {
+      // Keep it last in <head> (CKEditor may append additional styles later).
+      head.appendChild(existing);
+      return;
+    }
 
     // CKEditor renders the editable surface inside a nested iframe. This style
     // keeps the *editable document* in sync with GUSTAV tokens.
@@ -109,6 +114,11 @@
         background: var(--color-bg-base) !important;
         color: var(--color-text) !important;
         font-family: var(--font-base) !important;
+        margin: 0 !important;
+      }
+      body.cke_editable {
+        background: var(--color-bg-base) !important;
+        color: var(--color-text) !important;
       }
       a { color: var(--color-primary) !important; }
       :focus-visible {
@@ -117,6 +127,31 @@
       }
     `;
     head.appendChild(style);
+  };
+
+  const ensureCkeditorThemeStaysLastInHead = (iframeEl, iframeDoc) => {
+    const head = iframeDoc.head || iframeDoc.getElementsByTagName('head')[0] || null;
+    if (!head) return;
+
+    const style = head.querySelector('style[data-gustav-ckeditor-theme="true"]');
+    if (!style) return;
+
+    const currentHead = iframeEl.__gustavCkThemeHead || null;
+    if (currentHead === head && iframeEl.__gustavCkThemeHeadObserver) return;
+
+    try {
+      iframeEl.__gustavCkThemeHeadObserver?.disconnect?.();
+    } catch {
+      // Best-effort only.
+    }
+
+    const obs = new MutationObserver(() => {
+      if (head.lastElementChild !== style) head.appendChild(style);
+    });
+    obs.observe(head, { childList: true });
+
+    iframeEl.__gustavCkThemeHead = head;
+    iframeEl.__gustavCkThemeHeadObserver = obs;
   };
 
   const applyThemeToCkeditorIframe = (iframeEl) => {
@@ -130,6 +165,7 @@
     if (!doc) return false;
     applyThemeTokensToIframe(doc);
     ensureCkeditorThemeInDocument(doc);
+    ensureCkeditorThemeStaysLastInHead(iframeEl, doc);
     return true;
   };
 

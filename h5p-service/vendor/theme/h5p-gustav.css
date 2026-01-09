@@ -283,6 +283,56 @@ button.h5p-core-cancel-button {
   color: var(--color-bg-base);
 }
 
+/* -------------------------------------------------------------------------- */
+/* CKEditor (rich-text fields inside the H5P editor)                           */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * H5P uses CKEditor for rich-text fields (e.g. “Question”).
+ *
+ * Upstream H5P editor CSS turns the active widget white via `.h5peditor-widget-active`.
+ * That breaks Dark Mode and looks “foreign” inside GUSTAV.
+ *
+ * We theme the CKEditor chrome (toolbars, borders) using GUSTAV tokens.
+ * The editable surface itself is handled via a JS hook because it lives in a
+ * nested iframe (see `backend/web/static/js/h5p_task_editor.js`).
+ */
+.h5peditor-widget-active {
+  background: var(--color-bg-surface) !important;
+}
+
+.h5peditor-widgets > .h5peditor-widget-wrapper {
+  border-color: var(--color-border) !important;
+}
+
+.h5peditor .cke_chrome {
+  background: var(--color-bg-surface) !important;
+  border-color: var(--color-border) !important;
+  border-radius: var(--radius-md);
+}
+
+.h5peditor .cke_top,
+.h5peditor .cke_bottom {
+  background: var(--color-bg-overlay) !important;
+  border-color: var(--color-border) !important;
+}
+
+.h5peditor .cke_toolgroup,
+.h5peditor .cke_combo_button {
+  background: var(--color-bg-surface) !important;
+  border-color: var(--color-border) !important;
+}
+
+.h5peditor .cke_combo_text,
+.h5peditor .cke_button_label {
+  color: var(--color-text) !important;
+}
+
+.h5peditor .cke_contents {
+  background: var(--color-bg-base) !important;
+  border-color: var(--color-border) !important;
+}
+
 /*
  * Upstream H5P editor CSS creates "zebra" nesting by alternating white and
  * near-white backgrounds for `.content` wrappers (and does so

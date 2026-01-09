@@ -45,3 +45,8 @@ def test_h5p_theme_css_exists_and_uses_tokens() -> None:
     assert ".h5peditor input" in css or ".h5peditor input," in css
     assert ".h5peditor textarea" in css
     assert ".h5peditor select" in css
+
+    # Rich-text in the H5P editor uses CKEditor; we must theme its chrome too
+    # (otherwise focusing a field brings back light backgrounds).
+    assert ".h5peditor-widget-active" in css
+    assert ".cke_chrome" in css

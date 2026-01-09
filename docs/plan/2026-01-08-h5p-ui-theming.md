@@ -18,6 +18,9 @@ Das ist bewusst ambitionierter als das ursprüngliche „Option B minimal“: Wi
   - Lumi Webcomponents rendern **im Light‑DOM** (kein Shadow DOM).
   - H5P lädt **CSS/JS dynamisch in den `<head>`** (über `addStylesheets(...)` / `addScripts(...)`).
   - Deshalb gilt: **CSS‑Reihenfolge** ist entscheidend → das Theme muss *nach* H5P‑Core/Library‑CSS geladen werden, sonst „verliert“ es.
+  - **Wichtig (Player):** `<h5p-player>` rendert H5P je nach `embedTypes` im Model entweder
+    - als **DIV** (direkt im GUSTAV‑DOM) oder
+    - in einem **internen iframe** (schlechter zu themen, weil Tokens dort nicht automatisch existieren).
   - **Wichtig (Editor):** `<h5p-editor>` rendert die eigentliche Editor‑UI in einem **iframe** und lädt die Styles aus `editorModel.styles` bewusst **nicht** in den Parent‑DOM (upstream‑Kommentar: „styles don't really matter“). Ergebnis: GUSTAV‑CSS/Tokens im Parent wirken *nicht* in den Editor‑Controls – wir müssen das Theme **in den iframe injizieren**.
 
 ## Nicht‑Ziele (vorerst)
@@ -63,6 +66,7 @@ Da es sich primär um UI/CSS handelt, kombinieren wir:
 - Neue Datei (Beispiel): `h5p-service/vendor/theme/h5p-gustav.css`
 - Inhalt:
   - Base‑Overrides für `.h5p-content`, `.h5p-container`, `.h5p-iframe`, `.h5p-core-button`, typische H5P‑UI‑Buttons/Inputs.
+  - Wichtig (Player): Viele auto‑scorable Question‑Types basieren auf `H5P.Question` und bringen einen **transluzenten weißen Hintergrund** mit (`.h5p-question { background: rgba(255,255,255,0.9) }`). Das muss token‑basiert überschrieben werden, sonst entstehen „weiße Inseln“ im Dark‑Mode.
   - Editor‑Fix für „weiße Inseln“: Upstream nutzt rekursiv verschachtelte `.content`‑Wrapper mit abwechselnd weißen/hellen Hintergründen → in Dark‑Mode extrem störend. Lösung: verschachtelte `.content`‑Wrapper transparent machen und nur die „eigentlichen“ Flächen (`.h5peditor-form`, `.group > .content`) token‑basiert einfärben.
   - Nur Tokens: `var(--color-bg-surface)`, `var(--color-text)`, `var(--color-border)`, `var(--color-primary)`, `var(--color-focus-ring)`, `var(--font-base)`.
   - Fokus: `:focus-visible { outline/box-shadow: ... }` (keine unsichtbaren Zustände).
@@ -77,6 +81,15 @@ Entscheidung (Mechanismus A, robust):
     (Intern im Service: Route ohne Prefix `/theme/h5p-gustav.css`, da Caddy `/h5p` strippt.)
 - Fallback (nur wenn A nicht reicht): Option C (library‑spezifische Overrides). Keine SSR‑Injection als „Workaround“.
 
+### 2a) Player: DIV‑Embed erzwingen (damit Mechanismus A greift)
+Problem:
+- Viele H5P‑Pakete deklarieren `embedTypes=["iframe"]` → Lumi rendert im **internen iframe**.
+- In diesem Modus wird `playerModel.styles` nicht im Parent‑DOM geladen, und unsere token‑basierte Theme‑CSS kann den Player kaum beeinflussen.
+
+Entscheidung:
+- Für die GUSTAV‑Integration erzwingen wir im H5P‑Service für `GET /player/model`, dass `embedTypes` **immer `div` enthält** (Lumi bevorzugt dann DIV‑Embed).
+- Trade‑off: weniger Isolation, dafür **stabile, native Theme‑Integration** (und ohne „Extra‑Seite“/User‑visible iframe).
+
 ### 2b) Editor‑Iframe Hook (KISS‑Erweiterung für Option B)
 Problem: Der Editor rendert im iframe, daher wirkt Mechanismus A zwar für Player, aber im Editor nur sehr begrenzt.
 
@@ -90,14 +103,32 @@ Lösung (Option 1, GUSTAV‑seitig):
 
 ### 2c) CKEditor‑White‑On‑Focus (Rich‑Text‑Felder)
 Beobachtung:
-- Einige H5P‑Felder (z. B. „Question“) sind Rich‑Text und nutzen CKEditor.
-- Beim Fokus wird das Feld „aktiv“ und wird upstream wieder sehr hell/weiß (unpassend im Dark‑Mode).
-- Zusätzlich rendert CKEditor die eigentliche Text‑Fläche in einem **weiteren (nested) iframe** → normales CSS im Editor‑iframe reicht nicht.
+- Einige H5P‑Felder (z. B. „Question“) sind Rich‑Text und nutzen **CKEditor 5 (ClassicEditor)**.
+- Beim Fokus wird das Feld „aktiv“ und zeigt eine Toolbar + eine bearbeitbare Fläche, die upstream wieder sehr hell/weiß ist (unpassend im Dark‑Mode).
+- CKEditor 5 läuft **im selben Dokument** wie der H5P‑Editor‑iframe (kein nested iframe), aber bringt eigene Styles mit (`.ck-*`), die wir überschreiben müssen.
 
 Lösung:
-- Theme‑CSS überschreibt die CKEditor‑„Chrome“‑Flächen (Toolbars/Rahmen) token‑basiert und verhindert den weißen Active‑State (`.h5peditor-widget-active`, `.cke_*`).
-- Ein kleiner JS‑Hook themed das **nested CKEditor iframe** (Tokens kopieren + minimale Styles für `html/body`/`.cke_editable`) und hält dieses Style‑Snippet per MutationObserver **immer als letztes** im iframe‑`<head>` (CKEditor/H5P laden teils Styles nach).
-- Praxis‑Hinweis: CKEditor‑Markup ist nicht in allen Fällen zuverlässig unter `.h5peditor` verschachtelt → Theme‑CSS sollte `.cke_*` auch ohne `.h5peditor`‑Prefix abdecken.
+- Theme‑CSS überschreibt die CKEditor‑Oberflächen token‑basiert:
+  - Toolbar: `.ck-toolbar`
+  - Editable surface: `.ck-editor__editable`
+  - Dropdowns/Popups: `.ck-dropdown__panel`, `.ck-balloon-panel`
+- Zusätzlich bleibt der weiße Active‑State der H5P‑Wrapper neutral (`.h5peditor-widget-active`).
+- Kein zusätzlicher JS‑Hook für CKEditor nötig: der bestehende Editor‑iframe‑Hook injiziert Tokens + Theme‑CSS, und CKEditor 5 übernimmt den Rest über CSS.
+
+### 2d) Editor‑Buttons & Pfeile (List‑Editor: “ADD OPTION”, order up/down)
+Beobachtung:
+- Viele Editor‑Controls sind **keine** echten `<button>`s, sondern `<div role="button">` aus `H5PEditor.createButton(...)`.
+- Typische Beispiele:
+  - Text‑Buttons wie **“ADD OPTION”** → Klasse `.h5peditor-button-textual`
+  - Listen‑Actions rechts in `.list-item-title-bar` (Pfeile/Entfernen) → `.order-group` mit `.order-up`, `.order-down` und `.remove`
+
+Problem:
+- Wenn wir nur `<button>` stylen, bleiben diese Elemente im **Upstream‑Look** (dunkle Blöcke/Blau‑Buttons) und wirken im GUSTAV‑Theme „fremd“.
+
+Lösung:
+- Theme‑CSS ergänzt token‑basierte Overrides für:
+  - `.h5peditor-button` / `.h5peditor-button-textual` (inkl. Hover + `:focus-visible`)
+  - `.order-group` / `.order-up` / `.order-down` / `.remove` (Farbe erbt von der Title‑Bar, Hover nur als dezente Tönung)
 
 ### 3) GUSTAV‑Wrapper‑Styles (klein, lokal)
 - In `backend/web/static/css/gustav.css` nur die Container (`.h5p-task-player`, `.h5p-task-editor`) so stylen, dass sie wie Karten/Panels wirken (Spacing/Border/Radius), ohne H5P intern zu „zerlegen“.
@@ -105,7 +136,7 @@ Lösung:
 ## Risiken & Fallbacks
 - Der H5P‑Editor ist ein Dritt‑UI (inkl. Hub + CKEditor) → ein „native“ Look braucht **viele** Overrides und ist bei Upstream‑Updates potentiell wartungsintensiv.
 - Manche H5P‑Libraries bringen harte Farben/Inline‑Styles → es kann library‑spezifische Nacharbeit geben.
-  - Pragmatiker‑Ansatz (KISS): Wir priorisieren **gemeinsame UI‑Libraries** zuerst (z. B. `H5P.JoubelUI` Buttons), weil sie viele Content‑Types gleichzeitig verbessern.
+  - Pragmatiker‑Ansatz (KISS): Wir priorisieren **gemeinsame Basis‑Libraries** zuerst (z. B. `H5P.JoubelUI` Buttons und `H5P.Question` Wrapper), weil sie viele Content‑Types gleichzeitig verbessern.
   - Danach gezielt die „Top‑Autoscorer“ (z. B. `H5P.MultiChoice`), statt „alles“ perfekt themen zu wollen.
 
 ## Done‑Definition (für Option B)

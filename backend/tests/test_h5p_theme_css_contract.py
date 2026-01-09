@@ -46,15 +46,34 @@ def test_h5p_theme_css_exists_and_uses_tokens() -> None:
     assert ".h5peditor textarea" in css
     assert ".h5peditor select" in css
 
-    # Rich-text in the H5P editor uses CKEditor; we must theme its chrome too
-    # (otherwise focusing a field brings back light backgrounds).
-    assert ".h5peditor-widget-active" in css
-    assert ".cke_chrome" in css
+    # Rich-text in the H5P editor uses CKEditor 5 (ClassicEditor).
+    # We must theme its surfaces, toolbars and dropdown panels, otherwise
+    # focusing a field brings back white UI in Dark Mode.
+    assert ".ck-editor__editable" in css
+    assert ".ck-toolbar" in css
+    assert ".ck-dropdown__panel" in css
 
     # Student runtime uses H5P.JoubelUI buttons across many question types.
     # Without this, the UI stays bright blue/white in Dark Mode.
     assert ".h5p-joubelui-button" in css
 
+    # Many autoscorable H5P question types (including MultiChoice) are wrapped
+    # in the shared `H5P.Question` base library. Upstream paints a translucent
+    # white background on `.h5p-question`, which looks very foreign in Dark Mode.
+    assert ".h5p-question" in css
+
     # MultiChoice is a core autoscorable type we actively use; ensure we
     # override its light surfaces so it looks native in Dark Mode.
     assert ".h5p-multichoice" in css
+
+    # The editor uses non-standard "buttons" implemented as <div role="button">
+    # (H5PEditor.createButton). Without explicit styling, actions like
+    # “ADD OPTION” keep their upstream (blue/gray) colors and look foreign.
+    assert ".h5peditor-button-textual" in css
+
+    # The list editor (arrays/option lists) includes right-side order controls
+    # (up/down arrows). These must be themed too; otherwise they remain dark
+    # blocks that clash with the surrounding surface.
+    assert ".order-group" in css
+    assert ".order-up" in css
+    assert ".order-down" in css

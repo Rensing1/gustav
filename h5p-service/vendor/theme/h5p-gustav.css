@@ -174,6 +174,23 @@ button.h5p-core-cancel-button {
   color: var(--color-success) !important;
 }
 
+/* H5P.Question (shared wrapper for many autoscorable question types) */
+/*
+ * Upstream paints a translucent white background for `.h5p-question`.
+ * In Dark Mode this creates a glaring "white island" inside the GUSTAV UI.
+ *
+ * We prefer the surrounding `.h5p-content` surface to define the background,
+ * so we make the question wrapper transparent and let our token-based
+ * container styling shine through.
+ */
+.h5p-question {
+  background: transparent !important;
+}
+
+.h5p-question-feedback {
+  color: var(--color-primary) !important;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Editor                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -356,6 +373,52 @@ button.h5p-core-cancel-button {
   background-color: var(--color-bg-hover);
 }
 
+/*
+ * H5P editor actions are not always <button> elements.
+ *
+ * Many controls (e.g. “ADD OPTION”, list item remove, order up/down) are
+ * implemented as <div role="button"> via `H5PEditor.createButton`.
+ *
+ * If we only style real <button> elements, these controls keep their upstream
+ * (gray/blue) palette and look foreign in GUSTAV.
+ */
+.h5peditor .h5peditor-button {
+  font-family: var(--font-base);
+  user-select: none;
+}
+
+.h5peditor .h5peditor-button[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.h5peditor .h5peditor-button-textual {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) !important;
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-bg-overlay) !important;
+  color: var(--color-text) !important;
+  font-size: var(--text-base) !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+.h5peditor .h5peditor-button-textual:hover {
+  background: var(--color-bg-hover) !important;
+}
+
+.h5peditor .h5peditor-button-textual:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring) !important;
+  outline-offset: var(--focus-ring-offset);
+}
+
 .h5peditor .h5peditor-button-collapse {
   border-radius: var(--radius-full);
   border-color: var(--color-border);
@@ -365,6 +428,17 @@ button.h5p-core-cancel-button {
 
 .h5peditor .h5peditor-button-collapse:hover:not([disabled]) {
   background-color: var(--color-bg-hover);
+}
+
+.h5peditor .h5p-editor-flex-wrapper .h5peditor-button-collapse {
+  border-color: var(--color-border) !important;
+  background: var(--color-bg-overlay) !important;
+  color: var(--color-text) !important;
+  box-shadow: none !important;
+}
+
+.h5peditor .h5p-editor-flex-wrapper .h5peditor-button-collapse:hover:not([disabled]) {
+  background: var(--color-bg-hover) !important;
 }
 
 .h5peditor .group > .title,
@@ -382,19 +456,60 @@ button.h5p-core-cancel-button {
   color: var(--color-bg-base);
 }
 
+/*
+ * List item action controls (order up/down + remove icon) sit on the right side
+ * of `.list-item-title-bar`. Upstream paints them as dark blocks, which clashes
+ * with our token-based surfaces.
+ *
+ * We inherit the title bar text color and use a subtle hover tint so controls
+ * feel native both on neutral headers and on "importance-high" headers.
+ */
+.h5peditor .h5p-li > .list-item-title-bar .order-group {
+  background: transparent !important;
+  color: inherit;
+  border-left: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+}
+
+.h5peditor .h5p-li > .list-item-title-bar .order-up,
+.h5peditor .h5p-li > .list-item-title-bar .order-down,
+.h5peditor .h5p-li > .list-item-title-bar .remove {
+  background: transparent !important;
+  color: inherit;
+  border-radius: var(--radius-md);
+}
+
+.h5peditor .h5p-li > .list-item-title-bar .order-up:hover,
+.h5peditor .h5p-li > .list-item-title-bar .order-down:hover,
+.h5peditor .h5p-li > .list-item-title-bar .remove:hover {
+  background: color-mix(in oklab, currentColor 12%, transparent) !important;
+}
+
+.h5peditor .h5p-li > .list-item-title-bar .order-up:after,
+.h5peditor .h5p-li > .list-item-title-bar .order-down:after,
+.h5peditor .h5p-li > .list-item-title-bar .remove:after {
+  opacity: 0.9 !important;
+}
+
+.h5peditor .h5p-li > .list-item-title-bar .order-up:focus-visible,
+.h5peditor .h5p-li > .list-item-title-bar .order-down:focus-visible,
+.h5peditor .h5p-li > .list-item-title-bar .remove:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring) !important;
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* -------------------------------------------------------------------------- */
-/* CKEditor (rich-text fields inside the H5P editor)                           */
+/* CKEditor 5 (rich-text fields inside the H5P editor)                         */
 /* -------------------------------------------------------------------------- */
 
 /*
- * H5P uses CKEditor for rich-text fields (e.g. “Question”).
+ * H5P uses CKEditor 5 (ClassicEditor) for rich-text fields (e.g. “Question”).
  *
- * Upstream H5P editor CSS turns the active widget white via `.h5peditor-widget-active`.
- * That breaks Dark Mode and looks “foreign” inside GUSTAV.
+ * Upstream CKEditor ships with a bright (white) UI. In Dark Mode this looks
+ * like a foreign UI embedded into GUSTAV.
  *
- * We theme the CKEditor chrome (toolbars, borders) using GUSTAV tokens.
- * The editable surface itself is handled via a JS hook because it lives in a
- * nested iframe (see `backend/web/static/js/h5p_task_editor.js`).
+ * We theme the CKEditor 5 surfaces (toolbar, editable area, dropdown panels)
+ * using GUSTAV tokens. CKEditor 5 lives in the same document as the H5P editor
+ * iframe (no nested iframe), so CSS overrides are sufficient.
  */
 .h5peditor-widget-active {
   background: var(--color-bg-surface) !important;
@@ -404,61 +519,89 @@ button.h5p-core-cancel-button {
   border-color: var(--color-border) !important;
 }
 
-.h5peditor .cke_chrome,
-.cke_chrome {
-  background: var(--color-bg-surface) !important;
-  border-color: var(--color-border) !important;
-  border-radius: var(--radius-md);
-}
-
-.h5peditor .cke_top,
-.h5peditor .cke_bottom,
-.cke_top,
-.cke_bottom {
-  background: var(--color-bg-overlay) !important;
-  border-color: var(--color-border) !important;
-}
-
-.h5peditor .cke_toolgroup,
-.h5peditor .cke_combo_button,
-.cke_toolgroup,
-.cke_combo_button {
-  background: var(--color-bg-surface) !important;
-  border-color: var(--color-border) !important;
-}
-
-.h5peditor .cke_combo_text,
-.h5peditor .cke_button_label,
-.cke_combo_text,
-.cke_button_label {
+.h5peditor .ck,
+.ck {
+  font-family: var(--font-base) !important;
   color: var(--color-text) !important;
 }
 
-.h5peditor .cke_contents,
-.cke_contents {
-  background: var(--color-bg-base) !important;
-  border-color: var(--color-border) !important;
+.h5peditor .ck.ck-toolbar,
+.ck.ck-toolbar {
+  background: var(--color-bg-overlay) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: none !important;
 }
 
-.h5peditor iframe.cke_wysiwyg_frame,
-iframe.cke_wysiwyg_frame {
-  background: var(--color-bg-base) !important;
-  border-color: var(--color-border) !important;
-  border-radius: var(--radius-sm);
+.h5peditor .ck.ck-toolbar .ck.ck-button,
+.h5peditor .ck.ck-toolbar .ck.ck-dropdown__button,
+.ck.ck-toolbar .ck.ck-button,
+.ck.ck-toolbar .ck.ck-dropdown__button {
+  background: transparent !important;
+  color: var(--color-text) !important;
+  border-radius: var(--radius-md) !important;
 }
 
-.h5peditor .cke_button,
-.h5peditor a.cke_button,
-.cke_button,
-a.cke_button {
+.h5peditor .ck.ck-toolbar .ck.ck-button:hover,
+.h5peditor .ck.ck-toolbar .ck.ck-dropdown__button:hover,
+.ck.ck-toolbar .ck.ck-button:hover,
+.ck.ck-toolbar .ck.ck-dropdown__button:hover {
+  background: var(--color-bg-hover) !important;
+}
+
+.h5peditor .ck.ck-toolbar .ck.ck-button.ck-on,
+.h5peditor .ck.ck-toolbar .ck.ck-dropdown__button.ck-on,
+.ck.ck-toolbar .ck.ck-button.ck-on,
+.ck.ck-toolbar .ck.ck-dropdown__button.ck-on {
+  background: var(--color-bg-focus) !important;
+}
+
+.h5peditor .ck.ck-editor__main > .ck.ck-editor__editable,
+.ck.ck-editor__main > .ck.ck-editor__editable {
+  background: var(--color-bg-base) !important;
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: none !important;
+}
+
+.h5peditor .ck.ck-editor__main > .ck.ck-editor__editable.ck-focused,
+.ck.ck-editor__main > .ck.ck-editor__editable.ck-focused {
+  border-color: var(--color-border-focus) !important;
+  box-shadow:
+    0 0 0 1px var(--color-border-focus),
+    0 0 0 4px var(--color-bg-focus) !important;
+}
+
+.h5peditor .ck.ck-editor__main > .ck.ck-editor__editable .ck-placeholder:before,
+.ck.ck-editor__main > .ck.ck-editor__editable .ck-placeholder:before {
+  color: var(--color-text-muted) !important;
+}
+
+.h5peditor .ck.ck-dropdown__panel,
+.h5peditor .ck.ck-balloon-panel,
+.ck.ck-dropdown__panel,
+.ck.ck-balloon-panel {
   background: var(--color-bg-surface) !important;
-  border-color: var(--color-border) !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: none !important;
 }
 
-.h5peditor .cke_button:hover,
-.h5peditor a.cke_button:hover,
-.cke_button:hover,
-a.cke_button:hover {
+.h5peditor .ck.ck-list,
+.ck.ck-list {
+  background: var(--color-bg-surface) !important;
+}
+
+.h5peditor .ck.ck-list .ck.ck-button,
+.ck.ck-list .ck.ck-button {
+  background: transparent !important;
+  color: var(--color-text) !important;
+}
+
+.h5peditor .ck.ck-list .ck.ck-button:hover,
+.h5peditor .ck.ck-list .ck.ck-button:focus,
+.ck.ck-list .ck.ck-button:hover,
+.ck.ck-list .ck.ck-button:focus {
   background: var(--color-bg-hover) !important;
 }
 

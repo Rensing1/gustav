@@ -90,6 +90,24 @@ function ensureThemeStylesLast(styles) {
   return arr;
 }
 
+function ensureDivEmbedTypes(embedTypes) {
+  // Lumi's `<h5p-player>` prefers DIV when possible (less iframes, better theming).
+  // In practice many H5P packages advertise `embedTypes=["iframe"]` only, which
+  // forces an internal iframe and makes a native GUSTAV theme almost impossible
+  // (tokens do not automatically exist inside the iframe).
+  //
+  // We therefore advertise `div` as supported for the embedded player UI.
+  const raw = Array.isArray(embedTypes) ? embedTypes : [];
+  const out = ["div"];
+  for (const t of raw) {
+    if (!t) continue;
+    if (t === "div") continue;
+    if (out.includes(t)) continue;
+    out.push(t);
+  }
+  return out;
+}
+
 function sendJson(res, statusCode, body, headers = {}) {
   res.status(statusCode);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
@@ -869,7 +887,11 @@ async function main() {
         asUserId,
         readOnlyState,
       });
-      const out = { ...model, styles: ensureThemeStylesLast(model?.styles) };
+      const out = {
+        ...model,
+        embedTypes: ensureDivEmbedTypes(model?.embedTypes),
+        styles: ensureThemeStylesLast(model?.styles),
+      };
       // Robust progress ingest:
       // Attach course/task context to the `setFinished` endpoint so the H5P
       // service can persist a `learning_submissions(kind='h5p')` row server-side.

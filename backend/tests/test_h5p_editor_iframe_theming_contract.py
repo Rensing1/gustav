@@ -43,12 +43,7 @@ def test_h5p_task_editor_js_contains_iframe_theme_hook() -> None:
     # The iframe document must not apply upstream layout constraints (e.g. max-width: 960px).
     assert "maxWidth" in js
 
-    # Rich-text fields in the H5P editor use CKEditor, which renders its editable
-    # surface in a nested iframe. We theme that nested iframe too, otherwise
-    # focusing a text field reintroduces white backgrounds in Dark Mode.
-    assert "cke_wysiwyg_frame" in js
-
-    # Prefer CKEditor-native hooks when possible; they are more robust than
-    # DOM-only patching because CKEditor can re-create its iframe dynamically.
-    assert "CKEDITOR" in js
-    assert "addCss" in js
+    # Rich-text fields in the H5P editor use CKEditor 5 (ClassicEditor) which
+    # lives in the same iframe document. Theming is done via the shared
+    # token-based stylesheet (`h5p-gustav.css`), so the JS hook only needs to
+    # inject tokens + the theme link into the editor iframe.

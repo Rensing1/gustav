@@ -19,7 +19,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import json
 
@@ -374,26 +374,88 @@ async def test_e2e_local_ai_image_submission_completed_v2(monkeypatch: pytest.Mo
         if "dspy" in sys.modules:
             monkeypatch.delitem(sys.modules, "dspy", raising=False)
 
-    # Create pending image submission
-    repo = DBLearningRepo(dsn=dsn)
-    create = CreateSubmissionUseCase(repo)
-    submission = create.execute(
-        CreateSubmissionInput(
-            course_id=fixture.course_id,
-            task_id=fixture.task["id"],
-            student_sub=fixture.student_sub,
-            kind="image",
-            text_body=None,
-            storage_key="storage://bucket/key.jpg",
-            mime_type="image/jpeg",
-            size_bytes=1024,
-            sha256="0" * 64,
-            score_raw=None,
-            score_max=None,
-            idempotency_key="e2e-local-image",
-        )
-    )
-    submission_id = submission["id"]
+    # Create a pending image submission + job, but schedule it slightly in the future.
+    #
+    # Why:
+    #   When the real `gustav-learning-worker` container is running locally, it can
+    #   race this test by leasing the freshly inserted job before `run_once()` runs.
+    #   We avoid that by inserting the job with `visible_at` > now + 30s (worker
+    #   lease window), then running `run_once()` with a deterministic `now` cursor
+    #   aligned to that visibility timestamp.
+    #
+    # Local = Prod:
+    #   This is a test-only setup choice; production keeps `visible_at=now()`.
+    future_tick = datetime.now(tz=timezone.utc) + timedelta(minutes=2)
+    submission_id: str
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (fixture.student_sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                    course_id,
+                    task_id,
+                    student_sub,
+                    kind,
+                    storage_key,
+                    mime_type,
+                    size_bytes,
+                    sha256,
+                    attempt_nr,
+                    analysis_status,
+                    idempotency_key
+                )
+                values (
+                    %s::uuid,
+                    %s::uuid,
+                    %s,
+                    'image',
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    1,
+                    'pending',
+                    %s
+                )
+                returning id::text
+                """,
+                (
+                    fixture.course_id,
+                    fixture.task["id"],
+                    fixture.student_sub,
+                    "storage://bucket/key.jpg",
+                    "image/jpeg",
+                    1024,
+                    "0" * 64,
+                    "e2e-local-image",
+                ),
+            )
+            submission_id = str(cur.fetchone()[0])
+            job_payload = {
+                "submission_id": submission_id,
+                "course_id": fixture.course_id,
+                "task_id": fixture.task["id"],
+                "task_kind": str((fixture.task or {}).get("kind") or "native"),
+                "student_sub": fixture.student_sub,
+                "kind": "image",
+                "attempt_nr": 1,
+                "criteria": list((fixture.task or {}).get("criteria") or []),
+                "instruction_md": (fixture.task or {}).get("instruction_md"),
+                "hints_md": (fixture.task or {}).get("hints_md"),
+            }
+            cur.execute(
+                """
+                insert into public.learning_submission_jobs (
+                    submission_id,
+                    payload,
+                    visible_at
+                )
+                values (%s::uuid, %s::jsonb, %s)
+                """,
+                (submission_id, json.dumps(job_payload), future_tick),
+            )
+        conn.commit()
 
     # Build adapters
     import importlib
@@ -407,7 +469,7 @@ async def test_e2e_local_ai_image_submission_completed_v2(monkeypatch: pytest.Mo
         dsn=worker_dsn,
         vision_adapter=local_vision,
         feedback_adapter=local_feedback,
-        now=datetime.now(tz=timezone.utc),
+        now=future_tick,
     )
     assert processed is True
 

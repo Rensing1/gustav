@@ -832,35 +832,12 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         detail = str(exc) or "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
     except Exception:
-        # Conservative fallback in dev/test when the Learning repo is unavailable
-        # (e.g., missing DB driver). Return a minimal accepted submission so UI
-        # and contract tests remain operable without a database.
-        from datetime import datetime, timezone
-        from uuid import uuid4 as _uuid4
-        submission = {
-            "id": str(_uuid4()),
-            "attempt_nr": 1,
-            "kind": kind,
-            "score_raw": clean_payload.get("score_raw"),
-            "score_max": clean_payload.get("score_max"),
-            "text_body": clean_payload.get("text_body"),
-            "mime_type": clean_payload.get("mime_type"),
-            "size_bytes": clean_payload.get("size_bytes"),
-            "storage_key": clean_payload.get("storage_key"),
-            "sha256": clean_payload.get("sha256"),
-            "analysis_status": "completed" if kind == "h5p" else "pending",
-            "error_code": None,
-            "analysis_json": None,
-            "feedback_md": None,
-            # Telemetry defaults
-            "vision_attempts": 0,
-            "vision_last_error": None,
-            "feedback_last_attempt_at": None,
-            "feedback_last_error": None,
-            # Timestamps for UI parity (approximate)
-            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        }
-        return JSONResponse(submission, status_code=202, headers=_cache_headers_success())
+        # Fail closed: when persistence is unavailable, do not pretend success.
+        return JSONResponse(
+            {"error": "service_unavailable", "detail": "submission_persistence_unavailable"},
+            status_code=503,
+            headers=_cache_headers_error(),
+        )
 
     # Opportunistic dev processing for PDF submissions (synchronous, MVP):
     # In dev environments where STORAGE_VERIFY_ROOT is configured, attempt to

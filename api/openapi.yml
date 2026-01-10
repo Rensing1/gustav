@@ -1485,13 +1485,19 @@ paths:
   /h5p/editor:
     get:
       tags: [H5P]
-      summary: H5P editor page (trusted teachers only)
+      summary: H5P editor debug page (admin-only)
       description: >-
-        Serves the H5P editor UI. Access is restricted to trusted content
-        authors (GUSTAV role `teacher` or `admin`).
+        Serves a standalone HTML debug page for the H5P editor.
+        This page is **admin-only** and exists for diagnostics and development.
+        
+        The real GUSTAV integration for authoring uses the JSON model endpoint
+        `GET /h5p/editor/model` (trusted teachers/admins) and embeds the editor
+        inside the platform UI.
       operationId: getH5PEditorPage
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "Debug UI: admin-only (teacher/student must not access this page)."
       responses:
         '200':
           description: HTML editor page
@@ -1559,11 +1565,18 @@ paths:
   /h5p/player:
     get:
       tags: [H5P]
-      summary: H5P player page (students and teachers)
-      description: Serves the H5P player UI for viewing/playing H5P content.
+      summary: H5P player debug page (admin-only)
+      description: >-
+        Serves a standalone HTML debug page for the H5P player.
+        This page is **admin-only** and exists for diagnostics.
+        
+        The real GUSTAV integration for students/teachers uses the JSON model endpoint
+        `GET /h5p/player/model` and embeds the player inside the platform UI.
       operationId: getH5PPlayerPage
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "Debug UI: admin-only (teacher/student must not access this page)."
       parameters:
         - in: query
           name: content_id
@@ -2804,8 +2817,8 @@ paths:
         - cookieAuth: []
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
-        - "Strict mode: When STRICT_CSRF_SUBMISSIONS=true, Origin or Referer must be present; requests without either are rejected."
         - "RLS: student ownership and course membership enforced via policies and helpers."
+        - "Failure semantics: when persistence is unavailable (repo/db down), the API returns 503 and does not pretend success."
       x-permissions:
         requiredRole: student
       parameters:
@@ -2958,6 +2971,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable (submission persistence not available)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

@@ -1123,7 +1123,7 @@ def _csrf_guard(request: Request) -> JSONResponse | None:
     """
     origin_present = (request.headers.get("origin") or request.headers.get("referer"))
     if not origin_present or (not _is_same_origin(request)):
-        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, vary_origin=True)
     return None
 
 
@@ -3053,25 +3053,9 @@ async def update_module_section_visibility(
     if error:
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
-    # CSRF: In production or STRICT_CSRF_TEACHING=true, require explicit Origin/Referer
-    # and same-origin; otherwise fall back to best-effort check.
-    import os as _os
-    _prod = (_os.getenv("GUSTAV_ENV", "dev") or "").lower() == "prod"
-    _strict = _prod or ((_os.getenv("STRICT_CSRF_TEACHING", "false") or "").lower() == "true")
-    if _strict:
-        if not _require_strict_same_origin(request):
-            return _private_error(
-                {"error": "forbidden", "detail": "csrf_violation"},
-                status_code=403,
-                vary_origin=True,
-            )
-    else:
-        if not _is_same_origin(request):
-            return _private_error(
-                {"error": "forbidden", "detail": "csrf_violation"},
-                status_code=403,
-                vary_origin=True,
-            )
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
 
     if not _is_uuid_like(course_id):
         return _private_error(

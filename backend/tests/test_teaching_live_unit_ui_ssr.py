@@ -119,6 +119,7 @@ async def test_live_page_teacher_only_and_renders_table():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -157,6 +158,7 @@ async def test_live_page_includes_status_cursor_and_polling_attributes():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -201,6 +203,7 @@ async def test_live_page_respects_poll_interval_constant():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -357,6 +360,7 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -412,6 +416,7 @@ async def test_matrix_and_delta_fragments_render_h5p_status_symbols():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -499,6 +504,7 @@ async def test_delta_fragment_keeps_clickable_cell_attributes():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -565,6 +571,7 @@ async def test_matrix_fragment_renders_average_score_badge():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -648,6 +655,7 @@ async def test_delta_fragment_renders_average_score_badge():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -731,6 +739,7 @@ async def test_delta_fragment_sets_cursor_via_hx_trigger():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 

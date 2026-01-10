@@ -117,7 +117,7 @@
         if (existing) existing.replaceWith(newEl);
         else root.appendChild(newEl);
 
-        newEl.loadContentCallback = async (contentIdArg, contextId, asUserId, readOnlyState) => {
+        newEl.loadContentCallback = async (contentIdArg, contextId, _ignoredUserId, readOnlyState) => {
           const url = new URL('/h5p/player/model', window.location.origin);
           url.searchParams.set('content_id', contentIdArg);
           if (courseId) url.searchParams.set('course_id', courseId);
@@ -131,7 +131,6 @@
           // reliably, therefore we fall back to the known `taskId`.
           const stableContextId = taskId || contextId;
           if (stableContextId) url.searchParams.set('context_id', stableContextId);
-          if (asUserId) url.searchParams.set('as_user_id', asUserId);
           if (readOnlyState) url.searchParams.set('read_only_state', 'true');
           const r = await fetch(url.toString(), { credentials: 'include' });
           const data = await r.json().catch(() => ({}));

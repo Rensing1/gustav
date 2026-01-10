@@ -121,7 +121,16 @@
           const url = new URL('/h5p/player/model', window.location.origin);
           url.searchParams.set('content_id', contentIdArg);
           if (courseId) url.searchParams.set('course_id', courseId);
-          if (contextId) url.searchParams.set('context_id', contextId);
+          // IMPORTANT:
+          // We must always send a stable task context to the H5P service.
+          // The service uses `context_id` (== task_id in GUSTAV) to attach
+          // course/task metadata to the `setFinished` endpoint, so it can
+          // persist a `learning_submissions(kind='h5p')` row server-side.
+          //
+          // In some embed modes the webcomponent may not pass `contextId`
+          // reliably, therefore we fall back to the known `taskId`.
+          const stableContextId = taskId || contextId;
+          if (stableContextId) url.searchParams.set('context_id', stableContextId);
           if (asUserId) url.searchParams.set('as_user_id', asUserId);
           if (readOnlyState) url.searchParams.set('read_only_state', 'true');
           const r = await fetch(url.toString(), { credentials: 'include' });

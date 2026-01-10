@@ -15,14 +15,15 @@
  *   - `GET /contents/:contentId/export` (teacher/admin only) exports a `.h5p` package.
  *   - `GET /libraries` (teacher/admin only) lists installed content-type libraries.
  *   - `POST /libraries/import` (teacher/admin only) installs a content-type library package.
- *   - `GET /player?content_id=...` (student/teacher/admin) renders the H5P player.
+ *   - `GET /player?content_id=...` (admin only) is a standalone debug page for the player.
  *   - `GET /player/model?content_id=...` (student/teacher/admin) returns the JSON model for `<h5p-player>`.
- *   - `GET /editor` (teacher/admin) is a minimal Phase-1 UI (import form).
+ *   - `GET /editor` (admin only) is a standalone debug page for the editor.
+ *   - `GET /editor/model` (teacher/admin) returns the JSON model for `<h5p-editor>`.
  *
  * Security notes:
  *   - "Fail closed": if auth cannot be proven, respond 401/403.
- *   - CSP is intentionally permissive for `/h5p` (per current decision),
- *     but still scoped to this service only (route-level separation via proxy).
+ *   - CSP is strict by default (no `*`, no `unsafe-eval`). Standalone debug HTML
+ *     pages override CSP to allow the inline scripts they currently contain.
  *   - Trusted-content model: H5P packages are treated as executable code.
  *     Only role `teacher` (and `admin`) may import/export packages.
  *   - Write routes require strict same-origin checks via Origin/Referer.
@@ -67,21 +68,62 @@ const authCache = new Map();
  */
 const courseH5PAuthCache = new Map();
 
+// Default CSP for all `/h5p/*` responses (strict, no wildcards, no unsafe-eval).
+//
+// Note:
+//   In the primary GUSTAV flow, the H5P editor/player runs embedded inside
+//   regular GUSTAV pages (Lumi webcomponents). In that embedded mode, the
+//   browser enforces the *app* CSP for script execution.
+//
+//   This CSP is still valuable as defense-in-depth for standalone HTML pages
+//   served by the H5P service (especially the admin-only debug pages).
+const CSP_DEFAULT = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "object-src 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  "script-src 'self'",
+  // H5P uses inline styles and style attributes widely. We keep this
+  // permission scoped to the H5P service (not the whole app).
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' data: blob:",
+  "frame-src 'self' blob:",
+  "worker-src 'self' blob:",
+].join("; ");
+
+// Scoped CSP exception for standalone debug HTML pages only.
+// Those pages currently contain inline <script> and an inline import map.
+const CSP_DEBUG_HTML = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "object-src 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' data: blob:",
+  "frame-src 'self' blob:",
+  "worker-src 'self' blob:",
+].join("; ");
+
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
-  // Needed so browser form submits include a same-origin Referer header.
-  // We still avoid leaking Referer cross-origin.
-  "Referrer-Policy": "same-origin",
-  // Intentionally permissive CSP for `/h5p` (same-origin H5P requires JS).
-  // Tightening requires a content-type whitelist and real-world CSP testing.
-  "Content-Security-Policy":
-    "default-src * data: blob:; " +
-    "script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; " +
-    "style-src * 'unsafe-inline' data: blob:; " +
-    "img-src * data: blob:; " +
-    "connect-src *; " +
-    "frame-src *; " +
-    "font-src * data: blob:;",
+  // Align with the main app: keep a useful Referer for same-origin requests,
+  // and only send the *origin* on cross-origin requests (no path leaks).
+  //
+  // Why:
+  //   Some H5P embed modes may end up with `Origin: null` (sandboxed iframes).
+  //   In those cases we still want a same-origin indicator for CSRF checks.
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  // Default CSP is strict. The standalone debug pages override it with CSP_DEBUG_HTML.
+  "Content-Security-Policy": CSP_DEFAULT,
 };
 
 function ensureThemeStylesLast(styles) {
@@ -140,6 +182,11 @@ function rolesAllowTeacher(roles) {
   return roles.includes("admin") || roles.includes("teacher");
 }
 
+function rolesAllowAdmin(roles) {
+  if (!Array.isArray(roles)) return false;
+  return roles.includes("admin");
+}
+
 function rolesAllowStudentOrTeacher(roles) {
   if (!Array.isArray(roles)) return false;
   return roles.includes("admin") || roles.includes("teacher") || roles.includes("student");
@@ -156,10 +203,9 @@ function parseOriginForForwarding(req) {
       const scheme = String(u.protocol || "").replace(/:$/, "").toLowerCase() || "http";
       const host = String(u.hostname || "").toLowerCase();
       const port = u.port ? String(u.port) : scheme === "https" ? "443" : "80";
-      if (!host) return null;
-      return { origin: `${scheme}://${u.host}`, scheme, host, port };
+      if (host) return { origin: `${scheme}://${u.host}`, scheme, host, port };
     } catch {
-      return null;
+      // Fall back to Referer parsing below (e.g., Origin: null in sandboxed iframes).
     }
   }
   const referer = req.get("referer") || "";
@@ -204,22 +250,23 @@ function getPublicOrigin(req) {
 
 function requireSameOrigin(req, res, next) {
   const expected = getPublicOrigin(req);
-  const origin = req.get("origin");
-  const referer = req.get("referer");
+  const origin = String(req.get("origin") || "");
+  const referer = String(req.get("referer") || "");
 
   if (!expected) {
     sendJson(res, 403, { error: "csrf_violation" }, { Vary: "Origin" });
     return;
   }
 
-  const originOk = origin ? origin === expected : true;
-  let refererOk = true;
+  const originIsNull = origin.trim().toLowerCase() === "null";
+  const originMatches = origin ? origin === expected : false;
+  let refererMatches = false;
   if (referer) {
     try {
       const parsed = new URL(referer);
-      refererOk = `${parsed.protocol}//${parsed.host}` === expected;
+      refererMatches = `${parsed.protocol}//${parsed.host}` === expected;
     } catch {
-      refererOk = false;
+      refererMatches = false;
     }
   }
 
@@ -228,7 +275,21 @@ function requireSameOrigin(req, res, next) {
     sendJson(res, 403, { error: "csrf_violation" }, { Vary: "Origin" });
     return;
   }
-  if (!originOk || !refererOk) {
+  // Fast-path: valid, non-null Origin header matches expected.
+  if (originMatches) {
+    next();
+    return;
+  }
+
+  // Fail closed when a non-null Origin is present but mismatching.
+  // (Browsers should not send a mismatching Origin for same-origin requests.)
+  if (origin && !originIsNull) {
+    sendJson(res, 403, { error: "csrf_violation" }, { Vary: "Origin" });
+    return;
+  }
+
+  // Fallback: accept same-origin Referer (important when Origin is `null`).
+  if (!refererMatches) {
     sendJson(res, 403, { error: "csrf_violation" }, { Vary: "Origin" });
     return;
   }
@@ -356,6 +417,14 @@ function requireStudentOrTeacher(req, res, next) {
 
 function requireTeacher(req, res, next) {
   if (!rolesAllowTeacher(req.gustavMe?.roles)) {
+    sendJson(res, 403, { error: "forbidden" });
+    return;
+  }
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!rolesAllowAdmin(req.gustavMe?.roles)) {
     sendJson(res, 403, { error: "forbidden" });
     return;
   }
@@ -599,7 +668,7 @@ async function main() {
     sendJson(res, 200, req.gustavMe);
   });
 
-  app.get("/editor", requireTeacher, (_req, res) => {
+  app.get("/editor", requireAdmin, (_req, res) => {
     sendHtml(
       res,
       200,
@@ -618,7 +687,7 @@ async function main() {
         "</style>",
         "</head><body>",
         "<h1>H5P Editor (Phase 1)</h1>",
-        "<p class=\"muted\">Trusted-content model: only <code>teacher</code>/<code>admin</code> may install libraries and create/update content.</p>",
+        "<p class=\"muted\">Admin-only debug UI. Trusted-content model: only <code>teacher</code>/<code>admin</code> may install libraries and create/update content.</p>",
         "<div class=\"box\">",
         "<h2>1) Install content-type libraries (admin-managed)</h2>",
         "<p>If you see <code>missing_libraries</code> on import, install the missing libraries first.</p>",
@@ -789,6 +858,7 @@ async function main() {
       // inline `<script type="module">` do not swallow the remainder of the
       // module (the browser treats the whole script as a single line otherwise).
       ].join("\n"),
+      { "Content-Security-Policy": CSP_DEBUG_HTML },
     );
   });
 
@@ -1043,12 +1113,12 @@ async function main() {
     },
   );
 
-  app.get("/player", async (req, res) => {
+  app.get("/player", requireAdmin, async (req, res) => {
     const initialContentId =
       typeof req.query.content_id === "string" ? req.query.content_id : "";
     // NOTE: This debug page uses the same webcomponents + model endpoint as the
-    // embedded GUSTAV UI. Teachers can load any content id; students must
-    // provide a course id so `/player/model` can verify visibility.
+    // embedded GUSTAV UI. The route itself is admin-only; `/player/model`
+    // still enforces student visibility checks (course scope + released tasks).
     sendHtml(
       res,
       200,
@@ -1059,7 +1129,7 @@ async function main() {
         "<title>H5P Player</title>",
         "</head><body>",
         "<h1>H5P Player</h1>",
-        "<p class=\"text-muted\">Debug UI. The real integration lives inside GUSTAV pages.</p>",
+        "<p class=\"text-muted\">Admin-only debug UI. The real integration lives inside GUSTAV pages.</p>",
         "<div style=\"display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap;\">",
         `  <label>Content ID <input id="contentId" value="${String(initialContentId).replace(/\"/g, "&quot;")}" /></label>`,
         "  <label>Course ID (students) <input id=\"courseId\" value=\"\" /></label>",
@@ -1116,6 +1186,7 @@ async function main() {
         "</script>",
         "</body></html>",
       ].join("\n"),
+      { "Content-Security-Policy": CSP_DEBUG_HTML },
     );
   });
 

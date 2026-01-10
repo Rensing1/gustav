@@ -54,8 +54,11 @@ async def test_prod_csp_omits_unsafe_inline_and_sets_hsts():
         assert r.status_code == 200
         csp = r.headers.get("Content-Security-Policy", "")
         assert csp and "unsafe-inline" not in csp
+        # Regression guard: ensure common CSP sources are syntactically valid.
+        # In particular, `img-src` must allow `data:` with the colon (no stray quotes).
+        assert "img-src 'self' data:" in csp
+        assert "img-src 'self' data'" not in csp
         # HSTS should be set in prod (covered elsewhere, re-assert here for completeness)
         assert "Strict-Transport-Security" in r.headers
     finally:
         main.SETTINGS.override_environment(None)
-

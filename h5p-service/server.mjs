@@ -902,8 +902,6 @@ async function main() {
       typeof req.query.course_id === "string" ? req.query.course_id : undefined;
     const contextId =
       typeof req.query.context_id === "string" ? req.query.context_id : undefined;
-    const asUserId =
-      typeof req.query.as_user_id === "string" ? req.query.as_user_id : undefined;
     const readOnlyStateRaw =
       typeof req.query.read_only_state === "string" ? req.query.read_only_state : undefined;
     const readOnlyState = readOnlyStateRaw === "true";
@@ -954,7 +952,6 @@ async function main() {
         showCopyButton: false,
         showLicenseButton: false,
         contextId,
-        asUserId,
         readOnlyState,
       });
       const out = {
@@ -1153,13 +1150,12 @@ async function main() {
         "",
         "    const player = document.createElement('h5p-player');",
         "    player.setAttribute('content-id', cid);",
-        "    player.loadContentCallback = async (contentId, contextId, asUserId, readOnlyState) => {",
+        "    player.loadContentCallback = async (contentId, contextId, _ignoredUserId, readOnlyState) => {",
         "      const url = new URL('/h5p/player/model', window.location.origin);",
         "      url.searchParams.set('content_id', contentId);",
         "      const courseId = (courseEl?.value || '').trim();",
         "      if (courseId) url.searchParams.set('course_id', courseId);",
         "      if (contextId) url.searchParams.set('context_id', contextId);",
-        "      if (asUserId) url.searchParams.set('as_user_id', asUserId);",
         "      if (readOnlyState) url.searchParams.set('read_only_state', 'true');",
         "      const r = await fetch(url.toString(), { credentials: 'include' });",
         "      const data = await r.json().catch(() => ({}));",

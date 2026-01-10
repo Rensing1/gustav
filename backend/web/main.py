@@ -292,7 +292,7 @@ async def security_headers(request: Request, call_next):
         # Harden CSP in production: avoid 'unsafe-inline' to reduce XSS surface.
         csp = (
             "default-src 'self'; script-src 'self'; style-src 'self'; "
-            f"img-src 'self' data'; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
+            f"img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
         )
     else:
         # Developer experience: allow inline for local SSR templates/components.

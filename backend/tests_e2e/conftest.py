@@ -22,6 +22,48 @@ except Exception:
     pass
 
 
+def _configure_requests_tls_for_local_e2e() -> None:
+    """
+    E2E tests talk to `https://app.localhost` / `https://id.localhost` via Caddy.
+
+    In the default local setup, Caddy uses a locally-generated certificate which
+    is *not* trusted by Python's CA store inside the dev container.
+
+    To keep E2E tests runnable without manual CA installation, we default to
+    `verify=False` when RUN_E2E=1. If you do have a trusted CA bundle, set
+    `E2E_VERIFY_TLS=1` to re-enable certificate verification.
+    """
+    if os.getenv("RUN_E2E", "0") != "1":
+        return
+    if os.getenv("E2E_VERIFY_TLS", "0") == "1":
+        return
+    try:
+        import warnings
+        import urllib3  # type: ignore
+        from urllib3.exceptions import InsecureRequestWarning  # type: ignore
+        urllib3.disable_warnings(InsecureRequestWarning)
+        warnings.filterwarnings("ignore", category=InsecureRequestWarning)
+    except Exception:
+        pass
+    try:
+        import requests  # type: ignore
+        from requests.sessions import Session  # type: ignore
+
+        original_request = Session.request
+
+        def request_with_insecure_default(self, method, url, **kwargs):  # type: ignore[no-untyped-def]
+            kwargs.setdefault("verify", False)
+            return original_request(self, method, url, **kwargs)
+
+        Session.request = request_with_insecure_default  # type: ignore[assignment]
+    except Exception:
+        # If requests isn't available, individual tests may fail with a clearer error.
+        return
+
+
+_configure_requests_tls_for_local_e2e()
+
+
 # Ensure backend/web is importable if needed by E2E helpers
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"

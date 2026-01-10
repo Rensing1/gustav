@@ -1,12 +1,16 @@
 """
-E2E: H5P Phase-1 roundtrip (create/save/load) through the `/h5p/*` service.
+E2E: H5P finishedData ingest must work even when the browser sends `Origin: null`.
 
-Trusted-content model:
-    All teachers are trusted. H5P packages/libraries are treated as executable
-    code and may only be imported/updated/exported by role `teacher` (or `admin`).
+Why:
+    Some H5P embed modes can end up sending `Origin: null` (e.g., sandboxed iframes).
+    We still need to:
+      - accept the request when a same-origin Referer is present, and
+      - forward the finished score to the Learning API so Teacher dashboards can
+        read progress from `learning_submissions(kind='h5p')`.
 
-Proof strategy for "save" without browser automation:
-    Import (.h5p) → Player load → Export (.h5p) → Re-import → Player load.
+Regression:
+    The H5P service previously rejected `Origin: null` even with a valid Referer,
+    and its internal forwarding logic failed to fall back to Referer parsing.
 """
 
 from __future__ import annotations
@@ -17,7 +21,7 @@ import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import pytest
 import requests
@@ -118,7 +122,6 @@ def _kc_add_realm_role(token: str, user_id: str, role_name: str) -> None:
     role = _kc_get_role(token, role_name)
     url = f"{KC_BASE}/admin/realms/{REALM}/users/{user_id}/role-mappings/realm"
     r = requests.post(url, headers=_kc_headers(token), json=[role], timeout=10)
-    # 204 No Content on success
     assert r.status_code in (204, 200), f"Failed to add role {role_name}: {r.status_code} {r.text}"
 
 
@@ -176,104 +179,130 @@ def _build_fixture_h5p_bytes() -> bytes:
     return buf.getvalue()
 
 
-def _assert_no_external_http_urls(html: str) -> None:
-    """Ensure HTML does not reference external http(s) URLs (offline-first)."""
-    for m in re.finditer(r"https?://[^\s\"'<>]+", html):
-        url = m.group(0)
-        host = (urlparse(url).hostname or "").lower()
-        assert host == "app.localhost", f"Unexpected external URL in HTML: {url}"
-
-
-def test_h5p_import_export_roundtrip():
+def test_h5p_finisheddata_accepts_origin_null_and_persists_learning_submission():
     _wait_for(f"{KC_BASE}/realms/{REALM}/.well-known/openid-configuration")
     _wait_for(f"{WEB_BASE}/health")
     _wait_for(f"{WEB_BASE}/h5p/healthz")
 
     token = _kc_admin_token()
 
-    teacher_email = f"e2e_teacher_{int(time.time())}@example.com"
+    teacher_email = f"e2e_teacher_finisheddata_{int(time.time())}@example.com"
     teacher_pw = "Passw0rd!e2e"
     teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
     _kc_add_realm_role(token, teacher_id, "teacher")
 
-    admin_email = f"e2e_admin_{int(time.time())}@example.com"
-    admin_pw = "Passw0rd!e2e"
-    admin_id = _kc_create_user(token, admin_email, admin_pw)
-    _kc_add_realm_role(token, admin_id, "admin")
-
-    student_email = f"e2e_student_{int(time.time())}@example.com"
+    student_email = f"e2e_student_finisheddata_{int(time.time())}@example.com"
     student_pw = "Passw0rd!e2e"
-    _kc_create_user(token, student_email, student_pw)
+    student_id = _kc_create_user(token, student_email, student_pw)
+    _kc_add_realm_role(token, student_id, "student")
 
     teacher_sess = requests.Session()
     _login_via_oidc(teacher_sess, email=teacher_email, password=teacher_pw)
-    admin_sess = requests.Session()
-    _login_via_oidc(admin_sess, email=admin_email, password=admin_pw)
     student_sess = requests.Session()
     _login_via_oidc(student_sess, email=student_email, password=student_pw)
 
+    # Import a minimal H5P package to obtain a content_id.
     fixture_bytes = _build_fixture_h5p_bytes()
-
-    # 1) Import (create)
-    import_headers = {
-        "Origin": WEB_BASE,
-        "Referer": f"{WEB_BASE}/h5p/editor",
-    }
     r_import = teacher_sess.post(
         f"{WEB_BASE}/h5p/contents/import",
         files={"file": ("minimal.h5p", fixture_bytes, "application/zip")},
-        headers=import_headers,
+        headers={"Origin": WEB_BASE, "Referer": f"{WEB_BASE}/courses"},
         timeout=60,
     )
     assert r_import.status_code in (200, 201), f"Import failed: {r_import.status_code} {r_import.text}"
-    body = r_import.json()
-    assert isinstance(body, dict) and isinstance(body.get("content_id"), str) and body["content_id"]
-    content_id_1 = body["content_id"]
+    content_id = r_import.json().get("content_id")
+    assert isinstance(content_id, str) and content_id
 
-    # 2) Load (player debug page is admin-only)
-    r_forbidden = student_sess.get(
-        f"{WEB_BASE}/h5p/player",
-        params={"content_id": content_id_1},
+    # Create course + unit + released section + H5P task.
+    r_course = teacher_sess.post(
+        f"{WEB_BASE}/api/teaching/courses",
+        json={"title": f"E2E finishedData {int(time.time())}"},
+        headers={"Origin": WEB_BASE},
+        timeout=20,
+    )
+    assert r_course.status_code == 201, f"Course create failed: {r_course.status_code} {r_course.text}"
+    course_id = r_course.json().get("id")
+    assert isinstance(course_id, str) and course_id
+
+    r_unit = teacher_sess.post(
+        f"{WEB_BASE}/api/teaching/units",
+        json={"title": f"E2E Unit {int(time.time())}"},
+        headers={"Origin": WEB_BASE},
+        timeout=20,
+    )
+    assert r_unit.status_code == 201, f"Unit create failed: {r_unit.status_code} {r_unit.text}"
+    unit_id = r_unit.json().get("id")
+    assert isinstance(unit_id, str) and unit_id
+
+    r_section = teacher_sess.post(
+        f"{WEB_BASE}/api/teaching/units/{unit_id}/sections",
+        json={"title": "Section A"},
+        headers={"Origin": WEB_BASE},
+        timeout=20,
+    )
+    assert r_section.status_code == 201, f"Section create failed: {r_section.status_code} {r_section.text}"
+    section_id = r_section.json().get("id")
+    assert isinstance(section_id, str) and section_id
+
+    r_task = teacher_sess.post(
+        f"{WEB_BASE}/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+        json={"instruction_md": "H5P task", "h5p": {"content_id": content_id, "display_options": {}}},
+        headers={"Origin": WEB_BASE},
+        timeout=20,
+    )
+    assert r_task.status_code == 201, f"Task create failed: {r_task.status_code} {r_task.text}"
+    task_id = r_task.json().get("id")
+    assert isinstance(task_id, str) and task_id
+
+    r_mod = teacher_sess.post(
+        f"{WEB_BASE}/api/teaching/courses/{course_id}/modules",
+        json={"unit_id": unit_id},
+        headers={"Origin": WEB_BASE},
+        timeout=20,
+    )
+    assert r_mod.status_code == 201, f"Module create failed: {r_mod.status_code} {r_mod.text}"
+    module_id = r_mod.json().get("id")
+    assert isinstance(module_id, str) and module_id
+
+    r_release = teacher_sess.patch(
+        f"{WEB_BASE}/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
+        json={"visible": True},
+        headers={"Origin": WEB_BASE},
+        timeout=20,
+    )
+    assert r_release.status_code == 200, f"Release failed: {r_release.status_code} {r_release.text}"
+
+    # Enroll the student into the course.
+    r_me = student_sess.get(f"{WEB_BASE}/api/me", timeout=20)
+    assert r_me.status_code == 200
+    student_sub = r_me.json().get("sub")
+    assert isinstance(student_sub, str) and student_sub
+
+    r_add = teacher_sess.post(
+        f"{WEB_BASE}/api/teaching/courses/{course_id}/members",
+        json={"student_sub": student_sub},
+        headers={"Origin": WEB_BASE},
+        timeout=20,
+    )
+    assert r_add.status_code in (201, 204), f"Add member failed: {r_add.status_code} {r_add.text}"
+
+    # Main regression check: finishedData with Origin=null must still persist a submission.
+    r_finished = student_sess.post(
+        f"{WEB_BASE}/h5p/finishedData",
+        params={"course_id": course_id, "task_id": task_id},
+        json={"contentId": content_id, "score": 1, "maxScore": 1, "opened": 1, "finished": 2, "time": 3},
+        headers={"Origin": "null", "Referer": f"{WEB_BASE}/learning/courses/{course_id}"},
         timeout=30,
     )
-    assert r_forbidden.status_code == 403
+    assert r_finished.status_code == 200, f"finishedData failed: {r_finished.status_code} {r_finished.text}"
+    assert r_finished.json() == {"success": True}
 
-    r_player = admin_sess.get(
-        f"{WEB_BASE}/h5p/player",
-        params={"content_id": content_id_1},
-        timeout=30,
+    r_hist = student_sess.get(
+        f"{WEB_BASE}/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+        params={"limit": 5, "offset": 0},
+        timeout=20,
     )
-    assert r_player.status_code == 200
-    assert "text/html" in (r_player.headers.get("content-type") or "")
-    _assert_no_external_http_urls(r_player.text)
-
-    # 3) Export (save proof part 1)
-    r_export = teacher_sess.get(
-        f"{WEB_BASE}/h5p/contents/{content_id_1}/export",
-        timeout=60,
-    )
-    assert r_export.status_code == 200
-    assert (r_export.headers.get("content-type") or "").startswith("application/zip")
-    assert r_export.content[:2] == b"PK", "Export must be a ZIP (.h5p)"
-
-    # 4) Re-import (save proof part 2)
-    r_reimport = teacher_sess.post(
-        f"{WEB_BASE}/h5p/contents/import",
-        files={"file": ("exported.h5p", r_export.content, "application/zip")},
-        headers=import_headers,
-        timeout=60,
-    )
-    assert r_reimport.status_code in (200, 201), f"Re-import failed: {r_reimport.status_code} {r_reimport.text}"
-    body2 = r_reimport.json()
-    assert isinstance(body2, dict) and isinstance(body2.get("content_id"), str) and body2["content_id"]
-    content_id_2 = body2["content_id"]
-    assert content_id_2 != content_id_1, "Re-import should create a new content id for deterministic proof"
-
-    # 5) Reload (admin-only debug player)
-    r_player2 = admin_sess.get(
-        f"{WEB_BASE}/h5p/player",
-        params={"content_id": content_id_2},
-        timeout=30,
-    )
-    assert r_player2.status_code == 200
-    _assert_no_external_http_urls(r_player2.text)
+    assert r_hist.status_code == 200, f"Submissions list failed: {r_hist.status_code} {r_hist.text}"
+    items = r_hist.json()
+    assert isinstance(items, list) and items, "Expected at least one saved H5P submission"
+    assert any((isinstance(it, dict) and it.get("kind") == "h5p") for it in items)

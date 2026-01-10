@@ -231,14 +231,8 @@ def test_h5p_player_serves_core_and_library_assets():
     teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
     _kc_add_realm_role(token, teacher_id, "teacher")
 
-    student_email = f"e2e_student_assets_{int(time.time())}@example.com"
-    student_pw = "Passw0rd!e2e"
-    _kc_create_user(token, student_email, student_pw)
-
     teacher_sess = requests.Session()
     _login_via_oidc(teacher_sess, email=teacher_email, password=teacher_pw)
-    student_sess = requests.Session()
-    _login_via_oidc(student_sess, email=student_email, password=student_pw)
 
     fixture_bytes = _build_fixture_h5p_bytes()
 
@@ -253,23 +247,28 @@ def test_h5p_player_serves_core_and_library_assets():
     content_id = r_import.json().get("content_id")
     assert isinstance(content_id, str) and content_id
 
-    r_player = student_sess.get(
-        f"{WEB_BASE}/h5p/player",
+    # Player debug HTML is admin-only; the embedded student UI uses /player/model.
+    r_model = teacher_sess.get(
+        f"{WEB_BASE}/h5p/player/model",
         params={"content_id": content_id},
         timeout=30,
     )
-    assert r_player.status_code == 200
-    assert "text/html" in (r_player.headers.get("content-type") or "")
-    _assert_no_external_http_urls(r_player.text)
+    assert r_model.status_code == 200, f"Player model failed: {r_model.status_code} {r_model.text}"
+    model = r_model.json()
+    scripts = model.get("scripts") or []
+    styles = model.get("styles") or []
+    assert isinstance(scripts, list) and scripts
+    assert isinstance(styles, list) and styles
+    urls = [u for u in scripts + styles if isinstance(u, str)]
+    _assert_no_external_http_urls("\n".join(urls))
 
-    urls = _extract_asset_urls(r_player.text)
     core_assets = _pick_sample(urls, prefix="/h5p/core/", limit=3)
     lib_assets = _pick_sample(urls, prefix="/h5p/libraries/", limit=3)
-    assert core_assets, "Player HTML must reference /h5p/core/* assets"
-    assert lib_assets, "Player HTML must reference /h5p/libraries/* assets"
+    assert core_assets, "Player model must reference /h5p/core/* assets"
+    assert lib_assets, "Player model must reference /h5p/libraries/* assets"
 
     for asset_url in core_assets + lib_assets:
-        r = student_sess.get(urljoin(f"{WEB_BASE}/", asset_url.lstrip("/")), timeout=20)
+        r = teacher_sess.get(urljoin(f"{WEB_BASE}/", asset_url.lstrip("/")), timeout=20)
         assert r.status_code == 200, f"Asset fetch failed {asset_url}: {r.status_code}"
         assert r.content, f"Asset must not be empty: {asset_url}"
 
@@ -328,15 +327,15 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
 
     token = _kc_admin_token()
 
-    teacher_email = f"e2e_teacher_webcomponents_{int(time.time())}@example.com"
-    teacher_pw = "Passw0rd!e2e"
-    teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
-    _kc_add_realm_role(token, teacher_id, "teacher")
+    admin_email = f"e2e_admin_webcomponents_{int(time.time())}@example.com"
+    admin_pw = "Passw0rd!e2e"
+    admin_id = _kc_create_user(token, admin_email, admin_pw)
+    _kc_add_realm_role(token, admin_id, "admin")
 
-    teacher_sess = requests.Session()
-    _login_via_oidc(teacher_sess, email=teacher_email, password=teacher_pw)
+    admin_sess = requests.Session()
+    _login_via_oidc(admin_sess, email=admin_email, password=admin_pw)
 
-    r_editor = teacher_sess.get(f"{WEB_BASE}/h5p/editor", timeout=30)
+    r_editor = admin_sess.get(f"{WEB_BASE}/h5p/editor", timeout=30)
     assert r_editor.status_code == 200
     assert "h5p-editor" in r_editor.text
 
@@ -360,12 +359,12 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
         "editor.contentId = undefined;" in r_editor.text
     ), "Editor must force a reload when switching from 'new' to an existing content id"
 
-    r_utils = teacher_sess.get(f"{WEB_BASE}/h5p/webcomponents/h5p-utils.js", timeout=20)
+    r_utils = admin_sess.get(f"{WEB_BASE}/h5p/webcomponents/h5p-utils.js", timeout=20)
     assert r_utils.status_code == 200
     assert "from './vendor/deepmerge.js'" in r_utils.text
     assert "from 'deepmerge'" not in r_utils.text
 
-    r_dom = teacher_sess.get(f"{WEB_BASE}/h5p/webcomponents/dom-utils.js", timeout=20)
+    r_dom = admin_sess.get(f"{WEB_BASE}/h5p/webcomponents/dom-utils.js", timeout=20)
     assert r_dom.status_code == 200
     assert "from './vendor/await-lock.js'" in r_dom.text
     assert "from 'await-lock'" not in r_dom.text
@@ -380,7 +379,7 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
         "/h5p/webcomponents/vendor/await-lock.js",
     ]
     for p in paths:
-        r = teacher_sess.get(f"{WEB_BASE}{p}", timeout=20)
+        r = admin_sess.get(f"{WEB_BASE}{p}", timeout=20)
         assert r.status_code == 200, f"Webcomponent asset must be served: {p} -> {r.status_code}"
         assert r.content, f"Webcomponent asset must not be empty: {p}"
         assert "javascript" in (r.headers.get("content-type") or "").lower(), (

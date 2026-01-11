@@ -57,6 +57,8 @@ GUSTAV wird entwickelt nach dem Prinzip „Contract‑First“ und setzt stark a
 - Unit- und Integrationstests:
   - `make test`
   - oder `.venv/bin/pytest -q`
+  - Gesamter Durchlauf (Unit + Supabase + Ollama + E2E): `make verify`
+  - Nach `supabase db reset`: `make reset-local` (resync + service recreate)
   - `make test-supabase`
   - `make test-ollama && make test-ollama-vision`
   - Für die JS-Behaviour-Tests (Teaching-Live-UI in `gustav.js`) wird eine aktuelle Node.js-Installation benötigt; in CI sollte Node verfügbar sein, damit diese Tests nicht dauerhaft „skipped“ laufen.

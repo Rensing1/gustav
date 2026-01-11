@@ -2,7 +2,9 @@
 Regression tests for test-environment hardening.
 
 Goals:
-- Unit/integration pytest runs must not auto-load .env (unless RUN_E2E=1).
+- Unit/in-process pytest runs must not auto-load `.env`.
+- Integration suites may load `.env`, but only when explicitly enabled via
+  RUN_* flags *and* marker selection (e.g. `pytest -m e2e`).
 - Global OIDC state store (main.STATE_STORE) needs a clean instance per test.
 """
 
@@ -20,10 +22,10 @@ def reload_backend_conftest(monkeypatch: pytest.MonkeyPatch):
     """
     Helper to reload `backend.tests.conftest` with controlled environment flags.
 
-    Returns a callable: (run_e2e_value) -> load_dotenv_call_count.
+    Returns a callable: (run_e2e_value) -> (module, load_dotenv_calls).
     """
 
-    def _reload(run_e2e_value: str | None) -> int:
+    def _reload(run_e2e_value: str | None) -> tuple[types.ModuleType, dict[str, int]]:
         module_name = "backend.tests.conftest"
         # Drop previously imported module so the guarded load logic re-runs.
         sys.modules.pop(module_name, None)
@@ -43,8 +45,8 @@ def reload_backend_conftest(monkeypatch: pytest.MonkeyPatch):
         else:
             monkeypatch.setenv("RUN_E2E", run_e2e_value)
 
-        importlib.import_module(module_name)
-        return load_calls["count"]
+        mod = importlib.import_module(module_name)
+        return mod, load_calls
 
     yield _reload
     monkeypatch.delenv("RUN_E2E", raising=False)
@@ -85,15 +87,28 @@ def reload_backend_e2e_conftest(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_dotenv_not_loaded_when_run_e2e_disabled(reload_backend_conftest):
-    calls = reload_backend_conftest(run_e2e_value=None)
-    assert calls == 0, "load_dotenv should be skipped for unit/integration pytest runs"
-    calls_zero = reload_backend_conftest(run_e2e_value="0")
-    assert calls_zero == 0, "load_dotenv should remain disabled when RUN_E2E != '1'"
+    mod, calls = reload_backend_conftest(run_e2e_value=None)
+    assert calls["count"] == 0, "load_dotenv should be skipped for the unit/in-process suite"
+    mod.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="e2e")))
+    assert calls["count"] == 0, "Marker selection alone must not load `.env` without RUN_* flags"
+
+    mod_zero, calls_zero = reload_backend_conftest(run_e2e_value="0")
+    assert calls_zero["count"] == 0, "load_dotenv should remain disabled when RUN_E2E != '1'"
+    mod_zero.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="e2e")))
+    assert calls_zero["count"] == 0
 
 
-def test_dotenv_loaded_when_run_e2e_enabled(reload_backend_conftest):
-    calls = reload_backend_conftest(run_e2e_value="1")
-    assert calls == 1, "RUN_E2E=1 should trigger dotenv loading for E2E"
+def test_run_e2e_requires_marker_selection(reload_backend_conftest):
+    mod, calls = reload_backend_conftest(run_e2e_value="1")
+    with pytest.raises(pytest.UsageError):
+        mod.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="")))
+    assert calls["count"] == 0, "Guard should reject accidental full-suite runs with RUN_E2E=1"
+
+
+def test_dotenv_loaded_when_run_e2e_enabled_and_marked(reload_backend_conftest):
+    mod, calls = reload_backend_conftest(run_e2e_value="1")
+    mod.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="e2e")))
+    assert calls["count"] == 1, "RUN_E2E=1 + marker selection should trigger dotenv loading"
 
 
 def test_e2e_conftest_gate_respects_run_e2e_flag(reload_backend_e2e_conftest):

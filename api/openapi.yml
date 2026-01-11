@@ -2308,6 +2308,94 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/learning/courses/{course_id}/h5p/contents/{content_id}/access:
+    get:
+      tags: [Learning]
+      summary: Check student access to an H5P content item (fail-closed)
+      description: >-
+        Returns 204 when the authenticated student is enrolled in the given course and the
+        `content_id` belongs to a released H5P task in that course. Returns 404 otherwise
+        (fail-closed to avoid leaking membership, release state or content existence).
+      operationId: checkLearningH5PContentAccess
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "Fail-closed: return 404 for not member / not released / unknown course."
+        - "Data minimization: 204 response has no body."
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+          description: H5P content id (numeric).
+      responses:
+        '204':
+          description: Allowed (student has access to this H5P content in the course)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '400':
+          description: Bad request (invalid_uuid | invalid_content_id)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden — caller is not a student
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found — not allowed (fail-closed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/learning/courses/{course_id}/units:
     get:
       tags: [Learning]

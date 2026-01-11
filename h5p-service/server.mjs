@@ -177,6 +177,15 @@ function parseCookies(cookieHeader) {
   return out;
 }
 
+function sanitizeHeaderFilename(value) {
+  // Content-Disposition is a response header and must never contain control
+  // characters (CR/LF). Node would reject invalid header chars, causing 500s.
+  // We keep this KISS: map to a conservative ASCII token.
+  const raw = String(value || "").trim();
+  const safe = raw.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").slice(0, 80);
+  return safe || "download";
+}
+
 function rolesAllowTeacher(roles) {
   if (!Array.isArray(roles)) return false;
   return roles.includes("admin") || roles.includes("teacher");
@@ -330,20 +339,28 @@ async function fetchGustavMe(cookieHeader) {
 
 async function fetchAllowedH5PContentIdsForCourse(courseId, cookieHeader) {
   const base = gustavWebInternalBase.replace(/\/+$/, "");
-  const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/sections?include=tasks&limit=100&offset=0`;
-  const r = await fetch(url, {
-    method: "GET",
-    headers: {
-      cookie: cookieHeader,
-      "cache-control": "no-store",
-    },
-  });
-  if (r.status !== 200) {
-    return { ok: false, status: r.status };
-  }
-  const payload = await r.json();
+  const limit = 100;
+  let offset = 0;
   const allowed = new Set();
-  if (Array.isArray(payload)) {
+
+  // Defensive pagination:
+  // The learning endpoint is paginated. A single request with offset=0 could
+  // miss H5P tasks in large courses and wrongly forbid students (false-deny).
+  for (let page = 0; page < 50; page++) {
+    const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/sections?include=tasks&limit=${limit}&offset=${offset}`;
+    const r = await fetch(url, {
+      method: "GET",
+      headers: {
+        cookie: cookieHeader,
+        "cache-control": "no-store",
+      },
+    });
+    if (r.status !== 200) {
+      return { ok: false, status: r.status };
+    }
+    const payload = await r.json();
+    if (!Array.isArray(payload) || payload.length === 0) break;
+
     for (const entry of payload) {
       const tasks = entry?.tasks;
       if (!Array.isArray(tasks)) continue;
@@ -356,7 +373,11 @@ async function fetchAllowedH5PContentIdsForCourse(courseId, cookieHeader) {
         if (typeof cid === "string" && cid) allowed.add(cid);
       }
     }
+
+    if (payload.length < limit) break;
+    offset += limit;
   }
+
   return { ok: true, allowedContentIds: allowed };
 }
 
@@ -1253,7 +1274,8 @@ async function main() {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename=${contentId}.h5p`);
+    const safeName = sanitizeHeaderFilename(contentId);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.h5p"`);
     await h5pEditor.exportContent(contentId, res, req.user);
   });
 
@@ -1265,15 +1287,21 @@ async function main() {
       return;
     }
 
+    // CSRF defense-in-depth: `/ajax` is a cookie-authenticated browser POST endpoint.
+    // Require same-origin indicators (Origin/Referer) for *all* actions.
+    requireSameOrigin(req, res, () => {});
+    if (res.headersSent) return;
+
+    // Security: H5P Ajax responses must not be cacheable.
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Vary", "Origin");
+
     const writeActions = new Set(["files", "library-install", "library-upload", "get-content"]);
     if (writeActions.has(action)) {
       if (!rolesAllowTeacher(req.gustavMe?.roles)) {
         sendJson(res, 403, { error: "forbidden" });
         return;
       }
-      // Library/content writes must be same-origin.
-      requireSameOrigin(req, res, () => {});
-      if (res.headersSent) return;
     }
 
     const toH5pUpload = (multerFile) => {
@@ -1416,9 +1444,8 @@ async function main() {
               body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
             });
             if (!r.ok) {
-              const payload = await r.text().catch(() => "");
               // eslint-disable-next-line no-console
-              console.warn(`h5p finishedData → learning submission failed: ${r.status} ${payload}`);
+              console.warn(`h5p finishedData → learning submission failed: ${r.status}`);
             }
           }
         }

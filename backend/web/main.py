@@ -90,6 +90,26 @@ def _load_poll_interval_from_env() -> int:
         return 60
     return value
 
+def _running_under_pytest() -> bool:
+    """Detect a pytest process (including collection).
+
+    Why:
+        `main.py` is imported by unit tests (ASGITransport). Import-time side
+        effects like `.env` loading or startup guards must not run implicitly
+        during pytest collection, otherwise the suite becomes environment-
+        dependent and can abort with `SystemExit`.
+    """
+    import sys
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
+    if any(name == "pytest" or name.startswith("pytest.") for name in sys.modules):
+        return True
+    if any(name == "_pytest" or name.startswith("_pytest.") for name in sys.modules):
+        return True
+    if any("pytest" in (arg or "").lower() for arg in sys.argv):
+        return True
+    return False
+
 def _should_load_dotenv() -> bool:
     """Decide if we should load a local .env file.
 
@@ -97,9 +117,8 @@ def _should_load_dotenv() -> bool:
     - Allow explicit opt-out/opt-in via GUSTAV_ENABLE_DOTENV (default true
       outside pytest).
     """
-    import sys
-    # Under pytest, do not load .env – tests provide their own env.
-    if "pytest" in sys.modules or os.getenv("PYTEST_CURRENT_TEST"):
+    # Under pytest, do not load `.env` – tests provide their own env.
+    if _running_under_pytest():
         return False
     flag = (os.getenv("GUSTAV_ENABLE_DOTENV", "true") or "").strip().lower()
     return flag in ("1", "true", "yes")
@@ -122,7 +141,9 @@ except Exception:  # pragma: no cover
     except Exception:
         _cfg = None  # as a last resort, skip guard (should not happen in app)
 if _cfg is not None:
-    _cfg.ensure_secure_config_on_startup()
+    # Startup guards are for real deployments, not for pytest collection.
+    if not _running_under_pytest():
+        _cfg.ensure_secure_config_on_startup()
 
 # --- App & Settings Setup -------------------------------------------------------
 

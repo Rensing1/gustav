@@ -32,8 +32,10 @@ ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
 
 
-def _wait_for(url: str, *, expected=200, timeout_s: int = 60) -> None:
+def _wait_for(url: str, *, expected=200, timeout_s: int | None = None) -> None:
     """Poll a URL until it responds with the expected status or fail fast."""
+    if timeout_s is None:
+        timeout_s = int(os.getenv("E2E_READY_TIMEOUT_S", "60"))
     deadline = time.time() + timeout_s
     last_err: Exception | None = None
     while time.time() < deadline:

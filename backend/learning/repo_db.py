@@ -485,6 +485,46 @@ class DBLearningRepo:
                 sections.append(entry)
             return sections
 
+    def is_h5p_content_released_for_student(self, *, student_sub: str, course_id: str, content_id: str) -> bool:
+        """Return True when the student may access this H5P content in the course.
+
+        Why:
+            The H5P sidecar needs a small, fail-closed authorization check to
+            prevent enumeration of all released tasks/IDs and to avoid fragile
+            pagination in the browser-facing service.
+
+        Security:
+            - Enforces membership via course_memberships.
+            - Enforces release visibility via module_section_releases.visible.
+            - Restricts to `unit_tasks.kind='h5p'` and matching `h5p_content_id`.
+            - Runs under gustav_limited with `app.current_sub` set.
+        """
+        course_uuid = str(UUID(course_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                cur.execute(
+                    """
+                    select exists (
+                             select 1
+                               from public.course_memberships cm
+                               join public.course_modules m on m.course_id = cm.course_id
+                               join public.unit_sections s on s.unit_id = m.unit_id
+                               join public.unit_tasks t on t.section_id = s.id
+                               join public.module_section_releases r
+                                 on r.course_module_id = m.id
+                                and r.section_id = s.id
+                              where cm.course_id = %s
+                                and cm.student_id = %s
+                                and t.kind = 'h5p'
+                                and t.h5p_content_id = %s
+                                and coalesce(r.visible, false) = true
+                           )
+                    """,
+                    (course_uuid, student_sub, str(content_id)),
+                )
+                return bool((cur.fetchone() or [False])[0])
+
     # ------------------------------------------------------------------
     def create_submission(self, data: SubmissionInput) -> dict:
         """Persist a student submission after enforcing membership and attempts.

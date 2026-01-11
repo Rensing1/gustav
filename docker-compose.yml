@@ -155,6 +155,9 @@ services:
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
       - WORKER_POLL_INTERVAL=${WORKER_POLL_INTERVAL:-0.5}
+      # Avoid flaky unit tests when a docker worker is running while pytest
+      # runs the app in-process: skip jobs tagged with `_gustav_source=pytest`.
+      - WORKER_SKIP_PYTEST_JOBS=${WORKER_SKIP_PYTEST_JOBS:-true}
       - AUTO_CREATE_STORAGE_BUCKETS=false
       # Allow storage3 fallback in container even when using host.docker.internal
       - SUPABASE_FALLBACK_STORAGE3=true

@@ -228,6 +228,12 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
     lease_until = now + timedelta(seconds=_lease_duration_seconds())
     queue_table = _resolve_queue_table(conn)
     with conn.cursor() as cur:
+        # Local dev quality-of-life: when developers run unit tests (in-process)
+        # while also having the docker `learning-worker` running, the container
+        # worker must not consume jobs created by pytest and mutate DB state.
+        pytest_filter = _sql.SQL("")
+        if _truthy_env("WORKER_SKIP_PYTEST_JOBS", default=False):
+            pytest_filter = _sql.SQL("and coalesce(payload->>'_gustav_source', '') <> 'pytest'")
         stmt = _sql.SQL(
             """
             with candidate as (
@@ -237,14 +243,17 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
                        retry_count
                   from public.{}
                  where (
-                          status = 'queued'
-                          and visible_at <= %s + interval '30 seconds'
+                          (
+                              status = 'queued'
+                              and visible_at <= %s + interval '30 seconds'
+                          )
+                          or (
+                              status = 'leased'
+                              and leased_until is not null
+                              and leased_until <= %s
+                          )
                        )
-                    or (
-                          status = 'leased'
-                          and leased_until is not null
-                          and leased_until <= %s
-                       )
+                  {pytest_filter}
                  order by visible_at asc, created_at asc
                  limit %s
                  for update skip locked
@@ -261,7 +270,7 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
                      candidate.retry_count,
                      candidate.payload
             """
-        ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table))
+        ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table), pytest_filter=pytest_filter)
         cur.execute(stmt, (now, now, limit, str(lease_key), lease_until))
         rows = cur.fetchall()
     jobs: list[QueuedJob] = []

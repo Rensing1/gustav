@@ -41,6 +41,18 @@ def _sanitize_error_message(value: Optional[str]) -> Optional[str]:
     return scrubbed
 
 
+def _running_under_pytest() -> bool:
+    """Return True when running under pytest (including test collection).
+
+    Why:
+        Unit tests run the FastAPI app in-process (ASGITransport) against the
+        same local Postgres that docker services use. If a local docker
+        `learning-worker` is running in parallel, it can consume queue jobs
+        created by tests and mutate DB state asynchronously, making tests flaky.
+    """
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
 def _default_app_login_dsn() -> str:
     """Return the local dev DSN using the app login role (e.g. gustav_app).
 
@@ -858,6 +870,10 @@ class DBLearningRepo:
                         "instruction_md": instruction_md,
                         "hints_md": hints_md,
                     }
+                    if _running_under_pytest():
+                        # Tag jobs created by in-process tests so a local docker worker
+                        # can be configured to ignore them (avoid race conditions).
+                        job_payload["_gustav_source"] = "pytest"
                     queue_table = self._resolve_queue_table(cur)
                     insert_sql = sql.SQL(
                         "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"

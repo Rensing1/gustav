@@ -18,7 +18,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from backend.learning.repo_db import DBLearningRepo
 from .security import _is_same_origin
@@ -39,6 +39,10 @@ from backend.learning.usecases.submissions import (
     CreateSubmissionUseCase,
     ListSubmissionsInput,
     ListSubmissionsUseCase,
+)
+from backend.learning.usecases.h5p_access import (
+    CheckH5PContentAccessInput,
+    CheckH5PContentAccessUseCase,
 )
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 try:
@@ -221,6 +225,34 @@ def _require_strict_same_origin(request: Request) -> bool:
         return False
     return _is_same_origin(request)
 
+def _redact_origin_for_diag_log(raw_value: str) -> str:
+    """Return a safe origin string for diagnostic logs (no path/query).
+
+    Why:
+        `CSRF_DIAG_LOG` is an optional debug mechanism. We must not write full
+        Referer URLs (paths/queries may contain PII or tokens) to disk.
+
+    Behavior:
+        - Accept an Origin or Referer header value.
+        - Return only `scheme://host[:port]` when parseable.
+        - Return "?" for invalid or empty inputs.
+    """
+    value = str(raw_value or "").strip()
+    if not value:
+        return "?"
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.netloc:
+            scheme = parsed.scheme.strip()
+            netloc = parsed.netloc.strip()
+            if scheme and netloc:
+                return f"{scheme}://{netloc}"
+    except Exception:
+        pass
+    return "?"
+
 def _current_environment() -> str:
     """Return the current app environment string.
 
@@ -309,7 +341,8 @@ def _require_student(request: Request):
     if not has_student:
         # Add lightweight diagnostics for non-CSRF 403s to aid flaky runs.
         try:
-            origin_hdr = str(request.headers.get("origin") or request.headers.get("referer") or "")
+            raw_origin = str(request.headers.get("origin") or request.headers.get("referer") or "")
+            origin_hdr = _redact_origin_for_diag_log(raw_origin)
             scheme = (request.url.scheme or "http").lower()
             host_hdr = (request.headers.get("host") or request.url.hostname or "").lower()
             if ":" in host_hdr:
@@ -460,6 +493,54 @@ async def list_sections(
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
     return JSONResponse(sections, headers=_cache_headers_success())
+
+
+@learning_router.get("/api/learning/courses/{course_id}/h5p/contents/{content_id}/access")
+async def check_h5p_content_access(request: Request, course_id: str, content_id: str):
+    """Return 204 when the student may access an H5P content id (fail-closed).
+
+    Why:
+        The H5P sidecar must verify that a student is allowed to load a given
+        H5P `content_id` within a course, without enumerating all released tasks.
+
+    Behavior:
+        - 204: content is part of a released H5P task in the course for this student
+        - 404: not allowed / not member / not released (fail-closed)
+        - 400: invalid UUID or invalid content id
+
+    Permissions:
+        Caller must have role `student`.
+    """
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    try:
+        UUID(course_id)
+    except ValueError:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_uuid"},
+            status_code=400,
+            headers=_cache_headers_error(),
+        )
+
+    if not isinstance(content_id, str) or not content_id.isdigit():
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_content_id"},
+            status_code=400,
+            headers=_cache_headers_error(),
+        )
+
+    allowed = CheckH5PContentAccessUseCase(_get_repo()).execute(
+        CheckH5PContentAccessInput(
+            student_sub=str(user.get("sub", "")),
+            course_id=course_id,
+            content_id=content_id,
+        )
+    )
+    if allowed:
+        return Response(status_code=204, headers=_cache_headers_success())
+    return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
 
 @learning_router.get("/api/learning/courses")
@@ -799,7 +880,8 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         # Permission-denied at the use case layer (e.g., not enrolled or task
         # not released). Attach a diagnostic header to distinguish from CSRF.
         try:
-            origin_hdr = str(request.headers.get("origin") or request.headers.get("referer") or "")
+            raw_origin = str(request.headers.get("origin") or request.headers.get("referer") or "")
+            origin_hdr = _redact_origin_for_diag_log(raw_origin)
             scheme = (request.url.scheme or "http").lower()
             host_hdr = (request.headers.get("host") or request.url.hostname or "").lower()
             if ":" in host_hdr:

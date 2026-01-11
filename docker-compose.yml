@@ -100,6 +100,8 @@ services:
       - AUTH_CACHE_TTL_SECONDS=30
       # Filesystem-based storage root (mounted from repo under supabase/storage)
       - H5P_STORAGE_ROOT=/data/h5p
+      # Hard limit for uploaded .h5p ZIP packages (defense-in-depth).
+      - H5P_MAX_UPLOAD_BYTES=104857600
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

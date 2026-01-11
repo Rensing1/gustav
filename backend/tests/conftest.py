@@ -14,7 +14,14 @@ import pytest
 try:
     from dotenv import load_dotenv  # type: ignore
     if os.getenv("RUN_E2E", "0") == "1":
-        load_dotenv()
+        # IMPORTANT:
+        # Tests import `backend/web/main.py` during collection time. If a developer
+        # has e.g. `GUSTAV_ENV=prod` exported in their shell, the import-time
+        # startup guard will raise SystemExit unless all prod secrets are set.
+        #
+        # In E2E runs we want deterministic configuration from the repo-local
+        # `.env`, therefore we explicitly override any pre-exported variables.
+        load_dotenv(override=True)
 except Exception:
     pass
 

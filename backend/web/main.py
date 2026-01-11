@@ -1013,7 +1013,9 @@ def _render_analysis_in_progress_hint() -> str:
     )
 
 
-def _enrich_submission_records_with_file_urls(records: list[dict]) -> None:
+def _enrich_submission_records_with_file_urls(
+    records: list[dict], *, storage_adapter: object | None = None
+) -> None:
     """Attach presigned download URLs to upload submissions for SSR previews.
 
     Why:
@@ -1023,6 +1025,10 @@ def _enrich_submission_records_with_file_urls(records: list[dict]) -> None:
         download URL server-side and pass it into the rendering helper as an
         extra key (`file_url`).
 
+    Testability:
+        The presign-capable storage adapter can be injected via `storage_adapter`
+        to keep this helper unit-testable without importing route modules.
+
     Security:
         This runs only after the records have been fetched via the Learning API
         using the current session cookie, so the caller is already authorised to
@@ -1030,10 +1036,13 @@ def _enrich_submission_records_with_file_urls(records: list[dict]) -> None:
         to the object key.
     """
     try:
-        import routes.learning as learning_routes  # type: ignore
         from backend.storage.config import get_submissions_bucket
 
-        adapter = getattr(learning_routes, "STORAGE_ADAPTER", None)
+        adapter = storage_adapter
+        if adapter is None:
+            import routes.learning as learning_routes  # type: ignore
+
+            adapter = getattr(learning_routes, "STORAGE_ADAPTER", None)
         if adapter is None or not hasattr(adapter, "presign_download"):
             return
         bucket = get_submissions_bucket()

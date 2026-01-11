@@ -30,7 +30,7 @@
  */
 
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { access, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
@@ -48,6 +48,7 @@ const uploadMaxBytes = Number.parseInt(
   10,
 );
 const themeStylesheetPath = "/h5p/theme/h5p-gustav.css";
+const reviewTokenSecret = String(process.env.H5P_REVIEW_TOKEN_SECRET || "").trim();
 
 const storageDirs = {
   root: storageRoot,
@@ -207,6 +208,56 @@ function sanitizeHeaderFilename(value) {
   const raw = String(value || "").trim();
   const safe = raw.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").slice(0, 80);
   return safe || "download";
+}
+
+function parseReviewToken(token) {
+  if (!reviewTokenSecret) return null;
+  if (typeof token !== "string" || !token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, sigB64] = parts;
+  let payloadBytes;
+  let sigBytes;
+  try {
+    payloadBytes = Buffer.from(payloadB64, "base64url");
+    sigBytes = Buffer.from(sigB64, "base64url");
+  } catch {
+    return null;
+  }
+
+  try {
+    const expected = createHmac("sha256", reviewTokenSecret).update(payloadBytes).digest();
+    if (sigBytes.length !== expected.length) return null;
+    if (!timingSafeEqual(sigBytes, expected)) return null;
+  } catch {
+    return null;
+  }
+
+  let obj;
+  try {
+    obj = JSON.parse(payloadBytes.toString("utf-8"));
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== "object") return null;
+
+  const teacherSub = obj.teacher_sub;
+  const studentSub = obj.student_sub;
+  const courseId = obj.course_id;
+  const taskId = obj.task_id;
+  const contentId = obj.content_id;
+  const exp = obj.exp;
+
+  if (typeof teacherSub !== "string" || !teacherSub) return null;
+  if (typeof studentSub !== "string" || !studentSub) return null;
+  if (typeof courseId !== "string" || !courseId) return null;
+  if (typeof taskId !== "string" || !taskId) return null;
+  if (typeof contentId !== "string" || !contentId) return null;
+  if (typeof exp !== "number" || !Number.isFinite(exp)) return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (exp <= now) return null;
+
+  return { teacherSub, studentSub, courseId, taskId, contentId, exp };
 }
 
 function rolesAllowTeacher(roles) {
@@ -634,6 +685,83 @@ async function main() {
   app.use(requireAuth);
   app.use(requireStudentOrTeacher);
 
+  // Teacher review "view as student" (read-only) for H5P user state.
+  //
+  // The embedded review player rewrites the `contentUserData` URL to include
+  // a short-lived `review_token`. For those requests we:
+  // - validate the token (fail-closed),
+  // - bind it to the authenticated teacher, and
+  // - impersonate the student for GET-only reads.
+  app.use((req, res, next) => {
+    const reviewToken = typeof req.query.review_token === "string" ? req.query.review_token : undefined;
+    if (!reviewToken) {
+      next();
+      return;
+    }
+    // The model endpoint validates the token separately and must see the real teacher user.
+    if (req.path === "/player/review") {
+      next();
+      return;
+    }
+
+    // Defense-in-depth: review is teacher-only.
+    if (!rolesAllowTeacher(req.gustavMe?.roles)) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+
+    // Review token must be valid and match the authenticated teacher.
+    const payload = parseReviewToken(reviewToken);
+    if (!payload) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+    if (payload.teacherSub !== req.user?.id) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+
+    // Strict read-only: block all non-GET requests when a review token is present.
+    if (req.method !== "GET") {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+
+    // Fail-closed: only allow the token to be used for content user data reads.
+    const m = req.path.match(/\/contentUserData\/([^/]+)/);
+    const contentIdFromPath = m?.[1] ? String(m[1]) : "";
+    if (!contentIdFromPath) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+    if (contentIdFromPath !== payload.contentId) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+
+    // Optional context binding: enforce when the runtime forwards it.
+    const contextId =
+      typeof req.query.contextId === "string"
+        ? req.query.contextId
+        : typeof req.query.context_id === "string"
+          ? req.query.context_id
+          : "";
+    if (contextId && contextId !== payload.taskId) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+
+    // Impersonate the student for GET reads so the runtime loads the student's state.
+    req.user = {
+      id: payload.studentSub,
+      name: payload.studentSub,
+      email: `${payload.studentSub}@local.invalid`,
+      type: "local",
+    };
+
+    next();
+  });
+
   // Overrides for Lumi webcomponents to keep browser ESM compatible without a bundler.
   // These files remove bare imports like `deepmerge` and `await-lock`.
   app.use(
@@ -1014,6 +1142,92 @@ async function main() {
           // Do not fail content loading when URL parsing fails.
         }
       }
+      sendJson(res, 200, out);
+    } catch (err) {
+      if (err?.httpStatusCode === 404) {
+        sendJson(res, 404, { error: "not_found" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" });
+    }
+  });
+
+  app.get("/player/review", requireTeacher, async (req, res) => {
+    const contentId =
+      typeof req.query.content_id === "string" ? req.query.content_id : undefined;
+    const contextId =
+      typeof req.query.context_id === "string" ? req.query.context_id : undefined;
+    const reviewToken =
+      typeof req.query.review_token === "string" ? req.query.review_token : undefined;
+
+    if (!contentId || !contextId || !reviewToken) {
+      sendJson(res, 400, { error: "invalid_request" });
+      return;
+    }
+
+    const payload = parseReviewToken(reviewToken);
+    if (!payload) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+    // Bind token to the authenticated teacher (prevents token re-use by other teachers).
+    if (payload.teacherSub !== req.user?.id) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+    // Bind content and task context (fail-closed).
+    if (payload.contentId !== contentId || payload.taskId !== contextId) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+
+    try {
+      const language = typeof req.query.language === "string" ? req.query.language : req.language;
+      const studentUser = {
+        id: payload.studentSub,
+        name: payload.studentSub,
+        email: `${payload.studentSub}@local.invalid`,
+        type: "local",
+      };
+      const model = await h5pPlayer.render(contentId, studentUser, language, {
+        showDownloadButton: false,
+        showEmbedButton: false,
+        showCopyButton: false,
+        showLicenseButton: false,
+        contextId,
+        // Review mode is always strict read-only.
+        readOnlyState: true,
+      });
+      const out = {
+        ...model,
+        embedTypes: ensureDivEmbedTypes(model?.embedTypes),
+        styles: ensureThemeStylesLast(model?.styles),
+      };
+
+      // Do not expose a finished-data endpoint in review mode (strict read-only).
+      if (out?.integration?.ajax?.setFinished) {
+        try {
+          delete out.integration.ajax.setFinished;
+        } catch {
+          // ignore
+        }
+      }
+
+      // Ensure subsequent userState reads carry the review token so we can
+      // impersonate the student server-side (GET-only).
+      if (out?.integration?.ajax?.contentUserData) {
+        try {
+          const base = "http://local.invalid";
+          const u = new URL(String(out.integration.ajax.contentUserData), base);
+          u.searchParams.set("review_token", String(reviewToken));
+          // Optional: forward the task context for defense-in-depth checks.
+          u.searchParams.set("context_id", String(contextId));
+          out.integration.ajax.contentUserData = `${u.pathname}${u.search || ""}`;
+        } catch {
+          // Do not fail model loading when URL parsing fails.
+        }
+      }
+
       sendJson(res, 200, out);
     } catch (err) {
       if (err?.httpStatusCode === 404) {

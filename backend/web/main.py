@@ -3719,7 +3719,8 @@ async def teaching_unit_live_detail_partial(
         return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Keine Einreichung vorhanden.</p></div>", status_code=200)
 
     created = Component.escape(str(data.get("created_at") or ""))
-    kind = Component.escape(str(data.get("kind") or ""))
+    kind_raw = str(data.get("kind") or "")
+    kind = Component.escape(kind_raw)
     body_raw = str(data.get("text_body") or "")
     feedback_md = str(data.get("feedback_md") or "")
     analysis_json = data.get("analysis_json")
@@ -3739,6 +3740,42 @@ async def teaching_unit_live_detail_partial(
         display_name = Component.escape(n or str(student_sub))
     except Exception:
         display_name = Component.escape(str(student_sub))
+
+    if kind_raw == "h5p":
+        h5p = data.get("h5p") if isinstance(data.get("h5p"), dict) else {}
+        content_id = Component.escape(str(h5p.get("content_id") or ""))
+        review_token = Component.escape(str(h5p.get("review_token") or ""))
+
+        score_raw = data.get("score_raw")
+        score_max = data.get("score_max")
+        score_txt = ""
+        try:
+            if score_raw is not None and score_max is not None:
+                score_txt = f" · Score: {int(score_raw)}/{int(score_max)}"
+        except Exception:
+            score_txt = ""
+
+        if not content_id:
+            inner = "<p class=\"text-muted\">H5P-Inhalt nicht verknüpft.</p>"
+        else:
+            inner = (
+                f"<div data-h5p-task-review-player=\"true\""
+                f" data-task-id=\"{Component.escape(str(task_id))}\""
+                f" data-content-id=\"{content_id}\""
+                f" data-review-token=\"{review_token}\">"
+                f"<p class=\"text-muted\" data-h5p-status>Lade H5P…</p>"
+                f"</div>"
+                f"<script src=\"/static/js/h5p_task_review_player.js?v=20260111-1\" defer></script>"
+            )
+
+        detail_html = (
+            f"<div class=\"card\">"
+            f"<h3>Einreichung von {display_name}</h3>"
+            f"<p class=\"text-muted\">Typ: {kind} · erstellt: {created}{Component.escape(score_txt)}</p>"
+            f"{inner}"
+            f"</div>"
+        )
+        return HTMLResponse(detail_html, status_code=200, headers={"Cache-Control": "private, no-store"})
 
     def _panel(name: str, inner: str, active: bool) -> str:
         hidden_attr = "" if active else " hidden"

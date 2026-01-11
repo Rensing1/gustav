@@ -76,6 +76,8 @@ services:
       # Share dev upload root with worker so Vision can read image bytes
       - STORAGE_VERIFY_ROOT=${STORAGE_VERIFY_ROOT:-/app/.tmp/dev_uploads}
       - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}
+      # Teacher-only H5P review capability tokens (must match h5p service).
+      - H5P_REVIEW_TOKEN_SECRET=${H5P_REVIEW_TOKEN_SECRET:-CHANGE_ME_DEV}
     restart: unless-stopped
     # All Supabase services reachable via shared external network
     networks:
@@ -102,6 +104,8 @@ services:
       - H5P_STORAGE_ROOT=/data/h5p
       # Hard limit for uploaded .h5p ZIP packages (defense-in-depth).
       - H5P_MAX_UPLOAD_BYTES=104857600
+      # Must match the web service secret (used to validate review tokens).
+      - H5P_REVIEW_TOKEN_SECRET=${H5P_REVIEW_TOKEN_SECRET:-CHANGE_ME_DEV}
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

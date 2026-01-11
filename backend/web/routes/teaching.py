@@ -1213,7 +1213,17 @@ def _load_average_scores_by_submission_id(
     owner_sub: str,
     submission_ids_by_student: dict[str, list[str]],
 ) -> dict[str, float | None]:
-    """Load analysis_json for submissions via RLS by impersonating each student."""
+    """Load average scores for submissions where analysis is completed.
+
+    Why:
+        The teacher live matrix must only display an average score once the
+        asynchronous analysis pipeline finished. Submissions that exist but are
+        still pending must expose `average_score=None` (not 0.0).
+
+    Security:
+        Reads happen under RLS by impersonating each student via
+        `app.current_sub`.
+    """
     if not submission_ids_by_student:
         return {}
     out: dict[str, float | None] = {}
@@ -1225,7 +1235,7 @@ def _load_average_scores_by_submission_id(
             try:
                 cur.execute(
                     """
-                    select id::text, analysis_json
+                    select id::text, analysis_status::text, analysis_json
                       from public.learning_submissions
                      where id = any(%s)
                     """,
@@ -1235,7 +1245,10 @@ def _load_average_scores_by_submission_id(
             except Exception as exc:
                 logger.warning("Unit live average score lookup failed — %s", exc)
                 rows = []
-            for submission_id, analysis_json in rows:
+            for submission_id, analysis_status, analysis_json in rows:
+                if str(analysis_status or "") != "completed":
+                    out[str(submission_id)] = None
+                    continue
                 out[str(submission_id)] = compute_average_score_from_analysis(analysis_json)
     finally:
         cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
@@ -4201,6 +4214,10 @@ async def get_latest_submission_detail(
         created_at: Any,
         completed_at: Any,
         kind: Any,
+        score_raw: Any = None,
+        score_max: Any = None,
+        h5p_content_id: Any = None,
+        h5p_review_token: Any = None,
         text_body: Any,
         mime_type: Any,
         size_bytes: Any,
@@ -4224,6 +4241,11 @@ async def get_latest_submission_detail(
                 Timestamps used for the submission metadata.
             kind, text_body, mime_type, size_bytes, storage_key:
                 Raw submission fields describing the content and optional file upload.
+            score_raw, score_max:
+                Optional H5P score fields (raw/max). Only meaningful for `kind='h5p'`.
+            h5p_content_id, h5p_review_token:
+                Optional H5P metadata used by the teacher review UI. The review token
+                is a short-lived capability token and may be null when misconfigured.
             feedback_md, analysis_json:
                 Optional formative feedback and structured criteria-based analysis
                 attached to the submission.
@@ -4247,6 +4269,15 @@ async def get_latest_submission_detail(
         if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
             def_kind = "pdf"
 
+        def _safe_int(v: Any) -> Optional[int]:
+            if v is None:
+                return None
+            try:
+                n = int(v)
+                return max(0, n)
+            except (TypeError, ValueError):
+                return None
+
         payload: Dict[str, Any] = {
             "id": str(sid),
             "task_id": str(tid),
@@ -4255,6 +4286,13 @@ async def get_latest_submission_detail(
             "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
             "kind": def_kind,
         }
+        if def_kind == "h5p":
+            payload["score_raw"] = _safe_int(score_raw)
+            payload["score_max"] = _safe_int(score_max)
+            payload["h5p"] = {
+                "content_id": (str(h5p_content_id) if h5p_content_id is not None else None),
+                "review_token": (str(h5p_review_token) if h5p_review_token is not None else None),
+            }
         if isinstance(text_body, str) and text_body:
             payload["text_body"] = text_body
         if isinstance(feedback_md, str) and feedback_md:
@@ -4306,6 +4344,56 @@ async def get_latest_submission_detail(
             payload["files"] = files
         return payload
 
+    def _issue_h5p_review_token(
+        *,
+        owner_sub: str,
+        course_id_in: str,
+        task_id_in: str,
+        student_sub_in: str,
+        content_id_in: str,
+    ) -> Optional[str]:
+        """Return a short-lived, signed H5P review capability token.
+
+        Why:
+            The teacher review UI must load the student's H5P userState without
+            exposing a generic "impersonate user" query parameter. We therefore
+            issue a short-lived capability token that binds:
+              - teacher (owner_sub),
+              - student,
+              - course,
+              - task context,
+              - H5P content id.
+
+        Permissions:
+            Caller must already have verified course ownership (teacher-only).
+        """
+        secret = (os.getenv("H5P_REVIEW_TOKEN_SECRET") or "").strip()
+        if not secret:
+            return None
+        try:
+            import base64
+            import hashlib
+            import hmac
+            import json
+
+            now = int(time.time())
+            exp = now + 10 * 60
+            payload_obj = {
+                "teacher_sub": owner_sub,
+                "student_sub": student_sub_in,
+                "course_id": course_id_in,
+                "task_id": task_id_in,
+                "content_id": content_id_in,
+                "exp": exp,
+            }
+            raw_json = json.dumps(payload_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
+            payload_b64 = base64.urlsafe_b64encode(raw_json).decode("ascii").rstrip("=")
+            sig = hmac.new(secret.encode("utf-8"), raw_json, hashlib.sha256).digest()
+            sig_b64 = base64.urlsafe_b64encode(sig).decode("ascii").rstrip("=")
+            return f"{payload_b64}.{sig_b64}"
+        except Exception:
+            return None
+
     repo = _get_repo()
     user, forbidden = _require_teacher(request)
     if forbidden:
@@ -4355,7 +4443,8 @@ async def get_latest_submission_detail(
                         # Enforce task ∈ unit via explicit relation check (DB)
                         cur.execute(
                             """
-                            select 1
+                            select t.kind::text,
+                                   t.h5p_content_id::text
                               from public.unit_tasks t
                               join public.unit_sections s on s.id = t.section_id
                               join public.course_modules m on m.unit_id = s.unit_id
@@ -4366,8 +4455,10 @@ async def get_latest_submission_detail(
                             """,
                             (course_id, unit_id, task_id),
                         )
-                        if cur.fetchone() is None:
+                        task_row = cur.fetchone()
+                        if task_row is None:
                             return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+                        task_kind, task_h5p_content_id = task_row
                         helper_ok = True
                         try:
                             # SECURITY DEFINER helper encapsulates owner checks and RLS-aware access
@@ -4379,6 +4470,8 @@ async def get_latest_submission_detail(
                                        created_at,
                                        completed_at,
                                        kind,
+                                       score_raw,
+                                       score_max,
                                        text_body,
                                        mime_type,
                                        size_bytes,
@@ -4396,6 +4489,7 @@ async def get_latest_submission_detail(
                             cur.execute(
                                 """
                                 select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
+                                       score_raw, score_max,
                                        text_body, mime_type, size_bytes, storage_key, feedback_md, analysis_json
                                   from public.learning_submissions
                                  where course_id = %s
@@ -4416,6 +4510,8 @@ async def get_latest_submission_detail(
                             created_at,
                             completed_at,
                             kind,
+                            score_raw,
+                            score_max,
                             text_body,
                             mime_type,
                             size_bytes,
@@ -4423,6 +4519,15 @@ async def get_latest_submission_detail(
                             feedback_md,
                             analysis_json,
                         ) = row
+                        review_token = None
+                        if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
+                            review_token = _issue_h5p_review_token(
+                                owner_sub=str(sub),
+                                course_id_in=str(course_id),
+                                task_id_in=str(task_id),
+                                student_sub_in=str(student_sub),
+                                content_id_in=str(task_h5p_content_id),
+                            )
                         payload = _build_latest_submission_payload(
                             sid=sid,
                             tid=tid,
@@ -4430,6 +4535,10 @@ async def get_latest_submission_detail(
                             created_at=created_at,
                             completed_at=completed_at,
                             kind=kind,
+                            score_raw=score_raw,
+                            score_max=score_max,
+                            h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
+                            h5p_review_token=review_token,
                             text_body=text_body,
                             mime_type=mime_type,
                             size_bytes=size_bytes,
@@ -4458,7 +4567,8 @@ async def get_latest_submission_detail(
                             # fail with 404 instead of accidentally leaking submissions.
                             cur.execute(
                                 """
-                                select 1
+                                select t.kind::text,
+                                       t.h5p_content_id::text
                                   from public.unit_tasks t
                                   join public.unit_sections s on s.id = t.section_id
                                   join public.course_modules m on m.unit_id = s.unit_id
@@ -4469,10 +4579,12 @@ async def get_latest_submission_detail(
                                 """,
                                 (course_id, unit_id, task_id),
                             )
-                            if cur.fetchone() is None:
+                            task_row = cur.fetchone()
+                            if task_row is None:
                                 return _private_error(
                                     {"error": "not_found"}, status_code=404, vary_origin=True
                                 )
+                            task_kind, task_h5p_content_id = task_row
                             cur.execute(
                                 """
                                 select id::text,
@@ -4481,6 +4593,8 @@ async def get_latest_submission_detail(
                                        created_at,
                                        completed_at,
                                        kind,
+                                       score_raw,
+                                       score_max,
                                        text_body,
                                        mime_type,
                                        size_bytes,
@@ -4509,6 +4623,8 @@ async def get_latest_submission_detail(
                             created_at,
                             completed_at,
                             kind,
+                            score_raw,
+                            score_max,
                             text_body,
                             mime_type,
                             size_bytes,
@@ -4516,6 +4632,15 @@ async def get_latest_submission_detail(
                             feedback_md,
                             analysis_json,
                         ) = row
+                        review_token = None
+                        if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
+                            review_token = _issue_h5p_review_token(
+                                owner_sub=str(sub),
+                                course_id_in=str(course_id),
+                                task_id_in=str(task_id),
+                                student_sub_in=str(student_sub),
+                                content_id_in=str(task_h5p_content_id),
+                            )
                         payload = _build_latest_submission_payload(
                             sid=sid,
                             tid=tid,
@@ -4523,6 +4648,10 @@ async def get_latest_submission_detail(
                             created_at=created_at,
                             completed_at=completed_at,
                             kind=kind,
+                            score_raw=score_raw,
+                            score_max=score_max,
+                            h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
+                            h5p_review_token=review_token,
                             text_body=text_body,
                             mime_type=mime_type,
                             size_bytes=size_bytes,

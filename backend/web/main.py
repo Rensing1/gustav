@@ -287,19 +287,14 @@ async def security_headers(request: Request, call_next):
     except Exception:
         pass
     connect_src = "'self'" + (" " + " ".join(dict.fromkeys(extra_connect)) if extra_connect else "")
-
-    if SETTINGS.environment == "prod":
-        # Harden CSP in production: avoid 'unsafe-inline' to reduce XSS surface.
-        csp = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; "
-            f"img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
-        )
-    else:
-        # Developer experience: allow inline for local SSR templates/components.
-        csp = (
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-            f"img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
-        )
+    # CSP policy (local = prod):
+    # - Scripts are strict (no inline) to reduce XSS surface.
+    # - Styles currently allow inline because parts of the SSR UI still use
+    #   style attributes and HTMX injects a small <style> block by default.
+    csp = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        f"img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
+    )
     response.headers.setdefault("Content-Security-Policy", csp)
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -4624,25 +4619,7 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         f'</form>'
     )
     kind_toggle_js = (
-        "<script>"
-        "(() => {"
-        "  const sel = document.getElementById('task_kind');"
-        "  const native = document.getElementById('native-task-fields');"
-        "  const h5p = document.getElementById('h5p-task-fields');"
-        "  const instr = document.getElementById('instruction_md');"
-        "  if (!sel || !native || !h5p || !instr) return;"
-        "  const apply = () => {"
-        "    const kind = (sel.value || 'native');"
-        "    const showNativeFields = kind !== 'h5p';"
-        "    const showH5PFields = kind === 'h5p';"
-        "    native.hidden = !showNativeFields;"
-        "    h5p.hidden = !showH5PFields;"
-        "    instr.required = showNativeFields;"
-        "  };"
-        "  sel.addEventListener('change', apply);"
-        "  apply();"
-        "})();"
-        "</script>"
+        '<script src="/static/js/task_kind_toggle.js?v=1" defer></script>'
         '<script type="module" src="/static/js/h5p_task_editor.js?v=20260109-6"></script>'
     )
     return (

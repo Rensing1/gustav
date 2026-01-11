@@ -106,6 +106,7 @@ services:
     environment:
       # Service listens on this port inside the compose network
       - PORT=3000
+      - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       # Internal URL to validate gustav_session via /api/me (cookie forwarded)
       - GUSTAV_WEB_INTERNAL_BASE=http://gustav-alpha2:8000
       - SESSION_COOKIE_NAME=gustav_session

@@ -21,6 +21,7 @@ help:
 	@echo "  test-ollama-vision - Run local Ollama Vision tests (also sets RUN_OLLAMA_VISION_E2E=1)"
 	@echo "  supabase-status    - Show local Supabase status"
 	@echo "  supabase-sync-env  - Sync Supabase service role key into .env"
+	@echo "  prod-sync-env      - Make local .env prod-like (Keycloak+Supabase+CA sync)"
 	@echo "  verify             - Run all test suites (unit + integrations + e2e)"
 	@echo "  import-legacy      - Import legacy Supabase dump with Keycloak mapping"
 	@echo "  import-legacy-dry  - Dry-run for the legacy import (no writes)"
@@ -29,6 +30,8 @@ help:
 
 .PHONY: up
 up:
+	mkdir -p .tmp/dev_uploads
+	touch .tmp/caddy-root.crt
 	docker compose up -d --build
 
 .PHONY: ps
@@ -44,6 +47,8 @@ reset-local:
 	supabase db reset --yes
 	$(MAKE) db-login-user
 	$(MAKE) supabase-sync-env
+	mkdir -p .tmp/dev_uploads
+	touch .tmp/caddy-root.crt
 	docker compose up -d --build --force-recreate web learning-worker h5p
 
 .PHONY: db-login-user
@@ -60,10 +65,21 @@ test:
 
 .PHONY: test-e2e
 test-e2e:
-	# E2E requires running docker services and a fresh Supabase service role key.
+	# E2E requires running docker services with prod-like config (dev=prod):
+	# - GUSTAV_ENV=prod (startup guards enabled)
+	# - Keycloak admin API via client_credentials (KC_ADMIN_CLIENT_SECRET)
+	# - Caddy local CA trusted for HTTPS endpoints
+	mkdir -p .tmp/dev_uploads
+	touch .tmp/caddy-root.crt
 	@$(MAKE) up
-	@$(MAKE) supabase-sync-env
-	. ./.venv/bin/activate && RUN_E2E=1 pytest -q -m e2e
+	@$(MAKE) prod-sync-env
+	# Reload env_file changes into the web container
+	docker compose up -d --build --force-recreate web
+	# Fail fast when deps are broken (avoid 60s timeouts inside tests)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	. ./.venv/bin/activate && E2E_READY_TIMEOUT_S=20 python3 scripts/wait_for_e2e_ready.py
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	. ./.venv/bin/activate && RUN_E2E=1 E2E_READY_TIMEOUT_S=20 pytest -q -m e2e
 
 # --- Local Ollama integration test shortcuts ---------------------------------
 # Default host URL for Ollama reachable from the host machine.
@@ -95,6 +111,10 @@ supabase-status:
 .PHONY: supabase-sync-env
 supabase-sync-env:
 	python3 scripts/sync_supabase_env.py
+
+.PHONY: prod-sync-env
+prod-sync-env:
+	python3 scripts/sync_prod_env.py
 
 # --- Supabase integration tests ---------------------------------------------
 .PHONY: test-supabase

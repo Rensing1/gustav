@@ -29,6 +29,9 @@ def _guard_against_prod_env_during_pytest() -> None:
         For tests, we want deterministic, hermetic defaults. Individual tests
         that validate prod guards explicitly set `GUSTAV_ENV=prod` themselves.
     """
+    # Ensure application modules never auto-load `.env` during pytest collection.
+    # Integration suites that need `.env` load it explicitly in `pytest_configure`.
+    os.environ.setdefault("GUSTAV_ENABLE_DOTENV", "false")
     if _is_prod_like(os.getenv("GUSTAV_ENV")):
         os.environ["GUSTAV_ENV"] = "dev"
 
@@ -299,6 +302,7 @@ def _force_prod_env_and_clear_feature_flags(monkeypatch: pytest.MonkeyPatch):
         "ENABLE_STORAGE_UPLOAD_PROXY",
         "ENABLE_DEV_UPLOAD_STUB",
         "STORAGE_VERIFY_ROOT",
+        "REQUIRE_STORAGE_VERIFY",
         "GUSTAV_TRUST_PROXY",
         "STRICT_CSRF_SUBMISSIONS",
     ):

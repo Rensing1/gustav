@@ -20,6 +20,12 @@ services:
     build: .
     container_name: gustav-alpha2
     # behind proxy; no direct host port mapping
+    extra_hosts:
+      # Prod-like: containers must be able to reach the public TLS endpoints via the host gateway.
+      # Otherwise `*.localhost` resolves to 127.0.0.1 inside containers (loopback), which breaks
+      # server-to-server OIDC (KC_BASE_URL=https://id.localhost) in `GUSTAV_ENV=prod`.
+      - "app.localhost:host-gateway"
+      - "id.localhost:host-gateway"
     volumes:
       # Live-Reload: Web-Code (SSR) wird eingebunden
       - ./backend/web:/app:z
@@ -36,6 +42,8 @@ services:
       - ./backend/__init__.py:/app/backend/__init__.py:z
       # Shared dev uploads directory for vision to access uploaded files
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
+      # Trust Caddy's local CA inside the container for prod-like HTTPS calls.
+      - ./.tmp/caddy-root.crt:/app/.tmp/caddy-root.crt:ro
     env_file:
       - .env
     environment:
@@ -54,6 +62,9 @@ services:
       # Keycloak Admin API credentials for /api/users/search and name resolution
       - KC_ADMIN_USERNAME=${KC_ADMIN_USERNAME:-admin}
       - KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-admin}
+      # Trust the local dev CA for HTTPS calls to `https://id.localhost` (OIDC + Admin API).
+      - KEYCLOAK_CA_BUNDLE=/app/.tmp/caddy-root.crt
+      - REQUESTS_CA_BUNDLE=/app/.tmp/caddy-root.crt
       # Browser-facing app base controls callback host
       - WEB_BASE=${WEB_BASE:-https://app.localhost}
       - REDIRECT_URI=${WEB_BASE:-https://app.localhost}/auth/callback

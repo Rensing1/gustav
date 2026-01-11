@@ -8,7 +8,7 @@ Why:
 
     Because this is a cookie-authenticated browser POST endpoint, we enforce:
     - strict same-origin checks (Origin/Referer) for *all* `/ajax` requests
-    - `Cache-Control: no-store` (defense-in-depth for sensitive responses)
+    - `Cache-Control: private, no-store` (defense-in-depth for sensitive responses)
     - `Vary: Origin` for CSRF-aware caches
 
 Note:
@@ -49,6 +49,5 @@ def test_h5p_ajax_requires_same_origin_and_sets_no_store_headers() -> None:
     assert ajax_block.find("requireSameOrigin") < ajax_block.find("const writeActions")
 
     # Responses must be non-cacheable and vary by origin for CSRF-aware caches.
-    assert 'res.setHeader("Cache-Control", "no-store")' in ajax_block
+    assert 'res.setHeader("Cache-Control", "private, no-store")' in ajax_block
     assert 'res.setHeader("Vary", "Origin")' in ajax_block
-

@@ -50,6 +50,14 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: KC_ADMIN_CLIENT_SECRET is unset or a placeholder in production."
         )
 
+    # 1c) H5P teacher review capability token secret must be configured.
+    # Used to sign short-lived review tokens consumed by the H5P sidecar.
+    h5p_review_secret = (os.getenv("H5P_REVIEW_TOKEN_SECRET", "") or "").strip()
+    if not h5p_review_secret or h5p_review_secret.upper().startswith("CHANGE_ME"):
+        raise SystemExit(
+            "Refusing to start: H5P_REVIEW_TOKEN_SECRET is unset or a placeholder in production."
+        )
+
     # 2) Postgres TLS: basic guard to avoid explicit disable
     dsn = os.getenv("DATABASE_URL", "")
     if "sslmode=disable" in dsn:

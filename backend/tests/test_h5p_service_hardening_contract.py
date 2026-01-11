@@ -51,7 +51,7 @@ def test_h5p_finisheddata_does_not_read_or_log_upstream_response_body() -> None:
     assert "await r.text(" not in js
 
 
-def test_h5p_student_visibility_check_uses_pagination() -> None:
+def test_h5p_student_visibility_check_uses_access_check_endpoint() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     server_path = repo_root / "h5p-service" / "server.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
@@ -59,11 +59,10 @@ def test_h5p_student_visibility_check_uses_pagination() -> None:
 
     block = _extract_block(
         js,
-        start_token="async function fetchAllowedH5PContentIdsForCourse(",
+        start_token="async function checkLearningH5PContentAccess(",
         end_token="async function requireAuth(",
     )
 
-    # The upstream Learning endpoint is paginated; hard-coding offset=0 can cause false-deny.
-    assert "offset=" in block
-    assert ("offset +=" in block) or ("offset = offset +" in block)
-
+    # Data minimization: avoid enumerating released sections/tasks for students.
+    assert "include=tasks" not in block
+    assert "/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access" in block

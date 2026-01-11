@@ -40,6 +40,8 @@ const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
 const sessionCookieName = process.env.SESSION_COOKIE_NAME || "gustav_session";
 const authCacheTtlSeconds = Number.parseInt(process.env.AUTH_CACHE_TTL_SECONDS || "30", 10);
+const AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.AUTH_CACHE_MAX_ENTRIES, 1000);
+const H5P_AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.H5P_AUTH_CACHE_MAX_ENTRIES, 5000);
 const storageRoot = process.env.H5P_STORAGE_ROOT || "/data/h5p";
 const uploadMaxBytes = Number.parseInt(
   process.env.H5P_MAX_UPLOAD_BYTES || String(512 * 1024 * 1024),
@@ -63,10 +65,10 @@ const storageDirs = {
 const authCache = new Map();
 
 /**
- * Cache H5P content authorization lookups (student scope).
- * Key: `${session_id}|${course_id}`. Value: { expiresAtMs, allowedContentIds: Set<string> }
+ * Cache H5P content authorization checks (student scope).
+ * Key: `${session_id}|${course_id}|${content_id}`. Value: { expiresAtMs, allowed: boolean }
  */
-const courseH5PAuthCache = new Map();
+const h5pContentAccessCache = new Map();
 
 // Default CSP for all `/h5p/*` responses (strict, no wildcards, no unsafe-eval).
 //
@@ -153,7 +155,7 @@ function ensureDivEmbedTypes(embedTypes) {
 function sendJson(res, statusCode, body, headers = {}) {
   res.status(statusCode);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Cache-Control", "private, no-store");
   for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
   res.json(body);
 }
@@ -161,7 +163,7 @@ function sendJson(res, statusCode, body, headers = {}) {
 function sendHtml(res, statusCode, html, headers = {}) {
   res.status(statusCode);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Cache-Control", "private, no-store");
   for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
   res.type("html").send(html);
 }
@@ -175,6 +177,27 @@ function parseCookies(cookieHeader) {
     out[rawKey] = decodeURIComponent(rawRest.join("="));
   }
   return out;
+}
+
+function parseMaxEntries(raw, defaultValue) {
+  const n = Number.parseInt(String(raw || "").trim(), 10);
+  if (!Number.isFinite(n) || n < 0) return defaultValue;
+  return n;
+}
+
+function pruneCacheToMaxEntries(cache, nowMs, maxEntries) {
+  // TTL sweep first (keeps memory stable without requiring access per key).
+  for (const [k, v] of cache.entries()) {
+    const expiresAtMs = v?.expiresAtMs;
+    if (typeof expiresAtMs !== "number" || expiresAtMs <= nowMs) cache.delete(k);
+  }
+
+  // Size cap (oldest-first, approximates LRU when callers "touch" hot keys).
+  while (cache.size > maxEntries) {
+    const firstKey = cache.keys().next().value;
+    if (firstKey === undefined) break;
+    cache.delete(firstKey);
+  }
 }
 
 function sanitizeHeaderFilename(value) {
@@ -337,48 +360,21 @@ async function fetchGustavMe(cookieHeader) {
   return { ok: true, payload };
 }
 
-async function fetchAllowedH5PContentIdsForCourse(courseId, cookieHeader) {
+async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) {
   const base = gustavWebInternalBase.replace(/\/+$/, "");
-  const limit = 100;
-  let offset = 0;
-  const allowed = new Set();
-
-  // Defensive pagination:
-  // The learning endpoint is paginated. A single request with offset=0 could
-  // miss H5P tasks in large courses and wrongly forbid students (false-deny).
-  for (let page = 0; page < 50; page++) {
-    const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/sections?include=tasks&limit=${limit}&offset=${offset}`;
-    const r = await fetch(url, {
-      method: "GET",
-      headers: {
-        cookie: cookieHeader,
-        "cache-control": "no-store",
-      },
-    });
-    if (r.status !== 200) {
-      return { ok: false, status: r.status };
-    }
-    const payload = await r.json();
-    if (!Array.isArray(payload) || payload.length === 0) break;
-
-    for (const entry of payload) {
-      const tasks = entry?.tasks;
-      if (!Array.isArray(tasks)) continue;
-      for (const t of tasks) {
-        const kind = t?.kind;
-        if (kind !== "h5p") continue;
-        // Contract: LearningTask.h5p.content_id (preferred). Keep a tolerant
-        // fallback for transitional payloads.
-        const cid = t?.h5p?.content_id || t?.h5p_content_id || null;
-        if (typeof cid === "string" && cid) allowed.add(cid);
-      }
-    }
-
-    if (payload.length < limit) break;
-    offset += limit;
+  const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access`;
+  const r = await fetch(url, {
+    method: "GET",
+    headers: {
+      cookie: cookieHeader,
+      // Keep "no-store" semantics for access checks (cookie-auth, student scope).
+      "cache-control": "no-store",
+    },
+  });
+  if (r.status === 204) {
+    return { ok: true, status: 204 };
   }
-
-  return { ok: true, allowedContentIds: allowed };
+  return { ok: false, status: r.status };
 }
 
 async function requireAuth(req, res, next) {
@@ -390,9 +386,13 @@ async function requireAuth(req, res, next) {
     return;
   }
 
-  const cached = authCache.get(sid);
   const now = Date.now();
+  const cached = authCache.get(sid);
   if (cached && cached.expiresAtMs > now) {
+    // LRU touch: move to end so pruning removes older entries first.
+    authCache.delete(sid);
+    authCache.set(sid, cached);
+
     req.gustavMe = cached.payload;
     req.user = {
       id: cached.payload.sub,
@@ -404,6 +404,7 @@ async function requireAuth(req, res, next) {
     next();
     return;
   }
+  if (cached) authCache.delete(sid);
 
   try {
     const me = await fetchGustavMe(cookieHeader);
@@ -411,7 +412,9 @@ async function requireAuth(req, res, next) {
       sendJson(res, me.status === 401 ? 401 : 502, { error: "unauthenticated" });
       return;
     }
+    authCache.delete(sid);
     authCache.set(sid, { expiresAtMs: now + authCacheTtlSeconds * 1000, payload: me.payload });
+    pruneCacheToMaxEntries(authCache, now, AUTH_CACHE_MAX_ENTRIES);
     req.gustavMe = me.payload;
     req.user = {
       id: me.payload.sub,
@@ -940,26 +943,42 @@ async function main() {
       const cookieHeader = req.get("cookie") || "";
       const cookies = parseCookies(cookieHeader);
       const sid = cookies[sessionCookieName] || "";
-      const cacheKey = `${sid}|${courseId}`;
-      const cached = courseH5PAuthCache.get(cacheKey);
+      const cacheKey = `${sid}|${courseId}|${contentId}`;
       const now = Date.now();
-      let allowedSet = null;
+      let allowed = null;
+      const cached = h5pContentAccessCache.get(cacheKey);
       if (cached && cached.expiresAtMs > now) {
-        allowedSet = cached.allowedContentIds;
-      } else {
-        const fetched = await fetchAllowedH5PContentIdsForCourse(courseId, cookieHeader);
-        if (!fetched.ok) {
+        // LRU touch: move to end so pruning removes older entries first.
+        h5pContentAccessCache.delete(cacheKey);
+        h5pContentAccessCache.set(cacheKey, cached);
+        allowed = cached.allowed;
+      } else if (cached) {
+        h5pContentAccessCache.delete(cacheKey);
+      }
+
+      if (allowed === null) {
+        const checked = await checkLearningH5PContentAccess(courseId, contentId, cookieHeader);
+        if (checked.ok) {
+          allowed = true;
+          h5pContentAccessCache.delete(cacheKey);
+          h5pContentAccessCache.set(cacheKey, { expiresAtMs: now + authCacheTtlSeconds * 1000, allowed: true });
+          pruneCacheToMaxEntries(h5pContentAccessCache, now, H5P_AUTH_CACHE_MAX_ENTRIES);
+        } else if (checked.status === 404) {
+          // Fail-closed: cache negative results briefly to reduce upstream load.
+          allowed = false;
+          h5pContentAccessCache.delete(cacheKey);
+          h5pContentAccessCache.set(cacheKey, { expiresAtMs: now + authCacheTtlSeconds * 1000, allowed: false });
+          pruneCacheToMaxEntries(h5pContentAccessCache, now, H5P_AUTH_CACHE_MAX_ENTRIES);
+        } else if (checked.status === 401) {
+          sendJson(res, 401, { error: "unauthenticated" });
+          return;
+        } else {
           // Upstream errors: treat as forbidden in student context to avoid leaks.
-          sendJson(res, fetched.status === 401 ? 401 : 403, { error: "forbidden" });
+          sendJson(res, 403, { error: "forbidden" });
           return;
         }
-        allowedSet = fetched.allowedContentIds;
-        courseH5PAuthCache.set(cacheKey, {
-          expiresAtMs: now + authCacheTtlSeconds * 1000,
-          allowedContentIds: allowedSet,
-        });
       }
-      if (!allowedSet || !allowedSet.has(contentId)) {
+      if (!allowed) {
         sendJson(res, 403, { error: "forbidden" });
         return;
       }
@@ -1272,7 +1291,7 @@ async function main() {
     }
     res.status(200);
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
-    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Content-Type", "application/zip");
     const safeName = sanitizeHeaderFilename(contentId);
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}.h5p"`);
@@ -1293,7 +1312,7 @@ async function main() {
     if (res.headersSent) return;
 
     // Security: H5P Ajax responses must not be cacheable.
-    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Vary", "Origin");
 
     const writeActions = new Set(["files", "library-install", "library-upload", "get-content"]);

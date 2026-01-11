@@ -49,6 +49,15 @@ const uploadMaxBytes = Number.parseInt(
 );
 const themeStylesheetPath = "/h5p/theme/h5p-gustav.css";
 const reviewTokenSecret = String(process.env.H5P_REVIEW_TOKEN_SECRET || "").trim();
+const gustavEnv = String(process.env.GUSTAV_ENV || "dev").trim().toLowerCase();
+const isProdLike = ["prod", "production", "stage", "staging"].includes(gustavEnv);
+if (isProdLike && (!reviewTokenSecret || reviewTokenSecret.toUpperCase().startsWith("CHANGE_ME"))) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "Refusing to start: H5P_REVIEW_TOKEN_SECRET is unset or a placeholder in production/staging.",
+  );
+  process.exit(1);
+}
 
 const storageDirs = {
   root: storageRoot,
@@ -169,13 +178,30 @@ function sendHtml(res, statusCode, html, headers = {}) {
   res.type("html").send(html);
 }
 
+function asyncHandler(fn) {
+  // Express 4 does not automatically handle rejected promises from async
+  // handlers. Wrap them so errors propagate to the error middleware.
+  return function wrapped(req, res, next) {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
 function parseCookies(cookieHeader) {
   const out = {};
   if (!cookieHeader) return out;
   for (const part of cookieHeader.split(";")) {
     const [rawKey, ...rawRest] = part.trim().split("=");
     if (!rawKey) continue;
-    out[rawKey] = decodeURIComponent(rawRest.join("="));
+    const rawValue = rawRest.join("=");
+    // decodeURIComponent can throw on malformed percent encodings; treat such
+    // values as opaque and keep the raw string to avoid a 500.
+    let decoded = rawValue;
+    try {
+      decoded = decodeURIComponent(rawValue);
+    } catch {
+      decoded = rawValue;
+    }
+    out[rawKey] = decoded;
   }
   return out;
 }
@@ -414,18 +440,23 @@ async function fetchGustavMe(cookieHeader) {
 async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) {
   const base = gustavWebInternalBase.replace(/\/+$/, "");
   const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access`;
-  const r = await fetch(url, {
-    method: "GET",
-    headers: {
-      cookie: cookieHeader,
-      // Keep "no-store" semantics for access checks (cookie-auth, student scope).
-      "cache-control": "no-store",
-    },
-  });
-  if (r.status === 204) {
-    return { ok: true, status: 204 };
+  try {
+    const r = await fetch(url, {
+      method: "GET",
+      headers: {
+        cookie: cookieHeader,
+        // Keep "no-store" semantics for access checks (cookie-auth, student scope).
+        "cache-control": "no-store",
+      },
+    });
+    if (r.status === 204) {
+      return { ok: true, status: 204 };
+    }
+    return { ok: false, status: r.status };
+  } catch {
+    // Upstream network errors: fail-closed in the caller (student context).
+    return { ok: false, status: 503 };
   }
-  return { ok: false, status: r.status };
 }
 
 async function requireAuth(req, res, next) {
@@ -671,7 +702,7 @@ async function main() {
   app.use(express.urlencoded({ extended: false, limit: "2mb" }));
 
   // Public readiness probe (used by E2E and docker-compose health checks).
-  app.get("/healthz", async (_req, res) => {
+  app.get("/healthz", asyncHandler(async (_req, res) => {
     const storage = await probeStorage();
     sendJson(res, storage.ok ? 200 : 503, {
       status: storage.ok ? "healthy" : "unhealthy",
@@ -679,7 +710,7 @@ async function main() {
       time: new Date().toISOString(),
       storage,
     });
-  });
+  }));
 
   // Everything else is authenticated.
   app.use(requireAuth);
@@ -1014,7 +1045,7 @@ async function main() {
     );
   });
 
-  app.get("/editor/model", requireTeacher, async (req, res) => {
+  app.get("/editor/model", requireTeacher, asyncHandler(async (req, res) => {
     const contentId =
       typeof req.query.content_id === "string" ? req.query.content_id : undefined;
     if (req.query.content_id !== undefined && !contentId) {
@@ -1040,9 +1071,9 @@ async function main() {
       }
       sendJson(res, 500, { error: "internal_error" });
     }
-  });
+  }));
 
-  app.get("/player/model", async (req, res) => {
+  app.get("/player/model", asyncHandler(async (req, res) => {
     const contentId =
       typeof req.query.content_id === "string" ? req.query.content_id : undefined;
     if (!contentId) {
@@ -1150,9 +1181,9 @@ async function main() {
       }
       sendJson(res, 500, { error: "internal_error" });
     }
-  });
+  }));
 
-  app.get("/player/review", requireTeacher, async (req, res) => {
+  app.get("/player/review", requireTeacher, asyncHandler(async (req, res) => {
     const contentId =
       typeof req.query.content_id === "string" ? req.query.content_id : undefined;
     const contextId =
@@ -1236,9 +1267,9 @@ async function main() {
       }
       sendJson(res, 500, { error: "internal_error" });
     }
-  });
+  }));
 
-  app.post("/contents", requireTeacher, requireSameOrigin, async (req, res) => {
+  app.post("/contents", requireTeacher, requireSameOrigin, asyncHandler(async (req, res) => {
     const library = req.body?.library;
     const params = req.body?.params;
     const parameters = params?.params;
@@ -1268,9 +1299,9 @@ async function main() {
       }
       sendJson(res, 500, { error: "internal_error" }, { Vary: "Origin" });
     }
-  });
+  }));
 
-  app.patch("/contents/:contentId", requireTeacher, requireSameOrigin, async (req, res) => {
+  app.patch("/contents/:contentId", requireTeacher, requireSameOrigin, asyncHandler(async (req, res) => {
     const { contentId } = req.params;
     if (!(await contentStorage.contentExists(contentId))) {
       sendJson(res, 404, { error: "not_found" }, { Vary: "Origin" });
@@ -1306,9 +1337,9 @@ async function main() {
       }
       sendJson(res, 500, { error: "internal_error" }, { Vary: "Origin" });
     }
-  });
+  }));
 
-  app.get("/libraries", requireTeacher, async (_req, res) => {
+  app.get("/libraries", requireTeacher, asyncHandler(async (_req, res) => {
     const storage = await probeStorage();
     if (!storage.ok) {
       sendJson(res, 503, { error: "storage_unavailable" });
@@ -1316,14 +1347,14 @@ async function main() {
     }
     const libraries = await listInstalledLibraries();
     sendJson(res, 200, { libraries });
-  });
+  }));
 
   app.post(
     "/libraries/import",
     requireTeacher,
     requireSameOrigin,
     uploadImport.single("file"),
-    async (req, res) => {
+    asyncHandler(async (req, res) => {
       const file = req.file;
       if (!file?.path) {
         sendJson(res, 400, { error: "invalid_request" });
@@ -1361,10 +1392,10 @@ async function main() {
           // ignore cleanup errors
         }
       }
-    },
+    }),
   );
 
-  app.get("/player", requireAdmin, async (req, res) => {
+  app.get("/player", requireAdmin, asyncHandler(async (req, res) => {
     const initialContentId =
       typeof req.query.content_id === "string" ? req.query.content_id : "";
     // NOTE: This debug page uses the same webcomponents + model endpoint as the
@@ -1438,14 +1469,14 @@ async function main() {
       ].join("\n"),
       { "Content-Security-Policy": CSP_DEBUG_HTML },
     );
-  });
+  }));
 
   app.post(
     "/contents/import",
     requireTeacher,
     requireSameOrigin,
     uploadImport.single("file"),
-    async (req, res) => {
+    asyncHandler(async (req, res) => {
       const file = req.file;
       if (!file?.path) {
         sendJson(res, 400, { error: "invalid_request" });
@@ -1494,10 +1525,10 @@ async function main() {
           // ignore cleanup errors
         }
       }
-    },
+    }),
   );
 
-  app.get("/contents/:contentId/export", requireTeacher, async (req, res) => {
+  app.get("/contents/:contentId/export", requireTeacher, asyncHandler(async (req, res) => {
     const { contentId } = req.params;
     if (!(await contentStorage.contentExists(contentId))) {
       sendJson(res, 404, { error: "not_found" });
@@ -1510,10 +1541,10 @@ async function main() {
     const safeName = sanitizeHeaderFilename(contentId);
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}.h5p"`);
     await h5pEditor.exportContent(contentId, res, req.user);
-  });
+  }));
 
   // POST /ajax is required for player translations; treat unsafe actions as writes.
-  app.post("/ajax", maybeParseAjaxFiles, async (req, res) => {
+  app.post("/ajax", maybeParseAjaxFiles, asyncHandler(async (req, res) => {
     const action = req.query.action;
     if (!action || typeof action !== "string") {
       sendJson(res, 400, { error: "invalid_request" });
@@ -1577,7 +1608,7 @@ async function main() {
       if (libraryUploadFile?.tempFilePath) cleanup.push(unlink(libraryUploadFile.tempFilePath));
       await Promise.allSettled(cleanup);
     }
-  });
+  }));
 
   // H5P "finished" reporting: called by the H5P client when a user completed a run.
   //
@@ -1592,7 +1623,7 @@ async function main() {
   //
   // Note: We implement this route *before* mounting Lumi's ajax router so it
   // takes precedence over the default FinishedDataExpressRouter.
-  app.post("/finishedData", async (req, res) => {
+  app.post("/finishedData", asyncHandler(async (req, res) => {
     requireSameOrigin(req, res, () => {});
     if (res.headersSent) return;
 
@@ -1690,7 +1721,7 @@ async function main() {
 
     // Match upstream semantics: a successful Ajax response is `{ success: true }`.
     sendJson(res, 200, { success: true }, { Vary: "Origin" });
-  });
+  }));
 
   // Mount the Lumi Express router for all read endpoints (libraries/content/params/core/userdata/finished).
   // We disable:
@@ -1705,6 +1736,17 @@ async function main() {
     "en",
   );
   app.use(ajaxRouter);
+
+  // Central error handler (defense-in-depth).
+  app.use((err, req, res, _next) => {
+    // Avoid logging request context (PII). Keep this minimal.
+    const msg =
+      err && typeof err === "object" && "message" in err ? String(err.message || "") : String(err || "");
+    // eslint-disable-next-line no-console
+    console.error(`h5p-service unhandled error: ${msg}`);
+    if (res.headersSent) return;
+    sendJson(res, 500, { error: "internal_error" });
+  });
 
   app.listen(port, () => {
     // eslint-disable-next-line no-console

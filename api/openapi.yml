@@ -1657,7 +1657,9 @@ paths:
           schema:
             type: string
             format: uuid
-          description: Optional course id used for authorization checks.
+          description: >-
+            Course id used for authorization checks. Required for student requests
+            (fail-closed). Optional for teacher/admin preview.
         - in: query
           name: read_only_state
           required: false
@@ -1877,6 +1879,7 @@ paths:
         Trusted content model: only teachers/admins may import packages. The
         server stores content and libraries under `/data/h5p` (filesystem).
         Browser clients MUST pass same-origin indicators (Origin/Referer).
+        Scope: content is global (not course-scoped) and referenced by `Task.h5p.content_id`.
       operationId: importH5PContent
       security:
         - cookieAuth: []
@@ -1951,7 +1954,8 @@ paths:
       description: >-
         Stores a new H5P content item using editor parameters (content.json + h5p.json metadata).
         Trusted content model: only teachers/admins may create content. Browser clients MUST pass
-        same-origin indicators (Origin/Referer).
+        same-origin indicators (Origin/Referer). Scope: content is global (not course-scoped) and
+        referenced by `Task.h5p.content_id`.
       operationId: createH5PContent
       security:
         - cookieAuth: []
@@ -2020,7 +2024,8 @@ paths:
       description: >-
         Updates an existing H5P content item using editor parameters (content.json + h5p.json metadata).
         Trusted content model: only teachers/admins may update content. Browser clients MUST pass
-        same-origin indicators (Origin/Referer).
+        same-origin indicators (Origin/Referer). Scope: content is global (not course-scoped) and
+        referenced by `Task.h5p.content_id`.
       operationId: updateH5PContent
       security:
         - cookieAuth: []
@@ -3002,7 +3007,7 @@ paths:
         
         Task-type rules:
         - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).
-        - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously.
+        - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously (response 201).
         
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is
@@ -3117,7 +3122,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '201':
-          description: Submission analysed synchronously (opportunistic Fast-Path).
+          description: Submission completed synchronously (H5P submissions; opportunistic Fast-Path for other kinds).
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

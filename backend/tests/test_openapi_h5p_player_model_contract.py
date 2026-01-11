@@ -41,6 +41,16 @@ def test_h5p_player_model_contract_includes_read_only_state_param():
     assert "read_only_state" in names, "H5P player model must expose read_only_state query param"
 
 
+def test_h5p_player_model_contract_documents_course_id_student_requirement():
+    spec = _load_spec()
+    params = spec["paths"]["/h5p/player/model"]["get"].get("parameters") or []
+    course_param = next((p for p in params if isinstance(p, dict) and p.get("name") == "course_id"), None)
+    assert course_param is not None, "H5P player model must define course_id query param"
+    assert course_param.get("required") is False
+    desc = (course_param.get("description") or "").lower()
+    assert "student" in desc and "require" in desc
+
+
 def test_h5p_review_player_contract_requires_review_token():
     spec = _load_spec()
     get_op = spec["paths"]["/h5p/player/review"]["get"]

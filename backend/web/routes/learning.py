@@ -940,9 +940,11 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     except Exception:
         pass
 
-    # Always return 202 Accepted for async processing semantics, including
-    # idempotent retries reusing an existing pending submission.
-    return JSONResponse(submission, status_code=202, headers=_cache_headers_success())
+    # Response semantics:
+    # - H5P submissions are persisted synchronously (score only) → 201 Created.
+    # - Other kinds enter the async pipeline → 202 Accepted.
+    status_code = 201 if kind == "h5p" else 202
+    return JSONResponse(submission, status_code=status_code, headers=_cache_headers_success())
 
 
 def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, course_id: str, task_id: str, student_sub: str) -> None:

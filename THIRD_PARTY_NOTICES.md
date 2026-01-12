@@ -26,18 +26,42 @@ scanner as part of your release process.
   - **Location:** `h5p-service/vendor/h5p/core/js/jquery.js`
   - **License:** MIT (see header comment in the file)
 
+## H5P Editor (static editor assets)
+
+- **Location:** `h5p-service/vendor/h5p/editor/`
+- **Upstream:** `https://github.com/h5p/h5p-editor-php-library`  
+  **Revision:** `80b3b281ee9d064b563f242e8ee7a0026b5bf205` (2024-09-06, "Build CSS")
+- **License:** GNU General Public License v3 (GPL-3.0, per upstream `composer.json`)  
+  **License text:** `h5p-service/vendor/h5p/core/LICENSE.txt`
+- **Notes:** This is a vendored snapshot of upstream H5P editor assets
+  (JS/CSS/images/CKEditor build) served by the H5P sidecar.
+
+### Included subcomponents inside the H5P editor snapshot
+
+- **CKEditor 5 (custom build)**
+  - **Location:** `h5p-service/vendor/h5p/editor/ckeditor/`
+  - **License:** see upstream license file (copied into this repo)  
+    **License text:** `h5p-service/vendor/h5p/editor/ckeditor/LICENSE.md`
+- **Zebra Datepicker 1.9.11**
+  - **Location:** `h5p-service/vendor/h5p/editor/libs/zebra_datepicker.min.js`
+  - **License:** GNU Lesser General Public License v3 (LGPL-3.0)  
+    **License text:** `h5p-service/vendor/h5p/editor/libs/zebra_datepicker.LICENSE.md`
+- **h5p-image-cropper**
+  - **Location:** `h5p-service/vendor/h5p/editor/libs/cropper.js`
+  - **License:** MIT  
+    **License text:** `h5p-service/vendor/h5p/editor/libs/h5p-image-cropper.LICENSE.txt`
+
 ## Lumi Education H5P Webcomponents (vendored derivative overrides)
 
-The H5P sidecar serves Lumi Education's webcomponents from `node_modules`, but
-we vendor two small override modules (derived from upstream) to keep browser
-ESM compatible without a bundler.
+The H5P sidecar uses Lumi Education's webcomponents (installed via npm at build
+time), but we vendor two small override modules (derived from upstream) to keep
+browser ESM compatible without a bundler.
 
 - **Upstream package:** `@lumieducation/h5p-webcomponents`
-- **Upstream license:** GNU General Public License v3 (GPL-3.0)  
-  **License text (at build time):** `h5p-service/node_modules/@lumieducation/h5p-webcomponents/LICENSE`
+- **Upstream license:** GNU General Public License v3 or later (GPL-3.0-or-later)  
+  **License text:** `h5p-service/vendor/h5p/core/LICENSE.txt`
 - **Vendored derivative files:**
   - `h5p-service/vendor/webcomponents/overrides/h5p-utils.js`
   - `h5p-service/vendor/webcomponents/overrides/dom-utils.js`
 - **Local change:** only the import paths are adjusted; functional logic stays
   aligned with upstream (see file headers for rationale).
-

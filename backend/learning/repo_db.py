@@ -99,8 +99,8 @@ def _dsn() -> str:
         os.getenv("RLS_TEST_DSN"),
         os.getenv("DATABASE_URL"),
     ]
-    # Only allow default limited DSN implicitly in non-prod environments (dev/test)
-    if env != "prod":
+    # Only allow the default dev DSN implicitly in non-prod-like environments.
+    if env not in {"prod", "production", "stage", "staging"}:
         candidates.append(_default_app_login_dsn())
     for candidate in candidates:
         if candidate:

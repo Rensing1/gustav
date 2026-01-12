@@ -34,6 +34,8 @@ def test_h5p_editor_model_contract():
     schemas = (spec.get("components") or {}).get("schemas", {})
     assert "H5PEditorModelResponse" in schemas
     assert get_op.get("security"), "GET /h5p/editor/model must require authentication"
+    perms = get_op.get("x-permissions") or {}
+    assert perms.get("requiredRole") == "teacher", "GET /h5p/editor/model must document teacher-only permission"
     assert "200" in (get_op.get("responses") or {}), "GET /h5p/editor/model must define 200 response"
 
 
@@ -67,4 +69,3 @@ def test_h5p_contents_update_contract():
     content = rb.get("content") or {}
     assert "application/json" in content
     assert "200" in (patch_op.get("responses") or {}), "PATCH /h5p/contents/{content_id} must define 200 response"
-

@@ -1283,11 +1283,6 @@ async def learning_index(request: Request):
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-                try:
-                    if os.getenv("PYTEST_CURRENT_TEST"):
-                        logger.debug("__SSR_DEBUG_SID__ %s", sid)
-                except Exception:
-                    pass
             r = await client.get("/api/learning/courses", params={"limit": limit, "offset": offset})
             if r.status_code == 200 and isinstance(r.json(), list):
                 items = r.json()

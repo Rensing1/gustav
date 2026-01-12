@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 
+import hashlib
 import time
 from dataclasses import dataclass, asdict, is_dataclass
 import os
@@ -3995,24 +3996,16 @@ async def get_unit_live_delta(
                                     changed_dt = datetime.now(timezone.utc)
                             changed_iso = changed_dt.isoformat(timespec="microseconds")
                             if logger.isEnabledFor(logging.DEBUG) or debug:
+                                student_sub_hash = hashlib.sha256(student_sub.encode("utf-8")).hexdigest()[:12]
                                 logger.debug(
                                     "delta-cell",
                                     extra={
-                                        "student_sub": student_sub,
+                                        "student_sub_hash": student_sub_hash,
                                         "task_id": task_id,
                                         "changed_dt": changed_dt.isoformat(timespec="microseconds"),
                                         "original_updated": original_updated_dt.isoformat(timespec="microseconds"),
                                     },
                                 )
-                                if debug:
-                                    print(
-                                        "[DELTA] changed=",
-                                        changed_dt.isoformat(timespec="microseconds"),
-                                        " cursor=",
-                                        original_updated_dt.isoformat(timespec="microseconds"),
-                                        " db_lb=",
-                                        db_lower_bound.isoformat(timespec="microseconds"),
-                                    )
                             # Include changes after (cursor - EPS) to account for clock skew
                             include = changed_dt > (original_updated_dt - EPS)
                             if not include:

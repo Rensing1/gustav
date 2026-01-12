@@ -532,7 +532,11 @@ async function requireAuth(req, res, next) {
   try {
     const me = await fetchGustavMe(cookieHeader);
     if (!me.ok) {
-      sendJson(res, me.status === 401 ? 401 : 502, { error: "unauthenticated" });
+      if (me.status === 401) {
+        sendJson(res, 401, { error: "unauthenticated" });
+        return;
+      }
+      sendJson(res, 502, { error: "upstream_unavailable" });
       return;
     }
     authCache.delete(sid);

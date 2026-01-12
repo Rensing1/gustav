@@ -3359,7 +3359,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '201':
-          description: Submission completed synchronously (H5P submissions; opportunistic Fast-Path for other kinds).
+          description: Submission completed synchronously (H5P submissions only).
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

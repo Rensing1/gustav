@@ -118,6 +118,16 @@ services:
       - H5P_MAX_UPLOAD_BYTES=104857600
       # Must match the web service secret (used to validate review tokens).
       - H5P_REVIEW_TOKEN_SECRET=${H5P_REVIEW_TOKEN_SECRET:-CHANGE_ME_DEV}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

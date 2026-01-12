@@ -24,8 +24,10 @@ export function buildSessionCookieHeader(cookieHeader, cookieName) {
     if (!trimmed.startsWith(`${name}=`)) continue;
     const value = trimmed.slice(name.length + 1);
     if (!value) return "";
+    // Defense-in-depth: never forward a value that contains header control chars.
+    // This avoids CR/LF injection into upstream requests.
+    if (value.includes("\r") || value.includes("\n")) return "";
     return `${name}=${value}`;
   }
   return "";
 }
-

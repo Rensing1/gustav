@@ -37,6 +37,7 @@ import express from "express";
 import multer from "multer";
 import { buildSessionCookieHeader } from "./lib/cookies.mjs";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
+import { fetchWithTimeout } from "./lib/fetch_timeout.mjs";
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
@@ -46,13 +47,16 @@ const AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.AUTH_CACHE_MAX_ENTRIE
 const H5P_AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.H5P_AUTH_CACHE_MAX_ENTRIES, 5000);
 const storageRoot = process.env.H5P_STORAGE_ROOT || "/data/h5p";
 const uploadMaxBytes = Number.parseInt(
-  process.env.H5P_MAX_UPLOAD_BYTES || String(512 * 1024 * 1024),
+  process.env.H5P_MAX_UPLOAD_BYTES || String(100 * 1024 * 1024),
   10,
 );
 const themeStylesheetPath = "/h5p/theme/h5p-gustav.css";
 const reviewTokenSecret = String(process.env.H5P_REVIEW_TOKEN_SECRET || "").trim();
 const gustavEnv = String(process.env.GUSTAV_ENV || "dev").trim().toLowerCase();
 const isProdLike = isProdLikeEnv(gustavEnv);
+const upstreamFetchTimeoutMsRaw = Number.parseInt(process.env.H5P_UPSTREAM_FETCH_TIMEOUT_MS || "5000", 10);
+const upstreamFetchTimeoutMs =
+  Number.isFinite(upstreamFetchTimeoutMsRaw) && upstreamFetchTimeoutMsRaw > 0 ? upstreamFetchTimeoutMsRaw : 5000;
 const debugHtmlEnabled = debugPagesEnabled({
   gustavEnv,
   enableFlag: process.env.H5P_ENABLE_DEBUG_PAGES,
@@ -465,10 +469,7 @@ async function fetchGustavMe(cookieHeader) {
     "cache-control": "no-store",
   };
   if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
-  const r = await fetch(url, {
-    method: "GET",
-    headers,
-  });
+  const r = await fetchWithTimeout(url, { method: "GET", headers }, { timeoutMs: upstreamFetchTimeoutMs });
   if (r.status !== 200) {
     return { ok: false, status: r.status };
   }
@@ -486,10 +487,7 @@ async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) 
   };
   if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
   try {
-    const r = await fetch(url, {
-      method: "GET",
-      headers,
-    });
+    const r = await fetchWithTimeout(url, { method: "GET", headers }, { timeoutMs: upstreamFetchTimeoutMs });
     if (r.status === 204) {
       return { ok: true, status: 204 };
     }
@@ -659,6 +657,7 @@ async function main() {
   if (!storage.ok) {
     // eslint-disable-next-line no-console
     console.error(`H5P storage not ready: ${storage.error}`);
+    process.exit(1);
   }
 
   const configPath = path.join(storageRoot, "h5p-config.json");
@@ -734,8 +733,13 @@ async function main() {
 
   const app = express();
   app.disable("x-powered-by");
-  // We only expect a single reverse-proxy hop (Caddy). Do not trust arbitrary clients.
-  app.set("trust proxy", 1);
+  const trustProxyEnabled = String(process.env.H5P_TRUST_PROXY || "")
+    .trim()
+    .toLowerCase() === "true";
+  if (trustProxyEnabled) {
+    // We only expect a single reverse-proxy hop (Caddy). Do not trust arbitrary clients.
+    app.set("trust proxy", 1);
+  }
 
   // Security headers for all responses (Cache-Control is set route-specific).
   app.use((req, res, next) => {
@@ -1179,13 +1183,14 @@ async function main() {
           sendJson(res, 401, { error: "unauthenticated" });
           return;
         } else {
-          // Upstream errors: treat as forbidden in student context to avoid leaks.
-          sendJson(res, 403, { error: "forbidden" });
+          // Upstream errors: fail-closed and do not reveal whether the content exists.
+          sendJson(res, 404, { error: "not_found" });
           return;
         }
       }
       if (!allowed) {
-        sendJson(res, 403, { error: "forbidden" });
+        // Fail-closed: do not reveal whether the content exists in H5P storage.
+        sendJson(res, 404, { error: "not_found" });
         return;
       }
     }
@@ -1750,11 +1755,15 @@ async function main() {
             };
             if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
 
-            const r = await fetch(url, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
-            });
+            const r = await fetchWithTimeout(
+              url,
+              {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
+              },
+              { timeoutMs: upstreamFetchTimeoutMs },
+            );
             if (!r.ok) {
               // eslint-disable-next-line no-console
               console.warn(`h5p finishedData → learning submission failed: ${r.status}`);

@@ -66,3 +66,16 @@ def test_h5p_student_visibility_check_uses_access_check_endpoint() -> None:
     # Data minimization: avoid enumerating released sections/tasks for students.
     assert "include=tasks" not in block
     assert "/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access" in block
+
+
+def test_h5p_upload_default_max_bytes_is_reduced() -> None:
+    """Default upload limit should be conservative unless configured explicitly."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    server_path = repo_root / "h5p-service" / "server.mjs"
+    assert server_path.is_file(), f"Missing H5P service file: {server_path}"
+    js = server_path.read_text(encoding="utf-8")
+
+    # Regression guard: avoid a huge default (512 MiB).
+    assert "512 * 1024 * 1024" not in js
+    assert "100 * 1024 * 1024" in js

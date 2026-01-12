@@ -209,11 +209,7 @@ OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
 
-def _under_pytest() -> bool:
-    import sys
-    return "pytest" in sys.modules or bool(os.getenv("PYTEST_CURRENT_TEST"))
-
-if (not _under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
+if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
     try:
         from identity_access.stores_db import DBSessionStore
         SESSION_STORE = DBSessionStore()

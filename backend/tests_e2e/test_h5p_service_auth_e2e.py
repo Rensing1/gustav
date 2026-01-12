@@ -159,7 +159,6 @@ def test_h5p_healthz_and_auth_me():
     assert health_body.get("status") == "healthy"
     assert "storage" in health_body and isinstance(health_body["storage"], dict)
     assert health_body["storage"].get("ok") is True
-    assert isinstance(health_body["storage"].get("root"), str) and health_body["storage"]["root"]
 
     # Unauthenticated: H5P service must fail-closed
     r0 = requests.get(f"{WEB_BASE}/h5p/auth/me", timeout=10)

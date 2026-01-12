@@ -32,8 +32,14 @@ def test_h5p_debug_pages_documented_as_admin_only() -> None:
         assert "debug" in summary, f"Expected 'debug' in summary for {path}"
         assert "admin" in summary, f"Expected 'admin' in summary for {path}"
 
+        perms = get_op.get("x-permissions") or {}
+        assert perms.get("requiredRole") == "admin", f"Expected x-permissions.requiredRole=admin for {path}"
+
         notes = get_op.get("x-security-notes") or []
         if isinstance(notes, str):
             notes = [notes]
         assert any("admin" in str(n).lower() for n in notes), f"Expected admin-only note for {path}"
 
+        # Defense-in-depth: debug pages can be disabled in prod-like envs (404).
+        responses = get_op.get("responses") or {}
+        assert "404" in responses, f"Expected 404 response to be documented for {path}"

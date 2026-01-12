@@ -1690,10 +1690,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     if not parts:
         try:
             import importlib
-            try:
-                tmod = importlib.import_module("routes.teaching")
-            except Exception:
-                tmod = importlib.import_module("backend.web.routes.teaching")
+            tmod = importlib.import_module("routes.teaching")
         except Exception:
             tmod = None
         if tmod is not None:
@@ -1821,10 +1818,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
             import importlib
             tmod = importlib.import_module("routes.teaching")
         except Exception:
-            try:
-                tmod = importlib.import_module("backend.web.routes.teaching")
-            except Exception:
-                tmod = None
+            tmod = None
         if tmod is not None:
             try:
                 repo = getattr(tmod, "REPO", None)

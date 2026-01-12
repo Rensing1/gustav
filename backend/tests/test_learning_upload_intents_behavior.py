@@ -327,3 +327,43 @@ async def test_upload_intent_returns_503_when_storage_missing(monkeypatch):
             )
     assert r.status_code == 503
     assert r.json().get("detail") == "storage_adapter_not_configured"
+
+
+@pytest.mark.anyio
+async def test_upload_intent_fail_closed_when_authorization_check_unavailable(monkeypatch):
+    """Fail-closed: never return a presigned upload when visibility cannot be verified."""
+    student_sid, course_id, task_id = await _prepare_fixture()
+    monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
+    monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "600")
+    monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")
+
+    def _boom(self, _req):  # noqa: ANN001
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(learning.ListSubmissionsUseCase, "execute", _boom, raising=True)
+
+    import importlib
+
+    original_import_module = importlib.import_module
+
+    def _blocked_import(name, package=None):  # noqa: ANN001
+        if name in {"routes.teaching", "backend.web.routes.teaching"}:
+            raise ModuleNotFoundError(name)
+        return original_import_module(name, package=package)
+
+    monkeypatch.setattr(importlib, "import_module", _blocked_import, raising=True)
+
+    with _use_storage_adapter(FakeStorageAdapter()):
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
+            r = await c.post(
+                f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
+                json={"kind": "image", "filename": "foto.png", "mime_type": "image/png", "size_bytes": 2048},
+                headers={"Origin": "http://test"},
+            )
+    assert r.status_code == 503
+    assert r.headers.get("Cache-Control") == "private, no-store"
+    assert r.headers.get("Vary") == "Origin"
+    body = r.json() or {}
+    assert body.get("error") == "service_unavailable"
+    assert body.get("detail") == "authorization_unavailable"

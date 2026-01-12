@@ -328,7 +328,7 @@ async def test_delta_includes_h5p_completed_flag_for_h5p_tasks():
                 "instruction_md": "H5P",
                 "criteria": [],
                 "max_attempts": 3,
-                "h5p": {"content_id": "delta-h5p", "display_options": {}},
+                "h5p": {"content_id": "2001", "display_options": {}},
             },
         )
         assert r_task.status_code == 201

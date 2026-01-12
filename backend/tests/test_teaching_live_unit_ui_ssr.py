@@ -409,7 +409,7 @@ async def test_matrix_and_delta_fragments_render_h5p_status_symbols():
         cid = await _create_course(c_owner, "Kurs UI H5P Matrix")
         unit = await _create_unit(c_owner, "Einheit UI H5P Matrix")
         section = await _create_section(c_owner, unit["id"], "S1")
-        task = await _create_h5p_task(c_owner, unit["id"], section["id"], "### H5P", content_id="ui-h5p")
+        task = await _create_h5p_task(c_owner, unit["id"], section["id"], "### H5P", content_id="3001")
         module = await _attach_unit(c_owner, cid, unit["id"])
         await _add_member(c_owner, cid, learner.sub)
 

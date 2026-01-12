@@ -35,6 +35,8 @@ import { access, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
 import multer from "multer";
+import { buildSessionCookieHeader } from "./lib/cookies.mjs";
+import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
@@ -50,7 +52,11 @@ const uploadMaxBytes = Number.parseInt(
 const themeStylesheetPath = "/h5p/theme/h5p-gustav.css";
 const reviewTokenSecret = String(process.env.H5P_REVIEW_TOKEN_SECRET || "").trim();
 const gustavEnv = String(process.env.GUSTAV_ENV || "dev").trim().toLowerCase();
-const isProdLike = ["prod", "production", "stage", "staging"].includes(gustavEnv);
+const isProdLike = isProdLikeEnv(gustavEnv);
+const debugHtmlEnabled = debugPagesEnabled({
+  gustavEnv,
+  enableFlag: process.env.H5P_ENABLE_DEBUG_PAGES,
+});
 if (isProdLike && (!reviewTokenSecret || reviewTokenSecret.toUpperCase().startsWith("CHANGE_ME"))) {
   // eslint-disable-next-line no-console
   console.error(
@@ -176,6 +182,11 @@ function sendHtml(res, statusCode, html, headers = {}) {
   res.setHeader("Cache-Control", "private, no-store");
   for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
   res.type("html").send(html);
+}
+
+function requireDebugHtmlEnabled(_req, res, next) {
+  if (debugHtmlEnabled) return next();
+  sendHtml(res, 404, "");
 }
 
 function asyncHandler(fn) {
@@ -422,13 +433,15 @@ async function probeStorage() {
 
 async function fetchGustavMe(cookieHeader) {
   const url = `${gustavWebInternalBase.replace(/\/+$/, "")}/api/me`;
+  const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
+  const headers = {
+    // Mirror "no-store" semantics of /api/me; avoid accidental caches.
+    "cache-control": "no-store",
+  };
+  if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
   const r = await fetch(url, {
     method: "GET",
-    headers: {
-      cookie: cookieHeader,
-      // Mirror "no-store" semantics of /api/me; avoid accidental caches.
-      "cache-control": "no-store",
-    },
+    headers,
   });
   if (r.status !== 200) {
     return { ok: false, status: r.status };
@@ -440,14 +453,16 @@ async function fetchGustavMe(cookieHeader) {
 async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) {
   const base = gustavWebInternalBase.replace(/\/+$/, "");
   const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access`;
+  const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
+  const headers = {
+    // Keep "no-store" semantics for access checks (cookie-auth, student scope).
+    "cache-control": "no-store",
+  };
+  if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
   try {
     const r = await fetch(url, {
       method: "GET",
-      headers: {
-        cookie: cookieHeader,
-        // Keep "no-store" semantics for access checks (cookie-auth, student scope).
-        "cache-control": "no-store",
-      },
+      headers,
     });
     if (r.status === 204) {
       return { ok: true, status: 204 };
@@ -851,7 +866,7 @@ async function main() {
     sendJson(res, 200, req.gustavMe);
   });
 
-  app.get("/editor", requireAdmin, (_req, res) => {
+  app.get("/editor", requireDebugHtmlEnabled, requireAdmin, (_req, res) => {
     sendHtml(
       res,
       200,
@@ -1395,7 +1410,7 @@ async function main() {
     }),
   );
 
-  app.get("/player", requireAdmin, asyncHandler(async (req, res) => {
+  app.get("/player", requireDebugHtmlEnabled, requireAdmin, asyncHandler(async (req, res) => {
     const initialContentId =
       typeof req.query.content_id === "string" ? req.query.content_id : "";
     // NOTE: This debug page uses the same webcomponents + model endpoint as the
@@ -1686,8 +1701,8 @@ async function main() {
             const base = gustavWebInternalBase.replace(/\/+$/, "");
             const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(taskId)}/submissions`;
 
+            const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
             const headers = {
-              cookie: cookieHeader,
               "content-type": "application/json",
               "idempotency-key": idem,
               // CSRF same-origin for internal call: mimic the reverse-proxy headers
@@ -1701,6 +1716,7 @@ async function main() {
                   }
                 : {}),
             };
+            if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
 
             const r = await fetch(url, {
               method: "POST",

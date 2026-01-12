@@ -337,29 +337,10 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
     admin_sess = requests.Session()
     _login_via_oidc(admin_sess, email=admin_email, password=admin_pw)
 
+    # Debug HTML pages are disabled by default in prod-like runs (defense-in-depth).
+    # The embedded UI uses `/h5p/editor/model` and `/h5p/player/model` instead.
     r_editor = admin_sess.get(f"{WEB_BASE}/h5p/editor", timeout=30)
-    assert r_editor.status_code == 200
-    assert "h5p-editor" in r_editor.text
-
-    assert (
-        "Waiting for editor JS" in r_editor.text
-    ), "Editor page should show a visible placeholder when JS fails to load"
-
-    assert (
-        "__gustav_h5p_editor_init_ok" in r_editor.text
-    ), "Editor page should expose an init flag so we can detect partial JS failures"
-
-    # The editor page inlines JS. We rely on line breaks because the script
-    # contains `//` comments (without newlines they'd comment out the rest).
-    assert "\n" in r_editor.text
-    assert "\n    // Workaround:" in r_editor.text
-
-    assert 'type="importmap"' in r_editor.text, "Editor must ship an import map for bare imports"
-    assert "deepmerge" in r_editor.text
-    assert "await-lock" in r_editor.text
-    assert (
-        "editor.contentId = undefined;" in r_editor.text
-    ), "Editor must force a reload when switching from 'new' to an existing content id"
+    assert r_editor.status_code == 404
 
     r_utils = admin_sess.get(f"{WEB_BASE}/h5p/webcomponents/h5p-utils.js", timeout=20)
     assert r_utils.status_code == 200

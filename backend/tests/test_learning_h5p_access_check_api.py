@@ -177,3 +177,20 @@ async def test_learning_h5p_access_400_for_invalid_content_id() -> None:
         body = r.json() or {}
         assert body.get("error") == "bad_request"
         assert body.get("detail") == "invalid_content_id"
+
+
+@pytest.mark.anyio
+async def test_learning_h5p_access_400_for_non_ascii_digit_content_id() -> None:
+    """Non-ASCII digits must be rejected to match the OpenAPI `^[0-9]+$` pattern."""
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-h5p-access-nonascii", name="Student", roles=["student"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.get(
+            "/api/learning/courses/123e4567-e89b-12d3-a456-426614174000/h5p/contents/١/access"
+        )
+        assert r.status_code == 400
+        assert r.headers.get("Cache-Control") == "private, no-store"
+        body = r.json() or {}
+        assert body.get("error") == "bad_request"
+        assert body.get("detail") == "invalid_content_id"

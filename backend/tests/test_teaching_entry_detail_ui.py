@@ -324,7 +324,7 @@ async def test_h5p_task_create_uses_h5p_content_id_from_form():
             f"/units/{unit['id']}/sections/{section['id']}/tasks/create",
             data={
                 "task_kind": "h5p",
-                "h5p_content_id": "content-123",
+                "h5p_content_id": "123",
                 "csrf_token": token,
             },
             follow_redirects=False,
@@ -336,14 +336,14 @@ async def test_h5p_task_create_uses_h5p_content_id_from_form():
         tasks = lst.json()
         assert isinstance(tasks, list) and tasks
         assert tasks[0].get("kind") == "h5p"
-        assert (tasks[0].get("h5p") or {}).get("content_id") == "content-123"
+        assert (tasks[0].get("h5p") or {}).get("content_id") == "123"
 
         # Detail page should advertise the content id for the embedded editor JS.
         tid = str(tasks[0].get("id") or "")
         page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/{tid}")
         assert page.status_code == 200
-        assert 'data-content-id="content-123"' in page.text
-        assert 'content-id="content-123"' in page.text
+        assert 'data-content-id="123"' in page.text
+        assert 'content-id="123"' in page.text
 
 class FakeStorageAdapter:
     def presign_upload(self, **kwargs):

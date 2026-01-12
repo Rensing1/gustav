@@ -16,6 +16,7 @@ before writing. Secrets are never printed.
 
 from __future__ import annotations
 
+import secrets
 import shutil
 import subprocess
 from pathlib import Path
@@ -23,6 +24,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = REPO_ROOT / ".env"
+
+
+def _read_env_value(key: str) -> str | None:
+    if not ENV_PATH.exists():
+        return None
+    prefix = f"{key}="
+    for line in ENV_PATH.read_text().splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip()
+    return None
 
 
 def _update_env(key: str, value: str) -> None:
@@ -77,9 +88,21 @@ def main() -> None:
     _run(["python3", "scripts/sync_supabase_env.py"])
     _run(["python3", "scripts/sync_keycloak_env.py"])
 
+    # 5) Ensure required prod-like secrets exist locally.
+    #
+    # Why:
+    #   `make test-e2e` runs with `GUSTAV_ENV=prod` to exercise production guards.
+    #   That means secrets must be configured even in local runs.
+    #
+    # Security:
+    #   We generate a fresh random value only when missing/placeholder. Secrets are
+    #   not printed.
+    h5p_review_secret = (_read_env_value("H5P_REVIEW_TOKEN_SECRET") or "").strip()
+    if not h5p_review_secret or h5p_review_secret.upper().startswith("CHANGE_ME"):
+        _update_env("H5P_REVIEW_TOKEN_SECRET", secrets.token_urlsafe(32))
+
     print("Synced .env for prod-like local runs (secrets not printed).")
 
 
 if __name__ == "__main__":
     main()
-

@@ -6,7 +6,7 @@ Trusted-content model:
     code and may only be imported/updated/exported by role `teacher` (or `admin`).
 
 Proof strategy for "save" without browser automation:
-    Import (.h5p) → Player load → Export (.h5p) → Re-import → Player load.
+    Import (.h5p) → Player model load → Export (.h5p) → Re-import → Player model load.
 """
 
 from __future__ import annotations
@@ -232,22 +232,28 @@ def test_h5p_import_export_roundtrip():
     assert isinstance(body, dict) and isinstance(body.get("content_id"), str) and body["content_id"]
     content_id_1 = body["content_id"]
 
-    # 2) Load (player debug page is admin-only)
+    # 2) Load (embedded UI uses the JSON model endpoint)
     r_forbidden = student_sess.get(
-        f"{WEB_BASE}/h5p/player",
+        f"{WEB_BASE}/h5p/player/model",
         params={"content_id": content_id_1},
         timeout=30,
     )
     assert r_forbidden.status_code == 403
 
-    r_player = admin_sess.get(
-        f"{WEB_BASE}/h5p/player",
+    r_model = admin_sess.get(
+        f"{WEB_BASE}/h5p/player/model",
         params={"content_id": content_id_1},
         timeout=30,
     )
-    assert r_player.status_code == 200
-    assert "text/html" in (r_player.headers.get("content-type") or "")
-    _assert_no_external_http_urls(r_player.text)
+    assert r_model.status_code == 200
+    assert "application/json" in (r_model.headers.get("content-type") or "")
+    model = r_model.json()
+    scripts = model.get("scripts") or []
+    styles = model.get("styles") or []
+    assert isinstance(scripts, list) and scripts
+    assert isinstance(styles, list) and styles
+    urls = [u for u in scripts + styles if isinstance(u, str)]
+    _assert_no_external_http_urls("\n".join(urls))
 
     # 3) Export (save proof part 1)
     r_export = teacher_sess.get(
@@ -271,11 +277,15 @@ def test_h5p_import_export_roundtrip():
     content_id_2 = body2["content_id"]
     assert content_id_2 != content_id_1, "Re-import should create a new content id for deterministic proof"
 
-    # 5) Reload (admin-only debug player)
+    # 5) Reload (model endpoint)
     r_player2 = admin_sess.get(
-        f"{WEB_BASE}/h5p/player",
+        f"{WEB_BASE}/h5p/player/model",
         params={"content_id": content_id_2},
         timeout=30,
     )
     assert r_player2.status_code == 200
-    _assert_no_external_http_urls(r_player2.text)
+    model2 = r_player2.json()
+    scripts2 = model2.get("scripts") or []
+    styles2 = model2.get("styles") or []
+    urls2 = [u for u in scripts2 + styles2 if isinstance(u, str)]
+    _assert_no_external_http_urls("\n".join(urls2))

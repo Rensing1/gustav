@@ -62,8 +62,9 @@ def test_h5p_csp_policy_matrix_and_debug_access_control() -> None:
     js = server_path.read_text(encoding="utf-8")
 
     # Debug HTML pages must be admin-only.
-    assert 'app.get("/editor", requireAdmin' in js
-    assert 'app.get("/player", requireAdmin' in js
+    assert 'app.get("/editor",' in js and "requireAdmin" in js
+    assert re.search(r'app\.get\(\"/editor\",\s*.*?requireAdmin', js), "editor debug page must be admin-only"
+    assert re.search(r'app\.get\(\"/player\",\s*.*?requireAdmin', js), "player debug page must be admin-only"
 
     # Default CSP is strict (no wildcards, no unsafe-eval).
     default_directives = _extract_csp_directives(js, "CSP_DEFAULT")
@@ -93,4 +94,3 @@ def test_h5p_csp_policy_matrix_and_debug_access_control() -> None:
     # (editor + player pages).
     send_html_uses = re.findall(r"sendHtml\([\s\S]*?CSP_DEBUG_HTML", js)
     assert len(send_html_uses) == 2, f"Expected 2 CSP_DEBUG_HTML overrides, got {len(send_html_uses)}"
-

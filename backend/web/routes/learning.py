@@ -524,7 +524,9 @@ async def check_h5p_content_access(request: Request, course_id: str, content_id:
             headers=_cache_headers_error(),
         )
 
-    if not isinstance(content_id, str) or not content_id.isdigit():
+    import re
+
+    if not isinstance(content_id, str) or not re.fullmatch(r"[0-9]+", content_id):
         return JSONResponse(
             {"error": "bad_request", "detail": "invalid_content_id"},
             status_code=400,
@@ -928,7 +930,9 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     try:
         if kind == "file" and str(clean_payload.get("mime_type")) == "application/pdf":
             root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
-            if root:
+            env = _current_environment()
+            prod_like = env in {"prod", "production", "stage", "staging"}
+            if root and (not prod_like):
                 _dev_try_process_pdf(
                     root=root,
                     storage_key=str(clean_payload.get("storage_key") or ""),
@@ -1150,9 +1154,13 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
             if not visible:
                 return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
         except Exception:
-            # As a last resort, keep behavior permissive to avoid breaking dev
-            # flows; submission creation will still be RLS-protected.
-            pass
+            # Fail closed: without a reliable authorization check we must not
+            # hand out a presigned upload capability.
+            return JSONResponse(
+                {"error": "service_unavailable", "detail": "authorization_unavailable"},
+                status_code=503,
+                headers=_cache_headers_error(),
+            )
 
     # Build a storage key (lowercase path, no traversal) — the value is later
     # validated again at submission time with a strict regex.

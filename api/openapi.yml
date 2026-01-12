@@ -689,7 +689,8 @@ components:
         content_id:
           type: string
           nullable: true
-          description: Opaque identifier of the H5P content item (may be null for drafts).
+          pattern: '^[0-9]+$'
+          description: Numeric identifier of the H5P content item (may be null for drafts).
         display_options:
           type: object
           nullable: true
@@ -1353,7 +1354,7 @@ components:
           nullable: true
           description: >
             Only for H5P tasks. True when the student has at least one H5P submission
-            with full score (score_raw == score_max and score_max > 0). Null for non-H5P tasks.
+            with full score (score_raw == score_max, including 0/0). Null for non-H5P tasks.
         average_score:
           type: number
           format: float
@@ -1395,7 +1396,7 @@ components:
           nullable: true
           description: >
             Only for H5P tasks. True when the student has at least one H5P submission
-            with full score (score_raw == score_max and score_max > 0). Null for non-H5P tasks.
+            with full score (score_raw == score_max, including 0/0). Null for non-H5P tasks.
         average_score:
           type: number
           format: float
@@ -1770,6 +1771,203 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /h5p/ajax:
+    post:
+      tags: [H5P]
+      summary: H5P runtime Ajax endpoint
+      description: >-
+        Runtime endpoint required by the H5P client for translations and other actions.
+        This endpoint is cookie-authenticated and must enforce strict same-origin
+        checks (Origin/Referer) to reduce CSRF surface.
+      operationId: postH5PAjax
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content model: some actions are restricted to teacher/admin."
+      parameters:
+        - in: query
+          name: action
+          required: true
+          schema:
+            type: string
+          description: H5P ajax action identifier (e.g., translations).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: true
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Action response (varies by action)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Invalid request (e.g., missing action)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (csrf_violation or role not allowed for action)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /h5p/finishedData:
+    post:
+      tags: [H5P]
+      summary: Persist H5P finished state (runtime)
+      description: >-
+        Called by the H5P client when a user finishes a run. The service persists
+        finished state in its own storage backend and may additionally forward a
+        scored attempt to the Learning API when `course_id` and `task_id` are provided.
+      operationId: postH5PFinishedData
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Data minimisation: only score raw/max are forwarded to Learning."
+      parameters:
+        - in: query
+          name: course_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional course scope for forwarding a learning submission.
+        - in: query
+          name: task_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional task scope for forwarding a learning submission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [contentId, score, maxScore]
+              properties:
+                contentId:
+                  type: string
+                  description: H5P content id.
+                score:
+                  type: number
+                maxScore:
+                  type: number
+                opened:
+                  type: string
+                  nullable: true
+                finished:
+                  type: string
+                  nullable: true
+                time:
+                  type: number
+                  nullable: true
+      responses:
+        '200':
+          description: Finished state persisted
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                additionalProperties: false
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid request
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (csrf_violation)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /h5p/libraries:
     get:
       tags: [H5P]
@@ -5976,7 +6174,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Storage unavailable (storage_adapter_not_configured | storage_service_error)
+          description: Storage or authorization unavailable (storage_adapter_not_configured | storage_service_error | authorization_unavailable)
           headers:
             Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
             Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }

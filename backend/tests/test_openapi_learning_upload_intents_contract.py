@@ -50,3 +50,10 @@ def test_openapi_upload_intents_includes_404_not_found():
     # Upload intents must document 404 when task not visible or not found
     assert "/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents:" in yml
     assert "'404':" in yml or "404:" in yml
+
+
+def test_openapi_upload_intents_503_includes_authorization_unavailable():
+    yml = _load_openapi()
+    # Fail-closed: when authorization checks are unavailable, upload-intents must return 503.
+    assert "/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents:" in yml
+    assert "authorization_unavailable" in yml

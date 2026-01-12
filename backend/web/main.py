@@ -1597,37 +1597,38 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             params={"limit": 10, "offset": 0},
                         )
                     if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
-                            records = r_hist.json()
-                            _enrich_submission_records_with_file_urls(
-                                [rec for rec in records if isinstance(rec, dict)]
+                        records = r_hist.json()
+                        _enrich_submission_records_with_file_urls(
+                            [rec for rec in records if isinstance(rec, dict)]
+                        )
+                        # If the latest attempt is still in progress, prefer a polling
+                        # placeholder to auto-refresh.
+                        latest_status = None
+                        if records:
+                            try:
+                                latest_status = (records[0] or {}).get("analysis_status")
+                            except Exception:
+                                latest_status = None
+                        if _is_analysis_in_progress(latest_status):
+                            payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                            history_placeholder_html = (
+                                f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                                f'data-pending="true" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                                f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+                                f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML" '
+                                f"hx-vals='{payload}' "
+                                'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+                                f"{_render_analysis_in_progress_hint()}"
+                                "</section>"
                             )
-                            # If latest attempt is still in progress, prefer a polling placeholder to auto-refresh
-                            latest_status = None
-                            if records:
-                                try:
-                                    latest_status = (records[0] or {}).get("analysis_status")
-                                except Exception:
-                                    latest_status = None
-                            if _is_analysis_in_progress(latest_status):
-                                payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
-                                history_placeholder_html = (
-                                    f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                                    f'data-pending="true" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
-                                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
-                                    f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML" '
-                                    f"hx-vals='{payload}' "
-                                    'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-                                    f'{_render_analysis_in_progress_hint()}'
-                                    f'</section>'
+                        else:
+                            for index, rec in enumerate(records):
+                                entry = _build_history_entry_from_record(
+                                    rec if isinstance(rec, dict) else {},
+                                    index=index,
+                                    open_attempt_id=open_attempt_id_qp,
                                 )
-                            else:
-                                for index, rec in enumerate(records):
-                                    entry = _build_history_entry_from_record(
-                                        rec if isinstance(rec, dict) else {},
-                                        index=index,
-                                        open_attempt_id=open_attempt_id_qp,
-                                    )
-                                    history_entries.append(entry)
+                                history_entries.append(entry)
                 except Exception:
                     history_entries = []
             else:
@@ -1804,7 +1805,8 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         visibility. Same-origin protection is applied at the API boundary.
     """
     # CSRF: enforce same-origin for browser form POSTs before touching inputs.
-    if not _is_same_origin(request):
+    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
+    if not origin_present or (not _is_same_origin(request)):
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
     user = getattr(request.state, "user", None)

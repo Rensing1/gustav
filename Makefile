@@ -73,8 +73,9 @@ test-e2e:
 	touch .tmp/caddy-root.crt
 	@$(MAKE) up
 	@$(MAKE) prod-sync-env
-	# Reload env_file changes into the web container
-	docker compose up -d --build --force-recreate web
+	# Reload env changes into containers that depend on `.env` substitutions.
+	# (e.g. prod-guards require non-placeholder secrets for both web and h5p.)
+	docker compose up -d --build --force-recreate web h5p
 	# Fail fast when deps are broken (avoid 60s timeouts inside tests)
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	. ./.venv/bin/activate && E2E_READY_TIMEOUT_S=20 python3 scripts/wait_for_e2e_ready.py

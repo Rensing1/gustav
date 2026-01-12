@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
 
@@ -151,6 +152,8 @@ def _normalize_h5p_config(value: object) -> Tuple[Optional[str], Dict[str, Any]]
         content_id = None
     elif isinstance(raw_content_id, str):
         trimmed = raw_content_id.strip()
+        if trimmed and not re.fullmatch(r"[0-9]+", trimmed):
+            raise ValueError("invalid_h5p_config")
         content_id = trimmed or None
     else:
         raise ValueError("invalid_h5p_config")

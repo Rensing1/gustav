@@ -362,10 +362,36 @@ function h5pFinishedIdempotencyKey({ userId, courseId, taskId, contentId, opened
 }
 
 function getPublicOrigin(req) {
-  const proto = (req.get("x-forwarded-proto") || req.protocol || "").split(",")[0].trim();
-  const host = (req.get("x-forwarded-host") || req.get("host") || "").split(",")[0].trim();
-  if (!proto || !host) return null;
-  return `${proto}://${host}`;
+  const proto = String(req.get("x-forwarded-proto") || req.protocol || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const xfHost = String(req.get("x-forwarded-host") || req.get("host") || "")
+    .split(",")[0]
+    .trim();
+  if (!proto || !xfHost) return null;
+
+  // Some proxy setups strip the port from `X-Forwarded-Host`, but set
+  // `X-Forwarded-Port` instead. We normalize this so CSRF same-origin checks
+  // behave like browsers: default ports are omitted from origins.
+  const xfPort = String(req.get("x-forwarded-port") || "").split(",")[0].trim();
+
+  let hostname = "";
+  let port = "";
+  try {
+    const u = new URL(`${proto}://${xfHost}`);
+    hostname = String(u.hostname || "").toLowerCase();
+    port = String(u.port || "");
+  } catch {
+    return null;
+  }
+  if (!hostname) return null;
+  if (xfPort) port = xfPort;
+
+  const defaultPort = proto === "https" ? "443" : "80";
+  const includePort = port && port !== defaultPort;
+  const hostPart = hostname.includes(":") ? `[${hostname}]` : hostname;
+  return `${proto}://${includePort ? `${hostPart}:${port}` : hostPart}`;
 }
 
 function requireSameOrigin(req, res, next) {
@@ -704,7 +730,8 @@ async function main() {
 
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", true);
+  // We only expect a single reverse-proxy hop (Caddy). Do not trust arbitrary clients.
+  app.set("trust proxy", 1);
 
   // Security headers for all responses (Cache-Control is set route-specific).
   app.use((req, res, next) => {
@@ -723,7 +750,8 @@ async function main() {
       status: storage.ok ? "healthy" : "unhealthy",
       service: "gustav-h5p",
       time: new Date().toISOString(),
-      storage,
+      // Keep the public payload minimal (no filesystem paths, no raw errors).
+      storage: { ok: storage.ok },
     });
   }));
 

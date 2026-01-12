@@ -11,6 +11,8 @@ scanner as part of your release process.
 ## H5P Core (static runtime assets)
 
 - **Location:** `h5p-service/vendor/h5p/core/`
+- **Upstream:** `https://github.com/h5p/h5p-php-library`
+- **Revision:** `1.27.0` (tag)
 - **License:** GNU General Public License v3 (GPL-3.0)  
   **License text:** `h5p-service/vendor/h5p/core/LICENSE.txt`
 - **Notes:** This is a vendored snapshot of upstream H5P core runtime assets
@@ -65,3 +67,15 @@ browser ESM compatible without a bundler.
   - `h5p-service/vendor/webcomponents/overrides/dom-utils.js`
 - **Local change:** only the import paths are adjusted; functional logic stays
   aligned with upstream (see file headers for rationale).
+
+## How to update vendored assets (checklist)
+
+When updating anything listed in this file:
+
+1) Identify the upstream source (URL) and pin a specific revision (tag/commit).
+2) Replace the vendored files under the documented `Location` path(s).
+3) Verify license files are present and still apply (and add missing notices for bundled subcomponents).
+4) Update the `Upstream`/`Revision` fields above (and add new entries when new vendored files appear).
+5) Run local verification:
+   - Rebuild affected services (e.g. `docker compose build h5p-service`).
+   - Run the relevant contract tests (`.venv/bin/pytest -q backend/tests/test_h5p_* backend/tests/test_openapi_h5p_*`).

@@ -83,17 +83,12 @@ components:
           type: string
     H5PStorageReadiness:
       type: object
-      required: [ok, root]
+      required: [ok]
       additionalProperties: false
       properties:
         ok:
           type: boolean
-        root:
-          type: string
-        error:
-          type: string
-          nullable: true
-          description: Optional diagnostic string when storage is not writable/ready.
+          description: Whether the filesystem-backed H5P storage is writable/ready.
     H5PHealth:
       type: object
       required: [status, service, time, storage]
@@ -1444,7 +1439,7 @@ paths:
       summary: H5P service health check (proxy + storage readiness)
       description: >-
         Lightweight readiness probe for the H5P sidecar service behind the reverse proxy.
-        Returns basic filesystem storage readiness for `/data/h5p` (bind mount).
+        Returns a minimal filesystem-backed storage readiness signal.
       operationId: getH5PHealth
       security: []
       responses:
@@ -1567,6 +1562,10 @@ paths:
       operationId: getH5PEditorModel
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "Trusted content: teachers only."
+      x-permissions:
+        requiredRole: teacher
       parameters:
         - in: query
           name: content_id
@@ -2006,6 +2005,8 @@ paths:
       operationId: listH5PLibraries
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
       responses:
         '200':
           description: Installed libraries
@@ -2036,6 +2037,8 @@ paths:
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Trusted-content: Only teacher/admin may install content-type libraries (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
       requestBody:
         required: true
         content:
@@ -2112,6 +2115,8 @@ paths:
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Trusted-content: Only teacher/admin may import packages (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
       requestBody:
         required: true
         content:
@@ -2188,6 +2193,8 @@ paths:
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Trusted-content: Only teacher/admin may create content (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
       requestBody:
         required: true
         content:
@@ -2258,6 +2265,8 @@ paths:
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Trusted-content: Only teacher/admin may update content (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
       parameters:
         - in: path
           name: content_id
@@ -2339,6 +2348,8 @@ paths:
       operationId: exportH5PContent
       security:
         - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
       parameters:
         - in: path
           name: content_id

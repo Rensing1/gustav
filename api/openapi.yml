@@ -1525,6 +1525,8 @@ paths:
         - cookieAuth: []
       x-security-notes:
         - "Debug UI: admin-only (teacher/student must not access this page)."
+      x-permissions:
+        requiredRole: admin
       responses:
         '200':
           description: HTML editor page
@@ -1542,6 +1544,18 @@ paths:
           $ref: '#/components/responses/Unauthorized401'
         '403':
           $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found (debug pages disabled)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
   /h5p/editor/model:
     get:
       tags: [H5P]
@@ -1604,6 +1618,8 @@ paths:
         - cookieAuth: []
       x-security-notes:
         - "Debug UI: admin-only (teacher/student must not access this page)."
+      x-permissions:
+        requiredRole: admin
       parameters:
         - in: query
           name: content_id
@@ -1628,6 +1644,18 @@ paths:
           $ref: '#/components/responses/Unauthorized401'
         '403':
           $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found (debug pages disabled)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
   /h5p/player/model:
     get:
       tags: [H5P]

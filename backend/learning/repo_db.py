@@ -50,7 +50,17 @@ def _running_under_pytest() -> bool:
         `learning-worker` is running in parallel, it can consume queue jobs
         created by tests and mutate DB state asynchronously, making tests flaky.
     """
-    return bool(os.getenv("PYTEST_CURRENT_TEST"))
+    import sys
+
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
+    if any(name == "pytest" or name.startswith("pytest.") for name in sys.modules):
+        return True
+    if any(name == "_pytest" or name.startswith("_pytest.") for name in sys.modules):
+        return True
+    if any("pytest" in (arg or "").lower() for arg in sys.argv):
+        return True
+    return False
 
 
 def _default_app_login_dsn() -> str:

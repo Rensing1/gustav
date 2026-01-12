@@ -32,7 +32,15 @@ def test_h5p_service_trust_proxy_is_bounded() -> None:
     js = server_path.read_text(encoding="utf-8")
 
     assert 'app.set("trust proxy", true);' not in js
-    assert 'app.set("trust proxy", 1);' in js
+    # Default should be "off" (Express default), but deployments behind a
+    # reverse-proxy can enable bounded proxy trust explicitly.
+    block = _extract_block(
+        js,
+        start_token="const app = express();",
+        end_token="// Security headers for all responses",
+    )
+    assert "process.env.H5P_TRUST_PROXY" in block
+    assert 'app.set("trust proxy", 1);' in block
 
 
 def test_h5p_same_origin_expected_origin_considers_forwarded_port() -> None:

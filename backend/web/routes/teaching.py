@@ -977,9 +977,11 @@ def _build_default_repo():
 _REPO = None
 
 def _get_repo():  # pragma: no cover - simple accessor
-    global _REPO
+    global _REPO, REPO
     if _REPO is None:
         _REPO = _build_default_repo()
+    # Keep the public alias in sync for tests that do `isinstance(routes.teaching.REPO, ...)`.
+    REPO = _REPO
     return _REPO
 
 # Back-compat symbol used in tests: expose the actual instance for isinstance checks
@@ -999,8 +1001,9 @@ def _get_tasks_service() -> TasksService:
 
 def set_repo(repo) -> None:
     """Allow tests to swap the teaching repository implementation."""
-    global _REPO
+    global _REPO, REPO
     _REPO = repo
+    REPO = repo
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
@@ -2138,9 +2141,9 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -2159,7 +2162,7 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             visual=payload.visual,
         )
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
         if detail not in {
@@ -2173,10 +2176,10 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             "invalid_task_kind_config",
         }:
             detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_task(task), status_code=201)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_task(task), status_code=201)
 
 
 @teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
@@ -2196,18 +2199,18 @@ async def update_section_task(
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     if not _is_uuid_like(task_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
     raw_updates = payload.model_dump(mode="python", exclude_unset=True)
     if not raw_updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     kwargs: Dict[str, object] = {}
     if "instruction_md" in raw_updates:
         kwargs["instruction_md"] = raw_updates["instruction_md"]
@@ -2244,12 +2247,12 @@ async def update_section_task(
             "invalid_task_kind_config",
         }:
             detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_task(updated), status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_task(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")

@@ -30,3 +30,14 @@ test("buildSessionCookieHeader: empty session cookie is treated as missing", () 
   assert.equal(out, "");
 });
 
+test("buildSessionCookieHeader: rejects CR/LF in cookie value (header injection defense)", () => {
+  const header = "gustav_session=abc\r\ninjected=1; other=1";
+  const out = buildSessionCookieHeader(header, "gustav_session");
+  assert.equal(out, "");
+});
+
+test("buildSessionCookieHeader: rejects LF in cookie value (header injection defense)", () => {
+  const header = "other=1; gustav_session=abc\ninjected=1";
+  const out = buildSessionCookieHeader(header, "gustav_session");
+  assert.equal(out, "");
+});

@@ -76,3 +76,62 @@ async def test_prod_csp_omits_unsafe_inline_and_sets_hsts():
         assert "Strict-Transport-Security" in r.headers
     finally:
         main.SETTINGS.override_environment(None)
+
+
+@pytest.mark.anyio
+async def test_teaching_task_create_sets_private_no_store_cache_header():
+    import routes.teaching as teaching  # type: ignore
+
+    # Force in-memory repo to avoid DB dependencies for this header contract.
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+
+    sess = main.SESSION_STORE.create(sub="t-task-cache-create", name="Teacher", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+
+        unit = (await c.post("/api/teaching/units", json={"title": "Unit"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "Section"})).json()
+
+        r = await c.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={"instruction_md": "Task"},
+        )
+    assert r.status_code == 201
+    cc = r.headers.get("Cache-Control", "")
+    assert "private" in cc and "no-store" in cc
+
+
+@pytest.mark.anyio
+async def test_teaching_task_update_sets_private_no_store_cache_header():
+    import routes.teaching as teaching  # type: ignore
+
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+
+    sess = main.SESSION_STORE.create(sub="t-task-cache-update", name="Teacher", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+
+        unit = (await c.post("/api/teaching/units", json={"title": "Unit"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "Section"})).json()
+        created = (
+            await c.post(
+                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+                json={"instruction_md": "Task"},
+            )
+        ).json()
+
+        r = await c.patch(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks/{created['id']}",
+            json={"instruction_md": "Updated"},
+        )
+    assert r.status_code == 200
+    cc = r.headers.get("Cache-Control", "")
+    assert "private" in cc and "no-store" in cc

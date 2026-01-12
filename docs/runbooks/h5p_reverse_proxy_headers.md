@@ -24,9 +24,15 @@ dem Browser-Verhalten entspricht (Default-Port wird in `Origin` i. d. R. nic
 angezeigt).
 
 ## `trust proxy` Policy
-Der Sidecar setzt `trust proxy` bewusst auf **single hop** (`1`), d. h. er
-vertraut Forwarded-Headern nur für genau einen Reverse-Proxy-Hop
-(Defense-in-depth, falls der Service jemals ohne Proxy erreichbar wäre).
+Der Sidecar hält `trust proxy` standardmäßig **aus** (Express Default).
+
+Wenn der Sidecar *stets* hinter genau einem Reverse-Proxy-Hop betrieben wird,
+kann `trust proxy` explizit aktiviert werden:
+
+- `H5P_TRUST_PROXY=true` → `trust proxy` wird bewusst auf **single hop** (`1`) gesetzt.
+
+Damit vertraut Express Forwarded-Headern nur für genau einen Hop (Defense-in-depth,
+falls der Service jemals ohne Proxy erreichbar wäre).
 
 ## Fehlerbild / Triage
 Typisches Symptom bei fehlenden/inkonsistenten Proxy-Headern:

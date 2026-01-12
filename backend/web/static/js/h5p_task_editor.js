@@ -347,14 +347,16 @@
       setHiddenContentId(initialContentId || '');
       installEditor(startContentId);
 
-      btnNew.addEventListener('click', () => {
+      btnNew.addEventListener('click', (ev) => {
+        ev.preventDefault();
         contentIdInput.value = '';
         setHiddenContentId('');
         installEditor('new');
         setStatus('Creating new content…');
       });
 
-      btnLoad.addEventListener('click', () => {
+      btnLoad.addEventListener('click', (ev) => {
+        ev.preventDefault();
         const cid = (contentIdInput.value || '').trim();
         if (!cid) {
           setStatus('Bitte zuerst eine Content ID eingeben.');
@@ -365,7 +367,8 @@
         setStatus(`Loading content ${cid}…`);
       });
 
-      btnSave.addEventListener('click', async () => {
+      btnSave.addEventListener('click', async (ev) => {
+        ev.preventDefault();
         try {
           if (!editor) {
             setStatus('Editor not ready.');

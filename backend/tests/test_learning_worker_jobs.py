@@ -812,6 +812,10 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
                     ),
                 )
                 payload = {
+                    # Tag test-created jobs so a running docker worker can ignore them.
+                    # (See `WORKER_SKIP_PYTEST_JOBS` in docker-compose.yml and the
+                    # dedicated contract tests below.)
+                    "_gustav_source": "pytest",
                     "submission_id": submission_id,
                     "course_id": str(course_id),
                     "task_id": str(task_id),
@@ -1331,10 +1335,29 @@ async def test_worker_skips_pytest_tagged_jobs_when_configured(monkeypatch: pyte
         conn.commit()
 
     now = datetime.now(tz=timezone.utc)
-    _set_job_visibility(worker_dsn, pytest_job_id, visible_at=now - timedelta(seconds=5))
-    _set_job_visibility(worker_dsn, real_job_id, visible_at=now - timedelta(seconds=4))
-
+    # Make the jobs visible and lease in the *same* transaction. This avoids
+    # flakiness when a docker worker is running concurrently: the worker can't
+    # see the jobs until we commit, and by then the "real" job is already leased.
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            for job_id, visible_at in (
+                (pytest_job_id, now - timedelta(seconds=5)),
+                (real_job_id, now - timedelta(seconds=4)),
+            ):
+                cur.execute(
+                    """
+                    update public.learning_submission_jobs
+                       set visible_at = %s,
+                           status = 'queued',
+                           retry_count = 0,
+                           error_code = null,
+                           lease_key = null,
+                           leased_until = null,
+                           updated_at = now()
+                     where id = %s::uuid
+                    """,
+                    (visible_at, job_id),
+                )
         leased = worker_module._lease_next_job(conn, now=now)
         conn.commit()
     assert leased is not None

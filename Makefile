@@ -63,6 +63,13 @@ db-login-user:
 test:
 	. ./.venv/bin/activate && pytest -q
 
+.PHONY: test-h5p
+test-h5p:
+	# Run Node unit tests for the H5P sidecar.
+	# Dependencies are installed from `package-lock.json` (not from vendored `node_modules/`).
+	@cd h5p-service && [ -d node_modules ] || npm ci --omit=dev
+	@cd h5p-service && npm test
+
 .PHONY: test-e2e
 test-e2e:
 	# E2E requires running docker services with prod-like config (dev=prod):
@@ -134,6 +141,7 @@ test-supabase:
 .PHONY: verify
 verify:
 	@$(MAKE) test
+	@$(MAKE) test-h5p
 	@$(MAKE) test-supabase
 	@$(MAKE) test-ollama
 	@$(MAKE) test-e2e

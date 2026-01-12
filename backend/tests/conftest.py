@@ -224,12 +224,6 @@ def _reset_teaching_repo_between_tests():
                 except Exception:
                     ok = False
             teaching.set_repo(teaching._build_default_repo() if ok else teaching._Repo())
-        # Keep alias module in sync if loaded under backend.web.routes.teaching
-        try:
-            alias = importlib.import_module("backend.web.routes.teaching")
-            alias.set_repo(teaching.REPO)  # type: ignore[attr-defined]
-        except Exception:
-            pass
     except Exception:
         pass
     yield

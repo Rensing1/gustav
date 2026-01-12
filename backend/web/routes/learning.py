@@ -13,6 +13,7 @@ elif __name__ == "routes.learning":
 import base64
 import json
 import os
+import re
 import sys as _sys
 from typing import Any
 from uuid import UUID
@@ -524,8 +525,6 @@ async def check_h5p_content_access(request: Request, course_id: str, content_id:
             headers=_cache_headers_error(),
         )
 
-    import re
-
     if not isinstance(content_id, str) or not re.fullmatch(r"[0-9]+", content_id):
         return JSONResponse(
             {"error": "bad_request", "detail": "invalid_content_id"},
@@ -831,8 +830,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
             headers=_cache_headers_error(),
         )
     if idempotency_key is not None:
-        import re as _re
-        if not _re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
             return JSONResponse(
                 {"error": "bad_request", "detail": "invalid_input"},
                 status_code=400,
@@ -1119,10 +1117,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         # DB may be unavailable in dev/test; attempt a conservative in-memory check
         try:
             import importlib
-            try:
-                t = importlib.import_module("routes.teaching")
-            except Exception:
-                t = importlib.import_module("backend.web.routes.teaching")
+            t = importlib.import_module("routes.teaching")
             repo = getattr(t, "REPO", None)
             student_sub = str(user.get("sub", ""))
             # Membership

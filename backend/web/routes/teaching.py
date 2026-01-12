@@ -18,14 +18,7 @@ Notes:
 from __future__ import annotations
 
 import logging
-import sys
 
-# Ensure imports via `routes.teaching` and `backend.web.routes.teaching` point to
-# the same module instance to avoid test-time alias drift.
-if __name__ == "backend.web.routes.teaching":
-    sys.modules.setdefault("routes.teaching", sys.modules[__name__])
-elif __name__ == "routes.teaching":
-    sys.modules.setdefault("backend.web.routes.teaching", sys.modules[__name__])
 import time
 from dataclasses import dataclass, asdict, is_dataclass
 import os

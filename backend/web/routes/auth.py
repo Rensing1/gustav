@@ -148,6 +148,27 @@ def _hostport_from_url(url: str) -> str:
         pass
     return ""
 
+def _origin_from_url(url: str) -> tuple[str, str]:
+    """Return (scheme, host[:port]) from a URL string, lowercased.
+
+    Used to decide whether we can safely derive redirect_uri from the current
+    request without causing a redirect_uri mismatch during token exchange.
+    """
+    try:
+        from urllib.parse import urlparse
+
+        p = urlparse(url or "")
+        return (str(p.scheme or "").lower(), _hostport_from_url(url))
+    except Exception:
+        return ("", "")
+
+
+def _same_origin(url_a: str, url_b: str) -> bool:
+    """Return True when both URLs share the same (scheme, host[:port])."""
+    sa, ha = _origin_from_url(url_a)
+    sb, hb = _origin_from_url(url_b)
+    return bool(sa and ha and sb and hb and sa == sb and ha == hb)
+
 
 @auth_router.get("/auth/login")
 async def auth_login(request: Request, redirect: str | None = None):
@@ -188,7 +209,11 @@ async def auth_login(request: Request, redirect: str | None = None):
     import os
 
     allowed_base = (os.getenv("WEB_BASE") or getattr(mod, "OIDC_CFG").redirect_uri).rstrip("/")
-    same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
+    # Only use the dynamic redirect URI when the request origin matches the
+    # configured app origin. This avoids a common proxy pitfall where ASGI sees
+    # `http://...` but the browser-facing URL is `https://...`, which would
+    # break the authorization-code token exchange (redirect_uri mismatch).
+    same_host = _same_origin(dynamic_redirect_uri, allowed_base)
 
     redirect_uri = dynamic_redirect_uri if same_host else getattr(mod, "OIDC_CFG").redirect_uri
     cfg = OIDCConfig(
@@ -269,7 +294,7 @@ async def auth_register(request: Request, login_hint: str | None = None):
     import os
     cfg = getattr(mod, "OIDC_CFG", None)
     allowed_base = (os.getenv("WEB_BASE") or getattr(cfg, "redirect_uri", "")).rstrip("/")
-    same_host = _hostport_from_url(dynamic_redirect_uri) == _hostport_from_url(allowed_base)
+    same_host = _same_origin(dynamic_redirect_uri, allowed_base)
     redirect_uri = dynamic_redirect_uri if same_host else getattr(cfg, "redirect_uri", "")
     cfg = OIDCConfig(
         base_url=getattr(cfg, "base_url", ""),

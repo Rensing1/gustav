@@ -69,6 +69,8 @@ async def test_worker_logs_do_not_include_text_body(caplog):
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key="privacy-logs",
         )
     )

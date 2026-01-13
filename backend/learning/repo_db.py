@@ -41,6 +41,28 @@ def _sanitize_error_message(value: Optional[str]) -> Optional[str]:
     return scrubbed
 
 
+def _running_under_pytest() -> bool:
+    """Return True when running under pytest (including test collection).
+
+    Why:
+        Unit tests run the FastAPI app in-process (ASGITransport) against the
+        same local Postgres that docker services use. If a local docker
+        `learning-worker` is running in parallel, it can consume queue jobs
+        created by tests and mutate DB state asynchronously, making tests flaky.
+    """
+    import sys
+
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
+    if any(name == "pytest" or name.startswith("pytest.") for name in sys.modules):
+        return True
+    if any(name == "_pytest" or name.startswith("_pytest.") for name in sys.modules):
+        return True
+    if any("pytest" in (arg or "").lower() for arg in sys.argv):
+        return True
+    return False
+
+
 def _default_app_login_dsn() -> str:
     """Return the local dev DSN using the app login role (e.g. gustav_app).
 
@@ -87,8 +109,8 @@ def _dsn() -> str:
         os.getenv("RLS_TEST_DSN"),
         os.getenv("DATABASE_URL"),
     ]
-    # Only allow default limited DSN implicitly in non-prod environments (dev/test)
-    if env != "prod":
+    # Only allow the default dev DSN implicitly in non-prod-like environments.
+    if env not in {"prod", "production", "stage", "staging"}:
         candidates.append(_default_app_login_dsn())
     for candidate in candidates:
         if candidate:
@@ -107,6 +129,8 @@ class SubmissionInput:
     mime_type: Optional[str]
     size_bytes: Optional[int]
     sha256: Optional[str]
+    score_raw: Optional[int]
+    score_max: Optional[int]
     idempotency_key: Optional[str]
 
 
@@ -361,6 +385,9 @@ class DBLearningRepo:
                        hints_md,
                        due_at_iso,
                        max_attempts,
+                       kind,
+                       h5p_content_id,
+                       h5p_display_options,
                        task_position,
                        created_at_iso,
                        updated_at_iso
@@ -371,6 +398,16 @@ class DBLearningRepo:
             rows = cur.fetchall()
         tasks: List[dict] = []
         for row in rows:
+            kind = str(row[6] or "native")
+            h5p_content_id = row[7]
+            h5p_display_options = row[8]
+            display_options = h5p_display_options if isinstance(h5p_display_options, dict) else {}
+            h5p = None
+            visual = None
+            if kind == "h5p":
+                h5p = {"content_id": (str(h5p_content_id) if h5p_content_id is not None else None), "display_options": display_options}
+            elif kind == "visual":
+                visual = {}
             tasks.append(
                 {
                     "id": row[0],
@@ -379,10 +416,12 @@ class DBLearningRepo:
                     "hints_md": row[3],
                     "due_at": row[4],
                     "max_attempts": row[5],
-                    "position": int(row[6]) if row[6] is not None else None,
-                    "created_at": row[7],
-                    "updated_at": row[8],
-                    "kind": "native",
+                    "kind": kind,
+                    "h5p": h5p,
+                    "visual": visual,
+                    "position": int(row[9]) if row[9] is not None else None,
+                    "created_at": row[10],
+                    "updated_at": row[11],
                 }
             )
         return tasks
@@ -468,6 +507,46 @@ class DBLearningRepo:
                 sections.append(entry)
             return sections
 
+    def is_h5p_content_released_for_student(self, *, student_sub: str, course_id: str, content_id: str) -> bool:
+        """Return True when the student may access this H5P content in the course.
+
+        Why:
+            The H5P sidecar needs a small, fail-closed authorization check to
+            prevent enumeration of all released tasks/IDs and to avoid fragile
+            pagination in the browser-facing service.
+
+        Security:
+            - Enforces membership via course_memberships.
+            - Enforces release visibility via module_section_releases.visible.
+            - Restricts to `unit_tasks.kind='h5p'` and matching `h5p_content_id`.
+            - Runs under gustav_limited with `app.current_sub` set.
+        """
+        course_uuid = str(UUID(course_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                cur.execute(
+                    """
+                    select exists (
+                             select 1
+                               from public.course_memberships cm
+                               join public.course_modules m on m.course_id = cm.course_id
+                               join public.unit_sections s on s.unit_id = m.unit_id
+                               join public.unit_tasks t on t.section_id = s.id
+                               join public.module_section_releases r
+                                 on r.course_module_id = m.id
+                                and r.section_id = s.id
+                              where cm.course_id = %s
+                                and cm.student_id = %s
+                                and t.kind = 'h5p'
+                                and t.h5p_content_id = %s
+                                and coalesce(r.visible, false) = true
+                           )
+                    """,
+                    (course_uuid, student_sub, str(content_id)),
+                )
+                return bool((cur.fetchone() or [False])[0])
+
     # ------------------------------------------------------------------
     def create_submission(self, data: SubmissionInput) -> dict:
         """Persist a student submission after enforcing membership and attempts.
@@ -519,6 +598,8 @@ class DBLearningRepo:
                         select id::text,
                                attempt_nr,
                                kind,
+                               score_raw,
+                               score_max,
                                text_body,
                                mime_type,
                                size_bytes,
@@ -551,6 +632,8 @@ class DBLearningRepo:
                     select task_id::text,
                            section_id::text,
                            unit_id::text,
+                           kind,
+                           h5p_content_id,
                            max_attempts,
                            coalesce(criteria, array[]::text[])
                       from public.get_task_metadata_for_student(%s, %s, %s)
@@ -560,17 +643,34 @@ class DBLearningRepo:
                 meta = cur.fetchone()
                 if not meta:
                     raise LookupError("task_not_visible")
-                max_attempts = meta[3]
+                task_kind = str(meta[3] or "native")
+                max_attempts = meta[5]
                 # Rubric criteria come from the helper (already filtered by RLS).
-                raw_criteria = list(meta[4] or [])
+                raw_criteria = list(meta[6] or [])
                 criteria = [str(entry).strip() for entry in raw_criteria if str(entry).strip()]
+
+                # Guard against mixing task types and submission types.
+                # This prevents students from spoofing a different submission kind.
+                if task_kind == "h5p":
+                    if data.kind != "h5p":
+                        raise ValueError("invalid_input")
+                    if data.score_raw is None or data.score_max is None:
+                        raise ValueError("invalid_h5p_payload")
+                elif task_kind == "visual":
+                    # Visual tasks are upload-only. Text or H5P payloads are rejected.
+                    if data.kind not in ("image", "file"):
+                        raise ValueError("invalid_input")
+                else:
+                    if data.kind == "h5p":
+                        raise ValueError("invalid_h5p_payload")
 
                 cur.execute(
                     "select public.next_attempt_nr(%s, %s, %s)",
                     (course_uuid, task_uuid, data.student_sub),
                 )
                 attempt_nr = int(cur.fetchone()[0])
-                if max_attempts is not None and attempt_nr > int(max_attempts):
+                # H5P attempts are not limited at the GUSTAV DB layer (H5P can enforce its own limits).
+                if task_kind != "h5p" and max_attempts is not None and attempt_nr > int(max_attempts):
                     raise ValueError("max_attempts_exceeded")
 
                 try:
@@ -588,66 +688,128 @@ class DBLearningRepo:
                                   f"{course_uuid}:{task_uuid}:{data.student_sub}:{norm_key}")
                         )
 
-                    cur.execute(
-                        """
-                        insert into public.learning_submissions (
-                            id,
-                            course_id,
-                            task_id,
-                            student_sub,
-                            kind,
-                            text_body,
-                            storage_key,
-                            mime_type,
-                            size_bytes,
-                            sha256,
-                            attempt_nr,
-                            analysis_status,
-                            analysis_json,
-                            feedback_md,
-                            error_code,
-                            idempotency_key
+                    if data.kind == "h5p":
+                        cur.execute(
+                            """
+                            insert into public.learning_submissions (
+                                id,
+                                course_id,
+                                task_id,
+                                student_sub,
+                                kind,
+                                score_raw,
+                                score_max,
+                                attempt_nr,
+                                analysis_status,
+                                analysis_json,
+                                feedback_md,
+                                error_code,
+                                idempotency_key,
+                                completed_at
+                            )
+                            values (coalesce(%s::uuid, gen_random_uuid()),
+                                    %s::uuid, %s::uuid, %s, %s,
+                                    %s, %s,
+                                    %s,
+                                    'completed', null, null, null, %s, now())
+                            on conflict (course_id, task_id, student_sub, idempotency_key)
+                            do nothing
+                            returning id::text,
+                                      attempt_nr,
+                                      kind,
+                                      score_raw,
+                                      score_max,
+                                      text_body,
+                                      mime_type,
+                                      size_bytes,
+                                      storage_key,
+                                      sha256,
+                                      analysis_status,
+                                      analysis_json,
+                                      feedback_md,
+                                      error_code,
+                                      coalesce(vision_attempts, 0),
+                                      vision_last_error,
+                                      to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      feedback_last_error,
+                                      to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                            """,
+                            (
+                                deterministic_id,
+                                course_uuid,
+                                task_uuid,
+                                data.student_sub,
+                                data.kind,
+                                int(data.score_raw),
+                                int(data.score_max),
+                                attempt_nr,
+                                norm_key,
+                            ),
                         )
-                        values (coalesce(%s::uuid, gen_random_uuid()),
-                                %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s,
-                                %s,
-                                'pending', null, null, null, %s)
-                        on conflict (course_id, task_id, student_sub, idempotency_key)
-                        do nothing
-                        returning id::text,
-                                  attempt_nr,
-                                  kind,
-                                  text_body,
-                                  mime_type,
-                                  size_bytes,
-                                  storage_key,
-                                  sha256,
-                                  analysis_status,
-                                  analysis_json,
-                                  feedback_md,
-                                  error_code,
-                                  coalesce(vision_attempts, 0),
-                                  vision_last_error,
-                                  to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                  feedback_last_error,
-                                  to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                                  to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                        """,
-                        (
-                            deterministic_id,
-                            course_uuid,
-                            task_uuid,
-                            data.student_sub,
-                            data.kind,
-                            data.text_body,
-                            data.storage_key,
-                            data.mime_type,
-                            data.size_bytes,
-                            data.sha256,
-                            attempt_nr,
-                            norm_key,
-                        ),
-                    )
+                    else:
+                        cur.execute(
+                            """
+                            insert into public.learning_submissions (
+                                id,
+                                course_id,
+                                task_id,
+                                student_sub,
+                                kind,
+                                text_body,
+                                storage_key,
+                                mime_type,
+                                size_bytes,
+                                sha256,
+                                attempt_nr,
+                                analysis_status,
+                                analysis_json,
+                                feedback_md,
+                                error_code,
+                                idempotency_key
+                            )
+                            values (coalesce(%s::uuid, gen_random_uuid()),
+                                    %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s,
+                                    %s,
+                                    'pending', null, null, null, %s)
+                            on conflict (course_id, task_id, student_sub, idempotency_key)
+                            do nothing
+                            returning id::text,
+                                      attempt_nr,
+                                      kind,
+                                      score_raw,
+                                      score_max,
+                                      text_body,
+                                      mime_type,
+                                      size_bytes,
+                                      storage_key,
+                                      sha256,
+                                      analysis_status,
+                                      analysis_json,
+                                      feedback_md,
+                                      error_code,
+                                      coalesce(vision_attempts, 0),
+                                      vision_last_error,
+                                      to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      feedback_last_error,
+                                      to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                                      to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                            """,
+                            (
+                                deterministic_id,
+                                course_uuid,
+                                task_uuid,
+                                data.student_sub,
+                                data.kind,
+                                data.text_body,
+                                data.storage_key,
+                                data.mime_type,
+                                data.size_bytes,
+                                data.sha256,
+                                attempt_nr,
+                                norm_key,
+                            ),
+                        )
                     row = cur.fetchone()
                     if row is None and norm_key:
                         # Conflict occurred; fetch existing row by idempotency key
@@ -656,6 +818,8 @@ class DBLearningRepo:
                             select id::text,
                                    attempt_nr,
                                    kind,
+                                   score_raw,
+                                   score_max,
                                    text_body,
                                    mime_type,
                                    size_bytes,
@@ -677,6 +841,9 @@ class DBLearningRepo:
                             (course_uuid, task_uuid, data.student_sub, norm_key),
                         )
                         row = cur.fetchone()
+                    if data.kind == "h5p":
+                        conn.commit()
+                        return self._row_to_submission(row)
                     submission_id = row[0]
                     # Enrich job payload with task instruction and optional hints for the Feedback adapter
                     instruction_md: str | None = None
@@ -705,6 +872,7 @@ class DBLearningRepo:
                         "submission_id": submission_id,
                         "course_id": course_uuid,
                         "task_id": task_uuid,
+                        "task_kind": task_kind,
                         "student_sub": data.student_sub,
                         "kind": data.kind,
                         "attempt_nr": attempt_nr,
@@ -712,6 +880,10 @@ class DBLearningRepo:
                         "instruction_md": instruction_md,
                         "hints_md": hints_md,
                     }
+                    if _running_under_pytest():
+                        # Tag jobs created by in-process tests so a local docker worker
+                        # can be configured to ignore them (avoid race conditions).
+                        job_payload["_gustav_source"] = "pytest"
                     queue_table = self._resolve_queue_table(cur)
                     insert_sql = sql.SQL(
                         "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"
@@ -738,6 +910,8 @@ class DBLearningRepo:
                                 select id::text,
                                        attempt_nr,
                                        kind,
+                                       score_raw,
+                                       score_max,
                                        text_body,
                                        mime_type,
                                        size_bytes,
@@ -822,6 +996,8 @@ class DBLearningRepo:
                     select id::text,
                            attempt_nr,
                            kind,
+                           score_raw,
+                           score_max,
                            text_body,
                            mime_type,
                            size_bytes,
@@ -977,6 +1153,8 @@ class DBLearningRepo:
             submission_id,
             attempt_nr,
             kind,
+            score_raw,
+            score_max,
             text_body,
             mime_type,
             size_bytes,
@@ -993,7 +1171,9 @@ class DBLearningRepo:
             created_at,
             completed_at,
         ) = list(row)
-        if status != "completed":
+        if kind == "h5p":
+            analysis_payload = None
+        elif status != "completed":
             analysis_payload = None
         else:
             analysis_payload = analysis_raw
@@ -1020,6 +1200,8 @@ class DBLearningRepo:
             "id": submission_id,
             "attempt_nr": int(attempt_nr),
             "kind": kind,
+            "score_raw": score_raw,
+            "score_max": score_max,
             "text_body": text_body,
             "mime_type": mime_type,
             "size_bytes": size_bytes,

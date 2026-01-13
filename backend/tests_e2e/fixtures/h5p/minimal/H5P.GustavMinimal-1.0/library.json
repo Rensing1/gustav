@@ -1,0 +1,20 @@
+{
+  "title": "GUSTAV Minimal",
+  "machineName": "H5P.GustavMinimal",
+  "majorVersion": 1,
+  "minorVersion": 0,
+  "patchVersion": 0,
+  "runnable": 1,
+  "author": "GUSTAV",
+  "license": "MIT",
+  "preloadedJs": [
+    {
+      "path": "scripts/gustav-minimal.js"
+    }
+  ],
+  "preloadedCss": [
+    {
+      "path": "styles/gustav-minimal.css"
+    }
+  ]
+}

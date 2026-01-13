@@ -104,3 +104,78 @@ async def test_pdf_submission_triggers_processing_in_dev(monkeypatch: pytest.Mon
     )
     # Ensure our processing hook was invoked exactly once
     assert called["n"] == 1
+
+
+@pytest.mark.anyio
+async def test_pdf_submission_does_not_trigger_processing_in_prod(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Even with STORAGE_VERIFY_ROOT set, the PDF hook must not run in prod-like envs."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+
+    monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "true")
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+
+    storage_key = f"learning/{course_id}/{task_id}/{student.sub}/test.pdf".lower()  # type: ignore[attr-defined]
+    target = tmp_path / storage_key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pdf_bytes = b"%PDF-1.4\n%fake\n"
+    target.write_bytes(pdf_bytes)
+
+    called = {"n": 0}
+
+    def _dummy_process(pdf_bytes: bytes):
+        called["n"] += 1
+        return ([], types.SimpleNamespace(page_count=1, dpi=300, grayscale=True, used_annotations=True))
+
+    import sys as _sys
+    monkeypatch.setitem(_sys.modules, "backend.vision.pipeline", types.SimpleNamespace(process_pdf_bytes=_dummy_process))  # type: ignore
+
+    from hashlib import sha256
+    digest = sha256(pdf_bytes).hexdigest()
+    payload = {
+        "kind": "file",
+        "storage_key": storage_key,
+        "mime_type": "application/pdf",
+        "size_bytes": target.stat().st_size,
+        "sha256": digest,
+    }
+
+    class _FakeUC:
+        def __init__(self, *a, **k):
+            pass
+
+        def execute(self, input_data):
+            return {"id": str(uuid.uuid4()), "analysis_status": "pending"}
+
+    from backend.web.routes import learning as learning_routes
+    monkeypatch.setattr(learning_routes, "CreateSubmissionUseCase", _FakeUC)
+    try:
+        import importlib as _importlib
+        lr_alias = _importlib.import_module("routes.learning")
+        monkeypatch.setattr(lr_alias, "CreateSubmissionUseCase", _FakeUC, raising=False)
+    except Exception:
+        pass
+    try:
+        import backend.learning.usecases.submissions as _uc_mod  # type: ignore
+        monkeypatch.setattr(
+            _uc_mod.CreateSubmissionUseCase,
+            "execute",
+            lambda self, input_data: {"id": str(uuid.uuid4()), "analysis_status": "pending"},
+            raising=False,
+        )
+    except Exception:
+        pass
+
+    main.SETTINGS.override_environment("prod")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+            json=payload,
+            headers={"Origin": "http://test"},
+        )
+
+    assert r.status_code == 202
+    assert called["n"] == 0

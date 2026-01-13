@@ -749,6 +749,101 @@ async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
 
 
 @pytest.mark.anyio
+async def test_ui_history_fragment_shows_image_preview_instead_of_ocr_placeholder():
+    """Image submissions should render the uploaded image preview for learners.
+
+    Why:
+        The learner history view is the student's primary place to review what
+        they submitted. For upload-only modes (image/PDF), showing only a stubbed
+        "OCR placeholder …" text is confusing and hides the actual artifact.
+    """
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    student = main.SESSION_STORE.get(sid)
+    if not student:
+        pytest.fail("Session lookup failed for seeded student")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to seed completed submission")
+
+    submission_id = uuid.uuid4()
+    origin_key = f"submissions/{course_id}/{task_id}/{student.sub}/orig/sample.png"
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (student.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id,
+                  course_id,
+                  task_id,
+                  student_sub,
+                  kind,
+                  storage_key,
+                  mime_type,
+                  size_bytes,
+                  sha256,
+                  attempt_nr,
+                  analysis_status,
+                  analysis_json,
+                  feedback_md
+                ) values (
+                  %s::uuid,
+                  %s::uuid,
+                  %s::uuid,
+                  %s,
+                  'image',
+                  %s,
+                  'image/png',
+                  2048,
+                  %s,
+                  1,
+                  'completed',
+                  jsonb_build_object(
+                    'schema', 'criteria.v2',
+                    'text', 'OCR placeholder for sample.png',
+                    'criteria_results', jsonb_build_array(jsonb_build_object('criterion','Inhalt','score',10,'explanation_md','OK'))
+                  ),
+                  null
+                )
+                """,
+                (
+                    str(submission_id),
+                    str(course_id),
+                    str(task_id),
+                    student.sub,
+                    origin_key,
+                    "a" * 64,
+                ),
+            )
+            conn.commit()
+
+    import routes.learning as learning  # noqa: E402
+
+    class _FakeStorageAdapter:
+        def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
+            return {"url": f"https://storage.test/{bucket}/{key}", "headers": {}, "method": "GET"}
+
+    original_adapter = learning.STORAGE_ADAPTER
+    learning.set_storage_adapter(_FakeStorageAdapter())
+    try:
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+            r = await c.get(
+                f"/learning/courses/{course_id}/tasks/{task_id}/history",
+                params={"open_attempt_id": str(submission_id)},
+            )
+        assert r.status_code == 200
+        html = r.text
+        assert "submission-preview" in html
+        assert "OCR placeholder for" not in html
+        assert "storage.test" in html
+    finally:
+        learning.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
 async def test_ui_history_shows_pdf_failure_message():
     """History fragment should surface failure code + sanitized detail for failed PDFs."""
     sid, course_id, unit_id, task_id = await _prepare_learning_fixture()

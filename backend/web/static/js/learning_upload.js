@@ -52,6 +52,15 @@
     });
   }
 
+  function currentMode(form) {
+    // Choice-cards: checked radio; upload-only forms: hidden input value.
+    const checked = form.querySelector('input[name="mode"][type="radio"]:checked');
+    if (checked && checked.value) return checked.value;
+    const any = form.querySelector('input[name="mode"]');
+    if (any && any.value) return any.value;
+    return 'text';
+  }
+
   async function handleSubmitWithUpload(e, form, mode) {
     // If hidden fields already populated, let the submission proceed.
     const storageKeyInput = form.querySelector('input[name="storage_key"]');
@@ -138,14 +147,12 @@
         });
       });
       // Initialize visibility
-      const checked = form.querySelector('input[name="mode"]:checked');
-      showFields(form, checked ? checked.value : 'text');
+      showFields(form, currentMode(form));
       updateChoiceCardState(form);
 
       // Intercept submit for image/file
       form.addEventListener('submit', async function (e) {
-        const selected = form.querySelector('input[name="mode"]:checked');
-        const mode = selected ? selected.value : 'text';
+        const mode = currentMode(form);
         if (mode === 'text') return; // let it pass
         const ok = await handleSubmitWithUpload(e, form, mode);
         if (!ok) return; // prevent submit in error cases

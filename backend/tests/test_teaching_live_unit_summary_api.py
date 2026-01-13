@@ -210,6 +210,140 @@ async def test_summary_happy_path_minimal_status_matrix_and_headers():
 
 
 @pytest.mark.anyio
+async def test_summary_marks_h5p_tasks_as_attempted_or_completed():
+    """H5P cells in the live matrix distinguish bearbeitet vs abgeschlossen.
+
+    Semantics (MVP):
+        - bearbeitet: at least one H5P submission exists, but never full score
+        - abgeschlossen: at least one H5P submission exists with full score
+          (score_raw == score_max, including 0/0), even if later attempts are worse
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for H5P summary test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-live-h5p-learner", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Live Kurs H5P")
+        unit = await _create_unit(c_owner, "Live Einheit H5P")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        # Create three H5P tasks: bearbeitet, abgeschlossen, and unscored (0/0).
+        r_t_attempted = await c_owner.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={
+                "instruction_md": "H5P Attempted",
+                "criteria": [],
+                "max_attempts": 3,
+                "h5p": {"content_id": "1001", "display_options": {}},
+            },
+        )
+        assert r_t_attempted.status_code == 201
+        t_attempted = r_t_attempted.json()
+
+        r_t_completed = await c_owner.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={
+                "instruction_md": "H5P Completed",
+                "criteria": [],
+                "max_attempts": 3,
+                "h5p": {"content_id": "1002", "display_options": {}},
+            },
+        )
+        assert r_t_completed.status_code == 201
+        t_completed = r_t_completed.json()
+
+        r_t_unscored = await c_owner.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={
+                "instruction_md": "H5P Unscored Completed",
+                "criteria": [],
+                "max_attempts": 3,
+                "h5p": {"content_id": "1003", "display_options": {}},
+            },
+        )
+        assert r_t_unscored.status_code == 201
+        t_unscored = r_t_unscored.json()
+
+        # Release section so student submissions are allowed.
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        # Student attempts first task but never reaches full score.
+        r_a1 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{t_attempted['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert r_a1.status_code in (200, 201, 202)
+
+        # Student completes second task at least once, then makes a worse attempt.
+        r_c1 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{t_completed['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert r_c1.status_code in (200, 201, 202)
+        r_c2 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{t_completed['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 1, "score_max": 1},
+        )
+        assert r_c2.status_code in (200, 201, 202)
+        r_c3 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{t_completed['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert r_c3.status_code in (200, 201, 202)
+
+        # Unscored H5P content can report 0/0. Product decision: 0/0 counts as completed.
+        r_u1 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{t_unscored['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 0},
+        )
+        assert r_u1.status_code in (200, 201, 202)
+
+        # Owner fetches summary and checks H5P flags.
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c_owner.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary",
+            params={"limit": 100, "offset": 0},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        tasks_by_id = {t["id"]: t for t in body["tasks"]}
+        assert tasks_by_id[t_attempted["id"]]["kind"] == "h5p"
+        assert tasks_by_id[t_completed["id"]]["kind"] == "h5p"
+        assert tasks_by_id[t_unscored["id"]]["kind"] == "h5p"
+
+        rows = {row["student"]["sub"]: row for row in body["rows"]}
+        cells = {c["task_id"]: c for c in rows[learner.sub]["tasks"]}
+        assert cells[t_attempted["id"]]["has_submission"] is True
+        assert cells[t_attempted["id"]].get("h5p_completed") is False
+
+        assert cells[t_completed["id"]]["has_submission"] is True
+        assert cells[t_completed["id"]].get("h5p_completed") is True
+
+        assert cells[t_unscored["id"]]["has_submission"] is True
+        assert cells[t_unscored["id"]].get("h5p_completed") is True
+
+
+@pytest.mark.anyio
 async def test_summary_includes_average_score_for_completed_analysis():
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402

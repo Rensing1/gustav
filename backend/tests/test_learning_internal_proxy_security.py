@@ -103,6 +103,55 @@ async def test_proxy_rejects_invalid_path(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "bad_path",
+    [
+        "/storage/v1/object/../auth/v1/token",
+        "/storage/v1/object/%2e%2e/auth/v1/token",
+        "/storage/v1/object/%2E%2E/auth/v1/token",
+    ],
+)
+async def test_proxy_rejects_path_traversal(monkeypatch: pytest.MonkeyPatch, bad_path: str) -> None:
+    """Reject dot-segments and encoded traversal to keep SSRF surface narrow."""
+
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except Exception:
+        learning_backend = None
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-traversal", name="S", roles=["student"])  # type: ignore
+
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("forward must not be called when path contains traversal")
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+
+    bad = f"https://supabase.local:54321{bad_path}"
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": bad},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
+        )
+    assert r.status_code == 400
+    assert r.json().get("detail") == "invalid_url"
+
+
+@pytest.mark.anyio
 async def test_proxy_rejects_disallowed_mime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
@@ -139,6 +188,69 @@ async def test_proxy_rejects_disallowed_mime(monkeypatch: pytest.MonkeyPatch) ->
         )
     assert r.status_code == 400
     assert r.json().get("detail") == "mime_not_allowed"
+
+
+@pytest.mark.anyio
+async def test_proxy_filters_forward_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Forward only an allowlist of safe presign headers (no auth/cookie/host)."""
+
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except Exception:
+        learning_backend = None
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-headers", name="S", roles=["student"])  # type: ignore
+
+    captured: dict[str, object] = {}
+
+    class _Resp:
+        status_code = 200
+
+    async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
+        captured.update(kwargs)
+        return _Resp()
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+
+    token = learning._encode_proxy_headers(  # type: ignore[attr-defined]
+        {
+            "Authorization": "Bearer secret",
+            "Cookie": "x=y",
+            "Host": "evil.example.com",
+            "x-upsert": "true",
+            "Content-Type": "application/octet-stream",
+        },
+    )
+
+    good = "https://supabase.local:54321/storage/v1/object/upload/submissions/file"
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": good, "headers": token},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
+        )
+    assert r.status_code == 200
+
+    forwarded = dict(captured.get("headers") or {})
+    assert forwarded.get("x-upsert") == "true"
+    assert forwarded.get("Content-Type") == "application/octet-stream"
+    assert "Authorization" not in forwarded
+    assert "Cookie" not in forwarded
+    assert "Host" not in forwarded
 
 
 @pytest.mark.anyio

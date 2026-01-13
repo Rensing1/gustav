@@ -14,6 +14,26 @@ import types
 import pytest
 
 
+def _set_minimal_prod_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set a minimal valid production-like env baseline for config guard tests."""
+
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
+    monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_NON_DUMMY")
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
+    monkeypatch.setenv("AI_BACKEND", "local")
+    monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
+    monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
+    )
+
+
 @pytest.mark.anyio
 async def test_service_role_key_guard_prod_raises(monkeypatch: pytest.MonkeyPatch):
     """In prod-like env, a dummy/unset service role key must abort startup."""
@@ -50,7 +70,14 @@ async def test_dsn_user_guard_prod_raises_if_limited_user(monkeypatch: pytest.Mo
     """In prod-like env, DSN must not authenticate as the app role."""
     monkeypatch.setenv("GUSTAV_ENV", "production")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
+    monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_NON_DUMMY")
     monkeypatch.setenv("AI_BACKEND", "local")
+    # Ensure Keycloak URLs are https to satisfy production guards
+    monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
     # Valid TLS setting
     monkeypatch.setenv(
         "DATABASE_URL",
@@ -76,6 +103,7 @@ async def test_dsn_user_guard_prod_allows_nonlimited_user(monkeypatch: pytest.Mo
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -86,6 +114,46 @@ async def test_dsn_user_guard_prod_allows_nonlimited_user(monkeypatch: pytest.Mo
     importlib.reload(cfg)
     # Should not raise
     cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "dsn_var",
+    [
+        "TEACHING_DATABASE_URL",
+        "LEARNING_DATABASE_URL",
+        "SESSION_DATABASE_URL",
+    ],
+)
+async def test_prod_rejects_sslmode_disable_in_all_dsns(
+    monkeypatch: pytest.MonkeyPatch, dsn_var: str
+) -> None:
+    _set_minimal_prod_env(monkeypatch)
+    monkeypatch.setenv(
+        dsn_var,
+        "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=disable",
+    )
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    with pytest.raises(SystemExit):
+        cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+async def test_dsn_user_guard_prod_rejects_learning_dsn_limited_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_minimal_prod_env(monkeypatch)
+    monkeypatch.setenv(
+        "LEARNING_DATABASE_URL",
+        "postgresql://gustav_limited:secret@db.example.com:5432/postgres?sslmode=require",
+    )
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    with pytest.raises(SystemExit):
+        cfg.ensure_secure_config_on_startup()
 
 
 @pytest.mark.anyio
@@ -134,6 +202,8 @@ async def test_prod_disallows_ai_stub_backend(monkeypatch: pytest.MonkeyPatch):
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
     )
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
+    monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
     monkeypatch.setenv("AI_BACKEND", "stub")
 
     from backend.web import config as cfg  # type: ignore
@@ -154,6 +224,7 @@ async def test_prod_requires_storage_verify_and_disables_proxy(monkeypatch: pyte
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("AI_BACKEND", "local")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -198,6 +269,7 @@ async def test_prod_forbids_auto_create_storage_buckets(monkeypatch: pytest.Monk
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("AI_BACKEND", "local")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -210,3 +282,52 @@ async def test_prod_forbids_auto_create_storage_buckets(monkeypatch: pytest.Monk
     importlib.reload(cfg)
     with pytest.raises(SystemExit):
         cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+async def test_h5p_review_token_secret_guard_prod_raises(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like env, a missing/placeholder H5P review token secret must abort startup."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
+    monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_SECRET")
+    monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("AI_BACKEND", "local")
+    monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
+    )
+
+    # Placeholder must be rejected.
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "CHANGE_ME_DEV")
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    with pytest.raises(SystemExit):
+        cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+async def test_h5p_review_token_secret_guard_prod_allows_real_secret(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like env, a non-placeholder H5P review token secret is allowed."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
+    monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_SECRET")
+    monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
+    monkeypatch.setenv("AI_BACKEND", "local")
+    monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+    monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
+    monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
+    )
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    cfg.ensure_secure_config_on_startup()

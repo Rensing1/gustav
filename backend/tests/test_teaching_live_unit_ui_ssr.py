@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -65,6 +66,20 @@ async def _create_task(client: httpx.AsyncClient, unit_id: str, section_id: str,
     assert r.status_code == 201, r.text
     return r.json()
 
+async def _create_h5p_task(client: httpx.AsyncClient, unit_id: str, section_id: str, instruction: str, *, content_id: str) -> dict:
+    r = await client.post(
+        f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+        json={
+            "instruction_md": instruction,
+            "criteria": [],
+            "max_attempts": 3,
+            "h5p": {"content_id": content_id, "display_options": {}},
+        },
+        headers={"Origin": "http://test"},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()
+
 
 async def _attach_unit(client: httpx.AsyncClient, course_id: str, unit_id: str) -> dict:
     r = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
@@ -104,6 +119,7 @@ async def test_live_page_teacher_only_and_renders_table():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -142,6 +158,7 @@ async def test_live_page_includes_status_cursor_and_polling_attributes():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -186,6 +203,7 @@ async def test_live_page_respects_poll_interval_constant():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{mod['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -342,6 +360,7 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -375,6 +394,95 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
 
 
 @pytest.mark.anyio
+async def test_matrix_and_delta_fragments_render_h5p_status_symbols():
+    """H5P tasks use —/•/✓ (not score badges) in the live matrix."""
+    _require_db_or_skip()
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ui-h5p-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs UI H5P Matrix")
+        unit = await _create_unit(c_owner, "Einheit UI H5P Matrix")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_h5p_task(c_owner, unit["id"], section["id"], "### H5P", content_id="3001")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+            headers={"Origin": "http://test"},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = datetime.now(timezone.utc).isoformat()
+
+        # 1) Partial attempt → •
+        r_sub1 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub1.status_code in (200, 201, 202)
+
+        r_matrix_1 = await c_owner.get(f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix")
+        assert r_matrix_1.status_code == 200
+        html_1 = r_matrix_1.text
+        m1 = re.search(
+            rf'id="cell-{re.escape(learner.sub)}-{re.escape(task["id"])}"[^>]*>(.*?)</td>',
+            html_1,
+            re.DOTALL,
+        )
+        assert m1, "expected to find the H5P cell in the matrix HTML"
+        assert "•" in m1.group(1)
+
+        # Delta fragment should also render •
+        r_delta_1 = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta_1.status_code == 200
+        assert "•" in r_delta_1.text
+
+        # 2) Full score at least once → ✓ (even if later attempts are worse)
+        r_sub2 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 1, "score_max": 1},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub2.status_code in (200, 201, 202)
+        r_sub3 = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+            headers={"Origin": "http://test"},
+        )
+        assert r_sub3.status_code in (200, 201, 202)
+
+        r_matrix_2 = await c_owner.get(f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix")
+        assert r_matrix_2.status_code == 200
+        html_2 = r_matrix_2.text
+        m2 = re.search(
+            rf'id="cell-{re.escape(learner.sub)}-{re.escape(task["id"])}"[^>]*>(.*?)</td>',
+            html_2,
+            re.DOTALL,
+        )
+        assert m2, "expected to find the H5P cell in the matrix HTML"
+        assert "✓" in m2.group(1)
+
+        r_delta_2 = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
+            params={"updated_since": base_ts},
+        )
+        assert r_delta_2.status_code == 200
+        assert "✓" in r_delta_2.text
+
+
+@pytest.mark.anyio
 async def test_delta_fragment_keeps_clickable_cell_attributes():
     _require_db_or_skip()
 
@@ -396,6 +504,7 @@ async def test_delta_fragment_keeps_clickable_cell_attributes():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -462,6 +571,7 @@ async def test_matrix_fragment_renders_average_score_badge():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -545,6 +655,7 @@ async def test_delta_fragment_renders_average_score_badge():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 
@@ -628,6 +739,7 @@ async def test_delta_fragment_sets_cursor_via_hx_trigger():
         r_vis = await c_owner.patch(
             f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
+            headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
 

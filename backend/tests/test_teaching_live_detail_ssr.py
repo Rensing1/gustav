@@ -21,6 +21,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
+os.environ["H5P_REVIEW_TOKEN_SECRET"] = "test-secret"
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
@@ -52,6 +53,15 @@ async def _create_task(client: httpx.AsyncClient, unit_id: str, section_id: str,
     r = await client.post(
         f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
         json={"instruction_md": instruction, "criteria": ["Kriterium 1"], "max_attempts": 3},
+    )
+    assert r.status_code == 201
+    return r.json()
+
+
+async def _create_h5p_task(client: httpx.AsyncClient, unit_id: str, section_id: str, *, content_id: str) -> dict:
+    r = await client.post(
+        f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+        json={"instruction_md": "H5P placeholder", "h5p": {"content_id": content_id, "display_options": {}}},
     )
     assert r.status_code == 201
     return r.json()
@@ -279,6 +289,62 @@ async def test_detail_partial_file_submission_shows_text_and_file_tab():
     finally:
         teaching.set_storage_adapter(original_teaching_adapter)
         learning.set_storage_adapter(original_learning_adapter)
+
+
+@pytest.mark.anyio
+async def test_detail_partial_renders_h5p_review_player():
+    """H5P submissions should render a read-only review player under the matrix."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for SSR H5P detail test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-detail-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ssr-detail-h5p", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs SSR Detail H5P")
+        unit = await _create_unit(c_owner, "Einheit SSR Detail H5P")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_h5p_task(c_owner, unit["id"], section["id"], content_id="1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r_sub = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            headers={"Idempotency-Key": "123e4567-e89b-12d3-a456-426614174111"},
+            json={"kind": "h5p", "score_raw": 1, "score_max": 2},
+        )
+        assert r_sub.status_code in (201, 202)
+
+        r_detail = await c_owner.get(
+            f"/teaching/courses/{cid}/units/{unit['id']}/live/detail",
+            params={"student_sub": learner.sub, "task_id": task["id"]},
+        )
+
+    assert r_detail.status_code == 200
+    html = r_detail.text
+
+    # SSR contract: embed a dedicated review-player root and the JS that renders the webcomponent.
+    assert 'data-h5p-task-review-player="true"' in html
+    assert 'data-content-id="1"' in html
+    assert "/static/js/h5p_task_review_player.js" in html
 
 
 @pytest.mark.anyio

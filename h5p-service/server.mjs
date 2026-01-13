@@ -38,6 +38,7 @@ import multer from "multer";
 import { buildSessionCookieHeader } from "./lib/cookies.mjs";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 import { fetchWithTimeout } from "./lib/fetch_timeout.mjs";
+import { createFinishedForwardingMetrics, forwardLearningSubmission } from "./lib/finished_forwarding.mjs";
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
@@ -89,6 +90,15 @@ const authCache = new Map();
  * Key: `${session_id}|${course_id}|${content_id}`. Value: { expiresAtMs, allowed: boolean }
  */
 const h5pContentAccessCache = new Map();
+
+/**
+ * Best-effort forwarding telemetry for:
+ *   H5P `POST /finishedData` → Learning `POST /api/learning/.../submissions`.
+ *
+ * Why:
+ *   Forwarding failures must be observable without logging PII or response bodies.
+ */
+const finishedForwardingMetrics = createFinishedForwardingMetrics();
 
 // Default CSP for all `/h5p/*` responses (strict, no wildcards, no unsafe-eval).
 //
@@ -1755,24 +1765,27 @@ async function main() {
             };
             if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
 
-            const r = await fetchWithTimeout(
+            const result = await forwardLearningSubmission({
               url,
-              {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
-              },
-              { timeoutMs: upstreamFetchTimeoutMs },
-            );
-            if (!r.ok) {
+              headers,
+              body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
+              timeoutMs: upstreamFetchTimeoutMs,
+              maxAttempts: 2,
+              baseBackoffMs: 100,
+              metrics: finishedForwardingMetrics,
+            });
+            if (!result.ok) {
+              const reason = result.status ? `status=${result.status}` : `error=${result.error || "unknown"}`;
               // eslint-disable-next-line no-console
-              console.warn(`h5p finishedData → learning submission failed: ${r.status}`);
+              console.warn(
+                `h5p finishedData → learning submission failed: ${reason} attempts=${result.attempts} failures_total=${finishedForwardingMetrics.failureTotal}`,
+              );
             }
           }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.warn(`h5p finishedData → learning submission exception: ${String(err)}`);
+        console.warn(`h5p finishedData → learning submission exception: ${String(err?.name || "error")}`);
       }
     }
 

@@ -10,6 +10,7 @@ Covered:
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -206,3 +207,22 @@ async def test_login_redirect_uri_uses_configured_scheme_when_proxy_hides_https(
     loc = r.headers.get("location", "")
     qs = parse_qs(urlparse(loc).query)
     assert qs.get("redirect_uri") == ["https://app.localhost/auth/callback"]
+
+
+def test_app_session_ttl_seconds_defaults_and_clamps(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture):
+    # Default when unset
+    monkeypatch.delenv("APP_SESSION_TTL_SECONDS", raising=False)
+    assert main._app_session_ttl_seconds() == 86400
+
+    # Clamp to [15 minutes, 7 days]
+    monkeypatch.setenv("APP_SESSION_TTL_SECONDS", "1")
+    assert main._app_session_ttl_seconds() == 15 * 60
+
+    monkeypatch.setenv("APP_SESSION_TTL_SECONDS", str(8 * 24 * 60 * 60))
+    assert main._app_session_ttl_seconds() == 7 * 24 * 60 * 60
+
+    # Invalid values fall back and log a warning
+    caplog.set_level(logging.WARNING, logger="gustav.identity_access")
+    monkeypatch.setenv("APP_SESSION_TTL_SECONDS", "not-an-int")
+    assert main._app_session_ttl_seconds() == 86400
+    assert any("Invalid APP_SESSION_TTL_SECONDS" in rec.message for rec in caplog.records)

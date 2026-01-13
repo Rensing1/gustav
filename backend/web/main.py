@@ -8,6 +8,7 @@ import logging
 import uuid
 import secrets
 import mimetypes
+import re
 import json
 from typing import Optional, Dict, Any, List, Mapping
 from datetime import datetime, timezone
@@ -167,6 +168,60 @@ SESSION_COOKIE_NAME = "gustav_session"
 
 app = FastAPI(title="GUSTAV alpha-2", description="KI-gestützte Lernplattform", version="0.0.2")
 
+# --- App Session TTL -----------------------------------------------------------
+
+_INAPP_RETURN_TO_RE = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]{0,255}$")
+
+
+def _app_session_ttl_seconds() -> int:
+    """Return the TTL for GUSTAV's app-level session (server-side + cookie).
+
+    Why:
+        GUSTAV maintains an application session (cookie `gustav_session`) in
+        addition to the Keycloak SSO session. If this app session expires too
+        early, classroom workflows break (tabs are often open for hours).
+
+    Security:
+        Keep the value bounded to avoid accidental "infinite" sessions.
+        The cookie is HttpOnly/Secure/SameSite and stores only an opaque id.
+    """
+    raw = (os.getenv("APP_SESSION_TTL_SECONDS") or "").strip()
+    default_seconds = 24 * 60 * 60  # 24h (decision)
+    try:
+        value = int(raw) if raw else default_seconds
+    except ValueError:
+        logger.warning("Invalid APP_SESSION_TTL_SECONDS; falling back to default")
+        value = default_seconds
+    # Clamp to a safe range: 15 minutes .. 7 days
+    return max(15 * 60, min(value, 7 * 24 * 60 * 60))
+
+
+def _safe_return_to_path(path: str | None) -> str | None:
+    """Return a safe in-app path for auth redirects, or None.
+
+    Prevents open redirects by only allowing absolute paths without query
+    strings/fragments and by rejecting traversal patterns like "..".
+    """
+    if not path or not isinstance(path, str):
+        return None
+    candidate = path.strip()
+    if not candidate.startswith("/"):
+        return None
+    if len(candidate) > 256:
+        return None
+    if not _INAPP_RETURN_TO_RE.fullmatch(candidate):
+        return None
+    return candidate
+
+
+def _login_url_with_return_to(path: str | None) -> str:
+    """Build a /auth/login URL optionally including a safe return-to path."""
+    safe = _safe_return_to_path(path)
+    if not safe:
+        return "/auth/login"
+    from urllib.parse import urlencode
+    return f"/auth/login?{urlencode({'redirect': safe})}"
+
 # --- Static Files & Routers -----------------------------------------------------
 
 static_dir = Path(__file__).parent / "static"
@@ -267,9 +322,22 @@ async def auth_enforcement(request: Request, call_next):
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:
+            # HTMX requests should redirect back to the *page* that initiated the
+            # request (e.g., a /submit POST). Prefer HX-Current-URL, which HTMX
+            # sends as the browser's current URL.
+            return_to = None
+            hx_current = request.headers.get("HX-Current-URL")
+            if hx_current:
+                try:
+                    from urllib.parse import urlparse as _urlparse
+                    return_to = _urlparse(hx_current).path
+                except Exception:
+                    return_to = None
+            login_url = _login_url_with_return_to(return_to or path)
             # Security: prevent intermediaries from caching unauthenticated HTMX responses
-            return Response(status_code=401, headers={"HX-Redirect": "/auth/login", "Cache-Control": "private, no-store", "Vary": "HX-Request"})
-        return RedirectResponse(url="/auth/login", status_code=302)
+            return Response(status_code=401, headers={"HX-Redirect": login_url, "Cache-Control": "private, no-store", "Vary": "HX-Request"})
+        login_url = _login_url_with_return_to(path)
+        return RedirectResponse(url=login_url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
     # Expose minimal, read-only user context for downstream handlers.
     request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles}
@@ -5812,7 +5880,7 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     
     display_name = claims.get("gustav_display_name") or claims.get("name") or (email.split("@")[0] if email else "Benutzer")
 
-    sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
+    sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), ttl_seconds=_app_session_ttl_seconds(), id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     resp.headers["Cache-Control"] = "private, no-store"

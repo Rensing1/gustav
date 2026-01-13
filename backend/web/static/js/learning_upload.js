@@ -11,6 +11,14 @@
 //  - Client validations mirror server allowlists but do not replace them.
 
 (function () {
+  function markSessionExpiredAndRedirectToLogin() {
+    try {
+      sessionStorage.setItem('gustav:auth:session-expired', String(Date.now()));
+    } catch (_) {}
+    const path = (window.location && window.location.pathname) ? window.location.pathname : '/';
+    window.location.href = `/auth/login?redirect=${encodeURIComponent(path)}`;
+  }
+
   function onReady(fn) {
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
       setTimeout(fn, 0);
@@ -117,6 +125,11 @@
       body: JSON.stringify({ kind: isImage ? 'image' : 'file', filename: file.name || '', mime_type: file.type, size_bytes: file.size })
     });
     if (!intentResp.ok) {
+      if (intentResp.status === 401) {
+        e.preventDefault();
+        markSessionExpiredAndRedirectToLogin();
+        return false;
+      }
       e.preventDefault();
       return false;
     }

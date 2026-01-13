@@ -36,7 +36,13 @@ def test_h5p_editor_model_contract():
     assert get_op.get("security"), "GET /h5p/editor/model must require authentication"
     perms = get_op.get("x-permissions") or {}
     assert perms.get("requiredRole") == "teacher", "GET /h5p/editor/model must document teacher-only permission"
-    assert "200" in (get_op.get("responses") or {}), "GET /h5p/editor/model must define 200 response"
+    responses = get_op.get("responses") or {}
+    assert "200" in responses, "GET /h5p/editor/model must define 200 response"
+
+    # Invalid query shapes (e.g. repeated content_id) should be visible as 400 in the contract.
+    assert "400" in responses, "GET /h5p/editor/model must define 400 response"
+    schema = (responses["400"].get("content") or {}).get("application/json", {}).get("schema") or {}
+    assert schema.get("$ref") == "#/components/schemas/Error"
 
 
 def test_h5p_contents_create_contract():

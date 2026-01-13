@@ -1586,6 +1586,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/H5PEditorModelResponse'
+        '400':
+          description: Invalid request (e.g., invalid query parameter shape)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized401'
         '403':
@@ -1708,6 +1720,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/H5PPlayerModelResponse'
+        '400':
+          description: Invalid request (e.g., missing required query parameters)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized401'
         '403':
@@ -1782,6 +1806,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/H5PPlayerModelResponse'
+        '400':
+          description: Invalid request (e.g., missing required query parameters)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized401'
         '403':

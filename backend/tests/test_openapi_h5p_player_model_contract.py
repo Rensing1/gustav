@@ -31,7 +31,13 @@ def test_h5p_player_model_contract():
     schemas = (spec.get("components") or {}).get("schemas", {})
     assert "H5PPlayerModelResponse" in schemas
     assert get_op.get("security"), "GET /h5p/player/model must require authentication"
-    assert "200" in (get_op.get("responses") or {}), "GET /h5p/player/model must define 200 response"
+    responses = get_op.get("responses") or {}
+    assert "200" in responses, "GET /h5p/player/model must define 200 response"
+
+    # Invalid/missing query parameters must be represented as a contract-level 400.
+    assert "400" in responses, "GET /h5p/player/model must define 400 response"
+    schema = (responses["400"].get("content") or {}).get("application/json", {}).get("schema") or {}
+    assert schema.get("$ref") == "#/components/schemas/Error"
 
 
 def test_h5p_player_model_contract_includes_read_only_state_param():
@@ -57,3 +63,13 @@ def test_h5p_review_player_contract_requires_review_token():
     params = get_op.get("parameters") or []
     required = {p.get("name") for p in params if isinstance(p, dict) and p.get("required") is True}
     assert {"content_id", "context_id", "review_token"}.issubset(required)
+
+
+def test_h5p_review_player_contract_defines_400_response():
+    spec = _load_spec()
+    get_op = spec["paths"]["/h5p/player/review"]["get"]
+    responses = get_op.get("responses") or {}
+    assert "200" in responses
+    assert "400" in responses, "GET /h5p/player/review must define 400 response"
+    schema = (responses["400"].get("content") or {}).get("application/json", {}).get("schema") or {}
+    assert schema.get("$ref") == "#/components/schemas/Error"

@@ -68,6 +68,8 @@ async def test_job_payload_contains_instruction_and_hints():
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key="worker-payload-context",
         )
     )
@@ -143,6 +145,8 @@ async def test_worker_passes_task_context_to_feedback_adapter():
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key="worker-pass-context",
         )
     )
@@ -176,4 +180,3 @@ def _job_pending(*, worker_dsn: str, submission_id: str) -> bool:
                 (submission_id,),
             )
             return cur.fetchone() is not None
-

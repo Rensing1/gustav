@@ -1,0 +1,14 @@
+{
+  "title": "GUSTAV Minimal Fixture",
+  "language": "en",
+  "mainLibrary": "H5P.GustavMinimal",
+  "embedTypes": ["div"],
+  "license": "U",
+  "preloadedDependencies": [
+    {
+      "machineName": "H5P.GustavMinimal",
+      "majorVersion": 1,
+      "minorVersion": 0
+    }
+  ]
+}

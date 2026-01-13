@@ -100,6 +100,22 @@ async def test_unit_task_form_has_htmx_attributes(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.anyio
+async def test_submit_requires_origin_or_referer_header():
+    """SSR submit must reject requests without Origin/Referer (strict CSRF)."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.post(
+            f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+            data={"mode": "text", "unit_id": str(uuid.uuid4()), "text_body": "x"},
+            follow_redirects=False,
+        )
+    assert r.status_code == 403
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("analysis_status", ["pending", "extracted"])
 async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pytest.MonkeyPatch, analysis_status: str):
     """Posting via HTMX should return the updated history fragment and trigger refresh while in progress."""
@@ -144,7 +160,11 @@ async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pyt
     }
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
-        r = await client.post(f"/learning/courses/{course_id}/tasks/{task_id}/submit", data=form, headers={"HX-Request": "true"})
+        r = await client.post(
+            f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+            data=form,
+            headers={"HX-Request": "true", "Origin": "http://test"},
+        )
     # Expect HTML fragment of history, not a redirect
     assert r.status_code == 200
     assert r.headers.get("HX-Trigger")
@@ -176,7 +196,12 @@ async def test_non_htmx_submit_keeps_prg(monkeypatch: pytest.MonkeyPatch):
     form = {"mode": "text", "unit_id": unit_id, "text_body": "Hallo"}
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
-        r = await client.post(f"/learning/courses/{course_id}/tasks/{task_id}/submit", data=form, follow_redirects=False)
+        r = await client.post(
+            f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+            data=form,
+            follow_redirects=False,
+            headers={"Origin": "http://test"},
+        )
     assert r.status_code in (302, 303)
     assert r.headers.get("location", "").startswith(f"/learning/courses/{course_id}/units/{unit_id}")
 
@@ -224,7 +249,7 @@ async def test_htmx_upload_missing_sha_computes_digest(tmp_path, monkeypatch: py
         r = await client.post(
             f"/learning/courses/{course_id}/tasks/{task_id}/submit",
             data=form,
-            headers={"HX-Request": "true"},
+            headers={"HX-Request": "true", "Origin": "http://test"},
         )
     assert r.status_code == 200
     payload = captured_payload.get("json")

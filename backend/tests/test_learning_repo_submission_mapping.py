@@ -16,6 +16,9 @@ from backend.learning.repo_db import DBLearningRepo
 def _sample_row(
     *,
     status: str = "pending",
+    kind: str = "file",
+    score_raw: Optional[int] = None,
+    score_max: Optional[int] = None,
     analysis_json: Optional[str] = None,
     feedback_md: Optional[str] = "Great job",
     vision_attempts: Optional[int] = None,
@@ -25,12 +28,18 @@ def _sample_row(
     created_at: str = "2025-11-08T11:00:00+00:00",
     completed_at: Optional[str] = None,
 ) -> Iterable[Any]:
-    """Construct a tuple shaped like the SQL result consumed by _row_to_submission."""
+    """Construct a tuple shaped like the SQL result consumed by `_row_to_submission`.
+
+    The mapping expects the same column order as the `SELECT ...` statements in
+    `DBLearningRepo` (id, attempt_nr, kind, score_raw, score_max, ... timestamps).
+    """
     submission_id = str(uuid.uuid4())
     return (
         submission_id,
         1,  # attempt_nr
-        "file",
+        kind,
+        score_raw,
+        score_max,
         "raw student text",
         "application/pdf",
         2048,

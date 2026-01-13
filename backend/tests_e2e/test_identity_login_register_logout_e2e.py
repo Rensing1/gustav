@@ -13,23 +13,12 @@ How to run locally:
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import time
 import re
 from urllib.parse import urljoin, urlparse, parse_qs
 
 import pytest
-import os
 import requests
-
-
-# Load .env for local developer runs if available (optional dependency)
-try:
-    from dotenv import load_dotenv  # type: ignore
-    # Load .env from repo root if not already loaded
-    load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
-except Exception:
-    pass
 
 
 def _derive_app_base() -> str:

@@ -90,6 +90,8 @@ async def test_worker_persists_dspy_feedback_without_legacy_calls(monkeypatch: p
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key=f"dspy-worker-integration-{os.urandom(4).hex()}",
         )
     )

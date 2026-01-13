@@ -14,7 +14,6 @@ import time
 from urllib.parse import urljoin
 
 import pytest
-import os
 import requests
 
 # Reuse environment for admin access

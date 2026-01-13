@@ -52,10 +52,15 @@ class Gustav {
     this.initSidebarAccessibility(); // Ensure keyboard navigation stays usable
     this.initSidebarGestures();
     this.initSidebarTooltips();
+    this.clearDraftFromPrgSuccess(); // PRG success should clear stale drafts
     this.initLearningTaskForms(); // Progressive enhancement for student task forms
     this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
     this.initFilePreviewZoom(); // Zoom toggle for inline file previews
     this.initTeachingLivePolling(); // Auto-refresh for teaching live matrix
+    // Explain what happened after we had to redirect to login.
+    if (this.consumeSessionExpiredFlag()) {
+      this.showNotification('Sitzung war abgelaufen. Bitte erneut abgeben (Entwürfe wurden, falls möglich, wiederhergestellt).', 'info', 5000);
+    }
   }
 
   /**
@@ -69,6 +74,152 @@ class Gustav {
     if (maxBytes > 0 && (file.size <= 0 || file.size > maxBytes)) {
       throw new Error('size_exceeded');
     }
+  }
+
+  /**
+   * Persist and restore student drafts across auth redirects.
+   *
+   * We intentionally use sessionStorage (tab-scoped) for privacy and to avoid
+   * stale drafts across shared devices. This is enough to survive the common
+   * "session expired → re-login → back to unit page" flow.
+   */
+  taskDraftKey(courseId, taskId) {
+    return `gustav:draft:task:${courseId}:${taskId}`;
+  }
+
+  sessionExpiredFlagKey() {
+    return 'gustav:auth:session-expired';
+  }
+
+  markSessionExpired() {
+    try {
+      sessionStorage.setItem(this.sessionExpiredFlagKey(), String(Date.now()));
+    } catch (_) {
+      // Storage may be disabled; fallback is still a login redirect without draft restore.
+    }
+  }
+
+  consumeSessionExpiredFlag() {
+    try {
+      const k = this.sessionExpiredFlagKey();
+      const v = sessionStorage.getItem(k);
+      if (!v) return false;
+      sessionStorage.removeItem(k);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  redirectToLoginWithReturnTo() {
+    const path = (window.location && window.location.pathname) ? window.location.pathname : '/';
+    const target = `/auth/login?redirect=${encodeURIComponent(path)}`;
+    window.location.href = target;
+  }
+
+  readTaskDraft(courseId, taskId) {
+    try {
+      const raw = sessionStorage.getItem(this.taskDraftKey(courseId, taskId));
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return null;
+      const mode = typeof data.mode === 'string' ? data.mode : 'text';
+      const text = typeof data.text === 'string' ? data.text : '';
+      return { mode, text };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  saveTaskDraftFromForm(form) {
+    try {
+      const courseId = form && form.dataset ? form.dataset.courseId : '';
+      const taskId = form && form.dataset ? form.dataset.taskId : '';
+      if (!courseId || !taskId) return;
+
+      const textarea = form.querySelector && form.querySelector('textarea[name="text_body"]');
+      const text = textarea ? String(textarea.value || '') : '';
+      const checked = form.querySelector && form.querySelector('input[name="mode"][type="radio"]:checked');
+      const anyMode = checked || (form.querySelector && form.querySelector('input[name="mode"]'));
+      const mode = anyMode && anyMode.value ? String(anyMode.value) : (form.dataset && form.dataset.mode ? String(form.dataset.mode) : 'text');
+
+      // Keep storage small: remove default empty drafts (text mode + empty body).
+      if (mode === 'text' && (!text || !text.trim())) {
+        sessionStorage.removeItem(this.taskDraftKey(courseId, taskId));
+        return;
+      }
+      sessionStorage.setItem(this.taskDraftKey(courseId, taskId), JSON.stringify({ mode, text }));
+    } catch (_) {
+      // Ignore storage failures.
+    }
+  }
+
+  clearTaskDraft(courseId, taskId) {
+    try {
+      sessionStorage.removeItem(this.taskDraftKey(courseId, taskId));
+    } catch (_) {}
+  }
+
+  applyTaskFormMode(form, mode) {
+    const textFields = form.querySelector('.fields-text');
+    const uploadFields = form.querySelector('.fields-upload');
+    const normalized = (mode || 'text');
+    form.dataset.mode = normalized;
+    if (textFields && uploadFields) {
+      if (normalized === 'upload' || normalized === 'image' || normalized === 'file') {
+        textFields.hidden = true;
+        uploadFields.hidden = false;
+      } else {
+        textFields.hidden = false;
+        uploadFields.hidden = true;
+      }
+    }
+  }
+
+  restoreTaskDraftIntoForm(form) {
+    try {
+      const courseId = form && form.dataset ? form.dataset.courseId : '';
+      const taskId = form && form.dataset ? form.dataset.taskId : '';
+      if (!courseId || !taskId) return false;
+
+      const draft = this.readTaskDraft(courseId, taskId);
+      if (!draft) return false;
+
+      const textarea = form.querySelector('textarea[name="text_body"]');
+      const current = textarea ? String(textarea.value || '') : '';
+
+      // Prefer showing text drafts to students, even if a stale mode was stored.
+      const hasText = draft.text && draft.text.trim();
+      const modeToApply = hasText ? 'text' : (draft.mode || 'text');
+
+      if (textarea && (!current || !current.trim()) && hasText) {
+        textarea.value = draft.text;
+      }
+
+      const radio = form.querySelector(`input[name="mode"][type="radio"][value="${modeToApply}"]`);
+      if (radio) {
+        radio.checked = true;
+      }
+      this.applyTaskFormMode(form, modeToApply);
+      return !!hasText;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  clearDraftFromPrgSuccess() {
+    // Non-HTMX submit uses PRG and sets `ok=submitted&show_history_for=<task_id>`.
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      if (params.get('ok') !== 'submitted') return;
+      const taskId = params.get('show_history_for') || '';
+      if (!taskId) return;
+      const path = window.location.pathname || '';
+      const m = path.match(/^\/learning\/courses\/([^/]+)\/units\//);
+      if (!m) return;
+      const courseId = m[1];
+      this.clearTaskDraft(courseId, taskId);
+    } catch (_) {}
   }
 
   /**
@@ -159,23 +310,28 @@ class Gustav {
     if (!forms.length) return;
 
     forms.forEach((form) => {
+      if (form._gustavTaskFormReady) return;
+      form._gustavTaskFormReady = true;
+
+      // Restore drafts early so field toggles reflect the recovered state.
+      this.restoreTaskDraftIntoForm(form);
+
+      // Persist drafts while the student types.
+      const textarea = form.querySelector('textarea[name="text_body"]');
+      if (textarea) {
+        textarea.addEventListener('input', () => this.saveTaskDraftFromForm(form));
+      }
+
       // Toggle fields when user changes mode
       form.addEventListener('change', (e) => {
         const modeInput = form.querySelector('input[name="mode"]:checked');
         const mode = modeInput ? modeInput.value : (form.dataset.mode || 'text');
-        form.dataset.mode = mode;
-        const textFields = form.querySelector('.fields-text');
-        const uploadFields = form.querySelector('.fields-upload');
-        if (textFields && uploadFields) {
-          if (mode === 'upload' || mode === 'image' || mode === 'file') {
-            textFields.hidden = true;
-            uploadFields.hidden = false;
-          } else {
-            textFields.hidden = false;
-            uploadFields.hidden = true;
-          }
-        }
+        this.applyTaskFormMode(form, mode);
+        this.saveTaskDraftFromForm(form);
       });
+
+      // Save once more on submit so last-second edits survive auth redirects.
+      form.addEventListener('submit', () => this.saveTaskDraftFromForm(form));
 
       // Handle file selection → request upload-intent → PUT bytes → fill hidden fields
       const fileInput = form.querySelector('input[type="file"][name="upload_file"]');
@@ -190,6 +346,11 @@ class Gustav {
         } catch (err) {
           console.error('Upload prepare failed', err);
           const code = err && err.message ? String(err.message) : '';
+          if (code === 'intent_failed_401') {
+            this.markSessionExpired();
+            this.redirectToLoginWithReturnTo();
+            return;
+          }
           if (code === 'mime_not_allowed') {
             this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
           } else if (code === 'size_exceeded') {
@@ -666,6 +827,8 @@ class Gustav {
       this.initSidebarGestures();
       this.initTeachingLivePolling();
       this.initTeachingLiveTabs(evt.target || document);
+      this.clearDraftFromPrgSuccess();
+      this.initLearningTaskForms();
     });
 
     // Ensure sidebar state restoration after OOB sidebar replacement
@@ -678,6 +841,8 @@ class Gustav {
         this.initSidebarGestures();
         this.initTeachingLivePolling();
         this.initTeachingLiveTabs(document);
+        this.clearDraftFromPrgSuccess();
+        this.initLearningTaskForms();
       });
     });
 
@@ -689,6 +854,8 @@ class Gustav {
       this.initSidebarGestures();
       this.initTeachingLivePolling();
       this.initTeachingLiveTabs(document);
+      this.clearDraftFromPrgSuccess();
+      this.initLearningTaskForms();
     });
 
     const liveStatusErrorMessage = 'Live-Ansicht: Verbindung unterbrochen.';
@@ -703,8 +870,14 @@ class Gustav {
 
     document.body.addEventListener('htmx:responseError', (evt) => {
       const status = evt.detail.xhr.status;
+      if (status === 401) {
+        // Session expired (app-level cookie). HTMX will follow HX-Redirect; we
+        // set a flag so the unit page can explain what happened after re-login.
+        this.markSessionExpired();
+      }
       const message = status === 404 ? 'Resource not found' :
                       status === 403 ? 'Access denied' :
+                      status === 401 ? 'Session expired. Please login again.' :
                        status === 500 ? 'Server error' :
                        'Request failed';
       this.showNotification(message, 'error');
@@ -719,6 +892,25 @@ class Gustav {
     document.body.addEventListener('showMessage', (evt) => {
       const detail = evt.detail || {};
       this.showNotification(detail.message || 'Aktion ausgeführt', detail.type || 'info');
+    });
+
+    // Clear saved drafts after a successful HTMX submit.
+    document.body.addEventListener('htmx:afterRequest', (evt) => {
+      try {
+        const detail = evt.detail || {};
+        if (!detail.successful) return;
+        const pathInfo = detail.pathInfo || {};
+        const requestPath = pathInfo.requestPath || '';
+        if (typeof requestPath !== 'string' || requestPath.indexOf('/learning/courses/') !== 0) return;
+        if (requestPath.indexOf('/tasks/') === -1 || requestPath.indexOf('/submit') === -1) return;
+        const elt = detail.elt;
+        if (!elt || !elt.closest) return;
+        const form = elt.closest('form.task-submit-form');
+        if (!form || !form.dataset) return;
+        const courseId = form.dataset.courseId;
+        const taskId = form.dataset.taskId;
+        if (courseId && taskId) this.clearTaskDraft(courseId, taskId);
+      } catch (_) {}
     });
   }
 

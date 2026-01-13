@@ -55,6 +55,14 @@ def test_h5p_service_upstream_fetches_use_fetch_with_timeout() -> None:
         start_token='app.post("/finishedData"',
         end_token="const ajaxRouter",
     )
-    assert "fetchWithTimeout" in finished_block
+    # `finishedData` forwards progress to the Learning API via a helper that is
+    # required to use `fetchWithTimeout` internally. We accept either direct
+    # usage in the route or usage via the forwarding helper.
+    assert ("fetchWithTimeout" in finished_block) or ("forwardLearningSubmission" in finished_block)
     assert "await fetch(" not in finished_block
 
+    forwarding_path = repo_root / "h5p-service" / "lib" / "finished_forwarding.mjs"
+    assert forwarding_path.is_file(), f"Missing H5P forwarding helper: {forwarding_path}"
+    forwarding_js = forwarding_path.read_text(encoding="utf-8")
+    assert "fetchWithTimeout" in forwarding_js
+    assert "await fetch(" not in forwarding_js

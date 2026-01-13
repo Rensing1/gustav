@@ -75,6 +75,23 @@ async def test_htmx_unauthenticated_prefers_hx_current_url_for_return_to():
 
 
 @pytest.mark.anyio
+async def test_html_post_unauthenticated_prefers_referer_for_return_to():
+    """Non-HTMX POSTs must not return-to a POST-only endpoint (would cause 405 after login)."""
+    headers = {
+        "Accept": "text/html",
+        "Referer": "https://app.localhost/learning/courses/c1/units/u1",
+    }
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.post("/learning/courses/c1/tasks/t1/submit", headers=headers, follow_redirects=False)
+    assert r.status_code in (301, 302, 303)
+    loc = r.headers.get("location", "")
+    p = urlparse(loc)
+    assert p.path == "/auth/login"
+    qs = parse_qs(p.query)
+    assert qs.get("redirect") == ["/learning/courses/c1/units/u1"]
+
+
+@pytest.mark.anyio
 async def test_allowlist_paths_not_redirected():
     # StaticFiles responses can be streaming; avoid exercising them via ASGITransport
     # here and instead assert the middleware's allowlist predicate directly.

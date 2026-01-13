@@ -33,6 +33,8 @@ Proposed Fix (Upstream; Code + UX):
 1) App-Session-TTL erhöhen und konfigurierbar machen (z. B. `APP_SESSION_TTL_SECONDS`, Default 8–24h für Schule).
 2) Optional: Sliding Sessions (TTL bei Aktivität verlängern) statt fixem Ablauf.
 3) Frontend/UX: Bei `401` im Upload-/Submit-Flow klarer Hinweis „Sitzung abgelaufen“ + Auto-Redirect auf `/auth/login` mit Rücksprung; Entwürfe lokal puffern (localStorage) und nach Re-Login wiederherstellen/resubmitten.
+   - Implementation detail: prefer `sessionStorage` (tab-scoped) for privacy and to avoid stale drafts on shared devices.
+   - Return-to detail: for non-HTMX POSTs, prefer the `Referer` page path (not the POST endpoint path) to avoid a 405 after login.
 4) Observability: Metrik/Logfilter für `401` bei `POST /learning/**/submit` und `POST /api/learning/**/upload-intents`.
 
 Acceptance Criteria:
@@ -41,4 +43,3 @@ Acceptance Criteria:
 
 Related:
 - `docs/tickets/learning-upload-intents-401-session-expired-2025-12-16.md` (401 im Upload-Intent-Flow; gleiche Grundursache: App-Session-TTL/Recovery)
-

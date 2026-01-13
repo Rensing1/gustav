@@ -21,18 +21,13 @@ import os
 import secrets
 
 from identity_access.oidc import OIDCClient, OIDCConfig
-import re
 import logging
+
+from .redirects import safe_inapp_path
 
 
 auth_router = APIRouter(tags=["Auth"])  # explicit paths, no prefix (align with OpenAPI)
 logger = logging.getLogger("gustav.web.auth")
-
-# Single source of truth for allowed in-app redirect paths
-# Disallow double slashes and path traversal (".."), allow dots in names
-# Keep pattern in sync with OpenAPI (api/openapi.yml)
-INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
-MAX_INAPP_REDIRECT_LEN = 256
 
 
 def _parse_allowed_registration_domains(raw: str | None) -> set[str]:
@@ -198,7 +193,7 @@ async def auth_login(request: Request, redirect: str | None = None):
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
     nonce = secrets.token_urlsafe(16)
     # Security: Accept only absolute in-app paths like "/courses". Reject external URLs.
-    safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
+    safe_redirect = safe_inapp_path(redirect)
     rec = mod.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
     final_state = rec.state
     # Use a fresh client bound to current config (allows monkeypatch in tests)
@@ -388,7 +383,7 @@ async def auth_logout(request: Request, redirect: str | None = None):
         base = (getattr(cfg, "public_base_url", None) or getattr(cfg, "base_url", "")).rstrip("/")
         app_base = _default_app_base(getattr(cfg, "redirect_uri", ""))
         # Accept only in-app absolute paths; ignore external values
-        safe_redirect = redirect if (isinstance(redirect, str) and _is_inapp_path(redirect)) else None
+        safe_redirect = safe_inapp_path(redirect)
         # After logout, go to the app success page with a re-login link
         dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
         # Build params: prefer id_token_hint (best compatibility), else include client_id
@@ -522,25 +517,3 @@ def _default_app_base(redirect_uri: str) -> str:
 
     # 4) Last resort: safe local default for dev
     return "https://app.localhost"
-
-
-def _is_inapp_path(value: str) -> bool:
-    """Return True if value is an absolute in-app path, e.g., "/", "/courses/1".
-
-    Why:
-        Prevent open redirect vulnerabilities by only allowing internal paths
-        without scheme/host or query fragments. Mirrors the OpenAPI contract.
-        Pattern is defined in `INAPP_PATH_PATTERN` and kept in sync with OpenAPI.
-    Examples (accepted):
-        "/", "/courses", "/courses/1", "/courses/list_all"
-    Examples (rejected):
-        "courses" (not absolute), "https://evil.com", "/a?b", "/a#b", "/.."
-    """
-    try:
-        if not value or not isinstance(value, str):
-            return False
-        if len(value) > MAX_INAPP_REDIRECT_LEN:
-            return False
-        return bool(INAPP_PATH_PATTERN.match(value))
-    except Exception:
-        return False

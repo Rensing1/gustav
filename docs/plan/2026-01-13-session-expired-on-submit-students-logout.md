@@ -39,7 +39,9 @@ Stand: 2026-01-13 · Ticket: `docs/tickets/session-expired-on-submit-students-lo
    - Cookie `Max-Age` stays derived from `sess.ttl_seconds` (so cookie and DB/in-memory session remain aligned).
 2) `backend/web/main.py` (auth middleware UX)
    - Add **return-to** on unauthenticated redirects:
-     - HTML: redirect to `/auth/login?redirect=<current_path>`.
+     - HTML: redirect to `/auth/login?redirect=<current_path>` for GET/HEAD.
+       For non-idempotent requests (e.g. POST `/submit`), prefer the `Referer`
+       page path to avoid returning to a POST-only endpoint (would 405 after login).
      - HTMX: set `HX-Redirect: /auth/login?redirect=<current_page_path>` using `HX-Current-URL` (fallback: request path).
    - Keep response semantics (`302` for HTML, `401` for HTMX/API) unchanged; only improve the redirect target.
 3) `backend/web/static/js/gustav.js` (draft persistence)

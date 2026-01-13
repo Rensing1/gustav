@@ -8,7 +8,6 @@ import logging
 import uuid
 import secrets
 import mimetypes
-import re
 import json
 from typing import Optional, Dict, Any, List, Mapping
 from datetime import datetime, timezone
@@ -170,8 +169,6 @@ app = FastAPI(title="GUSTAV alpha-2", description="KI-gestützte Lernplattform",
 
 # --- App Session TTL -----------------------------------------------------------
 
-_INAPP_RETURN_TO_RE = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]{0,255}$")
-
 
 def _app_session_ttl_seconds() -> int:
     """Return the TTL for GUSTAV's app-level session (server-side + cookie).
@@ -196,27 +193,14 @@ def _app_session_ttl_seconds() -> int:
     return max(15 * 60, min(value, 7 * 24 * 60 * 60))
 
 
-def _safe_return_to_path(path: str | None) -> str | None:
-    """Return a safe in-app path for auth redirects, or None.
-
-    Prevents open redirects by only allowing absolute paths without query
-    strings/fragments and by rejecting traversal patterns like "..".
-    """
-    if not path or not isinstance(path, str):
-        return None
-    candidate = path.strip()
-    if not candidate.startswith("/"):
-        return None
-    if len(candidate) > 256:
-        return None
-    if not _INAPP_RETURN_TO_RE.fullmatch(candidate):
-        return None
-    return candidate
-
-
 def _login_url_with_return_to(path: str | None) -> str:
     """Build a /auth/login URL optionally including a safe return-to path."""
-    safe = _safe_return_to_path(path)
+    try:
+        from routes.redirects import safe_inapp_path
+    except Exception:  # pragma: no cover - package import fallback
+        from backend.web.routes.redirects import safe_inapp_path  # type: ignore
+
+    safe = safe_inapp_path(path)
     if not safe:
         return "/auth/login"
     from urllib.parse import urlencode
@@ -336,7 +320,18 @@ async def auth_enforcement(request: Request, call_next):
             login_url = _login_url_with_return_to(return_to or path)
             # Security: prevent intermediaries from caching unauthenticated HTMX responses
             return Response(status_code=401, headers={"HX-Redirect": login_url, "Cache-Control": "private, no-store", "Vary": "HX-Request"})
-        login_url = _login_url_with_return_to(path)
+        # For non-HTMX requests, avoid returning to POST-only endpoints.
+        # If the request is non-idempotent, prefer the Referer page path.
+        return_to = path if request.method in ("GET", "HEAD") else None
+        if return_to is None:
+            referer = request.headers.get("referer")
+            if referer:
+                try:
+                    from urllib.parse import urlparse as _urlparse
+                    return_to = _urlparse(referer).path
+                except Exception:
+                    return_to = None
+        login_url = _login_url_with_return_to(return_to)
         return RedirectResponse(url=login_url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
     # Expose minimal, read-only user context for downstream handlers.

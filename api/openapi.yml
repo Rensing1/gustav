@@ -3485,7 +3485,7 @@ paths:
           schema:
             type: string
             maxLength: 256
-            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
           description: >-
             Optional in-app absolute path to navigate to after login. External
             URLs are rejected; invalid values are ignored. Disallows double-slash
@@ -3608,7 +3608,7 @@ paths:
           schema:
             type: string
             maxLength: 256
-            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
             default: "/auth/logout/success"
           description: >-
             App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.

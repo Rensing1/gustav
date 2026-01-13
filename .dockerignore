@@ -10,6 +10,10 @@
 # VCS
 .git/
 
+# Environment templates / secrets
+.env
+.env.*
+
 # Python artefacts
 **/__pycache__/
 **/*.pyc
@@ -35,3 +39,5 @@ supabase/storage/
 # OS / editor
 .DS_Store
 .vscode/
+
+.env

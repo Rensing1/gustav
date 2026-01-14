@@ -81,6 +81,162 @@ components:
           type: string
         detail:
           type: string
+    H5PStorageReadiness:
+      type: object
+      required: [ok]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          description: Whether the filesystem-backed H5P storage is writable/ready.
+    H5PHealth:
+      type: object
+      required: [status, service, time, storage]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        service:
+          type: string
+        time:
+          type: string
+          format: date-time
+        storage:
+          $ref: '#/components/schemas/H5PStorageReadiness'
+    H5PContentImportResponse:
+      type: object
+      required: [content_id]
+      additionalProperties: false
+      properties:
+        content_id:
+          type: string
+          description: Opaque identifier of the imported H5P content in the H5P service.
+    H5PLibrarySummary:
+      type: object
+      required: [ubername, machine_name, major_version, minor_version]
+      additionalProperties: false
+      properties:
+        ubername:
+          type: string
+          description: H5P library "ubername" (folder name), e.g. `H5P.MultiChoice-1.16`.
+        machine_name:
+          type: string
+          description: H5P machine name, e.g. `H5P.MultiChoice`.
+        major_version:
+          type: integer
+        minor_version:
+          type: integer
+    H5PLibrariesResponse:
+      type: object
+      required: [libraries]
+      additionalProperties: false
+      properties:
+        libraries:
+          type: array
+          items:
+            $ref: '#/components/schemas/H5PLibrarySummary'
+    H5PLibraryImportResponse:
+      type: object
+      required: [installed]
+      additionalProperties: false
+      properties:
+        installed:
+          type: array
+          description: Newly installed library ubernamen (may be empty if everything was already present).
+          items:
+            type: string
+    H5PEditorContentParams:
+      type: object
+      required: [params, metadata]
+      additionalProperties: false
+      properties:
+        params:
+          type: object
+          description: H5P content parameters (content.json).
+          additionalProperties: true
+        metadata:
+          type: object
+          description: H5P content metadata (h5p.json).
+          additionalProperties: true
+    H5PEditorModelResponse:
+      type: object
+      required: [integration, scripts, styles]
+      additionalProperties: false
+      properties:
+        integration:
+          type: object
+          description: H5PIntegration object used by the editor/player runtime.
+          additionalProperties: true
+        scripts:
+          type: array
+          items:
+            type: string
+        styles:
+          type: array
+          items:
+            type: string
+        library:
+          type: string
+          nullable: true
+          description: Main library ubername (only present when loading existing content).
+        metadata:
+          type: object
+          nullable: true
+          description: Content metadata (only present when loading existing content).
+          additionalProperties: true
+        params:
+          type: object
+          nullable: true
+          description: Content parameters (only present when loading existing content).
+          additionalProperties: true
+    H5PPlayerModelResponse:
+      type: object
+      required: [integration, scripts, styles, contentId, embedTypes]
+      additionalProperties: true
+      description: JSON model required by the `<h5p-player>` webcomponent.
+      properties:
+        contentId:
+          type: string
+          description: Opaque H5P content id.
+        embedTypes:
+          type: array
+          items:
+            type: string
+            enum: [iframe, div]
+          description: Allowed embed types for this content (prefer `div` when present).
+        integration:
+          type: object
+          description: H5PIntegration object used by the editor/player runtime.
+          additionalProperties: true
+        scripts:
+          type: array
+          items:
+            type: string
+        styles:
+          type: array
+          items:
+            type: string
+    H5PContentSaveRequest:
+      type: object
+      required: [library, params]
+      additionalProperties: false
+      properties:
+        library:
+          type: string
+          description: Main library ubername with whitespace separator, e.g. `H5P.MultiChoice 1.16`.
+        params:
+          $ref: '#/components/schemas/H5PEditorContentParams'
+    H5PContentSaveResponse:
+      type: object
+      required: [content_id, metadata]
+      additionalProperties: false
+      properties:
+        content_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
     LearningWorkerHealthCheck:
       type: object
       required: [check, status]
@@ -520,6 +676,28 @@ components:
           type: string
           format: date-time
           description: ISO timestamp when the download URL expires
+    H5PTaskConfig:
+      type: object
+      additionalProperties: false
+      description: Configuration for an H5P task (auto-scorable in MVP).
+      properties:
+        content_id:
+          type: string
+          nullable: true
+          pattern: '^[0-9]+$'
+          description: Numeric identifier of the H5P content item (may be null for drafts).
+        display_options:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Optional display flags passed to the H5P runtime.
+    VisualTaskConfig:
+      type: object
+      additionalProperties: false
+      description: >-
+        Marker config for upload-only visual tasks. Students submit exactly one
+        file (image/jpeg|image/png|application/pdf). Text submissions are
+        rejected (400 invalid_input). Empty object in MVP.
     Task:
       type: object
       required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
@@ -564,8 +742,14 @@ components:
           readOnly: true
           default: native
           description: >-
-            Task type (forward-compat). MVP returns "native". This field is
-            read-only and must not be provided by clients.
+            Task type (native|h5p|visual). This field is read-only and must not
+            be provided by clients.
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -600,6 +784,14 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+          description: Optional. When set, creates an H5P task. Mutually exclusive with `visual`.
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+          description: Optional. When set, creates a visual task. Mutually exclusive with `h5p`.
     TaskUpdate:
       type: object
       properties:
@@ -624,6 +816,14 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+          description: Optional. When set, updates the H5P configuration. Mutually exclusive with `visual`.
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+          description: Optional. When set, updates the visual configuration. Mutually exclusive with `h5p`.
     TaskReorder:
       type: object
       required: [task_ids]
@@ -765,7 +965,7 @@ components:
           nullable: true
     LearningTask:
       type: object
-      required: [id, instruction_md, criteria]
+      required: [id, instruction_md, criteria, kind]
       properties:
         id:
           type: string
@@ -794,8 +994,14 @@ components:
           nullable: true
         kind:
           type: string
+          enum: [native, h5p, visual]
+          description: Backend task type identifier.
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
-          description: Backend task type identifier (e.g., "native")
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
     LearningSection:
       type: object
       required: [section, materials, tasks]
@@ -929,7 +1135,17 @@ components:
               minimum: 1
             kind:
               type: string
-              enum: [text, image, file]
+              enum: [text, image, file, h5p]
+            score_raw:
+              type: integer
+              nullable: true
+              minimum: 0
+              description: Raw score reported by the H5P runtime for `kind=h5p`.
+            score_max:
+              type: integer
+              nullable: true
+              minimum: 0
+              description: Maximum score reported by the H5P runtime for `kind=h5p`.
             text_body:
               type: string
               nullable: true
@@ -1004,7 +1220,33 @@ components:
           nullable: true
         kind:
           type: string
-          enum: [text, image, pdf, file]
+          enum: [text, image, pdf, file, h5p]
+        score_raw:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Raw score (only present for `kind=h5p`).
+        score_max:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Maximum score (only present for `kind=h5p`).
+        h5p:
+          type: object
+          nullable: true
+          additionalProperties: false
+          description: H5P metadata (only present for `kind=h5p`).
+          properties:
+            content_id:
+              type: string
+              nullable: true
+              description: Opaque H5P content id linked to the task.
+            review_token:
+              type: string
+              nullable: true
+              description: >-
+                Short-lived, signed review capability token (teacher-only). Used by
+                `GET /h5p/player/review` to load the student state in strict read-only mode.
         text_body:
           type: string
           maxLength: 65536
@@ -1102,6 +1344,12 @@ components:
         has_submission:
           type: boolean
           description: True if at least one submission exists for this student and task
+        h5p_completed:
+          type: boolean
+          nullable: true
+          description: >
+            Only for H5P tasks. True when the student has at least one H5P submission
+            with full score (score_raw == score_max, including 0/0). Null for non-H5P tasks.
         average_score:
           type: number
           format: float
@@ -1138,6 +1386,12 @@ components:
         has_submission:
           type: boolean
           description: True if at least one submission exists after the change; false when none exist.
+        h5p_completed:
+          type: boolean
+          nullable: true
+          description: >
+            Only for H5P tasks. True when the student has at least one H5P submission
+            with full score (score_raw == score_max, including 0/0). Null for non-H5P tasks.
         average_score:
           type: number
           format: float
@@ -1179,6 +1433,999 @@ paths:
                   status:
                     type: string
                     example: healthy
+  /h5p/healthz:
+    get:
+      tags: [H5P]
+      summary: H5P service health check (proxy + storage readiness)
+      description: >-
+        Lightweight readiness probe for the H5P sidecar service behind the reverse proxy.
+        Returns a minimal filesystem-backed storage readiness signal.
+      operationId: getH5PHealth
+      security: []
+      responses:
+        '200':
+          description: H5P service healthy (storage writable)
+          headers:
+            Cache-Control:
+              description: Security — not cacheable.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PHealth'
+        '503':
+          description: H5P service unhealthy (storage not ready)
+          headers:
+            Cache-Control:
+              description: Security — not cacheable.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PHealth'
+  /h5p/auth/me:
+    get:
+      tags: [H5P]
+      summary: Resolve current principal for H5P (cookie forwarded to /api/me)
+      description: >-
+        Validates the `gustav_session` cookie by forwarding it to the web app's
+        `GET /api/me` endpoint and mirroring its JSON response.
+      operationId: getH5PMe
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current session principal
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '502':
+          description: Upstream unavailable (web service could not be reached)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/editor:
+    get:
+      tags: [H5P]
+      summary: H5P editor debug page (admin-only)
+      description: >-
+        Serves a standalone HTML debug page for the H5P editor.
+        This page is **admin-only** and exists for diagnostics and development.
+        
+        The real GUSTAV integration for authoring uses the JSON model endpoint
+        `GET /h5p/editor/model` (trusted teachers/admins) and embeds the editor
+        inside the platform UI.
+      operationId: getH5PEditorPage
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "Debug UI: admin-only (teacher/student must not access this page)."
+      x-permissions:
+        requiredRole: admin
+      responses:
+        '200':
+          description: HTML editor page
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found (debug pages disabled)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
+  /h5p/editor/model:
+    get:
+      tags: [H5P]
+      summary: H5P editor model (trusted teachers only)
+      description: >-
+        Returns the JSON model needed to render the H5P editor in a browser
+        (H5PIntegration + core script/style lists). If `content_id` is given,
+        includes the current library/metadata/params for editing existing content.
+      operationId: getH5PEditorModel
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "Trusted content: teachers only."
+      x-permissions:
+        requiredRole: teacher
+      parameters:
+        - in: query
+          name: content_id
+          required: false
+          schema:
+            type: string
+          description: Optional existing content id to load.
+      responses:
+        '200':
+          description: Editor model JSON
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PEditorModelResponse'
+        '400':
+          description: Invalid request (e.g., invalid query parameter shape)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/player:
+    get:
+      tags: [H5P]
+      summary: H5P player debug page (admin-only)
+      description: >-
+        Serves a standalone HTML debug page for the H5P player.
+        This page is **admin-only** and exists for diagnostics.
+        
+        The real GUSTAV integration for students/teachers uses the JSON model endpoint
+        `GET /h5p/player/model` and embeds the player inside the platform UI.
+      operationId: getH5PPlayerPage
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "Debug UI: admin-only (teacher/student must not access this page)."
+      x-permissions:
+        requiredRole: admin
+      parameters:
+        - in: query
+          name: content_id
+          required: false
+          schema:
+            type: string
+          description: Optional content id to load in the player.
+      responses:
+        '200':
+          description: HTML player page
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found (debug pages disabled)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            text/html:
+              schema:
+                type: string
+  /h5p/player/model:
+    get:
+      tags: [H5P]
+      summary: H5P player model (students and teachers)
+      description: >-
+        Returns the JSON model needed to render the H5P player in a browser
+        (H5PIntegration + core script/style lists). Used by the embedded
+        `<h5p-player>` webcomponent.
+      operationId: getH5PPlayerModel
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: content_id
+          required: true
+          schema:
+            type: string
+          description: H5P content id to load.
+        - in: query
+          name: context_id
+          required: false
+          schema:
+            type: string
+          description: Optional context id to isolate user state per task instance.
+        - in: query
+          name: course_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: >-
+            Course id used for authorization checks. Required for student requests
+            (fail-closed). Optional for teacher/admin preview.
+        - in: query
+          name: read_only_state
+          required: false
+          schema:
+            type: boolean
+          description: >-
+            When true, the H5P runtime loads user state in a read-only mode.
+      responses:
+        '200':
+          description: Player model JSON
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PPlayerModelResponse'
+        '400':
+          description: Invalid request (e.g., missing required query parameters)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/player/review:
+    get:
+      tags: [H5P]
+      summary: H5P review player model (teacher-only, read-only)
+      description: >-
+        Returns the JSON model needed to render the H5P player for reviewing a
+        student's latest state in strict read-only mode.
+
+        The request must include a short-lived `review_token` issued by the
+        teacher-only Teaching detail endpoint. The H5P service validates the
+        token fail-closed and renders the model "as the student" so the runtime
+        loads the student's userState. Write endpoints (e.g. finished data and
+        user data writes) are blocked in review mode.
+      operationId: getH5PReviewPlayerModel
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "Teacher/admin only. Review token is validated server-side (fail-closed)."
+        - "Strict read-only: write endpoints must be blocked in review mode."
+      parameters:
+        - in: query
+          name: content_id
+          required: true
+          schema:
+            type: string
+          description: H5P content id to load.
+        - in: query
+          name: context_id
+          required: true
+          schema:
+            type: string
+          description: "Task context id (in GUSTAV: task_id) to isolate user state per task instance."
+        - in: query
+          name: review_token
+          required: true
+          schema:
+            type: string
+          description: Short-lived, signed capability token issued by the Teaching API.
+        - in: query
+          name: read_only_state
+          required: false
+          schema:
+            type: boolean
+          description: >-
+            When true, the H5P runtime loads user state in a read-only mode.
+      responses:
+        '200':
+          description: Player model JSON (review mode)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PPlayerModelResponse'
+        '400':
+          description: Invalid request (e.g., missing required query parameters)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /h5p/ajax:
+    post:
+      tags: [H5P]
+      summary: H5P runtime Ajax endpoint
+      description: >-
+        Runtime endpoint required by the H5P client for translations and other actions.
+        This endpoint is cookie-authenticated and must enforce strict same-origin
+        checks (Origin/Referer) to reduce CSRF surface.
+      operationId: postH5PAjax
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content model: some actions are restricted to teacher/admin."
+      parameters:
+        - in: query
+          name: action
+          required: true
+          schema:
+            type: string
+          description: H5P ajax action identifier (e.g., translations).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: true
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Action response (varies by action)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Invalid request (e.g., missing action)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (csrf_violation or role not allowed for action)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /h5p/finishedData:
+    post:
+      tags: [H5P]
+      summary: Persist H5P finished state (runtime)
+      description: >-
+        Called by the H5P client when a user finishes a run. The service persists
+        finished state in its own storage backend and may additionally forward a
+        scored attempt to the Learning API when `course_id` and `task_id` are provided.
+      operationId: postH5PFinishedData
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Data minimisation: only score raw/max are forwarded to Learning."
+      parameters:
+        - in: query
+          name: course_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional course scope for forwarding a learning submission.
+        - in: query
+          name: task_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional task scope for forwarding a learning submission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [contentId, score, maxScore]
+              properties:
+                contentId:
+                  type: string
+                  description: H5P content id.
+                score:
+                  type: number
+                maxScore:
+                  type: number
+                opened:
+                  type: string
+                  nullable: true
+                finished:
+                  type: string
+                  nullable: true
+                time:
+                  type: number
+                  nullable: true
+      responses:
+        '200':
+          description: Finished state persisted
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                additionalProperties: false
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid request
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (csrf_violation)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /h5p/libraries:
+    get:
+      tags: [H5P]
+      summary: List installed H5P content-type libraries (trusted teachers only)
+      description: >-
+        Returns the list of installed H5P libraries in the H5P service storage.
+        Trusted-content model: access is restricted to role `teacher` (or `admin`).
+      operationId: listH5PLibraries
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+      responses:
+        '200':
+          description: Installed libraries
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PLibrariesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+  /h5p/libraries/import:
+    post:
+      tags: [H5P]
+      summary: Install/import an H5P content-type library package (.h5p) into the H5P service
+      description: >-
+        Trusted content model: only teachers/admins may install libraries.
+        Browser clients MUST pass same-origin indicators (Origin/Referer).
+      operationId: importH5PLibrary
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may install content-type libraries (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ".h5p ZIP package containing libraries"
+      responses:
+        '200':
+          description: Library package installed/imported
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PLibraryImportResponse'
+        '400':
+          description: Invalid library package
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/contents/import:
+    post:
+      tags: [H5P]
+      summary: Import an H5P package (.h5p) into the H5P service
+      description: >-
+        Trusted content model: only teachers/admins may import packages. The
+        server stores content and libraries under `/data/h5p` (filesystem).
+        Browser clients MUST pass same-origin indicators (Origin/Referer).
+        Scope: content is global (not course-scoped) and referenced by `Task.h5p.content_id`.
+      operationId: importH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may import packages (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ".h5p ZIP package"
+      responses:
+        '201':
+          description: Content imported
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentImportResponse'
+        '400':
+          description: Invalid package
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/contents:
+    post:
+      tags: [H5P]
+      summary: Create H5P content from editor params (trusted teachers only)
+      description: >-
+        Stores a new H5P content item using editor parameters (content.json + h5p.json metadata).
+        Trusted content model: only teachers/admins may create content. Browser clients MUST pass
+        same-origin indicators (Origin/Referer). Scope: content is global (not course-scoped) and
+        referenced by `Task.h5p.content_id`.
+      operationId: createH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may create content (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/H5PContentSaveRequest'
+      responses:
+        '201':
+          description: Content created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentSaveResponse'
+        '400':
+          description: Invalid request
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/contents/{content_id}:
+    patch:
+      tags: [H5P]
+      summary: Update H5P content from editor params (trusted teachers only)
+      description: >-
+        Updates an existing H5P content item using editor parameters (content.json + h5p.json metadata).
+        Trusted content model: only teachers/admins may update content. Browser clients MUST pass
+        same-origin indicators (Origin/Referer). Scope: content is global (not course-scoped) and
+        referenced by `Task.h5p.content_id`.
+      operationId: updateH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may update content (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/H5PContentSaveRequest'
+      responses:
+        '200':
+          description: Content updated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentSaveResponse'
+        '400':
+          description: Invalid request
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /h5p/contents/{content_id}/export:
+    get:
+      tags: [H5P]
+      summary: Export an H5P content item as a .h5p package
+      description: "Trusted content model: only teachers/admins may export packages."
+      operationId: exportH5PContent
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ".h5p ZIP package"
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Content-Disposition:
+              description: Download filename
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /internal/health/learning-worker:
     get:
       tags: [Operations]
@@ -1435,6 +2682,94 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Course not found or sections not released
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/courses/{course_id}/h5p/contents/{content_id}/access:
+    get:
+      tags: [Learning]
+      summary: Check student access to an H5P content item (fail-closed)
+      description: >-
+        Returns 204 when the authenticated student is enrolled in the given course and the
+        `content_id` belongs to a released H5P task in that course. Returns 404 otherwise
+        (fail-closed to avoid leaking membership, release state or content existence).
+      operationId: checkLearningH5PContentAccess
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "Fail-closed: return 404 for not member / not released / unknown course."
+        - "Data minimization: 204 response has no body."
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+          description: H5P content id (numeric).
+      responses:
+        '204':
+          description: Allowed (student has access to this H5P content in the course)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '400':
+          description: Bad request (invalid_uuid | invalid_content_id)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden — caller is not a student
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found — not allowed (fail-closed)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -1942,6 +3277,11 @@ paths:
         image or PDF file. All submissions enter an asynchronous analysis pipeline; clients
         poll submission detail endpoints to observe status changes. Duplicate requests can
         be avoided using the optional Idempotency-Key header.
+        
+        Task-type rules:
+        - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).
+        - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously (response 201).
+        
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is
         absent (some browsers), the server falls back to validating the `Referer` origin.
@@ -1950,8 +3290,8 @@ paths:
         - cookieAuth: []
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
-        - "Strict mode: When STRICT_CSRF_SUBMISSIONS=true, Origin or Referer must be present; requests without either are rejected."
         - "RLS: student ownership and course membership enforced via policies and helpers."
+        - "Failure semantics: when persistence is unavailable (repo/db down), the API returns 503 and does not pretend success."
       x-permissions:
         requiredRole: student
       parameters:
@@ -2029,6 +3369,18 @@ paths:
                     sha256:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
+                - type: object
+                  required: [kind, score_raw, score_max]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [h5p]
+                    score_raw:
+                      type: integer
+                      minimum: 0
+                    score_max:
+                      type: integer
+                      minimum: 0
       responses:
         '202':
           description: Submission accepted; analysis scheduled asynchronously (default response).
@@ -2043,7 +3395,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '201':
-          description: Submission analysed synchronously (opportunistic Fast-Path).
+          description: Submission completed synchronously (H5P submissions only).
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -2055,7 +3407,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '400':
-          description: Bad request (invalid_input | invalid_image_payload | invalid_file_payload | max_attempts_exceeded | invalid_uuid)
+          description: Bad request (invalid_input | invalid_image_payload | invalid_file_payload | invalid_h5p_payload | max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -2102,6 +3454,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable (submission persistence not available)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       x-gustav-notes:
         - Default response is 202 pending; 201 is best-effort and MUST NOT be relied upon by clients.
 
@@ -2121,7 +3485,7 @@ paths:
           schema:
             type: string
             maxLength: 256
-            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
           description: >-
             Optional in-app absolute path to navigate to after login. External
             URLs are rejected; invalid values are ignored. Disallows double-slash
@@ -2244,7 +3608,7 @@ paths:
           schema:
             type: string
             maxLength: 256
-            pattern: '^/(?!.*//)(?!.*\\.\\.)[A-Za-z0-9._\-/]*$'
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
             default: "/auth/logout/success"
           description: >-
             App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.
@@ -3459,6 +4823,9 @@ paths:
               - invalid_due_at
               - invalid_max_attempts
               - invalid_hints_md
+              - invalid_h5p_config
+              - invalid_visual_config
+              - invalid_task_kind_config
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -3470,6 +4837,9 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+                invalid_h5p_config: { value: { error: bad_request, detail: invalid_h5p_config } }
+                invalid_visual_config: { value: { error: bad_request, detail: invalid_visual_config } }
+                invalid_task_kind_config: { value: { error: bad_request, detail: invalid_task_kind_config } }
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or section not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -3536,6 +4906,9 @@ paths:
               - invalid_due_at
               - invalid_max_attempts
               - invalid_hints_md
+              - invalid_h5p_config
+              - invalid_visual_config
+              - invalid_task_kind_config
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -3549,6 +4922,9 @@ paths:
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
                 invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+                invalid_h5p_config: { value: { error: bad_request, detail: invalid_h5p_config } }
+                invalid_visual_config: { value: { error: bad_request, detail: invalid_visual_config } }
+                invalid_task_kind_config: { value: { error: bad_request, detail: invalid_task_kind_config } }
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -4873,7 +6249,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Storage unavailable (storage_adapter_not_configured | storage_service_error)
+          description: Storage or authorization unavailable (storage_adapter_not_configured | storage_service_error | authorization_unavailable)
           headers:
             Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
             Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
@@ -5135,12 +6511,16 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [id, instruction_md, position]
+                      required: [id, instruction_md, position, kind]
                       additionalProperties: false
                       properties:
                         id: { type: string, format: uuid }
                         instruction_md: { type: string, description: Task instruction (Markdown) }
                         position: { type: integer }
+                        kind:
+                          type: string
+                          enum: [native, h5p, visual]
+                          description: Backend task type identifier.
                   rows:
                     type: array
                     items:

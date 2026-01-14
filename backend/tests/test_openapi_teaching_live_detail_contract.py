@@ -30,3 +30,28 @@ def test_openapi_has_latest_submission_detail_path():
     schema = content.get("schema", {})
     assert schema.get("$ref", "").endswith("/TeachingLatestSubmission"), "schema ref expected"
 
+
+def test_teaching_latest_submission_schema_supports_h5p_review_fields():
+    """Contract: Teaching latest submission supports `kind=h5p` with score + review token."""
+    repo_root = Path(__file__).resolve().parents[2]
+    spec_path = repo_root / "api" / "openapi.yml"
+    with spec_path.open("r", encoding="utf-8") as fh:
+        spec = yaml.safe_load(fh)
+
+    schemas = (spec.get("components") or {}).get("schemas", {})
+    assert "TeachingLatestSubmission" in schemas
+    sub = schemas["TeachingLatestSubmission"]
+    props = sub.get("properties") or {}
+
+    kind = (props.get("kind") or {})
+    assert "h5p" in (kind.get("enum") or []), "TeachingLatestSubmission.kind must include 'h5p'"
+
+    assert "score_raw" in props
+    assert "score_max" in props
+    assert "h5p" in props
+
+    h5p = props["h5p"]
+    assert h5p.get("type") == "object"
+    h5p_props = h5p.get("properties") or {}
+    assert "content_id" in h5p_props
+    assert "review_token" in h5p_props

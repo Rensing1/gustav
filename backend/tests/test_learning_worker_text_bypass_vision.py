@@ -68,6 +68,8 @@ async def test_worker_bypasses_vision_for_text_and_preserves_text(monkeypatch: p
                 mime_type=None,
                 size_bytes=None,
                 sha256=None,
+                score_raw=None,
+                score_max=None,
                 # Use a unique key per test run to avoid colliding with prior state
                 idempotency_key=f"bypass-vision-text-{uuid4()}",
             )

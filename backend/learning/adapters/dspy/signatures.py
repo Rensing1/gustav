@@ -146,3 +146,107 @@ else:
         student_text_md: str
         analysis_json: dict[str, Any]
         teacher_instructions_md: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Visual tasks (image/PDF) — DSPy Signatures
+# ---------------------------------------------------------------------------
+
+if dspy is not None and hasattr(dspy, "Signature"):
+
+    class VisualFeedbackAnalysisSignature(dspy.Signature):  # type: ignore[attr-defined]
+        """Analysiere eine visuelle Schülerabgabe (Bild/PDF) anhand vorgegebener Kriterien.
+
+        Rolle:
+            Du denkst wie eine erfahrene Lehrkraft, die fair und evidenzbasiert
+            korrigiert. Du kannst Text *und* grafische Inhalte aus dem Bild
+            berücksichtigen.
+
+        Ziel:
+            Für jedes Kriterium soll klar erkennbar sein,
+            - wie gut das Kriterium erfüllt ist (Score 0..10) und
+            - worauf du dich im visuellen Inhalt stützt (kurze Erklärung).
+
+        Regeln (evidence-only):
+            - Bewerte jedes Kriterium ausschließlich anhand sichtbarer Inhalte.
+            - Erfinde keine Inhalte, die nicht erkennbar sind.
+            - Wenn du keine ausreichenden Belege findest: Score 0 und Erklärung
+              „kein Beleg gefunden“.
+            - Aufgabenstellung und Lösungshinweise sind nur Kontext; sie dürfen
+              nicht als „Beleg“ herangezogen oder zitiert werden.
+
+        Ausgabe:
+            - `overall_score` (0..5) als grobe Gesamteinschätzung.
+            - `criteria_results`: Liste von {criterion, max_score=10, score 0..10, explanation_md}.
+        """
+
+        student_image: dspy.Image = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Schülerabgabe als Bild (data-URI oder URL via dspy.Image)."
+        )
+        criteria: list[str] = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Geordnete Liste der Bewertungs-Kriterien (Strings)."
+        )
+        teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Aufgabenstellung; nur als Kontext, nicht direkt bewerten."
+        )
+        solution_hints_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Lösungshinweise der Lehrkraft; nur Kontext, nicht im Output zitieren."
+        )
+
+        overall_score: int = dspy.OutputField(  # type: ignore[attr-defined]
+            desc="Gesamtwertung 0..5, aus den Kriterien abgeleitet."
+        )
+        criteria_results: list[CriterionResult] = dspy.OutputField(  # type: ignore[attr-defined]
+            desc="Liste von Objekten mit {criterion, max_score, score, explanation_md}."
+        )
+
+else:
+
+    @dataclass
+    class VisualFeedbackAnalysisSignature:  # type: ignore[no-redef]
+        """Fallback visual analysis signature used when DSPy is unavailable."""
+
+        student_image: Any
+        criteria: Sequence[str]
+        teacher_instructions_md: str | None = None
+        solution_hints_md: str | None = None
+
+
+if dspy is not None and hasattr(dspy, "Signature"):
+
+    class VisualFeedbackSynthesisSignature(dspy.Signature):  # type: ignore[attr-defined]
+        """Erzeuge aus visueller Analyse eine kurze Rückmeldung im Fließtext.
+
+        Ziel:
+            Formuliere eine kurze, ermutigende Rückmeldung, basierend auf der
+            strukturierten Analyse und dem visuellen Inhalt.
+
+        Regeln:
+            - Schreibe Fließtext (keine Listen/Bullets).
+            - Stütze dich auf die Analyse (`criteria_results`) und sichtbare Inhalte.
+            - Erfinde keine Inhalte.
+        """
+
+        student_image: dspy.Image = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Schülerabgabe als Bild (data-URI oder URL via dspy.Image)."
+        )
+        analysis_json: CriteriaAnalysis = dspy.InputField(  # type: ignore[attr-defined]
+            desc="criteria.v2 Analyse, erzeugt durch die vorherige Stufe."
+        )
+        teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Aufgabenstellung; optionaler Kontext für das Feedback."
+        )
+
+        feedback_md: str = dspy.OutputField(  # type: ignore[attr-defined]
+            desc="Formative Rückmeldung in Markdown (Fließtext, keine Listen)."
+        )
+
+else:
+
+    @dataclass
+    class VisualFeedbackSynthesisSignature:  # type: ignore[no-redef]
+        """Fallback synthesis signature used when DSPy is unavailable."""
+
+        student_image: Any
+        analysis_json: dict[str, Any]
+        teacher_instructions_md: str | None = None

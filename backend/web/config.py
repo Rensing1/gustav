@@ -50,12 +50,22 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: KC_ADMIN_CLIENT_SECRET is unset or a placeholder in production."
         )
 
-    # 2) Postgres TLS: basic guard to avoid explicit disable
-    dsn = os.getenv("DATABASE_URL", "")
-    if "sslmode=disable" in dsn:
+    # 1c) H5P teacher review capability token secret must be configured.
+    # Used to sign short-lived review tokens consumed by the H5P sidecar.
+    h5p_review_secret = (os.getenv("H5P_REVIEW_TOKEN_SECRET", "") or "").strip()
+    if not h5p_review_secret or h5p_review_secret.upper().startswith("CHANGE_ME"):
         raise SystemExit(
-            "Refusing to start: DATABASE_URL contains sslmode=disable in production. Use sslmode=require or verify TLS."
+            "Refusing to start: H5P_REVIEW_TOKEN_SECRET is unset or a placeholder in production."
         )
+
+    # 2) Postgres TLS: forbid explicit disable in all configured DSNs
+    for key in ("DATABASE_URL", "TEACHING_DATABASE_URL", "LEARNING_DATABASE_URL", "SESSION_DATABASE_URL"):
+        dsn = os.getenv(key, "") or ""
+        if "sslmode=disable" in dsn:
+            raise SystemExit(
+                f"Refusing to start: {key} contains sslmode=disable in production. "
+                "Use sslmode=require or verify TLS."
+            )
 
     # 3) DSN user must not be the app role in prod-like envs
     def _parse_user(dsn_value: str) -> str | None:
@@ -73,7 +83,7 @@ def ensure_secure_config_on_startup() -> None:
         except Exception:
             return None
 
-    for key in ("DATABASE_URL", "TEACHING_DATABASE_URL", "SESSION_DATABASE_URL"):
+    for key in ("DATABASE_URL", "TEACHING_DATABASE_URL", "LEARNING_DATABASE_URL", "SESSION_DATABASE_URL"):
         val = os.getenv(key, "")
         if not val:
             continue

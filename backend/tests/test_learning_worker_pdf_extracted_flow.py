@@ -121,6 +121,9 @@ async def test_worker_completes_pdf_from_extracted(
             )
             # Queue job payload as the use case would do
             payload = {
+                # Tag test-created jobs so a running docker worker can ignore them
+                # (avoids race conditions during local `make verify`).
+                "_gustav_source": "pytest",
                 "submission_id": str(submission_id),
                 "course_id": str(course_id),
                 "task_id": str(task_id),

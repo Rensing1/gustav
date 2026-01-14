@@ -195,6 +195,8 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key=idempotency_key,
         )
     )
@@ -229,7 +231,13 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
 
 
 def _set_job_visibility(worker_dsn: str, job_id: str, *, visible_at: datetime) -> None:
-    """Pin a job's visibility for deterministic leasing, clearing any previous lease."""
+    """Pin a job's visibility for deterministic leasing, clearing previous processing state.
+
+    Why:
+        Worker tests should not depend on external worker processes or a previous
+        retry attempt. We reset `retry_count` and `error_code` so the next
+        `run_once()` call always exercises the "first retry" path deterministically.
+    """
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute(
@@ -237,6 +245,8 @@ def _set_job_visibility(worker_dsn: str, job_id: str, *, visible_at: datetime) -
                 update public.learning_submission_jobs
                    set visible_at = %s,
                        status = 'queued',
+                       retry_count = 0,
+                       error_code = null,
                        lease_key = null,
                        leased_until = null,
                        updated_at = now()
@@ -307,6 +317,8 @@ async def test_worker_processes_pending_submission_to_completed():
             mime_type=None,
             size_bytes=None,
             sha256=None,
+            score_raw=None,
+            score_max=None,
             idempotency_key="worker-happy-path",
         )
     )
@@ -800,6 +812,10 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
                     ),
                 )
                 payload = {
+                    # Tag test-created jobs so a running docker worker can ignore them.
+                    # (See `WORKER_SKIP_PYTEST_JOBS` in docker-compose.yml and the
+                    # dedicated contract tests below.)
+                    "_gustav_source": "pytest",
                     "submission_id": submission_id,
                     "course_id": str(course_id),
                     "task_id": str(task_id),
@@ -1181,4 +1197,176 @@ async def test_worker_extends_lease_window(monkeypatch: pytest.MonkeyPatch):
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute("delete from public.learning_submission_jobs where id = %s::uuid", (job_id,))
+        conn.commit()
+
+
+@pytest.mark.anyio
+async def test_create_submission_tags_queue_jobs_under_pytest(monkeypatch: pytest.MonkeyPatch):
+    """Jobs created by in-process tests must be tagged so docker workers can ignore them."""
+
+    _require_db_or_skip()
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "worker-job-tagging")
+
+    fixture = await _prepare_learning_fixture()
+    dsn = _dsn()
+    worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+        conn.commit()
+
+    repo = DBLearningRepo(dsn=dsn)
+    usecase = CreateSubmissionUseCase(repo)
+    submission = usecase.execute(
+        CreateSubmissionInput(
+            course_id=fixture.course_id,
+            task_id=fixture.task["id"],
+            student_sub=fixture.student_sub,
+            kind="text",
+            text_body="pytest tags jobs",
+            storage_key=None,
+            mime_type=None,
+            size_bytes=None,
+            sha256=None,
+            score_raw=None,
+            score_max=None,
+            idempotency_key=f"pytest-job-tag-{uuid.uuid4()}",
+        )
+    )
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select payload
+                  from public.learning_submission_jobs
+                 where submission_id = %s::uuid
+                 order by created_at desc
+                 limit 1
+                """,
+                (submission["id"],),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    assert row is not None
+    payload = row[0]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    assert payload.get("_gustav_source") == "pytest"
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs where submission_id = %s::uuid", (submission["id"],))
+        conn.commit()
+
+
+@pytest.mark.anyio
+async def test_worker_skips_pytest_tagged_jobs_when_configured(monkeypatch: pytest.MonkeyPatch):
+    """When WORKER_SKIP_PYTEST_JOBS=true, leasing must ignore pytest-tagged jobs."""
+
+    _require_db_or_skip()
+    telemetry.reset_for_tests()
+    monkeypatch.setenv("WORKER_SKIP_PYTEST_JOBS", "true")
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "worker-skip-pytest-jobs")
+
+    fixture = await _prepare_learning_fixture()
+    dsn = _dsn()
+    worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+        conn.commit()
+
+    repo = DBLearningRepo(dsn=dsn)
+    usecase = CreateSubmissionUseCase(repo)
+    submission_pytest = usecase.execute(
+        CreateSubmissionInput(
+            course_id=fixture.course_id,
+            task_id=fixture.task["id"],
+            student_sub=fixture.student_sub,
+            kind="text",
+            text_body="pytest job",
+            storage_key=None,
+            mime_type=None,
+            size_bytes=None,
+            sha256=None,
+            score_raw=None,
+            score_max=None,
+            idempotency_key=f"pytest-job-{uuid.uuid4()}",
+        )
+    )
+    submission_real = usecase.execute(
+        CreateSubmissionInput(
+            course_id=fixture.course_id,
+            task_id=fixture.task["id"],
+            student_sub=fixture.student_sub,
+            kind="text",
+            text_body="non-pytest job",
+            storage_key=None,
+            mime_type=None,
+            size_bytes=None,
+            sha256=None,
+            score_raw=None,
+            score_max=None,
+            idempotency_key=f"non-pytest-job-{uuid.uuid4()}",
+        )
+    )
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                "select id::text from public.learning_submission_jobs where submission_id = %s::uuid",
+                (submission_pytest["id"],),
+            )
+            pytest_job_id = cur.fetchone()[0]
+            cur.execute(
+                "select id::text from public.learning_submission_jobs where submission_id = %s::uuid",
+                (submission_real["id"],),
+            )
+            real_job_id = cur.fetchone()[0]
+
+            # Remove the pytest marker from one job so it represents a "real" queue item.
+            cur.execute(
+                "update public.learning_submission_jobs set payload = payload - '_gustav_source' where id = %s::uuid",
+                (real_job_id,),
+            )
+        conn.commit()
+
+    now = datetime.now(tz=timezone.utc)
+    # Make the jobs visible and lease in the *same* transaction. This avoids
+    # flakiness when a docker worker is running concurrently: the worker can't
+    # see the jobs until we commit, and by then the "real" job is already leased.
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            for job_id, visible_at in (
+                (pytest_job_id, now - timedelta(seconds=5)),
+                (real_job_id, now - timedelta(seconds=4)),
+            ):
+                cur.execute(
+                    """
+                    update public.learning_submission_jobs
+                       set visible_at = %s,
+                           status = 'queued',
+                           retry_count = 0,
+                           error_code = null,
+                           lease_key = null,
+                           leased_until = null,
+                           updated_at = now()
+                     where id = %s::uuid
+                    """,
+                    (visible_at, job_id),
+                )
+        leased = worker_module._lease_next_job(conn, now=now)
+        conn.commit()
+    assert leased is not None
+    assert leased.id == real_job_id
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                "delete from public.learning_submission_jobs where id in (%s::uuid, %s::uuid)",
+                (pytest_job_id, real_job_id),
+            )
         conn.commit()

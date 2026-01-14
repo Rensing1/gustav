@@ -47,7 +47,9 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
 
 ### Teaching: Aufgaben (Tasks) MVP
 - API: `GET|POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks`, `PATCH|DELETE /tasks/{task_id}`, `POST /tasks/reorder` (authorOnly, Teacher-role).
-- Vertrag: `Task` Schema besitzt `kind` (read-only, default `native`) für spätere H5P-Erweiterungen.
+- Vertrag: `Task.kind` unterstützt `native|h5p|visual`. Konfiguration erfolgt über optionale Nested-Objekte `h5p` (z. B. `content_id`) bzw. `visual` (Upload‑Only).
+- Security model: H5P‑Packages gelten als **trusted content** (ausführbarer Code) und dürfen nur von `teacher`/`admin` importiert/verwaltet werden.
+- Scope: H5P‑Content ist bewusst **global wiederverwendbar** (nicht kurs‑gebunden). Student‑Zugriff bleibt kurs‑gebunden über Access‑Checks auf freigeschaltete Tasks (fail‑closed).
 - Use Case Layer: `teaching.services.tasks.TasksService` normalisiert Eingaben (Criteria, Hints, Due-Date, Max-Attempts) und delegiert an das Repo (`TasksRepoProtocol`).
 - Persistenz: Supabase-Migration legt `public.unit_tasks` mit RLS, Triggern für Positionsresequenzierung und DEFERRABLE Unique-Constraint an.
 - Tests: API-Integrationstests spiegeln die BDD-Szenarien (CRUD, Reorder, Fehlerfälle); dedizierte Unit-Tests prüfen den Service isoliert.

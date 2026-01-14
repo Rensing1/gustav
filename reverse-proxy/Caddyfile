@@ -3,6 +3,12 @@
 }
 
 (app_proxy) {
+  # Path-based routing for the self-hosted H5P service (same origin).
+  # NOTE: `handle_path` strips the `/h5p` prefix before proxying.
+  # The H5P service still uses `baseUrl=/h5p` so browser URLs stay stable.
+  handle_path /h5p/* {
+    reverse_proxy h5p:3000
+  }
   # Same-origin path proxy for Supabase Storage (dev = prod)
   @storage_path path /storage/v1/*
   handle @storage_path {

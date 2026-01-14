@@ -15,10 +15,57 @@ services:
     depends_on:
       - web
       - keycloak
+      - h5p
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2
+
+  ddns:
+    image: alpine/curl:latest
+    container_name: gustav-ddns
+    env_file:
+      - .env
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache bind-tools >/dev/null && \
+        echo "IONOS DDNS updater started for gustav-lernplattform.de" && \
+        while true; do \
+          NOW=$(date +"%Y-%m-%d %H:%M:%S"); \
+          CURRENT_IP=$(curl -fs https://ipinfo.io/ip || echo "unknown"); \
+          APP_URL=${IONOS_UPDATE_URL_APP:-${IONOS_UPDATE_URL}}; \
+          ID_URL=${IONOS_UPDATE_URL_ID:-${IONOS_UPDATE_URL}}; \
+          \
+          if [ -n "${IONOS_UPDATE_URL}" ]; then \
+            DNS_IP=$(dig +short gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${IONOS_UPDATE_URL}"); \
+            echo "[$NOW] DDNS root -> HTTP $HTTP_CODE | current=${CURRENT_IP} | dns=${DNS_IP}"; \
+          else \
+            echo "[$NOW] DDNS root skipped: IONOS_UPDATE_URL not configured"; \
+          fi; \
+          \
+          if [ -n "${APP_URL}" ]; then \
+            DNS_IP_APP=$(dig +short app.gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
+            HTTP_APP=$(curl -s -o /dev/null -w "%{http_code}" "${APP_URL}"); \
+            echo "[$NOW] DDNS app  -> HTTP $HTTP_APP | current=${CURRENT_IP} | dns=${DNS_IP_APP}"; \
+          else \
+            echo "[$NOW] DDNS app skipped: IONOS_UPDATE_URL_APP not configured"; \
+          fi; \
+          \
+          if [ -n "${ID_URL}" ]; then \
+            DNS_IP_ID=$(dig +short id.gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
+            HTTP_ID=$(curl -s -o /dev/null -w "%{http_code}" "${ID_URL}"); \
+            echo "[$NOW] DDNS id   -> HTTP $HTTP_ID | current=${CURRENT_IP} | dns=${DNS_IP_ID}"; \
+          else \
+            echo "[$NOW] DDNS id skipped: IONOS_UPDATE_URL_ID not configured"; \
+          fi; \
+          sleep 300; \
+        done
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
 
   web:
     build: .
@@ -80,11 +127,50 @@ services:
       # Share dev upload root with worker so Vision can read image bytes
       - STORAGE_VERIFY_ROOT=${STORAGE_VERIFY_ROOT:-/app/.tmp/dev_uploads}
       - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}
+      # Teacher-only H5P review capability tokens (must match h5p service).
+      - H5P_REVIEW_TOKEN_SECRET=${H5P_REVIEW_TOKEN_SECRET:-CHANGE_ME_DEV}
     restart: unless-stopped
     # All Supabase services reachable via shared external network
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2
+
+  h5p:
+    build:
+      context: ./h5p-service
+    container_name: gustav-h5p
+    # behind proxy; no direct host port mapping
+    volumes:
+      # H5P content/libraries (single-host, included in backup-cron via SUPABASE_STORAGE_ROOT)
+      - ./supabase/storage/h5p:/data/h5p:z
+    environment:
+      # Service listens on this port inside the compose network
+      - PORT=3000
+      - GUSTAV_ENV=${GUSTAV_ENV:-dev}
+      # Internal URL to validate gustav_session via /api/me (cookie forwarded)
+      - GUSTAV_WEB_INTERNAL_BASE=http://gustav-alpha2:8000
+      - SESSION_COOKIE_NAME=gustav_session
+      # Small cache to reduce load on /api/me during editor/player asset bursts
+      - AUTH_CACHE_TTL_SECONDS=30
+      # Filesystem-based storage root (mounted from repo under supabase/storage)
+      - H5P_STORAGE_ROOT=/data/h5p
+      # Hard limit for uploaded .h5p ZIP packages (defense-in-depth).
+      - H5P_MAX_UPLOAD_BYTES=104857600
+      # Must match the web service secret (used to validate review tokens).
+      - H5P_REVIEW_TOKEN_SECRET=${H5P_REVIEW_TOKEN_SECRET:-CHANGE_ME_DEV}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
 
   learning-worker:
     build: .
@@ -120,6 +206,9 @@ services:
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
       - WORKER_POLL_INTERVAL=${WORKER_POLL_INTERVAL:-0.5}
+      # Avoid flaky unit tests when a docker worker is running while pytest
+      # runs the app in-process: skip jobs tagged with `_gustav_source=pytest`.
+      - WORKER_SKIP_PYTEST_JOBS=${WORKER_SKIP_PYTEST_JOBS:-true}
       - AUTO_CREATE_STORAGE_BUCKETS=false
       # Allow storage3 fallback in container even when using host.docker.internal
       - SUPABASE_FALLBACK_STORAGE3=true

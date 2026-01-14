@@ -10,13 +10,96 @@ import sys
 from pathlib import Path
 import pytest
 
-# Load .env only when E2E suite is explicit enabled.
-try:
-    from dotenv import load_dotenv  # type: ignore
-    if os.getenv("RUN_E2E", "0") == "1":
-        load_dotenv()
-except Exception:
-    pass
+def _truthy_env(name: str) -> bool:
+    return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _is_prod_like(env_value: str | None) -> bool:
+    return (env_value or "").strip().lower() in {"prod", "production", "stage", "staging"}
+
+
+def _guard_against_prod_env_during_pytest() -> None:
+    """Prevent import-time SystemExit when a developer exported prod-like env vars.
+
+    Why:
+        `backend/web/main.py` calls the startup security guard at import time.
+        If a developer has `GUSTAV_ENV=prod` exported in their shell, pytest
+        collection would abort unless *all* production secrets are configured.
+
+        For tests, we want deterministic, hermetic defaults. Individual tests
+        that validate prod guards explicitly set `GUSTAV_ENV=prod` themselves.
+    """
+    # Ensure application modules never auto-load `.env` during pytest collection.
+    # Integration suites that need `.env` load it explicitly in `pytest_configure`.
+    os.environ.setdefault("GUSTAV_ENABLE_DOTENV", "false")
+    if _is_prod_like(os.getenv("GUSTAV_ENV")):
+        os.environ["GUSTAV_ENV"] = "dev"
+
+
+def _prune_external_wiring_env_by_default() -> None:
+    """Keep the default unit/in-process suite independent from external services.
+
+    Why:
+        Several tests intentionally validate "storage unavailable" behaviour.
+        If a developer has Supabase env vars exported (or accidentally loads
+        `.env`) those tests would flip into the real storage adapter path and
+        fail in surprising ways.
+
+        Integration suites enable wiring explicitly via RUN_* flags and marker
+        selection (see Makefile targets).
+    """
+    if _truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E") or _truthy_env("RUN_OLLAMA_E2E"):
+        return
+    for var in (
+        "SUPABASE_URL",
+        "SUPABASE_PUBLIC_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+    ):
+        os.environ.pop(var, None)
+
+
+_guard_against_prod_env_during_pytest()
+_prune_external_wiring_env_by_default()
+
+
+def pytest_configure(config: pytest.Config) -> None:  # pragma: no cover
+    """Load `.env` only for explicitly selected integration suites.
+
+    Contract:
+        - Unit/in-process suite (`pytest` / `make test`) must not depend on `.env`.
+        - E2E (`make test-e2e`) requires RUN_E2E=1 and uses `-m e2e`.
+        - Supabase integration (`make test-supabase`) requires RUN_SUPABASE_E2E=1 and uses `-m supabase_integration`.
+        - Ollama integration (`make test-ollama`) requires RUN_OLLAMA_E2E=1 and uses `-m ollama_integration`.
+    """
+    markexpr = (getattr(config.option, "markexpr", "") or "").strip()
+
+    # Protect developers from the common "set RUN_E2E=1 and run full suite" pitfall.
+    # It mixes contradictory assumptions (external services wired vs deliberately unavailable tests).
+    if _truthy_env("RUN_E2E") and not markexpr:
+        raise pytest.UsageError("RUN_E2E=1 requires marker selection. Use `make test-e2e` or `pytest -m e2e`.")
+    if _truthy_env("RUN_SUPABASE_E2E") and not markexpr:
+        raise pytest.UsageError(
+            "RUN_SUPABASE_E2E=1 requires marker selection. Use `make test-supabase` or `pytest -m supabase_integration`."
+        )
+    if _truthy_env("RUN_OLLAMA_E2E") and not markexpr:
+        raise pytest.UsageError(
+            "RUN_OLLAMA_E2E=1 requires marker selection. Use `make test-ollama` or `pytest -m ollama_integration`."
+        )
+
+    # Load `.env` only when an integration suite is explicitly requested.
+    if not (_truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E") or _truthy_env("RUN_OLLAMA_E2E")):
+        return
+
+    try:
+        from dotenv import load_dotenv  # type: ignore
+
+        # Load `.env` as defaults; explicit env vars (e.g. Makefile overrides)
+        # must take precedence.
+        load_dotenv(override=False)
+    except Exception:
+        # `.env` loading is best-effort; integration tests will fail with a clear
+        # message when required vars are missing.
+        return
 
 
 def _ensure_db_env_defaults() -> None:
@@ -141,12 +224,6 @@ def _reset_teaching_repo_between_tests():
                 except Exception:
                     ok = False
             teaching.set_repo(teaching._build_default_repo() if ok else teaching._Repo())
-        # Keep alias module in sync if loaded under backend.web.routes.teaching
-        try:
-            alias = importlib.import_module("backend.web.routes.teaching")
-            alias.set_repo(teaching.REPO)  # type: ignore[attr-defined]
-        except Exception:
-            pass
     except Exception:
         pass
     yield
@@ -219,6 +296,7 @@ def _force_prod_env_and_clear_feature_flags(monkeypatch: pytest.MonkeyPatch):
         "ENABLE_STORAGE_UPLOAD_PROXY",
         "ENABLE_DEV_UPLOAD_STUB",
         "STORAGE_VERIFY_ROOT",
+        "REQUIRE_STORAGE_VERIFY",
         "GUSTAV_TRUST_PROXY",
         "STRICT_CSRF_SUBMISSIONS",
     ):

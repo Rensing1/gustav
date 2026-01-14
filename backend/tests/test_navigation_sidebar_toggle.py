@@ -12,6 +12,7 @@ import sys
 import pytest
 import httpx
 from httpx import ASGITransport
+from urllib.parse import urlparse, parse_qs
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -83,7 +84,11 @@ async def test_htmx_request_without_session_redirects_to_login():
         response = await client.get("/courses", headers={"HX-Request": "true"})
 
     assert response.status_code == 401
-    assert response.headers.get("HX-Redirect") == "/auth/login"
+    hx = response.headers.get("HX-Redirect", "")
+    p = urlparse(hx)
+    assert p.path == "/auth/login"
+    qs = parse_qs(p.query)
+    assert qs.get("redirect") == ["/courses"]
     # Security: HTMX unauthenticated responses must not be cached
     assert response.headers.get("Cache-Control") == "private, no-store"
 

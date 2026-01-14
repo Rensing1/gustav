@@ -90,6 +90,26 @@ def _load_poll_interval_from_env() -> int:
         return 60
     return value
 
+def _running_under_pytest() -> bool:
+    """Detect a pytest process (including collection).
+
+    Why:
+        `main.py` is imported by unit tests (ASGITransport). Import-time side
+        effects like `.env` loading or startup guards must not run implicitly
+        during pytest collection, otherwise the suite becomes environment-
+        dependent and can abort with `SystemExit`.
+    """
+    import sys
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
+    if any(name == "pytest" or name.startswith("pytest.") for name in sys.modules):
+        return True
+    if any(name == "_pytest" or name.startswith("_pytest.") for name in sys.modules):
+        return True
+    if any("pytest" in (arg or "").lower() for arg in sys.argv):
+        return True
+    return False
+
 def _should_load_dotenv() -> bool:
     """Decide if we should load a local .env file.
 
@@ -97,9 +117,8 @@ def _should_load_dotenv() -> bool:
     - Allow explicit opt-out/opt-in via GUSTAV_ENABLE_DOTENV (default true
       outside pytest).
     """
-    import sys
-    # Under pytest, do not load .env – tests provide their own env.
-    if "pytest" in sys.modules or os.getenv("PYTEST_CURRENT_TEST"):
+    # Under pytest, do not load `.env` – tests provide their own env.
+    if _running_under_pytest():
         return False
     flag = (os.getenv("GUSTAV_ENABLE_DOTENV", "true") or "").strip().lower()
     return flag in ("1", "true", "yes")
@@ -122,7 +141,9 @@ except Exception:  # pragma: no cover
     except Exception:
         _cfg = None  # as a last resort, skip guard (should not happen in app)
 if _cfg is not None:
-    _cfg.ensure_secure_config_on_startup()
+    # Startup guards are for real deployments, not for pytest collection.
+    if not _running_under_pytest():
+        _cfg.ensure_secure_config_on_startup()
 
 # --- App & Settings Setup -------------------------------------------------------
 
@@ -145,6 +166,45 @@ SETTINGS = AuthSettings()
 SESSION_COOKIE_NAME = "gustav_session"
 
 app = FastAPI(title="GUSTAV alpha-2", description="KI-gestützte Lernplattform", version="0.0.2")
+
+# --- App Session TTL -----------------------------------------------------------
+
+
+def _app_session_ttl_seconds() -> int:
+    """Return the TTL for GUSTAV's app-level session (server-side + cookie).
+
+    Why:
+        GUSTAV maintains an application session (cookie `gustav_session`) in
+        addition to the Keycloak SSO session. If this app session expires too
+        early, classroom workflows break (tabs are often open for hours).
+
+    Security:
+        Keep the value bounded to avoid accidental "infinite" sessions.
+        The cookie is HttpOnly/Secure/SameSite and stores only an opaque id.
+    """
+    raw = (os.getenv("APP_SESSION_TTL_SECONDS") or "").strip()
+    default_seconds = 24 * 60 * 60  # 24h (decision)
+    try:
+        value = int(raw) if raw else default_seconds
+    except ValueError:
+        logger.warning("Invalid APP_SESSION_TTL_SECONDS; falling back to default")
+        value = default_seconds
+    # Clamp to a safe range: 15 minutes .. 7 days
+    return max(15 * 60, min(value, 7 * 24 * 60 * 60))
+
+
+def _login_url_with_return_to(path: str | None) -> str:
+    """Build a /auth/login URL optionally including a safe return-to path."""
+    try:
+        from routes.redirects import safe_inapp_path
+    except Exception:  # pragma: no cover - package import fallback
+        from backend.web.routes.redirects import safe_inapp_path  # type: ignore
+
+    safe = safe_inapp_path(path)
+    if not safe:
+        return "/auth/login"
+    from urllib.parse import urlencode
+    return f"/auth/login?{urlencode({'redirect': safe})}"
 
 # --- Static Files & Routers -----------------------------------------------------
 
@@ -188,11 +248,7 @@ OIDC_CFG = load_oidc_config()
 OIDC = OIDCClient(OIDC_CFG)
 STATE_STORE = StateStore()
 
-def _under_pytest() -> bool:
-    import sys
-    return "pytest" in sys.modules or bool(os.getenv("PYTEST_CURRENT_TEST"))
-
-if (not _under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
+if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
     try:
         from identity_access.stores_db import DBSessionStore
         SESSION_STORE = DBSessionStore()
@@ -250,9 +306,33 @@ async def auth_enforcement(request: Request, call_next):
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:
+            # HTMX requests should redirect back to the *page* that initiated the
+            # request (e.g., a /submit POST). Prefer HX-Current-URL, which HTMX
+            # sends as the browser's current URL.
+            return_to = None
+            hx_current = request.headers.get("HX-Current-URL")
+            if hx_current:
+                try:
+                    from urllib.parse import urlparse as _urlparse
+                    return_to = _urlparse(hx_current).path
+                except Exception:
+                    return_to = None
+            login_url = _login_url_with_return_to(return_to or path)
             # Security: prevent intermediaries from caching unauthenticated HTMX responses
-            return Response(status_code=401, headers={"HX-Redirect": "/auth/login", "Cache-Control": "private, no-store", "Vary": "HX-Request"})
-        return RedirectResponse(url="/auth/login", status_code=302)
+            return Response(status_code=401, headers={"HX-Redirect": login_url, "Cache-Control": "private, no-store", "Vary": "HX-Request"})
+        # For non-HTMX requests, avoid returning to POST-only endpoints.
+        # If the request is non-idempotent, prefer the Referer page path.
+        return_to = path if request.method in ("GET", "HEAD") else None
+        if return_to is None:
+            referer = request.headers.get("referer")
+            if referer:
+                try:
+                    from urllib.parse import urlparse as _urlparse
+                    return_to = _urlparse(referer).path
+                except Exception:
+                    return_to = None
+        login_url = _login_url_with_return_to(return_to)
+        return RedirectResponse(url=login_url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
     # Expose minimal, read-only user context for downstream handlers.
     request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles}
@@ -287,19 +367,14 @@ async def security_headers(request: Request, call_next):
     except Exception:
         pass
     connect_src = "'self'" + (" " + " ".join(dict.fromkeys(extra_connect)) if extra_connect else "")
-
-    if SETTINGS.environment == "prod":
-        # Harden CSP in production: avoid 'unsafe-inline' to reduce XSS surface.
-        csp = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; "
-            f"img-src 'self' data'; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
-        )
-    else:
-        # Developer experience: allow inline for local SSR templates/components.
-        csp = (
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-            f"img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
-        )
+    # CSP policy (local = prod):
+    # - Scripts are strict (no inline) to reduce XSS surface.
+    # - Styles currently allow inline because parts of the SSR UI still use
+    #   style attributes and HTMX injects a small <style> block by default.
+    csp = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        f"img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src {connect_src};"
+    )
     response.headers.setdefault("Content-Security-Policy", csp)
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -465,13 +540,16 @@ def _compute_local_sha256(storage_key: str, expected_size: int) -> str | None:
     return h.hexdigest()
 
 
-def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) -> str:
-    """Build the task submission form HTML (text/upload Choice Cards) for learners.
+def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, task_kind: str = "native") -> str:
+    """Build the task submission form HTML for learners.
 
     Why:
         The learner unit page renders a TaskCard per task, each with a submit
-        form that supports two modes: plain text and file/image upload. Both
-        the normal Learning-API path and the Teaching-repo fallback should
+        form. Most tasks support two modes (plain text and upload). Visual
+        tasks are upload-only by design to keep the student workflow aligned
+        with VLM-based analysis.
+
+        Both the normal Learning-API path and the Teaching-repo fallback should
         render the exact same form structure so tests and users always see the
         same contract.
 
@@ -479,15 +557,38 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str) 
         course_id: ID of the learning course context.
         unit_id: ID of the unit whose sections/tasks are shown.
         task_id: ID of the task for which the form is rendered.
+        task_kind: Optional task type selector (native|h5p|visual).
 
     Returns:
-        HTML string containing the <form> element with radio Choice Cards,
-        textarea for text submissions and file input for uploads.
+        HTML string containing the <form> element.
     """
     form_action = f"/learning/courses/{course_id}/tasks/{task_id}/submit"
     tid_escaped = Component.escape(task_id)
     cid_escaped = Component.escape(course_id)
     uid_escaped = Component.escape(unit_id)
+    kind_norm = (task_kind or "native").strip().lower()
+
+    if kind_norm == "visual":
+        # Visual tasks are upload-only: no mode switch and no textarea.
+        return (
+            f'<form method="post" action="{form_action}" class="task-submit-form" '
+            f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
+            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="upload">'
+            f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
+            '<input type="hidden" name="mode" value="upload">'
+            '<div class="task-form-fields fields-upload">'
+            '<label>Datei auswählen '
+            '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
+            '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+            '<input type="hidden" name="storage_key" value="">'
+            '<input type="hidden" name="mime_type" value="">'
+            '<input type="hidden" name="size_bytes" value="">'
+            '<input type="hidden" name="sha256" value="">'
+            "</div>"
+            '<div class="task-form-actions"><button class="btn btn-primary" type="submit">Abgeben</button></div>'
+            "</form>"
+        )
+
     return (
         f'<form method="post" action="{form_action}" class="task-submit-form" '
         f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
@@ -675,20 +776,67 @@ def _build_history_entry_from_record(
     submission_id = str(record.get("id") or "")
     expanded = bool(open_attempt_id and submission_id == open_attempt_id) or (not open_attempt_id and index == 0)
 
+    # H5P submissions: no text/upload body, only scores (raw/max).
+    if str(record.get("kind") or "") == "h5p":
+        raw = record.get("score_raw")
+        max_ = record.get("score_max")
+        score_html = '<p class="text-muted">Keine Punkte verfügbar.</p>'
+        try:
+            if raw is not None and max_ is not None:
+                score_html = f"<p><strong>Punkte:</strong> {Component.escape(str(int(raw)))}/{Component.escape(str(int(max_)))}</p>"
+        except Exception:
+            score_html = '<p class="text-muted">Keine Punkte verfügbar.</p>'
+        return HistoryEntry(
+            label=label,
+            timestamp=timestamp,
+            content_html=f'<div class="analysis-text">{score_html}</div>',
+            expanded=expanded,
+            submission_id=submission_id,
+        )
+
+    def _is_ocr_placeholder(text: str) -> bool:
+        """Return True when the text is our legacy OCR/PDF placeholder stub."""
+        t = (text or "").strip()
+        return t.startswith("OCR placeholder for ") or t.startswith("PDF text placeholder for ")
+
     status = str(record.get("analysis_status") or "")
     analysis = record.get("analysis_json")
 
-    # Prefer stored text_body; fall back to extracted analysis text for uploads
+    kind = str(record.get("kind") or "")
+    mime = str(record.get("mime_type") or "").lower()
+    file_url = str(record.get("file_url") or "").strip()
+
+    # Prefer stored text_body; for uploads fall back to extracted analysis text only
+    # when it is not the legacy placeholder.
     text_src = str(record.get("text_body") or "")
-    if not text_src.strip():
-        if isinstance(analysis, dict):
-            extracted = str(analysis.get("text") or "").strip()
-            if extracted:
-                text_src = extracted
+    if not text_src.strip() and isinstance(analysis, dict):
+        extracted = str(analysis.get("text") or "").strip()
+        if extracted and not _is_ocr_placeholder(extracted):
+            text_src = extracted
+
     text_html = render_markdown_safe(text_src)
-    if not text_html:
-        text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
-    content_html = f'<div class="analysis-text">{text_html}</div>'
+    preview_html = ""
+    if file_url and kind in {"image", "file"}:
+        safe_url = Component.escape(file_url)
+        if mime.startswith("image/"):
+            preview_html = f'<img class="submission-preview" src="{safe_url}" alt="Deine Abgabe">'
+        elif "pdf" in mime:
+            preview_html = (
+                f'<a class="btn" href="{safe_url}" target="_blank" rel="noopener">PDF öffnen</a>'
+            )
+        else:
+            preview_html = (
+                f'<a class="btn" href="{safe_url}" target="_blank" rel="noopener">Datei öffnen</a>'
+            )
+
+    parts: list[str] = []
+    if preview_html:
+        parts.append(preview_html)
+    if text_html:
+        parts.append(text_html)
+    if not parts:
+        parts.append('<p class="text-muted">Keine Antwort hinterlegt.</p>')
+    content_html = '<div class="analysis-text">' + "".join(parts) + "</div>"
 
     feedback_src = record.get("feedback_md") or record.get("feedback")
 
@@ -923,6 +1071,68 @@ def _render_analysis_in_progress_hint() -> str:
         '</div>'
     )
 
+
+def _enrich_submission_records_with_file_urls(
+    records: list[dict], *, storage_adapter: object | None = None
+) -> None:
+    """Attach presigned download URLs to upload submissions for SSR previews.
+
+    Why:
+        The Learning API intentionally returns only storage metadata (storage_key,
+        sha256, mime_type). For the learner history UI we still want to show the
+        actual uploaded artifact (image/PDF). We therefore presign a short-lived
+        download URL server-side and pass it into the rendering helper as an
+        extra key (`file_url`).
+
+    Testability:
+        The presign-capable storage adapter can be injected via `storage_adapter`
+        to keep this helper unit-testable without importing route modules.
+
+    Security:
+        This runs only after the records have been fetched via the Learning API
+        using the current session cookie, so the caller is already authorised to
+        see the submission metadata. The presigned URL is short-lived and scoped
+        to the object key.
+    """
+    try:
+        from backend.storage.config import get_submissions_bucket
+
+        adapter = storage_adapter
+        if adapter is None:
+            import routes.learning as learning_routes  # type: ignore
+
+            adapter = getattr(learning_routes, "STORAGE_ADAPTER", None)
+        if adapter is None or not hasattr(adapter, "presign_download"):
+            return
+        bucket = get_submissions_bucket()
+    except Exception:
+        return
+
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("file_url"):
+            continue
+        kind = str(rec.get("kind") or "")
+        if kind not in {"image", "file"}:
+            continue
+        storage_key = str(rec.get("storage_key") or "").strip()
+        mime_type = str(rec.get("mime_type") or "").strip()
+        if not storage_key or not mime_type:
+            continue
+        try:
+            presign = adapter.presign_download(  # type: ignore[call-arg]
+                bucket=bucket,
+                key=storage_key,
+                expires_in=120,
+                disposition="inline",
+            )
+            url = presign.get("url") if isinstance(presign, dict) else None
+            if isinstance(url, str) and url.strip():
+                rec["file_url"] = url.strip()
+        except Exception:
+            continue
+
 # --- Page Rendering Helpers -----------------------------------------------------
 
 def _render_course_list_partial(items: list[dict], limit: int, offset: int, has_next: bool, *, csrf_token: str) -> str:
@@ -1132,11 +1342,6 @@ async def learning_index(request: Request):
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-                try:
-                    if os.getenv("PYTEST_CURRENT_TEST"):
-                        logger.debug("__SSR_DEBUG_SID__ %s", sid)
-                except Exception:
-                    pass
             r = await client.get("/api/learning/courses", params={"limit": limit, "offset": offset})
             if r.status_code == 200 and isinstance(r.json(), list):
                 items = r.json()
@@ -1350,6 +1555,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     # Build HTML without section titles; separate groups with <hr>
     # For readability, render each material and each task as its own card.
     parts: list[str] = []
+    needs_h5p_player_js = False
     for idx, entry in enumerate(sections):
         mats = entry.get("materials", []) if isinstance(entry, dict) else []
         tasks = entry.get("tasks", []) if isinstance(entry, dict) else []
@@ -1401,10 +1607,35 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
         for t in tasks:
             tid = str(t.get("id") or "")
             title = str(t.get("title") or "Aufgabe")
-            # Instruction text also benefits from Markdown (e.g., emphasis)
-            instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
-            # Build form HTML with Choice Cards (Text | Upload). Default: text.
-            form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=tid)
+            task_kind = str(t.get("kind") or "native")
+
+            if task_kind == "h5p":
+                # H5P tasks are solved directly inside the embedded player; there
+                # is no GUSTAV submit form and no additional instruction text.
+                needs_h5p_player_js = True
+                instruction_html = ""
+                content_id = ""
+                h5p_cfg = t.get("h5p") if isinstance(t.get("h5p"), dict) else {}
+                if isinstance(h5p_cfg, dict):
+                    content_id = str(h5p_cfg.get("content_id") or "")
+                if not content_id:
+                    form_html = '<p class="text-muted">Kein H5P-Inhalt verknüpft.</p>'
+                else:
+                    form_html = (
+                        f'<div class="h5p-task-player" data-h5p-task-player="true" '
+                        f'data-course-id="{Component.escape(course_id)}" '
+                        f'data-task-id="{Component.escape(tid)}" '
+                        f'data-content-id="{Component.escape(content_id)}">'
+                        f'<p class="text-muted" data-h5p-status>Initialisiere H5P …</p>'
+                        "</div>"
+                    )
+            else:
+                # Instruction text also benefits from Markdown (e.g., emphasis)
+                instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
+                # Build form HTML with Choice Cards (Text | Upload). Default: text.
+                form_html = _build_task_submit_form_html(
+                    course_id=course_id, unit_id=unit_id, task_id=tid, task_kind=task_kind
+                )
 
             # Optionally load submission history for this task only (latest open)
             history_entries = []
@@ -1419,35 +1650,39 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             f"/api/learning/courses/{course_id}/tasks/{tid}/submissions",
                             params={"limit": 10, "offset": 0},
                         )
-                        if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
-                            records = r_hist.json()
-                            # If latest attempt is still in progress, prefer a polling placeholder to auto-refresh
-                            latest_status = None
-                            if records:
-                                try:
-                                    latest_status = (records[0] or {}).get("analysis_status")
-                                except Exception:
-                                    latest_status = None
-                            if _is_analysis_in_progress(latest_status):
-                                payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
-                                history_placeholder_html = (
-                                    f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                                    f'data-pending="true" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
-                                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
-                                    f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML" '
-                                    f"hx-vals='{payload}' "
-                                    'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-                                    f'{_render_analysis_in_progress_hint()}'
-                                    f'</section>'
+                    if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
+                        records = r_hist.json()
+                        _enrich_submission_records_with_file_urls(
+                            [rec for rec in records if isinstance(rec, dict)]
+                        )
+                        # If the latest attempt is still in progress, prefer a polling
+                        # placeholder to auto-refresh.
+                        latest_status = None
+                        if records:
+                            try:
+                                latest_status = (records[0] or {}).get("analysis_status")
+                            except Exception:
+                                latest_status = None
+                        if _is_analysis_in_progress(latest_status):
+                            payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                            history_placeholder_html = (
+                                f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                                f'data-pending="true" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                                f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+                                f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML" '
+                                f"hx-vals='{payload}' "
+                                'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+                                f"{_render_analysis_in_progress_hint()}"
+                                "</section>"
+                            )
+                        else:
+                            for index, rec in enumerate(records):
+                                entry = _build_history_entry_from_record(
+                                    rec if isinstance(rec, dict) else {},
+                                    index=index,
+                                    open_attempt_id=open_attempt_id_qp,
                                 )
-                            else:
-                                for index, rec in enumerate(records):
-                                    entry = _build_history_entry_from_record(
-                                        rec if isinstance(rec, dict) else {},
-                                        index=index,
-                                        open_attempt_id=open_attempt_id_qp,
-                                    )
-                                    history_entries.append(entry)
+                                history_entries.append(entry)
                 except Exception:
                     history_entries = []
             else:
@@ -1509,10 +1744,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     if not parts:
         try:
             import importlib
-            try:
-                tmod = importlib.import_module("routes.teaching")
-            except Exception:
-                tmod = importlib.import_module("backend.web.routes.teaching")
+            tmod = importlib.import_module("routes.teaching")
         except Exception:
             tmod = None
         if tmod is not None:
@@ -1541,7 +1773,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             task.get("instruction_md") if isinstance(task, dict) else ""
                         )
                         instruction_html = render_markdown_safe(str(raw_instr or ""))
-                        form_html = _build_task_submit_form_html(course_id=course_id, unit_id=unit_id, task_id=str(tid))
+                        raw_kind = getattr(task, "kind", None) or (
+                            task.get("kind") if isinstance(task, dict) else None
+                        )
+                        task_kind = str(raw_kind or "native")
+                        form_html = _build_task_submit_form_html(
+                            course_id=course_id, unit_id=unit_id, task_id=str(tid), task_kind=task_kind
+                        )
                         hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
                         history_placeholder_html = (
                             f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
@@ -1571,11 +1809,17 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 pass
 
     inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p>"
+    h5p_script = (
+        '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
+        if needs_h5p_player_js
+        else ""
+    )
     content = (
         "<div class=\"container\">"
         f"<h1>{Component.escape(unit_title)}</h1>"
         f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
         f"<section class=\"card\" id=\"student-unit-sections\">{inner}</section>"
+        f"{h5p_script}"
         "</div>"
     )
     layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
@@ -1612,7 +1856,8 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         visibility. Same-origin protection is applied at the API boundary.
     """
     # CSRF: enforce same-origin for browser form POSTs before touching inputs.
-    if not _is_same_origin(request):
+    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
+    if not origin_present or (not _is_same_origin(request)):
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
     user = getattr(request.state, "user", None)
@@ -1627,10 +1872,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
             import importlib
             tmod = importlib.import_module("routes.teaching")
         except Exception:
-            try:
-                tmod = importlib.import_module("backend.web.routes.teaching")
-            except Exception:
-                tmod = None
+            tmod = None
         if tmod is not None:
             try:
                 repo = getattr(tmod, "REPO", None)
@@ -1815,6 +2057,8 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                     items = r.json() if r.status_code == 200 else []
             except Exception:
                 items = []
+            if isinstance(items, list):
+                _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
             entries = [
                 _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
                 for index, rec in enumerate(items if isinstance(items, list) else [])
@@ -1917,6 +2161,8 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
             items = r.json() if r.status_code == 200 else []
     except Exception:
         items = []
+    if isinstance(items, list):
+        _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
     # Build minimal fragment matching TaskCard._render_history structure
     open_attempt_id = str(request.query_params.get("open_attempt_id") or "")
     entries = [
@@ -3038,8 +3284,33 @@ def _render_live_average_score_badge(raw_score: object) -> str:
     return f'<span class="badge {variant}" aria-label="Durchschnitt {display} von 10">{display}</span>'
 
 
-def _render_live_cell_content(has_submission: bool, average_score: object) -> str:
-    """Render badge or fallback symbol for a live matrix cell."""
+def _render_live_cell_content(
+    *,
+    task_kind: object,
+    has_submission: bool,
+    average_score: object,
+    h5p_completed: object,
+) -> str:
+    """Render badge or status symbol for a live matrix cell.
+
+    Why:
+        The live matrix is a high-signal classroom view:
+        - Native/visual tasks can show an average 0..10 badge once analysis exists.
+        - H5P tasks are auto-scorable and should be displayed as a simple 3-state
+          indicator (—/•/✓) instead of a numeric badge.
+    """
+    kind = str(task_kind or "")
+
+    # H5P tasks: show only bearbeitet/abgeschlossen.
+    is_h5p = (kind == "h5p") or (h5p_completed is True) or (h5p_completed is False)
+    if is_h5p:
+        if not has_submission:
+            return "—"
+        if h5p_completed is True:
+            return '<span aria-label="Abgeschlossen">✓</span>'
+        return '<span aria-label="Bearbeitet">•</span>'
+
+    # Native/visual tasks: prefer numeric badge, otherwise a simple presence marker.
     badge = _render_live_average_score_badge(average_score)
     if badge:
         return badge
@@ -3085,7 +3356,12 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
             tid = str(t.get("id") or "")
             cell = cells_by_task.get(tid) or {}
             has = bool(cell.get("has_submission"))
-            content = _render_live_cell_content(has, cell.get("average_score"))
+            content = _render_live_cell_content(
+                task_kind=t.get("kind"),
+                has_submission=has,
+                average_score=cell.get("average_score"),
+                h5p_completed=cell.get("h5p_completed"),
+            )
             cell_id = f"cell-{sub}-{tid}"
             # Clicking a cell loads the detail pane below the matrix
             hx_href = (
@@ -3523,7 +3799,8 @@ async def teaching_unit_live_detail_partial(
         return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Keine Einreichung vorhanden.</p></div>", status_code=200)
 
     created = Component.escape(str(data.get("created_at") or ""))
-    kind = Component.escape(str(data.get("kind") or ""))
+    kind_raw = str(data.get("kind") or "")
+    kind = Component.escape(kind_raw)
     body_raw = str(data.get("text_body") or "")
     feedback_md = str(data.get("feedback_md") or "")
     analysis_json = data.get("analysis_json")
@@ -3543,6 +3820,42 @@ async def teaching_unit_live_detail_partial(
         display_name = Component.escape(n or str(student_sub))
     except Exception:
         display_name = Component.escape(str(student_sub))
+
+    if kind_raw == "h5p":
+        h5p = data.get("h5p") if isinstance(data.get("h5p"), dict) else {}
+        content_id = Component.escape(str(h5p.get("content_id") or ""))
+        review_token = Component.escape(str(h5p.get("review_token") or ""))
+
+        score_raw = data.get("score_raw")
+        score_max = data.get("score_max")
+        score_txt = ""
+        try:
+            if score_raw is not None and score_max is not None:
+                score_txt = f" · Score: {int(score_raw)}/{int(score_max)}"
+        except Exception:
+            score_txt = ""
+
+        if not content_id:
+            inner = "<p class=\"text-muted\">H5P-Inhalt nicht verknüpft.</p>"
+        else:
+            inner = (
+                f"<div data-h5p-task-review-player=\"true\""
+                f" data-task-id=\"{Component.escape(str(task_id))}\""
+                f" data-content-id=\"{content_id}\""
+                f" data-review-token=\"{review_token}\">"
+                f"<p class=\"text-muted\" data-h5p-status>Lade H5P…</p>"
+                f"</div>"
+                f"<script src=\"/static/js/h5p_task_review_player.js?v=20260111-1\" defer></script>"
+            )
+
+        detail_html = (
+            f"<div class=\"card\">"
+            f"<h3>Einreichung von {display_name}</h3>"
+            f"<p class=\"text-muted\">Typ: {kind} · erstellt: {created}{Component.escape(score_txt)}</p>"
+            f"{inner}"
+            f"</div>"
+        )
+        return HTMLResponse(detail_html, status_code=200, headers={"Cache-Control": "private, no-store"})
 
     def _panel(name: str, inner: str, active: bool) -> str:
         hidden_attr = "" if active else " hidden"
@@ -3734,7 +4047,12 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
         sub = Component.escape(raw_sub)
         task_id = Component.escape(raw_task_id)
         has = bool(c.get("has_submission"))
-        content = _render_live_cell_content(has, c.get("average_score"))
+        content = _render_live_cell_content(
+            task_kind=None,
+            has_submission=has,
+            average_score=c.get("average_score"),
+            h5p_completed=c.get("h5p_completed"),
+        )
         cell_id = f"cell-{raw_sub}-{raw_task_id}"
         hx_href = (
             f"/teaching/courses/{course_id}/units/{unit_id}/live/detail?student_sub={sub}&task_id={task_id}"
@@ -4364,6 +4682,21 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
     max_bytes = DEFAULT_POLICY.max_size_bytes
     max_mb = round(max_bytes / (1024 * 1024), 2)
 
+    kind_selector = (
+        '<label>Aufgabentyp'
+        '<select class="form-input" id="task_kind" name="task_kind">'
+        '<option value="native" selected>Normal</option>'
+        '<option value="h5p">H5P (interaktiv)</option>'
+        '<option value="visual">Visual (Upload‑Only)</option>'
+        "</select>"
+        "</label>"
+        '<p id="task-kind-hint" class="text-muted">'
+        "Normal: Markdown‑Aufgabe mit Kriterien. "
+        "H5P: Interaktive Übung (Editor wird direkt eingeblendet). "
+        "Visual: wie Normal, aber Abgabe nur als Bild/PDF."
+        "</p>"
+    )
+
     criteria_inputs = []
     for i in range(10):
         criteria_inputs.append(
@@ -4373,19 +4706,44 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
     form = (
         f'<form id="task-create-form" method="post" action="/units/{unit_id}/sections/{section_id}/tasks/create">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Anweisung<textarea class="form-input" name="instruction_md" required></textarea></label>'
+        f"{kind_selector}"
+        '<div id="native-task-fields">'
+        f'<label>Anweisung<textarea class="form-input" id="instruction_md" name="instruction_md" required></textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
         f'<label>Lösungshinweise<textarea class="form-input" name="hints_md"></textarea></label>'
+        "</div>"
+        '<div id="h5p-task-fields" hidden>'
+        f'<input type="hidden" name="h5p_content_id" id="h5p_content_id" value="">'
+        f'<div class="h5p-task-editor" data-h5p-task-editor="true" '
+        f'data-unit-id="{Component.escape(unit_id)}" '
+        f'data-section-id="{Component.escape(section_id)}" '
+        f'data-task-id="" data-content-id="">'
+        '<div class="row" style="gap:12px;flex-wrap:wrap;align-items:center">'
+        '<label>Content ID <input class="form-input" id="h5pContentId" placeholder="(leer = neu)" size="22" /></label>'
+        '<button class="btn" id="h5pNew" type="button">New</button>'
+        '<button class="btn" id="h5pLoad" type="button">Load</button>'
+        '<button class="btn btn-primary" id="h5pSave" type="button">Save</button>'
+        "</div>"
+        '<p id="h5pStatus" class="text-muted">Loading editor…</p>'
+        '<h5p-editor id="h5pEditor" content-id="new"></h5p-editor>'
+        "</div>"
+        '<p class="text-muted">Tipp: Speichere zuerst im H5P‑Editor (Save), '
+        'dann klicke „Anlegen“, damit die Aufgabe direkt mit der Content‑ID verknüpft ist.</p>'
+        "</div>"
         f'<label>Fällig bis (ISO 8601)<input class="form-input" type="text" name="due_at" placeholder="2025-01-01T10:00:00+00:00"></label>'
         f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" min="1"></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
         f'</form>'
     )
+    kind_toggle_js = (
+        '<script src="/static/js/task_kind_toggle.js?v=1" defer></script>'
+        '<script type="module" src="/static/js/h5p_task_editor.js?v=20260109-6"></script>'
+    )
     return (
         '<div class="container">'
         f'<h1>Aufgabe anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
         f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
-        f'<section class="card">{form}</section>'
+        f'<section class="card">{form}{kind_toggle_js}</section>'
         '</div>'
     )
 
@@ -4566,8 +4924,60 @@ def _render_material_detail_page_html(
 
 
 def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, csrf_token: str) -> str:
-    instr = Component.escape(str(task.get("instruction_md") or ""))
     tid = str(task.get("id") or "")
+    kind = str(task.get("kind") or "native")
+    if kind == "h5p":
+        h5p_cfg = task.get("h5p") if isinstance(task.get("h5p"), dict) else {}
+        content_id = str(h5p_cfg.get("content_id") or "") if isinstance(h5p_cfg, dict) else ""
+        editor_content_id_attr = content_id or "new"
+        due_at = Component.escape(str(task.get("due_at") or ""))
+        max_attempts = Component.escape(str(task.get("max_attempts") or ""))
+        settings_form = (
+            f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/{tid}/update">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+            "<p class=\"text-muted\">H5P‑Aufgaben verwenden den H5P‑Editor. "
+            "Fälligkeitsdatum und max. Versuche gelten weiterhin auf Task‑Ebene.</p>"
+            f'<label>Fällig bis<input class="form-input" type="text" name="due_at" value="{due_at}"></label>'
+            f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" value="{max_attempts}" min="1"></label>'
+            f'<div class="form-actions"><button class="btn btn-primary" type="submit">Einstellungen speichern</button></div>'
+            "</form>"
+        )
+
+        # Keep IDs stable: JS integration reads these to wire the editor callbacks.
+        editor_block = (
+            f'<div class="h5p-task-editor" data-h5p-task-editor="true" '
+            f'data-unit-id="{Component.escape(unit_id)}" '
+            f'data-section-id="{Component.escape(section_id)}" '
+            f'data-task-id="{Component.escape(tid)}" '
+            f'data-content-id="{Component.escape(content_id)}">'
+            '<div class="row" style="gap:12px;flex-wrap:wrap;align-items:center">'
+            '<label>Content ID <input class="form-input" id="h5pContentId" placeholder="(leer = neu)" size="22" /></label>'
+            '<button class="btn" id="h5pNew" type="button">New</button>'
+            '<button class="btn" id="h5pLoad" type="button">Load</button>'
+            '<button class="btn btn-primary" id="h5pSave" type="button">Save</button>'
+            "</div>"
+            '<p id="h5pStatus" class="text-muted">Loading editor…</p>'
+            f'<h5p-editor id="h5pEditor" content-id="{Component.escape(editor_content_id_attr)}"></h5p-editor>'
+            "</div>"
+            # Module script is kept external to avoid inline-minify pitfalls.
+            '<script type="module" src="/static/js/h5p_task_editor.js?v=20260109-6"></script>'
+        )
+
+        delete_form = (
+            f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/{tid}/delete">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+            f'<button class="btn btn-danger" type="submit">Löschen</button>'
+            f"</form>"
+        )
+        return (
+            '<div class="container">'
+            f"<h1>H5P‑Aufgabe bearbeiten</h1>"
+            f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+            f'<section class="card">{settings_form}{editor_block}{delete_form}</section>'
+            "</div>"
+        )
+
+    instr = Component.escape(str(task.get("instruction_md") or ""))
     criteria = task.get("criteria") or []
     crit_inputs = []
     for i in range(10):
@@ -4847,10 +5257,11 @@ async def materials_reorder(request: Request, unit_id: str, section_id: str):
 
 @app.post("/units/{unit_id}/sections/{section_id}/tasks/create", response_class=HTMLResponse)
 async def tasks_create(request: Request, unit_id: str, section_id: str):
-    """Create a native task via the API and return the updated list partial.
+    """Create a task via the Teaching API and return the updated list partial.
 
     Parameters form fields:
     - instruction_md: Required Markdown instruction
+    - task_kind: Optional task type selector (native|h5p|visual)
     - csrf_token: Required
 
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
@@ -4862,6 +5273,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
+    task_kind = str(form.get("task_kind") or "native").strip().lower()
     instruction_md = str(form.get("instruction_md", ""))
     # Collect up to 10 non-empty criteria from repeated fields
     criteria = [c.strip() for c in form.getlist("criteria") if isinstance(c, str) and c.strip()]
@@ -4877,6 +5289,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
         except Exception:
             max_attempts = None
     error: str | None = None
+    created_task_id: str | None = None
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -4888,15 +5301,40 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
                 "due_at": due_at,
                 "max_attempts": max_attempts,
             }
+            if task_kind == "h5p":
+                # H5P tasks do not use instruction/criteria/hints in the UI, but
+                # the DB contract requires a non-empty instruction_md.
+                h5p_content_id = str(form.get("h5p_content_id") or "").strip() or None
+                payload["instruction_md"] = "H5P task"
+                payload["criteria"] = []
+                payload["hints_md"] = None
+                payload["h5p"] = {"content_id": h5p_content_id, "display_options": {}}
+            elif task_kind == "visual":
+                payload["visual"] = {}
             resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)
             if resp.status_code >= 400:
                 error = _extract_api_error_detail(resp)
+            else:
+                try:
+                    body = resp.json()
+                    if isinstance(body, dict):
+                        created_task_id = str(body.get("id") or "") or None
+                except Exception:
+                    created_task_id = None
     except Exception:
         error = "backend_error"
     if "HX-Request" not in request.headers:
+        if task_kind == "h5p" and created_task_id:
+            return RedirectResponse(
+                url=f"/units/{unit_id}/sections/{section_id}/tasks/{created_task_id}",
+                status_code=303,
+            )
         return RedirectResponse(url=f"/units/{unit_id}/sections/{section_id}", status_code=303)
     tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid or "")
     token = _get_or_create_csrf_token(sid or "")
+    # For HTMX requests we can redirect to the H5P editor detail page (smooth UX).
+    if task_kind == "h5p" and created_task_id:
+        return HTMLResponse("", status_code=200, headers={"HX-Redirect": f"/units/{unit_id}/sections/{section_id}/tasks/{created_task_id}"})
     return HTMLResponse(_render_task_list_partial(unit_id, section_id, tasks, csrf_token=token, error=error))
 
 
@@ -5437,7 +5875,7 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     
     display_name = claims.get("gustav_display_name") or claims.get("name") or (email.split("@")[0] if email else "Benutzer")
 
-    sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), id_token=id_token)
+    sess = SESSION_STORE.create(sub=sub, roles=roles, name=str(display_name), ttl_seconds=_app_session_ttl_seconds(), id_token=id_token)
     dest = rec.redirect or "/"
     resp = RedirectResponse(url=dest, status_code=302)
     resp.headers["Cache-Control"] = "private, no-store"

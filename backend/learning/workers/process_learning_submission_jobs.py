@@ -228,6 +228,12 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
     lease_until = now + timedelta(seconds=_lease_duration_seconds())
     queue_table = _resolve_queue_table(conn)
     with conn.cursor() as cur:
+        # Local dev quality-of-life: when developers run unit tests (in-process)
+        # while also having the docker `learning-worker` running, the container
+        # worker must not consume jobs created by pytest and mutate DB state.
+        pytest_filter = _sql.SQL("")
+        if _truthy_env("WORKER_SKIP_PYTEST_JOBS", default=False):
+            pytest_filter = _sql.SQL("and coalesce(payload->>'_gustav_source', '') <> 'pytest'")
         stmt = _sql.SQL(
             """
             with candidate as (
@@ -237,14 +243,17 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
                        retry_count
                   from public.{}
                  where (
-                          status = 'queued'
-                          and visible_at <= %s + interval '30 seconds'
+                          (
+                              status = 'queued'
+                              and visible_at <= %s + interval '30 seconds'
+                          )
+                          or (
+                              status = 'leased'
+                              and leased_until is not null
+                              and leased_until <= %s
+                          )
                        )
-                    or (
-                          status = 'leased'
-                          and leased_until is not null
-                          and leased_until <= %s
-                       )
+                  {pytest_filter}
                  order by visible_at asc, created_at asc
                  limit %s
                  for update skip locked
@@ -261,7 +270,7 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
                      candidate.retry_count,
                      candidate.payload
             """
-        ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table))
+        ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table), pytest_filter=pytest_filter)
         cur.execute(stmt, (now, now, limit, str(lease_key), lease_until))
         rows = cur.fetchall()
     jobs: list[QueuedJob] = []
@@ -379,6 +388,79 @@ def _process_job(
             job.submission_id,
             submission.get("analysis_status"),
         )
+        _delete_job(conn, job_id=job.id)
+        return
+
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    task_kind = str(payload.get("task_kind") or "").strip().lower()
+
+    # Visual tasks are evaluated from the visual input (image/PDF). They do not
+    # run the OCR/text Vision pipeline by default.
+    if task_kind == "visual":
+        try:
+            analyze_visual = getattr(feedback_adapter, "analyze_visual", None)
+            if not callable(analyze_visual):
+                raise FeedbackPermanentError("missing_visual_feedback_adapter")
+
+            analyze_kwargs = {
+                "submission": submission,
+                "job_payload": job.payload,
+                "criteria": payload.get("criteria", []),
+            }
+            if payload:
+                instr = payload.get("instruction_md")
+                hints = payload.get("hints_md")
+                sig = None
+                try:
+                    sig = inspect.signature(analyze_visual)
+                except Exception:
+                    sig = None
+                if sig and "instruction_md" in sig.parameters and "hints_md" in sig.parameters:
+                    analyze_kwargs["instruction_md"] = instr
+                    analyze_kwargs["hints_md"] = hints
+
+            feedback_result = analyze_visual(**analyze_kwargs)
+        except FeedbackPermanentError as exc:
+            LOG.warning(
+                "Feedback permanent error for submission %s job %s: %s",
+                job.submission_id,
+                job.id,
+                exc.__class__.__name__,
+            )
+            _handle_feedback_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                transient=False,
+            )
+            return
+        except FeedbackTransientError as exc:
+            LOG.info(
+                "Feedback transient error for submission %s job %s: %s",
+                job.submission_id,
+                job.id,
+                exc.__class__.__name__,
+            )
+            _handle_feedback_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                transient=True,
+            )
+            return
+
+        _update_submission_completed(
+            conn=conn,
+            submission_id=job.submission_id,
+            text_md="",
+            analysis_json=feedback_result.analysis_json,
+            feedback_md=feedback_result.feedback_md,
+        )
+        telemetry.increment_counter("ai_worker_processed_total", status="completed")
         _delete_job(conn, job_id=job.id)
         return
 

@@ -11,6 +11,14 @@
 //  - Client validations mirror server allowlists but do not replace them.
 
 (function () {
+  function markSessionExpiredAndRedirectToLogin() {
+    try {
+      sessionStorage.setItem('gustav:auth:session-expired', String(Date.now()));
+    } catch (_) {}
+    const path = (window.location && window.location.pathname) ? window.location.pathname : '/';
+    window.location.href = `/auth/login?redirect=${encodeURIComponent(path)}`;
+  }
+
   function onReady(fn) {
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
       setTimeout(fn, 0);
@@ -50,6 +58,15 @@
         label.classList.remove('is-active');
       }
     });
+  }
+
+  function currentMode(form) {
+    // Choice-cards: checked radio; upload-only forms: hidden input value.
+    const checked = form.querySelector('input[name="mode"][type="radio"]:checked');
+    if (checked && checked.value) return checked.value;
+    const any = form.querySelector('input[name="mode"]');
+    if (any && any.value) return any.value;
+    return 'text';
   }
 
   async function handleSubmitWithUpload(e, form, mode) {
@@ -108,6 +125,11 @@
       body: JSON.stringify({ kind: isImage ? 'image' : 'file', filename: file.name || '', mime_type: file.type, size_bytes: file.size })
     });
     if (!intentResp.ok) {
+      if (intentResp.status === 401) {
+        e.preventDefault();
+        markSessionExpiredAndRedirectToLogin();
+        return false;
+      }
       e.preventDefault();
       return false;
     }
@@ -138,14 +160,12 @@
         });
       });
       // Initialize visibility
-      const checked = form.querySelector('input[name="mode"]:checked');
-      showFields(form, checked ? checked.value : 'text');
+      showFields(form, currentMode(form));
       updateChoiceCardState(form);
 
       // Intercept submit for image/file
       form.addEventListener('submit', async function (e) {
-        const selected = form.querySelector('input[name="mode"]:checked');
-        const mode = selected ? selected.value : 'text';
+        const mode = currentMode(form);
         if (mode === 'text') return; // let it pass
         const ok = await handleSubmitWithUpload(e, form, mode);
         if (!ok) return; // prevent submit in error cases

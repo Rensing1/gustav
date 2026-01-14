@@ -18,14 +18,8 @@ Notes:
 from __future__ import annotations
 
 import logging
-import sys
 
-# Ensure imports via `routes.teaching` and `backend.web.routes.teaching` point to
-# the same module instance to avoid test-time alias drift.
-if __name__ == "backend.web.routes.teaching":
-    sys.modules.setdefault("routes.teaching", sys.modules[__name__])
-elif __name__ == "routes.teaching":
-    sys.modules.setdefault("backend.web.routes.teaching", sys.modules[__name__])
+import hashlib
 import time
 from dataclasses import dataclass, asdict, is_dataclass
 import os
@@ -139,6 +133,8 @@ class TaskData:
     created_at: str
     updated_at: str
     kind: str = "native"
+    h5p_content_id: Optional[str] | None = None
+    h5p_display_options: Dict[str, Any] | None = None
 
 
 class _Repo:
@@ -679,6 +675,9 @@ class _Repo:
         hints_md: str | None = None,
         due_at=None,
         max_attempts: int | None = None,
+        kind: str = "native",
+        h5p_content_id: str | None = None,
+        h5p_display_options: Dict[str, Any] | None = None,
     ) -> TaskData:
         if not self.section_exists_for_author(unit_id, section_id, author_id):
             raise PermissionError("section_forbidden")
@@ -707,6 +706,9 @@ class _Repo:
             position=pos,
             created_at=now,
             updated_at=now,
+            kind=kind,
+            h5p_content_id=h5p_content_id,
+            h5p_display_options=dict(h5p_display_options or {}),
         )
         self.tasks[tid] = task
         bucket = self.task_ids_by_section.setdefault(section_id, [])
@@ -725,6 +727,9 @@ class _Repo:
         hints_md=_UNSET,
         due_at=_UNSET,
         max_attempts=_UNSET,
+        kind=_UNSET,
+        h5p_content_id=_UNSET,
+        h5p_display_options=_UNSET,
     ) -> TaskData | None:
         task = self.tasks.get(task_id)
         if not task or task.unit_id != unit_id or task.section_id != section_id:
@@ -756,6 +761,12 @@ class _Repo:
                 task.due_at = due_at
         if max_attempts is not _UNSET:
             task.max_attempts = max_attempts
+        if kind is not _UNSET:
+            task.kind = str(kind or "native")
+        if h5p_content_id is not _UNSET:
+            task.h5p_content_id = None if h5p_content_id is None else str(h5p_content_id)
+        if h5p_display_options is not _UNSET:
+            task.h5p_display_options = dict(h5p_display_options or {})
         task.updated_at = datetime.now(timezone.utc).isoformat()
         self.tasks[task_id] = task
         return task
@@ -966,9 +977,11 @@ def _build_default_repo():
 _REPO = None
 
 def _get_repo():  # pragma: no cover - simple accessor
-    global _REPO
+    global _REPO, REPO
     if _REPO is None:
         _REPO = _build_default_repo()
+    # Keep the public alias in sync for tests that do `isinstance(routes.teaching.REPO, ...)`.
+    REPO = _REPO
     return _REPO
 
 # Back-compat symbol used in tests: expose the actual instance for isinstance checks
@@ -988,8 +1001,9 @@ def _get_tasks_service() -> TasksService:
 
 def set_repo(repo) -> None:
     """Allow tests to swap the teaching repository implementation."""
-    global _REPO
+    global _REPO, REPO
     _REPO = repo
+    REPO = repo
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
@@ -1106,7 +1120,7 @@ def _csrf_guard(request: Request) -> JSONResponse | None:
     """
     origin_present = (request.headers.get("origin") or request.headers.get("referer"))
     if not origin_present or (not _is_same_origin(request)):
-        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403)
+        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, vary_origin=True)
     return None
 
 
@@ -1196,7 +1210,17 @@ def _load_average_scores_by_submission_id(
     owner_sub: str,
     submission_ids_by_student: dict[str, list[str]],
 ) -> dict[str, float | None]:
-    """Load analysis_json for submissions via RLS by impersonating each student."""
+    """Load average scores for submissions where analysis is completed.
+
+    Why:
+        The teacher live matrix must only display an average score once the
+        asynchronous analysis pipeline finished. Submissions that exist but are
+        still pending must expose `average_score=None` (not 0.0).
+
+    Security:
+        Reads happen under RLS by impersonating each student via
+        `app.current_sub`.
+    """
     if not submission_ids_by_student:
         return {}
     out: dict[str, float | None] = {}
@@ -1208,7 +1232,7 @@ def _load_average_scores_by_submission_id(
             try:
                 cur.execute(
                     """
-                    select id::text, analysis_json
+                    select id::text, analysis_status::text, analysis_json
                       from public.learning_submissions
                      where id = any(%s)
                     """,
@@ -1218,7 +1242,10 @@ def _load_average_scores_by_submission_id(
             except Exception as exc:
                 logger.warning("Unit live average score lookup failed — %s", exc)
                 rows = []
-            for submission_id, analysis_json in rows:
+            for submission_id, analysis_status, analysis_json in rows:
+                if str(analysis_status or "") != "completed":
+                    out[str(submission_id)] = None
+                    continue
                 out[str(submission_id)] = compute_average_score_from_analysis(analysis_json)
     finally:
         cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
@@ -1582,6 +1609,8 @@ class TaskCreatePayload(BaseModel):
     hints_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
+    h5p: object | None = None
+    visual: object | None = None
 
 
 class TaskUpdatePayload(BaseModel):
@@ -1590,6 +1619,8 @@ class TaskUpdatePayload(BaseModel):
     hints_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
+    h5p: object | None = None
+    visual: object | None = None
 
 
 class TaskReorderPayload(BaseModel):
@@ -2110,9 +2141,9 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -2127,9 +2158,11 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             hints_md=payload.hints_md,
             due_at=payload.due_at,
             max_attempts=payload.max_attempts,
+            h5p=payload.h5p,
+            visual=payload.visual,
         )
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
         if detail not in {
@@ -2138,12 +2171,15 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             "invalid_due_at",
             "invalid_max_attempts",
             "invalid_hints_md",
+            "invalid_h5p_config",
+            "invalid_visual_config",
+            "invalid_task_kind_config",
         }:
             detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_task(task), status_code=201)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_task(task), status_code=201)
 
 
 @teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
@@ -2163,18 +2199,18 @@ async def update_section_task(
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     if not _is_uuid_like(task_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
     raw_updates = payload.model_dump(mode="python", exclude_unset=True)
     if not raw_updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
     kwargs: Dict[str, object] = {}
     if "instruction_md" in raw_updates:
         kwargs["instruction_md"] = raw_updates["instruction_md"]
@@ -2186,6 +2222,10 @@ async def update_section_task(
         kwargs["due_at"] = raw_updates["due_at"]
     if "max_attempts" in raw_updates:
         kwargs["max_attempts"] = raw_updates["max_attempts"]
+    if "h5p" in raw_updates:
+        kwargs["h5p"] = raw_updates["h5p"]
+    if "visual" in raw_updates:
+        kwargs["visual"] = raw_updates["visual"]
     try:
         updated = _get_tasks_service().update_task(
             unit_id,
@@ -2202,14 +2242,17 @@ async def update_section_task(
             "invalid_due_at",
             "invalid_max_attempts",
             "invalid_hints_md",
+            "invalid_h5p_config",
+            "invalid_visual_config",
+            "invalid_task_kind_config",
         }:
             detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
     except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_task(updated), status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_task(updated), status_code=200)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
@@ -3020,25 +3063,9 @@ async def update_module_section_visibility(
     if error:
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
-    # CSRF: In production or STRICT_CSRF_TEACHING=true, require explicit Origin/Referer
-    # and same-origin; otherwise fall back to best-effort check.
-    import os as _os
-    _prod = (_os.getenv("GUSTAV_ENV", "dev") or "").lower() == "prod"
-    _strict = _prod or ((_os.getenv("STRICT_CSRF_TEACHING", "false") or "").lower() == "true")
-    if _strict:
-        if not _require_strict_same_origin(request):
-            return _private_error(
-                {"error": "forbidden", "detail": "csrf_violation"},
-                status_code=403,
-                vary_origin=True,
-            )
-    else:
-        if not _is_same_origin(request):
-            return _private_error(
-                {"error": "forbidden", "detail": "csrf_violation"},
-                status_code=403,
-                vary_origin=True,
-            )
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
 
     if not _is_uuid_like(course_id):
         return _private_error(
@@ -3349,9 +3376,31 @@ def _serialize_task(t) -> dict:
             "created_at": getattr(t, "created_at", None),
             "updated_at": getattr(t, "updated_at", None),
         }
-    data.setdefault("kind", "native")
+    kind = str(data.get("kind") or "native")
+    data["kind"] = kind
     if data.get("criteria") is None:
         data["criteria"] = []
+    # Normalize optional task kind configs to match the OpenAPI contract.
+    if kind == "h5p":
+        h5p_cfg = data.get("h5p")
+        if not isinstance(h5p_cfg, dict):
+            content_id = data.get("h5p_content_id")
+            display_options = data.get("h5p_display_options") or {}
+            if not isinstance(display_options, dict):
+                display_options = {}
+            h5p_cfg = {"content_id": content_id, "display_options": display_options}
+        data["h5p"] = h5p_cfg
+        data["visual"] = None
+    elif kind == "visual":
+        visual_cfg = data.get("visual")
+        data["visual"] = visual_cfg if isinstance(visual_cfg, dict) else {}
+        data["h5p"] = None
+    else:
+        data.setdefault("h5p", None)
+        data.setdefault("visual", None)
+    # Do not expose internal storage columns; the API uses nested objects.
+    data.pop("h5p_content_id", None)
+    data.pop("h5p_display_options", None)
     return data
 
 
@@ -3657,6 +3706,7 @@ async def get_unit_live_summary(
                         # API contract: tasks carry instruction_md (not a separate title)
                         "instruction_md": t.get("instruction_md") or "",
                         "position": int(t.get("position") or 0),
+                        "kind": str(t.get("kind") or "native"),
                     })
         else:
             # In-memory repo fallback
@@ -3670,6 +3720,7 @@ async def get_unit_live_summary(
                         "id": td.id,
                         "instruction_md": td.instruction_md or "",
                         "position": int(td.position),
+                        "kind": str(getattr(td, "kind", "native") or "native"),
                     })
     except Exception:
         tasks = []
@@ -3692,6 +3743,7 @@ async def get_unit_live_summary(
 
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}
+        h5p_map: dict[tuple[str, str], bool] = {}
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
@@ -3706,7 +3758,8 @@ async def get_unit_live_summary(
                                     """
                                     select student_sub::text,
                                            task_id::text,
-                                           submission_id::text
+                                           submission_id::text,
+                                           h5p_completed
                                       from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
                                     """,
                                     (sub, course_id, unit_id, updated_since_dt, int(limit), int(offset)),
@@ -3714,11 +3767,17 @@ async def get_unit_live_summary(
                                 rows = cur.fetchall() or []
                                 has_map = {(r[0], r[1]) for r in rows}
                                 submission_ids_by_student: dict[str, list[str]] = {}
-                                for student_sub, _task_id, submission_id in rows:
+                                for student_sub, _task_id, submission_id, _h5p_completed in rows:
                                     if submission_id:
                                         submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
                                 avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
                                 avg_map = {(r[0], r[1]): avg_by_id.get(r[2]) for r in rows}
+                                # Only present for Task.kind="h5p"; null for other tasks.
+                                h5p_map = {
+                                    (r[0], r[1]): bool(r[3])
+                                    for r in rows
+                                    if (len(r) > 3 and r[3] is not None)
+                                }
                             except Exception as exc:
                                 logger.warning(
                                     "Unit summary fallback: helper get_unit_latest_submissions_for_owner unavailable — %s",
@@ -3760,18 +3819,26 @@ async def get_unit_live_summary(
         except Exception:
             has_map = set()
             avg_map = {}
+            h5p_map = {}
 
         for sid in member_subs:
+            task_cells: list[dict] = []
+            for t in tasks:
+                tid = t["id"]
+                has = ((sid, tid) in has_map)
+                cell: dict = {
+                    "task_id": tid,
+                    "has_submission": has,
+                    "average_score": (avg_map.get((sid, tid)) if has else None),
+                }
+                # H5P tasks are auto-scorable; for the live matrix we only need
+                # a binary "completed" flag (full score at least once).
+                if (t.get("kind") == "h5p") and has:
+                    cell["h5p_completed"] = h5p_map.get((sid, tid), False)
+                task_cells.append(cell)
             row = {
                 "student": {"sub": sid, "name": names.get(sid, sid)},
-                "tasks": [
-                    {
-                        "task_id": t["id"],
-                        "has_submission": ((sid, t["id"]) in has_map),
-                        "average_score": (avg_map.get((sid, t["id"])) if ((sid, t["id"]) in has_map) else None),
-                    }
-                    for t in tasks
-                ],
+                "tasks": task_cells,
             }
             rows_out.append(row)
 
@@ -3880,14 +3947,19 @@ async def get_unit_live_delta(
                         try:
                             cur.execute(
                                 """
-                                select student_sub::text, task_id::text, submission_id::text, created_at_iso, completed_at_iso
+                                select student_sub::text,
+                                       task_id::text,
+                                       submission_id::text,
+                                       created_at_iso,
+                                       completed_at_iso,
+                                       h5p_completed
                                   from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
                                 """,
                                 (sub, course_id, unit_id, db_lower_bound, int(limit), int(offset)),
                             )
                             rows = cur.fetchall() or []
                             submission_ids_by_student: dict[str, list[str]] = {}
-                            for student_sub, _task_id, submission_id, _created_iso, _completed_iso in rows:
+                            for student_sub, _task_id, submission_id, _created_iso, _completed_iso, _h5p_completed in rows:
                                 if submission_id:
                                     submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
                             avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
@@ -3899,7 +3971,7 @@ async def get_unit_live_delta(
                             )
                             rows = []
                             helper_ok = False
-                        for student_sub, task_id, submission_id, created_iso, completed_iso in rows:
+                        for student_sub, task_id, submission_id, created_iso, completed_iso, h5p_completed in rows:
                             cur.execute(
                                 """
                                 select greatest(created_at, coalesce(completed_at, created_at))
@@ -3927,24 +3999,16 @@ async def get_unit_live_delta(
                                     changed_dt = datetime.now(timezone.utc)
                             changed_iso = changed_dt.isoformat(timespec="microseconds")
                             if logger.isEnabledFor(logging.DEBUG) or debug:
+                                student_sub_hash = hashlib.sha256(student_sub.encode("utf-8")).hexdigest()[:12]
                                 logger.debug(
                                     "delta-cell",
                                     extra={
-                                        "student_sub": student_sub,
+                                        "student_sub_hash": student_sub_hash,
                                         "task_id": task_id,
                                         "changed_dt": changed_dt.isoformat(timespec="microseconds"),
                                         "original_updated": original_updated_dt.isoformat(timespec="microseconds"),
                                     },
                                 )
-                                if debug:
-                                    print(
-                                        "[DELTA] changed=",
-                                        changed_dt.isoformat(timespec="microseconds"),
-                                        " cursor=",
-                                        original_updated_dt.isoformat(timespec="microseconds"),
-                                        " db_lb=",
-                                        db_lower_bound.isoformat(timespec="microseconds"),
-                                    )
                             # Include changes after (cursor - EPS) to account for clock skew
                             include = changed_dt > (original_updated_dt - EPS)
                             if not include:
@@ -3956,15 +4020,16 @@ async def get_unit_live_delta(
                                 (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
                             )
                             avg_score = avg_by_id.get(submission_id) if submission_id else None
-                            cells.append(
-                                {
-                                    "student_sub": student_sub,
-                                    "task_id": task_id,
-                                    "has_submission": bool(submission_id),
-                                    "average_score": avg_score,
-                                    "changed_at": emit_dt.isoformat(timespec="microseconds"),
-                                }
-                            )
+                            cell: dict = {
+                                "student_sub": student_sub,
+                                "task_id": task_id,
+                                "has_submission": bool(submission_id),
+                                "average_score": avg_score,
+                                "changed_at": emit_dt.isoformat(timespec="microseconds"),
+                            }
+                            if h5p_completed is not None:
+                                cell["h5p_completed"] = bool(h5p_completed)
+                            cells.append(cell)
 
                         if not helper_ok:
                             # Fallback to bulk query when helper missing. Return a real timestamptz
@@ -4138,6 +4203,10 @@ async def get_latest_submission_detail(
         created_at: Any,
         completed_at: Any,
         kind: Any,
+        score_raw: Any = None,
+        score_max: Any = None,
+        h5p_content_id: Any = None,
+        h5p_review_token: Any = None,
         text_body: Any,
         mime_type: Any,
         size_bytes: Any,
@@ -4161,6 +4230,11 @@ async def get_latest_submission_detail(
                 Timestamps used for the submission metadata.
             kind, text_body, mime_type, size_bytes, storage_key:
                 Raw submission fields describing the content and optional file upload.
+            score_raw, score_max:
+                Optional H5P score fields (raw/max). Only meaningful for `kind='h5p'`.
+            h5p_content_id, h5p_review_token:
+                Optional H5P metadata used by the teacher review UI. The review token
+                is a short-lived capability token and may be null when misconfigured.
             feedback_md, analysis_json:
                 Optional formative feedback and structured criteria-based analysis
                 attached to the submission.
@@ -4184,6 +4258,15 @@ async def get_latest_submission_detail(
         if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
             def_kind = "pdf"
 
+        def _safe_int(v: Any) -> Optional[int]:
+            if v is None:
+                return None
+            try:
+                n = int(v)
+                return max(0, n)
+            except (TypeError, ValueError):
+                return None
+
         payload: Dict[str, Any] = {
             "id": str(sid),
             "task_id": str(tid),
@@ -4192,6 +4275,13 @@ async def get_latest_submission_detail(
             "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
             "kind": def_kind,
         }
+        if def_kind == "h5p":
+            payload["score_raw"] = _safe_int(score_raw)
+            payload["score_max"] = _safe_int(score_max)
+            payload["h5p"] = {
+                "content_id": (str(h5p_content_id) if h5p_content_id is not None else None),
+                "review_token": (str(h5p_review_token) if h5p_review_token is not None else None),
+            }
         if isinstance(text_body, str) and text_body:
             payload["text_body"] = text_body
         if isinstance(feedback_md, str) and feedback_md:
@@ -4243,6 +4333,56 @@ async def get_latest_submission_detail(
             payload["files"] = files
         return payload
 
+    def _issue_h5p_review_token(
+        *,
+        owner_sub: str,
+        course_id_in: str,
+        task_id_in: str,
+        student_sub_in: str,
+        content_id_in: str,
+    ) -> Optional[str]:
+        """Return a short-lived, signed H5P review capability token.
+
+        Why:
+            The teacher review UI must load the student's H5P userState without
+            exposing a generic "impersonate user" query parameter. We therefore
+            issue a short-lived capability token that binds:
+              - teacher (owner_sub),
+              - student,
+              - course,
+              - task context,
+              - H5P content id.
+
+        Permissions:
+            Caller must already have verified course ownership (teacher-only).
+        """
+        secret = (os.getenv("H5P_REVIEW_TOKEN_SECRET") or "").strip()
+        if not secret:
+            return None
+        try:
+            import base64
+            import hashlib
+            import hmac
+            import json
+
+            now = int(time.time())
+            exp = now + 10 * 60
+            payload_obj = {
+                "teacher_sub": owner_sub,
+                "student_sub": student_sub_in,
+                "course_id": course_id_in,
+                "task_id": task_id_in,
+                "content_id": content_id_in,
+                "exp": exp,
+            }
+            raw_json = json.dumps(payload_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
+            payload_b64 = base64.urlsafe_b64encode(raw_json).decode("ascii").rstrip("=")
+            sig = hmac.new(secret.encode("utf-8"), raw_json, hashlib.sha256).digest()
+            sig_b64 = base64.urlsafe_b64encode(sig).decode("ascii").rstrip("=")
+            return f"{payload_b64}.{sig_b64}"
+        except Exception:
+            return None
+
     repo = _get_repo()
     user, forbidden = _require_teacher(request)
     if forbidden:
@@ -4292,7 +4432,8 @@ async def get_latest_submission_detail(
                         # Enforce task ∈ unit via explicit relation check (DB)
                         cur.execute(
                             """
-                            select 1
+                            select t.kind::text,
+                                   t.h5p_content_id::text
                               from public.unit_tasks t
                               join public.unit_sections s on s.id = t.section_id
                               join public.course_modules m on m.unit_id = s.unit_id
@@ -4303,8 +4444,10 @@ async def get_latest_submission_detail(
                             """,
                             (course_id, unit_id, task_id),
                         )
-                        if cur.fetchone() is None:
+                        task_row = cur.fetchone()
+                        if task_row is None:
                             return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+                        task_kind, task_h5p_content_id = task_row
                         helper_ok = True
                         try:
                             # SECURITY DEFINER helper encapsulates owner checks and RLS-aware access
@@ -4316,6 +4459,8 @@ async def get_latest_submission_detail(
                                        created_at,
                                        completed_at,
                                        kind,
+                                       score_raw,
+                                       score_max,
                                        text_body,
                                        mime_type,
                                        size_bytes,
@@ -4333,6 +4478,7 @@ async def get_latest_submission_detail(
                             cur.execute(
                                 """
                                 select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
+                                       score_raw, score_max,
                                        text_body, mime_type, size_bytes, storage_key, feedback_md, analysis_json
                                   from public.learning_submissions
                                  where course_id = %s
@@ -4353,6 +4499,8 @@ async def get_latest_submission_detail(
                             created_at,
                             completed_at,
                             kind,
+                            score_raw,
+                            score_max,
                             text_body,
                             mime_type,
                             size_bytes,
@@ -4360,6 +4508,15 @@ async def get_latest_submission_detail(
                             feedback_md,
                             analysis_json,
                         ) = row
+                        review_token = None
+                        if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
+                            review_token = _issue_h5p_review_token(
+                                owner_sub=str(sub),
+                                course_id_in=str(course_id),
+                                task_id_in=str(task_id),
+                                student_sub_in=str(student_sub),
+                                content_id_in=str(task_h5p_content_id),
+                            )
                         payload = _build_latest_submission_payload(
                             sid=sid,
                             tid=tid,
@@ -4367,6 +4524,10 @@ async def get_latest_submission_detail(
                             created_at=created_at,
                             completed_at=completed_at,
                             kind=kind,
+                            score_raw=score_raw,
+                            score_max=score_max,
+                            h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
+                            h5p_review_token=review_token,
                             text_body=text_body,
                             mime_type=mime_type,
                             size_bytes=size_bytes,
@@ -4395,7 +4556,8 @@ async def get_latest_submission_detail(
                             # fail with 404 instead of accidentally leaking submissions.
                             cur.execute(
                                 """
-                                select 1
+                                select t.kind::text,
+                                       t.h5p_content_id::text
                                   from public.unit_tasks t
                                   join public.unit_sections s on s.id = t.section_id
                                   join public.course_modules m on m.unit_id = s.unit_id
@@ -4406,10 +4568,12 @@ async def get_latest_submission_detail(
                                 """,
                                 (course_id, unit_id, task_id),
                             )
-                            if cur.fetchone() is None:
+                            task_row = cur.fetchone()
+                            if task_row is None:
                                 return _private_error(
                                     {"error": "not_found"}, status_code=404, vary_origin=True
                                 )
+                            task_kind, task_h5p_content_id = task_row
                             cur.execute(
                                 """
                                 select id::text,
@@ -4418,6 +4582,8 @@ async def get_latest_submission_detail(
                                        created_at,
                                        completed_at,
                                        kind,
+                                       score_raw,
+                                       score_max,
                                        text_body,
                                        mime_type,
                                        size_bytes,
@@ -4446,6 +4612,8 @@ async def get_latest_submission_detail(
                             created_at,
                             completed_at,
                             kind,
+                            score_raw,
+                            score_max,
                             text_body,
                             mime_type,
                             size_bytes,
@@ -4453,6 +4621,15 @@ async def get_latest_submission_detail(
                             feedback_md,
                             analysis_json,
                         ) = row
+                        review_token = None
+                        if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
+                            review_token = _issue_h5p_review_token(
+                                owner_sub=str(sub),
+                                course_id_in=str(course_id),
+                                task_id_in=str(task_id),
+                                student_sub_in=str(student_sub),
+                                content_id_in=str(task_h5p_content_id),
+                            )
                         payload = _build_latest_submission_payload(
                             sid=sid,
                             tid=tid,
@@ -4460,6 +4637,10 @@ async def get_latest_submission_detail(
                             created_at=created_at,
                             completed_at=completed_at,
                             kind=kind,
+                            score_raw=score_raw,
+                            score_max=score_max,
+                            h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
+                            h5p_review_token=review_token,
                             text_body=text_body,
                             mime_type=mime_type,
                             size_bytes=size_bytes,

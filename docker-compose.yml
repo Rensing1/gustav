@@ -33,33 +33,33 @@ services:
         apk add --no-cache bind-tools >/dev/null && \
         echo "IONOS DDNS updater started for gustav-lernplattform.de" && \
         while true; do \
-          NOW=$(date +"%Y-%m-%d %H:%M:%S"); \
-          CURRENT_IP=$(curl -fs https://ipinfo.io/ip || echo "unknown"); \
-          APP_URL=${IONOS_UPDATE_URL_APP:-${IONOS_UPDATE_URL}}; \
-          ID_URL=${IONOS_UPDATE_URL_ID:-${IONOS_UPDATE_URL}}; \
+          NOW=$$(date +"%Y-%m-%d %H:%M:%S"); \
+          CURRENT_IP=$$(curl -fs https://ipinfo.io/ip || echo "unknown"); \
+          APP_URL=$${IONOS_UPDATE_URL_APP:-$${IONOS_UPDATE_URL}}; \
+          ID_URL=$${IONOS_UPDATE_URL_ID:-$${IONOS_UPDATE_URL}}; \
           \
-          if [ -n "${IONOS_UPDATE_URL}" ]; then \
-            DNS_IP=$(dig +short gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${IONOS_UPDATE_URL}"); \
-            echo "[$NOW] DDNS root -> HTTP $HTTP_CODE | current=${CURRENT_IP} | dns=${DNS_IP}"; \
+          if [ -n "$${IONOS_UPDATE_URL}" ]; then \
+            DNS_IP=$$(dig +short gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
+            HTTP_CODE=$$(curl -s -o /dev/null -w "%{http_code}" "$${IONOS_UPDATE_URL}"); \
+            echo "[$$NOW] DDNS root -> HTTP $$HTTP_CODE | current=$${CURRENT_IP} | dns=$$DNS_IP"; \
           else \
-            echo "[$NOW] DDNS root skipped: IONOS_UPDATE_URL not configured"; \
+            echo "[$$NOW] DDNS root skipped: IONOS_UPDATE_URL not configured"; \
           fi; \
           \
-          if [ -n "${APP_URL}" ]; then \
-            DNS_IP_APP=$(dig +short app.gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
-            HTTP_APP=$(curl -s -o /dev/null -w "%{http_code}" "${APP_URL}"); \
-            echo "[$NOW] DDNS app  -> HTTP $HTTP_APP | current=${CURRENT_IP} | dns=${DNS_IP_APP}"; \
+          if [ -n "$${APP_URL}" ]; then \
+            DNS_IP_APP=$$(dig +short app.gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
+            HTTP_APP=$$(curl -s -o /dev/null -w "%{http_code}" "$${APP_URL}"); \
+            echo "[$$NOW] DDNS app  -> HTTP $$HTTP_APP | current=$${CURRENT_IP} | dns=$$DNS_IP_APP"; \
           else \
-            echo "[$NOW] DDNS app skipped: IONOS_UPDATE_URL_APP not configured"; \
+            echo "[$$NOW] DDNS app skipped: IONOS_UPDATE_URL_APP not configured"; \
           fi; \
           \
-          if [ -n "${ID_URL}" ]; then \
-            DNS_IP_ID=$(dig +short id.gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
-            HTTP_ID=$(curl -s -o /dev/null -w "%{http_code}" "${ID_URL}"); \
-            echo "[$NOW] DDNS id   -> HTTP $HTTP_ID | current=${CURRENT_IP} | dns=${DNS_IP_ID}"; \
+          if [ -n "$${ID_URL}" ]; then \
+            DNS_IP_ID=$$(dig +short id.gustav-lernplattform.de @8.8.8.8 || echo "unknown"); \
+            HTTP_ID=$$(curl -s -o /dev/null -w "%{http_code}" "$${ID_URL}"); \
+            echo "[$$NOW] DDNS id   -> HTTP $$HTTP_ID | current=$${CURRENT_IP} | dns=$$DNS_IP_ID"; \
           else \
-            echo "[$NOW] DDNS id skipped: IONOS_UPDATE_URL_ID not configured"; \
+            echo "[$$NOW] DDNS id skipped: IONOS_UPDATE_URL_ID not configured"; \
           fi; \
           sleep 300; \
         done

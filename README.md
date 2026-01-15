@@ -58,7 +58,7 @@ GUSTAV wird entwickelt nach dem Prinzip „Contract‑First“ und setzt stark a
   - `make test`
   - oder `.venv/bin/pytest -q`
   - H5P Sidecar (Node) Unit-Tests: `make test-h5p` (installiert Dependencies via `npm ci`, kein `node_modules/` im Repo)
-  - Gesamter Durchlauf (Unit + Supabase + Ollama + E2E): `make verify`
+  - Gesamter Durchlauf (Unit + Supabase + OpenAI-Endpoint + E2E): `make verify`
   - Nach `supabase db reset`: `make reset-local` (resync + service recreate)
   - `make test-supabase`
   - KI-Integration: OpenAI-kompatibler Endpoint via `OPENAI_BASE_URL` (LLM/VLM-Server). Für Unit-Tests werden Netzwerkanfragen stubbbar gehalten.

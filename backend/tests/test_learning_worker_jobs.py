@@ -1177,7 +1177,8 @@ async def test_worker_extends_lease_window(monkeypatch: pytest.MonkeyPatch):
 
     now = datetime.now(tz=timezone.utc)
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        job = worker_module._lease_next_job(conn, now=now)
+        leased = worker_module._lease_jobs(conn, now=now, limit=1)
+        job = leased[0] if leased else None
         conn.commit()
     assert job is not None
 
@@ -1358,7 +1359,8 @@ async def test_worker_skips_pytest_tagged_jobs_when_configured(monkeypatch: pyte
                     """,
                     (visible_at, job_id),
                 )
-        leased = worker_module._lease_next_job(conn, now=now)
+        leased_jobs = worker_module._lease_jobs(conn, now=now, limit=1)
+        leased = leased_jobs[0] if leased_jobs else None
         conn.commit()
     assert leased is not None
     assert leased.id == real_job_id

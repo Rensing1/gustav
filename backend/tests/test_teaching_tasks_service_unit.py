@@ -42,7 +42,7 @@ class FakeTasksRepo(TasksRepoProtocol):
         *,
         instruction_md: str,
         criteria: List[str],
-        hints_md: Optional[str],
+        teacher_context_md: Optional[str],
         due_at: Optional[datetime],
         max_attempts: Optional[int],
         kind: str,
@@ -55,7 +55,7 @@ class FakeTasksRepo(TasksRepoProtocol):
             "author_id": author_id,
             "instruction_md": instruction_md,
             "criteria": criteria,
-            "hints_md": hints_md,
+            "teacher_context_md": teacher_context_md,
             "due_at": due_at,
             "max_attempts": max_attempts,
             "kind": kind,
@@ -68,7 +68,7 @@ class FakeTasksRepo(TasksRepoProtocol):
             "section_id": section_id,
             "instruction_md": instruction_md,
             "criteria": criteria,
-            "hints_md": hints_md,
+            "teacher_context_md": teacher_context_md,
             "due_at": due_at.isoformat() if due_at else None,
             "max_attempts": max_attempts,
             "position": 1,
@@ -92,7 +92,7 @@ class FakeTasksRepo(TasksRepoProtocol):
         *,
         instruction_md: Any = _UNSET,
         criteria: Any = _UNSET,
-        hints_md: Any = _UNSET,
+        teacher_context_md: Any = _UNSET,
         due_at: Any = _UNSET,
         max_attempts: Any = _UNSET,
         kind: Any = _UNSET,
@@ -104,7 +104,7 @@ class FakeTasksRepo(TasksRepoProtocol):
         self.updated_payload = {
             "instruction_md": instruction_md,
             "criteria": criteria,
-            "hints_md": hints_md,
+            "teacher_context_md": teacher_context_md,
             "due_at": due_at,
             "max_attempts": max_attempts,
             "kind": kind,
@@ -116,8 +116,8 @@ class FakeTasksRepo(TasksRepoProtocol):
             task["instruction_md"] = instruction_md
         if criteria is not _UNSET:
             task["criteria"] = criteria
-        if hints_md is not _UNSET:
-            task["hints_md"] = hints_md
+        if teacher_context_md is not _UNSET:
+            task["teacher_context_md"] = teacher_context_md
         if due_at is not _UNSET:
             task["due_at"] = due_at.isoformat() if due_at else None
         if max_attempts is not _UNSET:
@@ -164,7 +164,7 @@ def repo() -> FakeTasksRepo:
             "section_id": "section-1",
             "instruction_md": "**Solve**",
             "criteria": ["Explain"],
-            "hints_md": None,
+            "teacher_context_md": None,
             "due_at": None,
             "max_attempts": None,
             "position": 1,
@@ -189,14 +189,14 @@ def test_create_task_normalizes_inputs(service: TasksService, repo: FakeTasksRep
         "teacher-1",
         instruction_md="  Analyse den Versuch  ",
         criteria=["  Hypothese  ", "Interpretation"],
-        hints_md="  Nutze Diagramm  ",
+        teacher_context_md="  Nutze Diagramm  ",
         due_at=due.isoformat(),
         max_attempts="3",
     )
     assert repo.created_payload is not None
     assert repo.created_payload["instruction_md"] == "Analyse den Versuch"
     assert repo.created_payload["criteria"] == ["Hypothese", "Interpretation"]
-    assert repo.created_payload["hints_md"] == "Nutze Diagramm"
+    assert repo.created_payload["teacher_context_md"] == "Nutze Diagramm"
     assert isinstance(repo.created_payload["due_at"], datetime)
     assert repo.created_payload["due_at"].tzinfo == timezone.utc
     assert repo.created_payload["max_attempts"] == 3
@@ -243,7 +243,7 @@ def test_update_task_delegates_only_provided_fields(service: TasksService, repo:
     assert repo.updated_payload == {
         "instruction_md": _UNSET,
         "criteria": ["Analysiere"],
-        "hints_md": _UNSET,
+        "teacher_context_md": _UNSET,
         "due_at": _UNSET,
         "max_attempts": 5,
         "kind": _UNSET,
@@ -298,7 +298,7 @@ def test_delete_and_reorder_delegate(service: TasksService, repo: FakeTasksRepo)
         "section_id": "section-1",
         "instruction_md": "Instruktion",
         "criteria": ["Hinweis"],
-        "hints_md": None,
+        "teacher_context_md": None,
         "due_at": None,
         "max_attempts": None,
         "position": 1,

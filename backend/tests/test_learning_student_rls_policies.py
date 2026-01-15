@@ -64,14 +64,14 @@ def _prep_rows(cur, teacher_sub: str, *, course_suffix: str) -> dict[str, str]:
         (unit_id, section_id, f"Material {course_suffix}", "# Body", 1),
     )
     material_id = cur.fetchone()[0]
-    cur.execute(
-        """
-        insert into public.unit_tasks (unit_id, section_id, instruction_md, criteria, hints_md, position)
+        cur.execute(
+            """
+        insert into public.unit_tasks (unit_id, section_id, instruction_md, criteria, teacher_context_md, position)
         values (%s, %s, %s, %s, %s, %s)
         returning id
         """,
-        (unit_id, section_id, "Solve the task", ["criterion"], None, 1),
-    )
+            (unit_id, section_id, "Solve the task", ["criterion"], None, 1),
+        )
     task_id = cur.fetchone()[0]
     return {
         "course_id": str(course_id),

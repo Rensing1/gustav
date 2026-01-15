@@ -54,6 +54,126 @@ def test_adapter_requires_openai_base_url(monkeypatch: pytest.MonkeyPatch) -> No
         adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
 
 
+def test_prod_disallows_http_openai_base_url_for_remote_hosts(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example.com/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    with pytest.raises(FeedbackPermanentError, match="insecure_OPENAI_BASE_URL"):
+        adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+
+
+def test_prod_allows_http_openai_base_url_for_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected LM to be instantiated"
+    assert lm_calls[0]["kwargs"]["base_url"] == "http://127.0.0.1:11434/v1"
+
+
+def test_prod_allows_http_openai_base_url_for_host_docker_internal(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://host.docker.internal:8111/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected LM to be instantiated"
+    assert lm_calls[0]["kwargs"]["base_url"] == "http://host.docker.internal:8111/api/v1"
+
+
+def test_prod_allows_http_openai_base_url_for_private_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://10.0.0.23:11434/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected LM to be instantiated"
+    assert lm_calls[0]["kwargs"]["base_url"] == "http://10.0.0.23:11434/v1"
+
+
 def test_adapter_builds_lm_with_base_url_as_is(monkeypatch: pytest.MonkeyPatch) -> None:
     from backend.learning.adapters import local_feedback
 

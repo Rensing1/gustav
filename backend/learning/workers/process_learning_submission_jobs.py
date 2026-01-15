@@ -262,6 +262,18 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
     return jobs
 
 
+def _lease_next_job(conn: Connection, *, now: datetime) -> QueuedJob | None:
+    """Backwards-compatible helper: lease exactly one job or return None.
+
+    Why:
+        Older unit tests (and some external scripts) patch `_lease_next_job(...)`
+        directly. The worker now leases in batches via `_lease_jobs(...)`, but we
+        keep this wrapper so those tests can remain stable.
+    """
+    jobs = _lease_jobs(conn, now=now, limit=1)
+    return jobs[0] if jobs else None
+
+
 def _resolve_queue_table(conn: Connection) -> str:
     """
     Ensure the worker queue exists and return its canonical table name.

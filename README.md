@@ -61,7 +61,7 @@ GUSTAV wird entwickelt nach dem Prinzip „Contract‑First“ und setzt stark a
   - Gesamter Durchlauf (Unit + Supabase + Ollama + E2E): `make verify`
   - Nach `supabase db reset`: `make reset-local` (resync + service recreate)
   - `make test-supabase`
-  - `make test-ollama && make test-ollama-vision`
+  - KI-Integration: OpenAI-kompatibler Endpoint via `OPENAI_BASE_URL` (LLM/VLM-Server). Für Unit-Tests werden Netzwerkanfragen stubbbar gehalten.
   - Für die JS-Behaviour-Tests (Teaching-Live-UI in `gustav.js`) wird eine aktuelle Node.js-Installation benötigt; in CI sollte Node verfügbar sein, damit diese Tests nicht dauerhaft „skipped“ laufen.
 - API-Verhalten wird gegen den OpenAPI-Vertrag in `api/openapi.yml` geprüft.
 - Für neue Features sind Tests und Dokumentation Teil der Definition of Done.

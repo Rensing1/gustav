@@ -186,7 +186,7 @@ def test_local_vision_timeout_is_transient(monkeypatch: pytest.MonkeyPatch) -> N
         "size_bytes": file_path.stat().st_size,
     }
 
-    with pytest.raises(VisionTransientError, match="simulated timeout"):
+    with pytest.raises(VisionTransientError, match="timeout"):
         adapter.extract(submission=submission, job_payload=job_payload)
 
 
@@ -267,3 +267,46 @@ def test_local_vision_requires_ocr_model(monkeypatch: pytest.MonkeyPatch) -> Non
 
     with pytest.raises(VisionTransientError, match="missing_AI_OCR_MODEL"):
         adapter.extract(submission={"id": "s", "kind": "file"}, job_payload=job_payload)  # type: ignore[arg-type]
+
+
+def test_local_vision_sanitizes_unexpected_errors(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """
+    Security regression: do not propagate raw exception messages (may contain PII).
+    """
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+
+    from backend.learning.adapters.dspy import vision_program
+
+    def _boom(**_kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("studentPII: leaked payload")
+
+    monkeypatch.setattr(vision_program, "extract_text_from_image", _boom)
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    bucket = get_submissions_bucket()
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+
+    storage_key = f"{bucket}/course/task/student/img.jpg"
+    file_path = storage_root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 16)
+
+    submission = {"id": "s", "kind": "file"}
+    job_payload = {
+        "mime_type": "image/jpeg",
+        "storage_key": storage_key,
+        "size_bytes": file_path.stat().st_size,
+    }
+
+    with pytest.raises(VisionTransientError) as exc:
+        adapter.extract(submission=submission, job_payload=job_payload)
+    assert str(exc.value) == "vision_failed"

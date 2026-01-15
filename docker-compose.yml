@@ -160,8 +160,9 @@ services:
       - AI_OCR_TEMPERATURE=${AI_OCR_TEMPERATURE:-0.0}
       - AI_VISUAL_TEMPERATURE=${AI_VISUAL_TEMPERATURE:-0.0}
       # DSPy caching (performance-critical; stored inside the container filesystem)
-      - DSPY_CACHEDIR=/tmp/dspy_cache
-      - DSPY_CACHE_LIMIT=34359738368
+      - DSPY_CACHEDIR=${DSPY_CACHEDIR:-/tmp/dspy_cache}
+      # Keep the default conservative; override via `.env` when needed.
+      - DSPY_CACHE_LIMIT=${DSPY_CACHE_LIMIT:-4294967296}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}

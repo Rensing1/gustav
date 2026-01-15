@@ -143,7 +143,7 @@ class _LocalFeedbackAdapter:
             raise FeedbackTransientError("dspy_unavailable") from exc
         except Exception as exc:
             # Fail-fast: surface as transient so the worker can retry.
-            raise FeedbackTransientError(str(exc) or "feedback_failed") from exc
+            raise FeedbackTransientError("feedback_failed") from exc
 
     def analyze_visual(  # type: ignore[no-untyped-def]
         self,
@@ -230,7 +230,7 @@ class _LocalFeedbackAdapter:
         except ImportError as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
         except Exception as exc:
-            raise FeedbackTransientError(str(exc) or "visual_feedback_failed") from exc
+            raise FeedbackTransientError("visual_feedback_failed") from exc
 
 
 def build() -> _LocalFeedbackAdapter:

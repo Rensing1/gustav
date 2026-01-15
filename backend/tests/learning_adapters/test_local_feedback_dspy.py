@@ -60,7 +60,7 @@ def test_adapter_builds_lm_with_base_url_as_is(monkeypatch: pytest.MonkeyPatch) 
     observed: dict = {}
     _install_fake_dspy(monkeypatch, observed=observed)
 
-    monkeypatch.setenv("OPENAI_BASE_URL", "http://100.80.221.81:8111/api/v1")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("AI_TEXT_MODEL", "my-model")
     monkeypatch.setenv("AI_TEXT_TEMPERATURE", "0.25")
@@ -85,12 +85,41 @@ def test_adapter_builds_lm_with_base_url_as_is(monkeypatch: pytest.MonkeyPatch) 
     lm_calls = observed.get("lm_calls") or []
     assert lm_calls, "Expected LM to be instantiated"
     lm_kwargs = lm_calls[0]["kwargs"]
-    assert lm_kwargs["base_url"] == "http://100.80.221.81:8111/api/v1"
+    assert lm_kwargs["base_url"] == "http://example/api/v1"
     assert lm_kwargs["temperature"] == 0.25
 
     contexts = observed.get("contexts") or []
     assert contexts, "Expected dspy.context(...) usage"
     assert contexts[0].get("disable_history") is True
+
+
+def test_adapter_sanitizes_unexpected_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Security regression: the adapter must not surface raw exception messages.
+
+    Why:
+        Upstream LLM/SDK exceptions may contain request payloads (student text).
+        We only propagate stable error codes.
+    """
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    def _boom(**_kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("studentPII: leaked payload")
+
+    monkeypatch.setattr(feedback_program, "analyze_feedback", _boom)
+
+    adapter = local_feedback.build()
+    with pytest.raises(FeedbackTransientError) as exc:
+        adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+    assert str(exc.value) == "feedback_failed"
 
 
 def test_adapter_analyze_visual_requires_visual_model(monkeypatch: pytest.MonkeyPatch) -> None:

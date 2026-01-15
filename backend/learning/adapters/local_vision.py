@@ -280,6 +280,7 @@ def _resolve_submission_image_bytes(
 ) -> Optional[str]:
     """Return base64 image bytes (JPEG/PNG) from local storage or Supabase."""
     mime = (job_payload or {}).get("mime_type") or (submission or {}).get("mime_type") or ""
+    mime = str(mime or "").strip().lower()
     if mime not in {"image/jpeg", "image/png"}:
         return None
     root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
@@ -428,11 +429,12 @@ class _LocalVisionAdapter:
             for path in paths:
                 try:
                     data = path.read_bytes()
-                except Exception:
+                except Exception as exc:
                     LOG.warning(
-                        "learning.vision.pdf_ensure_stitched action=read_page_failed submission_id=%s path=%s",
+                        "learning.vision.pdf_ensure_stitched action=read_page_failed error_type=%s submission_id=%s page=%s",
+                        type(exc).__name__,
                         submission_id,
-                        path,
+                        path.name,
                     )
                     continue
                 if data:
@@ -465,9 +467,8 @@ class _LocalVisionAdapter:
                 return stitch_images_vertically(pages)
             except Exception as exc:
                 LOG.warning(
-                    "learning.vision.pdf_ensure_stitched action=stitch_failed error_type=%s message=%s submission_id=%s",
+                    "learning.vision.pdf_ensure_stitched action=stitch_failed error_type=%s submission_id=%s",
                     type(exc).__name__,
-                    str(exc)[:120],
                     submission_id,
                 )
                 return None
@@ -597,14 +598,11 @@ class _LocalVisionAdapter:
         except Exception as exc:
             try:
                 err_type = type(exc).__name__
-                err_msg = str(exc)
             except Exception:
                 err_type = "Exception"
-                err_msg = "(unavailable)"
             LOG.error(
-                "learning.vision.pdf_ensure_stitched action=render_error error_type=%s message=%s submission_id=%s",
+                "learning.vision.pdf_ensure_stitched action=render_error error_type=%s submission_id=%s",
                 err_type,
-                err_msg[:120],
                 submission_id,
             )
             return None
@@ -635,8 +633,8 @@ class _LocalVisionAdapter:
             authorization context is required at this layer.
         """
         # Text submissions: pass-through (do not invoke external clients).
-        kind = (submission or {}).get("kind") or ""
-        mime = (job_payload or {}).get("mime_type") or (submission or {}).get("mime_type") or ""
+        kind = str((submission or {}).get("kind") or "").strip().lower()
+        mime = str((job_payload or {}).get("mime_type") or (submission or {}).get("mime_type") or "").strip().lower()
         if kind == "text":
             # Prefer submission.text_body; allow job_payload overrides for tests.
             body = (submission or {}).get("text_body")
@@ -655,41 +653,36 @@ class _LocalVisionAdapter:
         image_b64: Optional[str] = None
         image_data_uri: str | None = None
         bucket = _submissions_bucket()
-        if kind != "text":
+
+        if mime in {"image/jpeg", "image/png"}:
+            image_b64 = _resolve_submission_image_bytes(
+                submission=submission,
+                job_payload=job_payload,
+                bucket=bucket,
+                max_download_bytes=max_download_bytes,
+                meta=meta,
+            )
+            if image_b64:
+                image_data_uri = f"data:{mime};base64,{image_b64}"
+
+        # Local fetch for PDF derived pages (independent of original PDF presence)
+        if mime == "application/pdf":
+            # Validate local PDF bytes (size/hash) when a verify root is configured.
+            # This must happen before derived-page stitching so tests and operators
+            # get deterministic permanent errors for corrupt/mismatched uploads.
             root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
-            # Fallback to submission fields when job payload omits transport metadata.
             storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
             size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
             sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""
-            # Submission identity (used to infer derived page keys for PDFs)
-            submission_id = (submission or {}).get("id") or ""
-            course_id = (submission or {}).get("course_id") or ""
-            task_id = (submission or {}).get("task_id") or ""
-            student_sub = (submission or {}).get("student_sub") or ""
-
-            if mime in {"image/jpeg", "image/png"}:
-                image_b64 = _resolve_submission_image_bytes(
-                    submission=submission,
-                    job_payload=job_payload,
-                    bucket=bucket,
-                    max_download_bytes=max_download_bytes,
-                    meta=meta,
-                )
-                if image_b64:
-                    image_data_uri = f"data:{mime};base64,{image_b64}"
-
-            if mime == "application/pdf" and storage_key and root:
-                data = _load_local_storage_bytes(
+            if root and storage_key:
+                pdf_bytes = _load_local_storage_bytes(
                     root=root,
                     storage_key=storage_key,
                     size_bytes=size_bytes,
                     sha256_hex=sha256_hex,
                 )
-                if data:
-                    meta["bytes_read"] = len(data)
-
-            # Local fetch for PDF derived pages (independent of original PDF presence)
-        if mime == "application/pdf":
+                if pdf_bytes:
+                    meta["bytes_read"] = len(pdf_bytes)
             stitched_png = self._ensure_pdf_stitched_png(submission=submission, job_payload=job_payload)
             if not stitched_png:
                 raise VisionTransientError("pdf_images_unavailable")
@@ -715,15 +708,15 @@ class _LocalVisionAdapter:
                     image_data_uri=image_data_uri
                 )
         except TimeoutError as exc:
-            raise VisionTransientError(str(exc)) from exc
+            raise VisionTransientError("timeout") from exc
         except ImportError as exc:
-            raise VisionTransientError(str(exc)) from exc
+            raise VisionTransientError("dspy_unavailable") from exc
         except VisionTransientError:
             raise
         except VisionPermanentError:
             raise
         except Exception as exc:
-            raise VisionTransientError(str(exc) or "vision_failed") from exc
+            raise VisionTransientError("vision_failed") from exc
 
         if not isinstance(text_md, str) or not text_md.strip():
             raise VisionTransientError("empty_ocr_text")
@@ -740,25 +733,6 @@ class _LocalVisionAdapter:
 def build() -> _LocalVisionAdapter:
     """Factory used by the worker DI to construct the adapter instance."""
     return _LocalVisionAdapter()
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     
     

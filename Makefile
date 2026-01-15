@@ -17,6 +17,7 @@ help:
 	@echo "  db-login-user      - Create/alter app DB login (IN ROLE gustav_limited)"
 	@echo "  test               - Run test suite (unit/integration)"
 	@echo "  test-e2e           - Run E2E tests (requires running services)"
+	@echo "  test-openai        - Run OpenAI endpoint smoke tests (requires local inference endpoint)"
 	@echo "  supabase-status    - Show local Supabase status"
 	@echo "  supabase-sync-env  - Sync Supabase service role key into .env"
 	@echo "  prod-sync-env      - Make local .env prod-like (Keycloak+Supabase+CA sync)"
@@ -113,11 +114,26 @@ test-supabase:
 	AUTO_WIRE_STORAGE_E2E=true \
 	pytest -q -m supabase_integration
 
+.PHONY: test-openai
+test-openai:
+	# Smoke-test a real OpenAI-compatible endpoint (default: local Ollama on :11434).
+	# Default model is `ministral-3:3b` for all variants; override via OPENAI_E2E_MODEL.
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	. ./.venv/bin/activate && \
+	RUN_OPENAI_E2E=1 \
+	OPENAI_E2E_ROOT=$${OPENAI_E2E_ROOT:-http://localhost:11434} \
+	OPENAI_E2E_MODEL=$${OPENAI_E2E_MODEL:-ministral-3:3b} \
+	AI_TEXT_MODEL=$${OPENAI_E2E_MODEL} \
+	AI_OCR_MODEL=$${OPENAI_E2E_MODEL} \
+	AI_VISUAL_MODEL=$${OPENAI_E2E_MODEL} \
+	pytest -q -m openai_integration
+
 .PHONY: verify
 verify:
 	@$(MAKE) test
 	@$(MAKE) test-h5p
 	@$(MAKE) test-supabase
+	@$(MAKE) test-openai
 	@$(MAKE) test-e2e
 
 # --- Legacy data import shortcuts -------------------------------------------

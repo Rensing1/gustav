@@ -275,6 +275,14 @@ async def test_task_creation_validation_errors():
         assert resp.status_code == 400
         assert resp.json()["detail"] == "invalid_max_attempts"
 
+        # invalid teacher_context_md
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={"instruction_md": "A", "teacher_context_md": 123},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "invalid_teacher_context_md"
+
 
 @pytest.mark.anyio
 async def test_tasks_invalid_uuid_path_params_return_400():
@@ -373,6 +381,7 @@ async def test_task_update_validation_errors_and_empty_payload():
             ({"instruction_md": "   "}, "invalid_instruction_md"),
             ({"criteria": "nope"}, "invalid_criteria"),
             ({"criteria": ["", "ok"]}, "invalid_criteria"),
+            ({"teacher_context_md": 123}, "invalid_teacher_context_md"),
             ({"due_at": "not-a-datetime"}, "invalid_due_at"),
             ({"max_attempts": -1}, "invalid_max_attempts"),
         ]

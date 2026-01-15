@@ -48,7 +48,7 @@ def _prune_external_wiring_env_by_default() -> None:
         Integration suites enable wiring explicitly via RUN_* flags and marker
         selection (see Makefile targets).
     """
-    if _truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E"):
+    if _truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E") or _truthy_env("RUN_OPENAI_E2E"):
         return
     for var in (
         "SUPABASE_URL",
@@ -69,6 +69,7 @@ def pytest_configure(config: pytest.Config) -> None:  # pragma: no cover
         - Unit/in-process suite (`pytest` / `make test`) must not depend on `.env`.
         - E2E (`make test-e2e`) requires RUN_E2E=1 and uses `-m e2e`.
         - Supabase integration (`make test-supabase`) requires RUN_SUPABASE_E2E=1 and uses `-m supabase_integration`.
+        - OpenAI integration (`make test-openai`) requires RUN_OPENAI_E2E=1 and uses `-m openai_integration`.
     """
     markexpr = (getattr(config.option, "markexpr", "") or "").strip()
 
@@ -80,9 +81,13 @@ def pytest_configure(config: pytest.Config) -> None:  # pragma: no cover
         raise pytest.UsageError(
             "RUN_SUPABASE_E2E=1 requires marker selection. Use `make test-supabase` or `pytest -m supabase_integration`."
         )
+    if _truthy_env("RUN_OPENAI_E2E") and not markexpr:
+        raise pytest.UsageError(
+            "RUN_OPENAI_E2E=1 requires marker selection. Use `make test-openai` or `pytest -m openai_integration`."
+        )
 
     # Load `.env` only when an integration suite is explicitly requested.
-    if not (_truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E")):
+    if not (_truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E") or _truthy_env("RUN_OPENAI_E2E")):
         return
 
     try:

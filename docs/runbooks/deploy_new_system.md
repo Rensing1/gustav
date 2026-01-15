@@ -3,15 +3,15 @@
 Status: Draft (Stand 2025-02)  
 Zielgruppe: Lehrkräfte oder IT-Admins ohne tiefes DevOps-Wissen
 
-Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 22.04 LTS) zum Laufen. Das Setup entspricht exakt der Produktionsumgebung: Supabase (Postgres + Storage), GUSTAV (FastAPI + Keycloak + Learning Worker) und – optional – der lokale KI-Dienst Ollama.
+Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 22.04 LTS) zum Laufen. Das Setup entspricht exakt der Produktionsumgebung: Supabase (Postgres + Storage), GUSTAV (FastAPI + Keycloak + Learning Worker) und – optional – ein selbst betriebener OpenAI-kompatibler LLM/VLM-Endpoint für OCR/Feedback.
 
 ---
 
 ## Voraussetzungen (Hardware & Netzwerk)
 
-- **Hardware**: mind. 4 vCPU, 8 GB RAM und 40 GB SSD. Für produktive Klassenstufen empfehlen wir 8 vCPU, 16 GB RAM und 100 GB SSD (wegen Supabase-Storage, Ollama-Modellen und Logfiles).  
+- **Hardware**: mind. 4 vCPU, 8 GB RAM und 40 GB SSD. Für produktive Klassenstufen empfehlen wir 8 vCPU, 16 GB RAM und 100 GB SSD (wegen Supabase-Storage, Model-Caches und Logfiles).  
 - **Netz**: stabile symmetrische Verbindung mit ≥20 Mbit/s Upload (Datei-Uploads/Feedback).  
-- **Ports (extern)**: 22/TCP für SSH, 80/443 für Caddy (HTTP→HTTPS, Let’s Encrypt), optional 11434 falls Ollama extern erreichbar sein soll. Interne Supabase-Ports bleiben nur lokal sichtbar.  
+- **Ports (extern)**: 22/TCP für SSH, 80/443 für Caddy (HTTP→HTTPS, Let’s Encrypt). Interne Supabase-Ports bleiben nur lokal sichtbar.  
 - **DNS**: zwei FQDNs, z. B. `gustav.schule.de` (App) und `id.gustav.schule.de` (Keycloak).
 
 ---
@@ -64,7 +64,7 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
    - `APP_DB_PASSWORD`, `KC_ADMIN_CLIENT_SECRET`, `KC_DB_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`.
    - Öffentlich erreichbare URLs: `WEB_BASE`, `REDIRECT_URI`, `KC_BASE_URL`, `KC_PUBLIC_BASE_URL` **und** die Keycloak-spezifischen Hostnames aus dem Compose-File (`KC_HOSTNAME_URL`, `KC_HOSTNAME_ADMIN_URL`). Alle vier Werte müssen auf die endgültigen HTTPS-FQDNs zeigen, sonst funktionieren OIDC-Redirects nicht.
    - Supabase-Credentials: `SUPABASE_URL` kommt aus `supabase status`, der `SUPABASE_SERVICE_ROLE_KEY` darf **nie** auf `DUMMY_DO_NOT_USE` verbleiben. Sobald der Supabase-Stack läuft (Abschnitt 3), Werte mit `make supabase-sync-env` oder `scripts/sync_supabase_env.py` in `.env` schreiben und anschließend den Dummy manuell ersetzen.
-   - Falls Ollama/AI geplant: `AI_BACKEND` auf ein reales Backend setzen (`local` oder `remote`), niemals `stub`. Modelle: `AI_FEEDBACK_MODEL`, `AI_VISION_MODEL`, Timeouts etc.
+   - Falls Learning-AI geplant: `OPENAI_BASE_URL` sowie `AI_TEXT_MODEL`, `AI_OCR_MODEL`, `AI_VISUAL_MODEL` (und optional die Temperaturen `AI_*_TEMPERATURE`) setzen. Ohne diese Variablen kann der Learning-Worker OCR/Feedback nicht ausführen.
 
 3. **Uploads-Verzeichnis anlegen (für Vision-Worker)**  
    ```bash
@@ -182,8 +182,6 @@ sudo ufw default allow outgoing
 sudo ufw allow 22/tcp           # SSH-Login
 sudo ufw allow 80/tcp           # HTTP (Let’s Encrypt Challenge)
 sudo ufw allow 443/tcp          # HTTPS (Caddy Reverse Proxy)
-# Optional: nur öffnen, wenn externe KI-Clients Ollama nutzen sollen
-sudo ufw allow 11434/tcp        # Ollama API
 sudo ufw enable
 sudo ufw status verbose
 ```
@@ -217,8 +215,7 @@ Die wichtigsten Automationsbefehle sind bereits im `Makefile` hinterlegt. Sie ve
 | `make supabase-sync-env` | Liest Supabase-DSNs/Keys via CLI aus und schreibt sie in `.env`. | Nach `supabase db reset` oder wenn Service-Rollen-Schlüssel neu sind. |
 | `make test` | Aktiviert das Python-Venv und führt `pytest -q` aus. | Schnelle Regressionstests vor dem Deploy. |
 | `make test-e2e` | Startet die markierten End-to-End-Tests (`RUN_E2E=1 pytest -m e2e`). | Nach größeren Änderungen am Login-/UI-Fluss. |
-| `make test-ollama` / `make test-ollama-vision` | Prüfen die lokale KI-Anbindung (Feedback bzw. Vision). | Nur nötig, wenn `AI_BACKEND=local` aktiv ist und Ollama laufen soll. |
 
-Alle Targets lesen automatisch `.env`, daher keine erneute Eingabe der Secrets nötig. Optional lassen sich Variablen (`APP_DB_USER`, `OLLAMA_URL`, …) beim Aufruf überschreiben.
+Alle Targets lesen automatisch `.env`, daher keine erneute Eingabe der Secrets nötig. Optional lassen sich Variablen (z. B. `APP_DB_USER`, `APP_DB_PASSWORD`, `OPENAI_BASE_URL`, …) beim Aufruf überschreiben.
 
 Mit diesen Schritten läuft GUSTAV auf einem frischen Linux-System produktionsgleich. Falls etwas hakt, zuerst `docker compose logs` und `supabase status` prüfen – damit findet man 90 % aller Fehlkonfigurationen.

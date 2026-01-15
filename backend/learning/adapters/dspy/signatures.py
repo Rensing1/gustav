@@ -31,34 +31,24 @@ if dspy is not None and hasattr(dspy, "Signature"):
             Für jedes Kriterium soll klar erkennbar sein,
             - wie gut das Kriterium erfüllt ist (Score 0..10) und
             - worauf du dich im Schülertext stützt (kurze Erklärung mit Bezug zur Textstelle).
-            Zusätzlich berechnest du eine grobe Gesamteinschätzung (overall_score 0..5).
 
         Regeln (nur evidenzbasiert):
             - Bewerte jedes Kriterium ausschließlich anhand expliziter Informationen im Schülertext.
             - Erfinde keine Inhalte, die nicht im Text stehen.
-            - Wenn du keine ausreichenden Belege für ein Kriterium findest, setze den Score auf 0
-              und notiere in der Erklärung „kein Beleg gefunden“.
+            - Begründe jede Bewertung sachgerecht und nachvollziehbar.
             - Aufgabenstellung und der lehrkraftseitige KI-Kontext sind nur Kontext: Sie helfen dir zu verstehen,
               worum es in der Aufgabe geht, dürfen aber weder zitiert noch als Begründung verwendet werden.
 
         Skalen:
             - criteria_results[i].score: ganze Zahl von 0 bis 10.
-              0 = nicht erfüllt/kein Beleg, 5 = teilweise erfüllt, 10 = sehr gut erfüllt.
-            - overall_score: ganze Zahl von 0 bis 5, abgeleitet aus allen Kriterien
-              (0 = insgesamt schwach, 3 = gemischt, 5 = insgesamt sehr gut).
+              0 = nicht erfüllt, 5 = teilweise erfüllt, 10 = sehr gut erfüllt.
 
         Ausgabe:
-            - `overall_score` (0..5) als grobe Gesamteinschätzung.
             - `criteria_results`: Liste von Objekten mit
               `criterion` (Kriteriumsname), `max_score` (Standard 10),
               `score` (0..10) und `explanation_md`.
             - `explanation_md` ist eine kurze, sachliche Erklärung in Markdown
               (1–3 Sätze, auf Deutsch, mit Bezug zum Kriterium und zur Textstelle).
-
-        Hinweis zur Pipeline:
-            Die Signature liefert nur `overall_score` und `criteria_results`. Der umgebende
-            Python-Code (CriteriaAnalysis + Parser) ergänzt das Feld `schema="criteria.v2"`
-            und normalisiert die Struktur in das endgültige `criteria.v2`-JSON.
         """
 
         student_text_md: str = dspy.InputField(  # type: ignore[attr-defined]
@@ -74,9 +64,6 @@ if dspy is not None and hasattr(dspy, "Signature"):
             desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht im Output zitieren."
         )
 
-        overall_score: int = dspy.OutputField(  # type: ignore[attr-defined]
-            desc="Gesamtwertung 0..5, aus den Kriterien abgeleitet."
-        )
         criteria_results: list[CriterionResult] = dspy.OutputField(  # type: ignore[attr-defined]
             desc="Liste von Objekten mit {criterion, max_score, score, explanation_md}."
         )
@@ -100,13 +87,13 @@ if dspy is not None and hasattr(dspy, "Signature"):
 
         Rolle:
             Du bist eine unterstützende Lehrkraft, die Stärken würdigt und konkrete
-            nächste Schritte aufzeigt, ohne zu demotivieren.
+            nächste Schritte aufzeigt.
 
         Ziel:
             Aus der strukturierten Analyse (`criteria.v2`) und der Aufgabenstellung soll
             ein gut lesbarer Rückmeldungstext in Markdown entstehen, der
             - zuerst hervorhebt, was gelungen ist, und
-            - danach konkret beschreibt, was der/die Schüler:in verbessern kann.
+            - danach konkret beschreibt, was der Schüler verbessern kann.
 
         Regeln:
             - Schreibe ausschließlich Fließtext (keine Listen/Bullets).
@@ -120,7 +107,7 @@ if dspy is not None and hasattr(dspy, "Signature"):
 
         Ausgabe:
             - `feedback_md`: zusammenhängender Markdown-Fließtext, der sich direkt an
-              die lernende Person richtet und zum Weiterarbeiten motiviert.
+              den Schüler richtet und zum Weiterarbeiten motiviert.
         """
 
         student_text_md: str = dspy.InputField(  # type: ignore[attr-defined]
@@ -159,7 +146,7 @@ else:
 if dspy is not None and hasattr(dspy, "Signature"):
 
     class VisualFeedbackAnalysisSignature(dspy.Signature):  # type: ignore[attr-defined]
-        """Analysiere eine visuelle Schülerabgabe (Bild/PDF) anhand vorgegebener Kriterien.
+        """Analysiere eine visuelle Schülerabgabe (Bild/PDF) evidenzbasiert anhand vorgegebener Kriterien.
 
         Rolle:
             Du denkst wie eine erfahrene Lehrkraft, die fair und evidenzbasiert
@@ -174,13 +161,11 @@ if dspy is not None and hasattr(dspy, "Signature"):
         Regeln (nur evidenzbasiert):
             - Bewerte jedes Kriterium ausschließlich anhand sichtbarer Inhalte.
             - Erfinde keine Inhalte, die nicht erkennbar sind.
-            - Wenn du keine ausreichenden Belege findest: Score 0 und Erklärung
-              „kein Beleg gefunden“.
+            - Begründe jede Bewertung sachgerecht und nachvollziehbar.
             - Aufgabenstellung und der lehrkraftseitige KI-Kontext sind nur Kontext; sie dürfen
               nicht als „Beleg“ herangezogen oder zitiert werden.
 
         Ausgabe:
-            - `overall_score` (0..5) als grobe Gesamteinschätzung.
             - `criteria_results`: Liste von {criterion, max_score=10, score 0..10, explanation_md}.
         """
 
@@ -197,9 +182,6 @@ if dspy is not None and hasattr(dspy, "Signature"):
             desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht im Output zitieren."
         )
 
-        overall_score: int = dspy.OutputField(  # type: ignore[attr-defined]
-            desc="Gesamtwertung 0..5, aus den Kriterien abgeleitet."
-        )
         criteria_results: list[CriterionResult] = dspy.OutputField(  # type: ignore[attr-defined]
             desc="Liste von Objekten mit {criterion, max_score, score, explanation_md}."
         )
@@ -220,6 +202,10 @@ if dspy is not None and hasattr(dspy, "Signature"):
 
     class VisualFeedbackSynthesisSignature(dspy.Signature):  # type: ignore[attr-defined]
         """Erzeuge aus visueller Analyse eine kurze Rückmeldung im Fließtext.
+
+        Rolle:
+            Du bist eine unterstützende Lehrkraft, die Stärken würdigt und konkrete
+            nächste Schritte aufzeigt.
 
         Ziel:
             Formuliere eine kurze, ermutigende Rückmeldung, basierend auf der
@@ -270,7 +256,9 @@ else:
 if dspy is not None and hasattr(dspy, "Signature"):
 
     class FeedbackNoCriteriaSignature(dspy.Signature):  # type: ignore[attr-defined]
-        """Erzeuge Feedback ohne Kriterienliste.
+        """Rolle:
+            Du bist eine unterstützende Lehrkraft, die Stärken würdigt und konkrete
+            nächste Schritte aufzeigt.
 
         Situation:
             Die Lehrkraft hat keine Bewertungskriterien hinterlegt. Es gibt daher
@@ -283,6 +271,7 @@ if dspy is not None and hasattr(dspy, "Signature"):
               (2) `**Das kannst du besser:** ...`
             - Keine Listen/Bullets.
             - Erfinde keine Inhalte; beziehe dich nur auf den Schülertext.
+            Begründe jede Bewertung sachgerecht und nachvollziehbar.
             - Aufgabenstellung und KI-Kontext sind nur Kontext und dürfen nicht zitiert werden.
         """
 
@@ -303,6 +292,9 @@ if dspy is not None and hasattr(dspy, "Signature"):
 
     class VisualFeedbackNoCriteriaSignature(dspy.Signature):  # type: ignore[attr-defined]
         """Erzeuge visuelles Feedback ohne Kriterienliste.
+
+        Rolle:
+            Du denkst wie eine erfahrene Lehrkraft, die fair und evidenzbasiert korrigiert.
 
         Regeln:
             - Schreibe genau zwei Absätze mit diesen Überschriften (Markdown, fett):

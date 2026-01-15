@@ -23,6 +23,43 @@ def _ensure_criteria_results(value: Any) -> list[CriterionResult]:
     return [CriterionResult.from_value(value)]
 
 
+def _derive_overall_score(*, criteria_results: list[CriterionResult]) -> int:
+    """Derive an overall 0..5 score from per-criterion results.
+
+    Why:
+        The UI derives aggregate scores from per-criterion results. We keep an
+        overall `analysis_json.score` field for backwards compatibility, but we
+        do not require the model to produce it.
+
+    Rules:
+        - Normalise each criterion to a 0..10 scale using `max_score` (default 10).
+        - Average across all criteria.
+        - Map 0..10 -> 0..5 by dividing by 2 and rounding half-up.
+    """
+    if not criteria_results:
+        return 0
+    normalized: list[float] = []
+    for item in criteria_results:
+        try:
+            max_score = int(item.max_score)
+        except Exception:
+            max_score = 10
+        if max_score <= 0:
+            max_score = 10
+        try:
+            score = int(item.score)
+        except Exception:
+            score = 0
+        score = max(0, min(score, max_score))
+        normalized.append(score / float(max_score) * 10.0)
+    if not normalized:
+        return 0
+    avg_0_to_10 = sum(normalized) / len(normalized)
+    # Round half-up to an integer score on a 0..5 scale.
+    derived = int(avg_0_to_10 / 2.0 + 0.5)
+    return max(0, min(derived, 5))
+
+
 def run_structured_analysis(
     *,
     text_md: str,
@@ -43,15 +80,12 @@ def run_structured_analysis(
         teacher_instructions_md=teacher_instructions_md,
         teacher_context_md=teacher_context_md,
     )
-    score_value = getattr(out, "overall_score", 0)
-    try:
-        score_int = int(score_value) if score_value is not None else 0
-    except Exception:
-        score_int = 0
+    results = _ensure_criteria_results(getattr(out, "criteria_results", []))
+    score_int = _derive_overall_score(criteria_results=results)
     return CriteriaAnalysis(
         schema="criteria.v2",
         score=score_int,
-        criteria_results=_ensure_criteria_results(getattr(out, "criteria_results", [])),
+        criteria_results=results,
     )
 
 
@@ -128,15 +162,12 @@ def run_structured_visual_analysis(
         teacher_instructions_md=teacher_instructions_md,
         teacher_context_md=teacher_context_md,
     )
-    score_value = getattr(out, "overall_score", 0)
-    try:
-        score_int = int(score_value) if score_value is not None else 0
-    except Exception:
-        score_int = 0
+    results = _ensure_criteria_results(getattr(out, "criteria_results", []))
+    score_int = _derive_overall_score(criteria_results=results)
     return CriteriaAnalysis(
         schema="criteria.v2",
         score=score_int,
-        criteria_results=_ensure_criteria_results(getattr(out, "criteria_results", [])),
+        criteria_results=results,
     )
 
 

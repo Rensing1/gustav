@@ -200,7 +200,7 @@ async def test_worker_completes_pdf_from_extracted(
         "analyze_feedback",
         lambda **_: FeedbackResult(
             feedback_md="Stub feedback",
-            analysis_json={"schema": "criteria.v2", "criteria_results": [], "overall_score": 3},
+            analysis_json={"schema": "criteria.v2", "criteria_results": [], "score": 0},
             parse_status="stubbed",
         ),
     )

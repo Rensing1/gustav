@@ -808,10 +808,11 @@ components:
         teacher_context_md:
           type: string
           nullable: true
+          description: Optional teacher-only AI context (Markdown). Must never be shown to students.
         due_at:
-            type: string
-            format: date-time
-            nullable: true
+          type: string
+          format: date-time
+          nullable: true
         max_attempts:
           type: integer
           minimum: 1

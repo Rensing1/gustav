@@ -23,7 +23,7 @@ Dieses Dokument ersetzt `docs/plan/2025-11-18-dspy-only-feedback-pipeline.md` un
 1. **Ein OpenAI-kompatibler Endpoint für alle Modelle**
    - Ein Endpoint wird für Text-Modelle und Vision-Modelle (VLMs) geteilt; pro Use-Case ändert sich nur der Modellname.
    - Umgebungsvariablen (hartes Breaking Change):
-     - `OPENAI_BASE_URL` (erforderlich): OpenAI-kompatible Base URL **as-is** (keine Pfad-Regeln, kein implizites Anhängen von `/v1`). Beispiel: `http://100.80.221.81:8111/api/v1`
+     - `OPENAI_BASE_URL` (erforderlich): OpenAI-kompatible Base URL **as-is** (keine Pfad-Regeln, kein implizites Anhängen von `/v1`). Beispiel: `http://host.docker.internal:8111/api/v1`
      - `OPENAI_API_KEY` (optional): API-Key/Token (manche Server benötigen keinen)
    - Modell-Selektoren (hartes Breaking Change):
      - `AI_TEXT_MODEL` (erforderlich): ein Modell für beide Text-Schritte (Analyse → Synthese)

@@ -77,8 +77,8 @@ Why this matters:
 | `AI_VISUAL_TEMPERATURE` | no | Visual | Default `0.0`. |
 | `LEARNING_VISION_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_vision`). |
 | `LEARNING_FEEDBACK_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_feedback`). |
-| `DSPY_CACHEDIR` | no | Worker container | Disk cache directory (configured in compose for `learning-worker`). |
-| `DSPY_CACHE_LIMIT` | no | Worker container | Disk cache size limit in bytes (configured in compose). |
+| `DSPY_CACHEDIR` | no | Worker container | Disk cache directory (compose default: `/tmp/dspy_cache`; override via `.env`). |
+| `DSPY_CACHE_LIMIT` | no | Worker container | Disk cache size limit in bytes (compose default: `4294967296`; override via `.env`). |
 | `WORKER_CONCURRENCY` | no | Worker | Parallelism (default `1`, hard cap in code). |
 | `WORKER_MAX_RETRIES` | no | Worker | Default `3`. |
 | `WORKER_BACKOFF_SECONDS` | no | Worker | Base backoff, default `10`. |

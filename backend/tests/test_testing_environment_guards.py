@@ -55,6 +55,44 @@ def reload_backend_conftest(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
+def reload_backend_conftest_openai(monkeypatch: pytest.MonkeyPatch):
+    """
+    Helper to reload `backend.tests.conftest` with controlled RUN_OPENAI_E2E flag.
+
+    Returns a callable: (run_openai_value) -> (module, load_dotenv_calls).
+    """
+
+    def _reload(run_openai_value: str | None) -> tuple[types.ModuleType, dict[str, int]]:
+        module_name = "backend.tests.conftest"
+        sys.modules.pop(module_name, None)
+        sys.modules.pop("backend.tests", None)
+
+        load_calls = {"count": 0}
+
+        def _fake_load_dotenv(*args, **kwargs):
+            load_calls["count"] += 1
+
+        monkeypatch.setitem(sys.modules, "dotenv", types.SimpleNamespace(load_dotenv=_fake_load_dotenv))
+
+        # Ensure other integration flags are not accidentally active.
+        monkeypatch.delenv("RUN_E2E", raising=False)
+        monkeypatch.delenv("RUN_SUPABASE_E2E", raising=False)
+
+        if run_openai_value is None:
+            monkeypatch.delenv("RUN_OPENAI_E2E", raising=False)
+        else:
+            monkeypatch.setenv("RUN_OPENAI_E2E", run_openai_value)
+
+        mod = importlib.import_module(module_name)
+        return mod, load_calls
+
+    yield _reload
+    monkeypatch.delenv("RUN_OPENAI_E2E", raising=False)
+    sys.modules.pop("dotenv", None)
+    importlib.import_module("backend.tests.conftest")
+
+
+@pytest.fixture
 def reload_backend_e2e_conftest(monkeypatch: pytest.MonkeyPatch):
     """
     Reload `backend.tests_e2e.conftest` and record load_dotenv invocations.
@@ -109,6 +147,31 @@ def test_dotenv_loaded_when_run_e2e_enabled_and_marked(reload_backend_conftest):
     mod, calls = reload_backend_conftest(run_e2e_value="1")
     mod.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="e2e")))
     assert calls["count"] == 1, "RUN_E2E=1 + marker selection should trigger dotenv loading"
+
+
+def test_dotenv_not_loaded_when_run_openai_disabled(reload_backend_conftest_openai):
+    mod, calls = reload_backend_conftest_openai(run_openai_value=None)
+    assert calls["count"] == 0
+    mod.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="openai_integration")))
+    assert calls["count"] == 0
+
+    mod_zero, calls_zero = reload_backend_conftest_openai(run_openai_value="0")
+    assert calls_zero["count"] == 0
+    mod_zero.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="openai_integration")))
+    assert calls_zero["count"] == 0
+
+
+def test_run_openai_requires_marker_selection(reload_backend_conftest_openai):
+    mod, calls = reload_backend_conftest_openai(run_openai_value="1")
+    with pytest.raises(pytest.UsageError):
+        mod.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="")))
+    assert calls["count"] == 0
+
+
+def test_dotenv_loaded_when_run_openai_enabled_and_marked(reload_backend_conftest_openai):
+    mod, calls = reload_backend_conftest_openai(run_openai_value="1")
+    mod.pytest_configure(types.SimpleNamespace(option=types.SimpleNamespace(markexpr="openai_integration")))
+    assert calls["count"] == 1
 
 
 def test_e2e_conftest_gate_respects_run_e2e_flag(reload_backend_e2e_conftest):

@@ -91,3 +91,52 @@ def test_redacts_pii_from_logs(tmp_path, monkeypatch: pytest.MonkeyPatch, caplog
     assert "courseX/taskY" not in logs
     assert "object_key=" not in logs
     assert "bucket=" not in logs
+
+
+def test_redacts_pii_when_derived_page_read_fails(tmp_path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    """
+    Regression: derived PDF page reads must not log filesystem paths.
+
+    Why:
+        Derived paths include student_sub and would leak PII when logged.
+    """
+    from backend.storage.config import get_submissions_bucket
+
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+
+    bucket = get_submissions_bucket()
+    submission_id = "sub-logs-pagefail"
+    course_id = "courseX"
+    task_id = "taskY"
+    student_sub = "studentPII"
+
+    derived_dir = tmp_path / bucket / course_id / task_id / student_sub / "derived" / submission_id
+    derived_dir.mkdir(parents=True, exist_ok=True)
+
+    page_path = derived_dir / "page_1.png"
+    page_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 16)
+    page_path.chmod(0)
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    submission = {
+        "id": submission_id,
+        "course_id": course_id,
+        "task_id": task_id,
+        "student_sub": student_sub,
+        "kind": "file",
+        "mime_type": "application/pdf",
+        # No storage_key: keep the test local and deterministic.
+        "storage_key": "",
+    }
+    job_payload = {"mime_type": "application/pdf", "storage_key": ""}
+
+    with pytest.raises(mod.VisionTransientError) as exc:
+        adapter.extract(submission=submission, job_payload=job_payload)
+    assert "pdf_images_unavailable" in str(exc.value)
+
+    logs = "\n".join(r.getMessage() for r in caplog.records)
+    assert "studentPII" not in logs
+    assert "courseX/taskY" not in logs
+    assert str(page_path) not in logs

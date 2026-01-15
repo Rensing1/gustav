@@ -211,6 +211,8 @@ def test_create_task_normalizes_inputs(service: TasksService, repo: FakeTasksRep
         ({"criteria": "string"}, "invalid_criteria"),
         ({"criteria": ["", "ok"]}, "invalid_criteria"),
         ({"criteria": [f"K{i}" for i in range(12)]}, "invalid_criteria"),
+        ({"teacher_context_md": 123}, "invalid_teacher_context_md"),
+        ({"teacher_context_md": ["nope"]}, "invalid_teacher_context_md"),
         ({"due_at": "2025-01-01T10:00:00"}, "invalid_due_at"),  # missing tz
         ({"due_at": "bad"}, "invalid_due_at"),
         ({"max_attempts": 0}, "invalid_max_attempts"),

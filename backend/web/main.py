@@ -2881,7 +2881,7 @@ def _render_section_detail_page_html(
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Anweisung<textarea class="form-input" name="instruction_md" required></textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
-        f'<label>Lösungshinweise<textarea class="form-input" name="teacher_context_md"></textarea></label>'
+        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-input" name="teacher_context_md"></textarea></label>'
         f'<button class="btn btn-primary" type="submit">Aufgabe anlegen</button>'
         f'</form>'
     )
@@ -4709,7 +4709,7 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         '<div id="native-task-fields">'
         f'<label>Anweisung<textarea class="form-input" id="instruction_md" name="instruction_md" required></textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
-        f'<label>Lösungshinweise<textarea class="form-input" name="teacher_context_md"></textarea></label>'
+        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-input" name="teacher_context_md"></textarea></label>'
         "</div>"
         '<div id="h5p-task-fields" hidden>'
         f'<input type="hidden" name="h5p_content_id" id="h5p_content_id" value="">'
@@ -4990,7 +4990,7 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Anweisung<textarea class="form-input" name="instruction_md">{instr}</textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{"".join(crit_inputs)}</fieldset>'
-        f'<label>Lösungshinweise<textarea class="form-input" name="teacher_context_md">{teacher_context_md}</textarea></label>'
+        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-input" name="teacher_context_md">{teacher_context_md}</textarea></label>'
         f'<label>Fällig bis<input class="form-input" type="text" name="due_at" value="{due_at}"></label>'
         f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" value="{max_attempts}" min="1"></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'

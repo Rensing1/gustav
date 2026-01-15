@@ -17,7 +17,6 @@ import pytest
 
 def test_redacts_pii_from_logs(tmp_path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
-    monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     # Ensure supabase.local resolves to a private host for HTTP fetches
@@ -65,17 +64,6 @@ def test_redacts_pii_from_logs(tmp_path, monkeypatch: pytest.MonkeyPatch, caplog
     html = b"<!doctype html><title>Not Found</title>"
     fake_httpx = SimpleNamespace(Client=lambda timeout=None, follow_redirects=None: _HttpxClient(html, 200))
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
-
-    # Fake ollama client (should not be called in this path)
-    class _Client:
-        def __init__(self, host=None):
-            self.calls = []
-        def generate(self, **kwargs):  # pragma: no cover
-            self.calls.append(kwargs)
-            return {"response": "n/a"}
-
-    fake_ollama = SimpleNamespace(Client=lambda base_url=None: _Client())
-    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]

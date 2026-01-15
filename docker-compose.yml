@@ -150,18 +150,18 @@ services:
       - LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
       # Worker DSN: defaults to the app login role (gustav_app) so RLS stays active.
       - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
-      # Adapter selection: controlled by AI_BACKEND; prod-ready default is local
-      - AI_BACKEND=${AI_BACKEND:-local}
-      # Local AI (Ollama/DSPy) configuration for AI_BACKEND=local
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      # Ensure LiteLLM sees a matching base as well
-      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-${OLLAMA_BASE_URL:-http://ollama:11434}}
-      - AI_VISION_MODEL=${AI_VISION_MODEL:-qwen2.5vl:3b}
-      - AI_FEEDBACK_MODEL=${AI_FEEDBACK_MODEL:-gpt-oss:latest}
-      - AI_TIMEOUT_VISION=${AI_TIMEOUT_VISION:-30}
-      - AI_TIMEOUT_FEEDBACK=${AI_TIMEOUT_FEEDBACK:-15}
-      # Enable structured outputs by default; set to 'false' to disable
-      - LEARNING_DSPY_JSON_ADAPTER=${LEARNING_DSPY_JSON_ADAPTER:-true}
+      # Learning AI (DSPy-only via OpenAI-compatible endpoint; no path rules, no implicit "/v1")
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_TEXT_MODEL=${AI_TEXT_MODEL:-}
+      - AI_OCR_MODEL=${AI_OCR_MODEL:-}
+      - AI_VISUAL_MODEL=${AI_VISUAL_MODEL:-}
+      - AI_TEXT_TEMPERATURE=${AI_TEXT_TEMPERATURE:-0.0}
+      - AI_OCR_TEMPERATURE=${AI_OCR_TEMPERATURE:-0.0}
+      - AI_VISUAL_TEMPERATURE=${AI_VISUAL_TEMPERATURE:-0.0}
+      # DSPy caching (performance-critical; stored inside the container filesystem)
+      - DSPY_CACHEDIR=/tmp/dspy_cache
+      - DSPY_CACHE_LIMIT=34359738368
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
       - WORKER_BACKOFF_SECONDS=${WORKER_BACKOFF_SECONDS:-10}
       - WORKER_LEASE_SECONDS=${WORKER_LEASE_SECONDS:-45}
@@ -191,8 +191,6 @@ services:
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2
-    depends_on:
-      - ollama
 
   keycloak:
     build:
@@ -249,35 +247,6 @@ services:
     networks:
       - gustav-alpha2-network
 
-  ollama:
-    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
-    container_name: gustav-ollama
-    # Expose API port for host-based integration tests
-    # - Compose-internal: http://ollama:11434
-    # - Host-accessible:  http://localhost:11434
-    ports:
-      - "127.0.0.1:11434:11434"
-    volumes:
-      - ollama_models:/root/.ollama
-    # GPU device/group wiring is optional. Remove group_add/devices by default
-    # to improve portability; add them locally when ROCm is available.
-    environment:
-      # Optional ROCm tuning. Leave empty by default to auto-detect.
-      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
-      # Select which GPUs are visible to the container; default 'all'
-      - HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-all}
-      - OLLAMA_VULKAN=1
-    restart: unless-stopped
-    networks:
-      - gustav-alpha2-network
-    healthcheck:
-      # Probe the local daemon via CLI; allow generous startup time on cold boots.
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 30s
-      start_period: 90s
-      retries: 10
-
   backup-cron:
     build:
       context: .
@@ -308,8 +277,6 @@ networks:
     external: true
 volumes:
   keycloak_pg_data:
-    driver: local
-  ollama_models:
     driver: local
   backups:
     driver: local

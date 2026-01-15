@@ -17,8 +17,6 @@ help:
 	@echo "  db-login-user      - Create/alter app DB login (IN ROLE gustav_limited)"
 	@echo "  test               - Run test suite (unit/integration)"
 	@echo "  test-e2e           - Run E2E tests (requires running services)"
-	@echo "  test-ollama        - Run local Ollama connectivity tests (host: localhost:11434)"
-	@echo "  test-ollama-vision - Run local Ollama Vision tests (also sets RUN_OLLAMA_VISION_E2E=1)"
 	@echo "  supabase-status    - Show local Supabase status"
 	@echo "  supabase-sync-env  - Sync Supabase service role key into .env"
 	@echo "  prod-sync-env      - Make local .env prod-like (Keycloak+Supabase+CA sync)"
@@ -89,29 +87,6 @@ test-e2e:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	. ./.venv/bin/activate && RUN_E2E=1 E2E_READY_TIMEOUT_S=20 pytest -q -m e2e
 
-# --- Local Ollama integration test shortcuts ---------------------------------
-# Default host URL for Ollama reachable from the host machine.
-OLLAMA_URL ?= http://localhost:11434
-
-.PHONY: test-ollama
-test-ollama:
-	# Auto-load .env so model names (AI_*_MODEL) are available, but override host URL.
-	@set -a; [ -f .env ] && . ./.env; set +a; \
-	. ./.venv/bin/activate && \
-	RUN_OLLAMA_E2E=1 \
-	OLLAMA_BASE_URL=$(OLLAMA_URL) \
-	pytest -q -m ollama_integration
-
-.PHONY: test-ollama-vision
-test-ollama-vision:
-	# Runs vision subset as well; requires vision model to be pulled.
-	@set -a; [ -f .env ] && . ./.env; set +a; \
-	. ./.venv/bin/activate && \
-	RUN_OLLAMA_E2E=1 \
-	RUN_OLLAMA_VISION_E2E=1 \
-	OLLAMA_BASE_URL=$(OLLAMA_URL) \
-	pytest -q -m ollama_integration -k vision
-
 .PHONY: supabase-status
 supabase-status:
 	supabase status
@@ -143,7 +118,6 @@ verify:
 	@$(MAKE) test
 	@$(MAKE) test-h5p
 	@$(MAKE) test-supabase
-	@$(MAKE) test-ollama
 	@$(MAKE) test-e2e
 
 # --- Legacy data import shortcuts -------------------------------------------

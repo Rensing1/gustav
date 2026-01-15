@@ -1,17 +1,16 @@
 """
-Local Vision adapter using a simple Ollama client call.
+Learning vision adapter (DSPy-only OCR over OpenAI-compatible endpoint).
 
 Intent:
-    Provide the minimal implementation required by the adapter TDD tests:
-      - Support JPEG/PNG/PDF via job_payload["mime_type"].
-      - Return a VisionResult with Markdown text and simple metadata.
-      - Classify client timeouts as VisionTransientError.
-      - Classify unsupported MIME types as VisionPermanentError.
+    Turn non-text submissions (image/PDF) into Markdown text via DSPy, so the
+    worker can run the text feedback pipeline on a consistent representation.
 
-Notes:
-    - We import the error/result types from the worker module to keep contracts
-      aligned with existing tests and ports.
-    - We import `ollama` lazily inside the method so test monkeypatching works.
+Design:
+    - DSPy-only: no direct Ollama client calls, no Python prompt templates.
+    - Thread-safe: the worker may process jobs concurrently; use `dspy.context(...)`.
+
+Security:
+    - Do not log extracted OCR text or raw submission bytes.
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ import ipaddress
 import socket
 from typing import Dict, Optional
 import base64
-import inspect
 import logging
 from urllib.parse import urlparse as _urlparse
 
@@ -317,74 +315,42 @@ def _resolve_submission_image_bytes(
     return None
 
 
-def _call_model(
-    *,
-    mime: str,
-    prompt: str,
-    model: str,
-    base_url: str,
-    timeout: int,
-    image_b64: str | None,
-    image_list_b64: list[str] | None,
-) -> str:
-    """Invoke the Ollama vision model with optional image inputs."""
-    try:
-        import ollama  # type: ignore
-    except Exception as exc:  # pragma: no cover - defensive
-        raise VisionTransientError(f"ollama client unavailable: {exc}")
-
-    images_payload: list[str] | None = None
-    if mime == "application/pdf" and image_list_b64:
-        images_payload = image_list_b64
-    elif image_b64:
-        images_payload = [image_b64]
-    elif image_list_b64:
-        images_payload = image_list_b64
-
-    try:
-        client = ollama.Client(base_url)
-        opts = {"timeout": timeout, "temperature": 0}
-        generate = getattr(client, "generate")
-        signature = inspect.signature(generate)
-        params = set(signature.parameters.keys())
-        accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in signature.parameters.values())
-        kwargs: Dict[str, object] = {"model": model, "prompt": prompt, "options": opts}
-        if images_payload and (mime == "application/pdf" or "images" in params or accepts_kwargs):
-            kwargs["images"] = images_payload
-        response = generate(**kwargs)
-    except TimeoutError as exc:
-        raise VisionTransientError(str(exc))
-    except Exception as exc:  # pragma: no cover - conservative mapping
-        raise VisionTransientError(str(exc))
-
-    text = ""
-    if isinstance(response, dict):
-        text = str(response.get("response", "")).strip()
-    if text.startswith("```") and text.endswith("```"):
-        lines = text.splitlines()
-        if len(lines) >= 3 and lines[-1].strip() == "```":
-            text = "\n".join(lines[1:-1]).strip()
-    return text
-
-
 class _LocalVisionAdapter:
-    """Minimal Vision adapter backed by a local Ollama client.
-
-    The adapter does not access storage in this minimal version; it simply
-    demonstrates the call-out shape and error mapping required by tests.
-    """
+    """DSPy-only OCR adapter used by the learning worker."""
 
     def __init__(self) -> None:
-        self._model = os.getenv("AI_VISION_MODEL", os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision"))
-        # Visual tasks (upload-only) may require a dedicated VLM prompt/model to
-        # interpret graphical content beyond OCR-style extraction.
-        self._visual_model = (os.getenv("AI_VISUAL_MODEL") or "").strip() or self._model
-        raw_base_url = os.getenv("OLLAMA_BASE_URL")
-        # Mirror the feedback adapter behaviour: prefer explicit base URL and
-        # fall back to the docker-compose default host when unset.
-        self._base_url = (raw_base_url or "").strip() or "http://ollama:11434"
-        # Keep a small, safe timeout budget. Tests don't depend on this.
-        self._timeout = int(os.getenv("AI_TIMEOUT_VISION", "30"))
+        self._base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
+        self._api_key = (os.getenv("OPENAI_API_KEY") or "").strip() or "sk-noop"
+        self._ocr_model = (os.getenv("AI_OCR_MODEL") or "").strip()
+        raw_temp = (os.getenv("AI_OCR_TEMPERATURE") or "").strip()
+        try:
+            self._ocr_temperature = float(raw_temp) if raw_temp else 0.0
+        except Exception:
+            self._ocr_temperature = 0.0
+        self._ocr_lm = None
+
+    def _require_config(self) -> None:
+        if not self._base_url:
+            raise VisionTransientError("missing_OPENAI_BASE_URL")
+        if not self._ocr_model:
+            raise VisionTransientError("missing_AI_OCR_MODEL")
+
+    def _get_ocr_lm(self):  # type: ignore[no-untyped-def]
+        if self._ocr_lm is not None:
+            return self._ocr_lm
+        self._require_config()
+        try:
+            import dspy  # type: ignore
+        except Exception as exc:
+            raise VisionTransientError("dspy_unavailable") from exc
+        model = self._ocr_model if "/" in self._ocr_model else f"openai/{self._ocr_model}"
+        self._ocr_lm = dspy.LM(  # type: ignore[attr-defined]
+            model,
+            temperature=self._ocr_temperature,
+            base_url=self._base_url,
+            api_key=self._api_key,
+        )
+        return self._ocr_lm
 
     def _ensure_pdf_stitched_png(self, *, submission: Dict, job_payload: Dict) -> Optional[bytes]:
         """Return stitched PNG bytes for a PDF submission or None if unavailable.
@@ -592,21 +558,14 @@ class _LocalVisionAdapter:
             srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
             if srk and storage_key:
                 obj = _strip_bucket_prefix(storage_key, bucket)
-                try:
-                    fetched = _remote_fetch_submission_object(
-                        bucket=bucket,
-                        object_key=obj,
-                        srk=srk,
-                        max_bytes=get_learning_max_upload_bytes(),
-                        submission_id=submission_id,
-                        success_action="fetch_remote_pdf",
-                    )
-                except VisionTransientError as exc:
-                    reason = str(exc)
-                    if reason in {"untrusted_host", "remote_fetch_failed"}:
-                        fetched = None
-                    else:
-                        raise
+                fetched = _remote_fetch_submission_object(
+                    bucket=bucket,
+                    object_key=obj,
+                    srk=srk,
+                    max_bytes=get_learning_max_upload_bytes(),
+                    submission_id=submission_id,
+                    success_action="fetch_remote_pdf",
+                )
                 if fetched:
                     data = fetched
         if data is None:
@@ -655,8 +614,7 @@ class _LocalVisionAdapter:
 
         Why:
             Provide a minimal, predictable Vision step in the learning worker
-            pipeline that extracts/summarizes textual content via a local
-            Ollama runtime. Kept intentionally simple for didactic purposes.
+            pipeline that turns image/PDF submissions into Markdown text via DSPy.
 
         Parameters:
             submission: Minimal submission snapshot (expects keys like
@@ -668,8 +626,9 @@ class _LocalVisionAdapter:
             - Validates MIME (except for text submissions).
             - Optionally verifies and reads a local file when
               `STORAGE_VERIFY_ROOT` and `storage_key` are provided.
-            - Calls the local Ollama client and returns Markdown text.
-            - Classifies timeouts and empty outputs as transient.
+            - Runs the DSPy OCR program against an OpenAI-compatible endpoint
+              and returns Markdown text.
+            - Classifies timeouts and empty outputs as transient (worker retries).
 
         Permissions:
             Runs under the learning worker's service identity; no end-user
@@ -683,8 +642,8 @@ class _LocalVisionAdapter:
             body = (submission or {}).get("text_body")
             if not body:
                 body = (job_payload or {}).get("text_md") or (job_payload or {}).get("text_body") or ""
-            text_md = str(body or "").strip() or "# (empty submission)"
-            meta: Dict = {"adapter": "local_vision", "model": self._model, "backend": "pass_through"}
+            text_md = str(body or "")
+            meta: Dict = {"adapter": "local_vision", "backend": "pass_through", "reason": "text_submission"}
             # Strict pass-through: return as-is without any LLM normalization.
             return VisionResult(text_md=text_md, raw_metadata=meta)
         # Non-text: enforce MIME against supported types.
@@ -692,13 +651,9 @@ class _LocalVisionAdapter:
             raise VisionPermanentError(f"unsupported mime: {mime}")
 
         max_download_bytes = get_learning_max_upload_bytes()
-        # Stream bytes from local storage when configured for non-text kinds.
-        # We intentionally avoid importing the web layer; implement a minimal
-        # verification here mirroring the path guard and integrity checks.
-        meta: Dict = {"adapter": "local", "model": self._model, "backend": "ollama"}
+        meta: Dict = {"adapter": "local_vision", "model": self._ocr_model, "backend": "dspy"}
         image_b64: Optional[str] = None
-        # For PDFs we can pass multiple page images; collect them here when available
-        image_list_b64: list[str] = []
+        image_data_uri: str | None = None
         bucket = _submissions_bucket()
         if kind != "text":
             root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
@@ -720,6 +675,8 @@ class _LocalVisionAdapter:
                     max_download_bytes=max_download_bytes,
                     meta=meta,
                 )
+                if image_b64:
+                    image_data_uri = f"data:{mime};base64,{image_b64}"
 
             if mime == "application/pdf" and storage_key and root:
                 data = _load_local_storage_bytes(
@@ -732,151 +689,52 @@ class _LocalVisionAdapter:
                     meta["bytes_read"] = len(data)
 
             # Local fetch for PDF derived pages (independent of original PDF presence)
-            if mime == "application/pdf" and root and not image_list_b64:
-                from pathlib import Path as _P
-                base = _P(root).resolve()
-                derived_prefix = (
-                    f"{bucket}/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
-                    if course_id and task_id and student_sub and submission_id
-                    else None
-                )
-                if derived_prefix:
-                    for idx in range(1, 6):
-                        page_path = (base / f"{derived_prefix}/page_{idx:04}.png").resolve()
-                        try:
-                            common2 = os.path.commonpath([str(base), str(page_path)])
-                        except Exception:
-                            continue
-                        if common2 != str(base):
-                            continue
-                        if page_path.exists() and page_path.is_file():
-                            try:
-                                pb = page_path.read_bytes()
-                                image_list_b64.append(base64.b64encode(pb).decode("ascii"))
-                            except Exception:
-                                continue
-
-            # Remote fetch for PDF derived pages (if local read failed)
-            if mime == "application/pdf" and not image_list_b64:
-                derived_prefix = (
-                    f"{bucket}/{course_id}/{task_id}/{student_sub}/derived/{submission_id}"
-                    if course_id and task_id and student_sub and submission_id
-                    else None
-                )
-                srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
-                if derived_prefix and srk:
-                    for idx in range(1, 6):
-                        page_key = f"{derived_prefix}/page_{idx:04}.png"
-                        obj = _strip_bucket_prefix(page_key, bucket)
-                        data, reason = _download_supabase_object(
-                            bucket=bucket,
-                            object_key=obj,
-                            srk=srk,
-                            max_bytes=max_download_bytes,
-                        )
-                        if reason == "size_exceeded":
-                            raise VisionTransientError("remote_fetch_too_large")
-                        if reason == "untrusted_host":
-                            _log_storage_event(
-                                submission_id=submission_id,
-                                action="remote_fetch_failed",
-                                reason=reason,
-                                stage="pdf_page",
-                            )
-                            continue
-                        if reason and reason != "ok":
-                            if reason.startswith("http_error:400"):
-                                _log_storage_event(
-                                    submission_id=submission_id,
-                                    action="remote_fetch_failed",
-                                    reason=reason,
-                                    stage="pdf_page",
-                                )
-                                continue
-                            _log_storage_event(
-                                submission_id=submission_id,
-                                action="remote_fetch_failed",
-                                reason=reason,
-                                stage="pdf_page",
-                            )
-                            raise VisionTransientError("remote_fetch_failed")
-                        if data:
-                            image_list_b64.append(base64.b64encode(data).decode("ascii"))
-
-            # At this point, for image/jpeg|png we require bytes to avoid model
-            # calls without visual inputs. If still missing, classify as transient
-            # so the worker can retry when storage becomes available.
-            if mime in {"image/jpeg", "image/png"} and not image_b64:
-                raise VisionTransientError("image_unavailable")
-
-        task_kind = str(job_payload.get("task_kind") or "").strip().lower()
-        model = self._model
-        if task_kind == "visual":
-            model = self._visual_model
-            prompt = (
-                "Du bist ein Vision Language Model. Interpretiere die folgende Schüler-Einreichung (Bild/PDF)\n"
-                "und gib eine knappe, strukturierte Beschreibung in Markdown zurück.\n\n"
-                "Regeln:\n"
-                "- Wenn Text vorhanden ist, transkribiere ihn soweit lesbar.\n"
-                "- Beschreibe auch relevante Grafiken/Diagramme/Markierungen (nicht nur Text).\n"
-                "- Erfinde keine Inhalte; bei Unsicherheit markiere [unklar].\n"
-                "- Keine zusätzlichen Kommentare oder Disclaimer.\n\n"
-                f"Kontext: Eingabetyp: {kind or 'unknown'}; MIME-Typ: {mime or 'n/a'}."
-            )
-        else:
-            prompt = (
-                "Du bist ein OCR-Werkzeug. Übertrage den sichtbaren Inhalt genau in Markdown.\n\n"
-                "Regeln für den Text:\n"
-                "- Schreibe den Text wortgetreu ab (auch Rechtschreibfehler und Zeichensetzung).\n"
-                "- Übersetze nichts und formuliere nicht um.\n"
-                "- Füge keine Erklärungen, Kommentare oder Disclaimer hinzu.\n"
-                "- Wenn eine Stelle handschriftlich oder unscharf ist und du sie nicht sicher lesen kannst,\n"
-                "  markiere sie als [unleserlich] statt zu raten.\n\n"
-                "Regeln für Struktur (Markdown):\n"
-                "- Erhalte Zeilenumbrüche soweit wie möglich.\n"
-                "- Überschriften aus dem Bild kannst du als Markdown-Überschriften mit '# ' notieren.\n"
-                "- Aufzählungen darfst du als '- ' Listen wiedergeben, wenn sie im Bild klar erkennbar sind.\n"
-                "- Tabellen oder Kästchen mit Text gibst du als einfache Markdown-Tabelle wieder.\n"
-                "- Pfeile und einfache Diagramme beschreibst du textuell, z.B.: '- Start -> Schritt 1 -> Schritt 2'.\n\n"
-                "Wichtig:\n"
-                "- Schreibe ausschließlich das Ergebnis in Markdown.\n"
-                "- Füge keine zusätzlichen Sätze hinzu (keine Einleitung, keine Zusammenfassung).\n\n"
-                f"Kontext: Eingabetyp: {kind or 'unknown'}; MIME-Typ: {mime or 'n/a'}.\n"
-                "Wenn Seitenränder, Kopf- oder Fußzeilen mit technischen Metadaten vorhanden sind,\n"
-                "darfst du sie weglassen, solange der eigentliche Schülertext vollständig bleibt."
-            )
         if mime == "application/pdf":
             stitched_png = self._ensure_pdf_stitched_png(submission=submission, job_payload=job_payload)
             if not stitched_png:
                 raise VisionTransientError("pdf_images_unavailable")
             stitched_b64 = base64.b64encode(stitched_png).decode("ascii")
-            text = _call_model(
-                mime=mime,
-                prompt=prompt,
-                model=model,
-                base_url=self._base_url,
-                timeout=self._timeout,
-                image_b64=None,
-                image_list_b64=[stitched_b64],
-            )
-            if not text:
-                raise VisionTransientError("empty response from local vision")
-            return VisionResult(text_md=text, raw_metadata=meta)
+            image_data_uri = f"data:image/png;base64,{stitched_b64}"
 
-        text = _call_model(
-            mime=mime,
-            prompt=prompt,
-            model=model,
-            base_url=self._base_url,
-            timeout=self._timeout,
-            image_b64=image_b64,
-            image_list_b64=image_list_b64,
-        )
-        if not text:
-            # Empty outputs are considered transient so the worker can retry.
-            raise VisionTransientError("empty response from local vision")
+        if mime in {"image/jpeg", "image/png"} and not image_data_uri:
+            raise VisionTransientError("image_unavailable")
+        if not image_data_uri:
+            raise VisionTransientError("image_unavailable")
 
-        return VisionResult(text_md=text, raw_metadata=meta)
+        lm = self._get_ocr_lm()
+        try:
+            import dspy  # type: ignore
+            from backend.learning.adapters.dspy import vision_program
+
+            with dspy.context(  # type: ignore[attr-defined]
+                lm=lm,
+                adapter=dspy.JSONAdapter(),  # type: ignore[attr-defined]
+                disable_history=True,
+            ):
+                text_md, program_meta = vision_program.extract_text_from_image(  # type: ignore[attr-defined]
+                    image_data_uri=image_data_uri
+                )
+        except TimeoutError as exc:
+            raise VisionTransientError(str(exc)) from exc
+        except ImportError as exc:
+            raise VisionTransientError(str(exc)) from exc
+        except VisionTransientError:
+            raise
+        except VisionPermanentError:
+            raise
+        except Exception as exc:
+            raise VisionTransientError(str(exc) or "vision_failed") from exc
+
+        if not isinstance(text_md, str) or not text_md.strip():
+            raise VisionTransientError("empty_ocr_text")
+        if len(text_md) > 65_536:
+            # Transient so the worker can retry (e.g. with a different model/backend).
+            raise VisionTransientError("ocr_text_too_long")
+
+        # Merge program meta into adapter meta for observability.
+        if isinstance(program_meta, dict):
+            meta.update({k: v for k, v in program_meta.items() if k not in {"text_md"}})
+        return VisionResult(text_md=text_md, raw_metadata=meta)
 
 
 def build() -> _LocalVisionAdapter:

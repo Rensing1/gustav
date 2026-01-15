@@ -10,28 +10,42 @@ Intent:
 
 from __future__ import annotations
 
-import json
+import sys
+from types import SimpleNamespace
 
-from backend.learning.adapters.dspy.feedback_program import _parse_to_v2
+import pytest
 
 
-def test_parse_to_v2_aligns_items_by_order() -> None:
-    # Model output with different names but correct order and scores
-    raw = json.dumps(
-        {
+def test_feedback_program_aligns_items_by_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Pretend DSPy is importable (the program checks presence only).
+    monkeypatch.setitem(sys.modules, "dspy", SimpleNamespace(__version__="3.0.3"))
+
+    programs = __import__("importlib").import_module("backend.learning.adapters.dspy.programs")
+
+    # Structured analysis returns two items in the correct order but with different names.
+    monkeypatch.setattr(
+        programs,
+        "run_structured_analysis",
+        lambda **_: {
             "schema": "criteria.v2",
             "score": 4,
             "criteria_results": [
                 {"criterion": "Content", "max_score": 10, "score": 8, "explanation_md": "OK"},
                 {"criterion": "Structure", "max_score": 10, "score": 6, "explanation_md": "OK"},
             ],
-        }
+        },
+        raising=False,
     )
-    expected = ["Inhalt", "Struktur"]
+    monkeypatch.setattr(
+        programs,
+        "run_structured_feedback",
+        lambda **_: "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+        raising=False,
+    )
 
-    analysis, _ = _parse_to_v2(raw, criteria=expected)
-    assert analysis is not None
-    items = analysis["criteria_results"]
-    assert [i["criterion"] for i in items] == expected
+    mod = __import__("importlib").import_module("backend.learning.adapters.dspy.feedback_program")
+    result = mod.analyze_feedback(text_md="x", criteria=["Inhalt", "Struktur"])  # type: ignore[attr-defined]
+
+    items = result.analysis_json["criteria_results"]
+    assert [i["criterion"] for i in items] == ["Inhalt", "Struktur"]
     assert [i["score"] for i in items] == [8, 6]
-

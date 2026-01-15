@@ -6,8 +6,10 @@ from typing import Any, Callable, Sequence
 
 from backend.learning.adapters.dspy.signatures import (
     FeedbackAnalysisSignature,
+    FeedbackNoCriteriaSignature,
     FeedbackSynthesisSignature,
     VisualFeedbackAnalysisSignature,
+    VisualFeedbackNoCriteriaSignature,
     VisualFeedbackSynthesisSignature,
 )
 from backend.learning.adapters.dspy.types import CriteriaAnalysis, CriterionResult
@@ -26,7 +28,7 @@ def run_structured_analysis(
     text_md: str,
     criteria: Sequence[str],
     teacher_instructions_md: str | None = None,
-    solution_hints_md: str | None = None,
+    teacher_context_md: str | None = None,
 ) -> CriteriaAnalysis:
     """Execute DSPy Predict(Signature) to obtain structured analysis data."""
     try:  # pragma: no cover - exercised via tests
@@ -39,7 +41,7 @@ def run_structured_analysis(
         student_text_md=text_md,
         criteria=list(criteria),
         teacher_instructions_md=teacher_instructions_md,
-        solution_hints_md=solution_hints_md,
+        teacher_context_md=teacher_context_md,
     )
     score_value = getattr(out, "overall_score", 0)
     try:
@@ -59,6 +61,7 @@ def run_structured_feedback(
     criteria: Sequence[str],
     analysis_json: CriteriaAnalysis | dict[str, Any],
     teacher_instructions_md: str | None = None,
+    teacher_context_md: str | None = None,
 ) -> str:
     """Execute DSPy Predict(Signature) to obtain feedback prose."""
     try:  # pragma: no cover
@@ -72,29 +75,36 @@ def run_structured_feedback(
         student_text_md=text_md,
         analysis_json=payload,
         teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
     )
     val = getattr(out, "feedback_md", None)
     if isinstance(val, str) and val.strip() and val.strip().lower() != "none":
         return val
-    # If the model omitted the field, synthesize a minimal prose from the analysis payload
-    # (stay within DSPy path; no backend fallback here).
-    items = payload.get("criteria_results", []) if isinstance(payload, dict) else []
-    positives = [
-        f"{i.get('criterion', 'Kriterium')}: {i.get('score', 0)}/{i.get('max_score', 10)}"
-        for i in items
-        if int(i.get("score", 0)) >= int(i.get("max_score", 10)) // 2
-    ]
-    improves = [
-        f"{i.get('criterion', 'Kriterium')}"
-        for i in items
-        if int(i.get("score", 0)) < int(i.get("max_score", 10)) // 2
-    ]
-    parts = []
-    if positives:
-        parts.append("Stärken: " + ", ".join(positives) + ".")
-    if improves:
-        parts.append("Hinweise: gezielt ausbauen bei " + ", ".join(improves) + ".")
-    return " ".join(parts) or "Kurze, konstruktive Rückmeldung basierend auf der Analyse."
+    raise RuntimeError("empty_feedback_md")
+
+
+def run_feedback_no_criteria(
+    *,
+    text_md: str,
+    teacher_instructions_md: str | None = None,
+    teacher_context_md: str | None = None,
+) -> str:
+    """Execute DSPy Predict(Signature) to obtain feedback prose without criteria."""
+    try:  # pragma: no cover
+        import dspy  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise ImportError(f"dspy unavailable: {exc}")
+
+    predict = dspy.Predict(FeedbackNoCriteriaSignature)  # type: ignore[attr-defined]
+    out = predict(
+        student_text_md=text_md,
+        teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
+    )
+    val = getattr(out, "feedback_md", None)
+    if isinstance(val, str) and val.strip() and val.strip().lower() != "none":
+        return val
+    raise RuntimeError("empty_feedback_md")
 
 
 def run_structured_visual_analysis(
@@ -102,7 +112,7 @@ def run_structured_visual_analysis(
     image_data_uri: str,
     criteria: Sequence[str],
     teacher_instructions_md: str | None = None,
-    solution_hints_md: str | None = None,
+    teacher_context_md: str | None = None,
 ) -> CriteriaAnalysis:
     """Execute DSPy Predict(Signature) to obtain structured analysis from an image."""
     try:  # pragma: no cover - exercised via tests
@@ -116,7 +126,7 @@ def run_structured_visual_analysis(
         student_image=img,
         criteria=list(criteria),
         teacher_instructions_md=teacher_instructions_md,
-        solution_hints_md=solution_hints_md,
+        teacher_context_md=teacher_context_md,
     )
     score_value = getattr(out, "overall_score", 0)
     try:
@@ -136,6 +146,7 @@ def run_structured_visual_feedback(
     criteria: Sequence[str],
     analysis_json: CriteriaAnalysis | dict[str, Any],
     teacher_instructions_md: str | None = None,
+    teacher_context_md: str | None = None,
 ) -> str:
     """Execute DSPy Predict(Signature) to obtain feedback prose from an image."""
     try:  # pragma: no cover
@@ -150,27 +161,37 @@ def run_structured_visual_feedback(
         student_image=img,
         analysis_json=payload,
         teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
     )
     val = getattr(out, "feedback_md", None)
     if isinstance(val, str) and val.strip() and val.strip().lower() != "none":
         return val
-    items = payload.get("criteria_results", []) if isinstance(payload, dict) else []
-    positives = [
-        f"{i.get('criterion', 'Kriterium')}: {i.get('score', 0)}/{i.get('max_score', 10)}"
-        for i in items
-        if int(i.get("score", 0)) >= int(i.get("max_score", 10)) // 2
-    ]
-    improves = [
-        f"{i.get('criterion', 'Kriterium')}"
-        for i in items
-        if int(i.get("score", 0)) < int(i.get("max_score", 10)) // 2
-    ]
-    parts = []
-    if positives:
-        parts.append("Stärken: " + ", ".join(positives) + ".")
-    if improves:
-        parts.append("Hinweise: gezielt ausbauen bei " + ", ".join(improves) + ".")
-    return " ".join(parts) or "Kurze, konstruktive Rückmeldung basierend auf der Analyse."
+    raise RuntimeError("empty_feedback_md")
+
+
+def run_visual_feedback_no_criteria(
+    *,
+    image_data_uri: str,
+    teacher_instructions_md: str | None = None,
+    teacher_context_md: str | None = None,
+) -> str:
+    """Execute DSPy Predict(Signature) to obtain visual feedback prose without criteria."""
+    try:  # pragma: no cover
+        import dspy  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise ImportError(f"dspy unavailable: {exc}")
+
+    img = dspy.Image(url=str(image_data_uri))  # type: ignore[attr-defined]
+    predict = dspy.Predict(VisualFeedbackNoCriteriaSignature)  # type: ignore[attr-defined]
+    out = predict(
+        student_image=img,
+        teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
+    )
+    val = getattr(out, "feedback_md", None)
+    if isinstance(val, str) and val.strip() and val.strip().lower() != "none":
+        return val
+    raise RuntimeError("empty_feedback_md")
 
 
 class FeedbackAnalysisProgram:
@@ -185,7 +206,7 @@ class FeedbackAnalysisProgram:
         text_md: str,
         criteria: Sequence[str],
         teacher_instructions_md: str | None = None,
-        solution_hints_md: str | None = None,
+        teacher_context_md: str | None = None,
     ) -> str:
         import inspect as _inspect
         kwargs = {"text_md": text_md, "criteria": criteria}
@@ -193,8 +214,8 @@ class FeedbackAnalysisProgram:
             sig = _inspect.signature(self._runner)
             if "teacher_instructions_md" in sig.parameters:
                 kwargs["teacher_instructions_md"] = teacher_instructions_md
-            if "solution_hints_md" in sig.parameters:
-                kwargs["solution_hints_md"] = solution_hints_md
+            if "teacher_context_md" in sig.parameters:
+                kwargs["teacher_context_md"] = teacher_context_md
         except Exception:
             pass
         return self._runner(**kwargs)

@@ -111,7 +111,7 @@ def _prepare_tables(conn: psycopg.Connection) -> None:
             section_id uuid not null references public.unit_sections(id) on delete cascade,
             instruction_md text not null,
             criteria text[] not null default '{}',
-            hints_md text null,
+            teacher_context_md text null,
             due_at timestamptz null,
             max_attempts int null,
             position int not null,

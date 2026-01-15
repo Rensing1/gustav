@@ -382,7 +382,6 @@ class DBLearningRepo:
                 select id::text,
                        instruction_md,
                        criteria,
-                       hints_md,
                        due_at_iso,
                        max_attempts,
                        kind,
@@ -398,9 +397,9 @@ class DBLearningRepo:
             rows = cur.fetchall()
         tasks: List[dict] = []
         for row in rows:
-            kind = str(row[6] or "native")
-            h5p_content_id = row[7]
-            h5p_display_options = row[8]
+            kind = str(row[5] or "native")
+            h5p_content_id = row[6]
+            h5p_display_options = row[7]
             display_options = h5p_display_options if isinstance(h5p_display_options, dict) else {}
             h5p = None
             visual = None
@@ -413,15 +412,14 @@ class DBLearningRepo:
                     "id": row[0],
                     "instruction_md": row[1],
                     "criteria": list(row[2] or []),
-                    "hints_md": row[3],
-                    "due_at": row[4],
-                    "max_attempts": row[5],
+                    "due_at": row[3],
+                    "max_attempts": row[4],
                     "kind": kind,
                     "h5p": h5p,
                     "visual": visual,
-                    "position": int(row[9]) if row[9] is not None else None,
-                    "created_at": row[10],
-                    "updated_at": row[11],
+                    "position": int(row[8]) if row[8] is not None else None,
+                    "created_at": row[9],
+                    "updated_at": row[10],
                 }
             )
         return tasks
@@ -845,28 +843,25 @@ class DBLearningRepo:
                         conn.commit()
                         return self._row_to_submission(row)
                     submission_id = row[0]
-                    # Enrich job payload with task instruction and optional hints for the Feedback adapter
+                    # Enrich job payload with task instruction for the Feedback adapter.
                     instruction_md: str | None = None
-                    hints_md: str | None = None
                     try:
                         section_id = str(meta[1])  # from get_task_metadata_for_student
                         cur.execute(
                             """
-                            select id::text, instruction_md, hints_md
+                            select id::text, instruction_md
                               from public.get_released_tasks_for_student(%s, %s, %s)
                             """,
                             (data.student_sub, course_uuid, section_id),
                         )
                         rows_ctx = cur.fetchall() or []
-                        for tid, instr, hints in rows_ctx:
+                        for tid, instr in rows_ctx:
                             if str(tid) == task_uuid:
                                 instruction_md = instr
-                                hints_md = hints
                                 break
                     except Exception:
                         # Be tolerant: missing helper or columns shouldn't block submissions
                         instruction_md = None
-                        hints_md = None
 
                     job_payload = {
                         "submission_id": submission_id,
@@ -878,7 +873,6 @@ class DBLearningRepo:
                         "attempt_nr": attempt_nr,
                         "criteria": criteria,
                         "instruction_md": instruction_md,
-                        "hints_md": hints_md,
                     }
                     if _running_under_pytest():
                         # Tag jobs created by in-process tests so a local docker worker

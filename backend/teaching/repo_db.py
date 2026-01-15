@@ -124,7 +124,7 @@ _TASK_COLUMNS_SQL = """
     section_id::text,
     instruction_md,
     criteria,
-    hints_md,
+    teacher_context_md,
     case
       when due_at is null then null
       else to_char(due_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
@@ -155,7 +155,7 @@ def _task_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "section_id": row[2],
         "instruction_md": row[3],
         "criteria": list(row[4] or []),
-        "hints_md": row[5],
+        "teacher_context_md": row[5],
         "due_at": row[6],
         "max_attempts": int(row[7]) if row[7] is not None else None,
         "position": int(row[8]) if row[8] is not None else None,
@@ -1536,7 +1536,7 @@ class DBTeachingRepo:
         *,
         instruction_md: str,
         criteria: List[str],
-        hints_md: str | None,
+        teacher_context_md: str | None,
         due_at,
         max_attempts: int | None,
         kind: str,
@@ -1575,7 +1575,7 @@ class DBTeachingRepo:
                       section_id,
                       instruction_md,
                       criteria,
-                      hints_md,
+                      teacher_context_md,
                       due_at,
                       max_attempts,
                       position,
@@ -1591,7 +1591,7 @@ class DBTeachingRepo:
                         section_id,
                         instruction,
                         criteria,
-                        hints_md,
+                        teacher_context_md,
                         due_at,
                         max_attempts,
                         next_pos,
@@ -1615,7 +1615,7 @@ class DBTeachingRepo:
         *,
         instruction_md=_UNSET,
         criteria=_UNSET,
-        hints_md=_UNSET,
+        teacher_context_md=_UNSET,
         due_at=_UNSET,
         max_attempts=_UNSET,
         kind=_UNSET,
@@ -1648,9 +1648,9 @@ class DBTeachingRepo:
                 if criteria is not _UNSET:
                     updates.append("criteria")
                     params.append(criteria)
-                if hints_md is not _UNSET:
-                    updates.append("hints_md")
-                    params.append(hints_md)
+                if teacher_context_md is not _UNSET:
+                    updates.append("teacher_context_md")
+                    params.append(teacher_context_md)
                 if due_at is not _UNSET:
                     updates.append("due_at")
                     params.append(due_at)

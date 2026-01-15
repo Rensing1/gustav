@@ -126,7 +126,7 @@ class TaskData:
     section_id: str
     instruction_md: str
     criteria: List[str]
-    hints_md: Optional[str] | None
+    teacher_context_md: Optional[str] | None
     due_at: Optional[str] | None
     max_attempts: Optional[int] | None
     position: int
@@ -672,7 +672,7 @@ class _Repo:
         *,
         instruction_md: str,
         criteria: Sequence[str] | None = None,
-        hints_md: str | None = None,
+        teacher_context_md: str | None = None,
         due_at=None,
         max_attempts: int | None = None,
         kind: str = "native",
@@ -700,7 +700,9 @@ class _Repo:
             section_id=section_id,
             instruction_md=instruction,
             criteria=crit,
-            hints_md=hints_md.strip() if isinstance(hints_md, str) and hints_md.strip() else None,
+            teacher_context_md=teacher_context_md.strip()
+            if isinstance(teacher_context_md, str) and teacher_context_md.strip()
+            else None,
             due_at=due_iso,
             max_attempts=max_attempts,
             position=pos,
@@ -724,7 +726,7 @@ class _Repo:
         *,
         instruction_md=_UNSET,
         criteria=_UNSET,
-        hints_md=_UNSET,
+        teacher_context_md=_UNSET,
         due_at=_UNSET,
         max_attempts=_UNSET,
         kind=_UNSET,
@@ -746,12 +748,12 @@ class _Repo:
                 task.criteria = []
             else:
                 task.criteria = list(criteria)
-        if hints_md is not _UNSET:
-            if hints_md is None:
-                task.hints_md = None
-            elif isinstance(hints_md, str):
-                stripped = hints_md.strip()
-                task.hints_md = stripped or None
+        if teacher_context_md is not _UNSET:
+            if teacher_context_md is None:
+                task.teacher_context_md = None
+            elif isinstance(teacher_context_md, str):
+                stripped = teacher_context_md.strip()
+                task.teacher_context_md = stripped or None
         if due_at is not _UNSET:
             if due_at is None:
                 task.due_at = None
@@ -1606,7 +1608,7 @@ class MaterialReorderPayload(BaseModel):
 class TaskCreatePayload(BaseModel):
     instruction_md: object | None = None
     criteria: object | None = None
-    hints_md: object | None = None
+    teacher_context_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
     h5p: object | None = None
@@ -1616,7 +1618,7 @@ class TaskCreatePayload(BaseModel):
 class TaskUpdatePayload(BaseModel):
     instruction_md: object | None = None
     criteria: object | None = None
-    hints_md: object | None = None
+    teacher_context_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
     h5p: object | None = None
@@ -2155,7 +2157,7 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             sub,
             instruction_md=payload.instruction_md,
             criteria=payload.criteria,
-            hints_md=payload.hints_md,
+            teacher_context_md=payload.teacher_context_md,
             due_at=payload.due_at,
             max_attempts=payload.max_attempts,
             h5p=payload.h5p,
@@ -2170,7 +2172,7 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             "invalid_criteria",
             "invalid_due_at",
             "invalid_max_attempts",
-            "invalid_hints_md",
+            "invalid_teacher_context_md",
             "invalid_h5p_config",
             "invalid_visual_config",
             "invalid_task_kind_config",
@@ -2216,8 +2218,8 @@ async def update_section_task(
         kwargs["instruction_md"] = raw_updates["instruction_md"]
     if "criteria" in raw_updates:
         kwargs["criteria"] = raw_updates["criteria"]
-    if "hints_md" in raw_updates:
-        kwargs["hints_md"] = raw_updates["hints_md"]
+    if "teacher_context_md" in raw_updates:
+        kwargs["teacher_context_md"] = raw_updates["teacher_context_md"]
     if "due_at" in raw_updates:
         kwargs["due_at"] = raw_updates["due_at"]
     if "max_attempts" in raw_updates:
@@ -2241,7 +2243,7 @@ async def update_section_task(
             "invalid_criteria",
             "invalid_due_at",
             "invalid_max_attempts",
-            "invalid_hints_md",
+            "invalid_teacher_context_md",
             "invalid_h5p_config",
             "invalid_visual_config",
             "invalid_task_kind_config",
@@ -3369,7 +3371,7 @@ def _serialize_task(t) -> dict:
             "section_id": getattr(t, "section_id", None),
             "instruction_md": getattr(t, "instruction_md", None),
             "criteria": getattr(t, "criteria", []),
-            "hints_md": getattr(t, "hints_md", None),
+            "teacher_context_md": getattr(t, "teacher_context_md", None),
             "due_at": getattr(t, "due_at", None),
             "max_attempts": getattr(t, "max_attempts", None),
             "position": getattr(t, "position", None),

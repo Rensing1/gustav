@@ -135,10 +135,10 @@ Datei‑Flow (presigned Upload)
 
 #### Aufgaben (Tasks) je Abschnitt
 - `GET /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)
-  - 200 `[{ id, unit_id, section_id, instruction_md, criteria[], hints_md?, due_at?, max_attempts?, position, kind, created_at, updated_at }]`
+  - 200 `[{ id, unit_id, section_id, instruction_md, criteria[], teacher_context_md?, due_at?, max_attempts?, position, kind, created_at, updated_at }]`
 - `POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)
-  - Body `TaskCreate { instruction_md, criteria?, hints_md?, due_at?, max_attempts? }`
-  - 201 `Task`; 400 Val.-Fehler: `invalid_instruction_md | invalid_criteria | invalid_due_at | invalid_max_attempts | invalid_hints_md`; 403/404
+  - Body `TaskCreate { instruction_md, criteria?, teacher_context_md?, due_at?, max_attempts? }`
+  - 201 `Task`; 400 Val.-Fehler: `invalid_instruction_md | invalid_criteria | invalid_due_at | invalid_max_attempts | invalid_teacher_context_md`; 403/404
 - `PATCH /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}` (Author only)
   - Body `TaskUpdate` (alle Felder optional; leere Werte sind ungültig, wo zutreffend)
   - 200 `Task`; 400/403/404
@@ -161,7 +161,7 @@ Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
 - `/units/{unit_id}/sections/{section_id}` zeigt nur Listen (Materialien, Aufgaben) sowie Aktionen „+ Material“ und „+ Aufgabe“.
 - Erstellen erfolgt auf separaten Seiten:
   - Materialien: `/units/{u}/sections/{s}/materials/new` (Text oder Datei‑Upload mit Intent→Finalize)
-  - Aufgaben: `/units/{u}/sections/{s}/tasks/new` (instruction_md, Kriterien[0..10], hints_md, due_at?, max_attempts?)
+  - Aufgaben: `/units/{u}/sections/{s}/tasks/new` (instruction_md, Kriterien[0..10], teacher_context_md, due_at?, max_attempts?)
 - Detailseiten:
   - Material: `/units/{u}/sections/{s}/materials/{m}` (Bearbeiten/Löschen, Inline‑Preview für Datei‑Materialien)
   - Aufgabe: `/units/{u}/sections/{s}/tasks/{t}` (Bearbeiten/Löschen)

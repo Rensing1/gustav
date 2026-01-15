@@ -721,10 +721,10 @@ components:
           minItems: 0
           maxItems: 10
           description: Optional evaluation criteria; one line per item
-        hints_md:
+        teacher_context_md:
           type: string
           nullable: true
-          description: Optional hints or solution scaffolding (Markdown)
+          description: Optional teacher-only AI context (Markdown). Must never be shown to students.
         position:
           type: integer
           minimum: 1
@@ -772,10 +772,10 @@ components:
           minItems: 0
           maxItems: 10
           description: Optional evaluation criteria; one line per item
-        hints_md:
+        teacher_context_md:
           type: string
           nullable: true
-          description: Optional hints or solution scaffolding (Markdown)
+          description: Optional teacher-only AI context (Markdown). Must never be shown to students.
         due_at:
           type: string
           format: date-time
@@ -805,7 +805,7 @@ components:
             minLength: 1
           minItems: 0
           maxItems: 10
-        hints_md:
+        teacher_context_md:
           type: string
           nullable: true
         due_at:
@@ -981,9 +981,6 @@ components:
             minLength: 1
           maxItems: 10
           description: Evaluation criteria shown to the student
-        hints_md:
-          type: string
-          nullable: true
         due_at:
           type: string
           format: date-time
@@ -4822,7 +4819,7 @@ paths:
               - invalid_criteria
               - invalid_due_at
               - invalid_max_attempts
-              - invalid_hints_md
+              - invalid_teacher_context_md
               - invalid_h5p_config
               - invalid_visual_config
               - invalid_task_kind_config
@@ -4836,7 +4833,7 @@ paths:
                 invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
-                invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+                invalid_teacher_context_md: { value: { error: bad_request, detail: invalid_teacher_context_md } }
                 invalid_h5p_config: { value: { error: bad_request, detail: invalid_h5p_config } }
                 invalid_visual_config: { value: { error: bad_request, detail: invalid_visual_config } }
                 invalid_task_kind_config: { value: { error: bad_request, detail: invalid_task_kind_config } }
@@ -4905,7 +4902,7 @@ paths:
               - invalid_criteria
               - invalid_due_at
               - invalid_max_attempts
-              - invalid_hints_md
+              - invalid_teacher_context_md
               - invalid_h5p_config
               - invalid_visual_config
               - invalid_task_kind_config
@@ -4921,7 +4918,7 @@ paths:
                 invalid_criteria: { value: { error: bad_request, detail: invalid_criteria } }
                 invalid_due_at: { value: { error: bad_request, detail: invalid_due_at } }
                 invalid_max_attempts: { value: { error: bad_request, detail: invalid_max_attempts } }
-                invalid_hints_md: { value: { error: bad_request, detail: invalid_hints_md } }
+                invalid_teacher_context_md: { value: { error: bad_request, detail: invalid_teacher_context_md } }
                 invalid_h5p_config: { value: { error: bad_request, detail: invalid_h5p_config } }
                 invalid_visual_config: { value: { error: bad_request, detail: invalid_visual_config } }
                 invalid_task_kind_config: { value: { error: bad_request, detail: invalid_task_kind_config } }

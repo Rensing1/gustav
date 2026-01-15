@@ -1509,7 +1509,6 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                                     "id": getattr(td, "id", tid),
                                     "instruction_md": getattr(td, "instruction_md", ""),
                                     "criteria": list(getattr(td, "criteria", []) or []),
-                                    "hints_md": getattr(td, "hints_md", None),
                                     "due_at": getattr(td, "due_at", None),
                                     "max_attempts": getattr(td, "max_attempts", None),
                                     "position": getattr(td, "position", None),
@@ -2868,7 +2867,7 @@ def _render_section_detail_page_html(
         f'<button class="btn btn-primary" type="submit">Material anlegen</button>'
         f'</form>'
     )
-    # Tasks form with criteria[0..10] (as repeated name="criteria") and hints
+    # Tasks form with criteria[0..10] (as repeated name="criteria") and teacher-only AI context
     criteria_inputs = []
     for i in range(10):
         criteria_inputs.append(
@@ -2882,7 +2881,7 @@ def _render_section_detail_page_html(
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Anweisung<textarea class="form-input" name="instruction_md" required></textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
-        f'<label>Lösungshinweise<textarea class="form-input" name="hints_md"></textarea></label>'
+        f'<label>Lösungshinweise<textarea class="form-input" name="teacher_context_md"></textarea></label>'
         f'<button class="btn btn-primary" type="submit">Aufgabe anlegen</button>'
         f'</form>'
     )
@@ -4710,7 +4709,7 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         '<div id="native-task-fields">'
         f'<label>Anweisung<textarea class="form-input" id="instruction_md" name="instruction_md" required></textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
-        f'<label>Lösungshinweise<textarea class="form-input" name="hints_md"></textarea></label>'
+        f'<label>Lösungshinweise<textarea class="form-input" name="teacher_context_md"></textarea></label>'
         "</div>"
         '<div id="h5p-task-fields" hidden>'
         f'<input type="hidden" name="h5p_content_id" id="h5p_content_id" value="">'
@@ -4797,7 +4796,7 @@ async def tasks_new(request: Request, unit_id: str, section_id: str):
     """Render the dedicated create page for tasks.
 
     Includes fields for instruction, up to 10 analysis criteria, and optional
-    solution hints (`hints_md`). Submits to the UI route which delegates to the
+    teacher-only AI context (`teacher_context_md`). Submits to the UI route which delegates to the
     Teaching API and then redirects back to the section detail.
     """
     user = getattr(request.state, "user", None)
@@ -4983,7 +4982,7 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
     for i in range(10):
         val = Component.escape(str(criteria[i]) if i < len(criteria) else "")
         crit_inputs.append(f'<div class="form-field"><input class="form-input" type="text" name="criteria" value="{val}"></div>')
-    hints = Component.escape(str(task.get("hints_md") or ""))
+    teacher_context_md = Component.escape(str(task.get("teacher_context_md") or ""))
     due_at = Component.escape(str(task.get("due_at") or ""))
     max_attempts = Component.escape(str(task.get("max_attempts") or ""))
     form = (
@@ -4991,7 +4990,7 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Anweisung<textarea class="form-input" name="instruction_md">{instr}</textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{"".join(crit_inputs)}</fieldset>'
-        f'<label>Lösungshinweise<textarea class="form-input" name="hints_md">{hints}</textarea></label>'
+        f'<label>Lösungshinweise<textarea class="form-input" name="teacher_context_md">{teacher_context_md}</textarea></label>'
         f'<label>Fällig bis<input class="form-input" type="text" name="due_at" value="{due_at}"></label>'
         f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" value="{max_attempts}" min="1"></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'
@@ -5124,9 +5123,9 @@ async def task_detail_update(request: Request, unit_id: str, section_id: str, ta
     crit = [c.strip() for c in form.getlist("criteria") if isinstance(c, str) and c.strip()]
     if crit:
         payload["criteria"] = crit[:10]
-    if form.get("hints_md") is not None:
-        hints = str(form.get("hints_md") or "")
-        payload["hints_md"] = hints or None
+    if form.get("teacher_context_md") is not None:
+        teacher_context_md = str(form.get("teacher_context_md") or "")
+        payload["teacher_context_md"] = teacher_context_md or None
     if form.get("due_at") is not None:
         payload["due_at"] = str(form.get("due_at") or "") or None
     if form.get("max_attempts") is not None and str(form.get("max_attempts")) != "":
@@ -5279,7 +5278,9 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
     criteria = [c.strip() for c in form.getlist("criteria") if isinstance(c, str) and c.strip()]
     if len(criteria) > 10:
         criteria = criteria[:10]
-    hints_md = str(form.get("hints_md", "")) if form.get("hints_md") is not None else None
+    teacher_context_md = (
+        str(form.get("teacher_context_md", "")) if form.get("teacher_context_md") is not None else None
+    )
     due_at = str(form.get("due_at", "")).strip() or None
     max_attempts_raw = form.get("max_attempts")
     max_attempts = None
@@ -5297,7 +5298,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
             payload = {
                 "instruction_md": instruction_md,
                 "criteria": criteria,
-                "hints_md": (hints_md if hints_md else None),
+                "teacher_context_md": (teacher_context_md if teacher_context_md else None),
                 "due_at": due_at,
                 "max_attempts": max_attempts,
             }
@@ -5307,7 +5308,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
                 h5p_content_id = str(form.get("h5p_content_id") or "").strip() or None
                 payload["instruction_md"] = "H5P task"
                 payload["criteria"] = []
-                payload["hints_md"] = None
+                payload["teacher_context_md"] = None
                 payload["h5p"] = {"content_id": h5p_content_id, "display_options": {}}
             elif task_kind == "visual":
                 payload["visual"] = {}

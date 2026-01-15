@@ -3,7 +3,7 @@
 Status: Stable
 
 ## Voraussetzungen
-- `make up` (startet web + keycloak + caddy + h5p + worker + ollama)
+- `make up` (startet web + keycloak + caddy + h5p + worker)
 - Nach `supabase db reset`: `make reset-local` (Key/Env resync + Services werden neu erstellt)
 - `.env` mit korrekten `KC_BASE`/`WEB_BASE`/`KC_REALM`/`KEYCLOAK_ADMIN_PASSWORD` und docker-intern erreichbarem `SESSION_DATABASE_URL`
 

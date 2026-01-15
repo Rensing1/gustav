@@ -136,7 +136,7 @@ Die folgenden Schritte bringen eine frische Linux-Installation (z. B. Ubuntu 
    - `web`: FastAPI/HTMX-Backend  
    - `learning-worker`: Hintergrundjobs & KI-Feedback  
    - `keycloak` + `keycloak-db`: Identity Provider, läuft mit `kc.sh start --optimized` (kein Dev-Modus). Hostnames werden über `.env` via `KC_HOSTNAME_URL`/`KC_HOSTNAME_ADMIN_URL` gesetzt und müssen zu deinen FQDNs passen.  
-   - `ollama`: lokale KI-Inferenz (kann bei Bedarf aus dem Compose-File entfernt werden)
+   - KI/LLM: läuft extern als OpenAI-kompatibler Endpoint und wird über `.env` (`OPENAI_BASE_URL`, Modelle via `AI_*_MODEL`) konfiguriert.
 
 2. **Logs prüfen**  
    ```bash

@@ -1,10 +1,10 @@
 """
-Local feedback adapter: DSPy-only (no Ollama fallback).
+Local feedback adapter: DSPy-only (no legacy backend fallback).
 
 Contract:
     - Requires `OPENAI_BASE_URL` and `AI_TEXT_MODEL`.
     - Uses `dspy.context(...)` (thread-local) instead of `dspy.configure(...)`.
-    - Never calls the `ollama` client.
+    - Does not require any Ollama-specific client/library.
 """
 
 from __future__ import annotations
@@ -112,4 +112,3 @@ def test_adapter_analyze_visual_requires_visual_model(monkeypatch: pytest.Monkey
             instruction_md="Aufgabe",
             teacher_context_md=None,
         )
-

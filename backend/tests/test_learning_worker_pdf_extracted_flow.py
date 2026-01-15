@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ import psycopg  # type: ignore  # noqa: E402
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
 from backend.storage.config import get_submissions_bucket
 from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives  # noqa: E402
+from backend.learning.adapters.ports import FeedbackResult
 
 
 def _dsn() -> str:
@@ -31,17 +33,30 @@ def _dsn() -> str:
     )
 
 
-class _FakeOllamaClient:
-    def __init__(self, response_text: str = "## Vision PDF\n\nDetected text") -> None:
-        self.response_text = response_text
+def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install a minimal DSPy stub so worker tests don't do real LLM/VLM calls."""
 
-    def generate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
-        return {"response": self.response_text}
+    class _FakeLM:
+        def __init__(self, model: str, **_kwargs) -> None:
+            self.model = model
 
+    class _FakeJSONAdapter:
+        pass
 
-def _install_fake_ollama(monkeypatch: pytest.MonkeyPatch, *, text: str = "## Vision PDF\n\nDetected text") -> None:
-    fake_module = SimpleNamespace(Client=lambda base_url=None: _FakeOllamaClient(response_text=text))
-    monkeypatch.setitem(sys.modules, "ollama", fake_module)
+    @contextmanager
+    def _ctx(**_kwargs):  # type: ignore[no-untyped-def]
+        yield
+
+    monkeypatch.setitem(
+        sys.modules,
+        "dspy",
+        SimpleNamespace(
+            __version__="0.0-test",
+            LM=_FakeLM,
+            JSONAdapter=_FakeJSONAdapter,
+            context=_ctx,
+        ),
+    )
 
 
 @pytest.mark.anyio
@@ -60,6 +75,11 @@ async def test_worker_completes_pdf_from_extracted(
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    # Deterministic config (even when DSPy is stubbed).
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+    monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
     bucket = get_submissions_bucket()
 
     # Clean queue to avoid interference from previous runs
@@ -163,10 +183,27 @@ async def test_worker_completes_pdf_from_extracted(
             )
         conn.commit()
 
-    # Mock Ollama (pure in-memory)
-    _install_fake_ollama(monkeypatch, text="### Extracted from PDF\n- line a\n- line b")
-    if "dspy" in sys.modules:
-        monkeypatch.delitem(sys.modules, "dspy", raising=False)
+    # Avoid real LLM/VLM calls: stub DSPy + the dspy programs called by the adapters.
+    _install_fake_dspy(monkeypatch)
+    from backend.learning.adapters.dspy import feedback_program, vision_program  # noqa: E402
+
+    monkeypatch.setattr(
+        vision_program,
+        "extract_text_from_image",
+        lambda **_: (
+            "### Extracted from PDF\n- line a\n- line b",
+            {"backend": "stub", "program": "vision_ocr"},
+        ),
+    )
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="Stub feedback",
+            analysis_json={"schema": "criteria.v2", "criteria_results": [], "overall_score": 3},
+            parse_status="stubbed",
+        ),
+    )
 
     from backend.learning.workers.process_learning_submission_jobs import run_once  # noqa: E402
 

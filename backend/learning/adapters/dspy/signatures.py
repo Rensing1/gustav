@@ -33,12 +33,12 @@ if dspy is not None and hasattr(dspy, "Signature"):
             - worauf du dich im Schülertext stützt (kurze Erklärung mit Bezug zur Textstelle).
             Zusätzlich berechnest du eine grobe Gesamteinschätzung (overall_score 0..5).
 
-        Regeln (evidence-only):
+        Regeln (nur evidenzbasiert):
             - Bewerte jedes Kriterium ausschließlich anhand expliziter Informationen im Schülertext.
             - Erfinde keine Inhalte, die nicht im Text stehen.
             - Wenn du keine ausreichenden Belege für ein Kriterium findest, setze den Score auf 0
               und notiere in der Erklärung „kein Beleg gefunden“.
-            - Aufgabenstellung und Lösungshinweise sind nur Kontext: Sie helfen dir zu verstehen,
+            - Aufgabenstellung und der lehrkraftseitige KI-Kontext sind nur Kontext: Sie helfen dir zu verstehen,
               worum es in der Aufgabe geht, dürfen aber weder zitiert noch als Begründung verwendet werden.
 
         Skalen:
@@ -70,8 +70,8 @@ if dspy is not None and hasattr(dspy, "Signature"):
         teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
             desc="Aufgabenstellung; nur als Kontext, nicht direkt bewerten."
         )
-        solution_hints_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
-            desc="Lösungshinweise der Lehrkraft; nur Kontext, nicht im Output zitieren."
+        teacher_context_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht im Output zitieren."
         )
 
         overall_score: int = dspy.OutputField(  # type: ignore[attr-defined]
@@ -90,7 +90,7 @@ else:
         student_text_md: str
         criteria: Sequence[str]
         teacher_instructions_md: str | None = None
-        solution_hints_md: str | None = None
+        teacher_context_md: str | None = None
 
 
 if dspy is not None and hasattr(dspy, "Signature"):
@@ -110,11 +110,11 @@ if dspy is not None and hasattr(dspy, "Signature"):
 
         Regeln:
             - Schreibe ausschließlich Fließtext (keine Listen/Bullets).
-            - Struktur: zwei klar erkennbare Teile
-              (1) Stärken („Was war gut?“),
-              (2) Verbesserungsmöglichkeiten („Was kann beim nächsten Mal besser werden?“).
+            - Struktur: genau zwei Absätze mit diesen Überschriften (Markdown, fett):
+              (1) `**Das ist dir gut gelungen:** ...`
+              (2) `**Das kannst du besser:** ...`
             - Stütze dich auf die Analysewerte (`criteria_results`) und die Aufgabenstellung.
-            - Lösungshinweise der Lehrkraft dürfen nicht zitiert werden.
+            - Der lehrkraftseitige KI-Kontext darf nicht zitiert werden.
             - Wiederhole den Schülertext nicht vollständig; formuliere kurz, konkret
               und ermutigend in deutscher Sprache.
 
@@ -132,6 +132,9 @@ if dspy is not None and hasattr(dspy, "Signature"):
         teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
             desc="Aufgabenstellung; optionaler Kontext für das Feedback."
         )
+        teacher_context_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht zitieren."
+        )
 
         feedback_md: str = dspy.OutputField(  # type: ignore[attr-defined]
             desc="Formative Rückmeldung in Markdown (Fließtext, keine Listen)."
@@ -146,6 +149,7 @@ else:
         student_text_md: str
         analysis_json: dict[str, Any]
         teacher_instructions_md: str | None = None
+        teacher_context_md: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -167,12 +171,12 @@ if dspy is not None and hasattr(dspy, "Signature"):
             - wie gut das Kriterium erfüllt ist (Score 0..10) und
             - worauf du dich im visuellen Inhalt stützt (kurze Erklärung).
 
-        Regeln (evidence-only):
+        Regeln (nur evidenzbasiert):
             - Bewerte jedes Kriterium ausschließlich anhand sichtbarer Inhalte.
             - Erfinde keine Inhalte, die nicht erkennbar sind.
             - Wenn du keine ausreichenden Belege findest: Score 0 und Erklärung
               „kein Beleg gefunden“.
-            - Aufgabenstellung und Lösungshinweise sind nur Kontext; sie dürfen
+            - Aufgabenstellung und der lehrkraftseitige KI-Kontext sind nur Kontext; sie dürfen
               nicht als „Beleg“ herangezogen oder zitiert werden.
 
         Ausgabe:
@@ -189,8 +193,8 @@ if dspy is not None and hasattr(dspy, "Signature"):
         teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
             desc="Aufgabenstellung; nur als Kontext, nicht direkt bewerten."
         )
-        solution_hints_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
-            desc="Lösungshinweise der Lehrkraft; nur Kontext, nicht im Output zitieren."
+        teacher_context_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht im Output zitieren."
         )
 
         overall_score: int = dspy.OutputField(  # type: ignore[attr-defined]
@@ -209,7 +213,7 @@ else:
         student_image: Any
         criteria: Sequence[str]
         teacher_instructions_md: str | None = None
-        solution_hints_md: str | None = None
+        teacher_context_md: str | None = None
 
 
 if dspy is not None and hasattr(dspy, "Signature"):
@@ -225,6 +229,9 @@ if dspy is not None and hasattr(dspy, "Signature"):
             - Schreibe Fließtext (keine Listen/Bullets).
             - Stütze dich auf die Analyse (`criteria_results`) und sichtbare Inhalte.
             - Erfinde keine Inhalte.
+            - Struktur: genau zwei Absätze mit diesen Überschriften (Markdown, fett):
+              (1) `**Das ist dir gut gelungen:** ...`
+              (2) `**Das kannst du besser:** ...`
         """
 
         student_image: dspy.Image = dspy.InputField(  # type: ignore[attr-defined]
@@ -235,6 +242,9 @@ if dspy is not None and hasattr(dspy, "Signature"):
         )
         teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
             desc="Aufgabenstellung; optionaler Kontext für das Feedback."
+        )
+        teacher_context_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht zitieren."
         )
 
         feedback_md: str = dspy.OutputField(  # type: ignore[attr-defined]
@@ -250,3 +260,121 @@ else:
         student_image: Any
         analysis_json: dict[str, Any]
         teacher_instructions_md: str | None = None
+        teacher_context_md: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# "No criteria" feedback Signatures (skip scoring step)
+# ---------------------------------------------------------------------------
+
+if dspy is not None and hasattr(dspy, "Signature"):
+
+    class FeedbackNoCriteriaSignature(dspy.Signature):  # type: ignore[attr-defined]
+        """Erzeuge Feedback ohne Kriterienliste.
+
+        Situation:
+            Die Lehrkraft hat keine Bewertungskriterien hinterlegt. Es gibt daher
+            keine rubric-basierte Auswertung. Du sollst trotzdem eine kurze,
+            motivierende Rückmeldung schreiben.
+
+        Regeln:
+            - Schreibe genau zwei Absätze mit diesen Überschriften (Markdown, fett):
+              (1) `**Das ist dir gut gelungen:** ...`
+              (2) `**Das kannst du besser:** ...`
+            - Keine Listen/Bullets.
+            - Erfinde keine Inhalte; beziehe dich nur auf den Schülertext.
+            - Aufgabenstellung und KI-Kontext sind nur Kontext und dürfen nicht zitiert werden.
+        """
+
+        student_text_md: str = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Schülerabgabe als Markdown-Text."
+        )
+        teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Aufgabenstellung; optionaler Kontext."
+        )
+        teacher_context_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht zitieren."
+        )
+
+        feedback_md: str = dspy.OutputField(  # type: ignore[attr-defined]
+            desc="Feedback in Markdown mit genau zwei Absätzen und den festen Überschriften."
+        )
+
+
+    class VisualFeedbackNoCriteriaSignature(dspy.Signature):  # type: ignore[attr-defined]
+        """Erzeuge visuelles Feedback ohne Kriterienliste.
+
+        Regeln:
+            - Schreibe genau zwei Absätze mit diesen Überschriften (Markdown, fett):
+              (1) `**Das ist dir gut gelungen:** ...`
+              (2) `**Das kannst du besser:** ...`
+            - Keine Listen/Bullets.
+            - Erfinde keine Inhalte; beziehe dich nur auf sichtbare Inhalte im Bild/PDF.
+            - Aufgabenstellung und KI-Kontext sind nur Kontext und dürfen nicht zitiert werden.
+        """
+
+        student_image: dspy.Image = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Schülerabgabe als Bild (data-URI oder URL via dspy.Image)."
+        )
+        teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Aufgabenstellung; optionaler Kontext."
+        )
+        teacher_context_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Lehrkraftseitiger KI-Kontext (Wissensbasis); nur Kontext, nicht zitieren."
+        )
+
+        feedback_md: str = dspy.OutputField(  # type: ignore[attr-defined]
+            desc="Feedback in Markdown mit genau zwei Absätzen und den festen Überschriften."
+        )
+
+else:
+
+    @dataclass
+    class FeedbackNoCriteriaSignature:  # type: ignore[no-redef]
+        student_text_md: str
+        teacher_instructions_md: str | None = None
+        teacher_context_md: str | None = None
+
+
+    @dataclass
+    class VisualFeedbackNoCriteriaSignature:  # type: ignore[no-redef]
+        student_image: Any
+        teacher_instructions_md: str | None = None
+        teacher_context_md: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Vision / OCR Signatures
+# ---------------------------------------------------------------------------
+
+if dspy is not None and hasattr(dspy, "Signature"):
+
+    class VisionOcrSignature(dspy.Signature):  # type: ignore[attr-defined]
+        """Extrahiere Text aus einer visuellen Schülerabgabe (OCR/Handschrift/Diagramme) als Markdown.
+
+        Ziel:
+            Die Ausgabe soll eine möglichst genaue Text-Repräsentation des sichtbaren Inhalts sein,
+            damit die Feedback-Pipeline (Text-Analyse + Rückmeldung) darauf arbeiten kann.
+
+        Regeln:
+            - Schreibe nur den erkannten Inhalt (keine Bewertung, keine Rückmeldung, keine Meta-Erklärungen).
+            - Erfinde keine Inhalte. Wenn etwas unleserlich ist, markiere es kurz als `[unleserlich]`.
+            - Behalte Struktur, wenn sinnvoll (Absätze/Zeilenumbrüche). Keine Listenpflicht.
+            - Keine Codeblöcke, keine JSON-Ausgabe.
+
+        Ausgabe:
+            - `text_md`: erkannter Inhalt als Markdown (Deutsch, sofern im Bild vorhanden).
+        """
+
+        student_image: dspy.Image = dspy.InputField(  # type: ignore[attr-defined]
+            desc="Schülerabgabe als Bild (data-URI oder URL via dspy.Image)."
+        )
+        text_md: str = dspy.OutputField(  # type: ignore[attr-defined]
+            desc="Erkannter Text als Markdown (ohne zusätzliche Kommentare)."
+        )
+
+else:
+
+    @dataclass
+    class VisionOcrSignature:  # type: ignore[no-redef]
+        student_image: Any

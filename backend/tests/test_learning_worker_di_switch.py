@@ -3,8 +3,8 @@ Integration tests for DI switching of adapters in the worker entrypoint.
 
 Intent:
     Verify that environment-based selection picks the correct adapter modules.
-    - Default → stub adapters.
-    - AI_BACKEND=local → local adapters (alias for convenience).
+    - Default → local adapters.
+    - Explicit LEARNING_*_ADAPTER overrides are respected.
 
 We patch `import_module` and `run_forever` to avoid network and infinite loops.
 """
@@ -22,10 +22,16 @@ from backend.learning.workers import process_learning_submission_jobs as worker
 @pytest.mark.parametrize(
     "env,expected",
     [
-        ({}, ("backend.learning.adapters.stub_vision", "backend.learning.adapters.stub_feedback")),
         (
-            {"AI_BACKEND": "local"},
+            {},
             ("backend.learning.adapters.local_vision", "backend.learning.adapters.local_feedback"),
+        ),
+        (
+            {
+                "LEARNING_VISION_ADAPTER": "backend.learning.adapters.stub_vision",
+                "LEARNING_FEEDBACK_ADAPTER": "backend.learning.adapters.stub_feedback",
+            },
+            ("backend.learning.adapters.stub_vision", "backend.learning.adapters.stub_feedback"),
         ),
     ],
 )
@@ -34,7 +40,6 @@ def test_worker_main_selects_adapters_via_env(monkeypatch: pytest.MonkeyPatch, e
     for key in [
         "LEARNING_VISION_ADAPTER",
         "LEARNING_FEEDBACK_ADAPTER",
-        "AI_BACKEND",
     ]:
         monkeypatch.delenv(key, raising=False)
     for k, v in env.items():
@@ -56,4 +61,3 @@ def test_worker_main_selects_adapters_via_env(monkeypatch: pytest.MonkeyPatch, e
     worker.main()
 
     assert tuple(seen["paths"]) == expected
-

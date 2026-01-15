@@ -1,101 +1,101 @@
 """
-DSPy visual feedback program (image → analysis → feedback).
+DSPy visual feedback program (image/PDF → analysis → synthesis).
 
 Intent:
-    Provide the DSPy-only pipeline for `Task.kind="visual"` where both
-    - the criteria-based analysis and
-    - the formative feedback
-    are produced from a visual input (image/PDF) instead of OCR text.
+    Visual tasks are evaluated directly from the uploaded visual input
+    (image/PDF) via a vision-capable model. The pipeline mirrors the text
+    pipeline:
+      1) structured rubric analysis (`criteria.v2`)
+      2) formative prose feedback (Markdown)
 
-Design notes:
-    - The worker (or adapter) provides `image_data_uri` (base64) to avoid
-      external downloads and keep the pipeline DSGVO-friendly by default.
-    - The program uses the structured DSPy runner functions in
-      `backend.learning.adapters.dspy.programs`.
-    - Output is normalized to the existing `criteria.v2` JSON schema.
+Design principles:
+    - Fail-fast: no deterministic fallback output; errors bubble to the worker.
+    - Contract-first: normalize analysis to `criteria.v2` and validate the
+      feedback formatting expected by the plan document.
 """
 
 from __future__ import annotations
 
-import logging
-import os
 from typing import Any, Sequence
 
 from backend.learning.adapters.dspy import programs as dspy_programs
 from backend.learning.adapters.dspy.types import CriteriaAnalysis
 from backend.learning.adapters.ports import FeedbackResult
 
-
-logger = logging.getLogger(__name__)
-
-_TRUTHY = {"1", "true", "yes", "on"}
-
-
-def _truthy_env(name: str, *, default: bool = False) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in _TRUTHY
+_REQUIRED_FEEDBACK_HEADINGS = (
+    "**Das ist dir gut gelungen:**",
+    "**Das kannst du besser:**",
+)
 
 
-def _json_adapter_enabled() -> bool:
-    return _truthy_env("LEARNING_DSPY_JSON_ADAPTER", default=True)
-
-
-def _ensure_ollama_host_env() -> str | None:
-    """Propagate OLLAMA_BASE_URL into env vars that LiteLLM/DSPy might use."""
-    base_url = (os.getenv("OLLAMA_BASE_URL") or "").strip()
-    if not base_url:
-        return None
-    if not (os.getenv("OLLAMA_HOST") or "").strip():
-        os.environ["OLLAMA_HOST"] = base_url
-    if not (os.getenv("OLLAMA_API_BASE") or "").strip():
-        os.environ["OLLAMA_API_BASE"] = base_url
-    return base_url
-
-
-def _default_feedback_md() -> str:
-    return "Kurze, konstruktive Rückmeldung basierend auf der visuellen Analyse."
+def _validate_feedback_md(feedback_md: str) -> str:
+    text = (feedback_md or "").strip()
+    if not text:
+        raise RuntimeError("empty_feedback_md")
+    for heading in _REQUIRED_FEEDBACK_HEADINGS:
+        if heading not in text:
+            raise RuntimeError("invalid_feedback_format")
+    return text
 
 
 def _normalize_v2(*, raw: dict[str, Any], criteria: Sequence[str]) -> dict[str, Any]:
-    """Normalize a criteria.v2-ish dict to our canonical shape and ordering."""
-    by_name: dict[str, dict[str, Any]] = {}
-    items = raw.get("criteria_results", []) if isinstance(raw, dict) else []
-    if isinstance(items, list):
-        for it in items:
-            if not isinstance(it, dict):
+    items = raw.get("criteria_results") or raw.get("criteria") or []
+    model_items: list[dict[str, Any]] = [it for it in items if isinstance(it, dict)] if isinstance(items, list) else []
+
+    selected: dict[str, dict[str, Any]] = {}
+    used_indices: set[int] = set()
+    for expected in criteria:
+        for idx, item in enumerate(model_items):
+            if idx in used_indices:
                 continue
-            name = str(it.get("criterion") or "").strip()
-            if not name:
+            name = str(item.get("criterion") or item.get("name") or "").strip()
+            if name == expected:
+                selected[expected] = item
+                used_indices.add(idx)
+                break
+    for expected in criteria:
+        if expected in selected:
+            continue
+        for idx, item in enumerate(model_items):
+            if idx in used_indices:
                 continue
-            by_name[name] = it
+            selected[expected] = item
+            used_indices.add(idx)
+            break
 
     norm_items: list[dict[str, Any]] = []
     for name in criteria:
         key = str(name)
-        it = by_name.get(key)
-        if not isinstance(it, dict):
+        item = selected.get(key)
+        if not isinstance(item, dict):
             norm_items.append(
-                {"criterion": key, "max_score": 10, "score": 0, "explanation_md": "Kein Beleg im visuellen Inhalt gefunden."}
+                {
+                    "criterion": key,
+                    "max_score": 10,
+                    "score": 0,
+                    "explanation_md": "Kein Beleg im visuellen Inhalt gefunden.",
+                }
             )
             continue
         try:
-            max_score = int(it.get("max_score", 10))
+            max_score = int(item.get("max_score", item.get("max", 10)))
         except Exception:
             max_score = 10
         if max_score <= 0:
             max_score = 10
         try:
-            score = int(it.get("score", 0))
+            score = int(item.get("score", 0))
         except Exception:
             score = 0
         if score < 0:
             score = 0
         if score > max_score:
             score = max_score
-        expl = str(it.get("explanation_md") or it.get("explanation") or "").strip() or "Kein Beleg im visuellen Inhalt gefunden."
-        norm_items.append({"criterion": key, "max_score": max_score, "score": score, "explanation_md": expl})
+        explanation = (
+            str(item.get("explanation_md") or item.get("explanation") or "").strip()
+            or "Kein Beleg im visuellen Inhalt gefunden."
+        )
+        norm_items.append({"criterion": key, "max_score": max_score, "score": score, "explanation_md": explanation})
 
     try:
         overall = int(raw.get("score", 0))
@@ -114,74 +114,46 @@ def analyze_visual_feedback(
     image_data_uri: str,
     criteria: Sequence[str],
     teacher_instructions_md: str | None = None,
-    solution_hints_md: str | None = None,
+    teacher_context_md: str | None = None,
 ) -> FeedbackResult:
     """Run the Visual DSPy pipeline and return criteria.v2 analysis + feedback."""
-    try:  # pragma: no cover - presence is asserted in unit tests
+    try:  # pragma: no cover - import is controlled by unit tests
         import dspy  # type: ignore
+
         _ = getattr(dspy, "__version__", None)
     except Exception:
         raise ImportError("dspy is not available")
 
-    crit = [str(c) for c in (criteria or []) if str(c).strip()]
+    crit = [str(c).strip() for c in (criteria or []) if str(c).strip()]
     if not crit:
-        # Keep behaviour consistent with text pipeline: allow tasks without criteria.
-        return FeedbackResult(feedback_md=_default_feedback_md(), analysis_json={}, parse_status="skipped")
-
-    # Configure DSPy (LiteLLM) to use a vision-capable model for visual tasks.
-    # Default precedence: AI_VISUAL_MODEL → AI_VISION_MODEL.
-    model_name = (os.getenv("AI_VISUAL_MODEL") or "").strip() or (os.getenv("AI_VISION_MODEL") or "").strip()
-    try:  # pragma: no cover - configuration is integration-tested elsewhere
-        if model_name and hasattr(dspy, "LM"):
-            api_base = _ensure_ollama_host_env()
-            from backend.learning.adapters.dspy import helpers as dspy_helpers
-
-            think_level = os.getenv("AI_THINK_LEVEL")
-            lm_kwargs = dspy_helpers.build_lm_kwargs(
-                model_name=model_name,
-                api_base=api_base,
-                think_level=think_level,
-            )
-            lm = dspy.LM(f"ollama/{model_name}", **lm_kwargs)  # type: ignore[attr-defined]
-            adapter_cls = getattr(dspy, "JSONAdapter", None) if _json_adapter_enabled() else None
-            if adapter_cls is not None:
-                dspy.configure(lm=lm, adapter=adapter_cls())  # type: ignore[misc]
-            else:
-                dspy.configure(lm=lm)
-    except Exception:
-        # Keep the program robust: if configuration fails, still attempt to run.
-        pass
-
-    parse_status = "parsed_structured"
-    try:
-        analysis = dspy_programs.run_structured_visual_analysis(
+        feedback_md = dspy_programs.run_visual_feedback_no_criteria(
             image_data_uri=image_data_uri,
-            criteria=crit,
             teacher_instructions_md=teacher_instructions_md,
-            solution_hints_md=solution_hints_md,
+            teacher_context_md=teacher_context_md,
         )
-        analysis_dict = analysis if isinstance(analysis, dict) else analysis.to_dict()
-        analysis_json = _normalize_v2(raw=analysis_dict, criteria=crit)
-    except Exception as exc:
-        logger.warning("learning.visual_feedback.analysis_failed reason=%s", exc.__class__.__name__)
-        analysis_json = {"schema": "criteria.v2", "score": 0, "criteria_results": []}
-        parse_status = "analysis_fallback"
+        return FeedbackResult(feedback_md=_validate_feedback_md(feedback_md), analysis_json={}, parse_status="skipped")
 
-    feedback_md: str | None = None
-    try:
-        feedback_md = dspy_programs.run_structured_visual_feedback(
-            image_data_uri=image_data_uri,
-            criteria=crit,
-            analysis_json=CriteriaAnalysis.from_dict(analysis_json).to_dict(),
-            teacher_instructions_md=teacher_instructions_md,
-        )
-    except Exception as exc:
-        logger.warning("learning.visual_feedback.feedback_failed reason=%s", exc.__class__.__name__)
-        feedback_md = None
+    analysis = dspy_programs.run_structured_visual_analysis(
+        image_data_uri=image_data_uri,
+        criteria=crit,
+        teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
+    )
+    raw = analysis.to_dict() if isinstance(analysis, CriteriaAnalysis) else analysis
+    if not isinstance(raw, dict):
+        raise RuntimeError("invalid_analysis_json")
+    analysis_json = _normalize_v2(raw=raw, criteria=crit)
 
-    feedback_out = (feedback_md or "").strip() or _default_feedback_md()
-    if feedback_md is None:
-        parse_status = "analysis_feedback_fallback" if parse_status != "parsed_structured" else "feedback_fallback"
+    feedback_md = dspy_programs.run_structured_visual_feedback(
+        image_data_uri=image_data_uri,
+        criteria=crit,
+        analysis_json=analysis_json,
+        teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
+    )
 
-    return FeedbackResult(feedback_md=feedback_out, analysis_json=analysis_json, parse_status=parse_status)
-
+    return FeedbackResult(
+        feedback_md=_validate_feedback_md(feedback_md),
+        analysis_json=analysis_json,
+        parse_status="parsed_structured",
+    )

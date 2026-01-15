@@ -17,7 +17,6 @@ import pytest
 
 def test_pdf_remote_render_error_transient(tmp_path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
-    monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     # Ensure supabase.local resolves to a private host for HTTP fetches
@@ -73,17 +72,6 @@ def test_pdf_remote_render_error_transient(tmp_path, monkeypatch: pytest.MonkeyP
         raise RuntimeError("boom")
 
     monkeypatch.setattr(local_vision, "process_pdf_bytes", _boom)
-
-    # Fake ollama client to detect accidental calls
-    class _Client:
-        def __init__(self, host=None):
-            self.calls = []
-        def generate(self, **kwargs):  # pragma: no cover - should not be called
-            self.calls.append(kwargs)
-            return {"response": "n/a"}
-
-    fake_ollama = SimpleNamespace(Client=lambda base_url=None: _Client())
-    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]

@@ -1,5 +1,5 @@
 """
-Unit tests for the local Vision adapter (DSPy/Ollama-backed).
+Unit tests for the local Vision adapter (DSPy-only OCR).
 
 Intent:
     Drive a minimal implementation via TDD:
@@ -8,13 +8,13 @@ Intent:
       - Unsupported MIME types are classified as permanent errors.
 
 Notes:
-    We mock the `ollama` client to avoid network/model dependencies.
-    Tests import error classes and result types from the worker module.
+    We stub DSPy and the vision program to avoid network/model dependencies.
 """
 
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -31,22 +31,29 @@ from backend.storage.config import get_submissions_bucket
 from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives, write_dummy_png
 
 
-class _FakeOllamaClient:
-    """Minimal stub for the ollama client used by the adapter."""
+def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch, *, observed: dict) -> None:
+    class _FakeLM:
+        def __init__(self, model: str, **kwargs) -> None:
+            observed.setdefault("lm_calls", []).append({"model": model, "kwargs": dict(kwargs)})
 
-    def __init__(self, *, mode: str = "ok"):
-        self.mode = mode
+    class _FakeJSONAdapter:
+        pass
 
-    def generate(self, model: str, prompt: str, options: dict | None = None, **_: object) -> dict:
-        if self.mode == "timeout":
-            raise TimeoutError("simulated timeout")
-        # Return a deterministic response payload as many client libs do.
-        return {"response": "## Extracted text\n\nFrom local vision."}
+    @contextmanager
+    def _ctx(**kwargs):  # type: ignore[no-untyped-def]
+        observed.setdefault("contexts", []).append(dict(kwargs))
+        yield
 
-
-def _install_fake_ollama(monkeypatch: pytest.MonkeyPatch, *, mode: str = "ok") -> None:
-    fake_module = SimpleNamespace(Client=lambda base_url=None: _FakeOllamaClient(mode=mode))
-    monkeypatch.setitem(sys.modules, "ollama", fake_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "dspy",
+        SimpleNamespace(
+            __version__="0.0-test",
+            LM=_FakeLM,
+            JSONAdapter=_FakeJSONAdapter,
+            context=_ctx,
+        ),
+    )
 
 
 @pytest.mark.parametrize("mime", ["image/jpeg", "image/png", "application/pdf"])
@@ -55,9 +62,21 @@ def test_local_vision_happy_path_returns_markdown(
     tmp_path: Path,
     mime: str,
 ) -> None:
-    _install_fake_ollama(monkeypatch, mode="ok")
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+    monkeypatch.setenv("AI_OCR_TEMPERATURE", "0.0")
 
-    # Import after monkeypatching so adapter sees fake module.
+    from backend.learning.adapters.dspy import vision_program
+
+    monkeypatch.setattr(
+        vision_program,
+        "extract_text_from_image",
+        lambda **_: ("## OCR\n\nErkannter Text", {"program": "vision_ocr"}),
+    )
+
     import importlib
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
@@ -116,26 +135,64 @@ def test_local_vision_happy_path_returns_markdown(
     assert isinstance(result.text_md, str) and len(result.text_md.strip()) > 0
     # Metadata should indicate a local adapter for observability.
     assert isinstance(result.raw_metadata, dict)
-    assert result.raw_metadata.get("adapter") in {"local", "local_vision"}
+    assert result.raw_metadata.get("adapter") == "local_vision"
+    assert result.raw_metadata.get("backend") == "dspy"
+    assert result.raw_metadata.get("program") == "vision_ocr"
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected OCR LM to be instantiated"
+    assert lm_calls[0]["model"] == "openai/ocr-model"
+    assert lm_calls[0]["kwargs"].get("base_url") == "http://example/api/v1"
+
+    contexts = observed.get("contexts") or []
+    assert contexts and contexts[0].get("disable_history") is True
 
 
 def test_local_vision_timeout_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
-    _install_fake_ollama(monkeypatch, mode="timeout")
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+
+    from backend.learning.adapters.dspy import vision_program
+
+    def _timeout(**_kwargs):  # type: ignore[no-untyped-def]
+        raise TimeoutError("simulated timeout")
+
+    monkeypatch.setattr(vision_program, "extract_text_from_image", _timeout)
 
     import importlib
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]
 
-    submission = {"id": "deadbeef-dead-beef-dead-beef000002", "kind": "file"}
-    job_payload = {"mime_type": "image/jpeg", "storage_key": "files/def456"}
+    from backend.storage.config import get_submissions_bucket
 
-    with pytest.raises(VisionTransientError):
+    bucket = get_submissions_bucket()
+    submission = {"id": "deadbeef-dead-beef-dead-beef000002", "kind": "file"}
+    # Ensure local bytes exist so the adapter reaches the model call.
+    import tempfile
+    from pathlib import Path as _Path
+
+    root = _Path(tempfile.mkdtemp(prefix="gustav-test-vision-"))
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
+    storage_key = f"{bucket}/course/task/student/img.jpg"
+    file_path = root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 16)
+    job_payload = {
+        "mime_type": "image/jpeg",
+        "storage_key": storage_key,
+        "size_bytes": file_path.stat().st_size,
+    }
+
+    with pytest.raises(VisionTransientError, match="simulated timeout"):
         adapter.extract(submission=submission, job_payload=job_payload)
 
 
 def test_local_vision_unsupported_mime_is_permanent(monkeypatch: pytest.MonkeyPatch) -> None:
-    _install_fake_ollama(monkeypatch, mode="ok")
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
 
     import importlib
 
@@ -149,10 +206,11 @@ def test_local_vision_unsupported_mime_is_permanent(monkeypatch: pytest.MonkeyPa
         adapter.extract(submission=submission, job_payload=job_payload)
 
 
-def test_local_vision_uses_default_base_url_when_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Vision adapter should fall back to a safe default host when OLLAMA_BASE_URL is unset."""
-    _install_fake_ollama(monkeypatch, mode="ok")
-    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+def test_local_vision_requires_openai_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
 
     import importlib
 
@@ -160,4 +218,52 @@ def test_local_vision_uses_default_base_url_when_env_missing(monkeypatch: pytest
     importlib.reload(mod)
 
     adapter = mod.build()  # type: ignore[attr-defined]
-    assert getattr(adapter, "_base_url", None) == "http://ollama:11434"
+
+    from backend.storage.config import get_submissions_bucket
+
+    bucket = get_submissions_bucket()
+    # Ensure bytes exist so config validation is reached.
+    import tempfile
+    from pathlib import Path as _Path
+
+    root = _Path(tempfile.mkdtemp(prefix="gustav-test-vision-"))
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
+    storage_key = f"{bucket}/course/task/student/img.png"
+    file_path = root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    write_dummy_png(file_path)
+    job_payload = {"mime_type": "image/png", "storage_key": storage_key, "size_bytes": file_path.stat().st_size}
+
+    with pytest.raises(VisionTransientError, match="missing_OPENAI_BASE_URL"):
+        adapter.extract(submission={"id": "s", "kind": "file"}, job_payload=job_payload)  # type: ignore[arg-type]
+
+
+def test_local_vision_requires_ocr_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.delenv("AI_OCR_MODEL", raising=False)
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    importlib.reload(mod)
+
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    from backend.storage.config import get_submissions_bucket
+
+    bucket = get_submissions_bucket()
+    import tempfile
+    from pathlib import Path as _Path
+
+    root = _Path(tempfile.mkdtemp(prefix="gustav-test-vision-"))
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
+    storage_key = f"{bucket}/course/task/student/img.png"
+    file_path = root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    write_dummy_png(file_path)
+    job_payload = {"mime_type": "image/png", "storage_key": storage_key, "size_bytes": file_path.stat().st_size}
+
+    with pytest.raises(VisionTransientError, match="missing_AI_OCR_MODEL"):
+        adapter.extract(submission={"id": "s", "kind": "file"}, job_payload=job_payload)  # type: ignore[arg-type]

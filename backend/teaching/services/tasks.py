@@ -29,7 +29,7 @@ class TasksRepoProtocol(Protocol):
         *,
         instruction_md: str,
         criteria: List[str],
-        hints_md: Optional[str],
+        teacher_context_md: Optional[str],
         due_at: Optional[datetime],
         max_attempts: Optional[int],
         kind: str,
@@ -47,7 +47,7 @@ class TasksRepoProtocol(Protocol):
         *,
         instruction_md: Any,
         criteria: Any,
-        hints_md: Any,
+        teacher_context_md: Any,
         due_at: Any,
         max_attempts: Any,
         kind: Any,
@@ -99,11 +99,11 @@ def _normalize_criteria(value: object) -> List[str]:
     return normalized
 
 
-def _normalize_hints(value: object) -> Optional[str]:
+def _normalize_teacher_context(value: object) -> Optional[str]:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError("invalid_hints_md")
+        raise ValueError("invalid_teacher_context_md")
     trimmed = value.strip()
     return trimmed or None
 
@@ -192,7 +192,7 @@ class TasksService:
         *,
         instruction_md: object,
         criteria: object = None,
-        hints_md: object = None,
+        teacher_context_md: object = None,
         due_at: object = None,
         max_attempts: object = None,
         h5p: object | None = None,
@@ -202,7 +202,7 @@ class TasksService:
             raise LookupError("section_not_found")
         instruction = _normalize_instruction(instruction_md)
         crit = _normalize_criteria(criteria)
-        hints = _normalize_hints(hints_md)
+        teacher_context = _normalize_teacher_context(teacher_context_md)
         due_dt = _parse_due_at(due_at)
         attempts = _normalize_max_attempts(max_attempts)
         if h5p is not None and visual is not None:
@@ -223,7 +223,7 @@ class TasksService:
             author_id,
             instruction_md=instruction,
             criteria=crit,
-            hints_md=hints,
+            teacher_context_md=teacher_context,
             due_at=due_dt,
             max_attempts=attempts,
             kind=kind,
@@ -240,7 +240,7 @@ class TasksService:
         *,
         instruction_md: object = _UNSET,
         criteria: object = _UNSET,
-        hints_md: object = _UNSET,
+        teacher_context_md: object = _UNSET,
         due_at: object = _UNSET,
         max_attempts: object = _UNSET,
         h5p: object = _UNSET,
@@ -253,8 +253,8 @@ class TasksService:
             repo_kwargs["instruction_md"] = _normalize_instruction(instruction_md)
         if criteria is not _UNSET:
             repo_kwargs["criteria"] = _normalize_criteria(criteria)
-        if hints_md is not _UNSET:
-            repo_kwargs["hints_md"] = _normalize_hints(hints_md)
+        if teacher_context_md is not _UNSET:
+            repo_kwargs["teacher_context_md"] = _normalize_teacher_context(teacher_context_md)
         if due_at is not _UNSET:
             repo_kwargs["due_at"] = _parse_due_at(due_at)
         if max_attempts is not _UNSET:

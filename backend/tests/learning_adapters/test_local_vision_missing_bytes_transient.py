@@ -27,7 +27,7 @@ class _CapturingClient:
         return {"response": "should not be used"}
 
 
-def _install_fake_httpx_and_ollama(monkeypatch: pytest.MonkeyPatch, client: _CapturingClient) -> None:
+def _install_fake_httpx_and_dspy(monkeypatch: pytest.MonkeyPatch, client: _CapturingClient) -> None:
     # Simulate remote fetch failure (e.g., 404 or network error)
     class _HttpxStream:
         def __init__(self, status_code: int = 404):
@@ -56,9 +56,14 @@ def _install_fake_httpx_and_ollama(monkeypatch: pytest.MonkeyPatch, client: _Cap
 
     fake_httpx = SimpleNamespace(Client=lambda timeout=None, follow_redirects=None: _HttpxClient())
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
-    # Provide an ollama client stub to detect unintended calls
-    fake_ollama = SimpleNamespace(Client=lambda base_url=None: client)
-    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
+    # Provide a minimal DSPy stub to detect unintended model calls.
+    fake_dspy = SimpleNamespace(
+        __version__="0.0-test",
+        LM=lambda *a, **k: client,
+        JSONAdapter=object,
+        context=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("dspy.context must not be called here")),
+    )
+    monkeypatch.setitem(sys.modules, "dspy", fake_dspy)
 
 
 def test_missing_local_and_remote_is_transient(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,7 +88,7 @@ def test_missing_local_and_remote_is_transient(tmp_path, monkeypatch: pytest.Mon
     )
 
     client = _CapturingClient()
-    _install_fake_httpx_and_ollama(monkeypatch, client)
+    _install_fake_httpx_and_dspy(monkeypatch, client)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]

@@ -55,7 +55,7 @@ def test_vision_extracts_text_and_marks_completed():
     assert "Text(2)" in result.text_md
     # Analysis metadata records page count and model hint
     assert result.analysis_json.get("pages") == 2
-    assert result.analysis_json.get("source") == "vision.ollama"
+    assert result.analysis_json.get("source") == "vision.client"
 
     # Mark completion via the repo port
     repo: CompletionRepo = _FakeRepo()  # type: ignore[assignment]

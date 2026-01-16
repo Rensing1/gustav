@@ -3,10 +3,10 @@ Unit tests for the DSPy vision program.
 
 Covers:
 - ImportError when `dspy` is not importable.
-- With fake DSPy: returns Markdown that includes kind, MIME and source; returns meta
-  indicating it used the DSPy path. We require a `meta['program']` marker
-  ("dspy_vision") to make the contract explicit.
-- MIME fallback: if job payload lacks `mime_type`, it falls back to submission.
+- With fake DSPy: `extract_text_from_image(...)` calls `dspy.Predict(...)` with a
+  `dspy.Image(url=...)` and returns `(text_md, meta)` with an explicit `program`
+  marker.
+- Fail-fast: missing/empty `text_md` raises.
 """
 
 from __future__ import annotations
@@ -18,8 +18,33 @@ import builtins
 import pytest
 
 
+class _FakeImage:
+    def __init__(self, *, url: str):
+        self.url = url
+
+
+class _FakePredict:
+    seen_signature = None
+    calls: list[dict] = []
+
+    def __init__(self, signature):  # noqa: ANN001
+        type(self).seen_signature = signature
+
+    def __call__(self, **kwargs):  # noqa: ANN003
+        type(self).calls.append(kwargs)
+        return SimpleNamespace(text_md="Erkannter Text")
+
+
 def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(sys.modules, "dspy", SimpleNamespace(__version__="0.0-test"))
+    fake = SimpleNamespace(
+        __version__="0.0-test",
+        Signature=object,
+        InputField=lambda **_: None,
+        OutputField=lambda **_: None,
+        Image=_FakeImage,
+        Predict=_FakePredict,
+    )
+    monkeypatch.setitem(sys.modules, "dspy", fake)
 
 
 def _uninstall_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,7 +67,7 @@ def test_vision_program_raises_when_dspy_missing(monkeypatch: pytest.MonkeyPatch
 
     prog = import_module("backend.learning.adapters.dspy.vision_program")
     with pytest.raises(ImportError):
-        prog.extract_text(submission={"kind": "image"}, job_payload={"mime_type": "image/jpeg"})
+        prog.extract_text_from_image(image_data_uri="data:image/png;base64,AA==")
 
 
 def test_vision_program_returns_markdown_and_meta(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,24 +75,27 @@ def test_vision_program_returns_markdown_and_meta(monkeypatch: pytest.MonkeyPatc
     from importlib import import_module
 
     prog = import_module("backend.learning.adapters.dspy.vision_program")
-    text_md, meta = prog.extract_text(
-        submission={"kind": "image"}, job_payload={"mime_type": "image/png", "storage_key": "storage://b/k.png"}
-    )
-    assert text_md.startswith("### DSPy Vision")
-    assert "Kind: image; MIME: image/png" in text_md
-    assert "Quelle: storage://b/k.png" in text_md
+    _FakePredict.calls = []
+    text_md, meta = prog.extract_text_from_image(image_data_uri="data:image/png;base64,AA==")
+    assert text_md == "Erkannter Text"
     assert meta.get("backend") == "dspy"
-    assert meta.get("adapter") == "local_vision"
-    # Contract: mark program explicitly (should fail until implemented)
-    assert meta.get("program") == "dspy_vision"
+    assert meta.get("program") == "vision_ocr"
+    assert _FakePredict.calls
+    image = _FakePredict.calls[0].get("student_image")
+    assert isinstance(image, _FakeImage)
+    assert image.url == "data:image/png;base64,AA=="
 
 
-def test_vision_program_mime_fallback_to_submission(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_vision_program_empty_text_is_fail_fast(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
     from importlib import import_module
 
+    class _EmptyPredict(_FakePredict):
+        def __call__(self, **kwargs):  # noqa: ANN003
+            type(self).calls.append(kwargs)
+            return SimpleNamespace(text_md="  ")
+
+    sys.modules["dspy"].Predict = _EmptyPredict  # type: ignore[attr-defined]
     prog = import_module("backend.learning.adapters.dspy.vision_program")
-    text_md, _ = prog.extract_text(
-        submission={"kind": "file", "mime_type": "application/pdf"}, job_payload={"storage_key": "s://doc.pdf"}
-    )
-    assert "MIME: application/pdf" in text_md
+    with pytest.raises(RuntimeError):
+        prog.extract_text_from_image(image_data_uri="data:image/png;base64,AA==")

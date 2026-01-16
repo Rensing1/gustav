@@ -160,35 +160,6 @@ def run_once(
     tick = now or datetime.now(tz=timezone.utc)
     concurrency = _concurrency_limit()
 
-    if concurrency == 1:
-        with psycopg.connect(dsn, row_factory=dict_row) as conn:  # type: ignore[arg-type]
-            conn.autocommit = False
-            job = _lease_next_job(conn, now=tick)
-            if not job:
-                conn.rollback()
-                return False
-            telemetry.adjust_gauge("analysis_jobs_inflight", delta=1)
-            try:
-                _process_job(
-                    conn=conn,
-                    job=job,
-                    vision_adapter=vision_adapter,
-                    feedback_adapter=feedback_adapter,
-                    now=tick,
-                )
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                try:
-                    _unlease_job(conn=conn, job_id=job.id)
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-                raise
-            finally:
-                telemetry.adjust_gauge("analysis_jobs_inflight", delta=-1)
-        return True
-
     with psycopg.connect(dsn, row_factory=dict_row) as lease_conn:  # type: ignore[arg-type]
         lease_conn.autocommit = False
 
@@ -197,6 +168,16 @@ def run_once(
             lease_conn.rollback()
             return False
         lease_conn.commit()
+
+    if concurrency == 1:
+        _process_job_with_new_connection(
+            dsn=dsn,
+            job=jobs[0],
+            vision_adapter=vision_adapter,
+            feedback_adapter=feedback_adapter,
+            now=tick,
+        )
+        return True
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [
@@ -214,12 +195,6 @@ def run_once(
         for future in futures:
             future.result()
     return True
-
-
-def _lease_next_job(conn: Connection, *, now: datetime) -> Optional[QueuedJob]:
-    """Lease the next visible job from the canonical queue table."""
-    jobs = _lease_jobs(conn, now=now, limit=1)
-    return jobs[0] if jobs else None
 
 
 def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJob]:
@@ -287,6 +262,18 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
     return jobs
 
 
+def _lease_next_job(conn: Connection, *, now: datetime) -> QueuedJob | None:
+    """Backwards-compatible helper: lease exactly one job or return None.
+
+    Why:
+        Older unit tests (and some external scripts) patch `_lease_next_job(...)`
+        directly. The worker now leases in batches via `_lease_jobs(...)`, but we
+        keep this wrapper so those tests can remain stable.
+    """
+    jobs = _lease_jobs(conn, now=now, limit=1)
+    return jobs[0] if jobs else None
+
+
 def _resolve_queue_table(conn: Connection) -> str:
     """
     Ensure the worker queue exists and return its canonical table name.
@@ -343,7 +330,6 @@ def _process_job_with_new_connection(
             feedback_adapter=feedback_adapter,
             now=now,
         )
-        conn.commit()
     except Exception:
         try:
             if conn:
@@ -369,16 +355,31 @@ def _process_job(
     feedback_adapter: FeedbackAdapterProtocol,
     now: datetime,
 ) -> None:
-    """Fetch submission, run adapters, and branch into success, retry or failure."""
-    # Impersonate the student before selecting so RLS exposes the row.
-    _set_current_sub(conn, job.payload.get("student_sub", ""))
+    """Fetch submission, run adapters, and branch into success, retry or failure.
+
+    Transaction boundaries:
+        The worker must never keep a DB transaction open while waiting for LLM/VLM
+        calls. We therefore:
+          1) read all required DB context in a short transaction,
+          2) commit,
+          3) call adapters (external I/O),
+          4) persist results / retries in a second short transaction.
+    """
+    payload = job.payload if isinstance(job.payload, dict) else {}
+
+    # ---------------------------------------------------------------------
+    # Phase 1: DB reads (short transaction)
+    # ---------------------------------------------------------------------
+    _set_current_sub(conn, str(payload.get("student_sub") or ""))
     submission = _fetch_submission(conn, submission_id=job.submission_id)
     if submission is None:
         LOG.warning("Submission %s missing; deleting job %s", job.submission_id, job.id)
         _delete_job(conn, job_id=job.id)
+        conn.commit()
         return
-    # Ensure RLS context remains set for update (submission includes student_sub).
-    _set_current_sub(conn, submission.get("student_sub", job.payload.get("student_sub", "")))
+
+    student_sub = str(submission.get("student_sub") or payload.get("student_sub") or "")
+    _set_current_sub(conn, student_sub)
 
     # Accept both freshly queued and already extracted submissions (pages persisted).
     if submission.get("analysis_status") not in ("pending", "extracted"):
@@ -389,13 +390,23 @@ def _process_job(
             submission.get("analysis_status"),
         )
         _delete_job(conn, job_id=job.id)
+        conn.commit()
         return
 
-    payload = job.payload if isinstance(job.payload, dict) else {}
     task_kind = str(payload.get("task_kind") or "").strip().lower()
+    task_context = _fetch_task_context(
+        conn=conn,
+        task_id=str(submission.get("task_id") or payload.get("task_id") or ""),
+    )
+    instruction_md = payload.get("instruction_md") or task_context.get("instruction_md")
+    teacher_context_md = task_context.get("teacher_context_md")
 
-    # Visual tasks are evaluated from the visual input (image/PDF). They do not
-    # run the OCR/text Vision pipeline by default.
+    # End the transaction before any external I/O (ticket: avoid "idle in transaction").
+    conn.commit()
+
+    # ---------------------------------------------------------------------
+    # Visual tasks: evaluate directly from image/PDF (no OCR pipeline)
+    # ---------------------------------------------------------------------
     if task_kind == "visual":
         try:
             analyze_visual = getattr(feedback_adapter, "analyze_visual", None)
@@ -407,17 +418,17 @@ def _process_job(
                 "job_payload": job.payload,
                 "criteria": payload.get("criteria", []),
             }
-            if payload:
-                instr = payload.get("instruction_md")
-                hints = payload.get("hints_md")
+            sig = None
+            try:
+                sig = inspect.signature(analyze_visual)
+            except Exception:
                 sig = None
-                try:
-                    sig = inspect.signature(analyze_visual)
-                except Exception:
-                    sig = None
-                if sig and "instruction_md" in sig.parameters and "hints_md" in sig.parameters:
-                    analyze_kwargs["instruction_md"] = instr
-                    analyze_kwargs["hints_md"] = hints
+            if sig and "instruction_md" in sig.parameters:
+                analyze_kwargs["instruction_md"] = instruction_md
+            if sig and "teacher_context_md" in sig.parameters:
+                analyze_kwargs["teacher_context_md"] = teacher_context_md
+            elif sig and "hints_md" in sig.parameters:
+                analyze_kwargs["hints_md"] = teacher_context_md
 
             feedback_result = analyze_visual(**analyze_kwargs)
         except FeedbackPermanentError as exc:
@@ -427,6 +438,7 @@ def _process_job(
                 job.id,
                 exc.__class__.__name__,
             )
+            _set_current_sub(conn, student_sub)
             _handle_feedback_error(
                 conn=conn,
                 job=job,
@@ -435,6 +447,7 @@ def _process_job(
                 message=str(exc),
                 transient=False,
             )
+            conn.commit()
             return
         except FeedbackTransientError as exc:
             LOG.info(
@@ -443,6 +456,7 @@ def _process_job(
                 job.id,
                 exc.__class__.__name__,
             )
+            _set_current_sub(conn, student_sub)
             _handle_feedback_error(
                 conn=conn,
                 job=job,
@@ -451,8 +465,10 @@ def _process_job(
                 message=str(exc),
                 transient=True,
             )
+            conn.commit()
             return
 
+        _set_current_sub(conn, student_sub)
         _update_submission_completed(
             conn=conn,
             submission_id=job.submission_id,
@@ -462,77 +478,78 @@ def _process_job(
         )
         telemetry.increment_counter("ai_worker_processed_total", status="completed")
         _delete_job(conn, job_id=job.id)
+        conn.commit()
         return
 
+    # ---------------------------------------------------------------------
+    # Non-visual tasks: Vision/OCR (if needed) + Feedback
+    # ---------------------------------------------------------------------
     cached_vision = _cached_vision_result(submission=submission, job=job)
-
-    if cached_vision is not None:
-        vision_result = cached_vision
-    else:
-        try:
-            # For plain text submissions we never invoke Vision/OCR/LLM. Preserve the
-            # original student text verbatim to avoid unintended transformations.
+    try:
+        if cached_vision is not None:
+            vision_result = cached_vision
+        else:
             if (submission.get("kind") or "").strip() == "text":
-                from backend.learning.adapters.ports import VisionResult as _VR  # local import to avoid cycles
-                vision_result = _VR(
+                vision_result = VisionResult(
                     text_md=str(submission.get("text_body") or ""),
                     raw_metadata={"adapter": "worker", "backend": "pass_through", "reason": "text_submission"},
                 )
             else:
                 vision_result = vision_adapter.extract(submission=submission, job_payload=job.payload)
-            _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
-        except VisionPermanentError as exc:
-            # Log only the exception class to avoid leaking PII/prompt content in logs.
-            LOG.warning(
-                "Vision permanent error for submission %s job %s: %s",
-                job.submission_id,
-                job.id,
-                exc.__class__.__name__,
-            )
-            _handle_vision_error(
-                conn=conn,
-                job=job,
-                submission_id=job.submission_id,
-                now=now,
-                message=str(exc),
-                transient=False,
-            )
-            return
-        except VisionTransientError as exc:
-            # Keep logs free of raw messages; store truncated details in DB instead.
-            LOG.info(
-                "Vision transient error for submission %s job %s: %s",
-                job.submission_id,
-                job.id,
-                exc.__class__.__name__,
-            )
-            _handle_vision_error(
-                conn=conn,
-                job=job,
-                submission_id=job.submission_id,
-                now=now,
-                message=str(exc),
-                transient=True,
-            )
-            return
+    except VisionPermanentError as exc:
+        LOG.warning(
+            "Vision permanent error for submission %s job %s: %s",
+            job.submission_id,
+            job.id,
+            exc.__class__.__name__,
+        )
+        _set_current_sub(conn, student_sub)
+        _handle_vision_error(
+            conn=conn,
+            job=job,
+            submission_id=job.submission_id,
+            now=now,
+            message=str(exc),
+            transient=False,
+        )
+        conn.commit()
+        return
+    except VisionTransientError as exc:
+        LOG.info(
+            "Vision transient error for submission %s job %s: %s",
+            job.submission_id,
+            job.id,
+            exc.__class__.__name__,
+        )
+        _set_current_sub(conn, student_sub)
+        _handle_vision_error(
+            conn=conn,
+            job=job,
+            submission_id=job.submission_id,
+            now=now,
+            message=str(exc),
+            transient=True,
+        )
+        conn.commit()
+        return
 
     try:
-        # Pass task context (instruction/hints) to adapters that support it; keep compatibility otherwise.
         analyze_kwargs = {
             "text_md": vision_result.text_md,
-            "criteria": job.payload.get("criteria", []),
+            "criteria": payload.get("criteria", []),
         }
-        if isinstance(job.payload, dict):
-            instr = job.payload.get("instruction_md")
-            hints = job.payload.get("hints_md")
+        sig = None
+        try:
+            sig = inspect.signature(feedback_adapter.analyze)  # type: ignore[attr-defined]
+        except Exception:
             sig = None
-            try:
-                sig = inspect.signature(feedback_adapter.analyze)  # type: ignore[attr-defined]
-            except Exception:
-                sig = None
-            if sig and "instruction_md" in sig.parameters and "hints_md" in sig.parameters:
-                analyze_kwargs["instruction_md"] = instr
-                analyze_kwargs["hints_md"] = hints
+        if sig and "instruction_md" in sig.parameters:
+            analyze_kwargs["instruction_md"] = instruction_md
+        if sig and "teacher_context_md" in sig.parameters:
+            analyze_kwargs["teacher_context_md"] = teacher_context_md
+        elif sig and "hints_md" in sig.parameters:
+            analyze_kwargs["hints_md"] = teacher_context_md
+
         feedback_result = feedback_adapter.analyze(**analyze_kwargs)  # type: ignore[arg-type]
     except FeedbackPermanentError as exc:
         LOG.warning(
@@ -541,6 +558,9 @@ def _process_job(
             job.id,
             exc.__class__.__name__,
         )
+        _set_current_sub(conn, student_sub)
+        if cached_vision is None and (submission.get("kind") or "").strip() != "text":
+            _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
         _handle_feedback_error(
             conn=conn,
             job=job,
@@ -549,6 +569,7 @@ def _process_job(
             message=str(exc),
             transient=False,
         )
+        conn.commit()
         return
     except FeedbackTransientError as exc:
         LOG.info(
@@ -557,6 +578,9 @@ def _process_job(
             job.id,
             exc.__class__.__name__,
         )
+        _set_current_sub(conn, student_sub)
+        if cached_vision is None and (submission.get("kind") or "").strip() != "text":
+            _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
         _handle_feedback_error(
             conn=conn,
             job=job,
@@ -565,8 +589,10 @@ def _process_job(
             message=str(exc),
             transient=True,
         )
+        conn.commit()
         return
 
+    _set_current_sub(conn, student_sub)
     _update_submission_completed(
         conn=conn,
         submission_id=job.submission_id,
@@ -576,6 +602,7 @@ def _process_job(
     )
     telemetry.increment_counter("ai_worker_processed_total", status="completed")
     _delete_job(conn, job_id=job.id)
+    conn.commit()
 
 
 def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]:
@@ -601,6 +628,44 @@ def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]
         )
         row = cur.fetchone()
     return dict(row) if row else None
+
+
+def _fetch_task_context(conn: Connection, *, task_id: str) -> dict[str, str | None]:
+    """Fetch task context needed for feedback generation.
+
+    Notes:
+        This runs under the submission's student RLS context (`app.current_sub`)
+        so the SELECT must remain safe for students. We intentionally load the
+        teacher-only AI context from the tasks table but never expose it through
+        the Learning API surface.
+    """
+    if not task_id:
+        return {"instruction_md": None, "teacher_context_md": None}
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select instruction_md, teacher_context_md
+                  from public.unit_tasks
+                 where id = %s::uuid
+                """,
+                (task_id,),
+            )
+            row = cur.fetchone()
+    except Exception as exc:
+        LOG.warning("Task context lookup failed task_id=%s reason=%s", task_id, exc.__class__.__name__)
+        return {"instruction_md": None, "teacher_context_md": None}
+    if not row:
+        return {"instruction_md": None, "teacher_context_md": None}
+    # psycopg rows may be tuple-like or dict-like depending on row_factory.
+    # The worker uses `row_factory=dict_row`, while some tests use defaults.
+    try:
+        instruction_md = row["instruction_md"]  # type: ignore[index]
+        teacher_context_md = row["teacher_context_md"]  # type: ignore[index]
+    except Exception:
+        instruction_md = row[0] if len(row) > 0 else None  # type: ignore[index]
+        teacher_context_md = row[1] if len(row) > 1 else None  # type: ignore[index]
+    return {"instruction_md": instruction_md, "teacher_context_md": teacher_context_md}
 
 
 def _set_current_sub(conn: Connection, sub: str) -> None:
@@ -1013,30 +1078,6 @@ def _truthy_env(name: str, *, default: bool = False) -> bool:
     return raw.strip().lower() in _TRUTHY
 
 
-def _json_adapter_enabled() -> bool:
-    """Feature toggle for JSONAdapter (default on; set env to 'false' to disable)."""
-    return _truthy_env("LEARNING_DSPY_JSON_ADAPTER", default=True)
-
-
-def _ensure_ollama_host_env() -> str | None:
-    """
-    Align DSPy/LiteLLM host resolution with the worker configuration.
-
-    DSPy (via LiteLLM) expects `api_base` or `OLLAMA_API_BASE`, whereas our
-    env files only expose `OLLAMA_BASE_URL`. We propagate the value to the
-    expected knobs and return it so callers can pass `api_base` explicitly.
-    """
-    base_url = (os.getenv("OLLAMA_BASE_URL") or "").strip()
-    if not base_url:
-        return None
-
-    if not (os.getenv("OLLAMA_HOST") or "").strip():
-        os.environ["OLLAMA_HOST"] = base_url
-    if not (os.getenv("OLLAMA_API_BASE") or "").strip():
-        os.environ["OLLAMA_API_BASE"] = base_url
-    return base_url
-
-
 def main() -> None:
     """CLI entrypoint for the worker."""
     level_name = os.getenv("LOG_LEVEL", "INFO")
@@ -1044,47 +1085,12 @@ def main() -> None:
     logging.basicConfig(level=normalized_level)
     dsn = _resolve_worker_dsn()
 
-    # Centralised config load (keeps behaviour identical to the previous env logic).
-    from backend.learning.config import load_ai_config
+    from backend.learning.config import load_learning_adapter_config
 
-    cfg = load_ai_config()
+    cfg = load_learning_adapter_config()
     vision_path = cfg.vision_adapter_path
     feedback_path = cfg.feedback_adapter_path
-    LOG.info(
-        "learning.adapters.selected backend=%s vision=%s feedback=%s",
-        cfg.backend,
-        vision_path,
-        feedback_path,
-    )
-
-    # Configure DSPy globally when available so structured outputs are preferred.
-    try:  # pragma: no cover - behavior validated via higher-level tests
-        import dspy  # type: ignore
-
-        model_name = (os.getenv("AI_FEEDBACK_MODEL") or "").strip()
-        if model_name and hasattr(dspy, "LM"):
-            api_base = _ensure_ollama_host_env()
-            from backend.learning.adapters.dspy import helpers as dspy_helpers
-
-            think_level = os.getenv("AI_THINK_LEVEL")
-            lm_kwargs = dspy_helpers.build_lm_kwargs(
-                model_name=model_name,
-                api_base=api_base,
-                think_level=think_level,
-            )
-            lm = dspy.LM(f"ollama/{model_name}", **lm_kwargs)  # type: ignore[attr-defined]
-            use_json_adapter = _json_adapter_enabled()
-            adapter_cls = getattr(dspy, "JSONAdapter", None) if use_json_adapter else None
-            if adapter_cls is not None:
-                dspy.configure(lm=lm, adapter=adapter_cls())  # type: ignore[misc]
-                adapter_label = "JSONAdapter"
-            else:
-                # Explicit opt-out path: allow local debugging without JSONAdapter.
-                dspy.configure(lm=lm)
-                adapter_label = "default"
-            LOG.info("learning.feedback.dspy_configured model=%s adapter=%s", model_name, adapter_label)
-    except Exception as _cfg_exc:  # pragma: no cover
-        LOG.debug("DSPy not configured: %s", type(_cfg_exc).__name__)
+    LOG.info("learning.adapters.selected vision=%s feedback=%s", vision_path, feedback_path)
 
     vision_module = import_module(vision_path)
     feedback_module = import_module(feedback_path)

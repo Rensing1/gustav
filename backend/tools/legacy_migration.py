@@ -1002,7 +1002,7 @@ def _apply_tasks(
     total = len(tasks)
     used_positions: dict[str, set[int]] = {}
     next_pos_cache: dict[str, int] = {}
-    for idx, (tid, section_id, instruction_md, criteria, hints_md, max_attempts, position, created_at) in enumerate(tasks, start=1):
+    for idx, (tid, section_id, instruction_md, criteria, teacher_context_md, max_attempts, position, created_at) in enumerate(tasks, start=1):
         with conn.cursor() as cur:  # type: ignore[attr-defined]
             cur.execute("select unit_id::text from public.unit_sections where id = %s::uuid", (section_id,))
             row = cur.fetchone()
@@ -1034,11 +1034,11 @@ def _apply_tasks(
             used.add(pos)
             cur.execute(
                 """
-                insert into public.unit_tasks (id, unit_id, section_id, instruction_md, criteria, hints_md, due_at, max_attempts, position, created_at)
+                insert into public.unit_tasks (id, unit_id, section_id, instruction_md, criteria, teacher_context_md, due_at, max_attempts, position, created_at)
                 values (%s::uuid, %s::uuid, %s::uuid, %s, %s::text[], %s, null, %s, %s, coalesce(%s, now()))
-                on conflict (id) do update set instruction_md = excluded.instruction_md, criteria = excluded.criteria, hints_md = excluded.hints_md, max_attempts = excluded.max_attempts, position = excluded.position
+                on conflict (id) do update set instruction_md = excluded.instruction_md, criteria = excluded.criteria, teacher_context_md = excluded.teacher_context_md, max_attempts = excluded.max_attempts, position = excluded.position
                 """,
-                (tid, unit_id, section_id, instruction_md, criteria, hints_md, max_attempts, pos, created_at),
+                (tid, unit_id, section_id, instruction_md, criteria, teacher_context_md, max_attempts, pos, created_at),
             )
         _record_audit_batch(
             conn,

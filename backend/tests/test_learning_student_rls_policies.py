@@ -66,7 +66,7 @@ def _prep_rows(cur, teacher_sub: str, *, course_suffix: str) -> dict[str, str]:
     material_id = cur.fetchone()[0]
     cur.execute(
         """
-        insert into public.unit_tasks (unit_id, section_id, instruction_md, criteria, hints_md, position)
+        insert into public.unit_tasks (unit_id, section_id, instruction_md, criteria, teacher_context_md, position)
         values (%s, %s, %s, %s, %s, %s)
         returning id
         """,

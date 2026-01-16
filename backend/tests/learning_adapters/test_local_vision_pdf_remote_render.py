@@ -6,7 +6,7 @@ Scenario:
       STORAGE_VERIFY_ROOT.
     - Adapter should fetch the original PDF via Supabase service-role,
       render pages, stitch into a single image, and call the model once with
-      images=[<stitched>].
+      the stitched image as a data-URI.
 """
 
 from __future__ import annotations
@@ -14,11 +14,16 @@ from __future__ import annotations
 import base64
 import importlib
 from io import BytesIO
+from contextlib import contextmanager
 from types import SimpleNamespace
 import sys
 
 import pytest
 from PIL import Image
+
+pytest.importorskip("psycopg")
+
+from backend.learning.workers.process_learning_submission_jobs import VisionResult  # type: ignore
 
 
 def _png_bytes(w: int, h: int, gray: int) -> bytes:
@@ -27,20 +32,36 @@ def _png_bytes(w: int, h: int, gray: int) -> bytes:
     im.save(buf, format="PNG")
     return buf.getvalue()
 
+def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeLM:
+        def __init__(self, model: str, **_kwargs) -> None:
+            self.model = model
 
-class _CapturingClient:
-    def __init__(self, host=None):
-        self.calls: list[dict] = []
+    class _FakeJSONAdapter:
+        pass
 
-    def generate(self, *, model: str, prompt: str, options: dict, images: list[str] | None = None):  # type: ignore[override]
-        self.calls.append({"model": model, "prompt": prompt, "options": options, "images": images or []})
-        return {"response": "ok"}
+    @contextmanager
+    def _ctx(**_kwargs):  # type: ignore[no-untyped-def]
+        yield
+
+    monkeypatch.setitem(
+        sys.modules,
+        "dspy",
+        SimpleNamespace(
+            __version__="0.0-test",
+            LM=_FakeLM,
+            JSONAdapter=_FakeJSONAdapter,
+            context=_ctx,
+        ),
+    )
 
 
 def test_pdf_remote_fetch_and_render_stitch(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Provide a local root but without any PDF or derived pages
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
-    monkeypatch.setenv("AI_VISION_MODEL", "qwen2.5vl:3b")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+    _install_fake_dspy(monkeypatch)
     # Supabase service-role access
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
@@ -96,16 +117,33 @@ def test_pdf_remote_fetch_and_render_stitch(tmp_path, monkeypatch: pytest.Monkey
         def __init__(self, data: bytes):
             self.data = data
 
-    def _fake_process_pdf_bytes(_: bytes):
+    observed: dict = {"process_pdf_calls": []}
+
+    def _fake_process_pdf_bytes(payload: bytes):
+        observed["process_pdf_calls"].append(payload)
         return ([_Page(_png_bytes(10, 5, 10)), _Page(_png_bytes(10, 7, 200))], SimpleNamespace())
 
     import backend.learning.adapters.local_vision as local_vision  # type: ignore
     monkeypatch.setattr(local_vision, "process_pdf_bytes", _fake_process_pdf_bytes)
 
-    # Fake ollama client
-    client = _CapturingClient()
-    fake_ollama = SimpleNamespace(Client=lambda base_url=None: client)
-    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
+    stitched_bytes = b"stitched-bytes"
+
+    def _fake_stitch(pages: list[bytes]) -> bytes:
+        assert len(pages) == 2
+        return stitched_bytes
+
+    monkeypatch.setattr(local_vision, "stitch_images_vertically", _fake_stitch, raising=False)
+
+    # Capture the stitched data-URI passed into the DSPy vision program.
+    from backend.learning.adapters.dspy import vision_program
+
+    captured: dict = {}
+
+    def _fake_extract(*, image_data_uri: str):  # type: ignore[no-untyped-def]
+        captured["image_data_uri"] = image_data_uri
+        return ("ok", {"program": "vision_ocr"})
+
+    monkeypatch.setattr(vision_program, "extract_text_from_image", _fake_extract, raising=False)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]
@@ -121,11 +159,9 @@ def test_pdf_remote_fetch_and_render_stitch(tmp_path, monkeypatch: pytest.Monkey
     }
     job_payload = {"mime_type": "application/pdf", "storage_key": submission["storage_key"]}
 
-    res = adapter.extract(submission=submission, job_payload=job_payload)
-    # Model must be called exactly once with a single stitched image
-    assert isinstance(res.get("text_md", ""), str) if isinstance(res, dict) else isinstance(getattr(res, "text_md", ""), str)
-    assert len(client.calls) == 1
-    images = client.calls[0].get("images")
-    assert isinstance(images, list) and len(images) == 1
-    stitched = base64.b64decode(images[0])
-    assert stitched.startswith(b"\x89PNG")
+    res: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
+    assert isinstance(res, VisionResult)
+    assert observed["process_pdf_calls"] == [pdf_bytes]
+    assert str(captured.get("image_data_uri", "")).startswith("data:image/png;base64,")
+    payload_b64 = str(captured["image_data_uri"]).split(",", 1)[1]
+    assert base64.b64decode(payload_b64) == stitched_bytes

@@ -98,7 +98,7 @@ async def test_task_detail_edit_and_delete_prg():
         section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "Section"})).json()
         task = (await c.post(
             f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
-            json={"instruction_md": "Alt Instr", "criteria": ["A"], "hints_md": "Hinweis"},
+            json={"instruction_md": "Alt Instr", "criteria": ["A"], "teacher_context_md": "Hinweis"},
         )).json()
 
         page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/{task['id']}")
@@ -112,7 +112,7 @@ async def test_task_detail_edit_and_delete_prg():
             data={
                 "instruction_md": "Neu Instr",
                 "criteria": ["X", "Y"],
-                "hints_md": "Neuer Hinweis",
+                "teacher_context_md": "Neuer Hinweis",
                 "csrf_token": token,
             },
             follow_redirects=False,

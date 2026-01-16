@@ -386,14 +386,14 @@ async def test_tasks_form_has_criteria_and_hints_and_is_sent_to_api():
         token = _extract_csrf_token(page.text) or ""
         # Ensure 10 criteria inputs exist on create page
         assert page.text.count('name="criteria"') >= 10
-        assert 'name="hints_md"' in page.text
+        assert 'name="teacher_context_md"' in page.text
 
         resp = await c.post(
             f"/units/{unit_id}/sections/{section_id}/tasks/create",
             data={
                 "instruction_md": "Beschreibe den Prozess",
                 "criteria": ["Vollständigkeit", "Fachbegriffe", "Struktur"],
-                "hints_md": "Denke an Einleitung–Hauptteil–Schluss",
+                "teacher_context_md": "Denke an Einleitung–Hauptteil–Schluss",
                 "csrf_token": token,
             },
         )
@@ -405,7 +405,7 @@ async def test_tasks_form_has_criteria_and_hints_and_is_sent_to_api():
         assert isinstance(data, list) and data
         task = data[0]
         assert task.get("criteria") == ["Vollständigkeit", "Fachbegriffe", "Struktur"]
-        assert task.get("hints_md") == "Denke an Einleitung–Hauptteil–Schluss"
+        assert task.get("teacher_context_md") == "Denke an Einleitung–Hauptteil–Schluss"
 
 
 @pytest.mark.anyio

@@ -22,6 +22,9 @@ from backend.learning.adapters.ports import FeedbackResult
 
 def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example.test/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "visual-model")
     # DSPy defaults to $HOME/.dspy_cache. In some CI/sandbox setups $HOME may be
     # read-only, so force a writable cache dir under pytest's tmp_path.
     dspy_cache = tmp_path / "dspy_cache"
@@ -76,7 +79,7 @@ def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.
         job_payload=job_payload,
         criteria=["K1"],
         instruction_md="Aufgabe",
-        hints_md="Hinweis",
+        teacher_context_md="Hinweis",
     )
 
     assert res.feedback_md == "OK"

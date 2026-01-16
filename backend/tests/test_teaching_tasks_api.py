@@ -64,15 +64,15 @@ async def _create_task(
     *,
     instruction: str,
     criteria: Sequence[str] | None = None,
-    hints: str | None = None,
+    teacher_context: str | None = None,
     due_at: str | None = None,
     max_attempts: int | None = None,
 ) -> dict:
     payload: dict[str, object] = {"instruction_md": instruction}
     if criteria is not None:
         payload["criteria"] = list(criteria)
-    if hints is not None:
-        payload["hints_md"] = hints
+    if teacher_context is not None:
+        payload["teacher_context_md"] = teacher_context
     if due_at is not None:
         payload["due_at"] = due_at
     if max_attempts is not None:
@@ -158,7 +158,7 @@ async def test_author_can_crud_tasks_and_non_author_is_blocked():
             section["id"],
             instruction="### Analysiere das Experiment",
             criteria=["Beschreibung vollständig", "Grafik interpretiert"],
-            hints="Denk an die Lichtreaktion",
+            teacher_context="Denk an die Lichtreaktion",
             due_at=_iso_in_future(),
             max_attempts=3,
         )
@@ -178,7 +178,7 @@ async def test_author_can_crud_tasks_and_non_author_is_blocked():
         patch_payload = {
             "instruction_md": "### Aktualisierte Aufgabe",
             "criteria": ["Hypothese", "Auswertung"],
-            "hints_md": "Nutze Tabellen",
+            "teacher_context_md": "Nutze Tabellen",
             "due_at": _iso_in_future(120),
             "max_attempts": 5,
         }
@@ -190,7 +190,7 @@ async def test_author_can_crud_tasks_and_non_author_is_blocked():
         updated_payload = updated.json()
         assert updated_payload["instruction_md"].startswith("### Aktualisierte")
         assert updated_payload["criteria"] == patch_payload["criteria"]
-        assert updated_payload["hints_md"] == patch_payload["hints_md"]
+        assert updated_payload["teacher_context_md"] == patch_payload["teacher_context_md"]
         assert updated_payload["max_attempts"] == 5
         assert updated_payload["kind"] == "native"
 
@@ -274,6 +274,14 @@ async def test_task_creation_validation_errors():
         )
         assert resp.status_code == 400
         assert resp.json()["detail"] == "invalid_max_attempts"
+
+        # invalid teacher_context_md
+        resp = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={"instruction_md": "A", "teacher_context_md": 123},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "invalid_teacher_context_md"
 
 
 @pytest.mark.anyio
@@ -373,6 +381,7 @@ async def test_task_update_validation_errors_and_empty_payload():
             ({"instruction_md": "   "}, "invalid_instruction_md"),
             ({"criteria": "nope"}, "invalid_criteria"),
             ({"criteria": ["", "ok"]}, "invalid_criteria"),
+            ({"teacher_context_md": 123}, "invalid_teacher_context_md"),
             ({"due_at": "not-a-datetime"}, "invalid_due_at"),
             ({"max_attempts": -1}, "invalid_max_attempts"),
         ]
@@ -404,7 +413,7 @@ async def test_task_partial_patch_updates_only_sent_fields():
             section["id"],
             instruction="**Beschreibe den Graphen**",
             criteria=["Achsenabschnitt nennen"],
-            hints="Nutze Scheitelpunktform",
+            teacher_context="Nutze Scheitelpunktform",
             max_attempts=2,
         )
 
@@ -416,7 +425,7 @@ async def test_task_partial_patch_updates_only_sent_fields():
         payload = patch_resp.json()
         assert payload["criteria"] == ["Scheitelpunkt", "Nullstellen"]
         assert payload["instruction_md"] == created["instruction_md"]
-        assert payload["hints_md"] == created["hints_md"]
+        assert payload["teacher_context_md"] == created["teacher_context_md"]
         assert payload["max_attempts"] == created["max_attempts"]
 
 

@@ -1171,7 +1171,7 @@ def transfer_unit_tasks(dsn: str, legacy_schema: str, dry_run: bool) -> PhaseRes
                 position = section_positions[section_id]
 
                 instruction_md = instruction or "Legacy task had no instruction."
-                hints_md = hints or None
+                teacher_context_md = hints or None
 
                 if dry_run:
                     skipped += 1
@@ -1187,14 +1187,14 @@ def transfer_unit_tasks(dsn: str, legacy_schema: str, dry_run: bool) -> PhaseRes
                 cur.execute(
                     """
                     insert into public.unit_tasks (
-                        id, unit_id, section_id, instruction_md, criteria, hints_md,
+                        id, unit_id, section_id, instruction_md, criteria, teacher_context_md,
                         due_at, max_attempts, position, created_at, updated_at
                     )
                     values (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, NULL, %s, %s, coalesce(%s, now()), coalesce(%s, now()))
                     on conflict (id) do update set
                       instruction_md = excluded.instruction_md,
                       criteria = excluded.criteria,
-                      hints_md = excluded.hints_md,
+                      teacher_context_md = excluded.teacher_context_md,
                       max_attempts = excluded.max_attempts,
                       position = excluded.position,
                       updated_at = excluded.updated_at
@@ -1205,7 +1205,7 @@ def transfer_unit_tasks(dsn: str, legacy_schema: str, dry_run: bool) -> PhaseRes
                         section_id,
                         instruction_md,
                         criteria_list,
-                        hints_md,
+                        teacher_context_md,
                         max_attempts,
                         position,
                         created_at,

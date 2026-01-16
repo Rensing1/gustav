@@ -8,7 +8,7 @@ Why:
     transcript. Feedback generation is intentionally out-of-scope here.
 
 Design:
-    - `VisionClient` abstracts das Vision-Modell (z. B. Ollama) mit einer
+    - `VisionClient` abstracts the Vision/OCR model client with a
       Methode `analyze_image(image_bytes)`, die Klartext liefert.
     - `extract_text_from_pages` calls the client once per page and produces a
       markdown document with simple page headings. Analysis metadata records
@@ -60,7 +60,7 @@ def extract_text_from_pages(*, pages: List[RenderPage], client: VisionClient) ->
         text = client.analyze_image(image_bytes=page.png_bytes)
         sections.append(f"## Page {idx}\n\n{text}\n")
     text_md = "\n\n".join(sections).strip()
-    analysis = {"pages": len(pages), "source": "vision.ollama"}
+    analysis = {"pages": len(pages), "source": "vision.client"}
     return VisionExtractionResult(text_md=text_md, analysis_json=analysis)
 
 

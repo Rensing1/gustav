@@ -57,16 +57,20 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
     def fake_run_structured_analysis(*, text_md: str, criteria, **_kwargs):
         return {
             "schema": "criteria.v2",
-            "score": 4,
+            # Intentionally out-of-range to ensure normalization clamps.
+            "score": 9,
             "criteria_results": [
-                {"criterion": "Inhalt", "max_score": 10, "score": 8, "explanation_md": "Inhalt stärkt Aufbau"},
-                {"criterion": "Struktur", "max_score": 10, "score": 6, "explanation_md": "Struktur klar"},
+                {"criterion": "Inhalt", "max_score": 10, "score": 11, "explanation_md": "Nachvollziehbar begründet."},
+                {"criterion": "Struktur", "max_score": 10, "score": -1, "explanation_md": "Ansatz erkennbar."},
             ],
         }
 
     def fake_run_structured_feedback(*, text_md: str, criteria, analysis_json, **_kwargs):
         assert analysis_json["criteria_results"][0]["criterion"] == "Inhalt"
-        return "**LLM**\n\n- Inhalt stark."
+        return (
+            "**Das ist dir gut gelungen:** Du hast zentrale Punkte verständlich erklärt.\n\n"
+            "**Das kannst du besser:** Achte beim nächsten Mal stärker auf eine klare Gliederung."
+        )
 
     monkeypatch.setattr(programs, "run_structured_analysis", fake_run_structured_analysis, raising=False)
     monkeypatch.setattr(programs, "run_structured_feedback", fake_run_structured_feedback, raising=False)
@@ -84,82 +88,42 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
         assert item["criterion"] == crit_name
         assert item["max_score"] == 10
         assert 0 <= int(item["score"]) <= 10
-        assert crit_name in item["explanation_md"]  # name appears in explanation
+        assert isinstance(item["explanation_md"], str) and item["explanation_md"].strip()
 
     overall = int(result.analysis_json.get("score", -1))
     assert 0 <= overall <= 5
+    assert "**Das ist dir gut gelungen:**" in result.feedback_md
+    assert "**Das kannst du besser:**" in result.feedback_md
 
 
-def test_program_uses_legacy_runners_when_structured_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Legacy runners should be called with compatible kwargs when structured DSPy fails."""
+def test_program_raises_when_structured_pipeline_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail-fast: do not fall back to legacy runners when structured DSPy fails."""
     _install_fake_dspy(monkeypatch)
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
     programs = import_module("backend.learning.adapters.dspy.programs")
 
-    # Force structured path to raise so legacy path is exercised.
-    monkeypatch.setattr(programs, "run_structured_analysis", lambda **_: (_ for _ in ()).throw(AttributeError("no Predict")))
-    monkeypatch.setattr(programs, "run_structured_feedback", lambda **_: (_ for _ in ()).throw(AttributeError("no Predict")))
-
-    # Legacy analysis runner with minimal signature (no optional kwargs)
-    def _legacy_analysis(*, text_md: str, criteria):
-        return json.dumps(
-            {
-                "schema": "criteria.v2",
-                "score": 3,
-                "criteria_results": [
-                    {"criterion": criteria[0], "max_score": 10, "score": 9, "explanation_md": "Analyse ok"},
-                ],
-            }
-        )
-
-    def _legacy_feedback(*, text_md: str, criteria, analysis_json):
-        assert analysis_json["criteria_results"][0]["score"] == 9
-        return "**Legacy Feedback**"
-
-    monkeypatch.setattr(prog, "_run_analysis_model", _legacy_analysis)
-    monkeypatch.setattr(prog, "_run_feedback_model", _legacy_feedback)
-
-    result = prog.analyze_feedback(text_md="# Text", criteria=["Inhalt"])  # type: ignore[attr-defined]
-    assert result.analysis_json.get("schema") == "criteria.v2"
-    assert result.feedback_md == "**Legacy Feedback**"
-
-
-def test_program_legacy_fallback_raises_on_lm_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    If the legacy LM hook fails, the program must not return stub feedback.
-
-    Instead, it should surface the error so the caller can retry or fall back
-    to another adapter (e.g., Ollama).
-    """
-    _install_fake_dspy(monkeypatch)
-    prog = import_module("backend.learning.adapters.dspy.feedback_program")
-    programs = import_module("backend.learning.adapters.dspy.programs")
-
-    # Force structured path to fail and trigger the legacy fallback.
-    monkeypatch.setattr(programs, "run_structured_analysis", lambda **_: (_ for _ in ()).throw(RuntimeError("no predict")))
-    monkeypatch.setattr(programs, "run_structured_feedback", lambda **_: (_ for _ in ()).throw(RuntimeError("no predict")))
-
-    # Legacy LM hook signals a timeout; this must bubble up.
-    def _bomb_feedback_model(**kwargs):  # type: ignore[no-untyped-def]
-        raise TimeoutError("LM timeout in legacy fallback")
-
-    monkeypatch.setattr(prog, "_run_feedback_model", _bomb_feedback_model)
-
-    with pytest.raises(TimeoutError):
+    monkeypatch.setattr(
+        programs,
+        "run_structured_analysis",
+        lambda **_: (_ for _ in ()).throw(RuntimeError("structured_analysis_failed")),
+        raising=False,
+    )
+    with pytest.raises(RuntimeError):
         prog.analyze_feedback(text_md="# Text", criteria=["Inhalt"])  # type: ignore[arg-type]
 
 
-def test_program_with_empty_criteria_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_program_with_empty_criteria_generates_feedback(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
     prog = import_module("backend.learning.adapters.dspy.feedback_program")
     programs = import_module("backend.learning.adapters.dspy.programs")
 
-    def fake_structured_feedback(*, text_md: str, criteria, analysis_json, **_kwargs):
-        assert criteria == []
-        assert analysis_json.schema == "criteria.v2"
-        return "Eine kurze Rückmeldung im Fließtext."
+    def fake_feedback_no_criteria(*, text_md: str, **_kwargs):
+        return (
+            "**Das ist dir gut gelungen:** Du hast dich erkennbar mit dem Thema beschäftigt.\n\n"
+            "**Das kannst du besser:** Formuliere deine Antwort beim nächsten Mal noch genauer."
+        )
 
-    monkeypatch.setattr(programs, "run_structured_feedback", fake_structured_feedback, raising=False)
+    monkeypatch.setattr(programs, "run_feedback_no_criteria", fake_feedback_no_criteria, raising=False)
     result = prog.analyze_feedback(  # type: ignore[attr-defined]
         text_md="# Nur Text", criteria=[]
     )

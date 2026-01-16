@@ -1,6 +1,6 @@
 """
-Worker should propagate task context (instruction, hints) into the job payload
-and pass it through to the Feedback adapter when supported.
+Worker should pass task context (instruction + teacher-only AI context) to the
+Feedback adapter when supported.
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def _dsn() -> str:
 
 
 @pytest.mark.anyio
-async def test_job_payload_contains_instruction_and_hints():
+async def test_job_payload_does_not_contain_teacher_context():
     _require_db_or_skip()
     fixture = await _prepare_learning_fixture()
     dsn = _dsn()
@@ -88,8 +88,8 @@ async def test_job_payload_contains_instruction_and_hints():
             if isinstance(payload, str):
                 payload = json.loads(payload)
 
-    assert payload.get("instruction_md") == fixture.task.get("instruction_md")
-    assert payload.get("hints_md") == fixture.task.get("hints_md")
+    # The job payload must not leak teacher-only context.
+    assert "teacher_context_md" not in payload
 
 
 @dataclass
@@ -104,13 +104,20 @@ class _FeedbackCapturingAdapter:
     def __init__(self) -> None:
         self.last_kwargs: dict | None = None
 
-    def analyze(self, *, text_md: str, criteria: Sequence[str], instruction_md=None, hints_md=None) -> FeedbackResult:  # type: ignore[no-untyped-def]
+    def analyze(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        text_md: str,
+        criteria: Sequence[str],
+        instruction_md=None,
+        teacher_context_md=None,
+    ) -> FeedbackResult:
         # Capture context for assertions and return a minimal valid result
         self.last_kwargs = {
             "text_md": text_md,
             "criteria": list(criteria),
             "instruction_md": instruction_md,
-            "hints_md": hints_md,
+            "teacher_context_md": teacher_context_md,
         }
         return FeedbackResult(
             feedback_md="Prosa-Feedback",
@@ -170,7 +177,7 @@ async def test_worker_passes_task_context_to_feedback_adapter():
 
     assert captured_kwargs is not None, "Worker did not process the targeted submission"
     assert captured_kwargs.get("instruction_md") == fixture.task.get("instruction_md")
-    assert captured_kwargs.get("hints_md") == fixture.task.get("hints_md")
+    assert captured_kwargs.get("teacher_context_md") == fixture.task.get("teacher_context_md")
 def _job_pending(*, worker_dsn: str, submission_id: str) -> bool:
     """Return True when a queue entry for the submission still exists."""
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]

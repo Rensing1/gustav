@@ -6,7 +6,7 @@ import pytest
 
 @pytest.mark.anyio
 def test_dspy_feedback_program_normalizes_structured_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Structured DSPy analysis is normalized to criteria.v2 without legacy prompts."""
+    """Structured DSPy analysis is normalized to criteria.v2 (clamping + ordering)."""
 
     class _FakeDSPy:
         __version__ = "0.1-test"
@@ -28,7 +28,10 @@ def test_dspy_feedback_program_normalizes_structured_analysis(monkeypatch: pytes
 
     def fake_run_structured_feedback(*, text_md: str, criteria: list[str], analysis_json, **_kwargs):
         assert criteria == ["Inhalt", "Darstellung"]
-        return "Kurze Rückmeldung."
+        return (
+            "**Das ist dir gut gelungen:** Du hast zentrale Punkte verständlich erklärt.\n\n"
+            "**Das kannst du besser:** Achte beim nächsten Mal stärker auf eine klare Gliederung."
+        )
 
     monkeypatch.setattr(programs, "run_structured_analysis", fake_run_structured_analysis, raising=False)
     monkeypatch.setattr(programs, "run_structured_feedback", fake_run_structured_feedback, raising=False)
@@ -43,6 +46,5 @@ def test_dspy_feedback_program_normalizes_structured_analysis(monkeypatch: pytes
     darst = next(i for i in items if i["criterion"] == "Darstellung")
     assert 0 <= inhalt["score"] <= inhalt["max_score"]
     assert 0 <= darst["score"] <= darst["max_score"]
-    # Feedback text may fall back to a deterministic default; only require
-    # non-empty Markdown here to keep the test agnostic of wording.
-    assert isinstance(result.feedback_md, str) and result.feedback_md.strip()
+    assert "**Das ist dir gut gelungen:**" in result.feedback_md
+    assert "**Das kannst du besser:**" in result.feedback_md

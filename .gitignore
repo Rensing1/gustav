@@ -20,6 +20,7 @@ legacy-code-alpha1/
 # Python bytecode cache
 __pycache__/
 *.pyc
+.venv/
 .env*
 .venv
 !.env.example

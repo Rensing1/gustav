@@ -101,14 +101,14 @@ async def _create_task(
     *,
     instruction_md: str,
     criteria: Sequence[str] | None = None,
-    hints_md: str | None = None,
+    teacher_context_md: str | None = None,
     max_attempts: int | None = None,
 ) -> dict:
     payload: dict[str, object] = {"instruction_md": instruction_md}
     if criteria is not None:
         payload["criteria"] = list(criteria)
-    if hints_md is not None:
-        payload["hints_md"] = hints_md
+    if teacher_context_md is not None:
+        payload["teacher_context_md"] = teacher_context_md
     if max_attempts is not None:
         payload["max_attempts"] = max_attempts
     resp = await client.post(
@@ -214,7 +214,7 @@ async def _prepare_learning_fixture(
             section["id"],
             instruction_md="### Zeichne die Gerade y = 2x + 1",
             criteria=["Graph korrekt", "Steigung erläutert"],
-            hints_md="Nutze zwei Punkte.",
+            teacher_context_md="Nutze zwei Punkte.",
             max_attempts=max_attempts,
         )
         module = await _create_module(teacher_client, course_id, unit["id"])

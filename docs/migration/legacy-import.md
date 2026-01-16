@@ -203,11 +203,11 @@ Nutze diesen Abschnitt als Referenz, wenn du während des ETL-Laufs Feldzuordnun
 - **Legacy**
   - `task_base(id uuid, section_id uuid?, instruction text, task_type text, criteria text, assessment_criteria jsonb, solution_hints text, order_in_section int, created_at, updated_at)`
   - `regular_tasks(task_id uuid, order_in_section int, max_attempts int, prompt text, grading_criteria text[], solution_hints text)`
-- **Alpha2** `public.unit_tasks(id uuid, unit_id uuid, section_id uuid, instruction_md text, criteria text[], hints_md text?, max_attempts int?, due_at?, position int, created_at, updated_at)`
+- **Alpha2** `public.unit_tasks(id uuid, unit_id uuid, section_id uuid, instruction_md text, criteria text[], teacher_context_md text?, max_attempts int?, due_at?, position int, created_at, updated_at)`
 - **Mapping**
   - `instruction` oder `regular_tasks.prompt` → `instruction_md` (Markdown).
   - `assessment_criteria` (JSON) → `criteria` (`text[]`).
-  - `solution_hints` → `hints_md`.
+  - `solution_hints` → `teacher_context_md` (teacher-only AI context, not shown to students).
   - `order_in_section` → 1-basiertes `position`.
   - `unit_id` aus zugehörigem Abschnitt ableiten (`unit_sections.unit_id`).
   - `max_attempts` aus `regular_tasks`, `NULL` = unbegrenzt.

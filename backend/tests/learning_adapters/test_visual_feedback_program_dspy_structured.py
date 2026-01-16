@@ -50,7 +50,7 @@ def test_visual_feedback_program_raises_when_dspy_missing(monkeypatch: pytest.Mo
             image_data_uri="data:image/png;base64,AA==",
             criteria=["K1"],
             teacher_instructions_md="Aufgabe",
-            solution_hints_md=None,
+            teacher_context_md=None,
         )
 
 
@@ -64,15 +64,16 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
         image_data_uri: str,
         criteria: list[str],
         teacher_instructions_md=None,
-        solution_hints_md=None,
+        teacher_context_md=None,
     ):
         assert image_data_uri.startswith("data:image/"), "visual pipeline must receive an image data URI"
         return {
             "schema": "criteria.v2",
-            "score": 4,
+            # Out-of-range overall to ensure clamping.
+            "score": 9,
             "criteria_results": [
-                {"criterion": criteria[0], "max_score": 10, "score": 2, "explanation_md": "ok"},
-                {"criterion": criteria[1], "max_score": 10, "score": 7, "explanation_md": "gut"},
+                {"criterion": criteria[0], "max_score": 10, "score": 11, "explanation_md": "ok"},
+                {"criterion": criteria[1], "max_score": 10, "score": -1, "explanation_md": "gut"},
             ],
         }
 
@@ -82,10 +83,14 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
         criteria: list[str],
         analysis_json: dict,
         teacher_instructions_md=None,
+        teacher_context_md=None,
     ):
         assert image_data_uri.startswith("data:image/"), "visual feedback must receive an image data URI"
         assert analysis_json.get("schema") == "criteria.v2"
-        return "Die Lösung ist insgesamt gut; beim ersten Kriterium noch genauer werden."
+        return (
+            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
+            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+        )
 
     monkeypatch.setattr(programs, "run_structured_visual_analysis", fake_run_structured_visual_analysis, raising=False)
     monkeypatch.setattr(programs, "run_structured_visual_feedback", fake_run_structured_visual_feedback, raising=False)
@@ -95,7 +100,7 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
         image_data_uri="data:image/png;base64,AA==",
         criteria=["Inhalt", "Struktur"],
         teacher_instructions_md="Aufgabe",
-        solution_hints_md="Hinweis",
+        teacher_context_md="Hinweis",
     )
 
     assert result.parse_status == "parsed_structured"
@@ -103,5 +108,5 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
     items = result.analysis_json.get("criteria_results")
     assert isinstance(items, list) and len(items) == 2
     assert items[0]["criterion"] == "Inhalt" and items[1]["criterion"] == "Struktur"
-    assert "insgesamt" in result.feedback_md
-
+    assert "**Das ist dir gut gelungen:**" in result.feedback_md
+    assert "**Das kannst du besser:**" in result.feedback_md

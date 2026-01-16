@@ -1,47 +1,155 @@
 """
-Local Feedback adapter using a simple Ollama client call.
+Learning feedback adapter (DSPy-only, OpenAI-compatible endpoint).
 
 Intent:
-    Minimal implementation to satisfy tests:
-      - Analyze Markdown text against provided criteria.
-      - Return FeedbackResult with Markdown and a `criteria.v2` analysis JSON.
-      - Map client timeouts to FeedbackTransientError.
+    Provide a minimal adapter for the learning worker that generates:
+      - structured rubric analysis (`criteria.v2`) and
+      - formative feedback (Markdown)
+    via DSPy, configured against an OpenAI-compatible API endpoint.
 
-Privacy:
-    Do not log or return raw student text beyond the structured fields.
+Design:
+    - Fail-fast: no Ollama fallback, no deterministic Python fallback text.
+    - Thread-safe: the worker may run jobs concurrently; use `dspy.context(...)`
+      (thread-local settings) instead of global `dspy.configure(...)`.
+
+Security:
+    - Do not log student text or teacher-only context.
 """
 
 from __future__ import annotations
 
-import base64
 import logging
 import os
+import ipaddress
 from typing import Sequence
+from urllib.parse import urlparse as _urlparse
 
-from backend.learning.adapters.ports import FeedbackResult, FeedbackTransientError
-from backend.learning.adapters.dspy import helpers as dspy_helpers
+from backend.learning.adapters.ports import (
+    FeedbackPermanentError,
+    FeedbackResult,
+    FeedbackTransientError,
+)
+
+LOG = logging.getLogger(__name__)
 
 
-logger = logging.getLogger(__name__)
+_INSECURE_HTTP_ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
+
+
+def _is_prod_like() -> bool:
+    env = (os.getenv("GUSTAV_ENV") or "dev").strip().lower()
+    return env in {"prod", "production", "stage", "staging"}
+
+
+def _is_allowed_insecure_http_host(host: str) -> bool:
+    """Allow plain HTTP only for clearly local hosts (prod/stage safety guard)."""
+    host = (host or "").strip().lower()
+    if not host:
+        return False
+    if host in _INSECURE_HTTP_ALLOWED_HOSTS:
+        return True
+    try:
+        parsed_ip = ipaddress.ip_address(host)
+        return bool(parsed_ip.is_loopback or parsed_ip.is_private)
+    except ValueError:
+        pass
+    # Allow Docker/service DNS names like "ollama" but fail closed for public FQDNs.
+    return "." not in host
+
+
+def _require_secure_openai_base_url(base_url: str) -> None:
+    """Enforce HTTPS for remote OpenAI endpoints in production-like envs."""
+    if not _is_prod_like():
+        return
+    try:
+        parsed = _urlparse(base_url)
+    except Exception:
+        raise FeedbackPermanentError("invalid_OPENAI_BASE_URL")
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").lower()
+    if scheme not in {"http", "https"} or not host:
+        raise FeedbackPermanentError("invalid_OPENAI_BASE_URL")
+    if scheme == "http" and not _is_allowed_insecure_http_host(host):
+        raise FeedbackPermanentError("insecure_OPENAI_BASE_URL")
+
+
+def _parse_float_env(name: str, *, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return float(raw)
+    except Exception:
+        return default
+
+
+def _normalize_model_name(raw: str) -> str:
+    """Return a DSPy/LiteLLM model string for OpenAI-compatible chat completion."""
+    model = (raw or "").strip()
+    if not model:
+        return ""
+    # Allow advanced users to provide an explicit provider prefix.
+    if "/" in model:
+        return model
+    return f"openai/{model}"
 
 
 class _LocalFeedbackAdapter:
-    """Minimal Feedback adapter backed by a local Ollama client.
-
-    Keeps logic intentionally simple and deterministic for tests, while
-    respecting the expected result schema and error mapping.
-    """
+    """DSPy-only Feedback adapter used by the learning worker."""
 
     def __init__(self) -> None:
-        raw_model = os.getenv("AI_FEEDBACK_MODEL")
-        self._dspy_model = (raw_model or "").strip()
-        self._model = self._dspy_model or os.getenv("OLLAMA_FEEDBACK_MODEL") or "llama3.1"
+        self._base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
+        self._api_key = (os.getenv("OPENAI_API_KEY") or "").strip() or "sk-noop"
 
-        raw_base_url = os.getenv("OLLAMA_BASE_URL")
-        self._dspy_base_url = (raw_base_url or "").strip()
-        self._base_url = self._dspy_base_url or os.getenv("OLLAMA_BASE_URL") or "http://ollama:11434"
+        self._text_model = _normalize_model_name(os.getenv("AI_TEXT_MODEL") or "")
+        self._visual_model = _normalize_model_name(os.getenv("AI_VISUAL_MODEL") or "")
 
-        self._timeout = int(os.getenv("AI_TIMEOUT_FEEDBACK", "30"))
+        self._text_temperature = _parse_float_env("AI_TEXT_TEMPERATURE", default=0.0)
+        self._visual_temperature = _parse_float_env("AI_VISUAL_TEMPERATURE", default=0.0)
+
+        self._text_lm = None
+        self._visual_lm = None
+
+    def _require_common_config(self) -> None:
+        if not self._base_url:
+            raise FeedbackTransientError("missing_OPENAI_BASE_URL")
+        _require_secure_openai_base_url(self._base_url)
+        if not self._text_model:
+            raise FeedbackTransientError("missing_AI_TEXT_MODEL")
+
+    def _get_text_lm(self):  # type: ignore[no-untyped-def]
+        if self._text_lm is not None:
+            return self._text_lm
+        self._require_common_config()
+        try:
+            import dspy  # type: ignore
+        except Exception as exc:
+            raise FeedbackTransientError("dspy_unavailable") from exc
+        self._text_lm = dspy.LM(  # type: ignore[attr-defined]
+            self._text_model,
+            temperature=self._text_temperature,
+            base_url=self._base_url,
+            api_key=self._api_key,
+        )
+        return self._text_lm
+
+    def _get_visual_lm(self):  # type: ignore[no-untyped-def]
+        if self._visual_lm is not None:
+            return self._visual_lm
+        self._require_common_config()
+        if not self._visual_model:
+            raise FeedbackPermanentError("missing_AI_VISUAL_MODEL")
+        try:
+            import dspy  # type: ignore
+        except Exception as exc:
+            raise FeedbackTransientError("dspy_unavailable") from exc
+        self._visual_lm = dspy.LM(  # type: ignore[attr-defined]
+            self._visual_model,
+            temperature=self._visual_temperature,
+            base_url=self._base_url,
+            api_key=self._api_key,
+        )
+        return self._visual_lm
 
     def analyze(
         self,
@@ -49,238 +157,36 @@ class _LocalFeedbackAdapter:
         text_md: str,
         criteria: Sequence[str],
         instruction_md: str | None = None,
-        hints_md: str | None = None,
+        teacher_context_md: str | None = None,
     ) -> FeedbackResult:  # type: ignore[override]
-        """Produce formative feedback and a criteria.v2 analysis.
+        """Generate structured analysis + feedback for a text submission."""
+        lm = self._get_text_lm()
+        try:
+            import dspy  # type: ignore
+            from backend.learning.adapters.dspy import feedback_program
 
-        Why:
-            Provide a deterministic, privacy-conscious feedback step for the
-            learning worker. Uses DSPy when available, otherwise a local
-            Ollama client, then normalizes results into `criteria.v2`.
-
-        Parameters:
-            text_md: Student submission text in Markdown (preprocessed by web layer).
-            criteria: Sequence of rubric items to evaluate.
-
-        Behavior:
-            - Prefers DSPy program if `dspy` can be imported; otherwise calls
-              a local Ollama client with a compact prompt.
-            - Always returns a minimal `criteria.v2` structure with
-              `criterion`, `max_score`, `score`, `explanation_md`.
-            - Classifies client timeouts as transient.
-
-        Permissions:
-            Intended for the learning worker's background processing. No
-            direct end-user authorization is evaluated here.
-        """
-        use_dspy, skip_reason = self._dspy_prerequisites_met()
-        dspy_program = None
-
-        if use_dspy:
-            try:  # pragma: no cover - import decision is exercised via tests
-                import dspy  # type: ignore
-
-                _ = getattr(dspy, "__version__", None)
-                from backend.learning.adapters.dspy import feedback_program as dspy_program
-            except Exception as exc:
-                logger.warning("learning.feedback.dspy_import_failed reason=%s", exc.__class__.__name__)
-                use_dspy = False
-        elif skip_reason:
-            logger.warning("learning.feedback.dspy_skipped reason=%s", skip_reason)
-
-        dspy_analysis: dict | None = None
-        if use_dspy and dspy_program is not None:
-            try:
-                dspy_result = dspy_program.analyze_feedback(
+            with dspy.context(  # type: ignore[attr-defined]
+                lm=lm,
+                adapter=dspy.JSONAdapter(),  # type: ignore[attr-defined]
+                disable_history=True,
+            ):
+                return feedback_program.analyze_feedback(
                     text_md=text_md,
                     criteria=criteria,
                     teacher_instructions_md=instruction_md,
-                    solution_hints_md=hints_md,
+                    teacher_context_md=teacher_context_md,
                 )
-                converted: FeedbackResult | None = None
-                if isinstance(dspy_result, FeedbackResult):
-                    converted = dspy_result
-                elif hasattr(dspy_result, "feedback_md") and hasattr(dspy_result, "analysis_json"):
-                    converted = FeedbackResult(
-                        feedback_md=str(getattr(dspy_result, "feedback_md")),
-                        analysis_json=getattr(dspy_result, "analysis_json"),
-                        parse_status=getattr(dspy_result, "parse_status", None),
-                    )
-                else:
-                    try:
-                        feedback_md, analysis = dspy_result  # type: ignore[misc]
-                        converted = FeedbackResult(
-                            feedback_md=str(feedback_md),
-                            analysis_json=analysis,
-                            parse_status=getattr(dspy_result, "parse_status", None),
-                        )
-                    except Exception as exc:  # pragma: no cover - defensive guard
-                        logger.warning("learning.feedback.dspy_invalid_return reason=%s", exc.__class__.__name__)
-                if converted is not None:
-                    parse_status = (converted.parse_status or "unknown").strip()
-                    feedback_trimmed = (converted.feedback_md or "").strip()
-                    # Treat the literal string "None" as empty to avoid persisting it.
-                    if feedback_trimmed.lower() == "none":
-                        feedback_trimmed = ""
-                    analysis_dict = converted.analysis_json if isinstance(converted.analysis_json, dict) else None
-                    has_items = bool(analysis_dict and isinstance(analysis_dict.get("criteria_results"), list) and analysis_dict["criteria_results"])
-                    degraded_statuses = {"analysis_fallback", "analysis_error", "analysis_feedback_fallback"}
-                    looks_stub = feedback_trimmed.startswith("**Rückmeldung**") and "Stärken:" in feedback_trimmed
-                    if parse_status in degraded_statuses and feedback_trimmed and not looks_stub and has_items:
-                        # Degraded Status, aber verwertbares Feedback + Analyse vorhanden → direkt übernehmen.
-                        logger.info(
-                            "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
-                            len(criteria),
-                            parse_status,
-                        )
-                        return FeedbackResult(
-                            feedback_md=feedback_trimmed,
-                            analysis_json=analysis_dict or {},
-                            parse_status=parse_status,
-                        )
-                    if parse_status in degraded_statuses:
-                        logger.info(
-                            "learning.feedback.dspy_degraded_to_ollama criteria_count=%s parse_status=%s",
-                            len(criteria),
-                            parse_status or "unknown",
-                        )
-                        dspy_analysis = analysis_dict if isinstance(analysis_dict, dict) else None
-                        # Switch to Ollama fallback path below
-                        use_dspy = False
-                    elif not feedback_trimmed or looks_stub:
-                        # Stay within DSPy path: synthesize a brief feedback from the structured analysis
-                        # rather than calling Ollama again.
-                        analysis_dict = converted.analysis_json if isinstance(converted.analysis_json, dict) else None
-                        if analysis_dict is None:
-                            analysis_dict = {"schema": "criteria.v2", "score": 0, "criteria_results": []}
-                        crit = analysis_dict.get("criteria_results", []) if isinstance(analysis_dict, dict) else []
-                        good = [
-                            f"{c.get('criterion', 'Kriterium')}: {c.get('score', 0)}/{c.get('max_score', 10)}"
-                            for c in crit
-                            if int(c.get("score", 0)) >= int(c.get("max_score", 10)) // 2
-                        ]
-                        bad = [
-                            str(c.get('criterion', 'Kriterium'))
-                            for c in crit
-                            if int(c.get("score", 0)) < int(c.get("max_score", 10)) // 2
-                        ]
-                        synthetic = []
-                        if good:
-                            synthetic.append("Stärken: " + ", ".join(good) + ".")
-                        if bad:
-                            synthetic.append("Hinweise: gezielt ausbauen bei " + ", ".join(bad) + ".")
-                        feedback_text = " ".join(synthetic) or "Kurze, konstruktive Rückmeldung basierend auf der Analyse."
-                        logger.info(
-                            "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
-                            len(criteria),
-                            parse_status,
-                        )
-                        return FeedbackResult(
-                            feedback_md=feedback_text,
-                            analysis_json=analysis_dict,
-                            parse_status=parse_status,
-                        )
-                    else:
-                        logger.info(
-                            "learning.feedback.completed feedback_backend=dspy criteria_count=%s parse_status=%s",
-                            len(criteria),
-                            parse_status,
-                        )
-                        return converted
-            except FeedbackTransientError:
-                raise
-            except TimeoutError as exc:
-                logger.warning("learning.feedback.dspy_timeout reason=timeout")
-                raise FeedbackTransientError(str(exc)) from exc
-            except RuntimeError as exc:
-                logger.warning("learning.feedback.dspy_runtime_error reason=%s", str(exc))
-                # Switch to Ollama fallback path
-                use_dspy = False
-            except Exception as exc:  # pragma: no cover - defensive fallback
-                logger.warning("learning.feedback.dspy_failed reason=%s", exc.__class__.__name__)
-                # Switch to Ollama fallback path
-                use_dspy = False
-            # Any exception reaches this point → fall back to Ollama path by disabling DSPy
-
-        feedback_md_from_ollama: str | None = None
-        if not use_dspy:
-            # Import ollama lazily for test monkeypatching support.
-            try:
-                import ollama  # type: ignore
-            except Exception as exc:  # pragma: no cover - defensive only
-                raise FeedbackTransientError(f"ollama client unavailable: {exc}")
-
-            # The real prompt would incorporate text_md and criteria; keep simple here.
-            prompt = (
-                "Provide short formative feedback in Markdown and consider given criteria.\n"
-                f"Criteria count: {len(list(criteria))}."
-            )
-            try:
-                # Use positional host argument for broader client compatibility
-                client = ollama.Client(self._base_url)
-                # Force raw mode to bypass server-side templates that may reference
-                # unavailable functions (e.g., currentDate) and keep behavior stable.
-                think_level = dspy_helpers.resolve_think_level(self._model, os.getenv("AI_THINK_LEVEL"))
-                generate_kwargs = {
-                    "model": self._model,
-                    "prompt": prompt,
-                    "options": {
-                        "raw": True,
-                        "timeout": self._timeout,  # enforce AI_TIMEOUT_FEEDBACK at client level
-                        # Ensure server template is not applied to avoid template errors
-                        "template": "{{ .Prompt }}",
-                    },
-                }
-                if think_level:
-                    generate_kwargs["think"] = think_level
-
-                raw = client.generate(**generate_kwargs)
-                if isinstance(raw, dict):
-                    val = raw.get("response") or raw.get("message")
-                    feedback_md_from_ollama = str(val or "").strip() if val is not None else None
-                elif isinstance(raw, str):
-                    feedback_md_from_ollama = raw.strip()
-                else:  # pragma: no cover - defensive normalization
-                    feedback_md_from_ollama = str(raw).strip()
-            except TimeoutError as exc:
-                raise FeedbackTransientError(str(exc))
-            except Exception as exc:  # pragma: no cover - conservative mapping
-                raise FeedbackTransientError(str(exc))
-
-        # Prefer DSPy-produced analysis if available; otherwise build a minimal criteria.v2 payload.
-        if dspy_analysis and isinstance(dspy_analysis, dict):
-            analysis = dspy_analysis
-        else:
-            crit_list = []
-            for name in criteria:
-                crit_list.append(
-                    {
-                        "criterion": str(name),
-                        "max_score": 10,
-                        # KISS default without evidence: 0
-                        "score": 0,  # within 0..max_score (v2)
-                        "explanation_md": "Kurzbegründung auf Basis des Kriteriums.",
-                    }
-                )
-
-            analysis = {
-                "schema": "criteria.v2",
-                # Overall derives to 0 when all items are 0
-                "score": 0,  # overall score within 0..5
-                "criteria_results": crit_list,
-            }
-
-        # Prefer actual model output if available; otherwise return a deterministic stub.
-        feedback_md = (feedback_md_from_ollama or "").strip() or (
-            "**Rückmeldung**\n\n- Stärken: klar erkennbar.\n- Hinweise: gezielt ausbauen."
-        )
-        parse_status = "model" if feedback_md_from_ollama else "stub"
-        logger.info(
-            "learning.feedback.completed feedback_backend=ollama criteria_count=%s parse_status=%s",
-            len(criteria),
-            parse_status,
-        )
-        return FeedbackResult(feedback_md=feedback_md, analysis_json=analysis, parse_status=parse_status)
+        except FeedbackPermanentError:
+            raise
+        except FeedbackTransientError:
+            raise
+        except TimeoutError as exc:
+            raise FeedbackTransientError("timeout") from exc
+        except ImportError as exc:
+            raise FeedbackTransientError("dspy_unavailable") from exc
+        except Exception as exc:
+            # Fail-fast: surface as transient so the worker can retry.
+            raise FeedbackTransientError("feedback_failed") from exc
 
     def analyze_visual(  # type: ignore[no-untyped-def]
         self,
@@ -289,28 +195,12 @@ class _LocalFeedbackAdapter:
         job_payload: dict,
         criteria: Sequence[str],
         instruction_md: str | None = None,
-        hints_md: str | None = None,
+        teacher_context_md: str | None = None,
     ) -> FeedbackResult:
-        """Run the Visual DSPy pipeline (image/PDF → criteria.v2 + feedback).
+        """Generate structured analysis + feedback for a visual submission (image/PDF)."""
+        # Fail fast on missing visual-model configuration before touching storage.
+        lm = self._get_visual_lm()
 
-        Why:
-            Visual tasks (`Task.kind="visual"`) are designed for handwritten
-            solutions, sketches and diagrams. Their evaluation must be based
-            on the visual input directly (VLM), not on an OCR transcript.
-
-        Parameters:
-            submission: Submission row snapshot (expects kind, mime_type, ids).
-            job_payload: Worker payload (expects mime_type, storage_key, sha256, size_bytes).
-            criteria: Rubric criteria list (ordered).
-            instruction_md: Optional teacher task instruction (context).
-            hints_md: Optional teacher-only hints (context).
-
-        Behavior:
-            - Loads the uploaded file bytes (image/jpeg|image/png|application/pdf).
-            - For PDFs, uses the existing PDF→PNG stitching logic (shared with Vision).
-            - Converts the visual input to a data-URI string and calls the DSPy program.
-        """
-        from backend.learning.adapters.ports import FeedbackPermanentError  # local import to avoid cycles
         from backend.learning.adapters.local_vision import (  # type: ignore
             VisionPermanentError,
             VisionTransientError,
@@ -322,6 +212,7 @@ class _LocalFeedbackAdapter:
 
         mime = (job_payload or {}).get("mime_type") or (submission or {}).get("mime_type") or ""
         mime = str(mime or "").strip().lower()
+
         bucket = _submissions_bucket()
         max_download_bytes = get_learning_max_upload_bytes()
 
@@ -341,11 +232,14 @@ class _LocalFeedbackAdapter:
                 image_data_uri = f"data:{mime};base64,{image_b64}"
             elif mime == "application/pdf":
                 stitched = _LocalVisionAdapter()._ensure_pdf_stitched_png(  # noqa: SLF001
-                    submission=submission, job_payload=job_payload
+                    submission=submission,
+                    job_payload=job_payload,
                 )
                 if not stitched:
                     raise FeedbackTransientError("pdf_images_unavailable")
-                image_data_uri = "data:image/png;base64," + base64.b64encode(stitched).decode("ascii")
+                import base64 as _b64
+
+                image_data_uri = "data:image/png;base64," + _b64.b64encode(stitched).decode("ascii")
             else:
                 raise FeedbackPermanentError("unsupported_mime")
         except VisionPermanentError as exc:
@@ -355,27 +249,31 @@ class _LocalFeedbackAdapter:
 
         if not image_data_uri:
             raise FeedbackTransientError("image_unavailable")
-
         try:
-            from backend.learning.adapters.dspy import visual_feedback_program as prog
+            import dspy  # type: ignore
+            from backend.learning.adapters.dspy import visual_feedback_program
 
-            return prog.analyze_visual_feedback(
-                image_data_uri=image_data_uri,
-                criteria=criteria,
-                teacher_instructions_md=instruction_md,
-                solution_hints_md=hints_md,
-            )
+            with dspy.context(  # type: ignore[attr-defined]
+                lm=lm,
+                adapter=dspy.JSONAdapter(),  # type: ignore[attr-defined]
+                disable_history=True,
+            ):
+                return visual_feedback_program.analyze_visual_feedback(
+                    image_data_uri=image_data_uri,
+                    criteria=criteria,
+                    teacher_instructions_md=instruction_md,
+                    teacher_context_md=teacher_context_md,
+                )
+        except FeedbackPermanentError:
+            raise
+        except FeedbackTransientError:
+            raise
+        except TimeoutError as exc:
+            raise FeedbackTransientError("timeout") from exc
         except ImportError as exc:
-            # Visual tasks require a vision-capable model; without DSPy we fail closed.
-            raise FeedbackPermanentError("dspy_unavailable") from exc
-
-    def _dspy_prerequisites_met(self) -> tuple[bool, str | None]:
-        """Check whether env/config allow the DSPy path."""
-        if not self._dspy_model:
-            return False, "missing_model"
-        if not self._dspy_base_url:
-            return False, "missing_base_url"
-        return True, None
+            raise FeedbackTransientError("dspy_unavailable") from exc
+        except Exception as exc:
+            raise FeedbackTransientError("visual_feedback_failed") from exc
 
 
 def build() -> _LocalFeedbackAdapter:

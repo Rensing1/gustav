@@ -68,7 +68,7 @@ class _StubVisualFeedbackAdapter:
         job_payload: dict,
         criteria,
         instruction_md=None,
-        hints_md=None,
+        teacher_context_md=None,
     ) -> FeedbackResult:
         self.called = True
         self.last_payload = {
@@ -76,7 +76,7 @@ class _StubVisualFeedbackAdapter:
             "task_kind": (job_payload or {}).get("task_kind"),
             "criteria": list(criteria or []),
             "instruction_md": instruction_md,
-            "hints_md": hints_md,
+            "teacher_context_md": teacher_context_md,
         }
         return FeedbackResult(
             feedback_md="VLM Feedback",
@@ -159,4 +159,3 @@ async def test_worker_routes_visual_tasks_to_visual_feedback(monkeypatch: pytest
     assert feedback_md == "VLM Feedback"
     assert isinstance(analysis_json, dict)
     assert analysis_json.get("schema") == "criteria.v2"
-

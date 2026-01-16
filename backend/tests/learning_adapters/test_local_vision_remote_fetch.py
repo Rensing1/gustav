@@ -4,19 +4,20 @@ Vision adapter — remote fetch from Supabase when local file missing.
 Why:
     In proxy mode files land in Supabase Storage and are not available under
     STORAGE_VERIFY_ROOT. The adapter should fetch image bytes via service-role
-    to provide `images=[<b64>]` to the model.
+    to provide a data-URI to the DSPy vision program.
 
 Approach:
     - Do NOT set STORAGE_VERIFY_ROOT.
     - Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
-    - Monkeypatch httpx.Client to return PNG bytes via streaming; patch ollama.Client to capture
-      `images` parameter.
+    - Monkeypatch httpx.Client to return PNG bytes via streaming; stub DSPy + the
+      vision program to avoid real model calls.
 """
 
 from __future__ import annotations
 
 import base64
 import importlib
+from contextlib import contextmanager
 from types import SimpleNamespace
 import sys
 
@@ -29,14 +30,28 @@ from backend.learning.workers.process_learning_submission_jobs import (  # type:
     VisionTransientError,
 )
 
+def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeLM:
+        def __init__(self, model: str, **_kwargs) -> None:
+            self.model = model
 
-class _CapturingClient:
-    def __init__(self) -> None:
-        self.last_images = None
+    class _FakeJSONAdapter:
+        pass
 
-    def generate(self, *, model: str, prompt: str, options: dict | None = None, images: list[str] | None = None, **_: object) -> dict:  # type: ignore[override]
-        self.last_images = images
-        return {"response": "ok"}
+    @contextmanager
+    def _ctx(**_kwargs):  # type: ignore[no-untyped-def]
+        yield
+
+    monkeypatch.setitem(
+        sys.modules,
+        "dspy",
+        SimpleNamespace(
+            __version__="0.0-test",
+            LM=_FakeLM,
+            JSONAdapter=_FakeJSONAdapter,
+            context=_ctx,
+        ),
+    )
 
 
 class _FakeHttpxStream:
@@ -69,14 +84,17 @@ class _FakeHttpxClient:
         return _FakeHttpxStream(self._data, self._status_code)
 
 
-def _install_fake_httpx_and_ollama(monkeypatch: pytest.MonkeyPatch, data: bytes, client: _CapturingClient, status_code: int = 200) -> None:
+def _install_fake_httpx(monkeypatch: pytest.MonkeyPatch, data: bytes, status_code: int = 200) -> None:
     fake_httpx = SimpleNamespace(Client=lambda timeout=None, follow_redirects=None: _FakeHttpxClient(data, status_code))
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
-    fake_ollama = SimpleNamespace(Client=lambda base_url=None: client)
-    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
+    # No model client here: DSPy program is stubbed in the adapter tests.
 
 
 def test_remote_fetches_image_and_sends_to_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+    _install_fake_dspy(monkeypatch)
+
     # No local storage root
     monkeypatch.delenv("STORAGE_VERIFY_ROOT", raising=False)
     # Supabase service-role access
@@ -95,10 +113,18 @@ def test_remote_fetches_image_and_sends_to_model(monkeypatch: pytest.MonkeyPatch
 
     # Prepare a tiny PNG payload returned by the fake httpx client
     png = b"\x89PNG\r\n\x1a\n" + b"x" * 16
-    client = _CapturingClient()
-    _install_fake_httpx_and_ollama(monkeypatch, png, client)
+    _install_fake_httpx(monkeypatch, png)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
+    from backend.learning.adapters.dspy import vision_program
+
+    captured: dict = {}
+
+    def _fake_extract(*, image_data_uri: str):  # type: ignore[no-untyped-def]
+        captured["image_data_uri"] = image_data_uri
+        return ("ok", {"program": "vision_ocr"})
+
+    monkeypatch.setattr(vision_program, "extract_text_from_image", _fake_extract, raising=False)
     adapter = mod.build()  # type: ignore[attr-defined]
 
     submission = {"id": "deadbeef-dead-beef-0000-remoteimg", "kind": "file"}
@@ -111,9 +137,9 @@ def test_remote_fetches_image_and_sends_to_model(monkeypatch: pytest.MonkeyPatch
 
     res: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
     assert isinstance(res, VisionResult)
-    assert client.last_images is not None and isinstance(client.last_images, list) and len(client.last_images) == 1
-    # roundtrip check
-    restored = base64.b64decode(client.last_images[0])
+    assert str(captured.get("image_data_uri", "")).startswith("data:image/png;base64,")
+    payload_b64 = str(captured["image_data_uri"]).split(",", 1)[1]
+    restored = base64.b64decode(payload_b64)
     assert restored.startswith(b"\x89PNG")
 
 
@@ -128,9 +154,6 @@ def test_remote_fetch_rejects_invalid_supabase_url(monkeypatch: pytest.MonkeyPat
 
     fake_httpx = SimpleNamespace(Client=_fail_client)
     monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
-
-    fake_ollama = SimpleNamespace(Client=lambda base_url=None: _CapturingClient())
-    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]
@@ -392,8 +415,7 @@ def test_remote_fetch_aborts_when_download_exceeds_limit(monkeypatch: pytest.Mon
 
     # Prepare payload larger than limit (64 bytes)
     payload = b"\x89PNG\r\n\x1a\n" + (b"z" * 56)
-    client = _CapturingClient()
-    _install_fake_httpx_and_ollama(monkeypatch, payload, client)
+    _install_fake_httpx(monkeypatch, payload)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]
@@ -411,6 +433,10 @@ def test_remote_fetch_aborts_when_download_exceeds_limit(monkeypatch: pytest.Mon
 
 
 def test_remote_fetch_logs_success_without_pii(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+    _install_fake_dspy(monkeypatch)
+
     monkeypatch.delenv("STORAGE_VERIFY_ROOT", raising=False)
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
@@ -427,10 +453,17 @@ def test_remote_fetch_logs_success_without_pii(monkeypatch: pytest.MonkeyPatch, 
     )
 
     png = b"\x89PNG\r\n\x1a\n" + b"y" * 32
-    client = _CapturingClient()
-    _install_fake_httpx_and_ollama(monkeypatch, png, client)
+    _install_fake_httpx(monkeypatch, png)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
+    from backend.learning.adapters.dspy import vision_program
+
+    monkeypatch.setattr(
+        vision_program,
+        "extract_text_from_image",
+        lambda **_: ("ok", {"program": "vision_ocr"}),
+        raising=False,
+    )
     adapter = mod.build()  # type: ignore[attr-defined]
 
     submission = {
@@ -460,8 +493,7 @@ def test_remote_fetch_redirect_raises_transient(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     caplog.set_level("INFO")
 
-    client = _CapturingClient()
-    _install_fake_httpx_and_ollama(monkeypatch, b"", client, status_code=302)
+    _install_fake_httpx(monkeypatch, b"", status_code=302)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
     adapter = mod.build()  # type: ignore[attr-defined]

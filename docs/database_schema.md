@@ -123,7 +123,7 @@ This document summarizes the production session table introduced for persistent 
   - `section_id uuid not null` → `unit_sections(id)` (`on delete cascade`).
   - `instruction_md text not null` — Aufgabenbeschreibung (Markdown), serverseitig auf Nicht‑Leer validiert.
   - `criteria text[] not null default '{}'` — bis zu 10 Kriterien, keine leeren Einträge.
-  - `hints_md text null` — optionale Hinweise (Markdown).
+  - `teacher_context_md text null` — optionaler, lehrkraftseitiger KI‑Kontext (Markdown); wird nicht an Schüler ausgeliefert.
   - `due_at timestamptz null` — optionale Fälligkeit (UTC, ISO‑8601).
   - `max_attempts integer null check (max_attempts > 0)` — optionale Versuchsbegrenzung (≥ 1).
   - `position integer not null check (position > 0)` — 1‑basierte Reihenfolge im Abschnitt.

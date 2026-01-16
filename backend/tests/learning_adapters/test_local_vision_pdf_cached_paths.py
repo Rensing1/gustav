@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import importlib
 from io import BytesIO
+from contextlib import contextmanager
 from types import SimpleNamespace
 import sys
 
@@ -33,25 +34,43 @@ def _png_bytes(width: int, height: int, gray: int) -> bytes:
     return buf.getvalue()
 
 
-class _CapturingClient:
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-
-    def generate(self, *, model: str, prompt: str, options: dict, images: list[str] | None = None, **_: object) -> dict:  # type: ignore[override]
-        self.calls.append({"model": model, "prompt": prompt, "options": options, "images": images or []})
-        return {"response": "ok"}
-
-
 def _reload_adapter():
     # Ensure fresh module state per test (env vars differ per scenario).
     import backend.learning.adapters.local_vision as local_vision  # type: ignore
     return importlib.reload(local_vision)
 
 
+def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch, *, observed: dict) -> None:
+    class _FakeLM:
+        def __init__(self, model: str, **kwargs) -> None:
+            observed.setdefault("lm_calls", []).append({"model": model, "kwargs": dict(kwargs)})
+
+    class _FakeJSONAdapter:
+        pass
+
+    @contextmanager
+    def _ctx(**kwargs):  # type: ignore[no-untyped-def]
+        observed.setdefault("contexts", []).append(dict(kwargs))
+        yield
+
+    monkeypatch.setitem(
+        sys.modules,
+        "dspy",
+        SimpleNamespace(
+            __version__="0.0-test",
+            LM=_FakeLM,
+            JSONAdapter=_FakeJSONAdapter,
+            context=_ctx,
+        ),
+    )
+
+
 def test_pdf_prefers_cached_stitched_png(monkeypatch: pytest.MonkeyPatch, tmp_path, caplog) -> None:
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
-    monkeypatch.setenv("AI_VISION_MODEL", "vision-mini")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
     monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_PUBLIC_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     caplog.set_level("INFO")
 
@@ -67,8 +86,17 @@ def test_pdf_prefers_cached_stitched_png(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     monkeypatch.setattr(module, "_download_supabase_object", _fail_remote, raising=False)
 
-    client = _CapturingClient()
-    monkeypatch.setitem(sys.modules, "ollama", SimpleNamespace(Client=lambda base_url=None: client))
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    from backend.learning.adapters.dspy import vision_program
+
+    captured: dict = {}
+
+    def _fake_extract(*, image_data_uri: str):  # type: ignore[no-untyped-def]
+        captured["image_data_uri"] = image_data_uri
+        return ("ok", {"program": "vision_ocr"})
+
+    monkeypatch.setattr(vision_program, "extract_text_from_image", _fake_extract, raising=False)
 
     adapter = module.build()  # type: ignore[attr-defined]
     submission = {
@@ -84,10 +112,11 @@ def test_pdf_prefers_cached_stitched_png(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     res: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
     assert isinstance(res, VisionResult)
-    assert len(client.calls) == 1
-    images = client.calls[0]["images"]
-    assert isinstance(images, list) and len(images) == 1
-    assert base64.b64decode(images[0]) == stitched_png
+    assert "image_data_uri" in captured
+    data_uri = str(captured["image_data_uri"])
+    assert data_uri.startswith("data:image/png;base64,")
+    payload_b64 = data_uri.split(",", 1)[1]
+    assert base64.b64decode(payload_b64) == stitched_png
 
     logs = "\n".join(rec.getMessage() for rec in caplog.records)
     assert "action=cached_stitched" in logs
@@ -97,7 +126,8 @@ def test_pdf_prefers_cached_stitched_png(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 def test_pdf_uses_page_keys_and_persists_stitched(monkeypatch: pytest.MonkeyPatch, tmp_path, caplog) -> None:
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
-    monkeypatch.setenv("AI_VISION_MODEL", "vision-mini")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
     caplog.set_level("INFO")
 
     base_dir = tmp_path / "submissions/courseB/taskC/student2/derived/sub-pages"
@@ -122,8 +152,17 @@ def test_pdf_uses_page_keys_and_persists_stitched(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(module, "stitch_images_vertically", _fake_stitch, raising=False)
 
-    client = _CapturingClient()
-    monkeypatch.setitem(sys.modules, "ollama", SimpleNamespace(Client=lambda base_url=None: client))
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    from backend.learning.adapters.dspy import vision_program
+
+    captured: dict = {}
+
+    def _fake_extract(*, image_data_uri: str):  # type: ignore[no-untyped-def]
+        captured["image_data_uri"] = image_data_uri
+        return ("ok", {"program": "vision_ocr"})
+
+    monkeypatch.setattr(vision_program, "extract_text_from_image", _fake_extract, raising=False)
 
     adapter = module.build()  # type: ignore[attr-defined]
     submission = {
@@ -140,9 +179,9 @@ def test_pdf_uses_page_keys_and_persists_stitched(monkeypatch: pytest.MonkeyPatc
 
     res: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
     assert isinstance(res, VisionResult)
-    assert len(client.calls) == 1
-    images = client.calls[0]["images"]
-    assert base64.b64decode(images[0]) == stitched_bytes
+    assert "image_data_uri" in captured
+    payload_b64 = str(captured["image_data_uri"]).split(",", 1)[1]
+    assert base64.b64decode(payload_b64) == stitched_bytes
 
     stitched_file = base_dir / "stitched.png"
     assert stitched_file.exists() and stitched_file.read_bytes() == stitched_bytes
@@ -191,9 +230,6 @@ def test_pdf_remote_fetch_redirect_logs_reason(monkeypatch: pytest.MonkeyPatch, 
         raise AssertionError("process_pdf_bytes must not run after redirect failure")
 
     monkeypatch.setattr(module, "process_pdf_bytes", _fail_process, raising=False)
-
-    client = _CapturingClient()
-    monkeypatch.setitem(sys.modules, "ollama", SimpleNamespace(Client=lambda base_url=None: client))
 
     adapter = module.build()  # type: ignore[attr-defined]
     submission = {

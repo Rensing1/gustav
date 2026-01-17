@@ -22,6 +22,7 @@ import logging
 import os
 from typing import Sequence
 
+from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.learning.adapters.ports import (
     FeedbackPermanentError,
     FeedbackResult,
@@ -71,6 +72,8 @@ class _LocalFeedbackAdapter:
 
         self._text_model = _normalize_model_name(os.getenv("AI_TEXT_MODEL") or "")
         self._visual_model = _normalize_model_name(os.getenv("AI_VISUAL_MODEL") or "")
+        self._text_think_level = (os.getenv("AI_TEXT_THINK_LEVEL") or "").strip() or None
+        self._visual_think_level = (os.getenv("AI_VISUAL_THINK_LEVEL") or "").strip() or None
 
         self._text_temperature = _parse_float_env("AI_TEXT_TEMPERATURE", default=0.0)
         self._visual_temperature = _parse_float_env("AI_VISUAL_TEMPERATURE", default=0.0)
@@ -93,12 +96,16 @@ class _LocalFeedbackAdapter:
             import dspy  # type: ignore
         except Exception as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
-        self._text_lm = dspy.LM(  # type: ignore[attr-defined]
-            self._text_model,
-            temperature=self._text_temperature,
-            base_url=self._base_url,
-            api_key=self._api_key,
-        )
+        lm_kwargs = {
+            "temperature": self._text_temperature,
+            "base_url": self._base_url,
+            "api_key": self._api_key,
+        }
+        # GPT-OSS supports a per-request `think` level; keep other models unchanged.
+        maybe_think = dspy_helpers.resolve_think_level(self._text_model, self._text_think_level)
+        if maybe_think:
+            lm_kwargs["extra_body"] = {"think": maybe_think}
+        self._text_lm = dspy.LM(self._text_model, **lm_kwargs)  # type: ignore[attr-defined]
         return self._text_lm
 
     def _get_visual_lm(self):  # type: ignore[no-untyped-def]
@@ -111,12 +118,16 @@ class _LocalFeedbackAdapter:
             import dspy  # type: ignore
         except Exception as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
-        self._visual_lm = dspy.LM(  # type: ignore[attr-defined]
-            self._visual_model,
-            temperature=self._visual_temperature,
-            base_url=self._base_url,
-            api_key=self._api_key,
-        )
+        lm_kwargs = {
+            "temperature": self._visual_temperature,
+            "base_url": self._base_url,
+            "api_key": self._api_key,
+        }
+        # GPT-OSS supports a per-request `think` level; keep other models unchanged.
+        maybe_think = dspy_helpers.resolve_think_level(self._visual_model, self._visual_think_level)
+        if maybe_think:
+            lm_kwargs["extra_body"] = {"think": maybe_think}
+        self._visual_lm = dspy.LM(self._visual_model, **lm_kwargs)  # type: ignore[attr-defined]
         return self._visual_lm
 
     def analyze(

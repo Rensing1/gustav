@@ -606,7 +606,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         '</label>'
         '</fieldset>'
         '<div class="task-form-fields fields-text">'
-        '<label>Antwort<textarea class="form-input" name="text_body" maxlength="65536"></textarea></label>'
+        '<label>Antwort<textarea class="form-textarea" name="text_body" rows="5" maxlength="65536"></textarea></label>'
         '</div>'
         '<div class="task-form-fields fields-upload" hidden>'
         '<label>Datei auswählen '
@@ -4639,7 +4639,7 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
         f'method="post" action="/units/{unit_id}/sections/{section_id}/materials/create">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
-        f'<label>Markdown<textarea class="form-input" name="body_md" required></textarea></label>'
+        f'<label>Markdown<textarea class="form-textarea" name="body_md" rows="12" required></textarea></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Anlegen</button></div>'
         f'</form>'
     )
@@ -4707,9 +4707,9 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f"{kind_selector}"
         '<div id="native-task-fields">'
-        f'<label>Anweisung<textarea class="form-input" id="instruction_md" name="instruction_md" required></textarea></label>'
+        f'<label>Anweisung<textarea class="form-textarea" id="instruction_md" name="instruction_md" rows="10" required></textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
-        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-input" name="teacher_context_md"></textarea></label>'
+        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-textarea" name="teacher_context_md" rows="6"></textarea></label>'
         "</div>"
         '<div id="h5p-task-fields" hidden>'
         f'<input type="hidden" name="h5p_content_id" id="h5p_content_id" value="">'
@@ -4883,7 +4883,7 @@ def _render_material_detail_page_html(
         f'<form method="post" action="/units/{unit_id}/sections/{section_id}/materials/{mid}/update">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         f'<label>Titel<input class="form-input" type="text" name="title" value="{title}"></label>'
-        f'<label>Markdown<textarea class="form-input" name="body_md">{body_md}</textarea></label>'
+        f'<label>Markdown<textarea class="form-textarea" name="body_md" rows="12">{body_md}</textarea></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'
         f'</form>'
     )
@@ -4988,9 +4988,9 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
     form = (
         f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/{tid}/update">'
         f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Anweisung<textarea class="form-input" name="instruction_md">{instr}</textarea></label>'
+        f'<label>Anweisung<textarea class="form-textarea" name="instruction_md" rows="10">{instr}</textarea></label>'
         f'<fieldset><legend>Analysekriterien (0–10)</legend>{"".join(crit_inputs)}</fieldset>'
-        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-input" name="teacher_context_md">{teacher_context_md}</textarea></label>'
+        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-textarea" name="teacher_context_md" rows="6">{teacher_context_md}</textarea></label>'
         f'<label>Fällig bis<input class="form-input" type="text" name="due_at" value="{due_at}"></label>'
         f'<label>Max. Versuche<input class="form-input" type="number" name="max_attempts" value="{max_attempts}" min="1"></label>'
         f'<div class="form-actions"><button class="btn btn-primary" type="submit">Speichern</button></div>'

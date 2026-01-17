@@ -1,5 +1,15 @@
 # Plan: Textareas are vertically too small (students + teachers)
 Stand: 2026-01-16
+Status: DONE (implemented 2026-01-17)
+
+## Implementation (done)
+- Learner answer textarea (`text_body`) renders with `class="form-textarea"` and `rows="5"` (and stays non-`required` to allow switching to Upload mode).
+- Teacher authoring textareas render with explicit defaults:
+  - Material Markdown (`body_md`): `rows="12"`
+  - Task instruction (`instruction_md`): `rows="10"`
+  - Task AI context (`teacher_context_md`): `rows="6"`
+- Regression guard: `TextAreaField` now always includes `form-textarea`, so future forms don’t accidentally fall back to browser-default textarea sizing.
+- Tests were added/updated to lock this behavior in.
 
 ## Why
 - Learner and teacher textareas often render at the browser default (`rows=2`) which shows only ~2–3 lines and feels broken for longer answers / Markdown.
@@ -33,7 +43,7 @@ Stand: 2026-01-16
 5) Given a teacher opens “Material/Aufgabe bearbeiten”, When the edit form renders, Then the corresponding textareas also have consistent class + rows.
 
 ## Design (long-term consistency)
-### Defaults (proposal)
+### Defaults (final)
 - Learner `text_body`: `rows=5`
 - Teacher `body_md` (Markdown): `rows=12`
 - Teacher `instruction_md`: `rows=10`
@@ -45,17 +55,13 @@ Rationale:
 - Teachers write longer Markdown; instruction is typically shorter than full material text.
 - Teacher context is usually short but should not feel cramped.
 
-### Code Changes (targeted)
-1) Introduce/extend reusable form components for textareas:
-   - Ensure `TextAreaField.render(...)` applies `class_="form-textarea"` by default (caller can override).
-   - Ensure `rows` defaults are intentional per use-case (passed explicitly at call sites).
-2) Refactor SSR HTML in `backend/web/main.py`:
-   - Replace hard-coded `<label>...<textarea ...></textarea></label>` blocks with `TextAreaField` usage.
-   - Keep current semantics: same `name` attributes, same `maxlength`, and keep learner textarea non-required.
-3) Align unit forms (`backend/web/components/forms/unit_create_form.py`, `backend/web/components/forms/unit_edit_form.py`):
-   - Ensure summary uses `form-textarea` consistently (currently mixed).
-4) CSS:
-   - Prefer one canonical style path (`.form-textarea`) and avoid needing `textarea.form-input` special cases.
+### Code Changes (implemented)
+1) Form component:
+   - `TextAreaField.render(...)` always includes `form-textarea` to prevent accidental regressions.
+2) SSR HTML:
+   - Explicit `rows` + `form-textarea` for learner and teacher textareas in `backend/web/main.py` (keeps names/maxlength/required semantics).
+3) Unit forms:
+   - Unit edit summary is rendered with `form-textarea` and an explicit small default (`rows=3`).
 
 ### Security / Privacy Notes
 - No new data is stored; this is a UI-only change.
@@ -70,7 +76,6 @@ Rationale:
    - Apply explicit `rows` per field.
 3) Refactor: Remove any remaining ad-hoc textarea markup in these flows and keep styles consistent.
 
-## Open Questions (for Felix)
-1) Confirmed defaults: student=5, markdown=12, instruction=10, context=6. Any changes desired?
-2) Do we want a max height (e.g. via CSS) for very large textareas, or leave it fully resizable?
-3) Do we want to actively reduce layout jumps when switching Text ↔ Upload (e.g. matching approximate heights), or accept the small jump from `rows=5`?
+## Follow-ups (optional)
+1) Do we want a max height (e.g. via CSS) for very large textareas, or leave it fully resizable?
+2) Do we want to actively reduce layout jumps when switching Text ↔ Upload (e.g. matching approximate heights), or accept the small jump from `rows=5`?

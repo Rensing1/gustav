@@ -836,7 +836,7 @@ async def test_ui_history_fragment_shows_image_preview_instead_of_ocr_placeholde
             )
         assert r.status_code == 200
         html = r.text
-        assert "submission-preview" in html
+        assert "file-preview--image" in html
         assert "OCR placeholder for" not in html
         assert "storage.test" in html
     finally:

@@ -20,12 +20,16 @@ class UnitEditForm(Component):
         self.error = error
 
     def render(self) -> str:
-        fields = [
-            TextInputField("title", "Titel", required=True),
-            TextAreaField("summary", "Zusammenfassung (optional)"),
-        ]
-        rendered_fields = [f.render(value=self.values.get(getattr(f, "field_id", ""), ""), class_="form-input") for f in fields]
-        fields_html = "\n".join(rendered_fields)
+        title_field = TextInputField("title", "Titel", required=True)
+        summary_field = TextAreaField("summary", "Zusammenfassung (optional)")
+
+        title_html = title_field.render(value=self.values.get("title", ""), class_="form-input")
+        summary_html = summary_field.render(
+            value=self.values.get("summary", ""),
+            rows=3,
+            class_="form-textarea",
+        )
+        fields_html = "\n".join([title_html, summary_html])
         error_html = f'<div class="form-error" role="alert">{self.escape(self.error)}</div>' if self.error else ""
         submit_btn = SubmitButton("Speichern")
         return f"""
@@ -38,4 +42,3 @@ class UnitEditForm(Component):
             </div>
         </form>
         """
-

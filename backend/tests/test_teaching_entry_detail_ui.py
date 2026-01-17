@@ -63,6 +63,12 @@ async def test_material_detail_edit_and_delete_prg():
         assert page.status_code == 200
         assert page.headers.get("Cache-Control") == "private, no-store"
         assert "Alt" in page.text
+        # Markdown textarea should have explicit sizing defaults (avoid browser rows=2).
+        m = re.search(r"<textarea[^>]*name=\"body_md\"[^>]*>", page.text)
+        assert m, "body_md textarea must be present"
+        tag = m.group(0)
+        assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', tag), tag
+        assert 'rows="12"' in tag, tag
         token = _extract_csrf_token(page.text) or ""
 
         # Update (PRG)
@@ -105,6 +111,17 @@ async def test_task_detail_edit_and_delete_prg():
         assert page.status_code == 200
         assert page.headers.get("Cache-Control") == "private, no-store"
         assert "Alt Instr" in page.text
+        # Textareas should have explicit sizing defaults (avoid browser rows=2).
+        m_instr = re.search(r"<textarea[^>]*name=\"instruction_md\"[^>]*>", page.text)
+        assert m_instr, "instruction_md textarea must be present"
+        instr_tag = m_instr.group(0)
+        assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', instr_tag), instr_tag
+        assert 'rows="10"' in instr_tag, instr_tag
+        m_ctx = re.search(r"<textarea[^>]*name=\"teacher_context_md\"[^>]*>", page.text)
+        assert m_ctx, "teacher_context_md textarea must be present"
+        ctx_tag = m_ctx.group(0)
+        assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', ctx_tag), ctx_tag
+        assert 'rows="6"' in ctx_tag, ctx_tag
         token = _extract_csrf_token(page.text) or ""
 
         upd = await c.post(

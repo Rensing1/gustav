@@ -56,6 +56,7 @@ class Gustav {
     this.initLearningTaskForms(); // Progressive enhancement for student task forms
     this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
     this.initFilePreviewZoom(); // Zoom toggle for inline file previews
+    this.initSubmissionArtifactReload(); // Show reload control only when preview fails
     this.initTeachingLivePolling(); // Auto-refresh for teaching live matrix
     // Explain what happened after we had to redirect to login.
     if (this.consumeSessionExpiredFlag()) {
@@ -517,6 +518,47 @@ class Gustav {
       event.preventDefault();
       toggleZoom(wrapper);
     });
+  }
+
+  /**
+   * Show the "Neu laden" button only when an artifact preview fails to load.
+   *
+   * Why:
+   * - Signed download URLs can expire while a learner keeps the page open.
+   * - Network hiccups should not break the whole history UI.
+   *
+   * Behavior:
+   * - Listens for load errors on <img> / <iframe> inside #submission-artifact-*
+   * - Unhides the corresponding reload button (data-artifact-reload="true")
+   *
+   * Note:
+   * - Image errors are reliable. For PDFs, browsers may not always surface an
+   *   error event, but we still try.
+   */
+  initSubmissionArtifactReload() {
+    if (this.submissionArtifactReloadInit) return;
+    this.submissionArtifactReloadInit = true;
+
+    const revealReloadButton = (target) => {
+      if (!target || !target.closest) return;
+      const container = target.closest('[id^="submission-artifact-"]');
+      if (!container) return;
+      const btn = container.querySelector('[data-artifact-reload="true"]');
+      if (!btn) return;
+      btn.hidden = false;
+      btn.removeAttribute('hidden');
+    };
+
+    // "error" does not bubble, so we must use capture.
+    document.addEventListener('error', (event) => {
+      const t = event && event.target ? event.target : null;
+      if (!t) return;
+      // Only handle common preview elements to avoid false positives.
+      if (!(t instanceof HTMLImageElement) && !(t instanceof HTMLIFrameElement)) {
+        return;
+      }
+      revealReloadButton(t);
+    }, true);
   }
 
   /**

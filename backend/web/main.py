@@ -745,6 +745,8 @@ async def _server_side_prepare_submission_upload(
 def _build_history_entry_from_record(
     record: Dict[str, Any],
     *,
+    course_id: str,
+    task_id: str,
     index: int,
     open_attempt_id: str,
 ) -> HistoryEntry:
@@ -754,6 +756,8 @@ def _build_history_entry_from_record(
 
     Args:
         record: Submission payload fetched from the API (dict-like).
+        course_id: Course id in scope (used to build reload URLs for artifacts).
+        task_id: Task id in scope (used to build reload URLs for artifacts).
         index: Position within the history list; newest item at index 0.
         open_attempt_id: Submission ID that should render with `<details open>`.
 
@@ -794,113 +798,24 @@ def _build_history_entry_from_record(
             submission_id=submission_id,
         )
 
-    def _is_ocr_placeholder(text: str) -> bool:
-        """Return True when the text is our legacy OCR/PDF placeholder stub."""
-        t = (text or "").strip()
-        return t.startswith("OCR placeholder for ") or t.startswith("PDF text placeholder for ")
+    artifact_html = _render_submission_artifact_container(
+        record,
+        course_id=course_id,
+        task_id=task_id,
+        submission_id=submission_id,
+    )
+    has_artifact = bool(artifact_html)
+    text_container_html = _render_submission_text_container(
+        record,
+        submission_id=submission_id,
+        has_artifact=has_artifact,
+        oob=False,
+    )
+    result_container_html = _render_submission_result_container(record, submission_id=submission_id, oob=False)
 
-    status = str(record.get("analysis_status") or "")
-    analysis = record.get("analysis_json")
-
-    kind = str(record.get("kind") or "")
-    mime = str(record.get("mime_type") or "").lower()
-    file_url = str(record.get("file_url") or "").strip()
-
-    # Prefer stored text_body; for uploads fall back to extracted analysis text only
-    # when it is not the legacy placeholder.
-    text_src = str(record.get("text_body") or "")
-    if not text_src.strip() and isinstance(analysis, dict):
-        extracted = str(analysis.get("text") or "").strip()
-        if extracted and not _is_ocr_placeholder(extracted):
-            text_src = extracted
-
-    text_html = render_markdown_safe(text_src)
-    preview_html = ""
-    if file_url and kind in {"image", "file"}:
-        safe_url = Component.escape(file_url)
-        if mime.startswith("image/"):
-            preview_html = f'<img class="submission-preview" src="{safe_url}" alt="Deine Abgabe">'
-        elif "pdf" in mime:
-            preview_html = (
-                f'<a class="btn" href="{safe_url}" target="_blank" rel="noopener">PDF öffnen</a>'
-            )
-        else:
-            preview_html = (
-                f'<a class="btn" href="{safe_url}" target="_blank" rel="noopener">Datei öffnen</a>'
-            )
-
-    parts: list[str] = []
-    if preview_html:
-        parts.append(preview_html)
-    if text_html:
-        parts.append(text_html)
-    if not parts:
-        parts.append('<p class="text-muted">Keine Antwort hinterlegt.</p>')
-    content_html = '<div class="analysis-text">' + "".join(parts) + "</div>"
-
-    feedback_src = record.get("feedback_md") or record.get("feedback")
-
-    # Render criteria cards (criteria.v1/v2) via helper for clarity.
-    # Skip criteria when the analysis failed so we don't show partial data.
-    criteria_html = ""
-    if status != "failed" and isinstance(analysis, dict):
-        criteria_html = _render_analysis_criteria_section(analysis)
-
-    feedback_sections: List[str] = []
-    if status == "failed":
-        # Surface preprocessing/analysis failures prominently so learners know
-        # why no feedback is available yet.
-        code_raw = record.get("error_code") or "processing_failed"
-        code_html = Component.escape(str(code_raw))
-        detail = record.get("vision_last_error") or record.get("feedback_last_error") or ""
-        detail_html = Component.escape(str(detail)) if detail else '<span class="text-muted">Keine Details verfügbar.</span>'
-        feedback_sections.append(
-            '<section class="analysis-error">'
-            '<p class="analysis-error__heading"><strong>Analyse fehlgeschlagen</strong></p>'
-            f'<p class="analysis-error__code"><code>{code_html}</code></p>'
-            f'<p class="analysis-error__message">{detail_html}</p>'
-            "</section>"
-        )
-
-    has_feedback = bool(feedback_src)
-    has_criteria = bool(criteria_html)
-
-    if has_feedback:
-        # Wrap criteria inside a collapsible toggle beneath the feedback text.
-        criteria_block = ""
-        if has_criteria:
-            criteria_block = (
-                '<details class="analysis-feedback__details">'
-                '<summary class="analysis-feedback__summary">'
-                "<span>Auswertung anzeigen</span>"
-                '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
-                "</summary>"
-                f"{criteria_html}"
-                "</details>"
-            )
-
-        feedback_sections.append(
-            '<section class="analysis-feedback">'
-            '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
-            f'{render_markdown_safe(str(feedback_src))}'
-            f"{criteria_block}"
-            "</section>"
-        )
-    elif has_criteria:
-        # No feedback available, but keep analysis accessible via a toggle.
-        feedback_sections.append(
-            '<details class="analysis-feedback__details">'
-            '<summary class="analysis-feedback__summary">'
-            "<span>Auswertung anzeigen</span>"
-            '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
-            "</summary>"
-            f"{criteria_html}"
-            "</details>"
-        )
-
-    feedback_html = "".join(feedback_sections)
-    # Telemetry card removed per product decision; keep section empty for learners.
-    telemetry_html = ""
+    content_html = '<div class="analysis-text">' + artifact_html + text_container_html + "</div>"
+    feedback_html = result_container_html
+    telemetry_html = ""  # Telemetry removed per product decision.
 
     return HistoryEntry(
         label=label,
@@ -1071,6 +986,257 @@ def _render_analysis_in_progress_hint() -> str:
         '</div>'
     )
 
+
+def _is_legacy_extracted_text_placeholder(text: str) -> bool:
+    """Return True when the text matches our legacy OCR/PDF placeholder stub."""
+    t = (text or "").strip()
+    return t.startswith("OCR placeholder for ") or t.startswith("PDF text placeholder for ")
+
+
+def _render_task_history_poll_element(*, course_id: str, task_id: str, active: bool) -> str:
+    """Render the HTMX poll element responsible for granular OOB updates."""
+    poll_id = f"task-history-poll-{Component.escape(task_id)}"
+    if not active:
+        return f'<div id="{poll_id}"></div>'
+    return (
+        f'<div id="{poll_id}"'
+        f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history/poll"'
+        f' hx-trigger="every 10s" hx-target="this" hx-swap="outerHTML"></div>'
+    )
+
+
+def _render_submission_text_container(
+    record: Mapping[str, Any],
+    *,
+    submission_id: str,
+    has_artifact: bool,
+    oob: bool,
+) -> str:
+    """Render the (potentially changing) extracted text block of a submission.
+
+    The container id is stable so the poll endpoint can update it via OOB swaps.
+    """
+    analysis = record.get("analysis_json")
+    text_src = str(record.get("text_body") or "")
+    if not text_src.strip() and isinstance(analysis, dict):
+        extracted = str(analysis.get("text") or "").strip()
+        if extracted and not _is_legacy_extracted_text_placeholder(extracted):
+            text_src = extracted
+
+    text_html = render_markdown_safe(text_src)
+    if not text_html and not has_artifact:
+        text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
+
+    oob_attr = ' hx-swap-oob="true"' if oob else ""
+    return f'<div id="submission-text-{Component.escape(submission_id)}"{oob_attr}>{text_html}</div>'
+
+
+def _render_submission_result_container(record: Mapping[str, Any], *, submission_id: str, oob: bool) -> str:
+    """Render the (changing) status/feedback/result block of a submission."""
+    status = str(record.get("analysis_status") or "")
+    if _is_analysis_in_progress(status):
+        inner = _render_analysis_in_progress_hint()
+    else:
+        inner = _render_submission_result_static_html(record, submission_id=submission_id)
+
+    oob_attr = ' hx-swap-oob="true"' if oob else ""
+    return f'<div id="submission-result-{Component.escape(submission_id)}"{oob_attr}>{inner}</div>'
+
+
+def _render_submission_result_static_html(record: Mapping[str, Any], *, submission_id: str) -> str:
+    """Render the final feedback/error content for a submission (non-pending)."""
+    status = str(record.get("analysis_status") or "")
+    created_at = str(record.get("created_at") or "")
+    created_at_html = Component.escape(created_at) if created_at else "–"
+    submission_id_html = Component.escape(str(submission_id))
+
+    analysis = record.get("analysis_json")
+    feedback_src = record.get("feedback_md") or record.get("feedback")
+
+    # Render criteria cards (criteria.v1/v2) via helper for clarity.
+    # Skip criteria when the analysis failed so we don't show partial data.
+    criteria_html = ""
+    if status != "failed" and isinstance(analysis, dict):
+        criteria_html = _render_analysis_criteria_section(analysis)
+
+    sections: list[str] = []
+    if status == "failed":
+        # Surface preprocessing/analysis failures prominently so learners know
+        # why no feedback is available yet.
+        code_raw = record.get("error_code") or "processing_failed"
+        code_html = Component.escape(str(code_raw))
+        detail = record.get("vision_last_error") or record.get("feedback_last_error") or ""
+        detail_html = (
+            Component.escape(str(detail)) if detail else '<span class="text-muted">Keine Details verfügbar.</span>'
+        )
+        sections.append(
+            '<section class="analysis-error">'
+            '<p class="analysis-error__heading"><strong>Analyse fehlgeschlagen</strong></p>'
+            f'<p class="analysis-error__code"><code>{code_html}</code></p>'
+            f'<p class="analysis-error__message">{detail_html}</p>'
+            f'<p class="analysis-error__meta"><strong>Abgabe-ID:</strong> <code>{submission_id_html}</code></p>'
+            f'<p class="analysis-error__meta"><strong>Zeitstempel:</strong> {created_at_html}</p>'
+            "</section>"
+        )
+        return "".join(sections)
+
+    has_feedback = bool(feedback_src)
+    has_criteria = bool(criteria_html)
+
+    if has_feedback:
+        # Wrap criteria inside a collapsible toggle beneath the feedback text.
+        criteria_block = ""
+        if has_criteria:
+            criteria_block = (
+                '<details class="analysis-feedback__details">'
+                '<summary class="analysis-feedback__summary">'
+                "<span>Auswertung anzeigen</span>"
+                '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+                "</summary>"
+                f"{criteria_html}"
+                "</details>"
+            )
+        sections.append(
+            '<section class="analysis-feedback">'
+            '<p class="analysis-feedback__heading"><strong>Rückmeldung</strong></p>'
+            f'{render_markdown_safe(str(feedback_src))}'
+            f"{criteria_block}"
+            "</section>"
+        )
+    elif has_criteria:
+        # No feedback available, but keep analysis accessible via a toggle.
+        sections.append(
+            '<details class="analysis-feedback__details">'
+            '<summary class="analysis-feedback__summary">'
+            "<span>Auswertung anzeigen</span>"
+            '<span class="analysis-feedback__summary-icon" aria-hidden="true">▾</span>'
+            "</summary>"
+            f"{criteria_html}"
+            "</details>"
+        )
+
+    return "".join(sections)
+
+
+def _render_submission_artifact_container(
+    record: Mapping[str, Any],
+    *,
+    course_id: str,
+    task_id: str,
+    submission_id: str,
+) -> str:
+    """Render the stable artifact preview block (image/PDF) for a submission.
+
+    The artifact block must not be re-rendered by polling to avoid scroll jumps.
+    """
+    kind = str(record.get("kind") or "")
+    file_url = str(record.get("file_url") or "").strip()
+    if not file_url or kind not in {"image", "file"}:
+        return ""
+    mime = str(record.get("mime_type") or "").lower().strip()
+
+    preview_html = ""
+    try:
+        preview_html = FilePreview(
+            url=file_url,
+            mime=mime,
+            title="Deine Abgabe",
+            alt="Deine Abgabe",
+            max_height="480px",
+        ).render()
+    except Exception:
+        preview_html = ""
+    if not preview_html:
+        return ""
+
+    safe_sid = Component.escape(submission_id)
+    container_id = f"submission-artifact-{safe_sid}"
+    reload_url = f"/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/artifact"
+    reload_btn = (
+        f'<button type="button" class="btn btn-sm" data-artifact-reload="true" hidden'
+        f' hx-get="{Component.escape(reload_url)}"'
+        f' hx-target="#{container_id}" hx-swap="outerHTML">Neu laden</button>'
+    )
+
+    open_tab_link = ""
+    if mime == "application/pdf":
+        safe_url = Component.escape(file_url)
+        open_tab_link = (
+            f'<a class="btn btn-sm" href="{safe_url}" target="_blank" rel="noopener">In neuem Tab öffnen</a>'
+        )
+
+    return f'<div id="{container_id}">{preview_html}{open_tab_link}{reload_btn}</div>'
+
+
+def _strip_task_history_outer_wrapper(html: str) -> str:
+    """Strip the outer <section> wrapper from `_render_history_entries_html` output."""
+    if not html.startswith("<section"):
+        return html
+    try:
+        start = html.find(">") + 1
+        end = html.rfind("</section>")
+        return html[start:end]
+    except Exception:
+        return html
+
+
+def _render_learning_task_history_wrapper_html(
+    *,
+    course_id: str,
+    task_id: str,
+    items: list[dict],
+    open_attempt_id: str,
+) -> str:
+    """Render the learner task history wrapper with optional granular poller.
+
+    Why:
+        During `pending/extracted` we must keep the history DOM stable to avoid
+        scroll jumps caused by repeatedly re-rendering signed URLs for previews.
+
+    Behavior:
+        - Always renders a stable `<section id="task-history-{task_id}">`.
+        - While the newest attempt is in progress, renders a dedicated poll
+          element that updates only `#submission-text-*` and `#submission-result-*`
+          via out-of-band swaps.
+    """
+    safe_task_id = Component.escape(task_id)
+    entries = [
+        _build_history_entry_from_record(
+            rec,
+            course_id=course_id,
+            task_id=task_id,
+            index=index,
+            open_attempt_id=open_attempt_id,
+        )
+        for index, rec in enumerate(items if isinstance(items, list) else [])
+        if isinstance(rec, dict)
+    ]
+
+    latest_status = None
+    if items:
+        try:
+            latest_status = (items[0] or {}).get("analysis_status")
+        except Exception:
+            latest_status = None
+    pending_latest = _is_analysis_in_progress(latest_status)
+
+    hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
+    wrapper_open = (
+        f'<section id="task-history-{safe_task_id}"'
+        f' class="task-panel__history"'
+        f' data-pending="{"true" if pending_latest else "false"}"'
+        f' data-open-attempt-id="{Component.escape(open_attempt_id)}"'
+        f" hx-vals='{hx_vals_payload}'"
+        f' hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+    )
+
+    inner_html = _strip_task_history_outer_wrapper(_render_history_entries_html(entries))
+    poller_html = (
+        _render_task_history_poll_element(course_id=course_id, task_id=task_id, active=True)
+        if pending_latest
+        else ""
+    )
+    return wrapper_open + inner_html + poller_html + "</section>"
 
 def _enrich_submission_records_with_file_urls(
     records: list[dict], *, storage_adapter: object | None = None
@@ -1638,7 +1804,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
 
             # Optionally load submission history for this task only (latest open)
             history_entries = []
-            history_placeholder_html = ''
+            history_placeholder_html = ""
             if show_history_for and show_history_for == tid:
                 try:
                     async with _internal_api_client() as client:
@@ -1654,34 +1820,14 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         _enrich_submission_records_with_file_urls(
                             [rec for rec in records if isinstance(rec, dict)]
                         )
-                        # If the latest attempt is still in progress, prefer a polling
-                        # placeholder to auto-refresh.
-                        latest_status = None
-                        if records:
-                            try:
-                                latest_status = (records[0] or {}).get("analysis_status")
-                            except Exception:
-                                latest_status = None
-                        if _is_analysis_in_progress(latest_status):
-                            payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
-                            history_placeholder_html = (
-                                f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                                f'data-pending="true" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
-                                f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
-                                f'hx-trigger="load, every 2s" hx-target="this" hx-swap="outerHTML" '
-                                f"hx-vals='{payload}' "
-                                'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-                                f"{_render_analysis_in_progress_hint()}"
-                                "</section>"
-                            )
-                        else:
-                            for index, rec in enumerate(records):
-                                entry = _build_history_entry_from_record(
-                                    rec if isinstance(rec, dict) else {},
-                                    index=index,
-                                    open_attempt_id=open_attempt_id_qp,
-                                )
-                                history_entries.append(entry)
+                        # Render the full history wrapper directly so the poller can
+                        # update only the dynamic zones without re-rendering previews.
+                        history_placeholder_html = _render_learning_task_history_wrapper_html(
+                            course_id=course_id,
+                            task_id=tid,
+                            items=[rec for rec in records if isinstance(rec, dict)],
+                            open_attempt_id=open_attempt_id_qp,
+                        )
                 except Exception:
                     history_entries = []
             else:
@@ -2034,6 +2180,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         diag_header = f"status={status},detail={detail or 'n/a'}"
     elif api_resp is None and api_error:
         diag_header = f"status=error,detail={api_error}"
+
     if is_htmx:
         headers = {"Cache-Control": "private, no-store"}
         import json as _json
@@ -2056,56 +2203,30 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                     items = r.json() if r.status_code == 200 else []
             except Exception:
                 items = []
-            if isinstance(items, list):
-                _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
-            entries = [
-                _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
-                for index, rec in enumerate(items if isinstance(items, list) else [])
-            ]
-            pending_latest = False
-            latest_status = None
-            if isinstance(items, list) and items:
-                try:
-                    latest_status = (items[0] or {}).get("analysis_status")
-                except Exception:
-                    latest_status = None
-            pending_latest = _is_analysis_in_progress(latest_status)
-            hx_poll_attrs = (
-                f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history"'
-                f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
-                if pending_latest
-                else ""
+
+            items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
+            _enrich_submission_records_with_file_urls(items_dicts)
+            html = _render_learning_task_history_wrapper_html(
+                course_id=course_id,
+                task_id=task_id,
+                items=items_dicts,
+                open_attempt_id=open_attempt_id,
             )
-            status_hint_html = _render_analysis_in_progress_hint() if pending_latest else ""
-            hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
-            wrapper_open = (
-                f'<section id="task-history-{Component.escape(task_id)}"'
-                f' class="task-panel__history"'
-                f' data-pending="{"true" if pending_latest else "false"}"'
-                f' data-open-attempt-id="{Component.escape(open_attempt_id)}"'
-                f'{hx_poll_attrs}'
-                f" hx-vals='{hx_vals_payload}'"
-                f' hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-            )
-            inner_html = _render_history_entries_html(entries)
-            if inner_html.startswith('<section'):
-                try:
-                    start = inner_html.find('>') + 1
-                    end = inner_html.rfind('</section>')
-                    inner_html = inner_html[start:end]
-                except Exception:
-                    pass
-            return HTMLResponse(content=wrapper_open + status_hint_html + inner_html + '</section>', headers=headers)
-        else:
-            # Error path: tell client to show an error and keep fragment unchanged
-            headers["HX-Trigger"] = _json.dumps({
-                "showMessage": {"message": "Abgabe fehlgeschlagen", "type": "error"}
-            })
-            # In non-prod, surface a minimal diagnostic header to aid debugging.
-            if diag_header and SETTINGS.environment != "prod":
-                headers["X-Diag"] = diag_header
-            # Do not leak diagnostics to clients in error cases.
-            return HTMLResponse(content=f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history"></section>', status_code=400, headers=headers)
+            return HTMLResponse(content=html, headers=headers)
+
+        # Error path: tell client to show an error and keep fragment unchanged
+        headers["HX-Trigger"] = _json.dumps({
+            "showMessage": {"message": "Abgabe fehlgeschlagen", "type": "error"}
+        })
+        # In non-prod, surface a minimal diagnostic header to aid debugging.
+        if diag_header and SETTINGS.environment != "prod":
+            headers["X-Diag"] = diag_header
+        # Do not leak diagnostics to clients in error cases.
+        return HTMLResponse(
+            content=f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history"></section>',
+            status_code=400,
+            headers=headers,
+        )
 
     # PRG to the unit page (non-HTMX); show success banner only on API success.
     qp_extra = f"&open_attempt_id={open_attempt_id}" if open_attempt_id else ""
@@ -2121,11 +2242,11 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
     """Render the student's submission history (HTML fragment) for a task.
 
     Why:
-        HTMX loads this fragment into the TaskCard on demand and, when the
-        latest attempt is still in progress (pending or extracted), polls it
-        (every 2s) until analysis completes. This enables the UI to update
-        automatically as soon as the vision text or feedback becomes
-        available — without full page reloads.
+        This fragment renders a stable history wrapper. While the newest attempt
+        is still being processed (`pending`/`extracted`), it embeds a dedicated
+        poll element that updates only the dynamic zones of the latest attempt
+        (text + feedback) via out-of-band swaps. This avoids scroll jumps caused
+        by repeatedly re-rendering signed preview URLs.
 
     Parameters:
         course_id: Course UUID in path.
@@ -2133,10 +2254,9 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
 
     Behavior:
         - Returns a <section class="task-panel__history"> wrapper containing
-          <details> entries. While the newest attempt is in progress
-          (analysis_status ∈ {pending, extracted}), the wrapper includes
-          hx-get + hx-trigger attributes so HTMX auto-refreshes the fragment
-          every 2 seconds.
+          <details> entries.
+        - While the newest attempt is in progress (analysis_status ∈ {pending, extracted}),
+          the wrapper includes a per-task poll element that triggers every 10 seconds.
         - Includes data-pending="true|false" (true signals auto-refresh) for
           progressive enhancement/tests.
 
@@ -2162,50 +2282,115 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
         items = []
     if isinstance(items, list):
         _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
-    # Build minimal fragment matching TaskCard._render_history structure
     open_attempt_id = str(request.query_params.get("open_attempt_id") or "")
-    entries = [
-        _build_history_entry_from_record(rec, index=index, open_attempt_id=open_attempt_id)
-        for index, rec in enumerate(items if isinstance(items, list) else [])
-    ]
-    # Determine whether the newest attempt is still being processed to decide polling
-    latest_status = None
-    if isinstance(items, list) and items:
-        try:
-            latest_status = (items[0] or {}).get("analysis_status")
-        except Exception:
-            latest_status = None
+    items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
+    html = _render_learning_task_history_wrapper_html(
+        course_id=course_id,
+        task_id=task_id,
+        items=items_dicts,
+        open_attempt_id=open_attempt_id,
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/learning/courses/{course_id}/tasks/{task_id}/history/poll", response_class=HTMLResponse)
+async def learning_task_history_poll(request: Request, course_id: str, task_id: str):
+    """Return granular OOB updates for the newest submission of a task.
+
+    Returns:
+        - A replacement poll element (keeps polling while pending/extracted, stops otherwise)
+        - Out-of-band swaps for:
+            * #submission-text-{id}
+            * #submission-result-{id}
+
+    Security:
+        Student-only. Authorization/membership is delegated to the internal API.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+
+    try:
+        async with _internal_api_client() as client:
+            sid = _get_session_id(request)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(
+                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                params={"limit": 10, "offset": 0},
+            )
+            items = r.json() if r.status_code == 200 else []
+    except Exception:
+        items = []
+
+    items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
+    latest = items_dicts[0] if items_dicts else {}
+    latest_status = latest.get("analysis_status") if isinstance(latest, dict) else None
     pending_latest = _is_analysis_in_progress(latest_status)
-    # Build wrapper with optional HX polling attributes (every 2s) while in progress
-    hx_poll_attrs = (
-        f' hx-get="/learning/courses/{course_id}/tasks/{task_id}/history"'
-        f' hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML"'
-        if pending_latest
-        else ""
-    )
-    status_hint_html = _render_analysis_in_progress_hint() if pending_latest else ""
-    hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
-    wrapper_open = (
-        f'<section id="task-history-{Component.escape(task_id)}"'
-        f' class="task-panel__history"'
-        f' data-pending="{"true" if pending_latest else "false"}"'
-        f' data-open-attempt-id="{Component.escape(open_attempt_id)}"'
-        f'{hx_poll_attrs}'
-        f" hx-vals='{hx_vals_payload}'"
-        f' hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-    )
-    inner_html = _render_history_entries_html(entries)
-    # The helper returns its own <section>. We only want the inner entries here,
-    # so we strip the outer wrapper to avoid nested sections.
-    if inner_html.startswith('<section'):
-        # naive strip: remove first opening tag and final closing tag
-        try:
-            start = inner_html.find('>') + 1
-            end = inner_html.rfind('</section>')
-            inner_html = inner_html[start:end]
-        except Exception:
-            pass
-    html = wrapper_open + status_hint_html + inner_html + "</section>"
+
+    poller_html = _render_task_history_poll_element(course_id=course_id, task_id=task_id, active=pending_latest)
+
+    latest_id = str(latest.get("id") or "") if isinstance(latest, dict) else ""
+    if not latest_id:
+        return HTMLResponse(content=poller_html, headers={"Cache-Control": "private, no-store"})
+
+    kind = str(latest.get("kind") or "")
+    has_artifact = kind in {"image", "file"}
+    text_oob = _render_submission_text_container(latest, submission_id=latest_id, has_artifact=has_artifact, oob=True)
+    result_oob = _render_submission_result_container(latest, submission_id=latest_id, oob=True)
+    return HTMLResponse(content=poller_html + text_oob + result_oob, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get(
+    "/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/artifact",
+    response_class=HTMLResponse,
+)
+async def learning_task_submission_artifact_fragment(
+    request: Request, course_id: str, task_id: str, submission_id: str
+):
+    """Refresh the artifact preview (image/PDF) for a submission.
+
+    Why:
+        Signed URLs can expire. The UI keeps the reload control hidden by default
+        and only reveals it on load errors.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+
+    try:
+        async with _internal_api_client() as client:
+            sid = _get_session_id(request)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(
+                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                params={"limit": 10, "offset": 0},
+            )
+            items = r.json() if r.status_code == 200 else []
+    except Exception:
+        items = []
+
+    items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
+    target = None
+    for rec in items_dicts:
+        if str(rec.get("id") or "") == str(submission_id):
+            target = rec
+            break
+    if target is not None:
+        _enrich_submission_records_with_file_urls([target])
+        html = _render_submission_artifact_container(
+            target,
+            course_id=course_id,
+            task_id=task_id,
+            submission_id=str(submission_id),
+        )
+    else:
+        html = ""
+
+    if not html:
+        safe_sid = Component.escape(str(submission_id))
+        html = f'<div id="submission-artifact-{safe_sid}"></div>'
     return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)

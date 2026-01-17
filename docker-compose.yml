@@ -70,6 +70,9 @@ services:
   web:
     build: .
     container_name: gustav-alpha2
+    extra_hosts:
+      # Ensure host-local inference endpoints (e.g. localhost:11434) are reachable from the container.
+      - "host.docker.internal:host-gateway"
     # behind proxy; no direct host port mapping
     volumes:
       # Live-Reload: Web-Code (SSR) wird eingebunden

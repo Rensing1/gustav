@@ -2850,54 +2850,12 @@ def _render_section_detail_page_html(
 ) -> str:
     """Builds the two-column section detail page content.
 
-    Left: materials (create form + list)
-    Right: tasks (create form + list)
+    Left: materials list (+ link to create page)
+    Right: tasks list (+ link to create page)
     """
     unit_id = unit.get("id")
     section_id = section.get("id")
 
-    # Minimal create forms (Markdown material, native task)
-    mat_form = (
-        f'<form id="material-create-text" method="post" action="/units/{unit_id}/sections/{section_id}/materials/create" '
-        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/create" '
-        f'hx-target="#material-list-section-{section_id}" hx-swap="outerHTML">'
-        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Titel<input class="form-input" type="text" name="title" required></label>'
-        f'<label>Markdown<textarea class="form-input" name="body_md" required></textarea></label>'
-        f'<button class="btn btn-primary" type="submit">Material anlegen</button>'
-        f'</form>'
-    )
-    # Tasks form with criteria[0..10] (as repeated name="criteria") and teacher-only AI context
-    criteria_inputs = []
-    for i in range(10):
-        criteria_inputs.append(
-            f'<div class="form-field"><input class="form-input" type="text" name="criteria" placeholder="Kriterium {i+1}"></div>'
-        )
-    criteria_html = "".join(criteria_inputs)
-    task_form = (
-        f'<form method="post" action="/units/{unit_id}/sections/{section_id}/tasks/create" '
-        f'hx-post="/units/{unit_id}/sections/{section_id}/tasks/create" '
-        f'hx-target="#task-list-section-{section_id}" hx-swap="outerHTML">'
-        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Anweisung<textarea class="form-input" name="instruction_md" required></textarea></label>'
-        f'<fieldset><legend>Analysekriterien (0–10)</legend>{criteria_html}</fieldset>'
-        f'<label>KI-Kontext (nur Lehrkraft; nicht sichtbar für Schüler)<textarea class="form-input" name="teacher_context_md"></textarea></label>'
-        f'<button class="btn btn-primary" type="submit">Aufgabe anlegen</button>'
-        f'</form>'
-    )
-
-    # Optional: lightweight upload-intent form for file materials
-    upload_form = (
-        f'<form id="material-upload-intent-form" method="post" action="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
-        f'hx-post="/units/{unit_id}/sections/{section_id}/materials/upload-intent" '
-        f'hx-target="#material-upload-area" hx-swap="outerHTML">'
-        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        f'<label>Dateiname<input class="form-input" type="text" name="filename" required></label>'
-        f'<label>MIME<input class="form-input" type="text" name="mime_type" value="application/pdf" required></label>'
-        f'<label>Größe (Bytes)<input class="form-input" type="number" name="size_bytes" value="1024" min="1" required></label>'
-        f'<button class="btn" type="submit">Upload vorbereiten</button>'
-        f'</form>'
-    )
     materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=csrf_token, error=error_materials)
     tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=csrf_token, error=error_tasks)
 

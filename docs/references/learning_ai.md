@@ -75,6 +75,9 @@ Why this matters:
 | `AI_TEXT_TEMPERATURE` | no | Feedback | Default `0.0`. |
 | `AI_OCR_TEMPERATURE` | no | OCR | Default `0.0`. |
 | `AI_VISUAL_TEMPERATURE` | no | Visual | Default `0.0`. |
+| `AI_TEXT_THINK_LEVEL` | no | Feedback | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
+| `AI_OCR_THINK_LEVEL` | no | OCR | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
+| `AI_VISUAL_THINK_LEVEL` | no | Visual | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
 | `LEARNING_VISION_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_vision`). |
 | `LEARNING_FEEDBACK_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_feedback`). |
 | `DSPY_CACHEDIR` | no | Worker container | Disk cache directory (compose default: `/tmp/dspy_cache`; override via `.env`). |

@@ -265,3 +265,104 @@ def test_adapter_analyze_visual_requires_visual_model(monkeypatch: pytest.Monkey
             instruction_md="Aufgabe",
             teacher_context_md=None,
         )
+
+
+def test_adapter_sets_text_think_level_low_for_gpt_oss_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    GPT-OSS models must receive an explicit think level to avoid long traces.
+
+    This is intentionally conservative: only GPT-OSS gets a think level; all
+    other models remain unchanged.
+    """
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "gpt-oss:120b")
+    monkeypatch.delenv("AI_TEXT_THINK_LEVEL", raising=False)
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    _ = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected LM to be instantiated"
+    lm_kwargs = lm_calls[0]["kwargs"]
+    assert lm_kwargs.get("extra_body", {}).get("think") == "low"
+
+
+def test_adapter_ignores_text_think_level_for_non_gpt_oss(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Safety: non-GPT-OSS models must never receive a think level, even if set.
+    """
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "llama3.1")
+    monkeypatch.setenv("AI_TEXT_THINK_LEVEL", "high")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    _ = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected LM to be instantiated"
+    lm_kwargs = lm_calls[0]["kwargs"]
+    assert "extra_body" not in lm_kwargs
+
+
+def test_adapter_sets_visual_think_level_low_for_gpt_oss_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Visual LM construction should also apply the GPT-OSS think-level default.
+    """
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "gpt-oss:120b")
+    monkeypatch.delenv("AI_VISUAL_THINK_LEVEL", raising=False)
+
+    adapter = local_feedback.build()
+    with pytest.raises(FeedbackPermanentError, match="unsupported_mime"):
+        adapter.analyze_visual(  # type: ignore[attr-defined]
+            submission={"id": "s"},
+            job_payload={"mime_type": "application/zip"},
+            criteria=["K1"],
+            instruction_md=None,
+            teacher_context_md=None,
+        )
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected visual LM to be instantiated"
+    lm_kwargs = lm_calls[0]["kwargs"]
+    assert lm_kwargs.get("extra_body", {}).get("think") == "low"

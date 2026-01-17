@@ -28,6 +28,7 @@ from backend.learning.adapters.ports import (
     VisionResult,
     VisionTransientError,
 )
+from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 
@@ -333,6 +334,7 @@ class _LocalVisionAdapter:
         self._base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
         self._api_key = (os.getenv("OPENAI_API_KEY") or "").strip() or "sk-noop"
         self._ocr_model = (os.getenv("AI_OCR_MODEL") or "").strip()
+        self._ocr_think_level = (os.getenv("AI_OCR_THINK_LEVEL") or "").strip() or None
         raw_temp = (os.getenv("AI_OCR_TEMPERATURE") or "").strip()
         try:
             self._ocr_temperature = float(raw_temp) if raw_temp else 0.0
@@ -356,12 +358,16 @@ class _LocalVisionAdapter:
         except Exception as exc:
             raise VisionTransientError("dspy_unavailable") from exc
         model = self._ocr_model if "/" in self._ocr_model else f"openai/{self._ocr_model}"
-        self._ocr_lm = dspy.LM(  # type: ignore[attr-defined]
-            model,
-            temperature=self._ocr_temperature,
-            base_url=self._base_url,
-            api_key=self._api_key,
-        )
+        lm_kwargs = {
+            "temperature": self._ocr_temperature,
+            "base_url": self._base_url,
+            "api_key": self._api_key,
+        }
+        # GPT-OSS supports a per-request `think` level; keep other models unchanged.
+        maybe_think = dspy_helpers.resolve_think_level(model, self._ocr_think_level)
+        if maybe_think:
+            lm_kwargs["extra_body"] = {"think": maybe_think}
+        self._ocr_lm = dspy.LM(model, **lm_kwargs)  # type: ignore[attr-defined]
         return self._ocr_lm
 
     def _ensure_pdf_stitched_png(self, *, submission: Dict, job_payload: Dict) -> Optional[bytes]:

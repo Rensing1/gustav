@@ -2317,7 +2317,7 @@ async def learning_task_history_poll(request: Request, course_id: str, task_id: 
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             r = await client.get(
                 f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
-                params={"limit": 10, "offset": 0},
+                params={"limit": 1, "offset": 0},
             )
             items = r.json() if r.status_code == 200 else []
     except Exception:
@@ -2363,11 +2363,12 @@ async def learning_task_submission_artifact_fragment(
             sid = _get_session_id(request)
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r = await client.get(
+            r_latest = await client.get(
                 f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
-                params={"limit": 10, "offset": 0},
+                params={"limit": 1, "offset": 0},
             )
-            items = r.json() if r.status_code == 200 else []
+            items_latest = r_latest.json() if r_latest.status_code == 200 else []
+            items = items_latest
     except Exception:
         items = []
 
@@ -2377,6 +2378,29 @@ async def learning_task_submission_artifact_fragment(
         if str(rec.get("id") or "") == str(submission_id):
             target = rec
             break
+
+    # If the requested submission is not the newest, fall back to the first
+    # 10 items (matches the history list on the page).
+    if target is None:
+        try:
+            async with _internal_api_client() as client:
+                sid = _get_session_id(request)
+                if sid:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.get(
+                    f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
+                    params={"limit": 10, "offset": 0},
+                )
+                items_fallback = r.json() if r.status_code == 200 else []
+        except Exception:
+            items_fallback = []
+        items_dicts = (
+            [rec for rec in items_fallback if isinstance(rec, dict)] if isinstance(items_fallback, list) else []
+        )
+        for rec in items_dicts:
+            if str(rec.get("id") or "") == str(submission_id):
+                target = rec
+                break
     if target is not None:
         _enrich_submission_records_with_file_urls([target])
         html = _render_submission_artifact_container(

@@ -124,7 +124,7 @@ class Layout(Component):
     <SCRIPT src="/static/js/vendor/sortable.js?v=4"></SCRIPT>
 
     <!-- Minimal custom JavaScript -->
-    <SCRIPT src="/static/js/gustav.js?v=8" defer></SCRIPT>
+    <SCRIPT src="/static/js/gustav.js?v=9" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
     """

@@ -101,8 +101,8 @@ async def test_materials_new_shows_toggle_and_data_attrs():
     m = re.search(r"<textarea[^>]*name=\"body_md\"[^>]*>", body)
     assert m, "body_md textarea must be present"
     tag = m.group(0)
-    assert re.search(r'class="[^"]*\\bform-textarea\\b[^"]*"', tag), tag
-    assert re.search(r'\\brows="12"\\b', tag), tag
+    assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', tag), tag
+    assert 'rows="12"' in tag, tag
     # Datei-Form wird vollständig serverseitig gerendert; JS übernimmt Toggle/Upload.
     # Ein prominenter No-JS-Banner soll hier NICHT mehr erscheinen.
     assert "Ohne JavaScript ist der Datei-Upload deaktiviert" not in body

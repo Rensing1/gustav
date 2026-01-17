@@ -391,13 +391,13 @@ async def test_tasks_form_has_criteria_and_hints_and_is_sent_to_api():
         m_instr = re.search(r"<textarea[^>]*name=\"instruction_md\"[^>]*>", page.text)
         assert m_instr, "instruction_md textarea must be present"
         instr_tag = m_instr.group(0)
-        assert re.search(r'class="[^"]*\\bform-textarea\\b[^"]*"', instr_tag), instr_tag
-        assert re.search(r'\\brows="10"\\b', instr_tag), instr_tag
+        assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', instr_tag), instr_tag
+        assert 'rows="10"' in instr_tag, instr_tag
         m_ctx = re.search(r"<textarea[^>]*name=\"teacher_context_md\"[^>]*>", page.text)
         assert m_ctx, "teacher_context_md textarea must be present"
         ctx_tag = m_ctx.group(0)
-        assert re.search(r'class="[^"]*\\bform-textarea\\b[^"]*"', ctx_tag), ctx_tag
-        assert re.search(r'\\brows="6"\\b', ctx_tag), ctx_tag
+        assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', ctx_tag), ctx_tag
+        assert 'rows="6"' in ctx_tag, ctx_tag
 
         resp = await c.post(
             f"/units/{unit_id}/sections/{section_id}/tasks/create",

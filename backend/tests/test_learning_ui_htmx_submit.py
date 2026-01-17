@@ -133,8 +133,8 @@ async def test_unit_task_form_textarea_has_rows_and_is_not_required(monkeypatch:
     m = re.search(r"<textarea[^>]*name=\"text_body\"[^>]*>", html)
     assert m, "text_body textarea must be present"
     tag = m.group(0)
-    assert re.search(r'class="[^"]*\\bform-textarea\\b[^"]*"', tag), tag
-    assert re.search(r'\\brows="5"\\b', tag), tag
+    assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', tag), tag
+    assert 'rows="5"' in tag, tag
     # Must not be HTML-required so upload mode can submit (textarea may be hidden).
     assert "required" not in tag, tag
 

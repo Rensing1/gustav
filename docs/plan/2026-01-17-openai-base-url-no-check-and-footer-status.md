@@ -2,7 +2,13 @@
 
 Datum: 2026-01-17  
 Autor: Codex (mit Felix)  
-Status: Plan (noch nicht implementiert)
+Status: DONE (implementiert 2026-01-17)
+
+## Implementation (done)
+- Security-Blocker entfernt: `OPENAI_BASE_URL` wird auch in `prod` nicht mehr auf HTTPS/Host eingeschränkt.
+- Neuer Status-Endpunkt: `GET /internal/health/openai` (teacher/operator only, private/no-store).
+- Footer-Indikator (teacher/operator only) + JS polling (60s) für schnelle Sichtbarkeit im UI.
+- Tests ergänzt/angepasst, damit Verhalten regressionssicher bleibt.
 
 ## Kontext / Problem
 - Beim Einreichen von Bild/PDF-Abgaben kann die KI-Auswertung fehlschlagen mit der Meldung **„insecure_OPENAI_BASE_URL“**.

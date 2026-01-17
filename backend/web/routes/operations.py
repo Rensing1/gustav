@@ -84,7 +84,7 @@ async def _probe_openai_health() -> tuple[dict, int]:
     try:
         import httpx
 
-        async with httpx.AsyncClient(timeout=2.0) as client:
+        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
             resp = await client.get(models_url, headers=headers)
     except Exception:
         body = {

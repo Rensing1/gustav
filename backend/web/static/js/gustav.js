@@ -572,7 +572,10 @@ class Gustav {
    */
   initOpenAIStatusIndicator() {
     const chip = document.getElementById('openai-status');
-    if (!chip) return;
+    if (!chip) {
+      this.stopOpenAIStatusIndicator();
+      return;
+    }
 
     // Refresh after HTMX navigation, but only create one interval per page load.
     if (this.openaiStatusIndicatorInit) {
@@ -588,9 +591,24 @@ class Gustav {
     }, 60000);
   }
 
+  stopOpenAIStatusIndicator() {
+    if (this._openaiStatusIntervalId) {
+      window.clearInterval(this._openaiStatusIntervalId);
+      this._openaiStatusIntervalId = null;
+    }
+    this.openaiStatusIndicatorInit = false;
+  }
+
   async refreshOpenAIStatusIndicator() {
     const chip = document.getElementById('openai-status');
-    if (!chip) return;
+    if (!chip) {
+      this.stopOpenAIStatusIndicator();
+      return;
+    }
+    if (chip.hidden) {
+      this.stopOpenAIStatusIndicator();
+      return;
+    }
     if (chip.dataset && chip.dataset.loading === 'true') return;
     if (chip.dataset) chip.dataset.loading = 'true';
 
@@ -618,6 +636,7 @@ class Gustav {
         // Should not happen because the element is teacher/operator-only,
         // but hide defensively if a session expired mid-page.
         chip.hidden = true;
+        this.stopOpenAIStatusIndicator();
         return;
       }
       const data = await resp.json();

@@ -211,7 +211,9 @@ async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pyt
     html = r.text
     assert f'id="task-history-{task_id}"' in html
     # In-progress → includes hx polling
-    assert "hx-trigger=\"every 2s\"" in html or "hx-trigger=\"load, every 2s\"" in html
+    assert f'id="task-history-poll-{task_id}"' in html
+    assert f'hx-get="/learning/courses/{course_id}/tasks/{task_id}/history/poll"' in html
+    assert 'hx-trigger="every 10s"' in html
 
 
 @pytest.mark.anyio

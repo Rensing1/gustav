@@ -124,7 +124,7 @@ class Layout(Component):
     <SCRIPT src="/static/js/vendor/sortable.js?v=4"></SCRIPT>
 
     <!-- Minimal custom JavaScript -->
-    <SCRIPT src="/static/js/gustav.js?v=7" defer></SCRIPT>
+    <SCRIPT src="/static/js/gustav.js?v=8" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
     """
@@ -135,6 +135,20 @@ class Layout(Component):
         Returns only the children of <main> so HTMX fragment swaps can replace
         innerHTML without nesting <main> elements.
         """
+        # Show internal AI connectivity hints only to teachers/operators.
+        role = (self.user or {}).get("role") if isinstance(self.user, dict) else None
+        show_openai_status = role in ("teacher", "operator")
+        openai_status_html = ""
+        if show_openai_status:
+            openai_status_html = """
+                <p class="text-center">
+                    <span id="openai-status" class="status-chip" role="status" aria-live="polite" aria-atomic="true">
+                        <span class="spinner spinner--sm spinner--muted" aria-hidden="true"></span>
+                        <span class="status-chip__text">KI: prüfe …</span>
+                    </span>
+                </p>
+            """
+
         return f"""
         {breadcrumb_html}
         {self.content}
@@ -149,6 +163,7 @@ class Layout(Component):
                     –
                     <a href="https://github.com/Rensing1/gustav/" target="_blank" rel="noopener">GitHub</a>
                 </p>
+                {openai_status_html}
             </div>
         </footer>
         """

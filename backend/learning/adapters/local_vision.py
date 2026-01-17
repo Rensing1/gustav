@@ -37,42 +37,15 @@ LOG = logging.getLogger(__name__)
 SUPPORTED_MIME = {"image/jpeg", "image/png", "application/pdf"}
 _LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
 
-
-def _is_prod_like() -> bool:
-    env = (os.getenv("GUSTAV_ENV") or "dev").strip().lower()
-    return env in {"prod", "production", "stage", "staging"}
-
-
-def _is_allowed_insecure_http_host(host: str) -> bool:
-    """Allow plain HTTP only for clearly local hosts (prod/stage safety guard)."""
-    host = (host or "").strip().lower()
-    if not host:
-        return False
-    if host in _LOCAL_HTTP_HOSTS:
-        return True
-    try:
-        parsed_ip = ipaddress.ip_address(host)
-        return bool(parsed_ip.is_loopback or parsed_ip.is_private)
-    except ValueError:
-        pass
-    # Allow Docker/service DNS names like "ollama" but fail closed for public FQDNs.
-    return "." not in host
-
-
 def _require_secure_openai_base_url(base_url: str) -> None:
-    """Enforce HTTPS for remote OpenAI endpoints in production-like envs."""
-    if not _is_prod_like():
-        return
-    try:
-        parsed = _urlparse(base_url)
-    except Exception:
-        raise VisionPermanentError("invalid_OPENAI_BASE_URL")
-    scheme = (parsed.scheme or "").lower()
-    host = (parsed.hostname or "").lower()
-    if scheme not in {"http", "https"} or not host:
-        raise VisionPermanentError("invalid_OPENAI_BASE_URL")
-    if scheme == "http" and not _is_allowed_insecure_http_host(host):
-        raise VisionPermanentError("insecure_OPENAI_BASE_URL")
+    """
+    Historical security guard (now disabled).
+
+    We intentionally do not block non-HTTPS OpenAI endpoints anymore. Operators
+    may route traffic through VPNs (e.g. Tailscale) and accept responsibility
+    for transport security at the network layer.
+    """
+    return
 
 
 def _is_local_host(host: str) -> bool:

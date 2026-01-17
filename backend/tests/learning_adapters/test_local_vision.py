@@ -269,7 +269,7 @@ def test_local_vision_requires_ocr_model(monkeypatch: pytest.MonkeyPatch) -> Non
         adapter.extract(submission={"id": "s", "kind": "file"}, job_payload=job_payload)  # type: ignore[arg-type]
 
 
-def test_local_vision_prod_disallows_http_openai_base_url_for_remote_hosts(
+def test_local_vision_prod_allows_http_openai_base_url_for_remote_hosts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -313,8 +313,12 @@ def test_local_vision_prod_disallows_http_openai_base_url_for_remote_hosts(
     write_dummy_png(file_path)
     job_payload = {"mime_type": "image/png", "storage_key": storage_key, "size_bytes": file_path.stat().st_size}
 
-    with pytest.raises(VisionPermanentError, match="insecure_OPENAI_BASE_URL"):
-        adapter.extract(submission=submission, job_payload=job_payload)
+    result = adapter.extract(submission=submission, job_payload=job_payload)
+    assert isinstance(result, VisionResult)
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected OCR LM to be instantiated"
+    assert lm_calls[0]["kwargs"]["base_url"] == "http://example.com/api/v1"
 
 
 def test_local_vision_prod_allows_http_openai_base_url_for_loopback(

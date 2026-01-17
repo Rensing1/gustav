@@ -44,6 +44,11 @@ def _extract_hidden_token(html: str, name: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _extract_textarea_tag(html: str, name: str) -> str | None:
+    m = re.search(rf"<textarea[^>]*name=\"{re.escape(name)}\"[^>]*>", html)
+    return m.group(0) if m else None
+
+
 @pytest.mark.anyio
 async def test_unit_edit_prefill_uses_get_by_id_beyond_first_page():
     # Arrange: teacher with 55 units; target is #55 (outside first 50)
@@ -63,8 +68,12 @@ async def test_unit_edit_prefill_uses_get_by_id_beyond_first_page():
         r_form = await c.get(f"/units/{uid}/edit")
         assert r_form.status_code == 200
         title_value = _extract_value(r_form.text, "title")
+        summary_tag = _extract_textarea_tag(r_form.text, "summary")
 
     assert title_value == expected_title
+    assert summary_tag, "summary textarea must be present"
+    assert "form-textarea" in summary_tag
+    assert 'rows="3"' in summary_tag
 
 
 @pytest.mark.anyio

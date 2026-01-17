@@ -136,8 +136,14 @@ class Layout(Component):
         innerHTML without nesting <main> elements.
         """
         # Show internal AI connectivity hints only to teachers/operators.
-        role = (self.user or {}).get("role") if isinstance(self.user, dict) else None
-        show_openai_status = role in ("teacher", "operator")
+        user = self.user if isinstance(self.user, dict) else {}
+        roles = user.get("roles")
+        show_openai_status = False
+        if isinstance(roles, list):
+            show_openai_status = any(role in ("teacher", "operator") for role in roles)
+        if not show_openai_status:
+            role = user.get("role")
+            show_openai_status = role in ("teacher", "operator")
         openai_status_html = ""
         if show_openai_status:
             openai_status_html = """

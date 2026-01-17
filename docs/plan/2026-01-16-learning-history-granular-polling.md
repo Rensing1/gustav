@@ -2,8 +2,15 @@
 
 Datum: 2026-01-16  
 Autor: Codex (mit Felix)  
-Status: Plan (noch nicht implementiert)  
+Status: DONE (implementiert 2026-01-17)  
 Bezug: `docs/tickets/learning-history-polling-scroll-jump-image-preview-2026-01-15.md`
+
+## Implementation (done)
+- Stable history wrapper: kein `outerHTML`-Polling mehr auf dem kompletten History-Container.
+- Neuer Poll-Endpunkt: `GET /learning/courses/{course_id}/tasks/{task_id}/history/poll` liefert nur OOB-Updates für Text/Result.
+- Polling endet automatisch bei `completed/failed`.
+- Preview bleibt stabil (signed URL wird nicht ständig neu gerendert); Reload-Button nur bei Preview-Fehler.
+- Tests angepasst/ergänzt (Scroll-Jump Regression + Poll-Endpunkt + Preview-Schutz).
 
 ## Kontext / Problem
 - In der Schüler-UI wird das Aufgaben-History-Fragment während laufender Analyse (`analysis_status ∈ {pending, extracted}`) **alle 2 Sekunden** per HTMX neu geladen.

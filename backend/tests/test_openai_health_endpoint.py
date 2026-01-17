@@ -13,6 +13,7 @@ Security:
 from __future__ import annotations
 
 import sys
+import types
 from pathlib import Path
 
 import httpx
@@ -145,3 +146,46 @@ async def test_openai_health_returns_503_for_degraded(monkeypatch: pytest.Monkey
     assert resp.headers.get("Cache-Control") == "private, no-store"
     assert resp.headers.get("Vary") == "Origin"
 
+
+@pytest.mark.anyio
+async def test_probe_openai_health_disables_trust_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Probe should not inherit proxy settings from the environment."""
+    _install_session_store()
+    import routes.operations as operations  # type: ignore  # noqa: E402
+
+    observed: dict = {}
+
+    class _FakeHTTPXResponse:
+        def __init__(self, status_code: int, payload: object):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):  # type: ignore[no-untyped-def]
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, **kwargs):
+            observed["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):  # type: ignore[no-untyped-def]
+            observed["url"] = url
+            observed["headers"] = headers or {}
+            return _FakeHTTPXResponse(200, {"data": [{"id": "m1"}]})
+
+    fake_httpx = types.SimpleNamespace(AsyncClient=lambda **kwargs: _FakeAsyncClient(**kwargs))
+    monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example.com/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+    body, status_code = await operations._probe_openai_health()
+    assert status_code == 200
+    assert body.get("modelsCount") == 1
+
+    client_kwargs = observed.get("client_kwargs") or {}
+    assert client_kwargs.get("trust_env") is False

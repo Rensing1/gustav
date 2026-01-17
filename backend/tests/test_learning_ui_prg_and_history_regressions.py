@@ -91,7 +91,13 @@ def test_history_uses_analysis_text_when_text_body_empty():
 
     from main import _build_history_entry_from_record  # type: ignore
 
-    entry = _build_history_entry_from_record(record, index=0, open_attempt_id="")
+    entry = _build_history_entry_from_record(
+        record,
+        course_id="course-1",
+        task_id="task-1",
+        index=0,
+        open_attempt_id="",
+    )
     assert hasattr(entry, "content_html")
     # Markdown-Content sollte im HTML landen
     assert re.search(r"Extracted|Hello", entry.content_html)

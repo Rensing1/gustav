@@ -69,6 +69,16 @@ class TextAreaField(FormField):
     """Convenience helper for textareas."""
 
     def render(self, value: str = "", rows: int = 5, **attrs: str) -> str:
+        # Always include the textarea base class so styling stays consistent.
+        # This prevents regressions where a textarea accidentally gets rendered
+        # with `form-input` (which is primarily tuned for <input> elements).
+        classes_raw = str(attrs.get("class_", "") or "").strip()
+        if classes_raw:
+            classes = classes_raw.split()
+            if "form-textarea" not in classes:
+                attrs["class_"] = f"{classes_raw} form-textarea"
+        else:
+            attrs["class_"] = "form-textarea"
         textarea_attrs = self.attributes(
             id=self.field_id,
             name=self.field_id,

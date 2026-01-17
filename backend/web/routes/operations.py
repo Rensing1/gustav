@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from urllib.parse import urljoin
 
 from fastapi import APIRouter, Request
@@ -11,6 +12,19 @@ from fastapi.responses import JSONResponse
 from backend.learning.workers import health as worker_health
 
 operations_router = APIRouter(tags=["Operations"])
+
+# In-memory cache to avoid repeatedly probing the OpenAI-compatible endpoint.
+#
+# Why:
+#   The footer indicator can poll periodically and HTMX navigation may trigger
+#   multiple refreshes close together. We keep a short TTL cache so we don't
+#   spam `/models` unnecessarily.
+#
+# Security:
+#   This is internal tooling only (teacher/operator). The cached payload does
+#   not contain PII.
+_OPENAI_HEALTH_CACHE_TTL_SECONDS = 15.0
+_OPENAI_HEALTH_CACHE: dict[str, object] = {"key": None, "at": 0.0, "body": None, "status_code": None}
 
 
 def _private_response(body: dict, *, status_code: int) -> JSONResponse:
@@ -34,6 +48,13 @@ def _require_teacher_or_operator(request: Request):
     if not isinstance(roles, list) or not any(role in ("teacher", "operator") for role in roles):
         return None, _private_response({"error": "forbidden"}, status_code=403)
     return user, None
+
+
+def _openai_health_cache_key() -> tuple[str, int]:
+    """Return a cache key for the OpenAI health probe."""
+    base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
+    # Include probe identity so test monkeypatches never hit stale cache.
+    return base_url, id(_probe_openai_health)
 
 
 def _join_openai_models_url(base_url: str) -> str:
@@ -168,5 +189,17 @@ async def openai_health(request: Request):
     if error:
         return error
 
+    cache_key = _openai_health_cache_key()
+    now = time.monotonic()
+    cached_key = _OPENAI_HEALTH_CACHE.get("key")
+    cached_at = float(_OPENAI_HEALTH_CACHE.get("at") or 0.0)
+    cached_body = _OPENAI_HEALTH_CACHE.get("body")
+    cached_status = _OPENAI_HEALTH_CACHE.get("status_code")
+    if cached_key == cache_key and cached_body is not None and (now - cached_at) < _OPENAI_HEALTH_CACHE_TTL_SECONDS:
+        return _private_response(dict(cached_body), status_code=int(cached_status or 503))
+
     body, status_code = await _probe_openai_health()
+    _OPENAI_HEALTH_CACHE.update(
+        {"key": cache_key, "at": now, "body": dict(body), "status_code": int(status_code)}
+    )
     return _private_response(body, status_code=status_code)

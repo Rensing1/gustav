@@ -148,6 +148,29 @@ async def test_openai_health_returns_503_for_degraded(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.anyio
+async def test_openai_health_caches_probe_result_for_short_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    The footer indicator polls periodically; the endpoint should avoid hammering
+    the OpenAI-compatible endpoint when multiple requests happen close together.
+    """
+    store = _install_session_store()
+    teacher = store.create(sub="t-openai-cache", roles=["teacher"], name="T")
+    import routes.operations as operations  # type: ignore  # noqa: E402
+
+    fake = _FakeProbe({"status": "healthy", "configured": True, "reachable": True, "modelsLoaded": True, "modelsCount": 1, "detail": None}, 200)
+    monkeypatch.setattr(operations, "_probe_openai_health", fake, raising=False)
+
+    async with await _client() as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        r1 = await client.get("/internal/health/openai")
+        r2 = await client.get("/internal/health/openai")
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert fake.calls == 1, "expected probe to be cached between close calls"
+
+
+@pytest.mark.anyio
 async def test_probe_openai_health_disables_trust_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Probe should not inherit proxy settings from the environment."""
     _install_session_store()

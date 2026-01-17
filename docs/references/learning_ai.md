@@ -88,6 +88,17 @@ Why this matters:
 | `WORKER_LEASE_SECONDS` | no | Worker | Default `45` (effective lease window is multiplied internally). |
 | `WORKER_POLL_INTERVAL` | no | Worker | Default `0.5`. |
 
+### 5.2 Operations: OpenAI health probe (UI footer)
+
+Why:
+- Teachers/operators need a quick “is the AI configured + reachable?” hint without digging through logs.
+
+How it works:
+- UI renders a small status chip in the footer for `teacher`/`operator` only (no student visibility).
+- The browser polls `GET /internal/health/openai` periodically and updates the label.
+- The server answers with `Cache-Control: private, no-store` and a structured payload (`status`, `reachable`, `modelsCount`, `detail`).
+- To avoid spamming the upstream endpoint, the server caches probe results in-memory for a short TTL (currently 15s).
+
 Additional storage-related env (security-critical for OCR fetch paths):
 - `SUPABASE_URL`, `SUPABASE_PUBLIC_URL`: define trusted hosts for remote fetch of uploaded files.
 - `SUPABASE_SERVICE_ROLE_KEY`: used only for server-side storage fetches; never sent to untrusted hosts.

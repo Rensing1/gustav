@@ -531,3 +531,49 @@ async def test_history_poll_endpoint_stops_polling_when_completed(monkeypatch: p
     assert "hx-trigger" not in html, "poller must remove its interval to stop polling"
     assert f'id="submission-result-{latest_id}"' in html
     assert "Gut gemacht" in html
+
+
+@pytest.mark.anyio
+async def test_history_poll_endpoint_uses_limit_1(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Poll endpoint should fetch only the newest submission (limit=1)."""
+    student = _student_session()
+
+    latest_id = str(uuid.uuid4())
+    latest = {
+        "id": latest_id,
+        "attempt_nr": 1,
+        "kind": "text",
+        "text_body": "Hallo",
+        "mime_type": None,
+        "size_bytes": None,
+        "storage_key": None,
+        "sha256": None,
+        "analysis_status": "pending",
+        "analysis_json": None,
+        "feedback_md": None,
+        "error_code": None,
+        "created_at": "2025-11-04T12:00:00+00:00",
+        "completed_at": None,
+    }
+
+    observed: dict = {}
+
+    def _submissions(params):
+        observed["params"] = params
+        return [latest]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history/poll")
+    assert r.status_code == 200
+
+    params = observed.get("params") or {}
+    assert params.get("limit") == 1
+    assert params.get("offset") == 0

@@ -649,9 +649,19 @@ class Gustav {
       const reachable = !!data.reachable;
       const modelsCount = Number.isFinite(Number(data.modelsCount)) ? Number(data.modelsCount) : 0;
       const detail = data.detail ? String(data.detail) : '';
+      const status = data.status ? String(data.status) : '';
 
       if (!configured) {
         apply('KI: nicht konfiguriert', detail || 'missing_OPENAI_BASE_URL');
+        return;
+      }
+      if (detail.startsWith('http_')) {
+        const code = detail.slice('http_'.length);
+        if (code === '401' || code === '403') {
+          apply(`KI: Auth fehlgeschlagen (${code})`, detail);
+          return;
+        }
+        apply(`KI: Fehler (${code || 'unknown'})`, detail);
         return;
       }
       if (!reachable) {
@@ -662,7 +672,11 @@ class Gustav {
         apply(`KI: ok (${modelsCount} Modelle)`, detail);
         return;
       }
-      apply('KI: erreichbar, aber keine Modelle', detail);
+      if (status === 'healthy') {
+        apply('KI: ok', detail);
+        return;
+      }
+      apply('KI: erreichbar, aber keine Modelle', detail || 'no_models');
     } catch (err) {
       apply('KI: nicht erreichbar', 'connect_failed');
     } finally {

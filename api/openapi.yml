@@ -265,6 +265,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LearningWorkerHealthCheck'
+    OpenAIHealth:
+      type: object
+      required: [status, configured, reachable, modelsLoaded, modelsCount]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        configured:
+          type: boolean
+          description: Whether OPENAI_BASE_URL is configured.
+        reachable:
+          type: boolean
+          description: Whether the endpoint responded to a GET /models probe.
+        modelsLoaded:
+          type: boolean
+          description: Whether the endpoint returned at least one model entry.
+        modelsCount:
+          type: integer
+          minimum: 0
+        detail:
+          type: string
+          nullable: true
+          description: Optional diagnostic tag (e.g. missing_OPENAI_BASE_URL, connect_failed, http_401).
     Course:
       type: object
       required: [id, title, teacher_id, created_at, updated_at]
@@ -2520,6 +2543,105 @@ paths:
                     currentRole: null
                     checks:
                       - { check: db_role, status: failed, detail: 'gustav_worker role not available' }
+  /internal/health/openai:
+    get:
+      tags: [Operations]
+      summary: OpenAI endpoint health probe
+      description: |
+        Returns diagnostics for the configured OpenAI-compatible endpoint by requesting `/models`.
+        Requires a teacher/operator session cookie.
+      operationId: getOpenAIHealth
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: OpenAI-compatible endpoint reachable and models available
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAIHealth'
+              examples:
+                healthy:
+                  summary: Endpoint healthy
+                  value:
+                    status: healthy
+                    configured: true
+                    reachable: true
+                    modelsLoaded: true
+                    modelsCount: 3
+                    detail: null
+        '401':
+          description: Missing or invalid session
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller lacks teacher/operator role
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Endpoint misconfigured, unreachable, or no models available
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAIHealth'
+              examples:
+                degraded:
+                  summary: Endpoint degraded
+                  value:
+                    status: degraded
+                    configured: true
+                    reachable: false
+                    modelsLoaded: false
+                    modelsCount: 0
+                    detail: connect_failed
   /api/learning/courses:
     get:
       tags: [Learning]

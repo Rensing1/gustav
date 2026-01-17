@@ -1,11 +1,13 @@
 """
-Helpers for configuring DSPy/Ollama LMs with GPT-OSS think levels.
+Helpers for configuring DSPy LMs with GPT-OSS think levels.
 
 Why:
-    GPT-OSS requires an explicit `think` level (`low|medium|high`). Without
-    it, the model emits long reasoning traces by default. These helpers
-    centralise the conditional wiring so both worker bootstrap and DSPy
-    programs stay consistent.
+    GPT-OSS requires an explicit `think` level (`low|medium|high`). Without it,
+    the model may emit long reasoning traces by default.
+
+    We keep the logic in one place so the learning adapters can apply the same
+    conservative rule: only GPT-OSS gets a think-level; other models are left
+    unchanged for compatibility with stricter OpenAI-compatible endpoints.
 """
 
 from __future__ import annotations
@@ -13,6 +15,20 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 _ALLOWED_THINK_LEVELS = {"low", "medium", "high"}
+
+def _model_leaf(model_name: str) -> str:
+    """
+    Return the provider-stripped model name.
+
+    Why:
+        Our adapters normalize models to strings like "openai/<name>". GPT-OSS
+        detection must therefore work on the leaf ("gpt-oss:...") rather than
+        the full provider-prefixed string.
+    """
+    raw = (model_name or "").strip()
+    if "/" not in raw:
+        return raw
+    return raw.rsplit("/", 1)[-1]
 
 
 def normalize_think_level(raw: str | None) -> str:
@@ -23,7 +39,8 @@ def normalize_think_level(raw: str | None) -> str:
 
 def resolve_think_level(model_name: str, think_level: str | None) -> str | None:
     """Only return a think level for GPT-OSS models."""
-    if not model_name.lower().startswith("gpt-oss"):
+    leaf = _model_leaf(model_name).lower()
+    if not leaf.startswith("gpt-oss"):
         return None
     return normalize_think_level(think_level)
 

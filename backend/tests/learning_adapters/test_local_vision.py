@@ -148,6 +148,125 @@ def test_local_vision_happy_path_returns_markdown(
     assert contexts and contexts[0].get("disable_history") is True
 
 
+def test_local_vision_sets_think_level_low_for_gpt_oss_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """
+    GPT-OSS models must receive an explicit think level to avoid long traces.
+    """
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("AI_OCR_MODEL", "gpt-oss:120b")
+    monkeypatch.delenv("AI_OCR_THINK_LEVEL", raising=False)
+
+    from backend.learning.adapters.dspy import vision_program
+
+    monkeypatch.setattr(
+        vision_program,
+        "extract_text_from_image",
+        lambda **_: ("## OCR\n\nErkannter Text", {"program": "vision_ocr"}),
+    )
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    bucket = get_submissions_bucket()
+    submission = {
+        "id": "deadbeef-dead-beef-dead-beef000010",
+        "kind": "file",
+        "text_body": None,
+        "course_id": "course-1",
+        "task_id": "task-1",
+        "student_sub": "student-1",
+    }
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+
+    storage_key = f"{bucket}/{submission['course_id']}/{submission['task_id']}/{submission['student_sub']}/img.png"
+    file_path = storage_root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    write_dummy_png(file_path)
+
+    job_payload = {
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": file_path.stat().st_size,
+    }
+
+    result: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
+    assert isinstance(result, VisionResult)
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected OCR LM to be instantiated"
+    assert lm_calls[0]["model"] == "openai/gpt-oss:120b"
+    assert lm_calls[0]["kwargs"].get("extra_body", {}).get("think") == "low"
+
+
+def test_local_vision_ignores_think_level_for_non_gpt_oss(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """
+    Safety: non-GPT-OSS models must never receive a think level, even if set.
+    """
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("AI_OCR_MODEL", "ocr-model")
+    monkeypatch.setenv("AI_OCR_THINK_LEVEL", "high")
+
+    from backend.learning.adapters.dspy import vision_program
+
+    monkeypatch.setattr(
+        vision_program,
+        "extract_text_from_image",
+        lambda **_: ("## OCR\n\nErkannter Text", {"program": "vision_ocr"}),
+    )
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    bucket = get_submissions_bucket()
+    submission = {
+        "id": "deadbeef-dead-beef-dead-beef000011",
+        "kind": "file",
+        "text_body": None,
+        "course_id": "course-1",
+        "task_id": "task-1",
+        "student_sub": "student-1",
+    }
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+
+    storage_key = f"{bucket}/{submission['course_id']}/{submission['task_id']}/{submission['student_sub']}/img.png"
+    file_path = storage_root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    write_dummy_png(file_path)
+
+    job_payload = {
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": file_path.stat().st_size,
+    }
+
+    result: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
+    assert isinstance(result, VisionResult)
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected OCR LM to be instantiated"
+    assert "extra_body" not in lm_calls[0]["kwargs"]
+
+
 def test_local_vision_timeout_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
     observed: dict = {}
     _install_fake_dspy(monkeypatch, observed=observed)
@@ -269,7 +388,7 @@ def test_local_vision_requires_ocr_model(monkeypatch: pytest.MonkeyPatch) -> Non
         adapter.extract(submission={"id": "s", "kind": "file"}, job_payload=job_payload)  # type: ignore[arg-type]
 
 
-def test_local_vision_prod_disallows_http_openai_base_url_for_remote_hosts(
+def test_local_vision_prod_allows_http_openai_base_url_for_remote_hosts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -313,8 +432,12 @@ def test_local_vision_prod_disallows_http_openai_base_url_for_remote_hosts(
     write_dummy_png(file_path)
     job_payload = {"mime_type": "image/png", "storage_key": storage_key, "size_bytes": file_path.stat().st_size}
 
-    with pytest.raises(VisionPermanentError, match="insecure_OPENAI_BASE_URL"):
-        adapter.extract(submission=submission, job_payload=job_payload)
+    result = adapter.extract(submission=submission, job_payload=job_payload)
+    assert isinstance(result, VisionResult)
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected OCR LM to be instantiated"
+    assert lm_calls[0]["kwargs"]["base_url"] == "http://example.com/api/v1"
 
 
 def test_local_vision_prod_allows_http_openai_base_url_for_loopback(

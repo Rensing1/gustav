@@ -58,7 +58,11 @@ class _FakeAsyncClient:
 @pytest.mark.anyio
 @pytest.mark.parametrize("status", ["pending", "extracted"])
 async def test_history_fragment_autopolls_for_in_progress_status(monkeypatch: pytest.MonkeyPatch, status: str):
-    """History fragment must auto-refresh while analysis is pending or extracting."""
+    """History fragment must include a dedicated poller while analysis runs.
+
+    The history wrapper itself must remain stable (no outerHTML polling) so
+    preview artifacts do not get re-rendered every cycle.
+    """
     student = _student_session()
 
     # Fake the internal API used by the fragment
@@ -94,13 +98,15 @@ async def test_history_fragment_autopolls_for_in_progress_status(monkeypatch: py
         r = await client.get("/learning/courses/c1/tasks/t1/history?open_attempt_id=" + latest["id"])  # type: ignore[index]
     assert r.status_code == 200
     html = r.text
-    # In-progress (pending/extracted) → auto-refresh attributes present
+    # In-progress (pending/extracted) → wrapper stays stable, poller drives refresh.
     assert "class=\"task-panel__history\"" in html
-    assert "hx-get=\"/learning/courses/c1/tasks/t1/history\"" in html
+    assert "hx-get=\"/learning/courses/c1/tasks/t1/history\"" not in html
     assert f'data-open-attempt-id="{latest["id"]}"' in html
     hx_vals = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
     assert hx_vals and hx_vals.group(1) == latest["id"]
-    assert "hx-trigger=\"every 2s\"" in html or "hx-trigger=\"load, every 2s\"" in html
+    assert 'id="task-history-poll-t1"' in html
+    assert 'hx-get="/learning/courses/c1/tasks/t1/history/poll"' in html
+    assert "hx-trigger=\"every 10s\"" in html
     assert "data-pending=\"true\"" in html
 
 
@@ -228,11 +234,12 @@ async def test_history_fragment_stops_polling_when_completed(monkeypatch: pytest
         r = await client.get("/learning/courses/c1/tasks/t1/history?open_attempt_id=" + latest["id"])  # type: ignore[index]
     assert r.status_code == 200
     html = r.text
-    # Completed → no hx polling attributes
+    # Completed → no poller
     assert "class=\"task-panel__history\"" in html
     assert "data-pending=\"false\"" in html
     assert "hx-get=\"/learning/courses/c1/tasks/t1/history" not in html
     assert "hx-trigger=\"" not in html
+    assert 'id="task-history-poll-t1"' not in html
 
 
 @pytest.mark.anyio
@@ -308,7 +315,7 @@ async def test_history_fragment_exposes_submission_ids_and_open_state_attrs(monk
 @pytest.mark.anyio
 @pytest.mark.parametrize("status", ["pending", "extracted"])
 async def test_unit_page_embeds_autopoll_when_latest_in_progress(monkeypatch: pytest.MonkeyPatch, status: str):
-    """Unit page should use a polling placeholder if the latest attempt is pending.
+    """Unit page should embed the per-task poller when the latest attempt is pending.
 
     This ensures that after PRG the history auto-refreshes (vision text/feedback).
     """
@@ -359,14 +366,11 @@ async def test_unit_page_embeds_autopoll_when_latest_in_progress(monkeypatch: py
         r = await client.get(url)
     assert r.status_code == 200
     html = r.text
-    # The pre-render should include a placeholder history with polling enabled
     assert "class=\"task-panel__history\"" in html
-    expected_hx = f"hx-get=\"/learning/courses/{course_id}/tasks/{task_id}/history\""
-    assert expected_hx in html
-    hx_vals = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
-    assert hx_vals and hx_vals.group(1) == open_id
-    assert "hx-trigger=\"load, every 2s\"" in html or "hx-trigger=\"every 2s\"" in html
-    # Spinner hint visible in the placeholder while analysis runs
+    assert f'id="task-history-poll-{task_id}"' in html
+    assert f'hx-get="/learning/courses/{course_id}/tasks/{task_id}/history/poll"' in html
+    assert "hx-trigger=\"every 10s\"" in html
+    # Spinner hint visible while analysis runs
     assert "Analyse läuft" in html
     assert "status-chip" in html
     assert "spinner" in html
@@ -425,3 +429,151 @@ async def test_unit_page_hides_spinner_when_latest_completed(monkeypatch: pytest
     assert "Analyse läuft" not in html
     assert "status-chip" not in html
     assert "spinner" not in html
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status", ["pending", "extracted"])
+async def test_history_poll_endpoint_returns_oob_updates_without_preview(
+    monkeypatch: pytest.MonkeyPatch, status: str
+):
+    """Poll endpoint must return OOB updates and never include preview HTML."""
+    student = _student_session()
+
+    latest_id = str(uuid.uuid4())
+    latest = {
+        "id": latest_id,
+        "attempt_nr": 1,
+        "kind": "image",
+        "text_body": None,
+        "mime_type": "image/png",
+        "size_bytes": 123,
+        "storage_key": "submissions/c/t/u/key.png",
+        "sha256": "deadbeef",
+        "analysis_status": status,
+        "analysis_json": None,
+        "feedback_md": None,
+        "error_code": None,
+        "created_at": "2025-11-04T12:00:00+00:00",
+        "completed_at": None,
+    }
+
+    def _submissions(_params):
+        return [latest]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history/poll")
+    assert r.status_code == 200
+    html = r.text
+
+    # Poller replaces itself (and keeps polling while still in progress)
+    assert 'id="task-history-poll-t1"' in html
+    assert 'hx-get="/learning/courses/c1/tasks/t1/history/poll"' in html
+    assert "hx-trigger=\"every 10s\"" in html
+
+    # OOB updates for dynamic zones of the latest submission
+    assert f'id="submission-text-{latest_id}"' in html
+    assert f'id="submission-result-{latest_id}"' in html
+    assert "hx-swap-oob" in html
+
+    # Never include artifact preview markup in polling responses
+    assert "<img" not in html
+    assert "<iframe" not in html
+
+
+@pytest.mark.anyio
+async def test_history_poll_endpoint_stops_polling_when_completed(monkeypatch: pytest.MonkeyPatch):
+    """When latest is completed, poll response must stop further polling and update content."""
+    student = _student_session()
+
+    latest_id = str(uuid.uuid4())
+    latest = {
+        "id": latest_id,
+        "attempt_nr": 2,
+        "kind": "text",
+        "text_body": "Hallo",
+        "mime_type": None,
+        "size_bytes": None,
+        "storage_key": None,
+        "sha256": None,
+        "analysis_status": "completed",
+        "analysis_json": {"text": "Hallo"},
+        "feedback_md": "Gut gemacht",
+        "error_code": None,
+        "created_at": "2025-11-04T12:10:00+00:00",
+        "completed_at": "2025-11-04T12:11:00+00:00",
+    }
+
+    def _submissions(_params):
+        return [latest]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history/poll")
+    assert r.status_code == 200
+    html = r.text
+
+    assert 'id="task-history-poll-t1"' in html
+    assert "hx-trigger" not in html, "poller must remove its interval to stop polling"
+    assert f'id="submission-result-{latest_id}"' in html
+    assert "Gut gemacht" in html
+
+
+@pytest.mark.anyio
+async def test_history_poll_endpoint_uses_limit_1(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Poll endpoint should fetch only the newest submission (limit=1)."""
+    student = _student_session()
+
+    latest_id = str(uuid.uuid4())
+    latest = {
+        "id": latest_id,
+        "attempt_nr": 1,
+        "kind": "text",
+        "text_body": "Hallo",
+        "mime_type": None,
+        "size_bytes": None,
+        "storage_key": None,
+        "sha256": None,
+        "analysis_status": "pending",
+        "analysis_json": None,
+        "feedback_md": None,
+        "error_code": None,
+        "created_at": "2025-11-04T12:00:00+00:00",
+        "completed_at": None,
+    }
+
+    observed: dict = {}
+
+    def _submissions(params):
+        observed["params"] = params
+        return [latest]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history/poll")
+    assert r.status_code == 200
+
+    params = observed.get("params") or {}
+    assert params.get("limit") == 1
+    assert params.get("offset") == 0

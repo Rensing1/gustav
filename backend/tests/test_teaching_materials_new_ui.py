@@ -97,6 +97,12 @@ async def test_materials_new_shows_toggle_and_data_attrs():
     assert 'data-intent-url="/api/teaching/units' in body
     assert 'data-allowed-mime="application/pdf,image/png,image/jpeg"' in body
     assert 'data-max-bytes="' in body
+    # Markdown textarea should have explicit sizing defaults (avoid browser rows=2).
+    m = re.search(r"<textarea[^>]*name=\"body_md\"[^>]*>", body)
+    assert m, "body_md textarea must be present"
+    tag = m.group(0)
+    assert re.search(r'class="[^"]*\bform-textarea\b[^"]*"', tag), tag
+    assert 'rows="12"' in tag, tag
     # Datei-Form wird vollständig serverseitig gerendert; JS übernimmt Toggle/Upload.
     # Ein prominenter No-JS-Banner soll hier NICHT mehr erscheinen.
     assert "Ohne JavaScript ist der Datei-Upload deaktiviert" not in body

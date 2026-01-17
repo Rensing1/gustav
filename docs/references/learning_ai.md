@@ -75,6 +75,9 @@ Why this matters:
 | `AI_TEXT_TEMPERATURE` | no | Feedback | Default `0.0`. |
 | `AI_OCR_TEMPERATURE` | no | OCR | Default `0.0`. |
 | `AI_VISUAL_TEMPERATURE` | no | Visual | Default `0.0`. |
+| `AI_TEXT_THINK_LEVEL` | no | Feedback | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
+| `AI_OCR_THINK_LEVEL` | no | OCR | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
+| `AI_VISUAL_THINK_LEVEL` | no | Visual | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
 | `LEARNING_VISION_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_vision`). |
 | `LEARNING_FEEDBACK_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_feedback`). |
 | `DSPY_CACHEDIR` | no | Worker container | Disk cache directory (compose default: `/tmp/dspy_cache`; override via `.env`). |
@@ -84,6 +87,17 @@ Why this matters:
 | `WORKER_BACKOFF_SECONDS` | no | Worker | Base backoff, default `10`. |
 | `WORKER_LEASE_SECONDS` | no | Worker | Default `45` (effective lease window is multiplied internally). |
 | `WORKER_POLL_INTERVAL` | no | Worker | Default `0.5`. |
+
+### 5.2 Operations: OpenAI health probe (UI footer)
+
+Why:
+- Teachers/operators need a quick “is the AI configured + reachable?” hint without digging through logs.
+
+How it works:
+- UI renders a small status chip in the footer for `teacher`/`operator` only (no student visibility).
+- The browser polls `GET /internal/health/openai` periodically and updates the label.
+- The server answers with `Cache-Control: private, no-store` and a structured payload (`status`, `reachable`, `modelsCount`, `detail`).
+- To avoid spamming the upstream endpoint, the server caches probe results in-memory for a short TTL (currently 15s).
 
 Additional storage-related env (security-critical for OCR fetch paths):
 - `SUPABASE_URL`, `SUPABASE_PUBLIC_URL`: define trusted hosts for remote fetch of uploaded files.

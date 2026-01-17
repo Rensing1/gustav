@@ -54,7 +54,7 @@ def test_adapter_requires_openai_base_url(monkeypatch: pytest.MonkeyPatch) -> No
         adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
 
 
-def test_prod_disallows_http_openai_base_url_for_remote_hosts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prod_allows_http_openai_base_url_for_remote_hosts(monkeypatch: pytest.MonkeyPatch) -> None:
     from backend.learning.adapters import local_feedback
 
     observed: dict = {}
@@ -77,8 +77,12 @@ def test_prod_disallows_http_openai_base_url_for_remote_hosts(monkeypatch: pytes
     )
 
     adapter = local_feedback.build()
-    with pytest.raises(FeedbackPermanentError, match="insecure_OPENAI_BASE_URL"):
-        adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+    res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+
+    lm_calls = observed.get("lm_calls") or []
+    assert lm_calls, "Expected LM to be instantiated"
+    assert lm_calls[0]["kwargs"]["base_url"] == "http://example.com/api/v1"
 
 
 def test_prod_allows_http_openai_base_url_for_loopback(monkeypatch: pytest.MonkeyPatch) -> None:

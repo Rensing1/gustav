@@ -57,6 +57,7 @@ class Gustav {
     this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
     this.initFilePreviewZoom(); // Zoom toggle for inline file previews
     this.initSubmissionArtifactReload(); // Show reload control only when preview fails
+    this.initOpenAIStatusIndicator(); // Footer hint for AI connectivity/models (teacher/operator)
     this.initTeachingLivePolling(); // Auto-refresh for teaching live matrix
     // Explain what happened after we had to redirect to login.
     if (this.consumeSessionExpiredFlag()) {
@@ -562,6 +563,96 @@ class Gustav {
   }
 
   /**
+   * Footer indicator for the OpenAI-compatible endpoint (teacher/operator only).
+   *
+   * Behaviour:
+   * - Reads server-side status from `/internal/health/openai` (same-origin).
+   * - Updates the `#openai-status .status-chip__text` label.
+   * - Refreshes periodically so long-running sessions get a current signal.
+   */
+  initOpenAIStatusIndicator() {
+    const chip = document.getElementById('openai-status');
+    if (!chip) return;
+
+    // Refresh after HTMX navigation, but only create one interval per page load.
+    if (this.openaiStatusIndicatorInit) {
+      this.refreshOpenAIStatusIndicator();
+      return;
+    }
+    this.openaiStatusIndicatorInit = true;
+
+    this.refreshOpenAIStatusIndicator();
+    // Keep the interval gentle; the probe makes at most one lightweight request.
+    this._openaiStatusIntervalId = window.setInterval(() => {
+      this.refreshOpenAIStatusIndicator();
+    }, 60000);
+  }
+
+  async refreshOpenAIStatusIndicator() {
+    const chip = document.getElementById('openai-status');
+    if (!chip) return;
+    if (chip.dataset && chip.dataset.loading === 'true') return;
+    if (chip.dataset) chip.dataset.loading = 'true';
+
+    const spinner = chip.querySelector('.spinner');
+    const textEl = chip.querySelector('.status-chip__text');
+    if (spinner) spinner.hidden = false;
+    if (textEl) textEl.textContent = 'KI: prüfe …';
+
+    const apply = (label, detail) => {
+      if (textEl) textEl.textContent = label;
+      if (detail) {
+        chip.title = `Detail: ${detail}`;
+      } else {
+        chip.removeAttribute('title');
+      }
+    };
+
+    try {
+      const resp = await fetch('/internal/health/openai', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+      if (resp.status === 401 || resp.status === 403) {
+        // Should not happen because the element is teacher/operator-only,
+        // but hide defensively if a session expired mid-page.
+        chip.hidden = true;
+        return;
+      }
+      const data = await resp.json();
+      if (!data || typeof data !== 'object') {
+        apply('KI: Status unbekannt', 'invalid_response');
+        return;
+      }
+
+      const configured = !!data.configured;
+      const reachable = !!data.reachable;
+      const modelsCount = Number.isFinite(Number(data.modelsCount)) ? Number(data.modelsCount) : 0;
+      const detail = data.detail ? String(data.detail) : '';
+
+      if (!configured) {
+        apply('KI: nicht konfiguriert', detail || 'missing_OPENAI_BASE_URL');
+        return;
+      }
+      if (!reachable) {
+        apply('KI: nicht erreichbar', detail || 'connect_failed');
+        return;
+      }
+      if (modelsCount > 0) {
+        apply(`KI: ok (${modelsCount} Modelle)`, detail);
+        return;
+      }
+      apply('KI: erreichbar, aber keine Modelle', detail);
+    } catch (err) {
+      apply('KI: nicht erreichbar', 'connect_failed');
+    } finally {
+      if (spinner) spinner.hidden = true;
+      if (chip.dataset) chip.dataset.loading = 'false';
+    }
+  }
+
+  /**
    * Persist which submission the learner has opened while HTMX polls history fragments.
    *
    * hx-on calls this whenever a <details> toggles. We update data-open-attempt-id
@@ -871,6 +962,7 @@ class Gustav {
       this.initTeachingLiveTabs(evt.target || document);
       this.clearDraftFromPrgSuccess();
       this.initLearningTaskForms();
+      this.initOpenAIStatusIndicator();
     });
 
     // Ensure sidebar state restoration after OOB sidebar replacement
@@ -885,6 +977,7 @@ class Gustav {
         this.initTeachingLiveTabs(document);
         this.clearDraftFromPrgSuccess();
         this.initLearningTaskForms();
+        this.initOpenAIStatusIndicator();
       });
     });
 
@@ -898,6 +991,7 @@ class Gustav {
       this.initTeachingLiveTabs(document);
       this.clearDraftFromPrgSuccess();
       this.initLearningTaskForms();
+      this.initOpenAIStatusIndicator();
     });
 
     const liveStatusErrorMessage = 'Live-Ansicht: Verbindung unterbrochen.';

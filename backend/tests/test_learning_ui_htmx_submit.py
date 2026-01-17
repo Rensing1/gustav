@@ -6,6 +6,7 @@ import httpx
 from httpx import ASGITransport
 
 from backend.web import main
+import re
 
 
 def _student_session():
@@ -97,6 +98,45 @@ async def test_unit_task_form_has_htmx_attributes(monkeypatch: pytest.MonkeyPatc
     assert f'hx-post="/learning/courses/{course_id}/tasks/{task_id}/submit"' in html
     assert f'hx-target="#task-history-{task_id}"' in html
     assert 'hx-swap="outerHTML"' in html
+
+
+@pytest.mark.anyio
+async def test_unit_task_form_textarea_has_rows_and_is_not_required(monkeypatch: pytest.MonkeyPatch):
+    """Student answer textarea should be comfortably sized but not block upload mode."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    unit_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+
+    def _sections(_params):
+        return [{
+            "section": {"id": "s1", "title": "A", "position": 1, "unit_id": unit_id},
+            "materials": [],
+            "tasks": [{"id": task_id, "instruction_md": "Aufgabe", "criteria": ["K"], "position": 1}],
+        }]
+
+    fake = _FakeAsyncClient({
+        f"GET /api/learning/courses/{course_id}/units/{unit_id}/sections": _sections,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    url = f"/learning/courses/{course_id}/units/{unit_id}?show_history_for={task_id}"
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get(url)
+    assert r.status_code == 200
+    html = r.text
+
+    # Must exist in SSR and be sized explicitly (avoid browser default rows=2).
+    m = re.search(r"<textarea[^>]*name=\"text_body\"[^>]*>", html)
+    assert m, "text_body textarea must be present"
+    tag = m.group(0)
+    assert re.search(r'class="[^"]*\\bform-textarea\\b[^"]*"', tag), tag
+    assert re.search(r'\\brows="5"\\b', tag), tag
+    # Must not be HTML-required so upload mode can submit (textarea may be hidden).
+    assert "required" not in tag, tag
 
 
 @pytest.mark.anyio

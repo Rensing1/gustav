@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UI Dummies - GUSTAV (Standalone)</title>
+    <link rel="stylesheet" href="./shared/gustav-lite.css" />
+    <script type="module" src="./shared/theme.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Zum Hauptinhalt springen</a>
+
+    <main id="main" class="main">
+      <div class="container">
+        <header class="page-header">
+          <div>
+            <h1>UI Dummies (Standalone)</h1>
+            <p class="text-muted">
+              Prototypen fuer das Modul-Graph-Feature innerhalb einer Lerneinheit (ohne GUSTAV Backend).
+            </p>
+          </div>
+          <div class="page-header__actions">
+            <button class="btn btn-secondary" type="button" data-theme-toggle>
+              Theme wechseln
+            </button>
+          </div>
+        </header>
+
+        <section class="surface-panel">
+          <h2 class="h2">Dummys</h2>
+          <div class="grid-2">
+            <a class="card-link" href="./student-workspace-hybrid-sticky/">
+              <article class="card">
+                <header class="card-header">
+                  <h3 class="card-title">Student: Lerneinheit (Hybrid – Sticky Toolbar)</h3>
+                  <span class="badge badge-primary">Aktuell</span>
+                </header>
+                <p class="text-muted">
+                  Normaler Seiten-Scroll; sticky bleibt nur eine kompakte Toolbar (Ansicht + wenige Aktionen). Klick im Graph oeffnet Module als Tabs (Working Set) und springt in die Inhalte.
+                </p>
+              </article>
+            </a>
+          </div>
+        </section>
+
+        <footer class="footer text-muted">
+          <p>
+            Starten: <code>python3 -m http.server 8000</code> oder <code>npx http-server -p 8000</code> (Repo-Root).
+          </p>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>

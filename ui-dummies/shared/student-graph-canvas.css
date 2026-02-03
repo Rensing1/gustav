@@ -1,0 +1,426 @@
+/* Graph canvas styling (SVG-based renderer).
+ *
+ * Used by workspace-style dummies where the graph lives inside an existing
+ * application layout (e.g. sidebar + breadcrumb), so this file intentionally
+ * does not style <body> or any page-level headers.
+ */
+
+.graph-container {
+  position: relative;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.graph-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  /* Subtle "canvas" frame so clipping edges feel intentional (not like a bug). */
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-border), transparent 55%),
+    inset 0 0 28px color-mix(in srgb, var(--color-border), transparent 80%);
+}
+
+.graph-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.graph-layer--map {
+  overflow: hidden;
+}
+
+.graph-overlay {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.graph-overlay--top {
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.overlay-card {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  background: color-mix(in srgb, var(--color-bg-surface), transparent 12%);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.graph-hint {
+  font-size: var(--text-sm);
+  max-width: 640px;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .graph-overlay--top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .graph-hint {
+    text-align: left;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Legend                                                                      */
+/* -------------------------------------------------------------------------- */
+
+.legend {
+  display: inline-flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.legend-item {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-overlay);
+}
+.dot-locked {
+  background: var(--color-bg-overlay);
+}
+.dot-open {
+  background: var(--graph-status-open, var(--color-primary));
+  border-color: var(--graph-status-open, var(--color-primary));
+}
+.dot-partial {
+  background: var(--graph-status-partial, var(--color-warning));
+  border-color: var(--graph-status-partial, var(--color-warning));
+}
+.dot-done {
+  background: var(--graph-status-done, var(--color-success));
+  border-color: var(--graph-status-done, var(--color-success));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Graph SVG                                                                   */
+/* -------------------------------------------------------------------------- */
+
+.graph-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-svg:active {
+  cursor: grabbing;
+}
+
+.graph-svg--scroll {
+  touch-action: pan-x pan-y;
+}
+
+.edge {
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.edge.is-related {
+  opacity: 0.92;
+  stroke-width: 2.3;
+}
+
+.edge.is-out {
+  opacity: 0.98;
+  stroke: var(--graph-status-open, var(--color-primary));
+}
+
+.edge.is-in {
+  opacity: 0.98;
+  stroke: var(--graph-status-open, var(--color-border-focus));
+}
+
+.edge.is-related.is-out-pending,
+.edge.is-related.is-in-pending {
+  opacity: 0.42;
+}
+
+.edge.is-blocked {
+  opacity: 0.6;
+  stroke: color-mix(in srgb, var(--graph-status-open, var(--color-primary)) 68%, var(--color-text-muted));
+}
+
+.edge.is-related.is-blocked {
+  opacity: 0.64;
+}
+
+.edge.is-ws-edge {
+  opacity: 0.64;
+}
+
+.edge.is-ws-edge-from-done:not(.is-blocked) {
+  opacity: 0.74;
+  stroke: color-mix(in srgb, var(--graph-status-open, var(--color-primary)) 62%, var(--color-text-muted));
+}
+
+.edge.is-dim {
+  opacity: 0.14;
+}
+
+.edge.is-blocked.is-dim {
+  opacity: 0.22;
+}
+
+.edge.is-ws-edge.is-dim {
+  opacity: 0.22;
+}
+
+.edge.is-ws-edge-from-done.is-dim:not(.is-blocked) {
+  opacity: 0.42;
+}
+
+.edge-arrow {
+  fill: context-stroke;
+  opacity: 0.55;
+}
+
+.phase-band {
+  fill: var(--color-bg-surface);
+  fill: color-mix(in srgb, var(--color-bg-surface), transparent 46%);
+  opacity: 1;
+  stroke: var(--color-border);
+  stroke: color-mix(in srgb, var(--color-border), transparent 35%);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.phase-label {
+  font-family: var(--font-base);
+  font-size: 12px;
+  font-weight: 900;
+  fill: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.node {
+  cursor: pointer;
+}
+
+.node.is-dim {
+  opacity: 0.28;
+}
+
+.node.is-in-working-set {
+  opacity: 1;
+}
+
+.node.is-in-working-set .node-shape {
+  stroke-width: 3.2;
+}
+
+.node.is-in-working-set:not(.is-locked):not(.is-done) .node-shape {
+  stroke: color-mix(in srgb, var(--color-border), var(--color-text-muted) 35%);
+}
+
+.node.is-dim.is-in-working-set {
+  opacity: 0.78;
+}
+
+.node.is-neighbor:not(.is-selected) .node-shape {
+  stroke-width: 3.5;
+}
+
+.node .node-shape {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border);
+  stroke-width: 3;
+  transition:
+    fill var(--transition-fast),
+    stroke var(--transition-fast),
+    opacity var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.node:not(.is-locked):hover .node-shape {
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.16));
+}
+
+.node-status {
+  pointer-events: none;
+}
+
+.node-badge {
+  pointer-events: none;
+}
+
+.node-badge-bg {
+  fill: var(--color-bg-surface);
+  stroke: none;
+  opacity: 0.96;
+}
+
+.node-badge-ring-track {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 3;
+  opacity: 1;
+}
+
+.node-badge-ring-progress {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-text-muted) 30%, #fff);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.95;
+}
+
+.node.is-locked .node-badge-ring-track {
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+}
+
+.node.is-done .node-badge-ring-track {
+  stroke: var(--graph-status-done, var(--color-success));
+}
+
+.node-status-badge {
+  display: none;
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border);
+  stroke-width: 2;
+  opacity: 0.96;
+}
+
+.node.is-locked .node-status-badge {
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+}
+
+.node.is-done .node-status-badge {
+  stroke: var(--graph-status-done, var(--color-success));
+}
+
+.node-status-icon {
+  display: none;
+}
+
+.node.is-locked .node-status-badge,
+.node.is-done .node-status-badge {
+  display: block;
+}
+
+.node.is-locked .node-status-icon--lock,
+.node.is-done .node-status-icon--done {
+  display: block;
+}
+
+.node-status-lock-body,
+.node-status-lock-shackle {
+  fill: none;
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node-badge .node-status-lock-body,
+.node-badge .node-status-lock-shackle {
+  stroke-width: 2.4;
+}
+
+.node-status-icon--done {
+  fill: none;
+  stroke: var(--graph-status-done, var(--color-success));
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node-status-partial-fill {
+  fill: var(--graph-status-partial, var(--color-warning));
+  opacity: 0.5;
+}
+
+.node-status-partial-outline {
+  fill: none;
+  stroke: var(--graph-status-partial, var(--color-warning));
+  stroke-width: 2.4;
+}
+
+.graph-svg.is-interacting .node .node-shape,
+.graph-svg.is-interacting .node:hover .node-shape {
+  filter: none !important;
+  transition: none;
+}
+
+.node text {
+  font-family: var(--font-base);
+  font-size: 14px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.node .node-title {
+  fill: var(--color-text);
+  font-weight: 800;
+}
+
+.node .node-sub,
+.node .node-icon,
+.node .node-prereq {
+  fill: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.node.is-selected .node-shape {
+  stroke: var(--graph-status-open, var(--color-primary));
+  stroke-width: 3;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+}
+
+.node.is-selected:hover .node-shape {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+}
+
+.node.is-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.node.is-locked.is-dim {
+  opacity: 0.28;
+}
+
+.node.is-locked .node-shape {
+  fill: var(--color-bg-surface);
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+  stroke-dasharray: 5 4;
+}
+
+.node.is-done .node-shape {
+  stroke: var(--graph-status-done, var(--color-success));
+  fill: color-mix(in srgb, var(--graph-status-done, var(--color-success)) 7%, var(--color-bg-surface));
+}

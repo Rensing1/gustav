@@ -224,12 +224,37 @@ RLS:
 - Kanten (= `unit_module_edges`).
 - `required_prereq_count` pro Modul.
 
+### Entscheidung (MVP): Option 1 („Submissions kennen ihr Modul“)
+Wir wählen **Option 1** (und nicht eine separate Progress‑Tabelle), um Unlock/Done **ohne RLS‑Rekursion** und ohne Content‑Leaks berechnen zu können.
+
+Kernidee:
+- Jede Submission speichert zusätzlich die Modul‑ID (=`section_id`) der zugehörigen Aufgabe.
+- Damit können wir `tasks_done` pro Modul direkt aus `learning_submissions` aggregieren, ohne `unit_tasks` im Student‑Kontext joinen zu müssen.
+
+Konkreter DB‑Vorschlag:
+- `public.learning_submissions` erweitern um:
+  - `section_id uuid not null references public.unit_sections(id) on delete cascade`
+  - (optional) `unit_id uuid not null references public.units(id) on delete cascade` (nur falls für Queries/Debugging hilfreich)
+- Backfill in der Migration (einmalig):
+  - Wenn wir nur `section_id` hinzufügen:
+    - `update public.learning_submissions ls set section_id = t.section_id from public.unit_tasks t where t.id = ls.task_id;`
+  - Wenn wir zusätzlich `unit_id` hinzufügen:
+    - `update public.learning_submissions ls set section_id = t.section_id, unit_id = t.unit_id from public.unit_tasks t where t.id = ls.task_id;`
+- Insert‑Pfad: Backend übernimmt `section_id` (und optional `unit_id`) aus `get_task_metadata_for_student(...)` und schreibt sie beim Insert in `learning_submissions`.
+- Indizes (für schnelle Graph‑Aggregation):
+  - `index on learning_submissions(course_id, student_sub, section_id)`
+  - optional: `index on learning_submissions(course_id, student_sub, section_id, task_id)`
+
+Warum nicht Option 2 (Progress‑Tabelle) im MVP:
+- Eine Progress‑Tabelle kann bei Teacher‑Änderungen (Tasks hinzufügen/löschen) veralten und braucht dann Recompute/Backfill‑Logik.
+- Option 1 bleibt automatisch korrekt, weil `tasks_total` am Modul gepflegt ist und `tasks_done` live aus Submissions kommt.
+- Option 2 ist ein späteres Performance‑Upgrade, falls Option 1 in echten Kursen zu langsam wird.
+
 ### Modul „done“
 - Wichtig: Ein gesperrtes Modul kann nicht „fertig“ sein. `done ⊆ unlocked`.
 - `total_tasks = module.tasks_total` (aus `unit_sections.tasks_total`, siehe Datenmodell oben)
-- `done_tasks` (nur sinnvoll wenn `module_unlocked = true`):
-  - native/visual: `exists learning_submissions(course_id, task_id, student_sub)`
-  - H5P: `exists learning_submissions(kind='h5p' and score_raw = score_max)`
+- `done_tasks` (nur sinnvoll wenn `module_unlocked = true`), technisch implementiert ohne Join auf `unit_tasks` (siehe Option 1):
+  - `done_tasks = count(distinct task_id) where course_id=… and student_sub=… and section_id=module and (kind <> 'h5p' or score_raw = score_max)`
 - `module_done = module_unlocked and ((total_tasks = 0) or (done_tasks = total_tasks))`
 
 ### Modul „unlocked“

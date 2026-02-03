@@ -1,0 +1,274 @@
+/* Fullscreen graph canvas: "map" view (modules + dependencies + status).
+ *
+ * Shared between multiple UI dummies.
+ */
+
+body {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+  overflow: hidden;
+}
+
+.topbar {
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.topbar__inner {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.topbar__left {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  flex-wrap: wrap;
+}
+
+.topbar__title {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.topbar__right {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.main--graph {
+  padding: 0;
+  min-height: 0;
+}
+
+.graph-container {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(180deg, var(--color-bg-overlay), var(--color-bg-base));
+  overflow: hidden;
+}
+
+.graph-overlay {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.graph-overlay--top {
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.overlay-card {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.graph-hint {
+  font-size: var(--text-sm);
+  max-width: 640px;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .graph-overlay--top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .graph-hint {
+    text-align: left;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Legend                                                                      */
+/* -------------------------------------------------------------------------- */
+
+.legend {
+  display: inline-flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.legend-item {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-overlay);
+}
+.dot-locked {
+  background: var(--color-bg-overlay);
+}
+.dot-open {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.dot-partial {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+}
+.dot-done {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Graph SVG                                                                   */
+/* -------------------------------------------------------------------------- */
+
+.graph-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-svg:active {
+  cursor: grabbing;
+}
+
+.graph-svg--scroll {
+  touch-action: pan-x pan-y;
+}
+
+.edge {
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+  fill: none;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.edge-arrow {
+  fill: var(--color-text-muted);
+  opacity: 0.55;
+}
+
+.phase-band {
+  fill: var(--color-bg-surface);
+  opacity: 0.62;
+  stroke: var(--color-border);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.phase-label {
+  font-family: var(--font-base);
+  font-size: 12px;
+  font-weight: 900;
+  fill: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.node {
+  cursor: pointer;
+}
+
+.node .node-shape {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border);
+  stroke-width: 3;
+  transition:
+    fill var(--transition-fast),
+    stroke var(--transition-fast),
+    opacity var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.node:not(.is-locked):hover .node-shape {
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.16));
+}
+
+.graph-svg.is-interacting .node .node-shape,
+.graph-svg.is-interacting .node:hover .node-shape {
+  filter: none !important;
+  transition: none;
+}
+
+.node text {
+  font-family: var(--font-base);
+  font-size: 14px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.node .node-title {
+  fill: var(--color-text);
+  font-weight: 800;
+}
+
+.node .node-sub,
+.node .node-icon,
+.node .node-prereq {
+  fill: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.node.is-selected .node-shape {
+  stroke: var(--color-primary);
+  stroke-width: 3;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+}
+
+.node.is-selected:hover .node-shape {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+}
+
+.node.is-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.node.is-locked .node-shape {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-text-muted);
+}
+
+.node.is-open .node-shape {
+  stroke: var(--color-border-focus);
+}
+
+.node.is-partial .node-shape {
+  stroke: var(--color-warning);
+}
+
+.node.is-done .node-shape {
+  stroke: var(--color-success);
+}
+
+/* Module types: subtle, static hints (independent of status color). */
+

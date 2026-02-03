@@ -126,6 +126,11 @@ UI‑Labels:
 - `linear` → „Lineare Lerneinheit“
 - `modular` → „Modulare Lerneinheit“
 
+Wichtig (Integration, damit SSR/API verzweigen können):
+- `unit_type` muss in der **Teaching‑API** (`Unit`, `UnitCreate`, `UnitUpdate`) und in der DB‑Repo‑Serialisierung mitgeführt werden.
+- `unit_type` muss in der **Learning‑API** in mindestens einem Aufruf verfügbar sein (empfohlen: in `GET /api/learning/courses/{course_id}/units` sowie `UnitPublic`), damit die Student‑SSR‑Route `/learning/courses/{course_id}/units/{unit_id}` sauber zwischen linear/modular verzweigen kann.
+- DB‑Helper wie `public.get_course_units_for_student(...)` müssen dafür `unit_type` aus `public.units` mitselecten (OpenAPI + Repo‑Mapping anpassen).
+
 ### 2) `public.unit_phases` (neu)
 Zweck: Pflicht‑Phasen in **modularen** Units.
 
@@ -138,7 +143,9 @@ Vorschlag:
 
 RLS:
 - Author: select/insert/update/delete wie `unit_sections`.
-- Student: kein direkter Table‑Select nötig, wenn Learning‑API die Graph‑Daten über course‑scoped Helper/Queries liefert.
+- Student (Metadaten): muss Phasen lesen können, sonst kann die Graph‑API nichts rendern. Zwei Wege:
+  - (empfohlen) `unit_phases_select_student` Policy analog zu `units_select_student` über `student_can_access_unit(...)`.
+  - (alternativ) Phasen werden ausschließlich über einen course‑scoped Helper (Graph‑Endpoint) ausgeliefert, der Membership prüft.
 
 ### 3) `public.unit_sections` (erweitern) – Modul‑Metadaten (nur für modulare Units)
 Modulare Units nutzen `unit_sections` weiterhin als Content‑Container (Materialien/Aufgaben). Dadurch können wir Materials/Tasks‑Authoring wiederverwenden.
@@ -147,6 +154,22 @@ Neue Spalten (Vorschlag):
 - `phase_id uuid null references unit_phases(id) on delete cascade`
 - `position_in_phase int null check (position_in_phase > 0)`
 - `required_prereq_count int not null default 0 check (required_prereq_count >= 0)`
+- (für die Student‑Graph‑UI, ohne Content‑Leak) `tasks_total int not null default 0 check (tasks_total >= 0)`
+- (für die Student‑Graph‑UI, ohne Content‑Leak) `materials_count int not null default 0 check (materials_count >= 0)`
+
+Warum die Count‑Spalten wichtig sind:
+- Schüler dürfen die Inhalte (Tasks/Materialien) gesperrter Module **nicht** sehen.
+- Gleichzeitig soll der Graph weiterhin Icons/Counts anzeigen (Aufgaben/Materialien), auch bei gesperrten Modulen.
+- Da RLS auf `unit_tasks/unit_materials` sonst Content leaken würde (Row‑Level, kein Column‑Level), sind sichere Counts am Modul nötig.
+
+Konsistenz (Trigger, DB‑seitig):
+- `unit_tasks`: after insert/delete → `unit_sections.tasks_total = count(*) where section_id = …`
+- `unit_materials`: after insert/delete → `unit_sections.materials_count = count(*) where section_id = …`
+
+Backfill (Migration, einmalig):
+- Nach dem Add der Spalten einmalig bestehende Daten backfillen (sonst bleiben alte Units bei `0`):
+  - `update public.unit_sections s set tasks_total = (select count(*) from public.unit_tasks t where t.section_id = s.id), materials_count = (select count(*) from public.unit_materials m where m.section_id = s.id);`
+- Reihenfolge in der Migration: Spalten → Backfill → Trigger.
 
 Constraints (Vorschlag):
 - `unique(phase_id, position_in_phase) deferrable initially immediate` (nur relevant wenn `phase_id` gesetzt)
@@ -184,6 +207,12 @@ Validierung (API‑Ebene, optional zusätzlich DB‑Trigger):
 - Beide Enden gehören zu `unit_id`.
 - Phase‑Regel: same‑phase „nach rechts“ oder next‑phase „nach unten“.
 
+RLS:
+- Author: select/insert/update/delete wie `unit_sections` (Unit‑Author).
+- Student (Metadaten): muss Kanten lesen können für den Graph. Analog zu Phasen:
+  - (empfohlen) `unit_module_edges_select_student` Policy über `student_can_access_unit(...)`.
+  - (alternativ) Kanten werden ausschließlich über den Graph‑Endpoint ausgeliefert (course‑scoped Helper, Membership prüfen).
+
 ---
 
 ## Unlock‑ und Statuslogik (modular)
@@ -196,11 +225,12 @@ Validierung (API‑Ebene, optional zusätzlich DB‑Trigger):
 - `required_prereq_count` pro Modul.
 
 ### Modul „done“
-- `total_tasks = count(unit_tasks where section_id=module)`
-- `done_tasks`:
-  - non‑H5P: `exists learning_submissions(course_id, task_id, student_sub)`
+- Wichtig: Ein gesperrtes Modul kann nicht „fertig“ sein. `done ⊆ unlocked`.
+- `total_tasks = module.tasks_total` (aus `unit_sections.tasks_total`, siehe Datenmodell oben)
+- `done_tasks` (nur sinnvoll wenn `module_unlocked = true`):
+  - native/visual: `exists learning_submissions(course_id, task_id, student_sub)`
   - H5P: `exists learning_submissions(kind='h5p' and score_raw = score_max)`
-- `module_done = (total_tasks = 0) or (done_tasks = total_tasks)`
+- `module_done = module_unlocked and ((total_tasks = 0) or (done_tasks = total_tasks))`
 
 ### Modul „unlocked“
 - `incoming = edges where to=module`
@@ -273,7 +303,7 @@ Beispiel (gekürzt):
 Security:
 - Mitgliedschaft im Kurs + Unit in Course‑Modules prüfen.
 - Keine Leaks: 404 wenn Unit nicht im Kurs/kein Member.
- - 400/404 wenn `unit_type != 'modular'` (damit linear nicht „aus Versehen“ über falschen Endpoint läuft).
+- 400/404 wenn `unit_type != 'modular'` (damit linear nicht „aus Versehen“ über falschen Endpoint läuft).
 
 ### 2) Modul‑Content für Lazy Loading
 `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}?include=materials,tasks`
@@ -285,7 +315,7 @@ Behavior:
 Zusatz (klarer Developer‑Hinweis):
 - Dieser Endpoint ist **nur** für modulare Units gedacht.
 - Für lineare Units bleibt das bestehende Sections‑Listing unverändert.
- - OpenAPI: neue OperationIds analog zu `listLearningUnitSections` anlegen (inkl. `Cache-Control: private, no-store`).
+- OpenAPI: neue OperationIds analog zu `listLearningUnitSections` anlegen (inkl. `Cache-Control: private, no-store`).
 
 ### 3) H5P‑Access Check (kritisch)
 Diese Freigabeprüfung muss **linear + modular** konsistent abbilden, da sie an mehreren Stellen „hart“ als Security‑Gate verwendet wird (H5P‑Sidecar, Submissions‑API, Submission‑History).
@@ -374,6 +404,9 @@ Optional (nice‑to‑have, nicht MVP‑Pflicht): ohne JS eine phasen‑gruppier
 In `/units` Create‑Form:
 - Feld `unit_type`: `linear (Abschnitte)` | `modular (Module als Graph)`
 - API: `POST /api/teaching/units` akzeptiert `unit_type` (default `linear`).
+- MVP: `unit_type` ist nach Erstellung **immutable** (kein Wechsel `linear↔modular`), um Mischzustände zu vermeiden.
+  - Konsequenz: `PATCH /api/teaching/units/{unit_id}` akzeptiert kein `unit_type` (oder liefert 400/409 bei Versuch).
+- Beim Erstellen einer modularen Unit wird automatisch **Phase 1** angelegt (z. B. Titel „Einstieg“), damit „Phasen sind verpflichtend“ sofort erfüllt ist.
 
 ### Modular: Phasen/Module/Graph bearbeiten (anschaulich)
 UI‑Vorschlag (Tabs im Unit‑Detail):
@@ -420,6 +453,15 @@ Content‑Editing:
   - Für `linear`: UI‑Label „Abschnitt“
   - Für `modular`: UI‑Label „Modul“
 
+Linear‑only: Abschnittsfreigaben (bestehend)
+- `module_section_releases` bleibt nur für `unit_type='linear'`.
+- Teacher‑UI `/courses/{course_id}/modules/{module_id}/sections` bleibt für lineare Units.
+
+Modular‑only: keine Releases
+- Für `unit_type='modular'` werden Release‑Views/Endpoints deaktiviert, um Verwirrung zu vermeiden:
+  - UI: Links/Buttons ausblenden oder Info‑State „Freischaltung passiert automatisch über den Graphen“.
+  - API: `.../sections/{section_id}/visibility` und `.../sections/releases` liefern 400 `invalid_unit_type` (kein stilles No‑Op).
+
 ---
 
 ## Sicherheit & Cache
@@ -430,19 +472,63 @@ Content‑Editing:
 - DB‑Helper/Functions (falls genutzt): hardened `search_path` (pg_catalog, public) und owner/grants analog zu bestehenden Learning‑Helpers.
 - Keine externen CDNs/Scripts; alles lokal (NoScript‑Fallback ist nice‑to‑have, nicht Voraussetzung).
 
-### RLS‑Strategie (kritisch für „modular“)
-Status Quo:
-- Student‑RLS für `unit_sections/unit_tasks/unit_materials` hängt an `student_can_access_section(...)`, das ausschließlich `module_section_releases.visible` prüft.
-- Für modulare Units gibt es keine Teacher‑Releases → ohne Anpassung wären alle Module/Tasks für Schüler per RLS unsichtbar.
+### Sichtbarkeitsmodell (kritisch für „modular“)
+Wir müssen strikt zwischen **Metadaten** (Advance Organizer) und **Inhalt** (Arbeitsbereich) trennen.
 
-Empfehlung (Option A, konsistent mit bisherigem Ansatz):
-- Ergänze eine zweite Session‑GUC analog zu `app.current_sub`, z. B. `app.current_course_id`.
-  - Backend setzt sie für student‑scoped Queries (z. B. in `DBLearningRepo` zusammen mit `app.current_sub`).
-- Erweitere `public.student_can_access_section(p_student_sub, p_section_id)`:
-  - Wenn Unit `unit_type='linear'`: **wie bisher** via `module_section_releases.visible`.
-  - Wenn Unit `unit_type='modular'`: nutze `current_setting('app.current_course_id', true)` als Kurs‑Kontext und erlaube Zugriff nur wenn das parent‑Modul für diesen Kurs/Schüler `status in ('open','done')` hat.
+**Metadaten (im Graph, immer sichtbar – auch bei `locked`):**
+- Phasen‑Titel + Reihenfolge
+- Modul‑Titel + Positionen (Phase/Position‑in‑Phase)
+- Kanten (Abhängigkeiten)
+- Modul‑Status (`locked/open/done`)
+- Sichere Counts: `unit_sections.tasks_total` und `unit_sections.materials_count`
+- Fortschrittszahlen (student‑spezifisch, aber ungefährlich): `tasks_done`, `prereq_done`
 
-Alternative (Option B, nur falls Option A zu teuer wird):
+**Inhalt (nur wenn `open` oder `done`):**
+- Materialien: `unit_materials.body_md` und File‑Metadaten/Downloads
+- Aufgaben: `unit_tasks.instruction_md`, `criteria`, H5P‑IDs/Config
+
+Anforderung aus UI/Didaktik:
+- Gesperrte Module sind **sichtbar** (Advance Organizer), aber **nicht klickbar** und ihr Inhalt ist nicht zugänglich.
+
+Status Quo im Repo (wichtig für den Senior Dev):
+- Student‑RLS für `unit_sections/unit_tasks/unit_materials` hängt an `public.student_can_access_section(...)`, das ausschließlich `module_section_releases.visible` prüft (`supabase/migrations/20251029124213_learning_student_rls_policies.sql`).
+- Zusätzlich blocken `public.check_task_visible_to_student(...)` und `public.get_task_metadata_for_student(...)` Submissions/History ebenfalls über Releases.
+- Für modulare Units gibt es keine Teacher‑Releases → ohne Umbau wären Module/Tasks/Materialien für Schüler unsichtbar, der Graph könnte `locked` Module nicht zeigen, und Submissions wären nicht möglich.
+
+Empfehlung (Option A, konsistent mit dem bisherigen RLS‑Pattern):
+1) **Course‑Kontext als Session‑GUC**
+   - Ergänze `app.current_course_id` (UUID als string).
+   - Backend setzt pro student‑scoped Request **beides**: `app.current_sub` und `app.current_course_id`.
+   - Konkreter Code‑Hook: `DBLearningRepo._set_current_sub(...)` bekommt eine Schwester‑Funktion, z. B. `_set_current_course(cur, course_id)`; alle course‑scoped Repo‑Methoden müssen sie vor Queries setzen.
+
+2) **Zwei Access‑Checks statt einer** (Metadaten vs Content)
+   - `public.student_can_view_section_metadata(p_student_sub text, p_section_id uuid) returns boolean`
+     - linear: wie bisher über `module_section_releases.visible`
+     - modular: Membership im Kurs (`app.current_course_id`) + Section gehört zu einer Unit, die in diesem Kurs via `course_modules` existiert
+   - `public.student_can_access_section_content(p_student_sub text, p_section_id uuid) returns boolean`
+     - linear: wie bisher (released)
+     - modular: wie oben **und zusätzlich**: Modul‑Status für diesen Schüler/Kurs ist `open` oder `done`
+   - Fail‑closed: wenn `app.current_course_id` fehlt/ungültig → modular‑Zweig liefert `false`.
+
+3) **RLS Policies entsprechend anpassen**
+   - `unit_sections_select_student`: nutzt `student_can_view_section_metadata(...)` (damit `locked` Module sichtbar werden).
+   - `unit_tasks_select_student` + `unit_materials_select_student`: nutzen `student_can_access_section_content(...)` (damit Content locked bleibt).
+
+4) **„Harte Gates“ im bestehenden Learning‑Flow aktualisieren** (sonst brechen Submissions/H5P)
+   - `public.check_task_visible_to_student(student_sub, course_id, task_id)`
+     - wird von `learning_submissions_insert_guard` genutzt (`supabase/migrations/20251023093421_learning_rls_policies.sql`).
+     - muss modular berücksichtigen: Task sichtbar, wenn parent‑Modul `open/done` (nicht nur releases).
+   - `public.get_task_metadata_for_student(student_sub, course_id, task_id)`
+     - wird in `DBLearningRepo.create_submission` und `list_submissions` als Sichtbarkeits‑Guard genutzt.
+     - muss modular berücksichtigen (wie `check_task_visible_to_student`).
+   - `DBLearningRepo.is_h5p_content_released_for_student(student_sub, course_id, content_id)`
+     - muss modular berücksichtigen (Index `idx_unit_tasks_h5p_content_id` bleibt relevant).
+
+5) **Counts ohne Content‑Leak**
+   - Der Graph darf Counts zeigen, aber wir dürfen dafür nicht `unit_tasks/unit_materials` direkt lesen, solange Content locked ist.
+   - Deshalb: `unit_sections.tasks_total/materials_count` als DB‑gepflegte Metadaten (siehe Datenmodell).
+
+Alternative (Option B, nur falls Option A scheitert):
 - Separate Backend‑DB‑Rolle mit BYPASSRLS für neue modular‑Helper + strikte SQL‑Guards (Membership + Unlock) in den Helpern.
 - Nachteil: größerer Security‑Footprint; weicht vom bisherigen „invoker + RLS“-Pattern ab.
 
@@ -499,7 +585,7 @@ Ergebnis:
 
 ## Tests (Skizze)
 - DB/Repo:
-  - Modul done: 0 tasks → done.
+  - Modul done: 0 tasks → done sobald unlocked.
   - H5P done: 0/0 und score_raw==score_max → done.
   - Unlock: k‑of‑n (2/3, 2/4 …) korrekt.
   - Kantenvalidierung (same‑phase rechts, next‑phase down).

@@ -758,12 +758,16 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
     if unit_type != "modular":
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
 
-    payload = {
-        "unit": {"id": unit_id, "title": unit.get("title") or "", "unit_type": unit_type},
-        "phases": [],
-        "modules": [],
-        "edges": [],
-    }
+    try:
+        payload = _get_repo().get_modular_unit_graph(
+            student_sub=str(user.get("sub", "")),
+            course_id=str(course_id),
+            unit_id=str(unit_id),
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
     return JSONResponse(payload, headers=_cache_headers_success())
 
 
@@ -828,9 +832,20 @@ async def get_modular_unit_module_content(
     if unit_type != "modular":
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
 
-    # Stub: the modular graph/content schema is introduced in later migrations.
-    # Until then we fail-closed (module content is never publicly visible).
-    return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+    try:
+        payload = _get_repo().get_modular_module_content(
+            student_sub=str(user.get("sub", "")),
+            course_id=str(course_id),
+            unit_id=str(unit_id),
+            module_id=str(module_id),
+            include_materials=_include_materials,
+            include_tasks=_include_tasks,
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
+    return JSONResponse(payload, headers=_cache_headers_success())
 
 
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:

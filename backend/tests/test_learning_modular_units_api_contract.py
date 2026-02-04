@@ -169,3 +169,74 @@ async def test_learning_modular_module_content_endpoint_rejects_linear_units():
         body = r.json()
         assert body.get("detail") == "invalid_unit_type"
         assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_learning_modular_module_content_happy_path_via_graph():
+    """Student can fetch graph modules and then load module content (materials/tasks)."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-mod-happy-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-mod-happy-1", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(c, "Kurs Modular Happy")
+
+        # Create a modular unit and a single module section with content.
+        r_unit = await c.post("/api/teaching/units", json={"title": "Unit Modular", "unit_type": "modular"})
+        assert r_unit.status_code == 201
+        unit_id = r_unit.json()["id"]
+        UUID(unit_id)
+
+        r_sec = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Modul 1"})
+        assert r_sec.status_code == 201
+        section_id = r_sec.json()["id"]
+        UUID(section_id)
+
+        r_mat = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
+            json={"title": "Material", "body_md": "Hallo"},
+        )
+        assert r_mat.status_code == 201
+
+        r_task = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"]},
+        )
+        assert r_task.status_code == 201
+
+        await _attach_unit(c, course_id, unit_id)
+        await _add_member(c, course_id, student.sub)
+
+        # Student: discover module_id via graph, then load module content.
+        c.cookies.set("gustav_session", student.session_id)
+        r_graph = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
+        assert r_graph.status_code == 200
+        graph = r_graph.json()
+        assert isinstance(graph.get("modules"), list) and graph["modules"], "expected at least one module"
+        module_id = graph["modules"][0]["id"]
+        UUID(module_id)
+
+        r_content = await c.get(
+            f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}?include=materials,tasks"
+        )
+        assert r_content.status_code == 200
+        payload = r_content.json()
+        assert payload["module"]["id"] == module_id
+        assert payload["module"]["unit_id"] == unit_id
+        assert isinstance(payload.get("materials"), list) and len(payload["materials"]) == 1
+        assert isinstance(payload.get("tasks"), list) and len(payload["tasks"]) == 1

@@ -451,6 +451,16 @@ class DBTeachingRepo:
                     (norm_type, title, summary, author_id),
                 )
                 row = cur.fetchone()
+                # Modular units require at least one phase. Create a default Phase 1
+                # to keep the API usable even before a dedicated phase editor exists.
+                if row and norm_type == "modular":
+                    cur.execute(
+                        """
+                        insert into public.unit_phases (unit_id, title, position)
+                        values (%s::uuid, %s, %s)
+                        """,
+                        (row[0], "Phase 1", 1),
+                    )
                 conn.commit()
         return {
             "id": row[0],
@@ -717,7 +727,11 @@ class DBTeachingRepo:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
                 # Serialize concurrent inserts by locking the parent unit row.
                 # RLS ensures only the author's units are lockable/visible.
-                cur.execute("select id from public.units where id = %s for update", (unit_id,))
+                cur.execute("select id::text, unit_type from public.units where id = %s for update", (unit_id,))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[1] or "linear").strip().lower()
                 # Lock current sections for additional safety (no-ops if none exist).
                 cur.execute(
                     "select id from public.unit_sections where unit_id = %s for update",
@@ -774,6 +788,40 @@ class DBTeachingRepo:
                         raise
                 if row is None:
                     raise RuntimeError("unit_sections insert returned no row")
+
+                # Option B: modular units create a 1:1 module record with its own UUID.
+                if unit_type == "modular":
+                    cur.execute(
+                        """
+                        select id::text
+                        from public.unit_phases
+                        where unit_id = %s::uuid
+                        order by position asc, id asc
+                        limit 1
+                        for update
+                        """,
+                        (unit_id,),
+                    )
+                    phase_row = cur.fetchone()
+                    if not phase_row:
+                        raise RuntimeError("modular_unit_missing_phase")
+                    phase_id = phase_row[0]
+                    cur.execute(
+                        """
+                        select coalesce(max(position_in_phase), 0) + 1
+                        from public.unit_modules
+                        where phase_id = %s::uuid
+                        """,
+                        (phase_id,),
+                    )
+                    next_pos_in_phase = int(cur.fetchone()[0])
+                    cur.execute(
+                        """
+                        insert into public.unit_modules (unit_id, section_id, phase_id, position_in_phase)
+                        values (%s::uuid, %s::uuid, %s::uuid, %s)
+                        """,
+                        (unit_id, row[0], phase_id, next_pos_in_phase),
+                    )
                 conn.commit()
         return {
             "id": row[0],

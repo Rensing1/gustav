@@ -102,6 +102,43 @@ async def test_units_create_prg_success():
 
 
 @pytest.mark.anyio
+async def test_units_create_can_create_modular_units_via_ui_form():
+    """Teachers should be able to select unit_type=modular in the SSR create form.
+
+    Why:
+        The JSON API already supports `unit_type`, but the teacher SSR UI must
+        expose it so we can create modular units without calling the API
+        manually.
+    """
+    sess = main.SESSION_STORE.create(sub="t-303-mod", name="Lehrer Modular", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        get_r = await c.get("/units")
+        assert get_r.status_code == 200
+        token = _extract_csrf_token(get_r.text)
+        assert token, "csrf_token not found in form"
+        # The form must expose a unit_type selector with a modular option.
+        assert 'name="unit_type"' in get_r.text
+        assert 'value="modular"' in get_r.text
+
+        post_r = await c.post(
+            "/units",
+            data={"title": "Modulare Einheit", "unit_type": "modular", "csrf_token": token},
+            follow_redirects=False,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert post_r.status_code in (302, 303)
+
+        # Verify through the Teaching JSON API that the unit was created as modular.
+        api_r = await c.get("/api/teaching/units", headers={"Origin": "http://test"})
+        assert api_r.status_code == 200
+        units = api_r.json() or []
+        created = next((u for u in units if u.get("title") == "Modulare Einheit"), None)
+        assert created is not None, "Created unit not found via API list"
+        assert created.get("unit_type") == "modular"
+
+
+@pytest.mark.anyio
 async def test_units_create_validation_error():
     sess = main.SESSION_STORE.create(sub="t-304", name="Lehrer U3", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:

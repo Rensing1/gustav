@@ -146,3 +146,38 @@ class TextInputField(FormField):
         )
         input_html = f"<input {input_attrs}>"
         return super().render(input_html)
+
+
+class SelectField(FormField):
+    """Dropdown/select control with consistent wrapper and labeling."""
+
+    def render(
+        self,
+        *,
+        options: list[tuple[str, str]],
+        value: str = "",
+        placeholder: Optional[str] = None,
+        **attrs: str,
+    ) -> str:
+        option_html: list[str] = []
+        if placeholder is not None:
+            selected = " selected" if not value else ""
+            option_html.append(
+                f'<option value="" disabled{selected}>{self.escape(placeholder)}</option>'
+            )
+
+        for opt_value, opt_label in options:
+            selected_attr = " selected" if str(opt_value) == str(value) else ""
+            option_html.append(
+                f'<option value="{self.escape(str(opt_value))}"{selected_attr}>{self.escape(str(opt_label))}</option>'
+            )
+
+        select_attrs = self.attributes(
+            id=self.field_id,
+            name=self.field_id,
+            aria_describedby=f"{self.field_id}-help" if self.help_text else None,
+            aria_invalid="true" if self.error_text else "false",
+            **attrs,
+        )
+        input_html = f"<select {select_attrs}>{''.join(option_html)}</select>"
+        return super().render(input_html)

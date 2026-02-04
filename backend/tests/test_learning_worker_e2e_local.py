@@ -202,6 +202,7 @@ async def test_worker_schedules_retry_when_image_bytes_missing(monkeypatch: pyte
                 insert into public.learning_submissions (
                     course_id,
                     task_id,
+                    section_id,
                     student_sub,
                     kind,
                     storage_key,
@@ -213,6 +214,7 @@ async def test_worker_schedules_retry_when_image_bytes_missing(monkeypatch: pyte
                     idempotency_key
                 )
                 values (
+                    %s::uuid,
                     %s::uuid,
                     %s::uuid,
                     %s,
@@ -230,6 +232,7 @@ async def test_worker_schedules_retry_when_image_bytes_missing(monkeypatch: pyte
                 (
                     fixture.course_id,
                     fixture.task["id"],
+                    fixture.section_id,
                     fixture.student_sub,
                     "storage://bucket/key.jpg",
                     "image/jpeg",
@@ -293,4 +296,3 @@ async def test_worker_schedules_retry_when_image_bytes_missing(monkeypatch: pyte
     assert status == "pending"
     assert text_body is None
     assert analysis_json is None
-

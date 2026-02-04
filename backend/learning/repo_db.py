@@ -190,6 +190,16 @@ class DBLearningRepo:
     def _set_current_sub(self, cur, sub: str) -> None:
         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
 
+    def _set_current_course_id(self, cur, course_id: str) -> None:
+        """Set course context for course-scoped student RLS checks.
+
+        Why:
+            Modular unit access is course-scoped (unlock state depends on the
+            course). For now we use the course id as *context* for RLS checks
+            in `student_can_access_section(...)` via `app.current_course_id`.
+        """
+        cur.execute("select set_config('app.current_course_id', %s, true)", (course_id,))
+
     # ------------------------------------------------------------------
     def list_courses_for_student(self, *, student_sub: str, limit: int, offset: int) -> List[dict]:
         """Return the student's courses with minimal fields, alphabetically.
@@ -267,6 +277,261 @@ class DBLearningRepo:
                 }
             )
         return result
+
+    # ------------------------------------------------------------------
+    def get_modular_unit_graph(self, *, student_sub: str, course_id: str, unit_id: str) -> dict:
+        """Return a modular unit graph payload (phases/modules/edges) for a student.
+
+        Notes:
+            MVP stub for unlock logic: modules are returned with `status="open"`
+            and with `tasks_done/prereq_done=0`. The schema is designed so we
+            can later compute true unlock states without changing the API.
+        """
+        course_uuid = str(UUID(course_id))
+        unit_uuid = str(UUID(unit_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                # RLS context
+                self._set_current_sub(cur, student_sub)
+                self._set_current_course_id(cur, course_uuid)
+
+                # Course membership + unit-in-course guard (404 semantics)
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise LookupError("not_course_member")
+                cur.execute(
+                    "select exists(select 1 from public.course_modules where course_id=%s and unit_id=%s)",
+                    (course_uuid, unit_uuid),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise LookupError("unit_not_in_course")
+
+                cur.execute(
+                    "select id::text, title, unit_type from public.units where id = %s",
+                    (unit_uuid,),
+                )
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise LookupError("unit_not_found")
+                unit_type = str(unit_row[2] or "").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+
+                cur.execute(
+                    """
+                    select id::text, title, position
+                    from public.unit_phases
+                    where unit_id = %s
+                    order by position asc, id asc
+                    """,
+                    (unit_uuid,),
+                )
+                phases = [{"id": r[0], "title": r[1], "position": int(r[2])} for r in (cur.fetchall() or [])]
+
+                cur.execute(
+                    """
+                    select um.id::text,
+                           us.title,
+                           um.phase_id::text,
+                           um.position_in_phase,
+                           um.required_prereq_count,
+                           us.tasks_total,
+                           us.materials_count
+                      from public.unit_modules um
+                      join public.unit_sections us on us.id = um.section_id
+                     where um.unit_id = %s
+                     order by um.phase_id asc, um.position_in_phase asc, um.id asc
+                    """,
+                    (unit_uuid,),
+                )
+                modules = []
+                for r in (cur.fetchall() or []):
+                    required_prereq_count = int(r[4] or 0)
+                    modules.append(
+                        {
+                            "id": r[0],
+                            "title": r[1],
+                            "phase_id": r[2],
+                            "position_in_phase": int(r[3] or 1),
+                            "required_prereq_count": required_prereq_count,
+                            "prereq_done": 0,
+                            "prereq_required": 0,
+                            "tasks_done": 0,
+                            "tasks_total": int(r[5] or 0),
+                            "materials_count": int(r[6] or 0),
+                            "status": "open",
+                        }
+                    )
+
+        return {
+            "unit": {"id": unit_row[0], "title": unit_row[1], "unit_type": unit_type},
+            "phases": phases,
+            "modules": modules,
+            "edges": [],
+        }
+
+    def get_modular_module_content(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        unit_id: str,
+        module_id: str,
+        include_materials: bool,
+        include_tasks: bool,
+    ) -> dict:
+        """Return module content for modular units (materials/tasks) when accessible."""
+        course_uuid = str(UUID(course_id))
+        unit_uuid = str(UUID(unit_id))
+        module_uuid = str(UUID(module_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                # RLS context
+                self._set_current_sub(cur, student_sub)
+                self._set_current_course_id(cur, course_uuid)
+
+                # Course membership + unit-in-course guard (404 semantics)
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise LookupError("not_course_member")
+                cur.execute(
+                    "select exists(select 1 from public.course_modules where course_id=%s and unit_id=%s)",
+                    (course_uuid, unit_uuid),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise LookupError("unit_not_in_course")
+
+                cur.execute(
+                    """
+                    select um.id::text,
+                           um.section_id::text,
+                           us.title,
+                           um.unit_id::text,
+                           um.phase_id::text,
+                           um.position_in_phase
+                      from public.unit_modules um
+                      join public.unit_sections us on us.id = um.section_id
+                     where um.id = %s
+                       and um.unit_id = %s
+                    """,
+                    (module_uuid, unit_uuid),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise LookupError("module_not_found")
+
+                section_id = row[1]
+                module = {
+                    "id": row[0],
+                    "title": row[2],
+                    "unit_id": row[3],
+                    "phase_id": row[4],
+                    "position_in_phase": int(row[5] or 1),
+                }
+
+                materials: list[dict] = []
+                tasks: list[dict] = []
+                if include_materials:
+                    cur.execute(
+                        """
+                        select id::text,
+                               title,
+                               kind,
+                               body_md,
+                               mime_type,
+                               size_bytes,
+                               filename_original,
+                               storage_key,
+                               sha256,
+                               alt_text,
+                               position,
+                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                          from public.unit_materials
+                         where section_id = %s::uuid
+                         order by position asc, id asc
+                        """,
+                        (section_id,),
+                    )
+                    for r in (cur.fetchall() or []):
+                        materials.append(
+                            {
+                                "id": r[0],
+                                "title": r[1],
+                                "kind": r[2],
+                                "body_md": r[3],
+                                "mime_type": r[4],
+                                "size_bytes": r[5],
+                                "filename_original": r[6],
+                                "storage_key": r[7],
+                                "sha256": r[8],
+                                "alt_text": r[9],
+                                "position": int(r[10]) if r[10] is not None else None,
+                                "created_at": r[11],
+                                "updated_at": r[12],
+                            }
+                        )
+
+                if include_tasks:
+                    cur.execute(
+                        """
+                        select id::text,
+                               instruction_md,
+                               criteria,
+                               case
+                                 when due_at is null then null
+                                 else to_char(due_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                               end as due_at_iso,
+                               max_attempts,
+                               kind,
+                               h5p_content_id,
+                               h5p_display_options,
+                               position,
+                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                          from public.unit_tasks
+                         where section_id = %s::uuid
+                         order by position asc, id asc
+                        """,
+                        (section_id,),
+                    )
+                    for r in (cur.fetchall() or []):
+                        kind = str(r[5] or "native")
+                        h5p_content_id = r[6]
+                        h5p_display_options = r[7]
+                        display_options = h5p_display_options if isinstance(h5p_display_options, dict) else {}
+                        h5p = None
+                        visual = None
+                        if kind == "h5p":
+                            h5p = {
+                                "content_id": (str(h5p_content_id) if h5p_content_id is not None else None),
+                                "display_options": display_options,
+                            }
+                        elif kind == "visual":
+                            visual = {}
+                        tasks.append(
+                            {
+                                "id": r[0],
+                                "instruction_md": r[1],
+                                "criteria": list(r[2] or []),
+                                "due_at": r[3],
+                                "max_attempts": r[4],
+                                "kind": kind,
+                                "h5p": h5p,
+                                "visual": visual,
+                                "position": int(r[8]) if r[8] is not None else None,
+                                "created_at": r[9],
+                                "updated_at": r[10],
+                            }
+                        )
+
+        return {"module": module, "materials": materials, "tasks": tasks}
 
     # ------------------------------------------------------------------
     def list_released_sections(

@@ -121,8 +121,6 @@ Goals:
       // Remove old edge elements (keep <defs>).
       Array.from(svg.querySelectorAll('.modular-editor__edge')).forEach(function (p) { p.remove(); });
       var PAD = 6;
-      var edgeInfos = [];
-      var samePhaseByPhase = {};
 
       edges.forEach(function (e) {
         var fromId = e.from;
@@ -132,62 +130,24 @@ Goals:
         var b = nodeInfo(toId);
         if (!a || !b) return;
 
+        // Render as an orthogonal polyline.
+        //
+        // Why:
+        // - Cross-phase edges should clearly go "down" (next phase).
+        // - Same-phase edges should go "right" (within the phase row).
+        //
+        // We use simple midpoints (readable + fast) and add padding so arrowheads
+        // do not overlap the node border.
         var samePhase = !!(a.phaseId && b.phaseId && a.phaseId === b.phaseId);
-        var phaseId = samePhase ? a.phaseId : '';
-        var info = { a: a, b: b, samePhase: samePhase, phaseId: phaseId };
-        if (samePhase) {
-          info.startX = a.x + a.w / 2 + PAD; // right-center of source
-          info.endX = b.x - b.w / 2 - PAD;   // left-center of target
-        }
-        edgeInfos.push(info);
-
-        if (samePhase) {
-          if (!samePhaseByPhase[phaseId]) samePhaseByPhase[phaseId] = [];
-          samePhaseByPhase[phaseId].push(info);
-        }
-      });
-
-      // Same-phase edges can cross through intermediate modules if drawn straight.
-      // To keep them readable even with many modules, we assign "lanes" above
-      // the phase row and route each edge via its lane.
-      Object.keys(samePhaseByPhase).forEach(function (phaseId) {
-        var list = samePhaseByPhase[phaseId] || [];
-        list.sort(function (a, b) {
-          if (a.startX !== b.startX) return a.startX - b.startX;
-          return a.endX - b.endX;
-        });
-
-        var laneEnds = [];
-        var LANE_PAD_X = 24;
-        list.forEach(function (info) {
-          var lane = 0;
-          for (lane = 0; lane < laneEnds.length; lane++) {
-            if (info.startX > laneEnds[lane] + LANE_PAD_X) break;
-          }
-          if (lane === laneEnds.length) laneEnds.push(info.endX);
-          laneEnds[lane] = Math.max(laneEnds[lane], info.endX);
-          info.lane = lane;
-        });
-      });
-
-      edgeInfos.forEach(function (info) {
-        var a = info.a;
-        var b = info.b;
         var points = '';
-
-        if (info.samePhase) {
-          var x1 = info.startX;
+        if (samePhase) {
+          // Same phase: start at right-center, end at left-center.
+          var x1 = a.x + a.w / 2 + PAD;
           var y1 = a.y;
-          var x4 = info.endX;
+          var x4 = b.x - b.w / 2 - PAD;
           var y4 = b.y;
-
-          // Route via a lane above the row. Lanes stack upward if needed.
-          var topA = a.y - a.h / 2;
-          var topB = b.y - b.h / 2;
-          var baseY = Math.min(topA, topB) - 14;
-          var laneY = Math.max(10, baseY - (info.lane || 0) * 12);
-
-          points = x1 + ',' + y1 + ' ' + x1 + ',' + laneY + ' ' + x4 + ',' + laneY + ' ' + x4 + ',' + y4;
+          var midX = (x1 + x4) / 2;
+          points = x1 + ',' + y1 + ' ' + midX + ',' + y1 + ' ' + midX + ',' + y4 + ' ' + x4 + ',' + y4;
         } else {
           // Cross phase: start at bottom-center, end at top-center.
           var x1b = a.x;
@@ -197,8 +157,8 @@ Goals:
           var midY = (y1b + y4b) / 2;
           points = x1b + ',' + y1b + ' ' + x1b + ',' + midY + ' ' + x4b + ',' + midY + ' ' + x4b + ',' + y4b;
         }
-
         if (!points) return;
+
         var line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
         line.setAttribute('points', points);
         line.setAttribute('marker-end', 'url(#modular-editor-arrow)');

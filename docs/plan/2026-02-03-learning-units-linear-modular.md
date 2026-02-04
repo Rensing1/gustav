@@ -37,7 +37,8 @@ Legende:
 - **DONE**: Lehrkraft kann Units als `unit_type="modular"` erstellen.
 - **DONE**: Beim Erstellen einer modularen Unit wird automatisch eine Default‑Phase (“Phase 1”) erzeugt (damit modulare Units ohne Phase‑Editor nutzbar sind).
 - **DONE**: Beim Erstellen einer Section in einer modularen Unit wird automatisch ein `unit_modules`‑Record erzeugt (Option B).
-- **OPEN**: Phase‑Editor (CRUD/Reorder) und Modul‑Editor (Move/Reorder innerhalb Phase, required_prereq_count) inkl. 409‑Validierungen.
+- **DONE**: Phase‑Editor API: Phasen listen/erstellen/umbenennen/reorder.
+- **OPEN**: Modul‑Editor (Move/Reorder innerhalb Phase, required_prereq_count) inkl. 409‑Validierungen.
 
 ### Abweichungen vom ursprünglichen Plan (wichtig)
 - **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).

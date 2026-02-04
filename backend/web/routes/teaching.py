@@ -2286,6 +2286,82 @@ async def create_unit_module(request: Request, unit_id: str, payload: UnitModule
     return _json_private(_serialize_unit_module(created), status_code=201, vary_origin=True)
 
 
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/edges")
+async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+    """Create a directed dependency edge within a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+
+    from_id = payload.from_module_id or ""
+    to_id = payload.to_module_id or ""
+    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    try:
+        created = repo.create_unit_module_edge_for_author(
+            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
+        )
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23514":  # check_violation
+            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+        if sqlstate == "23503":  # foreign_key_violation
+            return _private_error({"error": "not_found"}, status_code=404)
+        raise
+    return _json_private(_serialize_unit_graph_edge(created), status_code=201, vary_origin=True)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
+async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+    """Delete a directed dependency edge within a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+
+    from_id = payload.from_module_id or ""
+    to_id = payload.to_module_id or ""
+    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    try:
+        deleted = repo.delete_unit_module_edge_for_author(
+            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
+        )
+    except ValueError:
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
 @teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}")
 async def update_unit_module(request: Request, unit_id: str, module_id: str, payload: UnitModuleUpdatePayload):
     """Update module settings (author only)."""
@@ -2428,82 +2504,6 @@ async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: s
         raise
 
     return _json_private([_serialize_unit_module(m) for m in ordered], status_code=200, vary_origin=True)
-
-
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/edges")
-async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
-    """Create a directed dependency edge within a modular unit (author only)."""
-    repo = _get_repo()
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
-
-    from_id = payload.from_module_id or ""
-    to_id = payload.to_module_id or ""
-    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
-    try:
-        created = repo.create_unit_module_edge_for_author(
-            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
-        )
-    except ValueError as exc:
-        detail = str(exc) or "bad_request"
-        if detail == "invalid_unit_type":
-            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
-        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
-    except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    except Exception as exc:
-        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
-        if sqlstate == "23514":  # check_violation
-            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
-        if sqlstate == "23503":  # foreign_key_violation
-            return _private_error({"error": "not_found"}, status_code=404)
-        raise
-    return _json_private(_serialize_unit_graph_edge(created), status_code=201, vary_origin=True)
-
-
-@teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
-async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
-    """Delete a directed dependency edge within a modular unit (author only)."""
-    repo = _get_repo()
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
-
-    from_id = payload.from_module_id or ""
-    to_id = payload.to_module_id or ""
-    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
-    try:
-        deleted = repo.delete_unit_module_edge_for_author(
-            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
-        )
-    except ValueError:
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
-    except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    if not deleted:
-        return _private_error({"error": "not_found"}, status_code=404)
-    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections")

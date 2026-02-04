@@ -219,3 +219,54 @@ async def test_modular_editor_required_prereq_count_update_via_panel_settings() 
         mod = next((m for m in graph.json()["modules"] if m.get("id") == mod_a), None)
         assert isinstance(mod, dict)
         assert mod.get("required_prereq_count") == 2
+
+
+@pytest.mark.anyio
+async def test_modular_editor_edge_delete_via_panel_removes_edge_and_refreshes_graph() -> None:
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor HTMX CRUD UI test")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-ui-mod-editor-edge-del", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        uid, _p1, _p2, mod_a, mod_b = await _create_modular_unit_with_two_modules(c)
+
+        # Create an edge A -> B (valid: phase1 -> phase2).
+        r_edge = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_a, "to_module_id": mod_b},
+        )
+        assert r_edge.status_code == 201, r_edge.text
+
+        # Load the module panel; it should contain a delete-edge control.
+        panel = await c.get(
+            f"/units/{uid}/modules/{mod_a}/panel",
+            headers={"HX-Request": "true"},
+        )
+        assert panel.status_code == 200, panel.text
+        csrf = _extract_csrf(panel.text)
+        assert f'hx-post="/units/{uid}/modular-editor/module/{mod_a}/edges/delete"' in panel.text
+
+        # Delete the edge via panel action; expect OOB graph refresh.
+        res = await c.post(
+            f"/units/{uid}/modular-editor/module/{mod_a}/edges/delete",
+            data={"csrf_token": csrf, "from_module_id": mod_a, "to_module_id": mod_b},
+            headers={"HX-Request": "true"},
+        )
+        assert res.status_code == 200, res.text
+        assert 'id="modular-editor-graph"' in res.text
+        assert "hx-swap-oob" in res.text
+
+        # Source of truth: the graph API must not return the edge anymore.
+        graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert graph.status_code == 200
+        assert graph.json()["edges"] == []

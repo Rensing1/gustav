@@ -371,13 +371,20 @@ components:
         joined_at:
           type: string
           format: date-time
+    UnitType:
+      type: string
+      enum: [linear, modular]
+      description: Learning unit format identifier.
     Unit:
       type: object
-      required: [id, title, author_id, created_at, updated_at]
+      required: [id, unit_type, title, author_id, created_at, updated_at]
       properties:
         id:
           type: string
           format: uuid
+        unit_type:
+          $ref: '#/components/schemas/UnitType'
+          description: Unit format. Linear units use teacher section releases; modular units use graph-based unlock.
         title:
           type: string
           minLength: 1
@@ -399,6 +406,11 @@ components:
       type: object
       required: [title]
       properties:
+        unit_type:
+          allOf:
+            - $ref: '#/components/schemas/UnitType'
+          default: linear
+          description: Unit format. Defaults to "linear" when omitted.
         title:
           type: string
           minLength: 1
@@ -1329,7 +1341,7 @@ components:
           nullable: true
     UnitPublic:
       type: object
-      required: [id, title]
+      required: [id, title, unit_type]
       additionalProperties: false
       properties:
         id:
@@ -1340,6 +1352,165 @@ components:
         summary:
           type: string
           nullable: true
+        unit_type:
+          $ref: '#/components/schemas/UnitType'
+
+    LearningUnitGraphUnit:
+      type: object
+      required: [id, title, unit_type]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        unit_type:
+          $ref: '#/components/schemas/UnitType'
+
+    LearningUnitPhase:
+      type: object
+      required: [id, title, position]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        position:
+          type: integer
+          minimum: 1
+          description: 1-based ordering of phases within the unit.
+
+    LearningUnitModuleStatus:
+      type: string
+      enum: [locked, open, done]
+      description: Per-student module state within a course.
+
+    LearningUnitGraphModule:
+      type: object
+      required:
+        - id
+        - title
+        - phase_id
+        - position_in_phase
+        - required_prereq_count
+        - prereq_done
+        - prereq_required
+        - tasks_done
+        - tasks_total
+        - materials_count
+        - status
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        phase_id:
+          type: string
+          format: uuid
+        position_in_phase:
+          type: integer
+          minimum: 1
+        required_prereq_count:
+          type: integer
+          minimum: 0
+          description: k value for "k-of-n" unlock logic on this module (target node).
+        prereq_done:
+          type: integer
+          minimum: 0
+          description: Number of satisfied prerequisites (done incoming modules).
+        prereq_required:
+          type: integer
+          minimum: 0
+          description: Required prerequisite count after clamping (0..incoming_count).
+        tasks_done:
+          type: integer
+          minimum: 0
+        tasks_total:
+          type: integer
+          minimum: 0
+        materials_count:
+          type: integer
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/LearningUnitModuleStatus'
+
+    LearningUnitGraphEdge:
+      type: object
+      required: [from, to]
+      additionalProperties: false
+      properties:
+        from:
+          type: string
+          format: uuid
+        to:
+          type: string
+          format: uuid
+
+    LearningUnitModulesGraphResponse:
+      type: object
+      required: [unit, phases, modules, edges]
+      additionalProperties: false
+      properties:
+        unit:
+          $ref: '#/components/schemas/LearningUnitGraphUnit'
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningUnitPhase'
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningUnitGraphModule'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningUnitGraphEdge'
+
+    LearningModuleCore:
+      type: object
+      required: [id, title, unit_id, phase_id, position_in_phase]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        unit_id:
+          type: string
+          format: uuid
+        phase_id:
+          type: string
+          format: uuid
+        position_in_phase:
+          type: integer
+          minimum: 1
+
+    LearningModuleContent:
+      type: object
+      required: [module, materials, tasks]
+      properties:
+        module:
+          $ref: '#/components/schemas/LearningModuleCore'
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningMaterial'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningTask'
 
     # Teaching — Live unit view (teacher-only)
     TeachingStudentRef:
@@ -3092,6 +3263,201 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Course or unit not found, or unit does not belong to the course
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/courses/{course_id}/units/{unit_id}/modules/graph:
+    get:
+      tags: [Learning]
+      summary: Get the modular unit graph (advance organizer) for the current student
+      description: Returns phases, modules, edges and per-module status for a modular unit within a course.
+      operationId: getLearningUnitModulesGraph
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "RLS: course membership guard + per-student unlock (fail-closed)."
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Graph payload for a modular unit
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningUnitModulesGraphResponse'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_uuid
+              - invalid_unit_type
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden — caller is not a student
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or unit not found or not visible to the student
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}:
+    get:
+      tags: [Learning]
+      summary: Get module content (materials/tasks) for a modular unit (student-only)
+      description: Returns module content only when the module status is open or done. Locked modules return 404 (fail-closed).
+      operationId: getLearningUnitModuleContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "RLS: module content gated by per-student unlock; 404 for locked modules."
+      x-permissions:
+        requiredRole: student
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: include
+          style: form
+          explode: false
+          schema:
+            type: string
+            pattern: '^(materials|tasks)(,(materials|tasks))*$'
+          description: 'Comma-separated list controlling embedded resources (supported: "materials", "tasks").'
+      responses:
+        '200':
+          description: Module content (only for open/done modules)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningModuleContent'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_uuid
+              - invalid_include
+              - invalid_unit_type
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden — caller is not a student
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found — course/unit/module not visible, or module is locked (fail-closed)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

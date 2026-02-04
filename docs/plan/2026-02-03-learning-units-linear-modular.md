@@ -8,6 +8,39 @@ Referenz‑UI (Prototyp): `ui-dummies/student-workspace-hybrid-sticky/`
 
 ---
 
+## Umsetzungsstatus (aktuell)
+
+Legende:
+- **DONE** = umgesetzt und getestet
+- **PARTIAL** = umgesetzt, aber (noch) mit MVP‑Stub/ohne volle Logik
+- **OPEN** = noch nicht umgesetzt
+
+### Contract / API
+- **DONE**: `unit_type` in `Unit`, `UnitCreate`, `UnitPublic` (OpenAPI + Backend‑Serialisierung).
+- **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/graph` existiert.
+- **PARTIAL**: Graph‑Payload liefert Phasen/Module, aber Unlock‑Status ist aktuell MVP‑Stub (z.B. `status="open"`, `tasks_done/prereq_done=0`) und `edges` sind noch leer.
+- **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}` existiert.
+- **PARTIAL**: Module‑Content liefert `materials/tasks`, aber “locked → 404” ist noch nicht implementiert (wir liefern derzeit Inhalte für alle Module der Unit, sobald die Unit im Kurs hängt).
+
+### Datenbank / Security (RLS)
+- **DONE**: `public.units.unit_type` (Migration + Helper `get_course_units_for_student` erweitert).
+- **DONE**: `public.unit_sections.tasks_total` + `public.unit_sections.materials_count` inkl. Backfill + Triggern (MVP).
+- **DONE**: Option B umgesetzt: `public.unit_modules` (module_id) mappt 1:1 auf `unit_sections` (Content‑Container) via `unit_modules.section_id`.
+- **DONE**: `public.unit_phases` (Pflicht‑Phasen für modulare Units).
+- **DONE**: RLS‑Fix: `student_can_access_section(...)` unterstützt modulare Units **kurs‑scoped** ohne Policy‑Rekursion.
+- **OPEN**: `public.unit_module_edges` (Kanten/Abhängigkeiten) + Validierungsregeln.
+- **OPEN**: `public.learning_submissions.section_id` (MVP‑Entscheidung bleibt: nur `section_id`, kein `unit_id`).
+
+### Teaching (Autor‑Workflows)
+- **DONE**: Lehrkraft kann Units als `unit_type="modular"` erstellen.
+- **DONE**: Beim Erstellen einer modularen Unit wird automatisch eine Default‑Phase (“Phase 1”) erzeugt (damit modulare Units ohne Phase‑Editor nutzbar sind).
+- **DONE**: Beim Erstellen einer Section in einer modularen Unit wird automatisch ein `unit_modules`‑Record erzeugt (Option B).
+- **OPEN**: Phase‑Editor (CRUD/Reorder) und Modul‑Editor (Move/Reorder innerhalb Phase, required_prereq_count) inkl. 409‑Validierungen.
+
+### Abweichungen vom ursprünglichen Plan (wichtig)
+- **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).
+- **Abweichung 2 (zusätzliche Mechanik):** Kurs‑Scoped Modular‑Sichtbarkeit wird über `app.current_course_id` (GUC) vom Backend gesetzt, damit RLS “fail‑closed” bleibt und wir Content‑Leaks vermeiden.
+
 ## Begriffe (damit das Team dieselbe Sprache nutzt)
 
 - **Lerneinheit (Unit)**: wiederverwendbarer Content‑Container (DB: `public.units`), den Lehrkräfte erstellen und Kurse referenzieren (DB: `public.course_modules`).

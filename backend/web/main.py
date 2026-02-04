@@ -3124,12 +3124,7 @@ def _render_unit_list_partial(items: list[dict]) -> str:
     for u in items:
         unit_type = str(u.get("unit_type") or "linear").strip().lower()
         type_label = "Modular" if unit_type == "modular" else "Linear"
-        manage_label = "Module verwalten" if unit_type == "modular" else "Abschnitte verwalten"
-        phases_link = (
-            f'<a href="/units/{u.get("id")}/phases" class="btn btn-secondary">Phasen</a>'
-            if unit_type == "modular"
-            else ""
-        )
+        primary_label = "Editor öffnen" if unit_type == "modular" else "Abschnitte verwalten"
         cards.append(f'''
         <div class="card unit-card" data-unit-id="{u.get("id", "")}">
             <div class="card-body">
@@ -3138,8 +3133,7 @@ def _render_unit_list_partial(items: list[dict]) -> str:
                 <p class="text-muted">{Component.escape(u.get("summary"))}</p>
                 <div class="card-actions">
                     <a href="/units/{u.get("id")}/edit" class="btn btn-secondary">Umbenennen</a>
-                    {phases_link}
-                    <a href="/units/{u.get("id")}" class="btn btn-primary">{manage_label}</a>
+                    <a href="/units/{u.get("id")}" class="btn btn-primary">{primary_label}</a>
                 </div>
             </div>
         </div>
@@ -3251,6 +3245,87 @@ def _render_sections_page_html(unit: dict, sections: list[dict], csrf_token: str
             {section_list_html}
         </div>
     '''
+
+def _render_modular_unit_editor_page_html(
+    *,
+    unit: dict,
+    phases: list[dict],
+    modules: list[dict],
+    csrf_token: str,
+    error_phases: str | None = None,
+    error_modules: str | None = None,
+) -> str:
+    """Build the teacher editor page for a modular unit (single entrypoint).
+
+    Intent:
+        Teachers should edit a modular unit in one place:
+        - manage phases + modules (advance organizer meta)
+        - click a module to edit its materials/tasks (content)
+
+    Notes:
+        Option B: Each module (unit_modules.id) maps 1:1 to a section
+        (unit_sections.id). Teachers should not need to know about sections.
+    """
+    unit_id = str(unit.get("id") or "")
+    unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
+
+    create_phase_form = (
+        f'<form method="post" action="/units/{unit_id}/phases" '
+        f'hx-post="/units/{unit_id}/phases" hx-target="#phase-list-section" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        '<label>Titel der Phase<input class="form-input" type="text" name="title" required></label>'
+        '<div class="form-actions"><button class="btn btn-primary" type="submit">Phase hinzufügen</button></div>'
+        '</form>'
+    )
+    phases_list = _render_unit_phases_list_partial(unit_id, phases, csrf_token=csrf_token, error=error_phases)
+
+    # Group modules by phase for a simple, readable editor layout.
+    modules_by_phase: dict[str, list[dict]] = {}
+    for m in modules:
+        pid = str(m.get("phase_id") or "")
+        modules_by_phase.setdefault(pid, []).append(m)
+
+    module_cards: list[str] = []
+    for p in phases:
+        pid = str(p.get("id") or "")
+        ptitle = Component.escape(str(p.get("title") or "Phase"))
+        entries = modules_by_phase.get(pid, [])
+        if entries:
+            lis: list[str] = []
+            for m in entries:
+                mid = Component.escape(str(m.get("id") or ""))
+                title = Component.escape(str(m.get("title") or "Modul"))
+                lis.append(
+                    '<li class="module-item">'
+                    f'<a href="/units/{unit_id}/modules/{mid}">{title}</a>'
+                    '</li>'
+                )
+            inner = '<ul class="module-list">' + "".join(lis) + "</ul>"
+        else:
+            inner = '<div class="empty-state"><p>Noch keine Module in dieser Phase.</p></div>'
+        module_cards.append(f'<section class="card"><h3>{ptitle}</h3>{inner}</section>')
+
+    error_modules_html = (
+        f'<div class="section-error" role="alert" data-testid="module-error">{Component.escape(error_modules)}</div>'
+        if error_modules
+        else ""
+    )
+    create_module_form = (
+        f'<form method="post" action="/units/{unit_id}/modules">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        '<label>Titel des Moduls<input class="form-input" type="text" name="title" required></label>'
+        '<div class="form-actions"><button class="btn btn-primary" type="submit">Modul hinzufügen</button></div>'
+        '</form>'
+    )
+
+    return (
+        '<div class="container">'
+        f'<h1>Editor: {unit_title}</h1>'
+        '<p class="text-muted">Phasen und Module anlegen · Modul anklicken, um Inhalte zu bearbeiten.</p>'
+        f'<section class="card"><h2>Phasen</h2>{create_phase_form}{phases_list}</section>'
+        f'<section class="card"><h2>Module</h2>{error_modules_html}{create_module_form}{"".join(module_cards)}</section>'
+        '</div>'
+    )
 
 
 def _render_material_list_partial(unit_id: str, section_id: str, materials: list[dict], *, csrf_token: str, error: str | None = None) -> str:
@@ -3435,6 +3510,46 @@ def _render_section_detail_page_html(
     )
 
 
+def _render_module_detail_page_html(
+    *,
+    unit: dict,
+    module: dict,
+    section_id: str,
+    materials: list[dict],
+    tasks: list[dict],
+    csrf_token: str,
+) -> str:
+    """Build the module content page (teacher) without exposing sections.
+
+    Note:
+        Internally, content lives in a section (`section_id`). Links in the
+        materials/tasks lists still point to section routes for now; the teacher
+        entrypoint is module-first so the UX stays understandable.
+    """
+    unit_id = str(unit.get("id") or "")
+    module_id = str(module.get("id") or "")
+
+    materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=csrf_token)
+    tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=csrf_token)
+
+    return (
+        '<div class="container">'
+        f'<h1>Modul: {Component.escape(module.get("title") or "Modul")}</h1>'
+        f'<p><a href="/units/{Component.escape(unit_id)}">Zurück zum Editor</a></p>'
+        '<div class="two-col">'
+        f'<section class="card col-left"><h2>Materialien</h2>'
+        f'<div class="actions"><a class="btn btn-primary" id="btn-create-material" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/materials/new">+ Material</a></div>'
+        f'{materials_html}</section>'
+        f'<section class="card col-right"><h2>Aufgaben</h2>'
+        f'<div class="actions"><a class="btn btn-primary" id="btn-create-task" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/tasks/new">+ Aufgabe</a></div>'
+        f'{tasks_html}</section>'
+        '</div>'
+        '</div>'
+    )
+
+
 def _extract_api_error_detail(response) -> str:
     """Return the error `detail`/`error` field from an API response for display."""
     try:
@@ -3473,6 +3588,52 @@ async def _fetch_sections_for_unit(unit_id: str, *, session_id: str) -> list[dic
             continue
         cleaned.append({"id": item.get("id"), "title": item.get("title")})
     return cleaned
+
+
+def _fetch_unit_modules_for_unit(unit_id: str, *, author_sub: str) -> list[dict]:
+    """Fetch unit modules for the modular teacher editor via DBTeachingRepo (Option B).
+
+    Why:
+        The teaching JSON API exposes sections and phases. For the new modular
+        editor we need module_ids (unit_modules.id) to generate stable teacher
+        URLs like /units/{unit_id}/modules/{module_id} without leaking sections.
+
+    Security:
+        Uses the same DBTeachingRepo (RLS via app.current_sub) as the teaching API.
+    """
+    if not author_sub:
+        return []
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if not isinstance(repo, DBTeachingRepo):
+            return []
+        return repo.list_unit_modules_for_author(unit_id=unit_id, author_id=author_sub)
+    except Exception:
+        return []
+
+
+def _get_unit_module_for_teacher(unit_id: str, module_id: str, *, author_sub: str) -> dict | None:
+    """Resolve a teacher-facing module_id to its backing section_id.
+
+    Option B:
+        `public.unit_modules.id` is the module_id.
+        `public.unit_modules.section_id` points to the content container.
+    """
+    if not author_sub:
+        return None
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if not isinstance(repo, DBTeachingRepo):
+            return None
+        return repo.get_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=author_sub)
+    except Exception:
+        return None
 
 
 async def _fetch_unit_phases_for_unit(unit_id: str, *, session_id: str) -> tuple[list[dict], str | None]:
@@ -5103,7 +5264,6 @@ async def unit_details_index(request: Request, unit_id: str):
     unit_title: str | None = None
     unit_summary: str | None = None
     unit_type: str = "linear"
-    sections: list[dict] = []
     try:
         async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -5118,13 +5278,6 @@ async def unit_details_index(request: Request, unit_id: str):
             unit_title = str(ud.get("title") or "") or None
             unit_summary = str(ud.get("summary") or "") or None
             unit_type = str(ud.get("unit_type") or "linear").strip().lower()
-            s = await client.get(f"/api/teaching/units/{unit_id}/sections")
-            if s.status_code == 200 and isinstance(s.json(), list):
-                # Keep only fields needed for rendering
-                sections = [
-                    {"id": it.get("id"), "title": it.get("title")}
-                    for it in s.json()
-                ]
     except Exception:
         return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
 
@@ -5134,10 +5287,57 @@ async def unit_details_index(request: Request, unit_id: str):
         "summary": unit_summary or None,
         "unit_type": unit_type,
     }
+
+    if unit_type == "modular":
+        phases, phases_err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+        modules = _fetch_unit_modules_for_unit(unit_id, author_sub=str((user or {}).get("sub") or ""))
+        content = _render_modular_unit_editor_page_html(
+            unit=unit_vm,
+            phases=phases,
+            modules=modules,
+            csrf_token=token,
+            error_phases=phases_err,
+        )
+        layout = Layout(title=f"Editor – {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
+        return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+    sections = await _fetch_sections_for_unit(unit_id, session_id=sid)
     content = _render_sections_page_html(unit_vm, sections, csrf_token=token)
-    page_noun = "Module" if unit_type == "modular" else "Abschnitte"
-    layout = Layout(title=f"{page_noun} für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
+    layout = Layout(title=f"Abschnitte für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modules", response_class=HTMLResponse)
+async def unit_modules_create(request: Request, unit_id: str):
+    """Create a new module (backed by a section) for a modular unit.
+
+    Teachers should not need to know that Option B maps modules 1:1 to sections.
+    This endpoint keeps the teacher flow stable (/modules) while delegating the
+    actual persistence to the existing sections API.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+
+    title = str(form.get("title", "")).strip()
+    if not title:
+        return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
+
+    try:
+        async with _internal_api_client() as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+    except Exception:
+        # Keep teacher flow resilient: return to editor even when backend fails.
+        return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
+
+    return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
 
 
 @app.get("/units/{unit_id}/phases", response_class=HTMLResponse)
@@ -5360,6 +5560,60 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
         csrf_token=token,
     )
     layout = Layout(title=f"Abschnitt – {section_title or ''}", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modules/{module_id}", response_class=HTMLResponse)
+async def module_detail_index(request: Request, unit_id: str, module_id: str):
+    """SSR module content page (teacher).
+
+    UX intent:
+        A teacher clicks a module inside the modular unit editor and lands on a
+        page where they can add materials/tasks for that module.
+
+    Option B:
+        Modules map 1:1 to sections. We resolve module_id -> section_id via
+        DBTeachingRepo and then load materials/tasks using the existing API.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return HTMLResponse("Modul nicht gefunden", status_code=404)
+    section_id = str(module.get("section_id") or "")
+    if not section_id:
+        return HTMLResponse("Modul nicht gefunden", status_code=404)
+
+    unit_title: str | None = None
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            u = await client.get(f"/api/teaching/units/{unit_id}")
+            if u.status_code != 200:
+                return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+            ud = u.json() if isinstance(u.json(), dict) else {}
+            unit_title = str(ud.get("title") or "") or None
+    except Exception:
+        return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid)
+    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid)
+    content = _render_module_detail_page_html(
+        unit={"id": unit_id, "title": unit_title or "Lerneinheit"},
+        module={"id": module_id, "title": module.get("title") or "Modul"},
+        section_id=section_id,
+        materials=materials,
+        tasks=tasks,
+        csrf_token=token,
+    )
+    layout = Layout(title=f"Modul – {str(module.get('title') or '')}", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 

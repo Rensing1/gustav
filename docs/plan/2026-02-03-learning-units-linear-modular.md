@@ -22,6 +22,7 @@ Legende:
 - **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}` existiert.
 - **DONE**: Module‑Content liefert `materials/tasks` und setzt “locked → 404” (fail‑closed, keine Enumeration).
 - **DONE**: `GET /api/learning/courses/{course_id}/h5p/contents/{content_id}/access` unterstützt `linear` **und** `modular` (locked‑Modul → 404, open/done → 204).
+- **DONE**: Submissions‑Endpoints sind modular‑aware: Tasks in locked‑Modulen liefern 404 (fail‑closed).
 
 ### Datenbank / Security (RLS)
 - **DONE**: `public.units.unit_type` (Migration + Helper `get_course_units_for_student` erweitert).

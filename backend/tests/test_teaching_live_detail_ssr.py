@@ -244,11 +244,11 @@ async def test_detail_partial_file_submission_shows_text_and_file_tab():
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   storage_key, mime_type, size_bytes, sha256, attempt_nr,
                   text_body, analysis_status, completed_at
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                   %s, %s, %s, %s, 1,
                   %s, 'completed', now()
                 )
@@ -257,6 +257,7 @@ async def test_detail_partial_file_submission_shows_text_and_file_tab():
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     storage_key,
                     "application/pdf",
@@ -417,10 +418,10 @@ async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                   %s, 1, 'completed', now(), %s, %s
                 )
                 """,
@@ -428,6 +429,7 @@ async def test_detail_partial_shows_rueckmeldung_und_auswertung_wie_schueler():
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     "Antwort mit Feedback",
                     feedback_md,

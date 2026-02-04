@@ -128,16 +128,16 @@ async def test_worker_completes_pdf_from_extracted(
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                    id, course_id, task_id, student_sub, kind,
+                    id, course_id, task_id, section_id, student_sub, kind,
                     text_body, storage_key, mime_type, size_bytes, sha256,
                     attempt_nr, analysis_status, analysis_json
                 ) values (
-                    %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                    %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                     null, %s, 'application/pdf', 1024, %s,
                     1, 'pending', null
                 )
                 """,
-                (str(submission_id), course_id, task_id, student_sub, storage_key, "0" * 64),
+                (str(submission_id), course_id, task_id, section_id, student_sub, storage_key, "0" * 64),
             )
             # Queue job payload as the use case would do
             payload = {

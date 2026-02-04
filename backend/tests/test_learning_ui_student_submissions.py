@@ -681,12 +681,16 @@ async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, false)", (student.sub,))
+            cur.execute("select section_id::text from public.unit_tasks where id = %s::uuid", (task_id,))
+            section_id = (cur.fetchone() or [None])[0]
+            assert section_id
             cur.execute(
                 """
                 insert into public.learning_submissions (
                   id,
                   course_id,
                   task_id,
+                  section_id,
                   student_sub,
                   kind,
                   storage_key,
@@ -699,6 +703,7 @@ async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
                   internal_metadata,
                   feedback_md
                 ) values (
+                  %s::uuid,
                   %s::uuid,
                   %s::uuid,
                   %s::uuid,
@@ -722,6 +727,7 @@ async def test_ui_history_fragment_shows_pdf_feedback_and_previews():
                     str(submission_id),
                     str(course_id),
                     str(task_id),
+                    str(section_id),
                     student.sub,
                     origin_key,
                     "b" * 64,
@@ -772,12 +778,16 @@ async def test_ui_history_fragment_shows_image_preview_instead_of_ocr_placeholde
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, false)", (student.sub,))
+            cur.execute("select section_id::text from public.unit_tasks where id = %s::uuid", (task_id,))
+            section_id = (cur.fetchone() or [None])[0]
+            assert section_id
             cur.execute(
                 """
                 insert into public.learning_submissions (
                   id,
                   course_id,
                   task_id,
+                  section_id,
                   student_sub,
                   kind,
                   storage_key,
@@ -789,6 +799,7 @@ async def test_ui_history_fragment_shows_image_preview_instead_of_ocr_placeholde
                   analysis_json,
                   feedback_md
                 ) values (
+                  %s::uuid,
                   %s::uuid,
                   %s::uuid,
                   %s::uuid,
@@ -812,6 +823,7 @@ async def test_ui_history_fragment_shows_image_preview_instead_of_ocr_placeholde
                     str(submission_id),
                     str(course_id),
                     str(task_id),
+                    str(section_id),
                     student.sub,
                     origin_key,
                     "a" * 64,
@@ -860,15 +872,18 @@ async def test_ui_history_shows_pdf_failure_message():
 
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
+            cur.execute("select section_id::text from public.unit_tasks where id = %s::uuid", (task_id,))
+            section_id = (cur.fetchone() or [None])[0]
+            assert section_id
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                    id, course_id, task_id, student_sub, kind,
+                    id, course_id, task_id, section_id, student_sub, kind,
                     storage_key, mime_type, size_bytes, sha256, attempt_nr,
                     analysis_status, analysis_json, text_body, feedback_md, error_code,
                     vision_last_error
                 ) values (
-                    %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                    %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                     %s, 'application/pdf', 4096, %s, 1,
                     'failed', null, null, null, 'input_corrupt',
                     %s
@@ -878,6 +893,7 @@ async def test_ui_history_shows_pdf_failure_message():
                     str(submission_id),
                     str(course_id),
                     str(task_id),
+                    str(section_id),
                     student.sub,  # type: ignore[arg-type]
                     storage_key,
                     "c" * 64,

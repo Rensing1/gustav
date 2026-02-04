@@ -1159,20 +1159,24 @@ def _apply_submissions(
             if kind == "text":
                 cur.execute(
                     """
-                    insert into public.learning_submissions(course_id, task_id, student_sub, kind, text_body, attempt_nr, created_at)
-                    values (%s::uuid, %s::uuid, %s, 'text', %s, %s, %s)
+                    insert into public.learning_submissions(course_id, task_id, section_id, student_sub, kind, text_body, attempt_nr, created_at)
+                    select %s::uuid, %s::uuid, t.section_id, %s, 'text', %s, %s, %s
+                      from public.unit_tasks t
+                     where t.id = %s::uuid
                     on conflict (course_id, task_id, student_sub, attempt_nr) do nothing
                     """,
-                    (course_id, task_id, student, text_body, attempt_nr, created_at),
+                    (course_id, task_id, student, text_body, attempt_nr, created_at, task_id),
                 )
             else:
                 cur.execute(
                     """
-                    insert into public.learning_submissions(course_id, task_id, student_sub, kind, storage_key, mime_type, size_bytes, sha256, attempt_nr, created_at)
-                    values (%s::uuid, %s::uuid, %s, 'image', %s, %s, %s, %s, %s, %s)
+                    insert into public.learning_submissions(course_id, task_id, section_id, student_sub, kind, storage_key, mime_type, size_bytes, sha256, attempt_nr, created_at)
+                    select %s::uuid, %s::uuid, t.section_id, %s, 'image', %s, %s, %s, %s, %s, %s
+                      from public.unit_tasks t
+                     where t.id = %s::uuid
                     on conflict (course_id, task_id, student_sub, attempt_nr) do nothing
                     """,
-                    (course_id, task_id, student, storage_key, mime_type, size_bytes, sha256, attempt_nr, created_at),
+                    (course_id, task_id, student, storage_key, mime_type, size_bytes, sha256, attempt_nr, created_at, task_id),
                 )
         _record_audit_batch(conn, [(run_id, LEGACY_SUBMISSION_ENTITY, sid, "learning_submissions", course_id, "ok", None)])
         if batch_size and idx % batch_size == 0:

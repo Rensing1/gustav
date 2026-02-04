@@ -283,10 +283,15 @@ class DBLearningRepo:
         """Return a modular unit graph payload (phases/modules/edges) for a student.
 
         Notes:
-            MVP stub for unlock logic: modules are returned with `status="open"`
-            and with `tasks_done/prereq_done=0`. The schema is designed so we
-            can later compute true unlock states without changing the API.
+            Unlock/done logic is computed purely from:
+            - graph metadata (`unit_modules`, `unit_phases`, `unit_module_edges`)
+            - safe per-section counts (`unit_sections.tasks_total/materials_count`)
+            - the student's own submissions (`learning_submissions.section_id`)
+
+            This avoids joining `unit_tasks` for locked modules, which would
+            leak content details under RLS.
         """
+
         course_uuid = str(UUID(course_id))
         unit_uuid = str(UUID(unit_id))
         with psycopg.connect(self._dsn) as conn:
@@ -334,35 +339,35 @@ class DBLearningRepo:
                 cur.execute(
                     """
                     select um.id::text,
+                           um.section_id::text,
                            us.title,
                            um.phase_id::text,
+                           p.position as phase_position,
                            um.position_in_phase,
                            um.required_prereq_count,
                            us.tasks_total,
                            us.materials_count
                       from public.unit_modules um
                       join public.unit_sections us on us.id = um.section_id
+                      join public.unit_phases p on p.id = um.phase_id
                      where um.unit_id = %s
-                     order by um.phase_id asc, um.position_in_phase asc, um.id asc
+                     order by p.position asc, um.position_in_phase asc, um.id asc
                     """,
                     (unit_uuid,),
                 )
-                modules = []
+                modules_raw: list[dict] = []
                 for r in (cur.fetchall() or []):
-                    required_prereq_count = int(r[4] or 0)
-                    modules.append(
+                    modules_raw.append(
                         {
                             "id": r[0],
-                            "title": r[1],
-                            "phase_id": r[2],
-                            "position_in_phase": int(r[3] or 1),
-                            "required_prereq_count": required_prereq_count,
-                            "prereq_done": 0,
-                            "prereq_required": 0,
-                            "tasks_done": 0,
-                            "tasks_total": int(r[5] or 0),
-                            "materials_count": int(r[6] or 0),
-                            "status": "open",
+                            "section_id": r[1],
+                            "title": r[2],
+                            "phase_id": r[3],
+                            "phase_position": int(r[4] or 1),
+                            "position_in_phase": int(r[5] or 1),
+                            "required_prereq_count": int(r[6] or 0),
+                            "tasks_total": int(r[7] or 0),
+                            "materials_count": int(r[8] or 0),
                         }
                     )
 
@@ -377,12 +382,112 @@ class DBLearningRepo:
                 )
                 edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
 
+                # Aggregate tasks_done per module-section from the student's submissions.
+                section_ids = [m["section_id"] for m in modules_raw]
+                tasks_done_by_section: dict[str, int] = {}
+                if section_ids:
+                    cur.execute(
+                        """
+                        select section_id::text,
+                               count(distinct task_id)::int as tasks_done
+                          from public.learning_submissions
+                         where course_id = %s::uuid
+                           and student_sub = %s
+                           and section_id = any(%s::uuid[])
+                           and (kind <> 'h5p' or score_raw = score_max)
+                         group by section_id
+                        """,
+                        (course_uuid, student_sub, section_ids),
+                    )
+                    tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
+
+                module_state = self._compute_modular_unit_module_states(
+                    ordered_modules=modules_raw,
+                    edges=edges,
+                    tasks_done_by_section=tasks_done_by_section,
+                )
+
+                modules: list[dict] = []
+                for m in modules_raw:
+                    s = module_state.get(m["id"], {})
+                    modules.append(
+                        {
+                            "id": m["id"],
+                            "title": m["title"],
+                            "phase_id": m["phase_id"],
+                            "position_in_phase": int(m["position_in_phase"]),
+                            "required_prereq_count": int(m["required_prereq_count"]),
+                            "prereq_done": int(s.get("prereq_done") or 0),
+                            "prereq_required": int(s.get("prereq_required") or 0),
+                            "tasks_done": int(s.get("tasks_done") or 0),
+                            "tasks_total": int(m["tasks_total"]),
+                            "materials_count": int(m["materials_count"]),
+                            "status": str(s.get("status") or "locked"),
+                        }
+                    )
+
         return {
             "unit": {"id": unit_row[0], "title": unit_row[1], "unit_type": unit_type},
             "phases": phases,
             "modules": modules,
             "edges": edges,
         }
+
+    @staticmethod
+    def _compute_modular_unit_module_states(
+        *,
+        ordered_modules: list[dict],
+        edges: list[dict],
+        tasks_done_by_section: dict[str, int],
+    ) -> dict[str, dict]:
+        """Compute unlocked/done/status for a modular unit.
+
+        Why:
+            We want one deterministic implementation of the unlock algorithm,
+            shared by:
+            - the graph endpoint (advance organizer)
+            - the module content endpoint (locked -> 404)
+
+        Important:
+            The DB enforces an acyclic graph via triggers:
+            - same phase: only left -> right edges
+            - cross phase: only earlier -> later phase edges
+            Therefore, iterating modules in (phase.position, position_in_phase)
+            order is a valid topological order.
+        """
+        incoming: dict[str, list[str]] = {m["id"]: [] for m in ordered_modules}
+        for e in edges:
+            to_id = str(e.get("to") or "")
+            from_id = str(e.get("from") or "")
+            if to_id in incoming:
+                incoming[to_id].append(from_id)
+
+        state: dict[str, dict] = {}
+        for m in ordered_modules:
+            module_id = m["id"]
+            section_id = m["section_id"]
+            tasks_total = int(m.get("tasks_total") or 0)
+            required_prereq_count = int(m.get("required_prereq_count") or 0)
+
+            incoming_ids = incoming.get(module_id, [])
+            prereq_required = min(max(required_prereq_count, 0), len(incoming_ids))
+            prereq_done = sum(1 for from_id in incoming_ids if bool(state.get(from_id, {}).get("done")))
+            unlocked = prereq_required == 0 or prereq_done >= prereq_required
+
+            raw_tasks_done = int(tasks_done_by_section.get(section_id, 0))
+            tasks_done = min(raw_tasks_done, tasks_total) if tasks_total > 0 else 0
+            done = bool(unlocked and (tasks_total == 0 or tasks_done >= tasks_total))
+            status = "done" if done else ("open" if unlocked else "locked")
+
+            state[module_id] = {
+                "unlocked": unlocked,
+                "done": done,
+                "status": status,
+                "prereq_required": prereq_required,
+                "prereq_done": prereq_done,
+                "tasks_done": tasks_done,
+            }
+        return state
 
     def get_modular_module_content(
         self,
@@ -418,6 +523,16 @@ class DBLearningRepo:
                 if not bool(cur.fetchone()[0]):
                     raise LookupError("unit_not_in_course")
 
+                # Defense-in-depth: route already enforces modular-only, but keep
+                # the repo method safe when called directly.
+                cur.execute("select unit_type from public.units where id = %s", (unit_uuid,))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise LookupError("unit_not_found")
+                unit_type = str(unit_row[0] or "").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+
                 cur.execute(
                     """
                     select um.id::text,
@@ -436,6 +551,73 @@ class DBLearningRepo:
                 row = cur.fetchone()
                 if not row:
                     raise LookupError("module_not_found")
+
+                # Locked modules are intentionally indistinguishable from missing modules.
+                # This prevents enumeration via guessed module_ids.
+                cur.execute(
+                    """
+                    select um.id::text,
+                           um.section_id::text,
+                           um.required_prereq_count,
+                           us.tasks_total,
+                           p.position as phase_position,
+                           um.position_in_phase
+                      from public.unit_modules um
+                      join public.unit_sections us on us.id = um.section_id
+                      join public.unit_phases p on p.id = um.phase_id
+                     where um.unit_id = %s
+                     order by p.position asc, um.position_in_phase asc, um.id asc
+                    """,
+                    (unit_uuid,),
+                )
+                modules_raw = [
+                    {
+                        "id": r[0],
+                        "section_id": r[1],
+                        "required_prereq_count": int(r[2] or 0),
+                        "tasks_total": int(r[3] or 0),
+                        "phase_position": int(r[4] or 1),
+                        "position_in_phase": int(r[5] or 1),
+                    }
+                    for r in (cur.fetchall() or [])
+                ]
+                cur.execute(
+                    """
+                    select from_module_id::text, to_module_id::text
+                    from public.unit_module_edges
+                    where unit_id = %s
+                    order by from_module_id asc, to_module_id asc
+                    """,
+                    (unit_uuid,),
+                )
+                edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
+
+                section_ids = [m["section_id"] for m in modules_raw]
+                tasks_done_by_section: dict[str, int] = {}
+                if section_ids:
+                    cur.execute(
+                        """
+                        select section_id::text,
+                               count(distinct task_id)::int as tasks_done
+                          from public.learning_submissions
+                         where course_id = %s::uuid
+                           and student_sub = %s
+                           and section_id = any(%s::uuid[])
+                           and (kind <> 'h5p' or score_raw = score_max)
+                         group by section_id
+                        """,
+                        (course_uuid, student_sub, section_ids),
+                    )
+                    tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
+
+                module_state = self._compute_modular_unit_module_states(
+                    ordered_modules=modules_raw,
+                    edges=edges,
+                    tasks_done_by_section=tasks_done_by_section,
+                )
+                status = str((module_state.get(str(module_id)) or {}).get("status") or "")
+                if status == "locked":
+                    raise LookupError("module_locked")
 
                 section_id = row[1]
                 module = {
@@ -854,6 +1036,9 @@ class DBLearningRepo:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 self._set_current_sub(cur, data.student_sub)
+                # Course-scoped RLS context: required for modular units where
+                # section/task visibility depends on the current course.
+                self._set_current_course_id(cur, course_uuid)
                 cur.execute(
                     "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
                     (course_uuid, data.student_sub),
@@ -918,6 +1103,7 @@ class DBLearningRepo:
                 meta = cur.fetchone()
                 if not meta:
                     raise LookupError("task_not_visible")
+                section_uuid = str(UUID(meta[1]))
                 task_kind = str(meta[3] or "native")
                 max_attempts = meta[5]
                 # Rubric criteria come from the helper (already filtered by RLS).
@@ -970,6 +1156,7 @@ class DBLearningRepo:
                                 id,
                                 course_id,
                                 task_id,
+                                section_id,
                                 student_sub,
                                 kind,
                                 score_raw,
@@ -982,11 +1169,23 @@ class DBLearningRepo:
                                 idempotency_key,
                                 completed_at
                             )
-                            values (coalesce(%s::uuid, gen_random_uuid()),
-                                    %s::uuid, %s::uuid, %s, %s,
-                                    %s, %s,
+                            values (
+                                    coalesce(%s::uuid, gen_random_uuid()),
+                                    %s::uuid,
+                                    %s::uuid,
+                                    %s::uuid,
                                     %s,
-                                    'completed', null, null, null, %s, now())
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    'completed',
+                                    null,
+                                    null,
+                                    null,
+                                    %s,
+                                    now()
+                            )
                             on conflict (course_id, task_id, student_sub, idempotency_key)
                             do nothing
                             returning id::text,
@@ -1014,6 +1213,7 @@ class DBLearningRepo:
                                 deterministic_id,
                                 course_uuid,
                                 task_uuid,
+                                section_uuid,
                                 data.student_sub,
                                 data.kind,
                                 int(data.score_raw),
@@ -1029,6 +1229,7 @@ class DBLearningRepo:
                                 id,
                                 course_id,
                                 task_id,
+                                section_id,
                                 student_sub,
                                 kind,
                                 text_body,
@@ -1043,10 +1244,25 @@ class DBLearningRepo:
                                 error_code,
                                 idempotency_key
                             )
-                            values (coalesce(%s::uuid, gen_random_uuid()),
-                                    %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s,
+                            values (
+                                    coalesce(%s::uuid, gen_random_uuid()),
+                                    %s::uuid,
+                                    %s::uuid,
+                                    %s::uuid,
                                     %s,
-                                    'pending', null, null, null, %s)
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    'pending',
+                                    null,
+                                    null,
+                                    null,
+                                    %s
+                            )
                             on conflict (course_id, task_id, student_sub, idempotency_key)
                             do nothing
                             returning id::text,
@@ -1074,6 +1290,7 @@ class DBLearningRepo:
                                 deterministic_id,
                                 course_uuid,
                                 task_uuid,
+                                section_uuid,
                                 data.student_sub,
                                 data.kind,
                                 data.text_body,
@@ -1244,6 +1461,7 @@ class DBLearningRepo:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 self._set_current_sub(cur, student_sub)
+                self._set_current_course_id(cur, course_uuid)
                 cur.execute(
                     "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
                     (course_uuid, student_sub),

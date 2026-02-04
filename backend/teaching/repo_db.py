@@ -386,6 +386,7 @@ class DBTeachingRepo:
                 cur.execute(
                     """
                     select id::text,
+                           unit_type,
                            title,
                            summary,
                            author_id,
@@ -402,16 +403,17 @@ class DBTeachingRepo:
         return [
             {
                 "id": r[0],
-                "title": r[1],
-                "summary": r[2],
-                "author_id": r[3],
-                "created_at": r[4],
-                "updated_at": r[5],
+                "unit_type": r[1],
+                "title": r[2],
+                "summary": r[3],
+                "author_id": r[4],
+                "created_at": r[5],
+                "updated_at": r[6],
             }
             for r in rows
         ]
 
-    def create_unit(self, *, title: str, summary: Optional[str], author_id: str) -> dict:
+    def create_unit(self, *, title: str, summary: Optional[str], author_id: str, unit_type: Optional[str] = None) -> dict:
         """
         Persist a unit for the given author.
 
@@ -419,6 +421,9 @@ class DBTeachingRepo:
             - Enforces simple validation (non-empty title, summary length).
             - Sets RLS context so only the author can mutate the row.
         """
+        norm_type = (unit_type or "linear").strip().lower()
+        if norm_type not in {"linear", "modular"}:
+            raise ValueError("invalid_unit_type")
         title = (title or "").strip()
         if not title or len(title) > 200:
             raise ValueError("invalid_title")
@@ -433,26 +438,28 @@ class DBTeachingRepo:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
                 cur.execute(
                     """
-                    insert into public.units (title, summary, author_id)
-                    values (%s, %s, %s)
+                    insert into public.units (unit_type, title, summary, author_id)
+                    values (%s, %s, %s, %s)
                     returning id::text,
+                              unit_type,
                               title,
                               summary,
                               author_id,
                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                               to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                     """,
-                    (title, summary, author_id),
+                    (norm_type, title, summary, author_id),
                 )
                 row = cur.fetchone()
                 conn.commit()
         return {
             "id": row[0],
-            "title": row[1],
-            "summary": row[2],
-            "author_id": row[3],
-            "created_at": row[4],
-            "updated_at": row[5],
+            "unit_type": row[1],
+            "title": row[2],
+            "summary": row[3],
+            "author_id": row[4],
+            "created_at": row[5],
+            "updated_at": row[6],
         }
 
     def update_unit_owned(self, unit_id: str, author_id: str, *, title=_UNSET, summary=_UNSET) -> Optional[dict]:
@@ -501,6 +508,7 @@ class DBTeachingRepo:
                         set {assign}
                         where id = %s and author_id = %s
                         returning id::text,
+                                 unit_type,
                                  title,
                                  summary,
                                  author_id,
@@ -518,6 +526,7 @@ class DBTeachingRepo:
                         set {cols}
                         where id = %s and author_id = %s
                         returning id::text,
+                                 unit_type,
                                  title,
                                  summary,
                                  author_id,
@@ -532,11 +541,12 @@ class DBTeachingRepo:
                 conn.commit()
         return {
             "id": row[0],
-            "title": row[1],
-            "summary": row[2],
-            "author_id": row[3],
-            "created_at": row[4],
-            "updated_at": row[5],
+            "unit_type": row[1],
+            "title": row[2],
+            "summary": row[3],
+            "author_id": row[4],
+            "created_at": row[5],
+            "updated_at": row[6],
         }
 
     def get_unit_for_author(self, unit_id: str, author_id: str) -> Optional[dict]:
@@ -547,6 +557,7 @@ class DBTeachingRepo:
                 cur.execute(
                     """
                     select id::text,
+                           unit_type,
                            title,
                            summary,
                            author_id,
@@ -562,11 +573,12 @@ class DBTeachingRepo:
                     return None
         return {
             "id": row[0],
-            "title": row[1],
-            "summary": row[2],
-            "author_id": row[3],
-            "created_at": row[4],
-            "updated_at": row[5],
+            "unit_type": row[1],
+            "title": row[2],
+            "summary": row[3],
+            "author_id": row[4],
+            "created_at": row[5],
+            "updated_at": row[6],
         }
 
     def delete_unit_owned(self, unit_id: str, author_id: str) -> bool:

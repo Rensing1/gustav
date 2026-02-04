@@ -72,6 +72,7 @@ class Course:
 @dataclass
 class Unit:
     id: str
+    unit_type: str
     title: str
     summary: str | None
     author_id: str
@@ -241,7 +242,7 @@ class _Repo:
         items.sort(key=lambda u: u.created_at, reverse=True)
         return items[offset: offset + limit]
 
-    def create_unit(self, *, title: str, summary: str | None, author_id: str) -> Unit:
+    def create_unit(self, *, title: str, summary: str | None, author_id: str, unit_type: str | None = None) -> Unit:
         title = (title or "").strip()
         if not title or len(title) > 200:
             raise ValueError("invalid_title")
@@ -251,10 +252,14 @@ class _Repo:
                 raise ValueError("invalid_summary")
             if summary == "":
                 summary = None
+        norm_type = (unit_type or "linear").strip().lower()
+        if norm_type not in ("linear", "modular"):
+            raise ValueError("invalid_unit_type")
         now = datetime.now(timezone.utc).isoformat()
         uid = str(uuid4())
         unit = Unit(
             id=uid,
+            unit_type=norm_type,
             title=title,
             summary=summary,
             author_id=author_id,
@@ -1413,8 +1418,19 @@ class CourseUpdate(BaseModel):
 
 
 class UnitCreatePayload(BaseModel):
+    unit_type: str | None = Field(default=None)
     title: str | None = Field(default=None)
     summary: str | None = Field(default=None)
+
+    @field_validator("unit_type")
+    @classmethod
+    def _normalize_unit_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip().lower()
+            return stripped or None
+        return v
 
     @field_validator("title")
     @classmethod
@@ -1794,10 +1810,10 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     sub = _current_sub(user)
     try:
         title = payload.title or ""
-        unit = _get_repo().create_unit(title=title, summary=payload.summary, author_id=sub)
+        unit = _get_repo().create_unit(title=title, summary=payload.summary, author_id=sub, unit_type=payload.unit_type)
     except ValueError as exc:
         detail = str(exc)
-        if detail in {"invalid_title", "invalid_summary"}:
+        if detail in {"invalid_title", "invalid_summary", "invalid_unit_type"}:
             return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
         return JSONResponse({"error": "bad_request"}, status_code=400)
     except PermissionError:
@@ -3303,6 +3319,7 @@ def _serialize_unit(u) -> dict:
         return u
     return {
         "id": getattr(u, "id", None),
+        "unit_type": getattr(u, "unit_type", None),
         "title": getattr(u, "title", None),
         "summary": getattr(u, "summary", None),
         "author_id": getattr(u, "author_id", None),

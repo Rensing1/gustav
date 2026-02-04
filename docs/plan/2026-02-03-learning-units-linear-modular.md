@@ -18,9 +18,9 @@ Legende:
 ### Contract / API
 - **DONE**: `unit_type` in `Unit`, `UnitCreate`, `UnitPublic` (OpenAPI + Backend‑Serialisierung).
 - **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/graph` existiert.
-- **PARTIAL**: Graph‑Payload liefert Phasen/Module/Edges, aber Unlock‑Status ist aktuell MVP‑Stub (z.B. `status="open"`, `tasks_done/prereq_done=0`).
+- **DONE**: Graph‑Payload liefert Phasen/Module/Edges **inkl.** Unlock/Done‑Status (`locked/open/done`) + `tasks_done` + `prereq_done/prereq_required`.
 - **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}` existiert.
-- **PARTIAL**: Module‑Content liefert `materials/tasks`, aber “locked → 404” ist noch nicht implementiert (wir liefern derzeit Inhalte für alle Module der Unit, sobald die Unit im Kurs hängt).
+- **DONE**: Module‑Content liefert `materials/tasks` und setzt “locked → 404” (fail‑closed, keine Enumeration).
 
 ### Datenbank / Security (RLS)
 - **DONE**: `public.units.unit_type` (Migration + Helper `get_course_units_for_student` erweitert).
@@ -29,7 +29,7 @@ Legende:
 - **DONE**: `public.unit_phases` (Pflicht‑Phasen für modulare Units).
 - **DONE**: RLS‑Fix: `student_can_access_section(...)` unterstützt modulare Units **kurs‑scoped** ohne Policy‑Rekursion.
 - **DONE**: `public.unit_module_edges` (Kanten/Abhängigkeiten) inkl. Validierung (Trigger) + Student‑Read‑Policy für Graph.
-- **OPEN**: `public.learning_submissions.section_id` (MVP‑Entscheidung bleibt: nur `section_id`, kein `unit_id`).
+- **DONE**: `public.learning_submissions.section_id` (MVP‑Entscheidung bleibt: nur `section_id`, kein `unit_id`).
 
 ### Teaching (Autor‑Workflows)
 - **DONE**: Lehrkraft kann Units als `unit_type="modular"` erstellen.
@@ -40,6 +40,7 @@ Legende:
 ### Abweichungen vom ursprünglichen Plan (wichtig)
 - **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).
 - **Abweichung 2 (zusätzliche Mechanik):** Kurs‑Scoped Modular‑Sichtbarkeit wird über `app.current_course_id` (GUC) vom Backend gesetzt, damit RLS “fail‑closed” bleibt und wir Content‑Leaks vermeiden.
+- **Abweichung 3 (klein, aber wichtig):** Für Submission‑Flows (Create/List) setzen wir ebenfalls `app.current_course_id`, damit dieselben course‑scoped RLS‑Regeln auch für modulare Tasks gelten.
 
 ## Begriffe (damit das Team dieselbe Sprache nutzt)
 

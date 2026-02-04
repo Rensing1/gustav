@@ -4777,9 +4777,15 @@ async def units_create(request: Request):
     form = await request.form()
     title = str(form.get("title", "")).strip()
     summary = str(form.get("summary", "")).strip()
+    unit_type = str(form.get("unit_type", "linear")).strip().lower()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse("CSRF Error", status_code=403)
+
+    if unit_type not in {"linear", "modular"}:
+        token = _get_or_create_csrf_token(sid or "")
+        form_component = UnitCreateForm(csrf_token=token, error="invalid_unit_type", values=dict(form))
+        return HTMLResponse(form_component.render(), headers={"HX-Reswap": "outerHTML"})
 
     if not title:
         token = _get_or_create_csrf_token(sid or "")
@@ -4788,7 +4794,12 @@ async def units_create(request: Request):
 
     try:
         from routes import teaching as teaching_routes  # type: ignore
-        teaching_routes._get_repo().create_unit(title=title, summary=summary or None, author_id=str((user or {}).get("sub") or ""))
+        teaching_routes._get_repo().create_unit(
+            title=title,
+            summary=summary or None,
+            author_id=str((user or {}).get("sub") or ""),
+            unit_type=unit_type,
+        )
     except Exception:
         pass
 

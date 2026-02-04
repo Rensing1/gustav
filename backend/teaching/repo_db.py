@@ -629,6 +629,214 @@ class DBTeachingRepo:
             return None
         return None
 
+    # --- Unit phases (modular units) -----------------------------------------
+
+    def list_unit_phases_for_author(self, unit_id: str, author_id: str) -> List[dict]:
+        """List phases of a modular unit authored by the caller."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+                cur.execute(
+                    """
+                    select id::text,
+                           unit_id::text,
+                           title,
+                           position,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                      from public.unit_phases
+                     where unit_id = %s
+                     order by position asc, id asc
+                    """,
+                    (unit_id,),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "unit_id": r[1],
+                "title": r[2],
+                "position": int(r[3] or 1),
+                "created_at": r[4],
+                "updated_at": r[5],
+            }
+            for r in rows
+        ]
+
+    def create_unit_phase(self, unit_id: str, title: str, author_id: str) -> dict:
+        """Create a new phase at the next position within a modular unit."""
+        title = (title or "").strip()
+        if not title or len(title) > 200:
+            raise ValueError("invalid_title")
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    "select unit_type from public.units where id = %s and author_id = %s for update",
+                    (unit_id, author_id),
+                )
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+                cur.execute("select coalesce(max(position), 0) + 1 from public.unit_phases where unit_id = %s", (unit_id,))
+                next_pos = int(cur.fetchone()[0])
+                cur.execute(
+                    """
+                    insert into public.unit_phases (unit_id, title, position)
+                    values (%s::uuid, %s, %s)
+                    returning id::text,
+                              unit_id::text,
+                              title,
+                              position,
+                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    """,
+                    (unit_id, title, next_pos),
+                )
+                row = cur.fetchone()
+                conn.commit()
+        return {
+            "id": row[0],
+            "unit_id": row[1],
+            "title": row[2],
+            "position": int(row[3] or 1),
+            "created_at": row[4],
+            "updated_at": row[5],
+        }
+
+    def update_unit_phase_title(self, unit_id: str, phase_id: str, title: str, author_id: str) -> Optional[dict]:
+        """Rename a phase within a modular unit authored by the caller."""
+        if title is None:
+            raise ValueError("invalid_title")
+        t = (title or "").strip()
+        if not t or len(t) > 200:
+            raise ValueError("invalid_title")
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+                cur.execute(
+                    """
+                    update public.unit_phases
+                    set title = %s
+                    where id = %s and unit_id = %s
+                    returning id::text,
+                              unit_id::text,
+                              title,
+                              position,
+                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                              to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    """,
+                    (t, phase_id, unit_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                conn.commit()
+        return {
+            "id": row[0],
+            "unit_id": row[1],
+            "title": row[2],
+            "position": int(row[3] or 1),
+            "created_at": row[4],
+            "updated_at": row[5],
+        }
+
+    def reorder_unit_phases_owned(self, unit_id: str, author_id: str, phase_ids: List[str]) -> List[dict]:
+        """Atomically reorder phases for a modular unit the author owns."""
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+
+                cur.execute(
+                    """
+                    select id::text
+                    from public.unit_phases
+                    where unit_id = %s
+                    order by position asc, id
+                    """,
+                    (unit_id,),
+                )
+                existing = [row[0] for row in (cur.fetchall() or [])]
+                if not existing:
+                    raise ValueError("phase_mismatch")
+                existing_set = set(existing)
+                submitted_set = set(phase_ids)
+                if submitted_set != existing_set or len(phase_ids) != len(existing):
+                    extra = submitted_set - existing_set
+                    if extra:
+                        cur.execute("select count(*) from public.unit_phases where id = any(%s)", (list(extra),))
+                        c = cur.fetchone()
+                        if c and int(c[0]) > 0:
+                            raise LookupError("phase_not_in_unit")
+                    raise ValueError("phase_mismatch")
+
+                cur.execute("set constraints unit_phases_unit_id_position_key deferred")
+                orderings = list(range(1, len(phase_ids) + 1))
+                cur.execute(
+                    """
+                    with new_order as (
+                      select pid, ord from unnest(%s::uuid[], %s::int[]) as t(pid, ord)
+                    )
+                    update public.unit_phases p
+                    set position = n.ord
+                    from new_order n
+                    where p.id = n.pid
+                      and p.unit_id = %s
+                    """,
+                    (phase_ids, orderings, unit_id),
+                )
+                cur.execute(
+                    """
+                    select id::text,
+                           unit_id::text,
+                           title,
+                           position,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                      from public.unit_phases
+                     where unit_id = %s
+                     order by position asc, id asc
+                    """,
+                    (unit_id,),
+                )
+                rows = cur.fetchall() or []
+                conn.commit()
+        return [
+            {
+                "id": r[0],
+                "unit_id": r[1],
+                "title": r[2],
+                "position": int(r[3] or 1),
+                "created_at": r[4],
+                "updated_at": r[5],
+            }
+            for r in rows
+        ]
+
     def section_exists_for_author(self, unit_id: str, section_id: str, author_id: str) -> bool:
         """Check whether a section belongs to the unit and is visible to the author."""
         with psycopg.connect(self._dsn) as conn:

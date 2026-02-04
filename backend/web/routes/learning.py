@@ -767,6 +767,72 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
     return JSONResponse(payload, headers=_cache_headers_success())
 
 
+@learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}")
+async def get_modular_unit_module_content(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    module_id: str,
+    include: str | None = None,
+):
+    """Return module content (materials/tasks) for a modular unit (student-only).
+
+    Why:
+        For modular units the UI loads a *module* (not a whole unit) once the
+        student has unlocked it. This endpoint is modular-only: for linear
+        units the client must use the existing section endpoints.
+
+    Behavior:
+        - Requires an authenticated session with role "student".
+        - 400 detail=invalid_uuid when any path param is not UUID-like.
+        - 400 detail=invalid_include for an unsupported include query.
+        - 404 when the course/unit/module is not visible to the student (fail-closed).
+        - 400 detail=invalid_unit_type when the unit is not modular.
+
+    Permissions:
+        Caller must have the `student` role and be a member of the course.
+    """
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    try:
+        UUID(course_id)
+        UUID(unit_id)
+        UUID(module_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    try:
+        _include_materials, _include_tasks = _parse_include(include)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
+
+    try:
+        rows = ListCourseUnitsUseCase(_get_repo()).execute(
+            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=str(course_id))
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    unit: dict[str, Any] | None = None
+    for item in rows:
+        candidate = item.get("unit")
+        if isinstance(candidate, dict) and candidate.get("id") == unit_id:
+            unit = candidate
+            break
+    if not unit:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    unit_type = str(unit.get("unit_type") or "").strip().lower()
+    if unit_type != "modular":
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
+
+    # Stub: the modular graph/content schema is introduced in later migrations.
+    # Until then we fail-closed (module content is never publicly visible).
+    return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Validate and normalize the submission payload (text/image/file/h5p).
 

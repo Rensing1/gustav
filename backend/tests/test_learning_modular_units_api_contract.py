@@ -133,3 +133,39 @@ async def test_learning_modular_graph_endpoint_rejects_linear_units():
         assert body.get("detail") == "invalid_unit_type"
         assert r.headers.get("Cache-Control") == "private, no-store"
 
+
+@pytest.mark.anyio
+async def test_learning_modular_module_content_endpoint_rejects_linear_units():
+    """Module content endpoint must return 400 invalid_unit_type for linear units."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-mod-module-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-mod-module-1", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(c, "Kurs Module Content")
+        unit_id = await _create_unit(c, "Unit Linear")
+        await _attach_unit(c, course_id, unit_id)
+        await _add_member(c, course_id, student.sub)
+
+        c.cookies.set("gustav_session", student.session_id)
+        module_id = "00000000-0000-0000-0000-000000000000"
+        r = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}?include=materials,tasks")
+        assert r.status_code == 400
+        body = r.json()
+        assert body.get("detail") == "invalid_unit_type"
+        assert r.headers.get("Cache-Control") == "private, no-store"

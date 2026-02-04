@@ -18,7 +18,7 @@ Legende:
 ### Contract / API
 - **DONE**: `unit_type` in `Unit`, `UnitCreate`, `UnitPublic` (OpenAPI + Backend‑Serialisierung).
 - **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/graph` existiert.
-- **PARTIAL**: Graph‑Payload liefert Phasen/Module, aber Unlock‑Status ist aktuell MVP‑Stub (z.B. `status="open"`, `tasks_done/prereq_done=0`) und `edges` sind noch leer.
+- **PARTIAL**: Graph‑Payload liefert Phasen/Module/Edges, aber Unlock‑Status ist aktuell MVP‑Stub (z.B. `status="open"`, `tasks_done/prereq_done=0`).
 - **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}` existiert.
 - **PARTIAL**: Module‑Content liefert `materials/tasks`, aber “locked → 404” ist noch nicht implementiert (wir liefern derzeit Inhalte für alle Module der Unit, sobald die Unit im Kurs hängt).
 
@@ -28,7 +28,7 @@ Legende:
 - **DONE**: Option B umgesetzt: `public.unit_modules` (module_id) mappt 1:1 auf `unit_sections` (Content‑Container) via `unit_modules.section_id`.
 - **DONE**: `public.unit_phases` (Pflicht‑Phasen für modulare Units).
 - **DONE**: RLS‑Fix: `student_can_access_section(...)` unterstützt modulare Units **kurs‑scoped** ohne Policy‑Rekursion.
-- **OPEN**: `public.unit_module_edges` (Kanten/Abhängigkeiten) + Validierungsregeln.
+- **DONE**: `public.unit_module_edges` (Kanten/Abhängigkeiten) inkl. Validierung (Trigger) + Student‑Read‑Policy für Graph.
 - **OPEN**: `public.learning_submissions.section_id` (MVP‑Entscheidung bleibt: nur `section_id`, kein `unit_id`).
 
 ### Teaching (Autor‑Workflows)

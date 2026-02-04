@@ -493,49 +493,119 @@ In `/units` Create‑Form:
 - Beim Erstellen einer modularen Unit wird automatisch **Phase 1** angelegt (z. B. Titel „Einstieg“), damit „Phasen sind verpflichtend“ sofort erfüllt ist.
 
 ### Modular: Phasen/Module/Graph bearbeiten (anschaulich)
-UI‑Vorschlag (Tabs im Unit‑Detail):
-1) **Phasen**
-   - Liste (Phase 1..n), Create, Rename, Reorder.
-2) **Module**
-   - Pro Phase eine Liste mit Modulen.
-   - Create Modul innerhalb einer Phase.
-   - Drag&Drop innerhalb der Phase setzt `position_in_phase`.
-   - Pro Modul Einstellung „Benötigt k Voraussetzungen“ (Integer).
-3) **Abhängigkeiten**
-   - Fokus auf Zielmodul B:
-     - UI zeigt Checkbox‑Liste der erlaubten Prereqs:
-       - aus derselben Phase: nur Module links von B,
-       - aus der vorherigen Phase: alle Module.
-     - darunter `k`‑Picker (0..n), wobei n = Anzahl der aktivierten Checkboxen.
-   - Speichern:
-     - schreibt `unit_module_edges`,
-     - setzt/validiert `required_prereq_count` (k ≤ n).
+**Update (aktueller Vorschlag): Visual Editor (Graph) statt Tabs**
+
+Ziel (Teacher UX):
+- Lehrkräfte sollen modulare Lerneinheiten **wie im UI‑Dummy** in **einem** visuellen Editor bearbeiten:
+  - Phasen als **Spalten** (links → rechts)
+  - Module als **Knoten** in der Phase
+  - Abhängigkeiten als **Pfeile** (Kanten)
+  - Klick auf ein Modul öffnet rechts die Inhaltsbearbeitung (Material/Aufgaben) – ohne die Graph‑Ansicht zu verlassen.
+
+Referenz (UI‑Dummy im Repo):
+- `ui-dummies/student-workspace-hybrid-sticky/index.html`
+  - (Graph‑Canvas + Knoten + Kanten; wir übernehmen das Konzept, aber Teacher‑Authoring statt Student‑Progress)
+
+#### Layout (eine Seite, kein Kontextwechsel)
+- Route: `GET /units/{unit_id}` (nur wenn `unit_type='modular'`)
+- Split‑View:
+  - **Links:** Graph‑Canvas (Phasen‑Spalten, Module‑Knoten, Kanten‑Overlay)
+  - **Rechts:** Inspector‑Panel (breit, **resizable** per Drag‑Handle; Breite wird in `localStorage` gemerkt)
+
+#### Interaktion (MVP‑Kern)
+1) **Phase erstellen**
+   - Button „+ Phase“ im Editor
+   - Nach Submit erscheint die Phase sofort als neue Spalte (kein Seitenwechsel).
+2) **Modul erstellen**
+   - Button „+ Modul“ in einer Phase‑Spalte (oder Inspector bei selektierter Phase)
+   - Modul erscheint sofort als neuer Knoten in dieser Phase (Auto‑Layout).
+3) **Modul auswählen**
+   - Normaler Klick auf Knoten lädt rechts im Panel die Inhalte (Material/Aufgaben) via SSR/HTMX.
+   - MVP: Create‑Aktionen bleiben Links auf bestehende Create‑Pages (kein Inline‑Form‑Baukasten im Panel).
+4) **Abhängigkeiten (Kanten) bearbeiten**
+   - Toggle „Kante hinzufügen“
+   - Klick 1: Quelle wählen (visuelles Highlight)
+   - Klick 2: Ziel wählen → Kante wird gespeichert und sofort gerendert.
+   - Kante entfernen (MVP): im Inspector beim Zielmodul als Liste der Prereqs mit „Entfernen“.
+5) **Drag&Drop (Reorder + Move)**
+   - Module sind per Drag&Drop sortierbar:
+     - innerhalb der Phase: reorder (ändert `position_in_phase`)
+     - zwischen Phasen: move (ändert `phase_id` + `position_in_phase`)
+   - **Wichtig:** Move/Reorder wird blockiert, wenn dadurch Abhängigkeitsregeln verletzt würden
+     - (der Lehrer muss zuerst widersprechende Kanten entfernen).
+
+#### Auto‑Layout (deterministisch, kein freies Platzieren)
+- X‑Achse: Phase‑Position (Spalte)
+- Y‑Achse: `position_in_phase` (von oben nach unten)
+- Keine manuellen Koordinaten/Drag‑Positionen in der DB.
+
+#### Regeln (Edge‑Richtung, bereits DB‑seitig modelliert)
+- same‑phase: nur „nach rechts“ innerhalb derselben Phase (`from.position_in_phase < to.position_in_phase`)
+- cross‑phase: nur in die **nächste** Phase (`to_phase_pos = from_phase_pos + 1`)
+
+> Hinweis (wichtig für Korrektheit): Die DB validiert diese Regeln aktuell beim **Insert/Update von Kanten**.  
+> Für Move/Reorder müssen wir zusätzlich verhindern, dass bestehende, früher gültige Kanten durch spätere Positions-/Phasenänderungen ungültig werden.
 
 API‑Kontrakt (Vorschlag, möglichst wenig neue Surface):
 - Phasen:
   - `GET/POST /api/teaching/units/{unit_id}/phases`
   - `PATCH /api/teaching/units/{unit_id}/phases/{phase_id}` (rename)
   - `POST /api/teaching/units/{unit_id}/phases/reorder` (array von phase_ids)
-- Module (weiterhin `unit_sections`, UI‑Label „Modul“):
-  - Bestehende Endpunkte bleiben, werden aber für `unit_type='modular'` um Felder erweitert:
-    - `phase_id`, `position_in_phase`, `required_prereq_count`
-    - (optional) `prereq_module_ids: uuid[]` beim Update eines Moduls (Target‑Fokus).
-  - Reorder innerhalb einer Phase:
-    - `POST /api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder` (array von module_ids in Zielreihenfolge)
-    - Backend setzt `position_in_phase` + recompute von `unit_sections.position` (siehe Algorithmus oben).
-- Abhängigkeiten:
-  - MVP‑einfach: Abhängigkeiten werden beim Update des Zielmoduls B komplett ersetzt:
-    - Request enthält `prereq_module_ids` + `required_prereq_count`.
-    - Backend upsertet `unit_module_edges` entsprechend und validiert die Invarianten.
+- **Graph (Teacher)**
+  - `GET /api/teaching/units/{unit_id}/modules/graph`
+    - Returns: `{ phases: [...], modules: [...], edges: [...] }`
+    - Teacher‑sicht: keine Student‑Statusfelder (nur Authoring‑Metadaten).
+- **Module**
+  - `POST /api/teaching/units/{unit_id}/modules`
+    - Body: `{ title, phase_id }`
+    - Intern (Option B): erstellt `unit_sections` + `unit_modules` (1:1) in der Zielphase.
+  - `POST /api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder`
+    - Body: `{ module_ids: uuid[] }`
+    - Semantik:
+      - setzt `position_in_phase` lückenlos (1..n) für die Zielphase
+      - erlaubt Move zwischen Phasen, indem Module in `module_ids` automatisch auf `phase_id` gesetzt werden
+      - **blockiert**, wenn bestehende Kanten danach ungültig wären
+- **Abhängigkeiten (Kanten)**
+  - `POST /api/teaching/units/{unit_id}/modules/edges`
+    - Body: `{ from_module_id, to_module_id }`
+  - `DELETE /api/teaching/units/{unit_id}/modules/edges`
+    - Body: `{ from_module_id, to_module_id }` (MVP; alternativ Pfadparameter)
 
 Validierung:
 - Kanten nur same‑phase rechts / next‑phase.
-- `required_prereq_count` darf nicht > Anzahl eingehender Kanten sein.
+- Move/Reorder darf keine bestehende Kante „invalid“ machen (siehe unten: DB‑Invarianten).
 
 Content‑Editing:
 - Materialien/Aufgaben bleiben über bestehende Section‑Detail‑UI erreichbar:
   - Für `linear`: UI‑Label „Abschnitt“
   - Für `modular`: UI‑Label „Modul“
+  - Im Visual Editor wird im Inspector nur „Modul“ kommuniziert; „Section“ ist reines Implementierungsdetail.
+
+#### DB‑Invarianten (neu, um Move/Reorder korrekt zu blocken)
+Problem:
+- `unit_module_edges` sind beim Insert validiert, aber ein späteres Reorder/Move von `unit_modules`
+  könnte eine vormals gültige Kante ungültig machen, ohne dass ein Trigger feuert.
+
+Lösung (fail‑closed, DB‑seitig):
+1) Trigger auf `public.unit_modules` **before update of (phase_id, position_in_phase)**:
+   - prüft alle Kanten, in denen das Modul vorkommt (incoming + outgoing),
+   - verifiziert die same‑phase/next‑phase Regeln gegen die *neuen* Werte,
+   - wirft `check_violation`, wenn eine Kante ungültig würde.
+2) Trigger auf `public.unit_phases` **before update of position**:
+   - analog: Phase‑Reorder darf cross‑phase Kanten nicht ungültig machen.
+
+UI‑Handling:
+- Wenn Move/Reorder geblockt wird: UI zeigt eine klare Fehlermeldung („Abhängigkeiten zuerst entfernen“) und
+  lädt den Graph‑Bereich erneut, damit die Darstellung wieder dem DB‑Zustand entspricht.
+
+#### BDD‑Szenarien (Teacher Visual Editor)
+- Given eine modulare Unit mit Phase 1, When ich „+ Phase“ klicke, Then erscheint sofort eine neue Phase‑Spalte.
+- Given eine Phase, When ich „+ Modul“ in dieser Phase anlege, Then erscheint sofort ein neuer Knoten in dieser Spalte.
+- Given der Editor ist offen, When ich auf ein Modul klicke, Then lädt rechts ein Panel mit „Materialien“/„Aufgaben“ und Links „+ Material/+ Aufgabe“.
+- Given Edge‑Modus ist aktiv, When ich Quelle A und Ziel B klicke (gültig), Then wird eine Kante A→B angelegt und sichtbar.
+- Given Edge‑Modus ist aktiv, When ich eine ungültige Kante wähle (same‑phase nach links oder falsche Phase), Then wird sie abgewiesen und bleibt unsichtbar.
+- Given ein Modul mit Kanten, When ich es per Drag&Drop so verschiebe, dass eine Kante ungültig würde, Then wird der Move geblockt und die UI stellt den vorherigen Zustand wieder her.
+- Given ein Modul ohne konfliktierende Kanten, When ich es zwischen Phasen verschiebe, Then wird Phase/Position aktualisiert und der Knoten wechselt die Spalte.
 
 Linear‑only: Abschnittsfreigaben (bestehend)
 - `module_section_releases` bleibt nur für `unit_type='linear'`.

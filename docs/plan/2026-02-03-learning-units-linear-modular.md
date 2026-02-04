@@ -43,8 +43,10 @@ Legende:
   - CRUD (Anlegen/Umbenennen/Löschen) für Phasen/Module per inline HTMX‑Formulare (ohne Browser `prompt()/confirm()`).
   - Löschen ist **kaskadierend**: Phase löscht Module + Kanten + Inhalte; Modul löscht Inhalte (Option B: backing section).
   - Drag&Drop: Module innerhalb/zwischen Phasen verschieben; ungültige Verschiebungen werden vom Backend blockiert (Constraint).
+  - Drag&Drop: Phasen (Spalten) umsortierbar; ungültige Verschiebungen werden blockiert (Edge‑Constraint).
   - Kantenmodus: Kanten per Klick Quelle→Ziel anlegen; Kanten im Panel entfernen.
-- **OPEN**: Editor‑Feinschliff: `required_prereq_count` editieren, bessere Fehler‑UX (409 ohne Reload), Phase‑Reorder UI, Auto‑Layout für Knoten/Spalten.
+  - Freischaltung: `required_prereq_count` ist im Panel editierbar (k‑of‑n).
+- **OPEN**: Editor‑Feinschliff: bessere Fehler‑UX (Inline statt `alert()`), Auto‑Layout für Knoten/Spalten.
 
 ### Student UI
 - **PARTIAL**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:

@@ -3122,14 +3122,24 @@ async def courses_modules_delete(request: Request, course_id: str, module_id: st
 def _render_unit_list_partial(items: list[dict]) -> str:
     cards = []
     for u in items:
+        unit_type = str(u.get("unit_type") or "linear").strip().lower()
+        type_label = "Modular" if unit_type == "modular" else "Linear"
+        manage_label = "Module verwalten" if unit_type == "modular" else "Abschnitte verwalten"
+        phases_link = (
+            f'<a href="/units/{u.get("id")}/phases" class="btn btn-secondary">Phasen</a>'
+            if unit_type == "modular"
+            else ""
+        )
         cards.append(f'''
         <div class="card unit-card" data-unit-id="{u.get("id", "")}">
             <div class="card-body">
                 <h3 class="card-title"><a href="/units/{u.get("id")}">{Component.escape(u.get("title"))}</a></h3>
+                <p class="text-muted"><span class="badge">{type_label}</span></p>
                 <p class="text-muted">{Component.escape(u.get("summary"))}</p>
                 <div class="card-actions">
                     <a href="/units/{u.get("id")}/edit" class="btn btn-secondary">Umbenennen</a>
-                    <a href="/units/{u.get("id")}" class="btn btn-primary">Abschnitte verwalten</a>
+                    {phases_link}
+                    <a href="/units/{u.get("id")}" class="btn btn-primary">{manage_label}</a>
                 </div>
             </div>
         </div>
@@ -3200,17 +3210,42 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
     return f'<section id="section-list-section">{error_html}{inner}</section>'
 
 def _render_sections_page_html(unit: dict, sections: list[dict], csrf_token: str, error: str | None = None) -> str:
-    """Build the sections management page content HTML."""
+    """Build the sections management page content HTML.
+
+    Notes:
+        Option B: For modular units, each "module" maps 1:1 to a unit section.
+        Teachers still manage content via sections, but the UI uses "Module"
+        wording to avoid confusion.
+    """
     from components import SectionCreateForm
-    form_component = SectionCreateForm(unit_id=unit["id"], csrf_token=csrf_token, error=error)
+    unit_type = str(unit.get("unit_type") or "linear").strip().lower()
+    is_modular = unit_type == "modular"
+    noun = "Modul" if is_modular else "Abschnitt"
+    plural = "Module" if is_modular else "Abschnitte"
+
+    form_component = SectionCreateForm(
+        unit_id=unit["id"],
+        csrf_token=csrf_token,
+        error=error,
+        noun=noun,
+    )
     create_form_html = form_component.render()
     section_list_html = _render_section_list_partial(unit["id"], sections, csrf_token=csrf_token)
 
+    modular_hint = ""
+    if is_modular:
+        modular_hint = (
+            '<p class="text-muted">'
+            "Hinweis: In modularen Lerneinheiten entspricht jeder Abschnitt einem Modul."
+            "</p>"
+        )
+
     return f'''
         <div class="container">
-            <h1 id="sections-heading">Abschnitte für: {Component.escape(unit.get("title", ""))}</h1>
+            <h1 id="sections-heading">{plural} für: {Component.escape(unit.get("title", ""))}</h1>
+            {modular_hint}
             <section class="card create-section-section" id="create-section-form-container">
-                <h2 id="create-section-heading">Neuen Abschnitt erstellen</h2>
+                <h2 id="create-section-heading">Neues {noun} erstellen</h2>
                 {create_form_html}
             </section>
             {section_list_html}
@@ -3438,6 +3473,110 @@ async def _fetch_sections_for_unit(unit_id: str, *, session_id: str) -> list[dic
             continue
         cleaned.append({"id": item.get("id"), "title": item.get("title")})
     return cleaned
+
+
+async def _fetch_unit_phases_for_unit(unit_id: str, *, session_id: str) -> tuple[list[dict], str | None]:
+    """Fetch modular unit phases for the teacher UI.
+
+    Returns:
+        (phases, error_code). When phases are available, error_code is None.
+        When the unit is linear, error_code is "invalid_unit_type".
+        When the unit is not visible, error_code is "not_found" or "forbidden".
+    """
+    try:
+        async with _internal_api_client() as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            resp = await client.get(f"/api/teaching/units/{unit_id}/phases")
+    except Exception:
+        return [], "backend_error"
+
+    if resp.status_code == 200:
+        try:
+            payload = resp.json()
+        except Exception:
+            return [], "backend_error"
+        if not isinstance(payload, list):
+            return [], "backend_error"
+        cleaned: list[dict] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            cleaned.append(
+                {
+                    "id": item.get("id"),
+                    "title": item.get("title"),
+                    "position": item.get("position"),
+                }
+            )
+        return cleaned, None
+
+    # Map API error semantics to short UI codes.
+    if resp.status_code == 400:
+        detail = _extract_api_error_detail(resp)
+        return [], detail or "bad_request"
+    if resp.status_code == 403:
+        return [], "forbidden"
+    if resp.status_code == 404:
+        return [], "not_found"
+    return [], "backend_error"
+
+
+def _render_unit_phases_list_partial(unit_id: str, phases: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    items: list[str] = []
+    for p in phases:
+        pid = str(p.get("id") or "")
+        title = Component.escape(str(p.get("title") or "Phase"))
+        items.append(
+            f'<div class="card phase-card" id="phase_{pid}" data-phase-id="{pid}">'
+            f'<div class="card-body"><span class="drag-handle">☰</span> {title}</div>'
+            f"</div>"
+        )
+    inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
+    sortable_open = (
+        f'<div class="phase-list" hx-ext="sortable" '
+        f'data-reorder-url="/units/{unit_id}/phases/reorder" '
+        f'data-csrf-token="{Component.escape(csrf_token)}">'
+    )
+    error_html = (
+        f'<div class="section-error" role="alert" data-testid="phase-error">{Component.escape(error)}</div>'
+        if error
+        else ""
+    )
+    return f'<section id="phase-list-section">{error_html}{sortable_open}{inner_content}</div></section>'
+
+
+def _render_unit_phases_page_html(unit: dict, phases: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    unit_id = str(unit.get("id") or "")
+    unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
+    unit_type = str(unit.get("unit_type") or "linear").strip().lower()
+    if unit_type != "modular":
+        return (
+            '<div class="container">'
+            f'<h1>Phasen</h1>'
+            '<p class="text-muted">Phasen sind nur für modulare Lerneinheiten verfügbar.</p>'
+            f'<p><a href="/units/{unit_id}">Zurück zur Lerneinheit</a></p>'
+            '</div>'
+        )
+
+    create_form = (
+        f'<form method="post" action="/units/{unit_id}/phases" '
+        f'hx-post="/units/{unit_id}/phases" hx-target="#phase-list-section" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        '<label>Titel der Phase<input class="form-input" type="text" name="title" required></label>'
+        '<div class="form-actions"><button class="btn btn-primary" type="submit">Phase hinzufügen</button></div>'
+        '</form>'
+    )
+    phase_list = _render_unit_phases_list_partial(unit_id, phases, csrf_token=csrf_token, error=error)
+
+    return (
+        '<div class="container">'
+        f'<h1>Phasen für: {unit_title}</h1>'
+        f'<p><a href="/units/{unit_id}">Zurück zu den Modulen</a></p>'
+        f'<section class="card"><h2>Neue Phase erstellen</h2>{create_form}</section>'
+        f'{phase_list}'
+        '</div>'
+    )
 
 
 def _render_unit_edit_response(
@@ -4739,6 +4878,7 @@ async def units_index(request: Request):
         vm = [
             {
                 "id": getattr(u, "id", None) if not isinstance(u, dict) else u.get("id"),
+                "unit_type": getattr(u, "unit_type", None) if not isinstance(u, dict) else u.get("unit_type"),
                 "title": getattr(u, "title", None) if not isinstance(u, dict) else u.get("title"),
                 "summary": getattr(u, "summary", None) if not isinstance(u, dict) else u.get("summary"),
             }
@@ -4810,6 +4950,7 @@ async def units_create(request: Request):
             vm = [
                 {
                     "id": getattr(u, "id", None) if not isinstance(u, dict) else u.get("id"),
+                    "unit_type": getattr(u, "unit_type", None) if not isinstance(u, dict) else u.get("unit_type"),
                     "title": getattr(u, "title", None) if not isinstance(u, dict) else u.get("title"),
                     "summary": getattr(u, "summary", None) if not isinstance(u, dict) else u.get("summary"),
                 }
@@ -4961,6 +5102,7 @@ async def unit_details_index(request: Request, unit_id: str):
 
     unit_title: str | None = None
     unit_summary: str | None = None
+    unit_type: str = "linear"
     sections: list[dict] = []
     try:
         async with _internal_api_client() as client:
@@ -4975,6 +5117,7 @@ async def unit_details_index(request: Request, unit_id: str):
             ud = u.json()
             unit_title = str(ud.get("title") or "") or None
             unit_summary = str(ud.get("summary") or "") or None
+            unit_type = str(ud.get("unit_type") or "linear").strip().lower()
             s = await client.get(f"/api/teaching/units/{unit_id}/sections")
             if s.status_code == 200 and isinstance(s.json(), list):
                 # Keep only fields needed for rendering
@@ -4985,10 +5128,122 @@ async def unit_details_index(request: Request, unit_id: str):
     except Exception:
         return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
 
-    unit_vm = {"id": unit_id, "title": unit_title or "Lerneinheit", "summary": unit_summary or None}
+    unit_vm = {
+        "id": unit_id,
+        "title": unit_title or "Lerneinheit",
+        "summary": unit_summary or None,
+        "unit_type": unit_type,
+    }
     content = _render_sections_page_html(unit_vm, sections, csrf_token=token)
-    layout = Layout(title=f"Abschnitte für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
+    page_noun = "Module" if unit_type == "modular" else "Abschnitte"
+    layout = Layout(title=f"{page_noun} für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/phases", response_class=HTMLResponse)
+async def unit_phases_index(request: Request, unit_id: str):
+    """SSR phase editor page for modular units (teacher-only).
+
+    Why:
+        Modular units organize modules into phases. The Teaching JSON API
+        supports phase CRUD and reorder; this SSR page exposes it to teachers.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+
+    # Load unit meta so we can fail clearly for linear units.
+    unit_title: str | None = None
+    unit_type: str = "linear"
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            u = await client.get(f"/api/teaching/units/{unit_id}")
+            if u.status_code != 200 or not isinstance(u.json(), dict):
+                return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+            ud = u.json()
+            unit_title = str(ud.get("title") or "") or None
+            unit_type = str(ud.get("unit_type") or "linear").strip().lower()
+    except Exception:
+        return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+
+    phases, err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+    unit_vm = {"id": unit_id, "title": unit_title or "Lerneinheit", "unit_type": unit_type}
+    content = _render_unit_phases_page_html(unit_vm, phases, csrf_token=token, error=err)
+    status = 200 if unit_type == "modular" and err is None else 400 if unit_type != "modular" else 200
+    layout = Layout(title=f"Phasen – {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, status_code=status, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/phases", response_class=HTMLResponse)
+async def unit_phases_create(request: Request, unit_id: str):
+    """Create a new phase for a modular unit via the Teaching API (SSR/HTMX)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    token = _get_or_create_csrf_token(sid or "")
+    title = str(form.get("title", "")).strip()
+    error: str | None = None
+
+    if not title:
+        error = "invalid_title"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                if sid:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.post(f"/api/teaching/units/{unit_id}/phases", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "phase_create_failed"
+
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid or "")
+    phase_list_html = _render_unit_phases_list_partial(unit_id, phases, csrf_token=token, error=error)
+    if "HX-Request" in request.headers:
+        return HTMLResponse(phase_list_html)
+    return RedirectResponse(url=f"/units/{unit_id}/phases", status_code=303)
+
+
+@app.post("/units/{unit_id}/phases/reorder", response_class=Response)
+async def unit_phases_reorder(request: Request, unit_id: str):
+    """Reorder phases of a modular unit (drag & drop) via Teaching API."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    csrf_header = request.headers.get("X-CSRF-Token")
+    csrf_field = form.get("csrf_token")
+    if not _validate_csrf(sid, csrf_header or csrf_field):
+        return Response(status_code=403)
+
+    ordered_ids = [elem_id.replace("phase_", "") for elem_id in form.getlist("id")]
+    try:
+        async with _internal_api_client() as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            resp = await client.post(
+                f"/api/teaching/units/{unit_id}/phases/reorder",
+                json={"phase_ids": ordered_ids},
+            )
+    except Exception:
+        return JSONResponse({"error": "bad_request", "detail": "reorder_failed"}, status_code=400)
+    if resp.status_code >= 400:
+        detail = _extract_api_error_detail(resp)
+        status = resp.status_code if resp.status_code in (400, 403, 404) else 400
+        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=status)
+    return Response(status_code=200)
 
 
 async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session_id: str) -> list[dict]:

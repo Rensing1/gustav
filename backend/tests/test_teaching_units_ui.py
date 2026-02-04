@@ -139,6 +139,27 @@ async def test_units_create_can_create_modular_units_via_ui_form():
 
 
 @pytest.mark.anyio
+async def test_units_list_renders_modular_unit_badge_and_phase_link():
+    """Modular units must be distinguishable and expose modular authoring actions in the UI."""
+    sess = main.SESSION_STORE.create(sub="t-303-mod-ui", name="Lehrer Modular UI", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        # Seed: create one modular unit via API (bypasses SSR create form).
+        r = await c.post("/api/teaching/units", json={"title": "U Modular", "unit_type": "modular"}, headers={"Origin": "http://test"})
+        assert r.status_code == 201, r.text
+        uid = r.json()["id"]
+
+        page = await c.get("/units")
+        assert page.status_code == 200
+        html = page.text
+        assert "U Modular" in html
+        # Badge/label so teachers can see that this is not a linear unit.
+        assert "Modular" in html
+        # Modular authoring action: phases editor (graph organization).
+        assert f'href="/units/{uid}/phases"' in html
+
+
+@pytest.mark.anyio
 async def test_units_create_validation_error():
     sess = main.SESSION_STORE.create(sub="t-304", name="Lehrer U3", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:

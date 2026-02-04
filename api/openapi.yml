@@ -530,6 +530,103 @@ components:
             type: string
             format: uuid
           description: Desired order (1..n) of phase IDs for the given unit
+    TeachingUnitModule:
+      type: object
+      required: [id, unit_id, phase_id, title, position_in_phase, required_prereq_count]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Module identifier (unit_modules.id)
+        unit_id:
+          type: string
+          format: uuid
+        phase_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        position_in_phase:
+          type: integer
+          minimum: 1
+          description: 1-based ordering within the phase (top-to-bottom in the visual editor)
+        required_prereq_count:
+          type: integer
+          minimum: 0
+          description: k-of-n prerequisites required to unlock the module (k >= 0)
+    TeachingUnitModuleCreate:
+      type: object
+      required: [title, phase_id]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        phase_id:
+          type: string
+          format: uuid
+          description: Phase to create the module in
+    TeachingUnitModuleReorder:
+      type: object
+      required: [module_ids]
+      additionalProperties: false
+      properties:
+        module_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Desired order (1..n) of module IDs for the given phase
+    TeachingUnitGraphEdge:
+      type: object
+      required: [from, to]
+      additionalProperties: false
+      properties:
+        from:
+          type: string
+          format: uuid
+          description: Source module_id
+        to:
+          type: string
+          format: uuid
+          description: Target module_id
+    TeachingUnitModuleEdgeCreate:
+      type: object
+      required: [from_module_id, to_module_id]
+      additionalProperties: false
+      properties:
+        from_module_id:
+          type: string
+          format: uuid
+        to_module_id:
+          type: string
+          format: uuid
+    TeachingUnitModulesGraphResponse:
+      type: object
+      required: [unit_id, phases, modules, edges]
+      additionalProperties: false
+      properties:
+        unit_id:
+          type: string
+          format: uuid
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeachingUnitPhase'
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeachingUnitModule'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeachingUnitGraphEdge'
     ModuleSectionVisibility:
       type: object
       required: [course_module_id, section_id, visible, released_by]
@@ -5210,6 +5307,289 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/graph:
+    get:
+      tags: [Teaching]
+      summary: Get modular unit graph for authoring (author only)
+      description: Returns phases, modules and dependency edges for a modular unit.
+      operationId: getTeachingUnitModulesGraph
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Graph payload for the modular unit
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeachingUnitModulesGraphResponse'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_unit_type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules:
+    post:
+      tags: [Teaching]
+      summary: Create a module within a phase (author only)
+      description: Creates a module node and its backing content container (Option B).
+      operationId: createTeachingUnitModule
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeachingUnitModuleCreate'
+      responses:
+        '201':
+          description: Module created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeachingUnitModule'
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_unit_type
+              - invalid_phase_id
+              - invalid_title
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder:
+    post:
+      tags: [Teaching]
+      summary: Reorder (and move) modules for a phase (author only)
+      description: |
+        Sets the module order for the given phase. Modules in the request are assigned to this phase in that order.
+        The operation is rejected when it would violate dependency edge constraints.
+      operationId: reorderTeachingUnitPhaseModules
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Drag&drop reorder across phases is allowed only when edges remain valid."
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: phase_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeachingUnitModuleReorder'
+      responses:
+        '200':
+          description: Modules reordered successfully
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeachingUnitModule'
+        '400':
+          description: |
+            Invalid reorder. detail codes:
+              - invalid_unit_id
+              - invalid_phase_id
+              - invalid_unit_type
+              - module_ids_must_be_array
+              - empty_module_ids
+              - duplicate_module_ids
+              - invalid_module_ids
+              - edge_constraint_violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/edges:
+    post:
+      tags: [Teaching]
+      summary: Create a dependency edge between two modules (author only)
+      description: Creates a directed edge `from -> to` within a modular unit.
+      operationId: createTeachingUnitModuleEdge
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "DB validation enforces allowed directions (same-phase right, next-phase only)."
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeachingUnitModuleEdgeCreate'
+      responses:
+        '201':
+          description: Edge created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by request Origin for CSRF-aware caches.
+              schema:
+                type: string
+              example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeachingUnitGraphEdge'
+        '400':
+          description: |
+            Invalid edge. detail codes:
+              - invalid_unit_id
+              - invalid_unit_type
+              - invalid_module_ids
+              - edge_constraint_violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Teaching]
+      summary: Delete a dependency edge between two modules (author only)
+      description: Deletes a directed edge `from -> to` within a modular unit.
+      operationId: deleteTeachingUnitModuleEdge
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeachingUnitModuleEdgeCreate'
+      responses:
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_module_ids
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Edge not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/sections:
     get:

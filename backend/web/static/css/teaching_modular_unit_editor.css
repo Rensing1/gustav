@@ -26,6 +26,11 @@ Why:
   margin-bottom: 0.75rem;
 }
 
+.modular-editor__toolbar [data-action="modular-editor-edge-mode"][aria-pressed="true"] {
+  border-color: rgba(163, 217, 106, 0.8);
+  box-shadow: 0 0 0 2px rgba(163, 217, 106, 0.25);
+}
+
 .modular-editor__graph {
   position: relative;
   overflow: auto;

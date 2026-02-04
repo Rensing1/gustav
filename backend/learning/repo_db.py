@@ -982,27 +982,134 @@ class DBLearningRepo:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 self._set_current_sub(cur, student_sub)
+                # Course-scoped context is required for modular unit access checks
+                # (student_can_access_section uses app.current_course_id).
+                self._set_current_course_id(cur, course_uuid)
+
+                # Fail-closed: unauthenticated or non-member callers must not be able
+                # to probe which H5P content IDs exist.
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return False
+
+                # A content_id can theoretically be reused across tasks/units.
+                # Allow access if ANY matching H5P task is accessible in this course.
                 cur.execute(
                     """
-                    select exists (
-                             select 1
-                               from public.course_memberships cm
-                               join public.course_modules m on m.course_id = cm.course_id
-                               join public.unit_sections s on s.unit_id = m.unit_id
-                               join public.unit_tasks t on t.section_id = s.id
-                               join public.module_section_releases r
-                                 on r.course_module_id = m.id
-                                and r.section_id = s.id
-                              where cm.course_id = %s
-                                and cm.student_id = %s
-                                and t.kind = 'h5p'
-                                and t.h5p_content_id = %s
-                                and coalesce(r.visible, false) = true
-                           )
+                    select t.unit_id::text,
+                           t.section_id::text,
+                           u.unit_type,
+                           m.id::text as course_module_id
+                      from public.course_modules m
+                      join public.unit_tasks t on t.unit_id = m.unit_id
+                      join public.units u on u.id = t.unit_id
+                     where m.course_id = %s::uuid
+                       and t.kind = 'h5p'
+                       and t.h5p_content_id = %s
                     """,
-                    (course_uuid, student_sub, str(content_id)),
+                    (course_uuid, str(content_id)),
                 )
-                return bool((cur.fetchone() or [False])[0])
+                candidates = cur.fetchall() or []
+                if not candidates:
+                    return False
+
+                for unit_id, section_id, unit_type, course_module_id in candidates:
+                    norm_type = str(unit_type or "").strip().lower()
+                    if norm_type == "linear":
+                        cur.execute(
+                            """
+                            select exists(
+                                     select 1
+                                       from public.module_section_releases r
+                                      where r.course_module_id = %s::uuid
+                                        and r.section_id = %s::uuid
+                                        and coalesce(r.visible, false) = true
+                                   )
+                            """,
+                            (course_module_id, section_id),
+                        )
+                        if bool((cur.fetchone() or [False])[0]):
+                            return True
+                    elif norm_type == "modular":
+                        # Compute unlock state from graph + student's submissions.
+                        cur.execute(
+                            "select id::text from public.unit_modules where unit_id=%s::uuid and section_id=%s::uuid",
+                            (unit_id, section_id),
+                        )
+                        module_row = cur.fetchone()
+                        if not module_row:
+                            continue
+                        module_id = str(module_row[0])
+
+                        cur.execute(
+                            """
+                            select um.id::text,
+                                   um.section_id::text,
+                                   um.required_prereq_count,
+                                   us.tasks_total,
+                                   p.position as phase_position,
+                                   um.position_in_phase
+                              from public.unit_modules um
+                              join public.unit_sections us on us.id = um.section_id
+                              join public.unit_phases p on p.id = um.phase_id
+                             where um.unit_id = %s::uuid
+                             order by p.position asc, um.position_in_phase asc, um.id asc
+                            """,
+                            (unit_id,),
+                        )
+                        modules_raw = [
+                            {
+                                "id": r[0],
+                                "section_id": r[1],
+                                "required_prereq_count": int(r[2] or 0),
+                                "tasks_total": int(r[3] or 0),
+                                "phase_position": int(r[4] or 1),
+                                "position_in_phase": int(r[5] or 1),
+                            }
+                            for r in (cur.fetchall() or [])
+                        ]
+                        cur.execute(
+                            """
+                            select from_module_id::text, to_module_id::text
+                            from public.unit_module_edges
+                            where unit_id = %s::uuid
+                            order by from_module_id asc, to_module_id asc
+                            """,
+                            (unit_id,),
+                        )
+                        edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
+
+                        section_ids = [m["section_id"] for m in modules_raw]
+                        tasks_done_by_section: dict[str, int] = {}
+                        if section_ids:
+                            cur.execute(
+                                """
+                                select section_id::text,
+                                       count(distinct task_id)::int as tasks_done
+                                  from public.learning_submissions
+                                 where course_id = %s::uuid
+                                   and student_sub = %s
+                                   and section_id = any(%s::uuid[])
+                                   and (kind <> 'h5p' or score_raw = score_max)
+                                 group by section_id
+                                """,
+                                (course_uuid, student_sub, section_ids),
+                            )
+                            tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
+
+                        module_state = self._compute_modular_unit_module_states(
+                            ordered_modules=modules_raw,
+                            edges=edges,
+                            tasks_done_by_section=tasks_done_by_section,
+                        )
+                        status = str((module_state.get(module_id) or {}).get("status") or "")
+                        if status in {"open", "done"}:
+                            return True
+
+                return False
 
     # ------------------------------------------------------------------
     def create_submission(self, data: SubmissionInput) -> dict:

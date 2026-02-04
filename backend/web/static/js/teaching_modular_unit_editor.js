@@ -307,10 +307,12 @@ Goals:
     // Intercept module clicks in edge mode.
     root.addEventListener('click', function (ev) {
       if (!edgeMode) return;
-      var btn = ev.target && ev.target.closest ? ev.target.closest('.modular-editor__module-btn') : null;
-      if (!btn) return;
-      var node = btn.closest('.modular-editor__module-node');
+      var node = ev.target && ev.target.closest ? ev.target.closest('.modular-editor__module-node') : null;
       if (!node) return;
+      // Ignore actions/drag handle — edge mode should not interfere with CRUD or dragging.
+      if (ev.target.closest && ev.target.closest('[data-action^="modular-editor-rename-"]')) return;
+      if (ev.target.closest && ev.target.closest('[data-action^="modular-editor-delete-"]')) return;
+      if (ev.target.closest && ev.target.closest('.modular-editor__drag-handle')) return;
       var moduleId = node.getAttribute('data-module-id');
       if (!moduleId) return;
 

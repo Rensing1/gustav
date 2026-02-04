@@ -1,0 +1,132 @@
+"""
+Teaching API (DB-backed): Modular unit visual editor endpoints.
+
+These endpoints power the teacher-side visual editor:
+- load phases/modules/edges as a graph
+- create modules in a specific phase
+- create/delete dependency edges
+- drag&drop reorder and cross-phase moves (blocked when edges would be invalid)
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+
+import pytest
+import httpx
+from httpx import ASGITransport
+
+from utils.db import require_db_or_skip as _require_db_or_skip
+
+
+pytestmark = pytest.mark.anyio("asyncio")
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WEB_DIR = REPO_ROOT / "backend" / "web"
+sys.path.insert(0, str(WEB_DIR))
+
+import main  # type: ignore  # noqa: E402
+from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+
+
+async def _client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
+
+
+@pytest.mark.anyio
+async def test_teaching_modular_unit_graph_endpoints_support_visual_authoring() -> None:
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-1", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+
+        # Arrange: modular unit with 2 phases.
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        r_phases = await c.get(f"/api/teaching/units/{uid}/phases")
+        assert r_phases.status_code == 200, r_phases.text
+        phases = r_phases.json()
+        assert isinstance(phases, list) and len(phases) >= 1
+        p1 = phases[0]["id"]
+
+        r_p2 = await c.post(f"/api/teaching/units/{uid}/phases", json={"title": "Phase 2"})
+        assert r_p2.status_code == 201, r_p2.text
+        p2 = r_p2.json()["id"]
+
+        # Create modules in specific phases (Option B internally creates a backing section).
+        r_a = await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "A", "phase_id": p1})
+        assert r_a.status_code == 201, r_a.text
+        mod_a = r_a.json()["id"]
+
+        r_b = await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "B", "phase_id": p1})
+        assert r_b.status_code == 201, r_b.text
+        mod_b = r_b.json()["id"]
+
+        r_c = await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "C", "phase_id": p2})
+        assert r_c.status_code == 201, r_c.text
+        mod_c = r_c.json()["id"]
+
+        # Graph endpoint returns phases/modules/edges.
+        r_graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_graph.status_code == 200, r_graph.text
+        graph = r_graph.json()
+        assert graph["unit_id"] == uid
+        assert len(graph["phases"]) == 2
+        assert {m["title"] for m in graph["modules"]} >= {"A", "B", "C"}
+        assert graph["edges"] == []
+
+        # Add a valid same-phase edge A -> B.
+        r_edge = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_a, "to_module_id": mod_b},
+        )
+        assert r_edge.status_code == 201, r_edge.text
+        assert r_edge.json() == {"from": mod_a, "to": mod_b}
+
+        # Invalid same-phase direction B -> A must be rejected.
+        r_bad = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_b, "to_module_id": mod_a},
+        )
+        assert r_bad.status_code == 400, r_bad.text
+        assert r_bad.json().get("detail") == "edge_constraint_violation"
+
+        # Reorder that would break A -> B must be blocked (B before A).
+        r_reorder_bad = await c.post(
+            f"/api/teaching/units/{uid}/phases/{p1}/modules/reorder",
+            json={"module_ids": [mod_b, mod_a]},
+        )
+        assert r_reorder_bad.status_code == 400, r_reorder_bad.text
+        assert r_reorder_bad.json().get("detail") == "edge_constraint_violation"
+
+        # Moving modules across phases is allowed when constraints remain valid.
+        r_move = await c.post(
+            f"/api/teaching/units/{uid}/phases/{p1}/modules/reorder",
+            json={"module_ids": [mod_a, mod_b, mod_c]},
+        )
+        assert r_move.status_code == 200, r_move.text
+
+        r_graph2 = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_graph2.status_code == 200, r_graph2.text
+        moved = [m for m in r_graph2.json()["modules"] if m["id"] == mod_c][0]
+        assert moved["phase_id"] == p1
+        assert moved["position_in_phase"] == 3
+

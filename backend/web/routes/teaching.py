@@ -1540,6 +1540,55 @@ class UnitPhaseReorderPayload(BaseModel):
     phase_ids: object | None = None
 
 
+# --- Modules (modular Units; Option B) ---------------------------------------
+
+class UnitModuleCreatePayload(BaseModel):
+    # Accept raw strings (including empty) and validate in handler to return 400
+    title: str | None = Field(default=None)
+    phase_id: str | None = Field(default=None)
+
+    @field_validator("title")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+    @field_validator("phase_id")
+    @classmethod
+    def _normalize_phase_id(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+
+class UnitModuleReorderPayload(BaseModel):
+    # Use loose typing to avoid FastAPI 422, then validate type manually
+    module_ids: object | None = None
+
+
+class UnitModuleEdgePayload(BaseModel):
+    # Accept raw strings (including empty) and validate in handler to return 400
+    from_module_id: str | None = Field(default=None)
+    to_module_id: str | None = Field(default=None)
+
+    @field_validator("from_module_id", "to_module_id")
+    @classmethod
+    def _normalize_ids(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+
 # --- Sections (per Unit) --------------------------------------------------------
 
 class SectionCreatePayload(BaseModel):
@@ -2097,6 +2146,221 @@ async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhase
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private([_serialize_unit_phase(p) for p in ordered], status_code=200, vary_origin=True)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/modules/graph")
+async def get_unit_modules_graph(request: Request, unit_id: str):
+    """Return the authoring graph payload for a modular unit (author only).
+
+    Why:
+        The teacher UI needs a single endpoint to load the visual editor state:
+        phases (columns), modules (nodes) and dependency edges.
+    """
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        phases = repo.list_unit_phases_for_author(unit_id, sub)
+        modules = repo.list_unit_modules_for_author(unit_id=unit_id, author_id=sub)
+        edges = repo.list_unit_module_edges_for_author(unit_id=unit_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+    payload = {
+        "unit_id": unit_id,
+        "phases": [_serialize_unit_phase_public(p) for p in phases],
+        "modules": [_serialize_unit_module(m) for m in modules],
+        "edges": [_serialize_unit_graph_edge(e) for e in edges],
+    }
+    return _json_private(payload, status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules")
+async def create_unit_module(request: Request, unit_id: str, payload: UnitModuleCreatePayload):
+    """Create a module (graph node) inside a phase (author only).
+
+    Option B:
+        Internally this creates a backing `unit_sections` row and a 1:1
+        `unit_modules` row. The API returns module metadata only.
+    """
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    title = payload.title or ""
+    phase_id = payload.phase_id or ""
+    if not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
+    if not title or len(title) > 200:
+        return _private_error({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+    try:
+        created = repo.create_unit_module_for_author(unit_id=unit_id, phase_id=phase_id, title=title, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_unit_module(created), status_code=201, vary_origin=True)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder")
+async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: str, payload: UnitModuleReorderPayload):
+    """Reorder (and move) modules for a phase (author only).
+
+    Contract:
+        - Rejects requests that would violate dependency edge constraints with
+          detail=edge_constraint_violation.
+    """
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+
+    ids = payload.module_ids
+    if not isinstance(ids, list):
+        return _private_error({"error": "bad_request", "detail": "module_ids_must_be_array"}, status_code=400)
+    if len(ids) == 0:
+        return _private_error({"error": "bad_request", "detail": "empty_module_ids"}, status_code=400)
+    if len(ids) != len(set(ids)):
+        return _private_error({"error": "bad_request", "detail": "duplicate_module_ids"}, status_code=400)
+    if any(not _is_uuid_like(mid) for mid in ids):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+
+    try:
+        ordered = repo.reorder_unit_phase_modules_owned(unit_id=unit_id, phase_id=phase_id, author_id=sub, module_ids=ids)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError as exc:
+        detail = str(exc) or ""
+        if detail in {"module_not_in_unit", "phase_not_found"}:
+            return _private_error({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23514":  # check_violation
+            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+        raise
+
+    return _json_private([_serialize_unit_module(m) for m in ordered], status_code=200, vary_origin=True)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/edges")
+async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+    """Create a directed dependency edge within a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+
+    from_id = payload.from_module_id or ""
+    to_id = payload.to_module_id or ""
+    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    try:
+        created = repo.create_unit_module_edge_for_author(
+            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
+        )
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23514":  # check_violation
+            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+        if sqlstate == "23503":  # foreign_key_violation
+            return _private_error({"error": "not_found"}, status_code=404)
+        raise
+    return _json_private(_serialize_unit_graph_edge(created), status_code=201, vary_origin=True)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
+async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+    """Delete a directed dependency edge within a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+
+    from_id = payload.from_module_id or ""
+    to_id = payload.to_module_id or ""
+    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    try:
+        deleted = repo.delete_unit_module_edge_for_author(
+            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
+        )
+    except ValueError:
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections")
@@ -3513,6 +3777,80 @@ def _serialize_unit_phase(p) -> dict:
         "created_at": getattr(p, "created_at", None),
         "updated_at": getattr(p, "updated_at", None),
     }
+
+def _serialize_unit_phase_public(p) -> dict:
+    """Serialize a unit phase for public Teaching API schemas.
+
+    The OpenAPI contract for `TeachingUnitPhase` intentionally exposes only
+    the editor-relevant fields (id/unit_id/title/position).
+    """
+    if isinstance(p, dict):
+        return {
+            "id": p.get("id"),
+            "unit_id": p.get("unit_id"),
+            "title": p.get("title"),
+            "position": p.get("position"),
+        }
+    if is_dataclass(p):
+        return {
+            "id": getattr(p, "id", None),
+            "unit_id": getattr(p, "unit_id", None),
+            "title": getattr(p, "title", None),
+            "position": getattr(p, "position", None),
+        }
+    return {
+        "id": getattr(p, "id", None),
+        "unit_id": getattr(p, "unit_id", None),
+        "title": getattr(p, "title", None),
+        "position": getattr(p, "position", None),
+    }
+
+
+def _serialize_unit_module(m) -> dict:
+    """Serialize a unit module for the teacher visual editor APIs.
+
+    Option B:
+        Modules map 1:1 to sections via `unit_modules.section_id`, but the
+        editor API does not expose section ids to keep the UX vocabulary clean.
+    """
+    if isinstance(m, dict):
+        return {
+            "id": m.get("id"),
+            "unit_id": m.get("unit_id"),
+            "phase_id": m.get("phase_id"),
+            "title": m.get("title"),
+            "position_in_phase": m.get("position_in_phase"),
+            "required_prereq_count": m.get("required_prereq_count", 0),
+        }
+    if is_dataclass(m):
+        return {
+            "id": getattr(m, "id", None),
+            "unit_id": getattr(m, "unit_id", None),
+            "phase_id": getattr(m, "phase_id", None),
+            "title": getattr(m, "title", None),
+            "position_in_phase": getattr(m, "position_in_phase", None),
+            "required_prereq_count": getattr(m, "required_prereq_count", 0),
+        }
+    return {
+        "id": getattr(m, "id", None),
+        "unit_id": getattr(m, "unit_id", None),
+        "phase_id": getattr(m, "phase_id", None),
+        "title": getattr(m, "title", None),
+        "position_in_phase": getattr(m, "position_in_phase", None),
+        "required_prereq_count": getattr(m, "required_prereq_count", 0),
+    }
+
+
+def _serialize_unit_graph_edge(e) -> dict:
+    """Serialize a module edge as {from, to}."""
+    if isinstance(e, dict):
+        # Repo helpers already use `from`/`to` keys.
+        if "from" in e and "to" in e:
+            return {"from": e.get("from"), "to": e.get("to")}
+        return {"from": e.get("from_module_id"), "to": e.get("to_module_id")}
+    if is_dataclass(e):
+        return {"from": getattr(e, "from", None), "to": getattr(e, "to", None)}
+    return {"from": getattr(e, "from", None), "to": getattr(e, "to", None)}
 
 
 def _serialize_section(s) -> dict:

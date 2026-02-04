@@ -1406,13 +1406,13 @@ def transfer_submissions(dsn: str, legacy_schema: str, dry_run: bool) -> PhaseRe
                 cur.execute(
                     """
                     insert into public.learning_submissions (
-                        id, course_id, task_id, student_sub, kind, text_body,
+                        id, course_id, task_id, section_id, student_sub, kind, text_body,
                         storage_key, mime_type, size_bytes, sha256,
                         attempt_nr, analysis_status, analysis_json,
                         feedback_md, error_code, idempotency_key,
                         created_at, completed_at
                     )
-                    values (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s,
+                    values (%s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, %s, %s,
                             NULL, NULL, NULL, NULL,
                             %s, %s, %s,
                             %s, NULL, NULL,
@@ -1428,6 +1428,7 @@ def transfer_submissions(dsn: str, legacy_schema: str, dry_run: bool) -> PhaseRe
                         submission_id,
                         course_id,
                         task_id,
+                        section_id,
                         student_sub,
                         kind,
                         text_body,

@@ -2990,13 +2990,15 @@ paths:
       summary: Check student access to an H5P content item (fail-closed)
       description: >-
         Returns 204 when the authenticated student is enrolled in the given course and the
-        `content_id` belongs to a released H5P task in that course. Returns 404 otherwise
-        (fail-closed to avoid leaking membership, release state or content existence).
+        `content_id` belongs to an H5P task in that course that the student is allowed to access.
+        For linear units this requires the section to be released (`module_section_releases.visible = true`).
+        For modular units this requires the containing module to be `open` or `done` for the student.
+        Returns 404 otherwise (fail-closed to avoid leaking membership, release state, unlock state or content existence).
       operationId: checkLearningH5PContentAccess
       security:
         - cookieAuth: []
       x-security-notes:
-        - "Fail-closed: return 404 for not member / not released / unknown course."
+        - "Fail-closed: return 404 for not member / not released / locked module / unknown course."
         - "Data minimization: 204 response has no body."
       x-permissions:
         requiredRole: student

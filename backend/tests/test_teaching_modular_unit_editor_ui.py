@@ -1,10 +1,10 @@
 """
-SSR UI: Modular unit editor (teacher) is a single entrypoint.
+SSR UI: Modular unit editor (teacher) is a visual graph + right-side panel.
 
 Intent:
-    Teachers should not have to switch between separate "phases" and "modules"
-    pages. A modular unit should offer one editor view (graph/board), and
-    clicking a module should open its content editor (materials/tasks).
+    Teachers plan a modular unit as phases (columns) and modules (nodes).
+    The editor should render a visual representation and load module content
+    into a right-side panel via HTMX (no page navigation).
 
 Scope:
     This is a DB-backed integration test because modular phases/modules are
@@ -59,7 +59,8 @@ async def test_modular_unit_editor_renders_phases_modules_and_module_click_opens
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        # Create modular unit + one module (via section create).
+        # Create modular unit + one module (via section create; Option B will
+        # create a unit_module record automatically).
         r_unit = await c.post("/api/teaching/units", json={"title": "Modular Editor Unit", "unit_type": "modular"})
         assert r_unit.status_code == 201, r_unit.text
         uid = r_unit.json()["id"]
@@ -70,18 +71,18 @@ async def test_modular_unit_editor_renders_phases_modules_and_module_click_opens
         page = await c.get(f"/units/{uid}")
         assert page.status_code == 200
         html = page.text
-        assert "Editor" in html
+        assert 'data-testid="modular-unit-editor"' in html
+        assert 'id="modular-editor-panel"' in html
         assert "Phase 1" in html
         assert "Modul A" in html
 
-        # Module cards must link to a module content page.
-        pattern = rf"/units/{re.escape(uid)}/modules/([0-9a-fA-F-]{{36}})"
+        # Module nodes must load panel content via HTMX.
+        pattern = rf"/units/{re.escape(uid)}/modules/([0-9a-fA-F-]{{36}})/panel"
         m = re.search(pattern, html)
-        assert m, "Expected a module link /units/{unit_id}/modules/{module_id} in editor HTML"
+        assert m, "Expected a module panel link /units/{unit_id}/modules/{module_id}/panel in editor HTML"
         module_id = m.group(1)
 
-        module_page = await c.get(f"/units/{uid}/modules/{module_id}")
-        assert module_page.status_code == 200
-        assert "Modul" in module_page.text
-        assert "Materialien" in module_page.text
-        assert "Aufgaben" in module_page.text
+        panel = await c.get(f"/units/{uid}/modules/{module_id}/panel")
+        assert panel.status_code == 200
+        assert "Materialien" in panel.text
+        assert "Aufgaben" in panel.text

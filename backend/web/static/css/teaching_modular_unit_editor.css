@@ -1,0 +1,121 @@
+/*
+Teacher UI — Modular unit visual editor (phases as columns + module nodes).
+
+Why:
+  Teachers should be able to plan modular learning units visually:
+  phases are columns, modules are nodes, and dependencies are shown as edges.
+*/
+
+.modular-editor__shell {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 60vh;
+}
+
+.modular-editor__canvas {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.modular-editor__toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.modular-editor__graph {
+  position: relative;
+  overflow: auto;
+  padding: 0.5rem 0.25rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.modular-editor__edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.modular-editor__phase {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: top;
+  width: 280px;
+  margin-right: 12px;
+}
+
+.modular-editor__phase-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.5rem 0.25rem;
+}
+
+.modular-editor__phase-title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.modular-editor__module-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  min-height: 4rem;
+}
+
+.modular-editor__module-node {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.modular-editor__drag-handle {
+  cursor: grab;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.modular-editor__module-btn {
+  flex: 1 1 auto;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.modular-editor__module-node.is-edge-source {
+  outline: 2px solid rgba(163, 217, 106, 0.8);
+  outline-offset: 2px;
+}
+
+.modular-editor__splitter {
+  width: 10px;
+  cursor: col-resize;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.modular-editor__panel {
+  width: var(--modular-editor-panel-width, 440px);
+  min-width: 320px;
+  max-width: 60vw;
+  overflow: auto;
+  padding-left: 12px;
+}
+
+.modular-editor-panel__content .two-col {
+  gap: 0.75rem;
+}
+

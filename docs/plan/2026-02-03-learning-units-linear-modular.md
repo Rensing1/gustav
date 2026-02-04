@@ -46,7 +46,7 @@ Legende:
   - Drag&Drop: Phasen (Spalten) umsortierbar; ungültige Verschiebungen werden blockiert (Edge‑Constraint).
   - Kantenmodus: Kanten per Klick Quelle→Ziel anlegen; Kanten im Panel entfernen.
   - Freischaltung: `required_prereq_count` ist im Panel editierbar (k‑of‑n).
-- **OPEN**: Editor‑Feinschliff: bessere Fehler‑UX (Inline statt `alert()`), Auto‑Layout für Knoten/Spalten.
+- **PARTIAL**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Auto‑Layout für Knoten/Spalten noch OPEN.
 
 ### Student UI
 - **PARTIAL**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:

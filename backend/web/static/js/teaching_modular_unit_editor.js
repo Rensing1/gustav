@@ -201,9 +201,24 @@ Goals:
     }
   }
 
-  function setStatus(ctx, message) {
-    if (!ctx || !ctx.statusEl) return;
-    ctx.statusEl.textContent = message || '';
+  function setStatus(ctx, message, kind, ttlMs) {
+    if (!ctx || !ctx.statusEl || !ctx.statusContainer) return;
+
+    var msg = message || '';
+    ctx.statusEl.textContent = msg;
+
+    ctx.statusContainer.classList.remove('is-info', 'is-success', 'is-error');
+    if (msg) ctx.statusContainer.classList.add('is-' + (kind || 'info'));
+
+    if (ctx.statusTimer) {
+      window.clearTimeout(ctx.statusTimer);
+      ctx.statusTimer = null;
+    }
+    if (msg && typeof ttlMs === 'number' && ttlMs > 0) {
+      ctx.statusTimer = window.setTimeout(function () {
+        setStatus(ctx, '', 'info');
+      }, ttlMs);
+    }
   }
 
   function setupEditorActions(root, ctx) {
@@ -211,7 +226,8 @@ Goals:
     var unitId = root.getAttribute('data-unit-id') || '';
     if (!unitId) return;
     ctx.unitId = unitId;
-    ctx.statusEl = root.querySelector('#modular-editor-status small');
+    ctx.statusContainer = root.querySelector('#modular-editor-status');
+    ctx.statusEl = ctx.statusContainer ? ctx.statusContainer.querySelector('small') : null;
     ctx.edgeModeBtn = root.querySelector('[data-action="modular-editor-edge-mode"]');
 
     function apiJson(method, path, body) {
@@ -227,33 +243,19 @@ Goals:
 
     function apiPost(path, body) { return apiJson('POST', path, body); }
 
-    function alertApiError(r) {
-      if (!r) return;
-      try {
-        r.json().then(function (j) {
-          var msg = (j && j.detail) ? j.detail : (j && j.error) ? j.error : '';
-          window.alert(msg || 'Fehler');
-        }).catch(function () {
-          r.text().then(function (t) { window.alert(t || 'Fehler'); });
-        });
-      } catch (e) {
-        window.alert('Fehler');
-      }
-    }
-
     function clearEdgeSelection() {
       ctx.edgeFrom = null;
       Array.from(root.querySelectorAll('.modular-editor__module-node.is-edge-source')).forEach(function (n) {
         n.classList.remove('is-edge-source');
       });
-      if (ctx.statusEl && ctx.edgeMode) ctx.statusEl.textContent = 'Kantenmodus: Quelle wählen…';
+      if (ctx.edgeMode) setStatus(ctx, 'Kantenmodus: Quelle wählen…', 'info');
     }
 
     function setEdgeMode(enabled) {
       ctx.edgeMode = !!enabled;
       clearEdgeSelection();
       if (ctx.edgeModeBtn) ctx.edgeModeBtn.setAttribute('aria-pressed', ctx.edgeMode ? 'true' : 'false');
-      if (ctx.statusEl) ctx.statusEl.textContent = ctx.edgeMode ? 'Kantenmodus: Quelle wählen…' : '';
+      setStatus(ctx, ctx.edgeMode ? 'Kantenmodus: Quelle wählen…' : '', 'info');
     }
 
     if (ctx.edgeModeBtn) {
@@ -282,7 +284,7 @@ Goals:
       if (!ctx.edgeFrom) {
         ctx.edgeFrom = moduleId;
         node.classList.add('is-edge-source');
-        if (ctx.statusEl) ctx.statusEl.textContent = 'Kantenmodus: Ziel wählen…';
+        setStatus(ctx, 'Kantenmodus: Ziel wählen…', 'info');
         return;
       }
 
@@ -301,12 +303,14 @@ Goals:
           next.push(edge);
           ctx.edgeOverlay.setEdges(next);
           ctx.edgeOverlay.draw();
-          if (ctx.statusEl) ctx.statusEl.textContent = 'Kante erstellt.';
+          setStatus(ctx, 'Kante erstellt.', 'success', 2500);
         })
         .catch(function (e) {
           var detail = (e && e.detail) ? e.detail : '';
-          window.alert(detail === 'edge_constraint_violation' ? 'Ungültige Kante (Regel verletzt).' : 'Kante konnte nicht erstellt werden.');
-          if (ctx.statusEl) ctx.statusEl.textContent = '';
+          var msg = detail === 'edge_constraint_violation'
+            ? 'Ungültige Kante (Regel verletzt).'
+            : 'Kante konnte nicht erstellt werden.';
+          setStatus(ctx, msg, 'error', 6000);
         });
     }, true);
 
@@ -338,7 +342,7 @@ Goals:
           htmx.ajax('GET', '/units/' + unitId + '/modules/' + moduleId + '/panel', '#modular-editor-panel');
         }
       }).catch(function () {
-        window.alert('Kante konnte nicht entfernt werden.');
+        setStatus(ctx, 'Kante konnte nicht entfernt werden.', 'error', 6000);
       });
     });
 
@@ -384,7 +388,7 @@ Goals:
             if (!r.ok) return r.json().then(function (j) { throw j; });
             return r.json();
           }).then(function () {
-            setStatus(ctx, 'Phasen gespeichert.');
+            setStatus(ctx, 'Phasen gespeichert.', 'success', 2000);
             if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
           }).catch(function (e) {
             revertSortableMove(evt);
@@ -392,8 +396,7 @@ Goals:
             var msg = detail === 'edge_constraint_violation'
               ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.'
               : 'Verschieben fehlgeschlagen.';
-            window.alert(msg);
-            setStatus(ctx, msg);
+            setStatus(ctx, msg, 'error', 6000);
             if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
           });
         }
@@ -441,15 +444,14 @@ Goals:
             }).then(function () {
               // Redraw edges since node positions may have changed.
               if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
-              setStatus(ctx, '');
+              setStatus(ctx, '', 'info');
             }).catch(function (e) {
               revertSortableMove(evt);
               var detail = (e && e.detail) ? e.detail : '';
               var msg = detail === 'edge_constraint_violation'
                 ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.'
                 : 'Verschieben fehlgeschlagen.';
-              window.alert(msg);
-              setStatus(ctx, msg);
+              setStatus(ctx, msg, 'error', 6000);
               if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
             });
           }
@@ -477,7 +479,7 @@ Goals:
     Array.from(root.querySelectorAll('.modular-editor__module-node.is-edge-source')).forEach(function (n) {
       n.classList.remove('is-edge-source');
     });
-    if (ctx.statusEl && ctx.edgeMode) ctx.statusEl.textContent = 'Kantenmodus: Quelle wählen…';
+    if (ctx.edgeMode) setStatus(ctx, 'Kantenmodus: Quelle wählen…', 'info');
     if (ctx.edgeOverlay) {
       window.requestAnimationFrame(function () { ctx.edgeOverlay.draw(); });
     }

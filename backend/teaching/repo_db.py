@@ -837,6 +837,97 @@ class DBTeachingRepo:
             for r in rows
         ]
 
+    # --- Unit modules (modular units; Option B) ------------------------------
+
+    def list_unit_modules_for_author(self, *, unit_id: str, author_id: str) -> List[dict]:
+        """List modules (module_id) for a modular unit authored by the caller.
+
+        Option B:
+            Modules are graph nodes stored in `public.unit_modules` (module_id),
+            and map 1:1 to a content container `public.unit_sections` via
+            `unit_modules.section_id`.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+                cur.execute(
+                    """
+                    select um.id::text,
+                           um.unit_id::text,
+                           um.section_id::text,
+                           um.phase_id::text,
+                           um.position_in_phase,
+                           s.title
+                      from public.unit_modules um
+                      join public.unit_sections s on s.id = um.section_id
+                      join public.unit_phases p on p.id = um.phase_id
+                     where um.unit_id = %s
+                     order by p.position asc, um.position_in_phase asc, um.id asc
+                    """,
+                    (unit_id,),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "unit_id": r[1],
+                "section_id": r[2],
+                "phase_id": r[3],
+                "position_in_phase": int(r[4] or 1),
+                "title": r[5],
+            }
+            for r in rows
+        ]
+
+    def get_unit_module_for_author(self, *, unit_id: str, module_id: str, author_id: str) -> Optional[dict]:
+        """Resolve module metadata for a modular unit authored by the caller.
+
+        Returns:
+            Dict with keys: id (module_id), unit_id, section_id, phase_id, title.
+            None when the module is not visible to the caller.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+                cur.execute(
+                    """
+                    select um.id::text,
+                           um.unit_id::text,
+                           um.section_id::text,
+                           um.phase_id::text,
+                           s.title
+                      from public.unit_modules um
+                      join public.unit_sections s on s.id = um.section_id
+                     where um.unit_id = %s
+                       and um.id = %s::uuid
+                    """,
+                    (unit_id, module_id),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "unit_id": row[1],
+            "section_id": row[2],
+            "phase_id": row[3],
+            "title": row[4],
+        }
+
     def section_exists_for_author(self, unit_id: str, section_id: str, author_id: str) -> bool:
         """Check whether a section belongs to the unit and is visible to the author."""
         with psycopg.connect(self._dsn) as conn:

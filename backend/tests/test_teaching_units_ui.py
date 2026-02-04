@@ -139,8 +139,8 @@ async def test_units_create_can_create_modular_units_via_ui_form():
 
 
 @pytest.mark.anyio
-async def test_units_list_renders_modular_unit_badge_and_phase_link():
-    """Modular units must be distinguishable and expose modular authoring actions in the UI."""
+async def test_units_list_renders_modular_unit_badge_and_editor_link():
+    """Modular units must be distinguishable and expose a single editor entrypoint."""
     sess = main.SESSION_STORE.create(sub="t-303-mod-ui", name="Lehrer Modular UI", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
@@ -155,8 +155,9 @@ async def test_units_list_renders_modular_unit_badge_and_phase_link():
         assert "U Modular" in html
         # Badge/label so teachers can see that this is not a linear unit.
         assert "Modular" in html
-        # Modular authoring action: phases editor (graph organization).
-        assert f'href="/units/{uid}/phases"' in html
+        # Single entrypoint: open the editor (phases + modules).
+        assert "Editor öffnen" in html
+        assert f'href="/units/{uid}"' in html
 
 
 @pytest.mark.anyio

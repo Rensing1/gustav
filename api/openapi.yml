@@ -5361,6 +5361,7 @@ paths:
               - duplicate_phase_ids
               - invalid_phase_ids
               - phase_mismatch
+              - edge_constraint_violation
           content:
             application/json:
               schema:

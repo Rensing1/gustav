@@ -121,3 +121,59 @@ async def test_unit_phases_rejects_linear_unit_invalid_unit_type():
         assert r_create.status_code == 400
         assert r_create.json().get("detail") == "invalid_unit_type"
 
+
+@pytest.mark.anyio
+async def test_unit_phases_reorder_rejects_edge_constraint_violation():
+    """Reordering phases must fail-closed when it would invalidate existing edges."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-phases-3", name="Edges", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, title="Modular Unit", unit_type="modular")
+
+        r_list = await client.get(f"/api/teaching/units/{unit['id']}/phases")
+        assert r_list.status_code == 200
+        phase1 = r_list.json()[0]
+
+        r_create = await client.post(f"/api/teaching/units/{unit['id']}/phases", json={"title": "Phase 2"})
+        assert r_create.status_code == 201
+        phase2 = r_create.json()
+
+        r_mod_a = await client.post(
+            f"/api/teaching/units/{unit['id']}/modules",
+            json={"title": "A", "phase_id": phase1["id"]},
+        )
+        assert r_mod_a.status_code == 201
+        mod_a = r_mod_a.json()
+
+        r_mod_b = await client.post(
+            f"/api/teaching/units/{unit['id']}/modules",
+            json={"title": "B", "phase_id": phase2["id"]},
+        )
+        assert r_mod_b.status_code == 201
+        mod_b = r_mod_b.json()
+
+        r_edge = await client.post(
+            f"/api/teaching/units/{unit['id']}/modules/edges",
+            json={"from_module_id": mod_a["id"], "to_module_id": mod_b["id"]},
+        )
+        assert r_edge.status_code == 201, r_edge.text
+
+        # This reorder would move phase2 before phase1, making the existing A->B edge invalid.
+        r_reorder = await client.post(
+            f"/api/teaching/units/{unit['id']}/phases/reorder",
+            json={"phase_ids": [phase2["id"], phase1["id"]]},
+        )
+        assert r_reorder.status_code == 400, r_reorder.text
+        assert r_reorder.json().get("detail") == "edge_constraint_violation"

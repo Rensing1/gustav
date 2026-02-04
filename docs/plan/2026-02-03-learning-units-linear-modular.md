@@ -38,7 +38,13 @@ Legende:
 - **DONE**: Beim Erstellen einer modularen Unit wird automatisch eine Default‑Phase (“Phase 1”) erzeugt (damit modulare Units ohne Phase‑Editor nutzbar sind).
 - **DONE**: Beim Erstellen einer Section in einer modularen Unit wird automatisch ein `unit_modules`‑Record erzeugt (Option B).
 - **DONE**: Phase‑Editor API: Phasen listen/erstellen/umbenennen/reorder.
-- **OPEN**: Modul‑Editor (Move/Reorder innerhalb Phase, required_prereq_count) inkl. 409‑Validierungen.
+- **PARTIAL**: Visualer Modul‑Editor (HTMX + JS):
+  - Phasen als Spalten, Module als Knoten, rechte Seitenleiste (Panel) lädt Inhalte via HTMX.
+  - CRUD (Anlegen/Umbenennen/Löschen) für Phasen/Module per inline HTMX‑Formulare (ohne Browser `prompt()/confirm()`).
+  - Löschen ist **kaskadierend**: Phase löscht Module + Kanten + Inhalte; Modul löscht Inhalte (Option B: backing section).
+  - Drag&Drop: Module innerhalb/zwischen Phasen verschieben; ungültige Verschiebungen werden vom Backend blockiert (Constraint).
+  - Kantenmodus: Kanten per Klick Quelle→Ziel anlegen; Kanten im Panel entfernen.
+- **OPEN**: Editor‑Feinschliff: `required_prereq_count` editieren, bessere Fehler‑UX (409 ohne Reload), Phase‑Reorder UI, Auto‑Layout für Knoten/Spalten.
 
 ### Student UI
 - **PARTIAL**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:

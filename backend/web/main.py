@@ -3338,6 +3338,7 @@ def _render_modular_unit_editor_page_html(
         '<div class="modular-editor__toolbar">'
         f'<button type="button" class="btn btn-secondary" data-action="modular-editor-add-phase">+ Phase</button> '
         f'<button type="button" class="btn btn-secondary" data-action="modular-editor-edge-mode" aria-pressed="false">Kantenmodus</button>'
+        '<span class="text-muted" id="modular-editor-status" aria-live="polite"><small></small></span>'
         '</div>'
         f'<script type="application/json" id="modular-editor-edges-data">{edges_json}</script>'
         '<div class="modular-editor__graph" id="modular-editor-graph">'

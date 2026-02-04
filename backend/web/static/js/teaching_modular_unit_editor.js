@@ -151,6 +151,7 @@ Goals:
   function setupEditorActions(root, edgeOverlay) {
     var unitId = root.getAttribute('data-unit-id') || '';
     if (!unitId) return;
+    var statusEl = root.querySelector('#modular-editor-status small');
 
     function apiFetch(path, body) {
       return fetch(path, {
@@ -195,12 +196,14 @@ Goals:
       Array.from(root.querySelectorAll('.modular-editor__module-node.is-edge-source')).forEach(function (n) {
         n.classList.remove('is-edge-source');
       });
+      if (statusEl && edgeMode) statusEl.textContent = 'Kantenmodus: Quelle wählen…';
     }
 
     function setEdgeMode(enabled) {
       edgeMode = !!enabled;
       clearEdgeSelection();
       if (edgeModeBtn) edgeModeBtn.setAttribute('aria-pressed', edgeMode ? 'true' : 'false');
+      if (statusEl) statusEl.textContent = edgeMode ? 'Kantenmodus: Quelle wählen…' : '';
     }
 
     if (edgeModeBtn) {
@@ -229,6 +232,7 @@ Goals:
       if (!edgeFrom) {
         edgeFrom = moduleId;
         node.classList.add('is-edge-source');
+        if (statusEl) statusEl.textContent = 'Kantenmodus: Ziel wählen…';
         return;
       }
 
@@ -246,10 +250,12 @@ Goals:
           next.push(edge);
           edgeOverlay.setEdges(next);
           edgeOverlay.draw();
+          if (statusEl) statusEl.textContent = 'Kante erstellt.';
         })
         .catch(function (e) {
           var detail = (e && e.detail) ? e.detail : '';
           window.alert(detail === 'edge_constraint_violation' ? 'Ungültige Kante (Regel verletzt).' : 'Kante konnte nicht erstellt werden.');
+          if (statusEl) statusEl.textContent = '';
         });
     }, true);
 
@@ -338,6 +344,8 @@ Goals:
   }
 
   function init(root) {
+    if (root.dataset.modularEditorReady === 'true') return;
+    root.dataset.modularEditorReady = 'true';
     setupPanelResize(root);
     var edgeOverlay = setupEdgesOverlay(root);
     setupEditorActions(root, edgeOverlay);
@@ -350,8 +358,7 @@ Goals:
 
   function boot() {
     var root = document.querySelector('.modular-editor[data-unit-id]');
-    if (!root) return;
-    init(root);
+    if (root) init(root);
   }
 
   if (document.readyState === 'loading') {
@@ -359,4 +366,16 @@ Goals:
   } else {
     boot();
   }
+
+  // When the app navigates via HTMX (main content swaps), the editor markup
+  // can appear after the initial page load. Ensure the editor initializes.
+  document.body && document.body.addEventListener && document.body.addEventListener('htmx:load', function (evt) {
+    var scope = (evt && evt.detail && evt.detail.elt) ? evt.detail.elt : document;
+    try {
+      var root = scope.querySelector ? scope.querySelector('.modular-editor[data-unit-id]') : null;
+      if (root) init(root);
+    } catch (e) {
+      // no-op
+    }
+  });
 })();

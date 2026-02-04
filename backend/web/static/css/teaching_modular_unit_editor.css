@@ -60,6 +60,7 @@ Why:
 
 .modular-editor__phases {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 12px;
 }
@@ -67,7 +68,11 @@ Why:
 .modular-editor__phase {
   display: flex;
   flex-direction: column;
-  width: 280px;
+  width: 100%;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .modular-editor__phase-header {
@@ -104,7 +109,9 @@ Why:
 
 .modular-editor__module-list {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 0.5rem;
   min-height: 4rem;
@@ -115,6 +122,8 @@ Why:
   flex-direction: column;
   align-items: stretch;
   gap: 0.35rem;
+  flex: 0 0 220px;
+  width: 220px;
   padding: 0.5rem 0.6rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;

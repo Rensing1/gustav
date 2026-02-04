@@ -366,11 +366,22 @@ class DBLearningRepo:
                         }
                     )
 
+                cur.execute(
+                    """
+                    select from_module_id::text, to_module_id::text
+                    from public.unit_module_edges
+                    where unit_id = %s
+                    order by from_module_id asc, to_module_id asc
+                    """,
+                    (unit_uuid,),
+                )
+                edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
+
         return {
             "unit": {"id": unit_row[0], "title": unit_row[1], "unit_type": unit_type},
             "phases": phases,
             "modules": modules,
-            "edges": [],
+            "edges": edges,
         }
 
     def get_modular_module_content(

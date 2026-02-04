@@ -15,6 +15,7 @@ from uuid import UUID
 import pytest
 import httpx
 from httpx import ASGITransport
+import os
 
 from utils.db import require_db_or_skip as _require_db_or_skip
 
@@ -240,3 +241,80 @@ async def test_learning_modular_module_content_happy_path_via_graph():
         assert payload["module"]["unit_id"] == unit_id
         assert isinstance(payload.get("materials"), list) and len(payload["materials"]) == 1
         assert isinstance(payload.get("tasks"), list) and len(payload["tasks"]) == 1
+
+
+@pytest.mark.anyio
+async def test_learning_modular_graph_includes_edges():
+    """Graph endpoint returns `edges` based on unit_module_edges (Option B module IDs)."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    try:
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("psycopg not available")
+
+    dsn = os.getenv("DATABASE_URL") or f"postgresql://{os.getenv('APP_DB_USER','gustav_app')}:{os.getenv('APP_DB_PASSWORD','CHANGE_ME_DEV')}@{os.getenv('TEST_DB_HOST','127.0.0.1')}:{os.getenv('TEST_DB_PORT','54322')}/postgres"
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-mod-edges-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-mod-edges-1", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(c, "Kurs Edges")
+
+        r_unit = await c.post("/api/teaching/units", json={"title": "Unit Modular", "unit_type": "modular"})
+        assert r_unit.status_code == 201
+        unit_id = r_unit.json()["id"]
+        UUID(unit_id)
+
+        r_a = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"})
+        assert r_a.status_code == 201
+        sec_a = r_a.json()["id"]
+        UUID(sec_a)
+
+        r_b = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "B"})
+        assert r_b.status_code == 201
+        sec_b = r_b.json()["id"]
+        UUID(sec_b)
+
+        await _attach_unit(c, course_id, unit_id)
+        await _add_member(c, course_id, student.sub)
+
+    # Insert edge A -> B as the author (RLS).
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (teacher.sub,))
+            cur.execute("select id::text from public.unit_modules where section_id = %s::uuid", (sec_a,))
+            mod_a = (cur.fetchone() or [None])[0]
+            cur.execute("select id::text from public.unit_modules where section_id = %s::uuid", (sec_b,))
+            mod_b = (cur.fetchone() or [None])[0]
+            assert mod_a and mod_b
+            cur.execute(
+                """
+                insert into public.unit_module_edges (unit_id, from_module_id, to_module_id)
+                values (%s::uuid, %s::uuid, %s::uuid)
+                """,
+                (unit_id, mod_a, mod_b),
+            )
+        conn.commit()
+
+    # Student sees the edge in the graph payload.
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", student.session_id)
+        r_graph = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
+        assert r_graph.status_code == 200
+        graph = r_graph.json()
+        assert {"from": mod_a, "to": mod_b} in (graph.get("edges") or [])

@@ -624,7 +624,20 @@ Ergebnis:
 
 ---
 
-## Offene Punkte (kurz vor MVP‑Start final klären)
-- **Phase/Modul‑Moves:** erlauben wir Drag&Drop von Modulen zwischen Phasen im MVP, oder nur per „neu anlegen + löschen“? (Plan nimmt „erlaubt, aber blocked wenn Kanten brechen“ an.)
-- **Graph‑Änderungen in laufenden Kursen:** reicht Warnung+Bestätigung, oder sollen bestimmte Änderungen gesperrt werden (z. B. Kanten entfernen)?
-- **Default für `required_prereq_count`:** bei neuen Modulen mit eingehenden Kanten default auf `n` (alle nötig) oder `1` (mindestens eins)? (Plan lässt es explizit wählbar; UI‑Default muss entschieden werden.)
+## MVP‑Defaults (festgelegt)
+
+### 1) Phase/Modul‑Moves (zwischen Phasen)
+- MVP: **erlaubt**, aber **blocked (409)** wenn dadurch irgendeine bestehende Kante die Regel „nur rechts / nur nächste Phase“ verletzt.
+- Kein automatisches Entfernen/Umhängen von Kanten (kein "magisches" Edge‑Cleanup). Lehrkraft muss Kanten bewusst anpassen.
+- Fehlermeldung muss konkret benennen, welche Kante(n) den Move verhindern.
+
+### 2) Graph‑Änderungen in laufenden Kursen
+- UI zeigt dauerhaft: "Diese Unit wird in X Kursen verwendet."
+- Bestätigung (Confirm) ist nur bei **strukturellen** Änderungen nötig; reine Textänderungen nicht.
+  - **Ohne Confirm:** Titel/Labels von Unit/Phase/Modul.
+  - **Mit Confirm + Kurs‑Count:** Kanten hinzufügen/entfernen, `k` ändern, Phase/Modul reorder, Modul/Phase löschen, Modul zwischen Phasen verschieben.
+
+### 3) Default für `required_prereq_count` (`k`)
+- UI‑Default: bei einem Zielmodul mit eingehenden Kanten gilt initial **`k = n`** ("alle nötig").
+- UI bietet klare Presets: "Alle nötig (k=n)" und "Mindestens eins (k=1)".
+- Clamp‑Regel: bei Änderungen an den eingehenden Kanten gilt immer `k = min(k, n)` (fail‑safe, keine invaliden Zustände).

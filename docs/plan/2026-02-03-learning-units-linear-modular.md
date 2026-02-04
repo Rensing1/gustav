@@ -13,7 +13,7 @@ Referenz‑UI (Prototyp): `ui-dummies/student-workspace-hybrid-sticky/`
 - **Lerneinheit (Unit)**: wiederverwendbarer Content‑Container (DB: `public.units`), den Lehrkräfte erstellen und Kurse referenzieren (DB: `public.course_modules`).
 - **Kursmodul**: eine Unit, die in einem Kurs „eingehängt“ ist (DB: `public.course_modules`). *Nicht verwechseln* mit „Modul“ innerhalb einer modularen Lerneinheit.
 - **Abschnitt (linear)**: heutige „unit_sections“ in einer linearen Lerneinheit (DB: `public.unit_sections`).
-- **Modul (modular)**: in modularen Lerneinheiten wird ein „Modul“ ebenfalls durch `public.unit_sections` repräsentiert (gleiche Tabelle, anderes UI/Verhalten).
+- **Modul (modular)**: Graph‑Knoten (DB: `public.unit_modules`) mit eigener `module_id` (UUID). Der **Inhalt** (Tasks/Materialien) liegt 1:1 in einer Section (DB: `public.unit_sections`) und wird über `unit_modules.section_id` referenziert.
 - **Phase**: Gruppenband/„Card“ zur Strukturierung modularer Lerneinheiten; ausschließlich visuell + Sortierung, keine zusätzliche Freischaltlogik.
 - **Kante/Abhängigkeit**: „A → B“ bedeutet: A kann B freischalten, sobald A fertig ist (und B genug erfüllte Voraussetzungen hat).
 
@@ -52,7 +52,7 @@ Regeln:
 
 Invarianten (müssen bei **jeder** Schreiboperation gelten – API‑Validierung, optional zusätzlich DB‑Trigger):
 - Nur für Units mit `unit_type='modular'`.
-- `from_section_id` und `to_section_id` gehören zur selben `unit_id`.
+- `from_module_id` und `to_module_id` gehören zur selben `unit_id`.
 - Keine Selbstkanten (`from <> to`).
 - Same‑Phase‑Kanten: `from.position_in_phase < to.position_in_phase`.
 - Cross‑Phase‑Kanten: `to.phase.position = from.phase.position + 1`.
@@ -147,13 +147,10 @@ RLS:
   - (empfohlen) `unit_phases_select_student` Policy analog zu `units_select_student` über `student_can_access_unit(...)`.
   - (alternativ) Phasen werden ausschließlich über einen course‑scoped Helper (Graph‑Endpoint) ausgeliefert, der Membership prüft.
 
-### 3) `public.unit_sections` (erweitern) – Modul‑Metadaten (nur für modulare Units)
-Modulare Units nutzen `unit_sections` weiterhin als Content‑Container (Materialien/Aufgaben). Dadurch können wir Materials/Tasks‑Authoring wiederverwenden.
+### 3) `public.unit_sections` (erweitern) – Content‑Counts (linear + modular)
+Units nutzen `unit_sections` weiterhin als Content‑Container (Materialien/Aufgaben). Das gilt sowohl für lineare Units (Abschnitte) als auch für modulare Units (Module referenzieren Sections als Content‑Container).
 
-Neue Spalten (Vorschlag):
-- `phase_id uuid null references unit_phases(id) on delete cascade`
-- `position_in_phase int null check (position_in_phase > 0)`
-- `required_prereq_count int not null default 0 check (required_prereq_count >= 0)`
+Neue Spalten (MVP):
 - (für die Student‑Graph‑UI, ohne Content‑Leak) `tasks_total int not null default 0 check (tasks_total >= 0)`
 - (für die Student‑Graph‑UI, ohne Content‑Leak) `materials_count int not null default 0 check (materials_count >= 0)`
 
@@ -174,36 +171,53 @@ Backfill (Migration, einmalig):
 - Reihenfolge in der Migration: Spalten → Backfill → Trigger.
 
 Constraints (Vorschlag):
-- `unique(phase_id, position_in_phase) deferrable initially immediate` (nur relevant wenn `phase_id` gesetzt)
-- Trigger/Funktion (Konsistenz):
-  - `phase_id` muss zu derselben `unit_id` gehören.
-  - Für Units `unit_type='modular'`: `phase_id` und `position_in_phase` müssen gesetzt sein.
+- (keine weiteren Constraints auf `unit_sections`; Modul‑Metadaten liegen in `unit_modules`, siehe unten)
 
 Wichtig (für Entwickler):
 - `unit_sections.position` existiert bereits (unique pro Unit) und darf nicht verschwinden.
-- Für modulare Units ist die **kanonische Ordnung**: `(phase.position, section.position_in_phase)`.
+- Für modulare Units ist die **kanonische Ordnung**: `(phase.position, module.position_in_phase)`.
 - `unit_sections.position` ist für modulare Units ein **redundanter Ableitungswert** (für Kompatibilität mit bestehendem Code/Constraints).
   - Ownership: Nur Teaching‑API/DB‑Helper setzen diesen Wert; keine „manuelle“ Pflege im UI.
   - Ziel: bestehende Queries/Sortierungen bleiben robust, obwohl die kanonische Ordnung modular anders gedacht ist.
 
 Konkreter Algorithmus (muss bei jedem Reorder/Move laufen, in **einer** Transaktion):
 1) `phases = unit_phases(unit_id) order by position asc, id asc`
-2) `modules = unit_sections(unit_id) where phase_id is not null order by phase.position asc, position_in_phase asc, id asc`
+2) `modules = unit_modules(unit_id) join unit_sections order by phase.position asc, position_in_phase asc, module_id asc`
 3) Setze `unit_sections.position = row_number()` über diese Ordnung (beginnt bei 1).
 
 Implementationshinweis:
 - In `public.unit_sections` ist `(unit_id, position)` bereits **deferrable unique** (`unit_sections_unit_id_position_key`), daher kann ein „in‑place“ Reorder in einer Transaktion erfolgen.
 - Empfohlen ist ein einzelnes `UPDATE … FROM (… row_number() …)` statt N×Updates aus der App.
 
-### 4) `public.unit_module_edges` (neu)
+### 4) `public.unit_modules` (neu) – Modul‑Metadaten (Option B)
+Zweck: Modulare Units bekommen Graph‑Knoten mit eigener stabiler ID (`module_id`), ohne die bestehende Content‑Struktur umzubauen.
+
+Kernidee:
+- `unit_modules.id` ist die **module_id** (API‑Identifier).
+- `unit_modules.section_id` referenziert den Content‑Container (`unit_sections.id`) für Materialien/Aufgaben.
+
+Vorschlag:
+- `id uuid pk default gen_random_uuid()`
+- `unit_id uuid not null references units(id) on delete cascade`
+- `section_id uuid not null references unit_sections(id) on delete cascade` (unique)
+- `phase_id uuid not null references unit_phases(id) on delete cascade`
+- `position_in_phase int not null check (position_in_phase > 0)`
+- `required_prereq_count int not null default 0 check (required_prereq_count >= 0)`
+- `unique(phase_id, position_in_phase) deferrable initially immediate`
+
+RLS:
+- Author: select/insert/update/delete wie `unit_sections` (Unit‑Author).
+- Student (Metadaten): select möglich über `student_can_access_unit(...)`, damit der Graph gerendert werden kann.
+
+### 5) `public.unit_module_edges` (neu)
 Zweck: Abhängigkeiten zwischen Modulen innerhalb einer **modularen** Unit.
 
 Vorschlag:
 - `unit_id uuid not null references units(id) on delete cascade`
-- `from_section_id uuid not null references unit_sections(id) on delete cascade`
-- `to_section_id uuid not null references unit_sections(id) on delete cascade`
-- `primary key (unit_id, from_section_id, to_section_id)`
-- Check: `from_section_id <> to_section_id`
+- `from_module_id uuid not null references unit_modules(id) on delete cascade`
+- `to_module_id uuid not null references unit_modules(id) on delete cascade`
+- `primary key (unit_id, from_module_id, to_module_id)`
+- Check: `from_module_id <> to_module_id`
 
 Validierung (API‑Ebene, optional zusätzlich DB‑Trigger):
 - Beide Enden gehören zu `unit_id`.
@@ -461,13 +475,13 @@ API‑Kontrakt (Vorschlag, möglichst wenig neue Surface):
 - Module (weiterhin `unit_sections`, UI‑Label „Modul“):
   - Bestehende Endpunkte bleiben, werden aber für `unit_type='modular'` um Felder erweitert:
     - `phase_id`, `position_in_phase`, `required_prereq_count`
-    - (optional) `prereq_section_ids: uuid[]` beim Update eines Moduls (Target‑Fokus).
+    - (optional) `prereq_module_ids: uuid[]` beim Update eines Moduls (Target‑Fokus).
   - Reorder innerhalb einer Phase:
     - `POST /api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder` (array von module_ids in Zielreihenfolge)
     - Backend setzt `position_in_phase` + recompute von `unit_sections.position` (siehe Algorithmus oben).
 - Abhängigkeiten:
   - MVP‑einfach: Abhängigkeiten werden beim Update des Zielmoduls B komplett ersetzt:
-    - Request enthält `prereq_section_ids` + `required_prereq_count`.
+    - Request enthält `prereq_module_ids` + `required_prereq_count`.
     - Backend upsertet `unit_module_edges` entsprechend und validiert die Invarianten.
 
 Validierung:

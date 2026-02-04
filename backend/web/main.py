@@ -3251,33 +3251,28 @@ def _render_modular_unit_editor_page_html(
     unit: dict,
     phases: list[dict],
     modules: list[dict],
+    edges: list[dict],
     csrf_token: str,
     error_phases: str | None = None,
     error_modules: str | None = None,
 ) -> str:
-    """Build the teacher editor page for a modular unit (single entrypoint).
+    """Build the teacher visual editor page for a modular unit.
 
-    Intent:
-        Teachers should edit a modular unit in one place:
-        - manage phases + modules (advance organizer meta)
-        - click a module to edit its materials/tasks (content)
+    UX intent:
+        - Phases are columns (left -> right).
+        - Modules are nodes inside phases.
+        - Clicking a module loads its content editor into the right-side panel
+          via HTMX (no page navigation).
+        - Edges (dependencies) are rendered as an overlay and manipulated via
+          dedicated Teaching APIs (JS + HTMX hybrid).
 
-    Notes:
-        Option B: Each module (unit_modules.id) maps 1:1 to a section
-        (unit_sections.id). Teachers should not need to know about sections.
+    Option B (implementation detail):
+        Each module (unit_modules.id) maps 1:1 to a backing section
+        (unit_sections.id). The teacher UX should not expose sections.
     """
     unit_id = str(unit.get("id") or "")
     unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
-
-    create_phase_form = (
-        f'<form method="post" action="/units/{unit_id}/phases" '
-        f'hx-post="/units/{unit_id}/phases" hx-target="#phase-list-section" hx-swap="outerHTML">'
-        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        '<label>Titel der Phase<input class="form-input" type="text" name="title" required></label>'
-        '<div class="form-actions"><button class="btn btn-primary" type="submit">Phase hinzufügen</button></div>'
-        '</form>'
-    )
-    phases_list = _render_unit_phases_list_partial(unit_id, phases, csrf_token=csrf_token, error=error_phases)
+    edges_json = json.dumps(edges or [], ensure_ascii=False, separators=(",", ":"))
 
     # Group modules by phase for a simple, readable editor layout.
     modules_by_phase: dict[str, list[dict]] = {}
@@ -3285,46 +3280,78 @@ def _render_modular_unit_editor_page_html(
         pid = str(m.get("phase_id") or "")
         modules_by_phase.setdefault(pid, []).append(m)
 
-    module_cards: list[str] = []
-    for p in phases:
-        pid = str(p.get("id") or "")
-        ptitle = Component.escape(str(p.get("title") or "Phase"))
-        entries = modules_by_phase.get(pid, [])
-        if entries:
-            lis: list[str] = []
-            for m in entries:
-                mid = Component.escape(str(m.get("id") or ""))
-                title = Component.escape(str(m.get("title") or "Modul"))
-                lis.append(
-                    '<li class="module-item">'
-                    f'<a href="/units/{unit_id}/modules/{mid}">{title}</a>'
-                    '</li>'
-                )
-            inner = '<ul class="module-list">' + "".join(lis) + "</ul>"
-        else:
-            inner = '<div class="empty-state"><p>Noch keine Module in dieser Phase.</p></div>'
-        module_cards.append(f'<section class="card"><h3>{ptitle}</h3>{inner}</section>')
-
     error_modules_html = (
         f'<div class="section-error" role="alert" data-testid="module-error">{Component.escape(error_modules)}</div>'
         if error_modules
         else ""
     )
-    create_module_form = (
-        f'<form method="post" action="/units/{unit_id}/modules">'
-        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
-        '<label>Titel des Moduls<input class="form-input" type="text" name="title" required></label>'
-        '<div class="form-actions"><button class="btn btn-primary" type="submit">Modul hinzufügen</button></div>'
-        '</form>'
-    )
+
+    # Phase columns (left -> right)
+    phase_columns: list[str] = []
+    for p in phases:
+        pid = str(p.get("id") or "")
+        ptitle = Component.escape(str(p.get("title") or "Phase"))
+        entries = modules_by_phase.get(pid, [])
+
+        # Each module node is a Sortable item. The inner button triggers HTMX panel load.
+        node_html: list[str] = []
+        for m in entries:
+            mid = str(m.get("id") or "")
+            title = Component.escape(str(m.get("title") or "Modul"))
+            panel_url = f"/units/{Component.escape(unit_id)}/modules/{Component.escape(mid)}/panel"
+            node_html.append(
+                '<div class="modular-editor__module-node" '
+                f'id="module_{Component.escape(mid)}" data-module-id="{Component.escape(mid)}">'
+                '<span class="modular-editor__drag-handle" title="Verschieben" aria-hidden="true">⠿</span>'
+                f'<button type="button" class="modular-editor__module-btn" '
+                f'hx-get="{panel_url}" hx-target="#modular-editor-panel" hx-swap="innerHTML">'
+                f"{title}"
+                "</button>"
+                "</div>"
+            )
+        inner_nodes = "".join(node_html) if node_html else '<div class="empty-state"><p>Noch keine Module.</p></div>'
+
+        phase_columns.append(
+            '<section class="modular-editor__phase" '
+            f'data-phase-id="{Component.escape(pid)}">'
+            '<header class="modular-editor__phase-header">'
+            f'<h3 class="modular-editor__phase-title">{ptitle}</h3>'
+            f'<button type="button" class="btn btn-sm btn-secondary" '
+            f'data-action="modular-editor-add-module" data-phase-id="{Component.escape(pid)}">+ Modul</button>'
+            "</header>"
+            f'<div class="modular-editor__module-list" data-unit-id="{Component.escape(unit_id)}" '
+            f'data-phase-id="{Component.escape(pid)}">'
+            f"{inner_nodes}"
+            "</div>"
+            "</section>"
+        )
+
+    phases_html = "".join(phase_columns) if phase_columns else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
 
     return (
-        '<div class="container">'
+        f'<div class="container modular-editor" data-testid="modular-unit-editor" data-unit-id="{Component.escape(unit_id)}">'
         f'<h1>Editor: {unit_title}</h1>'
-        '<p class="text-muted">Phasen und Module anlegen · Modul anklicken, um Inhalte zu bearbeiten.</p>'
-        f'<section class="card"><h2>Phasen</h2>{create_phase_form}{phases_list}</section>'
-        f'<section class="card"><h2>Module</h2>{error_modules_html}{create_module_form}{"".join(module_cards)}</section>'
+        '<p class="text-muted">Phasen (Spalten) · Module (Knoten) · Rechts: Inhalte bearbeiten.</p>'
+        f"{error_modules_html}"
+        '<div class="modular-editor__shell">'
+        '<div class="modular-editor__canvas">'
+        '<div class="modular-editor__toolbar">'
+        f'<button type="button" class="btn btn-secondary" data-action="modular-editor-add-phase">+ Phase</button> '
+        f'<button type="button" class="btn btn-secondary" data-action="modular-editor-edge-mode" aria-pressed="false">Kantenmodus</button>'
         '</div>'
+        f'<script type="application/json" id="modular-editor-edges-data">{edges_json}</script>'
+        '<div class="modular-editor__graph" id="modular-editor-graph">'
+        '<svg class="modular-editor__edges" id="modular-editor-edges" aria-hidden="true" focusable="false"></svg>'
+        f"{phases_html}"
+        "</div>"
+        "</div>"
+        '<div class="modular-editor__splitter" id="modular-editor-splitter" aria-hidden="true"></div>'
+        '<aside class="modular-editor__panel" id="modular-editor-panel">'
+        '<h2>Modul</h2>'
+        '<p class="text-muted">Klicke links auf ein Modul, um Inhalte zu bearbeiten.</p>'
+        "</aside>"
+        "</div>"
+        "</div>"
     )
 
 
@@ -3611,6 +3638,26 @@ def _fetch_unit_modules_for_unit(unit_id: str, *, author_sub: str) -> list[dict]
         if not isinstance(repo, DBTeachingRepo):
             return []
         return repo.list_unit_modules_for_author(unit_id=unit_id, author_id=author_sub)
+    except Exception:
+        return []
+
+def _fetch_unit_module_edges_for_unit(unit_id: str, *, author_sub: str) -> list[dict]:
+    """Fetch module dependency edges for the modular teacher editor.
+
+    Returns:
+        List of dicts: { "from": <module_id>, "to": <module_id> }.
+        Returns an empty list on any error (editor stays usable).
+    """
+    if not author_sub:
+        return []
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if not isinstance(repo, DBTeachingRepo):
+            return []
+        return repo.list_unit_module_edges_for_author(unit_id=unit_id, author_id=author_sub)
     except Exception:
         return []
 
@@ -5291,14 +5338,26 @@ async def unit_details_index(request: Request, unit_id: str):
     if unit_type == "modular":
         phases, phases_err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
         modules = _fetch_unit_modules_for_unit(unit_id, author_sub=str((user or {}).get("sub") or ""))
+        edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=str((user or {}).get("sub") or ""))
         content = _render_modular_unit_editor_page_html(
             unit=unit_vm,
             phases=phases,
             modules=modules,
+            edges=edges,
             csrf_token=token,
             error_phases=phases_err,
         )
-        layout = Layout(title=f"Editor – {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
+        extra_head = (
+            '<link rel="stylesheet" href="/static/css/teaching_modular_unit_editor.css?v=1">'
+            '<script src="/static/js/teaching_modular_unit_editor.js?v=1" defer></script>'
+        )
+        layout = Layout(
+            title=f"Editor – {unit_vm['title']}",
+            content=content,
+            user=user,
+            current_path=request.url.path,
+            extra_head_html=extra_head,
+        )
         return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
     sections = await _fetch_sections_for_unit(unit_id, session_id=sid)
@@ -5312,8 +5371,10 @@ async def unit_modules_create(request: Request, unit_id: str):
     """Create a new module (backed by a section) for a modular unit.
 
     Teachers should not need to know that Option B maps modules 1:1 to sections.
-    This endpoint keeps the teacher flow stable (/modules) while delegating the
-    actual persistence to the existing sections API.
+    This endpoint keeps the teacher flow stable (/modules) while delegating to
+    the Teaching API:
+      - preferred: /api/teaching/units/{unit_id}/modules when phase_id is given
+      - fallback:  /api/teaching/units/{unit_id}/sections (legacy editor flow)
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
@@ -5327,12 +5388,16 @@ async def unit_modules_create(request: Request, unit_id: str):
     title = str(form.get("title", "")).strip()
     if not title:
         return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
+    phase_id = str(form.get("phase_id", "")).strip()
 
     try:
         async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+            if phase_id and _is_uuid_like(phase_id):
+                await client.post(f"/api/teaching/units/{unit_id}/modules", json={"title": title, "phase_id": phase_id})
+            else:
+                await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
     except Exception:
         # Keep teacher flow resilient: return to editor even when backend fails.
         return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
@@ -5615,6 +5680,58 @@ async def module_detail_index(request: Request, unit_id: str, module_id: str):
     )
     layout = Layout(title=f"Modul – {str(module.get('title') or '')}", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modules/{module_id}/panel", response_class=HTMLResponse)
+async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
+    """HTMX fragment for the modular unit editor's right-side panel (teacher).
+
+    Intent:
+        Keep the teacher inside the visual editor while editing module content.
+        The panel reuses the existing section-based content APIs (Option B).
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return HTMLResponse("Modul nicht gefunden", status_code=404)
+    section_id = str(module.get("section_id") or "")
+    if not section_id:
+        return HTMLResponse("Modul nicht gefunden", status_code=404)
+
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid)
+    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid)
+
+    module_title = str(module.get("title") or "Modul")
+    materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=token)
+    tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=token)
+
+    html = (
+        f'<div class="modular-editor-panel__content" data-module-id="{Component.escape(module_id)}">'
+        f'<h2>{Component.escape(module_title)}</h2>'
+        '<div class="two-col">'
+        f'<section class="card col-left"><h3>Materialien</h3>'
+        f'<div class="actions"><a class="btn btn-primary btn-sm" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/materials/new">+ Material</a></div>'
+        f"{materials_html}"
+        "</section>"
+        f'<section class="card col-right"><h3>Aufgaben</h3>'
+        f'<div class="actions"><a class="btn btn-primary btn-sm" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/tasks/new">+ Aufgabe</a></div>'
+        f"{tasks_html}"
+        "</section>"
+        "</div>"
+        f'<p class="text-muted"><small>Vollansicht: <a href="/units/{Component.escape(unit_id)}/modules/{Component.escape(module_id)}">Modul öffnen</a></small></p>'
+        "</div>"
+    )
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
 
 
 def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:

@@ -95,3 +95,4 @@ async def test_modular_unit_editor_renders_phases_modules_and_module_click_opens
         assert panel.status_code == 200
         assert "Materialien" in panel.text
         assert "Aufgaben" in panel.text
+        assert 'name="required_prereq_count"' in panel.text

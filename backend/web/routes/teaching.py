@@ -1571,6 +1571,8 @@ class UnitModuleCreatePayload(BaseModel):
 class UnitModuleUpdatePayload(BaseModel):
     # Accept any length; enforce 1..200 in handler to return 400 (not 422)
     title: str | None = Field(default=None)
+    # Use loose typing to avoid FastAPI 422, then validate type manually.
+    required_prereq_count: object | None = None
 
     @field_validator("title", mode="before")
     @classmethod
@@ -2281,7 +2283,7 @@ async def create_unit_module(request: Request, unit_id: str, payload: UnitModule
 
 @teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}")
 async def update_unit_module(request: Request, unit_id: str, module_id: str, payload: UnitModuleUpdatePayload):
-    """Rename a module (author only)."""
+    """Update module settings (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
@@ -2297,17 +2299,34 @@ async def update_unit_module(request: Request, unit_id: str, module_id: str, pay
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
-    updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not updates:
+    title_provided = "title" in payload.model_fields_set
+    k_provided = "required_prereq_count" in payload.model_fields_set
+    if not (title_provided or k_provided):
         return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
-    title = updates.get("title")
-    if title is not None and (not str(title).strip() or len(str(title).strip()) > 200):
+
+    title = payload.title if title_provided else _UNSET
+    if title is not _UNSET and (title is None or (not str(title).strip()) or len(str(title).strip()) > 200):
         return _private_error({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+
+    k = payload.required_prereq_count if k_provided else _UNSET
+    if k is not _UNSET:
+        if k is None or isinstance(k, bool) or (not isinstance(k, int)) or int(k) < 0:
+            return _private_error({"error": "bad_request", "detail": "invalid_required_prereq_count"}, status_code=400)
     try:
-        updated = repo.update_unit_module_title(unit_id=unit_id, module_id=module_id, title=title, author_id=sub)
+        update_kwargs: dict[str, object] = {}
+        if title_provided:
+            update_kwargs["title"] = title
+        if k_provided:
+            update_kwargs["required_prereq_count"] = k
+        updated = repo.update_unit_module_owned(
+            unit_id=unit_id,
+            module_id=module_id,
+            author_id=sub,
+            **update_kwargs,
+        )
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
-        if detail in {"invalid_unit_type", "invalid_title"}:
+        if detail in {"invalid_unit_type", "invalid_title", "invalid_required_prereq_count"}:
             return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
         return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     except PermissionError:

@@ -5774,6 +5774,30 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
     materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=token)
     tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=token)
 
+    # Unlock settings (k-of-n prerequisites).
+    required_prereq_count = int(module.get("required_prereq_count") or 0)
+    settings_target_id = f"modular-editor-module-settings-{module_id}"
+    settings_action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/settings"
+    settings_html = (
+        f'<section class="card" id="{Component.escape(settings_target_id)}">'
+        "<h3>Freischaltung</h3>"
+        '<p class="text-muted"><small>'
+        "Wie viele erfüllte Voraussetzungen (eingehende Kanten) benötigt dieses Modul, "
+        "bevor es für Schüler öffnet?"
+        "</small></p>"
+        f'<form method="post" action="{settings_action}" hx-post="{settings_action}" '
+        f'hx-target="#{Component.escape(settings_target_id)}" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label><span class="sr-only">required_prereq_count</span>'
+        f'<input class="form-input" type="number" name="required_prereq_count" min="0" value="{required_prereq_count}" required>'
+        "</label>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button>'
+        "</div>"
+        "</form>"
+        "</section>"
+    )
+
     # Dependency edges (graph): allow teachers to remove edges to unblock moves.
     edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=author_sub)
     outgoing = [e for e in edges if str(e.get("from") or "") == str(module_id)]
@@ -5825,9 +5849,98 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
         f"{tasks_html}"
         "</section>"
         "</div>"
+        f"{settings_html}"
         f"{deps_html}"
         f'<p class="text-muted"><small>Vollansicht: <a href="/units/{Component.escape(unit_id)}/modules/{Component.escape(module_id)}">Modul öffnen</a></small></p>'
         "</div>"
+    )
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/settings", response_class=HTMLResponse)
+async def modular_editor_module_settings_update(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: update module unlock settings (teacher).
+
+    Why:
+        Teachers need to model k-of-n prerequisites without leaving the visual
+        editor. This endpoint translates a simple form POST into a Teaching API
+        PATCH call.
+
+    Security:
+        - Synchronizer CSRF validation (dev = prod).
+        - AuthZ is enforced by the Teaching API (author only).
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    current_k = int((module or {}).get("required_prereq_count") or 0)
+
+    raw = str(form.get("required_prereq_count") or "").strip()
+    error: str | None = None
+    new_k: int = current_k
+    if raw == "":
+        error = "invalid_required_prereq_count"
+    else:
+        try:
+            new_k = int(raw)
+        except Exception:
+            error = "invalid_required_prereq_count"
+    if error is None and new_k < 0:
+        error = "invalid_required_prereq_count"
+
+    if error is None:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.patch(
+                    f"/api/teaching/units/{unit_id}/modules/{module_id}",
+                    json={"required_prereq_count": new_k},
+                )
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+                else:
+                    try:
+                        payload = r.json() if isinstance(r.json(), dict) else {}
+                        new_k = int(payload.get("required_prereq_count") or new_k)
+                    except Exception:
+                        pass
+        except Exception:
+            error = "update_failed"
+
+    settings_target_id = f"modular-editor-module-settings-{module_id}"
+    settings_action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/settings"
+    error_html = f'<div class="form-error" role="alert">{Component.escape(error)}</div>' if error else ""
+    success_html = "" if error else '<div class="form-success" role="status">Gespeichert.</div>'
+    html = (
+        f'<section class="card" id="{Component.escape(settings_target_id)}">'
+        "<h3>Freischaltung</h3>"
+        f"{error_html}{success_html}"
+        '<p class="text-muted"><small>'
+        "Wie viele erfüllte Voraussetzungen (eingehende Kanten) benötigt dieses Modul, "
+        "bevor es für Schüler öffnet?"
+        "</small></p>"
+        f'<form method="post" action="{settings_action}" hx-post="{settings_action}" '
+        f'hx-target="#{Component.escape(settings_target_id)}" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label><span class="sr-only">required_prereq_count</span>'
+        f'<input class="form-input" type="number" name="required_prereq_count" min="0" '
+        f'value="{int(new_k)}" required>'
+        "</label>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button>'
+        "</div>"
+        "</form>"
+        "</section>"
     )
     return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
 

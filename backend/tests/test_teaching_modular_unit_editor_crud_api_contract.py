@@ -71,6 +71,11 @@ async def test_teaching_modular_unit_module_update_and_delete_remove_backing_con
         assert r_rename.status_code == 200, r_rename.text
         assert r_rename.json()["title"] == "A2"
 
+        # Update k-of-n prerequisite semantics (k = required_prereq_count).
+        r_k = await c.patch(f"/api/teaching/units/{uid}/modules/{mid}", json={"required_prereq_count": 1})
+        assert r_k.status_code == 200, r_k.text
+        assert r_k.json()["required_prereq_count"] == 1
+
         # Backing content is a section; the section list should reflect the new title.
         r_sections = await c.get(f"/api/teaching/units/{uid}/sections")
         assert r_sections.status_code == 200
@@ -149,4 +154,3 @@ async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_
         assert r_sections.status_code == 200
         titles = {s.get("title") for s in r_sections.json()}
         assert "B" not in titles
-

@@ -1267,6 +1267,121 @@ class DBTeachingRepo:
             for r in out_rows
         ]
 
+    def update_unit_module_owned(
+        self,
+        *,
+        unit_id: str,
+        module_id: str,
+        author_id: str,
+        title=_UNSET,
+        required_prereq_count=_UNSET,
+    ) -> Optional[dict]:
+        """Update module settings inside a modular unit (author only).
+
+        Option B:
+            The visible module title lives on the backing section row
+            (`public.unit_sections.title`). The unlock setting
+            `required_prereq_count` lives on `public.unit_modules`.
+
+        Parameters:
+            unit_id: Modular unit id.
+            module_id: Unit module id (graph node).
+            author_id: Caller sub; must own the unit.
+            title: New title (1..200) or `_UNSET` to keep current title.
+            required_prereq_count: New k (>= 0) or `_UNSET` to keep current value.
+
+        Returns:
+            Updated module dict (including section_id for internal wiring) or
+            None when the module is not visible to the caller.
+        """
+        if title is _UNSET and required_prereq_count is _UNSET:
+            raise ValueError("empty_payload")
+
+        t: str | None = None
+        if title is not _UNSET:
+            t = (title or "").strip()
+            if not t or len(t) > 200:
+                raise ValueError("invalid_title")
+
+        k: int | None = None
+        if required_prereq_count is not _UNSET:
+            if required_prereq_count is None or isinstance(required_prereq_count, bool) or not isinstance(required_prereq_count, int):
+                raise ValueError("invalid_required_prereq_count")
+            k = int(required_prereq_count)
+            if k < 0:
+                raise ValueError("invalid_required_prereq_count")
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+
+                cur.execute(
+                    """
+                    select um.section_id::text,
+                           um.phase_id::text,
+                           um.position_in_phase,
+                           um.required_prereq_count,
+                           s.title
+                      from public.unit_modules um
+                      join public.unit_sections s on s.id = um.section_id
+                     where um.unit_id = %s::uuid
+                       and um.id = %s::uuid
+                     for update
+                    """,
+                    (unit_id, module_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+
+                section_id = row[0]
+                phase_id = row[1]
+                pos_in_phase = int(row[2] or 1)
+                current_k = int(row[3] or 0)
+                current_title = str(row[4] or "")
+
+                if t is not None:
+                    cur.execute(
+                        """
+                        update public.unit_sections
+                        set title = %s
+                        where id = %s::uuid
+                          and unit_id = %s::uuid
+                        """,
+                        (t, section_id, unit_id),
+                    )
+                    current_title = t
+
+                if k is not None:
+                    cur.execute(
+                        """
+                        update public.unit_modules
+                        set required_prereq_count = %s
+                        where unit_id = %s::uuid
+                          and id = %s::uuid
+                        """,
+                        (k, unit_id, module_id),
+                    )
+                    current_k = k
+
+                conn.commit()
+        return {
+            "id": module_id,
+            "unit_id": unit_id,
+            "section_id": section_id,
+            "phase_id": phase_id,
+            "position_in_phase": pos_in_phase,
+            "required_prereq_count": current_k,
+            "title": current_title,
+        }
+
     def update_unit_module_title(self, *, unit_id: str, module_id: str, title: str, author_id: str) -> Optional[dict]:
         """Rename a module inside a modular unit (author only).
 

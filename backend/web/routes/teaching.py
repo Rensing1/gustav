@@ -2196,6 +2196,11 @@ async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhase
         return _private_error({"error": "not_found"}, status_code=404)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23514":  # check_violation
+            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+        raise
     return _json_private([_serialize_unit_phase(p) for p in ordered], status_code=200, vary_origin=True)
 
 

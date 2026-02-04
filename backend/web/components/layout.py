@@ -136,7 +136,7 @@ class Layout(Component):
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
     <!-- Teacher modular unit visual editor -->
-    <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=7" defer></SCRIPT>
+    <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=8" defer></SCRIPT>
     {self.extra_head_html}
     """
 

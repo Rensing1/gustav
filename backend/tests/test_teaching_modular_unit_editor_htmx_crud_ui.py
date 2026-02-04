@@ -177,3 +177,45 @@ async def test_modular_editor_phase_delete_requires_csrf_and_cascades() -> None:
         assert all(m.get("id") != mod_b for m in body["modules"])
         assert body["edges"] == []
 
+
+@pytest.mark.anyio
+async def test_modular_editor_required_prereq_count_update_via_panel_settings() -> None:
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor HTMX CRUD UI test")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-ui-mod-editor-htmx-k", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        uid, _p1, _p2, mod_a, _mod_b = await _create_modular_unit_with_two_modules(c)
+
+        # Load panel fragment to get CSRF token for the inline settings form.
+        panel = await c.get(
+            f"/units/{uid}/modules/{mod_a}/panel",
+            headers={"HX-Request": "true"},
+        )
+        assert panel.status_code == 200, panel.text
+        csrf = _extract_csrf(panel.text)
+
+        # Update required_prereq_count via UI endpoint (form POST).
+        res = await c.post(
+            f"/units/{uid}/modular-editor/module/{mod_a}/settings",
+            data={"csrf_token": csrf, "required_prereq_count": "2"},
+            headers={"HX-Request": "true"},
+        )
+        assert res.status_code == 200, res.text
+
+        # Source of truth: the teaching graph API must reflect the new k.
+        graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert graph.status_code == 200, graph.text
+        mod = next((m for m in graph.json()["modules"] if m.get("id") == mod_a), None)
+        assert isinstance(mod, dict)
+        assert mod.get("required_prereq_count") == 2

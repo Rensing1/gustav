@@ -578,6 +578,10 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+        required_prereq_count:
+          type: integer
+          minimum: 0
+          description: k-of-n prerequisites required to unlock the module (k >= 0)
     TeachingUnitModuleReorder:
       type: object
       required: [module_ids]
@@ -5471,8 +5475,11 @@ paths:
   /api/teaching/units/{unit_id}/modules/{module_id}:
     patch:
       tags: [Teaching]
-      summary: Rename a module (author only)
-      description: "Updates the module title (Option B: updates the backing section title)."
+      summary: Update a module (author only)
+      description: |
+        Updates module settings.
+        - `title` updates the visible module title (Option B: updates the backing section title).
+        - `required_prereq_count` updates k-of-n unlocking semantics.
       operationId: updateTeachingUnitModule
       security:
         - cookieAuth: []
@@ -5526,6 +5533,7 @@ paths:
               - invalid_unit_type
               - empty_payload
               - invalid_title
+              - invalid_required_prereq_count
           content:
             application/json:
               schema:

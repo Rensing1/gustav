@@ -1,0 +1,98 @@
+/*
+Student UI — Modular learning unit page (advance organizer)
+
+Why:
+  The modular unit page renders an "advance organizer" graph where students
+  can see locked/open/done modules and load module content on demand.
+
+Notes:
+  - Keep CSS minimal and self-contained (gustav.css provides the base system).
+  - Layout uses a simple deterministic grid; no manual coordinates required.
+*/
+
+.modular-unit-page .card {
+  margin-bottom: 1rem;
+}
+
+.modular-graph {
+  position: relative;
+  overflow: auto;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  padding: 0.75rem;
+}
+
+/* SVG edges sit behind the HTML buttons */
+.modular-graph__edges {
+  position: absolute;
+  inset: 0;
+  width: var(--canvas-w, 800px);
+  height: var(--canvas-h, 400px);
+  pointer-events: none;
+}
+
+.modular-graph__edge {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.22);
+  stroke-width: 2;
+}
+
+.modular-graph__edges polygon {
+  fill: rgba(0, 0, 0, 0.22);
+}
+
+.modular-graph__nodes {
+  position: relative;
+}
+
+.modular-graph__node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.modular-graph__node:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.modular-graph__node-title {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.modular-graph__node-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.modular-graph__node--locked {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.modular-graph__node--open {
+  border-color: rgba(0, 90, 255, 0.35);
+}
+
+.modular-graph__node--done {
+  border-color: rgba(20, 160, 80, 0.5);
+  background: rgba(20, 160, 80, 0.06);
+}
+
+.modular-module h3 {
+  margin-top: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+

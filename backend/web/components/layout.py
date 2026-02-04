@@ -20,7 +20,8 @@ class Layout(Component):
         user: Optional[Dict[str, Any]] = None,
         show_nav: bool = True,
         show_header: bool = True,
-        current_path: str = "/"
+        current_path: str = "/",
+        extra_head_html: str = "",
     ):
         """
         Args:
@@ -30,6 +31,8 @@ class Layout(Component):
             show_nav: Whether to show navigation (default: True)
             show_header: Whether to show header (default: True)
             current_path: Current URL path for active navigation highlighting
+            extra_head_html: Optional raw HTML injected into the <head>.
+                             Intended for page-specific CSS/JS includes.
         """
         self.title = title
         self.content = content
@@ -37,6 +40,7 @@ class Layout(Component):
         self.show_nav = show_nav
         self.show_header = show_header
         self.current_path = current_path
+        self.extra_head_html = extra_head_html
 
     def render(self) -> str:
         """Render the complete HTML document including navigation and chrome."""
@@ -127,6 +131,7 @@ class Layout(Component):
     <SCRIPT src="/static/js/gustav.js?v=9" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
+    {self.extra_head_html}
     """
 
     def _render_main_inner(self, breadcrumb_html: str) -> str:

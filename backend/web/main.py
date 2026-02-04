@@ -1611,6 +1611,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
         return RedirectResponse(url=f"/learning/courses/{course_id}", status_code=303)
     unit_title = "Lerneinheit"
+    unit_type = "linear"
     sections: list[dict] = []
     show_history_for = request.query_params.get("show_history_for") or ""
     open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
@@ -1630,9 +1631,180 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             t = u.get("title")
                             if isinstance(t, str) and t:
                                 unit_title = t
+                            ut = str(u.get("unit_type") or "").strip().lower()
+                            unit_type = ut if ut in {"linear", "modular"} else unit_type
                             break
             except Exception:
                 pass
+
+            # Branch SSR page by unit_type:
+            # - linear: existing released-sections view
+            # - modular: advance organizer (graph) + module content loading
+            if unit_type == "modular":
+                graph: dict = {}
+                try:
+                    r_graph = await client.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
+                    if r_graph.status_code == 200 and isinstance(r_graph.json(), dict):
+                        graph = r_graph.json()
+                except Exception:
+                    graph = {}
+
+                phases = graph.get("phases") if isinstance(graph.get("phases"), list) else []
+                modules = graph.get("modules") if isinstance(graph.get("modules"), list) else []
+                edges = graph.get("edges") if isinstance(graph.get("edges"), list) else []
+
+                # Deterministic layout without manual coordinates:
+                # - Y by phase.position
+                # - X by position_in_phase
+                NODE_W = 220
+                NODE_H = 92
+                NODE_GAP_X = 260
+                PHASE_GAP_Y = 160
+                PAD_X = 24
+                PAD_Y = 24
+
+                # Phase order lookup (fall back to stable id ordering).
+                phases_sorted = sorted(
+                    [p for p in phases if isinstance(p, dict)],
+                    key=lambda p: (int(p.get("position") or 1), str(p.get("id") or "")),
+                )
+                phase_order: dict[str, int] = {str(p.get("id") or ""): idx for idx, p in enumerate(phases_sorted)}
+
+                coords: dict[str, tuple[int, int]] = {}
+                max_pos_in_phase = 1
+                for m in [m for m in modules if isinstance(m, dict)]:
+                    mid = str(m.get("id") or "")
+                    pid = str(m.get("phase_id") or "")
+                    pos_in_phase = int(m.get("position_in_phase") or 1)
+                    max_pos_in_phase = max(max_pos_in_phase, pos_in_phase)
+                    x = PAD_X + (max(pos_in_phase, 1) - 1) * NODE_GAP_X
+                    y = PAD_Y + (phase_order.get(pid, 0)) * PHASE_GAP_Y
+                    coords[mid] = (x, y)
+
+                canvas_w = PAD_X * 2 + (max(max_pos_in_phase, 1) - 1) * NODE_GAP_X + NODE_W
+                canvas_h = PAD_Y * 2 + (max(len(phases_sorted), 1) - 1) * PHASE_GAP_Y + NODE_H
+
+                # Edges rendered as SVG behind HTML nodes (no JS required).
+                edge_lines: list[str] = []
+                for e in [e for e in edges if isinstance(e, dict)]:
+                    from_id = str(e.get("from") or "")
+                    to_id = str(e.get("to") or "")
+                    if from_id not in coords or to_id not in coords:
+                        continue
+                    fx, fy = coords[from_id]
+                    tx, ty = coords[to_id]
+                    x1 = fx + NODE_W // 2
+                    y1 = fy + NODE_H
+                    x4 = tx + NODE_W // 2
+                    y4 = ty
+                    mid_y = (y1 + y4) // 2
+                    edge_lines.append(
+                        f'<polyline class="modular-graph__edge" '
+                        f'points="{x1},{y1} {x1},{mid_y} {x4},{mid_y} {x4},{y4}" '
+                        f'marker-end="url(#arrowhead)" />'
+                    )
+
+                edges_svg = (
+                    "<svg class=\"modular-graph__edges\" "
+                    f'viewBox="0 0 {canvas_w} {canvas_h}" '
+                    f'width="{canvas_w}" height="{canvas_h}" '
+                    "aria-hidden=\"true\" focusable=\"false\">"
+                    "<defs>"
+                    "<marker id=\"arrowhead\" markerWidth=\"10\" markerHeight=\"7\" "
+                    "refX=\"10\" refY=\"3.5\" orient=\"auto\">"
+                    "<polygon points=\"0 0, 10 3.5, 0 7\" />"
+                    "</marker>"
+                    "</defs>"
+                    + "".join(edge_lines)
+                    + "</svg>"
+                )
+
+                # Nodes rendered as HTML buttons positioned over the SVG.
+                node_buttons: list[str] = []
+                for m in sorted(
+                    [m for m in modules if isinstance(m, dict)],
+                    key=lambda m: (
+                        phase_order.get(str(m.get("phase_id") or ""), 0),
+                        int(m.get("position_in_phase") or 1),
+                        str(m.get("id") or ""),
+                    ),
+                ):
+                    mid = str(m.get("id") or "")
+                    title = Component.escape(str(m.get("title") or "Modul"))
+                    status = str(m.get("status") or "locked")
+                    tasks_done = int(m.get("tasks_done") or 0)
+                    tasks_total = int(m.get("tasks_total") or 0)
+                    materials_count = int(m.get("materials_count") or 0)
+                    prereq_done = int(m.get("prereq_done") or 0)
+                    prereq_required = int(m.get("prereq_required") or 0)
+
+                    x, y = coords.get(mid, (PAD_X, PAD_Y))
+                    hx = ""
+                    disabled = ""
+                    if status in {"open", "done"}:
+                        hx = (
+                            f' hx-get="/learning/courses/{Component.escape(course_id)}/units/{Component.escape(unit_id)}'
+                            f'/modules/{Component.escape(mid)}/fragment"'
+                            ' hx-target="#student-modular-module-content" hx-swap="innerHTML"'
+                        )
+                    else:
+                        disabled = ' disabled aria-disabled="true"'
+
+                    node_buttons.append(
+                        f'<button type="button" class="modular-graph__node modular-graph__node--{Component.escape(status)}"'
+                        f' style="left:{x}px;top:{y}px;width:{NODE_W}px;height:{NODE_H}px;"{hx}{disabled}>'
+                        f'<div class="modular-graph__node-title">{title}</div>'
+                        f'<div class="modular-graph__node-meta">'
+                        f'<span class="badge">{Component.escape(status)}</span>'
+                        f'<span class="text-muted"><small>'
+                        f'Prereqs {prereq_done}/{prereq_required} · '
+                        f'Tasks {tasks_done}/{tasks_total} · '
+                        f'Material {materials_count}'
+                        f'</small></span>'
+                        f'</div>'
+                        f'</button>'
+                    )
+
+                graph_html = (
+                    f'<section class="card" id="student-modular-unit-graph">'
+                    f'<h2>Übersicht</h2>'
+                    f'<div class="modular-graph" style="--canvas-w:{canvas_w}px;--canvas-h:{canvas_h}px;">'
+                    f"{edges_svg}"
+                    f'<div class="modular-graph__nodes" style="width:{canvas_w}px;height:{canvas_h}px;">'
+                    + "".join(node_buttons)
+                    + "</div>"
+                    + "</div>"
+                    + "</section>"
+                )
+
+                banner_html = (
+                    '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>' if success_banner else ""
+                )
+                content = (
+                    f'<div class="container modular-unit-page" data-unit-type="modular">'
+                    f"<h1>{Component.escape(unit_title)}</h1>"
+                    f'<p><a href="/learning/courses/{course_id}">Zurück zu „Lerneinheiten“</a></p>'
+                    f"{banner_html}"
+                    f"{graph_html}"
+                    '<section class="card" id="student-modular-module-content">'
+                    '<h2>Inhalte</h2>'
+                    '<p class="text-muted">Wähle ein geöffnetes Modul in der Übersicht.</p>'
+                    "</section>"
+                    # Always include the H5P player initializer on modular pages,
+                    # because module content is loaded dynamically via HTMX swaps.
+                    '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
+                    "</div>"
+                )
+                extra_head = '<link rel="stylesheet" href="/static/css/student_modular_unit.css?v=1">'
+                layout = Layout(
+                    title=Component.escape(unit_title),
+                    content=content,
+                    user=user,
+                    current_path=request.url.path,
+                    extra_head_html=extra_head,
+                )
+                return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
             # Silence in production; errors handled gracefully below
             # Fetch released sections for this unit (with embedded materials/tasks)
             r_sections = await client.get(
@@ -1969,6 +2141,148 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     )
     layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get(
+    "/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment",
+    response_class=HTMLResponse,
+)
+async def learning_modular_unit_module_fragment(request: Request, course_id: str, unit_id: str, module_id: str):
+    """Render a module body (HTML fragment) for modular learning units.
+
+    Why:
+        The modular unit page loads module contents on demand (HTMX) after the
+        student unlocked the module. This keeps the initial page lightweight
+        and avoids leaking locked content.
+
+    Behavior:
+        - Requires role "student".
+        - Uses the Learning API (cookie-auth) to fetch module content.
+        - Locked / not accessible modules return 404 (fail-closed).
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "student":
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(module_id)):
+        return HTMLResponse("", status_code=400, headers={"Cache-Control": "private, no-store"})
+
+    payload: dict[str, Any] | None = None
+    try:
+        async with _internal_api_client() as client:
+            sid = _get_session_id(request) or ""
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(
+                f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}",
+                params={"include": "materials,tasks"},
+            )
+        if r.status_code == 200 and isinstance(r.json(), dict):
+            payload = r.json()
+        else:
+            # Fail-closed: do not distinguish "locked" vs "missing".
+            return HTMLResponse(
+                '<p class="text-muted">Modul nicht verfügbar.</p>',
+                status_code=404,
+                headers={"Cache-Control": "private, no-store"},
+            )
+    except Exception:
+        return HTMLResponse(
+            '<p class="text-muted">Modul konnte nicht geladen werden.</p>',
+            status_code=503,
+            headers={"Cache-Control": "private, no-store"},
+        )
+
+    module = payload.get("module", {}) if isinstance(payload, dict) else {}
+    materials = payload.get("materials", []) if isinstance(payload, dict) else []
+    tasks = payload.get("tasks", []) if isinstance(payload, dict) else []
+
+    module_title = Component.escape(str(module.get("title") or "Modul"))
+
+    parts: list[str] = []
+    needs_h5p_player_js = False
+
+    # Render materials/tasks as the same cards used on the linear unit page.
+    for m in (materials if isinstance(materials, list) else []):
+        if not isinstance(m, dict):
+            continue
+        mid = str(m.get("id") or "")
+        title = str(m.get("title") or "Material")
+        kind = str(m.get("kind") or "")
+        preview_html = ""
+        if kind == "markdown":
+            preview_html = render_markdown_safe(str(m.get("body_md") or ""))
+        card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
+        parts.append(card.render())
+
+    for t in (tasks if isinstance(tasks, list) else []):
+        if not isinstance(t, dict):
+            continue
+        tid = str(t.get("id") or "")
+        title = str(t.get("title") or "Aufgabe")
+        task_kind = str(t.get("kind") or "native")
+
+        if task_kind == "h5p":
+            needs_h5p_player_js = True
+            instruction_html = ""
+            content_id = ""
+            h5p_cfg = t.get("h5p") if isinstance(t.get("h5p"), dict) else {}
+            if isinstance(h5p_cfg, dict):
+                content_id = str(h5p_cfg.get("content_id") or "")
+            if not content_id:
+                form_html = '<p class="text-muted">Kein H5P-Inhalt verknüpft.</p>'
+            else:
+                form_html = (
+                    f'<div class="h5p-task-player" data-h5p-task-player="true" '
+                    f'data-course-id="{Component.escape(course_id)}" '
+                    f'data-task-id="{Component.escape(tid)}" '
+                    f'data-content-id="{Component.escape(content_id)}">'
+                    f'<p class="text-muted" data-h5p-status>Initialisiere H5P …</p>'
+                    "</div>"
+                )
+        else:
+            instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
+            form_html = _build_task_submit_form_html(
+                course_id=course_id, unit_id=unit_id, task_id=tid, task_kind=task_kind
+            )
+
+        payload_json = json.dumps({"open_attempt_id": ""}, separators=(",", ":"))
+        history_placeholder_html = (
+            f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+            f'data-pending="false" data-open-attempt-id="" '
+            f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+            f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
+            f"hx-vals='{payload_json}' "
+            'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+            f'<div class="text-muted">Lade Verlauf …</div>'
+            f"</section>"
+        )
+        tcard = TaskCard(
+            task_id=tid,
+            title=title,
+            instruction_html=instruction_html,
+            history_entries=[],
+            history_placeholder_html=history_placeholder_html,
+            feedback_banner_html=None,
+            form_html=form_html,
+        )
+        parts.append(tcard.render())
+
+    inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte.</p>"
+    # We normally include the H5P player init script on the modular unit page.
+    # Keep this fragment robust when opened directly.
+    h5p_script = (
+        '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
+        if needs_h5p_player_js
+        else ""
+    )
+    html = (
+        f'<div class="modular-module" data-module-id="{Component.escape(str(module_id))}">'
+        f"<h3>{module_title}</h3>"
+        f"{inner}"
+        f"{h5p_script}"
+        "</div>"
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/learning/courses/{course_id}/tasks/{task_id}/submit", response_class=HTMLResponse)

@@ -700,6 +700,73 @@ async def list_unit_sections(
     return JSONResponse(sections, headers=_cache_headers_success())
 
 
+@learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
+async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str):
+    """Return the module graph (advance organizer) for a modular learning unit.
+
+    Why:
+        The Learning UI supports two unit formats:
+        - "linear": section-by-section progression controlled by teacher releases
+        - "modular": graph-based progression with an advance organizer
+        This endpoint is modular-only and must fail clearly for linear units so
+        clients can handle the case deterministically.
+
+    Behavior:
+        - Requires an authenticated session with role "student".
+        - 400 detail=invalid_uuid when path params are not UUID-like.
+        - 404 when the caller is not a course member or the unit is not part of
+          the course (intentionally indistinguishable).
+        - 400 detail=invalid_unit_type when the unit is not modular.
+        - 200 with a graph payload for modular units (stubbed until the graph
+          schema is introduced in later migrations).
+
+    Permissions:
+        Caller must have the `student` role and be enrolled in the course.
+    """
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    # Validate path params eagerly to align with contract detail=invalid_uuid
+    try:
+        UUID(course_id)
+        UUID(unit_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    # Reuse the existing course-unit listing helper to enforce membership/404
+    # semantics while keeping the adapter thin. This is efficient enough for
+    # MVP (courses have few units); a dedicated DB helper can be introduced
+    # later if needed.
+    try:
+        rows = ListCourseUnitsUseCase(_get_repo()).execute(
+            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=str(course_id))
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    unit: dict[str, Any] | None = None
+    for item in rows:
+        candidate = item.get("unit")
+        if isinstance(candidate, dict) and candidate.get("id") == unit_id:
+            unit = candidate
+            break
+    if not unit:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    unit_type = str(unit.get("unit_type") or "").strip().lower()
+    if unit_type != "modular":
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
+
+    payload = {
+        "unit": {"id": unit_id, "title": unit.get("title") or "", "unit_type": unit_type},
+        "phases": [],
+        "modules": [],
+        "edges": [],
+    }
+    return JSONResponse(payload, headers=_cache_headers_success())
+
+
 def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Validate and normalize the submission payload (text/image/file/h5p).
 

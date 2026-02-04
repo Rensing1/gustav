@@ -247,7 +247,7 @@ class DBLearningRepo:
                     raise LookupError("not_member_or_missing")
                 cur.execute(
                     """
-                    select unit_id::text, title, summary, module_position
+                    select unit_id::text, title, summary, unit_type, module_position
                       from public.get_course_units_for_student(%s, %s)
                     """,
                     (student_sub, course_uuid),
@@ -261,8 +261,9 @@ class DBLearningRepo:
                         "id": row[0],
                         "title": row[1],
                         "summary": row[2],
+                        "unit_type": row[3],
                     },
-                    "position": int(row[3]) if row[3] is not None else 1,
+                    "position": int(row[4]) if row[4] is not None else 1,
                 }
             )
         return result

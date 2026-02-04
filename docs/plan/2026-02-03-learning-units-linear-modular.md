@@ -161,6 +161,8 @@ Warum die Count‑Spalten wichtig sind:
 - Schüler dürfen die Inhalte (Tasks/Materialien) gesperrter Module **nicht** sehen.
 - Gleichzeitig soll der Graph weiterhin Icons/Counts anzeigen (Aufgaben/Materialien), auch bei gesperrten Modulen.
 - Da RLS auf `unit_tasks/unit_materials` sonst Content leaken würde (Row‑Level, kein Column‑Level), sind sichere Counts am Modul nötig.
+MVP‑Entscheidung:
+- `tasks_total` **und** `materials_count` werden im MVP DB‑seitig gepflegt (Trigger + Backfill), damit der Advance Organizer ohne Content‑Leak aussagekräftig ist.
 
 Konsistenz (Trigger, DB‑seitig):
 - `unit_tasks`: after insert/delete → `unit_sections.tasks_total = count(*) where section_id = …`
@@ -234,13 +236,12 @@ Kernidee:
 Konkreter DB‑Vorschlag:
 - `public.learning_submissions` erweitern um:
   - `section_id uuid not null references public.unit_sections(id) on delete cascade`
-  - (optional) `unit_id uuid not null references public.units(id) on delete cascade` (nur falls für Queries/Debugging hilfreich)
-- Backfill in der Migration (einmalig):
-  - Wenn wir nur `section_id` hinzufügen:
-    - `update public.learning_submissions ls set section_id = t.section_id from public.unit_tasks t where t.id = ls.task_id;`
-  - Wenn wir zusätzlich `unit_id` hinzufügen:
-    - `update public.learning_submissions ls set section_id = t.section_id, unit_id = t.unit_id from public.unit_tasks t where t.id = ls.task_id;`
-- Insert‑Pfad: Backend übernimmt `section_id` (und optional `unit_id`) aus `get_task_metadata_for_student(...)` und schreibt sie beim Insert in `learning_submissions`.
+MVP‑Entscheidung:
+- Wir speichern **nur** `section_id` (kein zusätzliches `unit_id`), um das Schema minimal zu halten.
+Backfill in der Migration (einmalig):
+- `update public.learning_submissions ls set section_id = t.section_id from public.unit_tasks t where t.id = ls.task_id;`
+Insert‑Pfad:
+- Backend übernimmt `section_id` aus `get_task_metadata_for_student(...)` und schreibt sie beim Insert in `learning_submissions`.
 - Indizes (für schnelle Graph‑Aggregation):
   - `index on learning_submissions(course_id, student_sub, section_id)`
   - optional: `index on learning_submissions(course_id, student_sub, section_id, task_id)`
@@ -602,7 +603,7 @@ Ergebnis:
 ## Milestones
 1) DB‑Migrationen: `units.unit_type`, `unit_phases`, `unit_sections`‑Erweiterungen, `unit_module_edges`.
 2) Teaching‑API: CRUD/Reorder Phasen, Module‑Phase‑Zuordnung, Edges, required_prereq_count.
-3) Learning‑API: modular graph endpoint + modular content endpoint + Update der „harten“ Gates (H5P‑Access, Task‑Metadata, Submissions‑Visibility).
+3) Learning‑API: modular graph endpoint + modular content endpoint + Security‑Fundament (Course‑Context‑GUC, Metadaten vs Content) + Update der „harten“ Gates (H5P‑Access, Task‑Metadata, Submissions‑Visibility).
 4) Web‑UI: modular Workspace‑SSR + HTMX‑Fragmente (No‑JS‑Fallback optional).
 5) Tests/Hardening: Contract‑Tests, Unlock‑Edgecases (0‑tasks, H5P complete), security regressions.
 

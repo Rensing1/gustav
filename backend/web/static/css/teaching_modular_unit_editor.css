@@ -62,6 +62,12 @@ Why:
   padding: 0.5rem 0.5rem 0.25rem;
 }
 
+.modular-editor__phase-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .modular-editor__phase-title {
   font-size: 1rem;
   margin: 0;
@@ -83,6 +89,17 @@ Why:
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.modular-editor__node-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.modular-editor__icon-btn {
+  line-height: 1;
+  padding: 0.25rem 0.4rem;
 }
 
 .modular-editor__drag-handle {

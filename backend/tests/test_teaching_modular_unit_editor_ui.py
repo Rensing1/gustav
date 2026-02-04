@@ -75,6 +75,11 @@ async def test_modular_unit_editor_renders_phases_modules_and_module_click_opens
         assert 'id="modular-editor-panel"' in html
         assert "Phase 1" in html
         assert "Modul A" in html
+        # Basic CRUD controls must be present in the visual editor.
+        assert 'data-action="modular-editor-rename-phase"' in html
+        assert 'data-action="modular-editor-delete-phase"' in html
+        assert 'data-action="modular-editor-rename-module"' in html
+        assert 'data-action="modular-editor-delete-module"' in html
 
         # Module nodes must load panel content via HTMX.
         pattern = rf"/units/{re.escape(uid)}/modules/([0-9a-fA-F-]{{36}})/panel"

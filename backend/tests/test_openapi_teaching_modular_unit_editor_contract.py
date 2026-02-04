@@ -20,9 +20,9 @@ def test_openapi_has_teaching_modular_unit_editor_paths() -> None:
     expected = [
         "/api/teaching/units/{unit_id}/modules/graph",
         "/api/teaching/units/{unit_id}/modules",
+        "/api/teaching/units/{unit_id}/modules/{module_id}",
         "/api/teaching/units/{unit_id}/modules/edges",
         "/api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder",
     ]
     for path in expected:
         assert path in paths, f"missing {path} in openapi.yml"
-

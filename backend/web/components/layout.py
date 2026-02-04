@@ -119,6 +119,10 @@ class Layout(Component):
 
     <!-- Custom CSS (no external dependencies) -->
     <link rel="stylesheet" href="/static/css/gustav.css?v=5">
+    <!-- Modular units (student + teacher). Must be loaded globally because
+         navigation happens via HTMX fragment swaps that do not update <head>. -->
+    <link rel="stylesheet" href="/static/css/student_modular_unit.css?v=1">
+    <link rel="stylesheet" href="/static/css/teaching_modular_unit_editor.css?v=2">
 
     <!-- HTMX for interactivity (local copy) -->
     <SCRIPT src="/static/js/vendor/htmx.min.js"></SCRIPT>
@@ -131,6 +135,8 @@ class Layout(Component):
     <SCRIPT src="/static/js/gustav.js?v=9" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
+    <!-- Teacher modular unit visual editor -->
+    <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=2" defer></SCRIPT>
     {self.extra_head_html}
     """
 

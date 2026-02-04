@@ -1795,13 +1795,11 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
                     "</div>"
                 )
-                extra_head = '<link rel="stylesheet" href="/static/css/student_modular_unit.css?v=1">'
                 layout = Layout(
                     title=Component.escape(unit_title),
                     content=content,
                     user=user,
                     current_path=request.url.path,
-                    extra_head_html=extra_head,
                 )
                 return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
@@ -3307,6 +3305,14 @@ def _render_modular_unit_editor_page_html(
                 f'hx-get="{panel_url}" hx-target="#modular-editor-panel" hx-swap="innerHTML">'
                 f"{title}"
                 "</button>"
+                '<div class="modular-editor__node-actions" role="group" aria-label="Modul Aktionen">'
+                f'<button type="button" class="btn btn-sm btn-secondary modular-editor__icon-btn" '
+                f'data-action="modular-editor-rename-module" data-module-id="{Component.escape(mid)}" '
+                f'title="Modul umbenennen" aria-label="Modul umbenennen">✎</button>'
+                f'<button type="button" class="btn btn-sm btn-danger modular-editor__icon-btn" '
+                f'data-action="modular-editor-delete-module" data-module-id="{Component.escape(mid)}" '
+                f'title="Modul löschen" aria-label="Modul löschen">🗑</button>'
+                "</div>"
                 "</div>"
             )
         inner_nodes = "".join(node_html) if node_html else '<div class="empty-state"><p>Noch keine Module.</p></div>'
@@ -3316,8 +3322,16 @@ def _render_modular_unit_editor_page_html(
             f'data-phase-id="{Component.escape(pid)}">'
             '<header class="modular-editor__phase-header">'
             f'<h3 class="modular-editor__phase-title">{ptitle}</h3>'
+            '<div class="modular-editor__phase-actions" role="group" aria-label="Phase Aktionen">'
             f'<button type="button" class="btn btn-sm btn-secondary" '
             f'data-action="modular-editor-add-module" data-phase-id="{Component.escape(pid)}">+ Modul</button>'
+            f'<button type="button" class="btn btn-sm btn-secondary" '
+            f'data-action="modular-editor-rename-phase" data-phase-id="{Component.escape(pid)}" '
+            f'title="Phase umbenennen" aria-label="Phase umbenennen">✎</button>'
+            f'<button type="button" class="btn btn-sm btn-danger" '
+            f'data-action="modular-editor-delete-phase" data-phase-id="{Component.escape(pid)}" '
+            f'title="Phase löschen" aria-label="Phase löschen">🗑</button>'
+            "</div>"
             "</header>"
             f'<div class="modular-editor__module-list" data-unit-id="{Component.escape(unit_id)}" '
             f'data-phase-id="{Component.escape(pid)}">'
@@ -3340,7 +3354,7 @@ def _render_modular_unit_editor_page_html(
         f'<button type="button" class="btn btn-secondary" data-action="modular-editor-edge-mode" aria-pressed="false">Kantenmodus</button>'
         '<span class="text-muted" id="modular-editor-status" aria-live="polite"><small></small></span>'
         '</div>'
-        f'<script type="application/json" id="modular-editor-edges-data">{edges_json}</script>'
+        f'<template id="modular-editor-edges-data">{edges_json}</template>'
         '<div class="modular-editor__graph" id="modular-editor-graph">'
         '<svg class="modular-editor__edges" id="modular-editor-edges" aria-hidden="true" focusable="false"></svg>'
         f"{phases_html}"
@@ -5348,16 +5362,11 @@ async def unit_details_index(request: Request, unit_id: str):
             csrf_token=token,
             error_phases=phases_err,
         )
-        extra_head = (
-            '<link rel="stylesheet" href="/static/css/teaching_modular_unit_editor.css?v=1">'
-            '<script src="/static/js/teaching_modular_unit_editor.js?v=1" defer></script>'
-        )
         layout = Layout(
             title=f"Editor – {unit_vm['title']}",
             content=content,
             user=user,
             current_path=request.url.path,
-            extra_head_html=extra_head,
         )
         return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 

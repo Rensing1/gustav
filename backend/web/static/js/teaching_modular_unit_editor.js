@@ -252,6 +252,41 @@ Goals:
           window.alert(detail === 'edge_constraint_violation' ? 'Ungültige Kante (Regel verletzt).' : 'Kante konnte nicht erstellt werden.');
         });
     }, true);
+
+    // Delete edge buttons inside the right-side panel.
+    root.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('[data-action="modular-editor-delete-edge"]') : null;
+      if (!btn) return;
+      ev.preventDefault();
+      var fromId = btn.getAttribute('data-from') || '';
+      var toId = btn.getAttribute('data-to') || '';
+      if (!fromId || !toId) return;
+
+      fetch('/api/teaching/units/' + unitId + '/modules/edges', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ from_module_id: fromId, to_module_id: toId })
+      }).then(function (r) {
+        if (!r.ok) throw r;
+      }).then(function () {
+        // Keep the graph consistent without a full reload.
+        var next = edgeOverlay.getEdges().filter(function (e) {
+          return !(e && e.from === fromId && e.to === toId);
+        });
+        edgeOverlay.setEdges(next);
+        edgeOverlay.draw();
+
+        // Refresh the panel to update its dependency lists.
+        var panelContent = root.querySelector('#modular-editor-panel .modular-editor-panel__content');
+        var moduleId = panelContent ? panelContent.getAttribute('data-module-id') : '';
+        if (moduleId && typeof htmx !== 'undefined' && htmx.ajax) {
+          htmx.ajax('GET', '/units/' + unitId + '/modules/' + moduleId + '/panel', '#modular-editor-panel');
+        }
+      }).catch(function () {
+        window.alert('Kante konnte nicht entfernt werden.');
+      });
+    });
   }
 
   function setupDragAndDrop(root, edgeOverlay) {
@@ -325,4 +360,3 @@ Goals:
     boot();
   }
 })();
-

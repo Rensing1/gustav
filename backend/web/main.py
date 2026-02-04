@@ -3244,6 +3244,114 @@ def _render_sections_page_html(unit: dict, sections: list[dict], csrf_token: str
         </div>
     '''
 
+
+def _render_modular_unit_editor_graph_html(
+    *,
+    unit_id: str,
+    phases: list[dict],
+    modules: list[dict],
+    edges: list[dict],
+    swap_oob: bool,
+) -> str:
+    """Render the modular editor graph container (phases + nodes + edges overlay).
+
+    Why:
+        After CRUD actions, HTMX updates the graph via out-of-band swaps.
+        We render the graph HTML in one place so SSR and OOB refresh match.
+    """
+    safe_unit_id = Component.escape(str(unit_id or ""))
+    edges_json = json.dumps(edges or [], ensure_ascii=False, separators=(",", ":"))
+
+    # Group modules by phase for a simple, readable editor layout.
+    modules_by_phase: dict[str, list[dict]] = {}
+    for m in modules:
+        pid = str(m.get("phase_id") or "")
+        modules_by_phase.setdefault(pid, []).append(m)
+
+    phase_columns: list[str] = []
+    for p in phases:
+        pid = str(p.get("id") or "")
+        safe_pid = Component.escape(pid)
+        ptitle = Component.escape(str(p.get("title") or "Phase"))
+        entries = modules_by_phase.get(pid, [])
+
+        node_html: list[str] = []
+        for m in entries:
+            mid = str(m.get("id") or "")
+            safe_mid = Component.escape(mid)
+            title = Component.escape(str(m.get("title") or "Modul"))
+            panel_url = f"/units/{safe_unit_id}/modules/{safe_mid}/panel"
+            inline_id = f"modular-editor-module-inline-{mid}"
+            safe_inline_id = Component.escape(inline_id)
+            node_html.append(
+                '<div class="modular-editor__module-node" '
+                f'id="module_{safe_mid}" data-module-id="{safe_mid}">'
+                '<div class="modular-editor__module-row">'
+                '<span class="modular-editor__drag-handle" title="Verschieben" aria-hidden="true">⠿</span>'
+                f'<button type="button" class="modular-editor__module-btn" '
+                f'hx-get="{panel_url}" hx-target="#modular-editor-panel" hx-swap="innerHTML">'
+                f"{title}"
+                "</button>"
+                '<div class="modular-editor__node-actions" role="group" aria-label="Modul Aktionen">'
+                f'<button type="button" class="btn btn-sm btn-secondary modular-editor__icon-btn" '
+                f'data-action="modular-editor-rename-module" data-module-id="{safe_mid}" '
+                f'hx-get="/units/{safe_unit_id}/modular-editor/module/{safe_mid}/rename" '
+                f'hx-target="#{safe_inline_id}" hx-swap="innerHTML" '
+                f'title="Modul umbenennen" aria-label="Modul umbenennen">✎</button>'
+                f'<button type="button" class="btn btn-sm btn-danger modular-editor__icon-btn" '
+                f'data-action="modular-editor-delete-module" data-module-id="{safe_mid}" '
+                f'hx-get="/units/{safe_unit_id}/modular-editor/module/{safe_mid}/delete" '
+                f'hx-target="#{safe_inline_id}" hx-swap="innerHTML" '
+                f'title="Modul löschen" aria-label="Modul löschen">🗑</button>'
+                "</div>"
+                "</div>"
+                f'<div class="modular-editor__node-inline" id="{safe_inline_id}"></div>'
+                "</div>"
+            )
+        inner_nodes = "".join(node_html) if node_html else '<div class="empty-state"><p>Noch keine Module.</p></div>'
+
+        phase_inline_id = f"modular-editor-phase-inline-{pid}"
+        safe_phase_inline_id = Component.escape(phase_inline_id)
+        phase_columns.append(
+            '<section class="modular-editor__phase" '
+            f'data-phase-id="{safe_pid}">'
+            '<header class="modular-editor__phase-header">'
+            f'<h3 class="modular-editor__phase-title">{ptitle}</h3>'
+            '<div class="modular-editor__phase-actions" role="group" aria-label="Phase Aktionen">'
+            f'<button type="button" class="btn btn-sm btn-secondary" '
+            f'data-action="modular-editor-add-module" data-phase-id="{safe_pid}" '
+            f'hx-get="/units/{safe_unit_id}/modular-editor/phase/{safe_pid}/module/new" '
+            f'hx-target="#{safe_phase_inline_id}" hx-swap="innerHTML">+ Modul</button>'
+            f'<button type="button" class="btn btn-sm btn-secondary" '
+            f'data-action="modular-editor-rename-phase" data-phase-id="{safe_pid}" '
+            f'hx-get="/units/{safe_unit_id}/modular-editor/phase/{safe_pid}/rename" '
+            f'hx-target="#{safe_phase_inline_id}" hx-swap="innerHTML" '
+            f'title="Phase umbenennen" aria-label="Phase umbenennen">✎</button>'
+            f'<button type="button" class="btn btn-sm btn-danger" '
+            f'data-action="modular-editor-delete-phase" data-phase-id="{safe_pid}" '
+            f'hx-get="/units/{safe_unit_id}/modular-editor/phase/{safe_pid}/delete" '
+            f'hx-target="#{safe_phase_inline_id}" hx-swap="innerHTML" '
+            f'title="Phase löschen" aria-label="Phase löschen">🗑</button>'
+            "</div>"
+            "</header>"
+            f'<div class="modular-editor__phase-inline" id="{safe_phase_inline_id}"></div>'
+            f'<div class="modular-editor__module-list" data-unit-id="{safe_unit_id}" '
+            f'data-phase-id="{safe_pid}">'
+            f"{inner_nodes}"
+            "</div>"
+            "</section>"
+        )
+
+    phases_html = "".join(phase_columns) if phase_columns else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
+    oob_attr = ' hx-swap-oob="outerHTML"' if swap_oob else ""
+    return (
+        f'<div class="modular-editor__graph" id="modular-editor-graph"{oob_attr}>'
+        f'<template id="modular-editor-edges-data">{edges_json}</template>'
+        '<svg class="modular-editor__edges" id="modular-editor-edges" aria-hidden="true" focusable="false"></svg>'
+        f"{phases_html}"
+        "</div>"
+    )
+
 def _render_modular_unit_editor_page_html(
     *,
     unit: dict,
@@ -3269,14 +3377,15 @@ def _render_modular_unit_editor_page_html(
         (unit_sections.id). The teacher UX should not expose sections.
     """
     unit_id = str(unit.get("id") or "")
+    safe_unit_id = Component.escape(unit_id)
     unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
-    edges_json = json.dumps(edges or [], ensure_ascii=False, separators=(",", ":"))
-
-    # Group modules by phase for a simple, readable editor layout.
-    modules_by_phase: dict[str, list[dict]] = {}
-    for m in modules:
-        pid = str(m.get("phase_id") or "")
-        modules_by_phase.setdefault(pid, []).append(m)
+    graph_html = _render_modular_unit_editor_graph_html(
+        unit_id=unit_id,
+        phases=phases,
+        modules=modules,
+        edges=edges,
+        swap_oob=False,
+    )
 
     error_modules_html = (
         f'<div class="section-error" role="alert" data-testid="module-error">{Component.escape(error_modules)}</div>'
@@ -3284,81 +3393,23 @@ def _render_modular_unit_editor_page_html(
         else ""
     )
 
-    # Phase columns (left -> right)
-    phase_columns: list[str] = []
-    for p in phases:
-        pid = str(p.get("id") or "")
-        ptitle = Component.escape(str(p.get("title") or "Phase"))
-        entries = modules_by_phase.get(pid, [])
-
-        # Each module node is a Sortable item. The inner button triggers HTMX panel load.
-        node_html: list[str] = []
-        for m in entries:
-            mid = str(m.get("id") or "")
-            title = Component.escape(str(m.get("title") or "Modul"))
-            panel_url = f"/units/{Component.escape(unit_id)}/modules/{Component.escape(mid)}/panel"
-            node_html.append(
-                '<div class="modular-editor__module-node" '
-                f'id="module_{Component.escape(mid)}" data-module-id="{Component.escape(mid)}">'
-                '<span class="modular-editor__drag-handle" title="Verschieben" aria-hidden="true">⠿</span>'
-                f'<button type="button" class="modular-editor__module-btn" '
-                f'hx-get="{panel_url}" hx-target="#modular-editor-panel" hx-swap="innerHTML">'
-                f"{title}"
-                "</button>"
-                '<div class="modular-editor__node-actions" role="group" aria-label="Modul Aktionen">'
-                f'<button type="button" class="btn btn-sm btn-secondary modular-editor__icon-btn" '
-                f'data-action="modular-editor-rename-module" data-module-id="{Component.escape(mid)}" '
-                f'title="Modul umbenennen" aria-label="Modul umbenennen">✎</button>'
-                f'<button type="button" class="btn btn-sm btn-danger modular-editor__icon-btn" '
-                f'data-action="modular-editor-delete-module" data-module-id="{Component.escape(mid)}" '
-                f'title="Modul löschen" aria-label="Modul löschen">🗑</button>'
-                "</div>"
-                "</div>"
-            )
-        inner_nodes = "".join(node_html) if node_html else '<div class="empty-state"><p>Noch keine Module.</p></div>'
-
-        phase_columns.append(
-            '<section class="modular-editor__phase" '
-            f'data-phase-id="{Component.escape(pid)}">'
-            '<header class="modular-editor__phase-header">'
-            f'<h3 class="modular-editor__phase-title">{ptitle}</h3>'
-            '<div class="modular-editor__phase-actions" role="group" aria-label="Phase Aktionen">'
-            f'<button type="button" class="btn btn-sm btn-secondary" '
-            f'data-action="modular-editor-add-module" data-phase-id="{Component.escape(pid)}">+ Modul</button>'
-            f'<button type="button" class="btn btn-sm btn-secondary" '
-            f'data-action="modular-editor-rename-phase" data-phase-id="{Component.escape(pid)}" '
-            f'title="Phase umbenennen" aria-label="Phase umbenennen">✎</button>'
-            f'<button type="button" class="btn btn-sm btn-danger" '
-            f'data-action="modular-editor-delete-phase" data-phase-id="{Component.escape(pid)}" '
-            f'title="Phase löschen" aria-label="Phase löschen">🗑</button>'
-            "</div>"
-            "</header>"
-            f'<div class="modular-editor__module-list" data-unit-id="{Component.escape(unit_id)}" '
-            f'data-phase-id="{Component.escape(pid)}">'
-            f"{inner_nodes}"
-            "</div>"
-            "</section>"
-        )
-
-    phases_html = "".join(phase_columns) if phase_columns else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
-
     return (
-        f'<div class="container modular-editor" data-testid="modular-unit-editor" data-unit-id="{Component.escape(unit_id)}">'
+        f'<div class="container modular-editor" data-testid="modular-unit-editor" data-unit-id="{safe_unit_id}" '
+        f'data-csrf-token="{Component.escape(csrf_token)}">'
         f'<h1>Editor: {unit_title}</h1>'
         '<p class="text-muted">Phasen (Spalten) · Module (Knoten) · Rechts: Inhalte bearbeiten.</p>'
         f"{error_modules_html}"
         '<div class="modular-editor__shell">'
         '<div class="modular-editor__canvas">'
         '<div class="modular-editor__toolbar">'
-        f'<button type="button" class="btn btn-secondary" data-action="modular-editor-add-phase">+ Phase</button> '
+        f'<button type="button" class="btn btn-secondary" data-action="modular-editor-add-phase" '
+        f'hx-get="/units/{safe_unit_id}/modular-editor/phase/new" '
+        f'hx-target="#modular-editor-toolbar-form" hx-swap="innerHTML">+ Phase</button> '
         f'<button type="button" class="btn btn-secondary" data-action="modular-editor-edge-mode" aria-pressed="false">Kantenmodus</button>'
         '<span class="text-muted" id="modular-editor-status" aria-live="polite"><small></small></span>'
         '</div>'
-        f'<template id="modular-editor-edges-data">{edges_json}</template>'
-        '<div class="modular-editor__graph" id="modular-editor-graph">'
-        '<svg class="modular-editor__edges" id="modular-editor-edges" aria-hidden="true" focusable="false"></svg>'
-        f"{phases_html}"
-        "</div>"
+        '<div id="modular-editor-toolbar-form"></div>'
+        f"{graph_html}"
         "</div>"
         '<div class="modular-editor__splitter" id="modular-editor-splitter" aria-hidden="true"></div>'
         '<aside class="modular-editor__panel" id="modular-editor-panel">'
@@ -5780,6 +5831,560 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
     )
     return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
 
+
+@app.get("/fragments/empty", response_class=HTMLResponse)
+async def empty_fragment(request: Request) -> HTMLResponse:
+    """Return an empty HTML fragment (useful as an HTMX cancel target)."""
+    return HTMLResponse("", headers={"Cache-Control": "private, no-store"})
+
+
+def _modular_editor_oob_clear(div_id: str) -> str:
+    """Clear a container's inner HTML via HTMX out-of-band swap."""
+    return f'<div id="{Component.escape(div_id)}" hx-swap-oob="innerHTML"></div>'
+
+
+def _modular_editor_oob_reset_panel() -> str:
+    """Reset the right-side panel to its empty state via HTMX OOB swap."""
+    return (
+        '<aside id="modular-editor-panel" hx-swap-oob="innerHTML">'
+        "<h2>Modul</h2>"
+        '<p class="text-muted">Klicke links auf ein Modul, um Inhalte zu bearbeiten.</p>'
+        "</aside>"
+    )
+
+
+async def _build_modular_editor_graph_oob(*, unit_id: str, session_id: str, author_sub: str) -> str:
+    """Fetch current graph state and render an OOB graph container."""
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=session_id)
+    modules = _fetch_unit_modules_for_unit(unit_id, author_sub=author_sub)
+    edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=author_sub)
+    return _render_modular_unit_editor_graph_html(
+        unit_id=unit_id,
+        phases=phases,
+        modules=modules,
+        edges=edges,
+        swap_oob=True,
+    )
+
+
+def _render_modular_editor_inline_form(
+    *,
+    heading: str,
+    form_html: str,
+    error: str | None,
+) -> str:
+    error_html = f'<div class="form-error" role="alert">{Component.escape(error)}</div>' if error else ""
+    return (
+        '<div class="card modular-editor__inline-card">'
+        f"<h4>{Component.escape(heading)}</h4>"
+        f"{error_html}"
+        f"{form_html}"
+        "</div>"
+    )
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/new", response_class=HTMLResponse)
+async def modular_editor_phase_new_fragment(request: Request, unit_id: str) -> HTMLResponse:
+    """HTMX fragment: create phase form (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+
+    target_id = "modular-editor-toolbar-form"
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/new"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="phase-title">Titel</label>'
+        '<input id="phase-title" class="form-input" type="text" name="title" placeholder="Phase" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Phase anlegen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Neue Phase", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/new", response_class=HTMLResponse)
+async def modular_editor_phase_create(request: Request, unit_id: str) -> HTMLResponse:
+    """HTMX action: create a phase and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.post(f"/api/teaching/units/{unit_id}/phases", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "phase_create_failed"
+    if error:
+        target_id = "modular-editor-toolbar-form"
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/new"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="phase-title">Titel</label>'
+            f'<input id="phase-title" class="form-input" type="text" name="title" value="{Component.escape(title)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Phase anlegen</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Neue Phase", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear("modular-editor-toolbar-form")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/{phase_id}/module/new", response_class=HTMLResponse)
+async def modular_editor_module_new_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX fragment: create module form within a phase (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+
+    target_id = f"modular-editor-phase-inline-{phase_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/module/new"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="module-title">Titel</label>'
+        '<input id="module-title" class="form-input" type="text" name="title" placeholder="Modul" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Modul anlegen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Neues Modul", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/{phase_id}/module/new", response_class=HTMLResponse)
+async def modular_editor_module_create(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX action: create a module and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.post(f"/api/teaching/units/{unit_id}/modules", json={"title": title, "phase_id": phase_id})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "module_create_failed"
+    if error:
+        target_id = f"modular-editor-phase-inline-{phase_id}"
+        safe_target = Component.escape(target_id)
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/module/new"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="module-title">Titel</label>'
+            f'<input id="module-title" class="form-input" type="text" name="title" value="{Component.escape(title)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Modul anlegen</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Neues Modul", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear(f"modular-editor-phase-inline-{phase_id}")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/module/{module_id}/rename", response_class=HTMLResponse)
+async def modular_editor_module_rename_fragment(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX fragment: rename module form (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return HTMLResponse("Not Found", status_code=404)
+    current = str(module.get("title") or "Modul")
+
+    target_id = f"modular-editor-module-inline-{module_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/rename"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="module-rename-title">Titel</label>'
+        f'<input id="module-rename-title" class="form-input" type="text" name="title" value="{Component.escape(current)}" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Modul umbenennen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/rename", response_class=HTMLResponse)
+async def modular_editor_module_rename(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: rename module and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    current = str((module or {}).get("title") or "Modul")
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.patch(f"/api/teaching/units/{unit_id}/modules/{module_id}", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "module_rename_failed"
+    if error:
+        target_id = f"modular-editor-module-inline-{module_id}"
+        safe_target = Component.escape(target_id)
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/rename"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="module-rename-title">Titel</label>'
+            f'<input id="module-rename-title" class="form-input" type="text" name="title" value="{Component.escape(title or current)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Modul umbenennen", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear(f"modular-editor-module-inline-{module_id}")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/{phase_id}/rename", response_class=HTMLResponse)
+async def modular_editor_phase_rename_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX fragment: rename phase form (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+    phase = next((p for p in (phases or []) if str(p.get("id") or "") == str(phase_id)), None)
+    if not isinstance(phase, dict):
+        return HTMLResponse("Not Found", status_code=404)
+    current = str(phase.get("title") or "Phase")
+
+    target_id = f"modular-editor-phase-inline-{phase_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/rename"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="phase-rename-title">Titel</label>'
+        f'<input id="phase-rename-title" class="form-input" type="text" name="title" value="{Component.escape(current)}" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Phase umbenennen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/{phase_id}/rename", response_class=HTMLResponse)
+async def modular_editor_phase_rename(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX action: rename phase and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.patch(f"/api/teaching/units/{unit_id}/phases/{phase_id}", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "phase_rename_failed"
+    if error:
+        target_id = f"modular-editor-phase-inline-{phase_id}"
+        safe_target = Component.escape(target_id)
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/rename"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="phase-rename-title">Titel</label>'
+            f'<input id="phase-rename-title" class="form-input" type="text" name="title" value="{Component.escape(title)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Phase umbenennen", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear(f"modular-editor-phase-inline-{phase_id}")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/module/{module_id}/delete", response_class=HTMLResponse)
+async def modular_editor_module_delete_fragment(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX fragment: delete module confirmation (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return HTMLResponse("Not Found", status_code=404)
+    label = str(module.get("title") or "Modul")
+
+    target_id = f"modular-editor-module-inline-{module_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/delete"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        f'<p>Modul <strong>{Component.escape(label)}</strong> wirklich löschen? '
+        "Dabei werden auch alle Inhalte (Materialien/Aufgaben) gelöscht.</p>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-danger btn-sm">Löschen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Modul löschen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/delete", response_class=HTMLResponse)
+async def modular_editor_module_delete(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: delete module and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    error: str | None = None
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.delete(f"/api/teaching/units/{unit_id}/modules/{module_id}")
+            if r.status_code >= 400:
+                error = _extract_api_error_detail(r)
+    except Exception:
+        error = "module_delete_failed"
+    if error:
+        return await modular_editor_module_delete_fragment(request, unit_id, module_id)
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = (
+        graph_oob
+        + _modular_editor_oob_clear(f"modular-editor-module-inline-{module_id}")
+        + _modular_editor_oob_reset_panel()
+    )
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/{phase_id}/delete", response_class=HTMLResponse)
+async def modular_editor_phase_delete_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX fragment: delete phase confirmation (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+    phase = next((p for p in (phases or []) if str(p.get("id") or "") == str(phase_id)), None)
+    label = str((phase or {}).get("title") or "Phase")
+
+    target_id = f"modular-editor-phase-inline-{phase_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/delete"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        f'<p>Phase <strong>{Component.escape(label)}</strong> wirklich löschen? '
+        "Dabei werden alle Module, Abhängigkeiten und Inhalte dieser Phase gelöscht.</p>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-danger btn-sm">Phase löschen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Phase löschen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/{phase_id}/delete", response_class=HTMLResponse)
+async def modular_editor_phase_delete(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX action: delete phase and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+    error: str | None = None
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.delete(f"/api/teaching/units/{unit_id}/phases/{phase_id}")
+            if r.status_code >= 400:
+                error = _extract_api_error_detail(r)
+    except Exception:
+        error = "phase_delete_failed"
+    if error:
+        return await modular_editor_phase_delete_fragment(request, unit_id, phase_id)
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = (
+        graph_oob
+        + _modular_editor_oob_clear(f"modular-editor-phase-inline-{phase_id}")
+        + _modular_editor_oob_reset_panel()
+    )
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
 
 def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
     """Render create page with toggle Text | Datei (upload-intent handled per JS)."""

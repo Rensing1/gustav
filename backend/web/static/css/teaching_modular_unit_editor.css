@@ -83,12 +83,19 @@ Why:
 
 .modular-editor__module-node {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 0.35rem;
   padding: 0.5rem 0.6rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.modular-editor__module-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .modular-editor__node-actions {
@@ -121,6 +128,27 @@ Why:
 .modular-editor__module-node.is-edge-source {
   outline: 2px solid rgba(163, 217, 106, 0.8);
   outline-offset: 2px;
+}
+
+.modular-editor__phase-inline:empty,
+.modular-editor__node-inline:empty {
+  display: none;
+}
+
+.modular-editor__inline-card {
+  padding: 0.5rem;
+}
+
+.modular-editor__inline-card h4 {
+  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+}
+
+.modular-editor__inline-card .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
 }
 
 .modular-editor__splitter {

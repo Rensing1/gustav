@@ -25,7 +25,12 @@ Goals:
     return Math.max(min, Math.min(max, n));
   }
 
+  function getCsrfToken(root) {
+    return (root && root.dataset && root.dataset.csrfToken) ? root.dataset.csrfToken : '';
+  }
+
   function setupPanelResize(root) {
+    if (root.dataset.modularEditorPanelResizeReady === 'true') return;
     var splitter = root.querySelector('#modular-editor-splitter');
     var panel = root.querySelector('#modular-editor-panel');
     if (!splitter || !panel) return;
@@ -65,12 +70,14 @@ Goals:
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
     });
+
+    root.dataset.modularEditorPanelResizeReady = 'true';
   }
 
   function setupEdgesOverlay(root) {
     var graph = root.querySelector('#modular-editor-graph');
     var svg = root.querySelector('#modular-editor-edges');
-    if (!graph || !svg) return { draw: function () {} };
+    if (!graph || !svg) return null;
 
     var edges = parseEdges(root);
 
@@ -142,29 +149,54 @@ Goals:
     }
 
     // Keep edges aligned on resize and scroll.
-    graph.addEventListener('scroll', function () { draw(); });
-    window.addEventListener('resize', function () { draw(); });
+    function onScroll() { draw(); }
+    function onResize() { draw(); }
+    graph.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', onResize);
 
-    return { draw: draw, getEdges: function () { return edges; }, setEdges: function (next) { edges = next || []; } };
+    function destroy() {
+      graph.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+    }
+
+    return {
+      draw: draw,
+      destroy: destroy,
+      getEdges: function () { return edges; },
+      setEdges: function (next) { edges = next || []; }
+    };
   }
 
-  function setupEditorActions(root, edgeOverlay) {
+  function destroySortables(instances) {
+    (instances || []).forEach(function (s) {
+      try {
+        if (s && typeof s.destroy === 'function') s.destroy();
+      } catch (e) {
+        // no-op
+      }
+    });
+  }
+
+  function setupEditorActions(root, ctx) {
+    if (root.dataset.modularEditorActionsReady === 'true') return;
     var unitId = root.getAttribute('data-unit-id') || '';
     if (!unitId) return;
-    var statusEl = root.querySelector('#modular-editor-status small');
+    ctx.unitId = unitId;
+    ctx.statusEl = root.querySelector('#modular-editor-status small');
+    ctx.edgeModeBtn = root.querySelector('[data-action="modular-editor-edge-mode"]');
 
     function apiJson(method, path, body) {
+      var headers = { 'Content-Type': 'application/json' };
+      if (ctx.csrfToken) headers['X-CSRF-Token'] = ctx.csrfToken;
       return fetch(path, {
         method: method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         credentials: 'same-origin',
         body: body ? JSON.stringify(body) : undefined
       });
     }
 
     function apiPost(path, body) { return apiJson('POST', path, body); }
-    function apiPatch(path, body) { return apiJson('PATCH', path, body); }
-    function apiDelete(path) { return apiJson('DELETE', path); }
 
     function alertApiError(r) {
       if (!r) return;
@@ -180,153 +212,52 @@ Goals:
       }
     }
 
-    // Create phase (reload on success).
-    var btnAddPhase = root.querySelector('[data-action="modular-editor-add-phase"]');
-    if (btnAddPhase) {
-      btnAddPhase.addEventListener('click', function () {
-        var title = window.prompt('Titel der Phase:', 'Neue Phase');
-        if (!title) return;
-        apiPost('/api/teaching/units/' + unitId + '/phases', { title: title })
-          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
-          .catch(function (e) { window.alert('Fehler: ' + e); });
-      });
-    }
-
-    // Create module in a phase (reload on success).
-    Array.from(root.querySelectorAll('[data-action="modular-editor-add-module"]')).forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var phaseId = btn.getAttribute('data-phase-id') || '';
-        var title = window.prompt('Titel des Moduls:', 'Neues Modul');
-        if (!title || !phaseId) return;
-        apiPost('/api/teaching/units/' + unitId + '/modules', { title: title, phase_id: phaseId })
-          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
-          .catch(function (e) { window.alert('Fehler: ' + e); });
-      });
-    });
-
-    // Rename phase.
-    Array.from(root.querySelectorAll('[data-action="modular-editor-rename-phase"]')).forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var phaseId = btn.getAttribute('data-phase-id') || '';
-        var phaseEl = btn.closest ? btn.closest('.modular-editor__phase') : null;
-        var titleEl = phaseEl ? phaseEl.querySelector('.modular-editor__phase-title') : null;
-        var current = titleEl ? (titleEl.textContent || '').trim() : '';
-        var nextTitle = window.prompt('Neuer Titel der Phase:', current || 'Phase');
-        if (!phaseId || !nextTitle) return;
-        apiPatch('/api/teaching/units/' + unitId + '/phases/' + phaseId, { title: nextTitle })
-          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
-          .catch(function (e) { window.alert('Fehler: ' + e); });
-      });
-    });
-
-    // Delete phase (destructive cascade).
-    Array.from(root.querySelectorAll('[data-action="modular-editor-delete-phase"]')).forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var phaseId = btn.getAttribute('data-phase-id') || '';
-        var phaseEl = btn.closest ? btn.closest('.modular-editor__phase') : null;
-        var titleEl = phaseEl ? phaseEl.querySelector('.modular-editor__phase-title') : null;
-        var label = titleEl ? (titleEl.textContent || '').trim() : 'Phase';
-        if (!phaseId) return;
-        var ok = window.confirm(
-          'Phase „' + label + '“ wirklich löschen?\n\n' +
-          'Dabei werden alle Module, Abhängigkeiten und Inhalte dieser Phase gelöscht.\n' +
-          'Diese Aktion kann nicht rückgängig gemacht werden.'
-        );
-        if (!ok) return;
-        apiDelete('/api/teaching/units/' + unitId + '/phases/' + phaseId)
-          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
-          .catch(function (e) { window.alert('Fehler: ' + e); });
-      });
-    });
-
-    // Rename module.
-    Array.from(root.querySelectorAll('[data-action="modular-editor-rename-module"]')).forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var moduleId = btn.getAttribute('data-module-id') || '';
-        var node = btn.closest ? btn.closest('.modular-editor__module-node') : null;
-        var titleBtn = node ? node.querySelector('.modular-editor__module-btn') : null;
-        var current = titleBtn ? (titleBtn.textContent || '').trim() : '';
-        var nextTitle = window.prompt('Neuer Titel des Moduls:', current || 'Modul');
-        if (!moduleId || !nextTitle) return;
-        apiPatch('/api/teaching/units/' + unitId + '/modules/' + moduleId, { title: nextTitle })
-          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
-          .catch(function (e) { window.alert('Fehler: ' + e); });
-      });
-    });
-
-    // Delete module (destructive).
-    Array.from(root.querySelectorAll('[data-action="modular-editor-delete-module"]')).forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var moduleId = btn.getAttribute('data-module-id') || '';
-        var node = btn.closest ? btn.closest('.modular-editor__module-node') : null;
-        var titleBtn = node ? node.querySelector('.modular-editor__module-btn') : null;
-        var label = titleBtn ? (titleBtn.textContent || '').trim() : 'Modul';
-        if (!moduleId) return;
-        var ok = window.confirm(
-          'Modul „' + label + '“ wirklich löschen?\n\n' +
-          'Dabei werden auch alle Inhalte (Materialien/Aufgaben) gelöscht.\n' +
-          'Diese Aktion kann nicht rückgängig gemacht werden.'
-        );
-        if (!ok) return;
-        apiDelete('/api/teaching/units/' + unitId + '/modules/' + moduleId)
-          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
-          .catch(function (e) { window.alert('Fehler: ' + e); });
-      });
-    });
-
-    // Edge mode: click source then target.
-    var edgeModeBtn = root.querySelector('[data-action="modular-editor-edge-mode"]');
-    var edgeMode = false;
-    var edgeFrom = null;
-
     function clearEdgeSelection() {
-      edgeFrom = null;
+      ctx.edgeFrom = null;
       Array.from(root.querySelectorAll('.modular-editor__module-node.is-edge-source')).forEach(function (n) {
         n.classList.remove('is-edge-source');
       });
-      if (statusEl && edgeMode) statusEl.textContent = 'Kantenmodus: Quelle wählen…';
+      if (ctx.statusEl && ctx.edgeMode) ctx.statusEl.textContent = 'Kantenmodus: Quelle wählen…';
     }
 
     function setEdgeMode(enabled) {
-      edgeMode = !!enabled;
+      ctx.edgeMode = !!enabled;
       clearEdgeSelection();
-      if (edgeModeBtn) edgeModeBtn.setAttribute('aria-pressed', edgeMode ? 'true' : 'false');
-      if (statusEl) statusEl.textContent = edgeMode ? 'Kantenmodus: Quelle wählen…' : '';
+      if (ctx.edgeModeBtn) ctx.edgeModeBtn.setAttribute('aria-pressed', ctx.edgeMode ? 'true' : 'false');
+      if (ctx.statusEl) ctx.statusEl.textContent = ctx.edgeMode ? 'Kantenmodus: Quelle wählen…' : '';
     }
 
-    if (edgeModeBtn) {
-      edgeModeBtn.addEventListener('click', function () {
-        setEdgeMode(!edgeMode);
+    if (ctx.edgeModeBtn) {
+      ctx.edgeModeBtn.addEventListener('click', function () {
+        setEdgeMode(!ctx.edgeMode);
       });
     }
 
-    window.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Escape') clearEdgeSelection();
-    });
-
     // Intercept module clicks in edge mode.
     root.addEventListener('click', function (ev) {
-      if (!edgeMode) return;
+      if (!ctx.edgeMode) return;
       var node = ev.target && ev.target.closest ? ev.target.closest('.modular-editor__module-node') : null;
       if (!node) return;
       // Ignore actions/drag handle — edge mode should not interfere with CRUD or dragging.
       if (ev.target.closest && ev.target.closest('[data-action^="modular-editor-rename-"]')) return;
       if (ev.target.closest && ev.target.closest('[data-action^="modular-editor-delete-"]')) return;
       if (ev.target.closest && ev.target.closest('.modular-editor__drag-handle')) return;
+      if (ev.target.closest && ev.target.closest('.modular-editor__node-inline')) return;
+      if (ev.target.closest && ev.target.closest('.modular-editor__phase-inline')) return;
       var moduleId = node.getAttribute('data-module-id');
       if (!moduleId) return;
 
       ev.preventDefault();
       ev.stopPropagation();
 
-      if (!edgeFrom) {
-        edgeFrom = moduleId;
+      if (!ctx.edgeFrom) {
+        ctx.edgeFrom = moduleId;
         node.classList.add('is-edge-source');
-        if (statusEl) statusEl.textContent = 'Kantenmodus: Ziel wählen…';
+        if (ctx.statusEl) ctx.statusEl.textContent = 'Kantenmodus: Ziel wählen…';
         return;
       }
 
-      var fromId = edgeFrom;
+      var fromId = ctx.edgeFrom;
       var toId = moduleId;
       clearEdgeSelection();
 
@@ -336,16 +267,17 @@ Goals:
           return r.json();
         })
         .then(function (edge) {
-          var next = edgeOverlay.getEdges().slice();
+          if (!ctx.edgeOverlay) return;
+          var next = ctx.edgeOverlay.getEdges().slice();
           next.push(edge);
-          edgeOverlay.setEdges(next);
-          edgeOverlay.draw();
-          if (statusEl) statusEl.textContent = 'Kante erstellt.';
+          ctx.edgeOverlay.setEdges(next);
+          ctx.edgeOverlay.draw();
+          if (ctx.statusEl) ctx.statusEl.textContent = 'Kante erstellt.';
         })
         .catch(function (e) {
           var detail = (e && e.detail) ? e.detail : '';
           window.alert(detail === 'edge_constraint_violation' ? 'Ungültige Kante (Regel verletzt).' : 'Kante konnte nicht erstellt werden.');
-          if (statusEl) statusEl.textContent = '';
+          if (ctx.statusEl) ctx.statusEl.textContent = '';
         });
     }, true);
 
@@ -358,20 +290,17 @@ Goals:
       var toId = btn.getAttribute('data-to') || '';
       if (!fromId || !toId) return;
 
-      fetch('/api/teaching/units/' + unitId + '/modules/edges', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ from_module_id: fromId, to_module_id: toId })
-      }).then(function (r) {
+      apiJson('DELETE', '/api/teaching/units/' + unitId + '/modules/edges', { from_module_id: fromId, to_module_id: toId })
+      .then(function (r) {
         if (!r.ok) throw r;
       }).then(function () {
         // Keep the graph consistent without a full reload.
-        var next = edgeOverlay.getEdges().filter(function (e) {
+        if (!ctx.edgeOverlay) return;
+        var next = ctx.edgeOverlay.getEdges().filter(function (e) {
           return !(e && e.from === fromId && e.to === toId);
         });
-        edgeOverlay.setEdges(next);
-        edgeOverlay.draw();
+        ctx.edgeOverlay.setEdges(next);
+        ctx.edgeOverlay.draw();
 
         // Refresh the panel to update its dependency lists.
         var panelContent = root.querySelector('#modular-editor-panel .modular-editor-panel__content');
@@ -383,12 +312,19 @@ Goals:
         window.alert('Kante konnte nicht entfernt werden.');
       });
     });
+
+    window.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') clearEdgeSelection();
+    });
+
+    root.dataset.modularEditorActionsReady = 'true';
   }
 
-  function setupDragAndDrop(root, edgeOverlay) {
+  function setupDragAndDrop(root, ctx) {
     if (typeof Sortable === 'undefined') return;
     var lists = Array.from(root.querySelectorAll('.modular-editor__module-list'));
     if (!lists.length) return;
+    var out = [];
 
     function moduleIds(listEl) {
       return Array.from(listEl.querySelectorAll('.modular-editor__module-node'))
@@ -398,7 +334,7 @@ Goals:
 
     lists.forEach(function (listEl) {
       try {
-        new Sortable(listEl, {
+        out.push(new Sortable(listEl, {
           group: 'modular-editor-modules',
           animation: 150,
           handle: '.modular-editor__drag-handle',
@@ -409,9 +345,11 @@ Goals:
             if (!unitId || !phaseId) return;
 
             var ids = moduleIds(evt.to);
+            var headers = { 'Content-Type': 'application/json' };
+            if (ctx.csrfToken) headers['X-CSRF-Token'] = ctx.csrfToken;
             fetch('/api/teaching/units/' + unitId + '/phases/' + phaseId + '/modules/reorder', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: headers,
               credentials: 'same-origin',
               body: JSON.stringify({ module_ids: ids })
             }).then(function (r) {
@@ -419,36 +357,53 @@ Goals:
               return r.json();
             }).then(function () {
               // Redraw edges since node positions may have changed.
-              edgeOverlay.draw();
+              if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
             }).catch(function (e) {
               var detail = (e && e.detail) ? e.detail : '';
               window.alert(detail === 'edge_constraint_violation' ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.' : 'Verschieben fehlgeschlagen.');
               window.location.reload();
             });
           }
-        });
+        }));
       } catch (e) {
         // Keep UI usable even when Sortable fails to init.
       }
     });
+
+    ctx.sortables = out;
   }
 
-  function init(root) {
-    if (root.dataset.modularEditorReady === 'true') return;
-    root.dataset.modularEditorReady = 'true';
-    setupPanelResize(root);
-    var edgeOverlay = setupEdgesOverlay(root);
-    setupEditorActions(root, edgeOverlay);
-    setupDragAndDrop(root, edgeOverlay);
-    edgeOverlay.draw();
-
-    // Redraw after HTMX swaps (e.g., panel content load).
-    document.body && document.body.addEventListener('htmx:afterSwap', function () { edgeOverlay.draw(); });
+  function refreshGraphBindings(root, ctx) {
+    if (ctx.edgeOverlay && typeof ctx.edgeOverlay.destroy === 'function') ctx.edgeOverlay.destroy();
+    destroySortables(ctx.sortables);
+    ctx.sortables = [];
+    ctx.csrfToken = getCsrfToken(root);
+    ctx.edgeOverlay = setupEdgesOverlay(root);
+    setupDragAndDrop(root, ctx);
+    // If the graph was replaced, any in-progress edge selection is invalid.
+    ctx.edgeFrom = null;
+    Array.from(root.querySelectorAll('.modular-editor__module-node.is-edge-source')).forEach(function (n) {
+      n.classList.remove('is-edge-source');
+    });
+    if (ctx.statusEl && ctx.edgeMode) ctx.statusEl.textContent = 'Kantenmodus: Quelle wählen…';
+    if (ctx.edgeOverlay) {
+      window.requestAnimationFrame(function () { ctx.edgeOverlay.draw(); });
+    }
   }
 
   function boot() {
     var root = document.querySelector('.modular-editor[data-unit-id]');
-    if (root) init(root);
+    if (!root) return;
+    var ctx = root.__modularEditorCtx || { edgeMode: false, edgeFrom: null, edgeOverlay: null, sortables: [], csrfToken: '' };
+    root.__modularEditorCtx = ctx;
+    ctx.csrfToken = getCsrfToken(root);
+    setupPanelResize(root);
+    setupEditorActions(root, ctx);
+    if (!ctx.edgeOverlay) {
+      refreshGraphBindings(root, ctx);
+    } else {
+      window.requestAnimationFrame(function () { ctx.edgeOverlay.draw(); });
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -457,15 +412,28 @@ Goals:
     boot();
   }
 
-  // When the app navigates via HTMX (main content swaps), the editor markup
-  // can appear after the initial page load. Ensure the editor initializes.
-  document.body && document.body.addEventListener && document.body.addEventListener('htmx:load', function (evt) {
-    var scope = (evt && evt.detail && evt.detail.elt) ? evt.detail.elt : document;
-    try {
-      var root = scope.querySelector ? scope.querySelector('.modular-editor[data-unit-id]') : null;
-      if (root) init(root);
-    } catch (e) {
-      // no-op
-    }
+  // When the app navigates via HTMX (main content swaps), the editor markup can
+  // appear after the initial page load. Ensure the editor initializes.
+  document.body && document.body.addEventListener && document.body.addEventListener('htmx:load', function () {
+    boot();
   });
+
+  // When HTMX replaces the graph container out-of-band, our edge overlay and
+  // Sortable instances must be re-initialized to point at the new DOM nodes.
+  function onHtmxSwap(evt) {
+    var root = document.querySelector('.modular-editor[data-unit-id]');
+    if (!root || !root.__modularEditorCtx) return;
+    var ctx = root.__modularEditorCtx;
+    var elt = evt && evt.detail && evt.detail.elt ? evt.detail.elt : null;
+    if (elt && elt.id === 'modular-editor-graph') {
+      refreshGraphBindings(root, ctx);
+      return;
+    }
+    // For non-graph swaps (e.g., right panel), just redraw edges because the
+    // canvas layout may have shifted.
+    if (ctx.edgeOverlay) window.requestAnimationFrame(function () { ctx.edgeOverlay.draw(); });
+  }
+
+  document.body && document.body.addEventListener && document.body.addEventListener('htmx:afterSwap', onHtmxSwap);
+  document.body && document.body.addEventListener && document.body.addEventListener('htmx:oobAfterSwap', onHtmxSwap);
 })();

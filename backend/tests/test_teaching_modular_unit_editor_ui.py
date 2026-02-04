@@ -72,6 +72,10 @@ async def test_modular_unit_editor_renders_phases_modules_and_module_click_opens
         assert page.status_code == 200
         html = page.text
         assert 'data-testid="modular-unit-editor"' in html
+        # The visual editor uses Teaching APIs via JS (edges + drag&drop). Those
+        # endpoints are protected by synchronizer CSRF, so the SSR page must
+        # expose a token as a data attribute.
+        assert 'data-csrf-token="' in html
         assert 'id="modular-editor-panel"' in html
         assert "Phase 1" in html
         assert "Modul A" in html

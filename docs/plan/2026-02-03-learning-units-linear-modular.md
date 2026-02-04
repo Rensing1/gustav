@@ -21,6 +21,7 @@ Legende:
 - **DONE**: Graph‑Payload liefert Phasen/Module/Edges **inkl.** Unlock/Done‑Status (`locked/open/done`) + `tasks_done` + `prereq_done/prereq_required`.
 - **DONE**: `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}` existiert.
 - **DONE**: Module‑Content liefert `materials/tasks` und setzt “locked → 404” (fail‑closed, keine Enumeration).
+- **DONE**: `GET /api/learning/courses/{course_id}/h5p/contents/{content_id}/access` unterstützt `linear` **und** `modular` (locked‑Modul → 404, open/done → 204).
 
 ### Datenbank / Security (RLS)
 - **DONE**: `public.units.unit_type` (Migration + Helper `get_course_units_for_student` erweitert).

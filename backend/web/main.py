@@ -5713,6 +5713,42 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
     materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=token)
     tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=token)
 
+    # Dependency edges (graph): allow teachers to remove edges to unblock moves.
+    edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=author_sub)
+    outgoing = [e for e in edges if str(e.get("from") or "") == str(module_id)]
+    incoming = [e for e in edges if str(e.get("to") or "") == str(module_id)]
+    title_by_id = {str(m.get("id") or ""): str(m.get("title") or "") for m in _fetch_unit_modules_for_unit(unit_id, author_sub=author_sub)}
+
+    def _deps_list(items: list[dict], *, direction: str) -> str:
+        if not items:
+            return '<p class="text-muted"><small>Keine.</small></p>'
+        lis: list[str] = []
+        for e in items:
+            from_id = str(e.get("from") or "")
+            to_id = str(e.get("to") or "")
+            other_id = from_id if direction == "incoming" else to_id
+            label = title_by_id.get(other_id) or other_id
+            lis.append(
+                "<li>"
+                f"<span>{Component.escape(label)}</span> "
+                f'<button type="button" class="btn btn-danger btn-sm" '
+                f'data-action="modular-editor-delete-edge" '
+                f'data-from="{Component.escape(from_id)}" data-to="{Component.escape(to_id)}">Entfernen</button>'
+                "</li>"
+            )
+        return '<ul class="deps-list">' + "".join(lis) + "</ul>"
+
+    deps_html = (
+        '<section class="card">'
+        "<h3>Abhängigkeiten</h3>"
+        '<div class="two-col">'
+        f'<div><h4>Voraussetzungen</h4>{_deps_list(incoming, direction="incoming")}</div>'
+        f'<div><h4>Folgemodule</h4>{_deps_list(outgoing, direction="outgoing")}</div>'
+        "</div>"
+        '<p class="text-muted"><small>Hinweis: Ungültige Verschiebungen sind blockiert. Entferne zuerst Abhängigkeiten.</small></p>'
+        "</section>"
+    )
+
     html = (
         f'<div class="modular-editor-panel__content" data-module-id="{Component.escape(module_id)}">'
         f'<h2>{Component.escape(module_title)}</h2>'
@@ -5728,6 +5764,7 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
         f"{tasks_html}"
         "</section>"
         "</div>"
+        f"{deps_html}"
         f'<p class="text-muted"><small>Vollansicht: <a href="/units/{Component.escape(unit_id)}/modules/{Component.escape(module_id)}">Modul öffnen</a></small></p>'
         "</div>"
     )

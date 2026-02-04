@@ -119,3 +119,18 @@ Why:
   gap: 0.75rem;
 }
 
+.deps-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.25rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.deps-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}

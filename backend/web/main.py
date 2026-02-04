@@ -3316,7 +3316,10 @@ def _render_modular_unit_editor_graph_html(
             '<section class="modular-editor__phase" '
             f'data-phase-id="{safe_pid}">'
             '<header class="modular-editor__phase-header">'
+            '<div class="modular-editor__phase-heading">'
+            '<span class="modular-editor__phase-drag-handle" title="Phase verschieben" aria-hidden="true">⠿</span>'
             f'<h3 class="modular-editor__phase-title">{ptitle}</h3>'
+            "</div>"
             '<div class="modular-editor__phase-actions" role="group" aria-label="Phase Aktionen">'
             f'<button type="button" class="btn btn-sm btn-secondary" '
             f'data-action="modular-editor-add-module" data-phase-id="{safe_pid}" '
@@ -3342,7 +3345,8 @@ def _render_modular_unit_editor_graph_html(
             "</section>"
         )
 
-    phases_html = "".join(phase_columns) if phase_columns else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
+    phases_inner = "".join(phase_columns) if phase_columns else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
+    phases_html = f'<div class="modular-editor__phases" id="modular-editor-phases">{phases_inner}</div>'
     oob_attr = ' hx-swap-oob="outerHTML"' if swap_oob else ""
     return (
         f'<div class="modular-editor__graph" id="modular-editor-graph"{oob_attr}>'

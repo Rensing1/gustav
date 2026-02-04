@@ -122,7 +122,7 @@ class Layout(Component):
     <!-- Modular units (student + teacher). Must be loaded globally because
          navigation happens via HTMX fragment swaps that do not update <head>. -->
     <link rel="stylesheet" href="/static/css/student_modular_unit.css?v=1">
-    <link rel="stylesheet" href="/static/css/teaching_modular_unit_editor.css?v=4">
+    <link rel="stylesheet" href="/static/css/teaching_modular_unit_editor.css?v=5">
 
     <!-- HTMX for interactivity (local copy) -->
     <SCRIPT src="/static/js/vendor/htmx.min.js"></SCRIPT>
@@ -136,7 +136,7 @@ class Layout(Component):
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
     <!-- Teacher modular unit visual editor -->
-    <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=5" defer></SCRIPT>
+    <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=6" defer></SCRIPT>
     {self.extra_head_html}
     """
 

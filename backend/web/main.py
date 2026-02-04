@@ -5747,36 +5747,35 @@ async def module_detail_index(request: Request, unit_id: str, module_id: str):
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
-@app.get("/units/{unit_id}/modules/{module_id}/panel", response_class=HTMLResponse)
-async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
-    """HTMX fragment for the modular unit editor's right-side panel (teacher).
+async def _build_modular_editor_module_panel_html(
+    *,
+    unit_id: str,
+    module_id: str,
+    session_id: str,
+    csrf_token: str,
+    author_sub: str,
+    deps_error: str | None,
+) -> tuple[str, int]:
+    """Build right-side panel HTML for the modular unit teacher editor.
 
-    Intent:
-        Keep the teacher inside the visual editor while editing module content.
-        The panel reuses the existing section-based content APIs (Option B).
+    Why:
+        Multiple HTMX actions (panel load, edge delete) need to re-render the
+        panel consistently. Keeping the rendering in one function avoids UI
+        drift and makes behavior testable.
     """
-    user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
-    sid = _get_session_id(request) or ""
-    if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
-    token = _get_or_create_csrf_token(sid)
-
-    author_sub = str((user or {}).get("sub") or "")
     module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
     if not isinstance(module, dict):
-        return HTMLResponse("Modul nicht gefunden", status_code=404)
+        return "Modul nicht gefunden", 404
     section_id = str(module.get("section_id") or "")
     if not section_id:
-        return HTMLResponse("Modul nicht gefunden", status_code=404)
+        return "Modul nicht gefunden", 404
 
-    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid)
-    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid)
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=session_id)
+    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=session_id)
 
     module_title = str(module.get("title") or "Modul")
-    materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=token)
-    tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=token)
+    materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=csrf_token)
+    tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=csrf_token)
 
     # Unlock settings (k-of-n prerequisites).
     required_prereq_count = int(module.get("required_prereq_count") or 0)
@@ -5791,9 +5790,10 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
         "</small></p>"
         f'<form method="post" action="{settings_action}" hx-post="{settings_action}" '
         f'hx-target="#{Component.escape(settings_target_id)}" hx-swap="outerHTML">'
-        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
         '<label><span class="sr-only">required_prereq_count</span>'
-        f'<input class="form-input" type="number" name="required_prereq_count" min="0" value="{required_prereq_count}" required>'
+        f'<input class="form-input" type="number" name="required_prereq_count" min="0" '
+        f'value="{required_prereq_count}" required>'
         "</label>"
         '<div class="form-actions">'
         '<button type="submit" class="btn btn-success btn-sm">Speichern</button>'
@@ -5806,7 +5806,12 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
     edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=author_sub)
     outgoing = [e for e in edges if str(e.get("from") or "") == str(module_id)]
     incoming = [e for e in edges if str(e.get("to") or "") == str(module_id)]
-    title_by_id = {str(m.get("id") or ""): str(m.get("title") or "") for m in _fetch_unit_modules_for_unit(unit_id, author_sub=author_sub)}
+    title_by_id = {
+        str(m.get("id") or ""): str(m.get("title") or "")
+        for m in _fetch_unit_modules_for_unit(unit_id, author_sub=author_sub)
+    }
+
+    edge_delete_action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/edges/delete"
 
     def _deps_list(items: list[dict], *, direction: str) -> str:
         if not items:
@@ -5819,17 +5824,23 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
             label = title_by_id.get(other_id) or other_id
             lis.append(
                 "<li>"
-                f"<span>{Component.escape(label)}</span> "
-                f'<button type="button" class="btn btn-danger btn-sm" '
-                f'data-action="modular-editor-delete-edge" '
-                f'data-from="{Component.escape(from_id)}" data-to="{Component.escape(to_id)}">Entfernen</button>'
+                f"<span>{Component.escape(label)}</span>"
+                f'<form method="post" action="{edge_delete_action}" hx-post="{edge_delete_action}" '
+                f'hx-target="#modular-editor-panel" hx-swap="innerHTML">'
+                f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+                f'<input type="hidden" name="from_module_id" value="{Component.escape(from_id)}">'
+                f'<input type="hidden" name="to_module_id" value="{Component.escape(to_id)}">'
+                '<button type="submit" class="btn btn-danger btn-sm">Entfernen</button>'
+                "</form>"
                 "</li>"
             )
         return '<ul class="deps-list">' + "".join(lis) + "</ul>"
 
+    deps_error_html = f'<div class="section-error" role="alert">{Component.escape(deps_error)}</div>' if deps_error else ""
     deps_html = (
         '<section class="card">'
         "<h3>Abhängigkeiten</h3>"
+        f"{deps_error_html}"
         '<div class="two-col">'
         f'<div><h4>Voraussetzungen</h4>{_deps_list(incoming, direction="incoming")}</div>'
         f'<div><h4>Folgemodule</h4>{_deps_list(outgoing, direction="outgoing")}</div>'
@@ -5858,7 +5869,98 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
         f'<p class="text-muted"><small>Vollansicht: <a href="/units/{Component.escape(unit_id)}/modules/{Component.escape(module_id)}">Modul öffnen</a></small></p>'
         "</div>"
     )
-    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    return html, 200
+
+
+@app.get("/units/{unit_id}/modules/{module_id}/panel", response_class=HTMLResponse)
+async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
+    """HTMX fragment for the modular unit editor's right-side panel (teacher).
+
+    Intent:
+        Keep the teacher inside the visual editor while editing module content.
+        The panel reuses the existing section-based content APIs (Option B).
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    html, status_code = await _build_modular_editor_module_panel_html(
+        unit_id=unit_id,
+        module_id=module_id,
+        session_id=sid,
+        csrf_token=token,
+        author_sub=author_sub,
+        deps_error=None,
+    )
+    return HTMLResponse(html, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/edges/delete", response_class=HTMLResponse)
+async def modular_editor_module_edge_delete(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: delete a dependency edge from the module panel (teacher).
+
+    Why:
+        Teachers need a reliable way to remove edges without relying on custom
+        browser fetch() quirks (e.g., DELETE request bodies). A plain HTML form
+        via HTMX keeps this robust and testable.
+
+    Behavior:
+        - Validates synchronizer CSRF token (dev = prod).
+        - Deletes the edge via Teaching API.
+        - Returns (1) an OOB graph refresh and (2) the refreshed module panel.
+    """
+    user = getattr(request.state, "user", None)
+    if (user or {}).get("role") != "teacher":
+        return HTMLResponse("Forbidden", status_code=403)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403)
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403)
+
+    token = _get_or_create_csrf_token(sid)
+    from_id = str(form.get("from_module_id") or "").strip()
+    to_id = str(form.get("to_module_id") or "").strip()
+
+    error: str | None = None
+    if not from_id or not to_id:
+        error = "invalid_edge"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.request(
+                    "DELETE",
+                    f"/api/teaching/units/{unit_id}/modules/edges",
+                    json={"from_module_id": from_id, "to_module_id": to_id},
+                )
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "edge_delete_failed"
+
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+
+    # Re-render the panel so the dependency lists reflect the current DB state.
+    # Even on errors we re-render to keep the UI consistent.
+    # (Error is displayed inline in the dependencies card.)
+    html, status_code = await _build_modular_editor_module_panel_html(
+        unit_id=unit_id,
+        module_id=module_id,
+        session_id=sid,
+        csrf_token=token,
+        author_sub=author_sub,
+        deps_error=error,
+    )
+    if status_code != 200:
+        return HTMLResponse(html, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(graph_oob + html, headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/units/{unit_id}/modular-editor/module/{module_id}/settings", response_class=HTMLResponse)

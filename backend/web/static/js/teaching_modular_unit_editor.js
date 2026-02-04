@@ -115,8 +115,8 @@ Goals:
       svg.setAttribute('height', String(graph.scrollHeight));
       svg.setAttribute('viewBox', '0 0 ' + graph.scrollWidth + ' ' + graph.scrollHeight);
 
-      // Remove old paths (keep <defs>).
-      Array.from(svg.querySelectorAll('path.modular-editor__edge')).forEach(function (p) { p.remove(); });
+      // Remove old edge elements (keep <defs>).
+      Array.from(svg.querySelectorAll('.modular-editor__edge')).forEach(function (p) { p.remove(); });
 
       edges.forEach(function (e) {
         var fromId = e.from;
@@ -126,25 +126,23 @@ Goals:
         var b = nodeCenter(toId);
         if (!a || !b) return;
 
-        // Start at right-center, end at left-center.
-        var x1 = a.x + a.w / 2;
-        var y1 = a.y;
-        var x2 = b.x - b.w / 2;
-        var y2 = b.y;
-        var c1x = x1 + 60;
-        var c1y = y1;
-        var c2x = x2 - 60;
-        var c2y = y2;
-        var d = 'M ' + x1 + ' ' + y1 + ' C ' + c1x + ' ' + c1y + ', ' + c2x + ' ' + c2y + ', ' + x2 + ' ' + y2;
+        // Render as an orthogonal polyline similar to the student "advance organizer":
+        // start at bottom-center, end at top-center.
+        var x1 = a.x;
+        var y1 = a.y + a.h / 2;
+        var x4 = b.x;
+        var y4 = b.y - b.h / 2;
+        var midY = (y1 + y4) / 2;
+        var points = x1 + ',' + y1 + ' ' + x1 + ',' + midY + ' ' + x4 + ',' + midY + ' ' + x4 + ',' + y4;
 
-        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', d);
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', 'rgba(163, 217, 106, 0.65)');
-        path.setAttribute('stroke-width', '2');
-        path.setAttribute('marker-end', 'url(#modular-editor-arrow)');
-        path.setAttribute('class', 'modular-editor__edge');
-        svg.appendChild(path);
+        var line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        line.setAttribute('points', points);
+        line.setAttribute('fill', 'none');
+        line.setAttribute('stroke', 'rgba(163, 217, 106, 0.6)');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('marker-end', 'url(#modular-editor-arrow)');
+        line.setAttribute('class', 'modular-editor__edge');
+        svg.appendChild(line);
       });
     }
 
@@ -367,7 +365,7 @@ Goals:
     try {
       return new Sortable(phasesEl, {
         animation: 150,
-        direction: 'horizontal',
+        direction: 'vertical',
         draggable: '.modular-editor__phase',
         handle: '.modular-editor__phase-drag-handle',
         filter: 'button, a, form, input, textarea, select',
@@ -423,6 +421,7 @@ Goals:
         out.push(new Sortable(listEl, {
           group: 'modular-editor-modules',
           animation: 150,
+          direction: 'horizontal',
           handle: '.modular-editor__drag-handle',
           draggable: '.modular-editor__module-node',
           onEnd: function (evt) {

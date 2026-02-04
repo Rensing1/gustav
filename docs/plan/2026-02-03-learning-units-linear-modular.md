@@ -39,14 +39,14 @@ Legende:
 - **DONE**: Beim Erstellen einer Section in einer modularen Unit wird automatisch ein `unit_modules`‑Record erzeugt (Option B).
 - **DONE**: Phase‑Editor API: Phasen listen/erstellen/umbenennen/reorder.
 - **PARTIAL**: Visualer Modul‑Editor (HTMX + JS):
-  - Phasen als Spalten, Module als Knoten, rechte Seitenleiste (Panel) lädt Inhalte via HTMX.
+  - Layout wie im Student‑Advance‑Organizer: Phasen untereinander (Zeilen), Module horizontal (Knoten), rechte Seitenleiste (Panel) lädt Inhalte via HTMX.
   - CRUD (Anlegen/Umbenennen/Löschen) für Phasen/Module per inline HTMX‑Formulare (ohne Browser `prompt()/confirm()`).
   - Löschen ist **kaskadierend**: Phase löscht Module + Kanten + Inhalte; Modul löscht Inhalte (Option B: backing section).
   - Drag&Drop: Module innerhalb/zwischen Phasen verschieben; ungültige Verschiebungen werden vom Backend blockiert (Constraint).
-  - Drag&Drop: Phasen (Spalten) umsortierbar; ungültige Verschiebungen werden blockiert (Edge‑Constraint).
+  - Drag&Drop: Phasen umsortierbar; ungültige Verschiebungen werden blockiert (Edge‑Constraint).
   - Kantenmodus: Kanten per Klick Quelle→Ziel anlegen; Kanten im Panel entfernen.
   - Freischaltung: `required_prereq_count` ist im Panel editierbar (k‑of‑n).
-- **PARTIAL**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Auto‑Layout für Knoten/Spalten noch OPEN.
+- **PARTIAL**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Kanten werden “always-on” gerendert (SVG hinter den Knoten) · Auto‑Layout für Knoten/Spalten noch OPEN.
 
 ### Student UI
 - **PARTIAL**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:

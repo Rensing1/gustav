@@ -40,6 +40,13 @@ Legende:
 - **DONE**: Phase‑Editor API: Phasen listen/erstellen/umbenennen/reorder.
 - **OPEN**: Modul‑Editor (Move/Reorder innerhalb Phase, required_prereq_count) inkl. 409‑Validierungen.
 
+### Student UI
+- **PARTIAL**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:
+  - `linear`: bestehende Section‑Liste (releases)
+  - `modular`: Advance‑Organizer‑Übersicht (Graph) + Modul‑Inhalt via HTMX‑Fragment
+    (`/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment`).
+- **OPEN**: UI‑Features aus dem Dummy (Sticky Toolbar, „Übersicht/Inhalte“‑Toggle, Tabs „offene Module“, Pan/Zoom) sind noch nicht übernommen.
+
 ### Abweichungen vom ursprünglichen Plan (wichtig)
 - **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).
 - **Abweichung 2 (zusätzliche Mechanik):** Kurs‑Scoped Modular‑Sichtbarkeit wird über `app.current_course_id` (GUC) vom Backend gesetzt, damit RLS “fail‑closed” bleibt und wir Content‑Leaks vermeiden.

@@ -84,6 +84,8 @@ async def test_modular_unit_editor_renders_phases_modules_and_module_click_opens
         assert 'data-action="modular-editor-delete-phase"' in html
         assert 'data-action="modular-editor-rename-module"' in html
         assert 'data-action="modular-editor-delete-module"' in html
+        assert 'id="modular-editor-phases"' in html
+        assert 'modular-editor__phase-drag-handle' in html
 
         # Module nodes must load panel content via HTMX.
         pattern = rf"/units/{re.escape(uid)}/modules/([0-9a-fA-F-]{{36}})/panel"

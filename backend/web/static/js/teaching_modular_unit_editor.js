@@ -177,6 +177,35 @@ Goals:
     });
   }
 
+  function revertSortableMove(evt) {
+    try {
+      if (!evt || !evt.item || !evt.from) return;
+      var from = evt.from;
+      var item = evt.item;
+      var idx = (typeof evt.oldIndex === 'number') ? evt.oldIndex : null;
+      // Remove from current parent first so `oldIndex` refers to the list
+      // without the moved element (important for same-list moves).
+      if (item.parentNode) item.parentNode.removeChild(item);
+      var children = from.children || [];
+      if (idx === null) {
+        from.appendChild(item);
+        return;
+      }
+      if (idx >= children.length) {
+        from.appendChild(item);
+        return;
+      }
+      from.insertBefore(item, children[idx]);
+    } catch (e) {
+      // no-op
+    }
+  }
+
+  function setStatus(ctx, message) {
+    if (!ctx || !ctx.statusEl) return;
+    ctx.statusEl.textContent = message || '';
+  }
+
   function setupEditorActions(root, ctx) {
     if (root.dataset.modularEditorActionsReady === 'true') return;
     var unitId = root.getAttribute('data-unit-id') || '';
@@ -320,6 +349,60 @@ Goals:
     root.dataset.modularEditorActionsReady = 'true';
   }
 
+  function setupPhaseDragAndDrop(root, ctx) {
+    if (typeof Sortable === 'undefined') return null;
+    var phasesEl = root.querySelector('#modular-editor-phases');
+    if (!phasesEl) return null;
+
+    function phaseIds() {
+      return Array.from(phasesEl.querySelectorAll('.modular-editor__phase'))
+        .map(function (p) { return p.getAttribute('data-phase-id'); })
+        .filter(Boolean);
+    }
+
+    try {
+      return new Sortable(phasesEl, {
+        animation: 150,
+        direction: 'horizontal',
+        draggable: '.modular-editor__phase',
+        handle: '.modular-editor__phase-drag-handle',
+        filter: 'button, a, form, input, textarea, select',
+        preventOnFilter: false,
+        onEnd: function (evt) {
+          var unitId = ctx.unitId || root.getAttribute('data-unit-id') || '';
+          if (!unitId) return;
+
+          var ids = phaseIds();
+          var headers = { 'Content-Type': 'application/json' };
+          if (ctx.csrfToken) headers['X-CSRF-Token'] = ctx.csrfToken;
+          fetch('/api/teaching/units/' + unitId + '/phases/reorder', {
+            method: 'POST',
+            headers: headers,
+            credentials: 'same-origin',
+            body: JSON.stringify({ phase_ids: ids })
+          }).then(function (r) {
+            if (!r.ok) return r.json().then(function (j) { throw j; });
+            return r.json();
+          }).then(function () {
+            setStatus(ctx, 'Phasen gespeichert.');
+            if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
+          }).catch(function (e) {
+            revertSortableMove(evt);
+            var detail = (e && e.detail) ? e.detail : '';
+            var msg = detail === 'edge_constraint_violation'
+              ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.'
+              : 'Verschieben fehlgeschlagen.';
+            window.alert(msg);
+            setStatus(ctx, msg);
+            if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
+          });
+        }
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
   function setupDragAndDrop(root, ctx) {
     if (typeof Sortable === 'undefined') return;
     var lists = Array.from(root.querySelectorAll('.modular-editor__module-list'));
@@ -358,10 +441,16 @@ Goals:
             }).then(function () {
               // Redraw edges since node positions may have changed.
               if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
+              setStatus(ctx, '');
             }).catch(function (e) {
+              revertSortableMove(evt);
               var detail = (e && e.detail) ? e.detail : '';
-              window.alert(detail === 'edge_constraint_violation' ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.' : 'Verschieben fehlgeschlagen.');
-              window.location.reload();
+              var msg = detail === 'edge_constraint_violation'
+                ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.'
+                : 'Verschieben fehlgeschlagen.';
+              window.alert(msg);
+              setStatus(ctx, msg);
+              if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
             });
           }
         }));
@@ -374,11 +463,14 @@ Goals:
   }
 
   function refreshGraphBindings(root, ctx) {
+    if (ctx.phaseSortable && typeof ctx.phaseSortable.destroy === 'function') ctx.phaseSortable.destroy();
+    ctx.phaseSortable = null;
     if (ctx.edgeOverlay && typeof ctx.edgeOverlay.destroy === 'function') ctx.edgeOverlay.destroy();
     destroySortables(ctx.sortables);
     ctx.sortables = [];
     ctx.csrfToken = getCsrfToken(root);
     ctx.edgeOverlay = setupEdgesOverlay(root);
+    ctx.phaseSortable = setupPhaseDragAndDrop(root, ctx);
     setupDragAndDrop(root, ctx);
     // If the graph was replaced, any in-progress edge selection is invalid.
     ctx.edgeFrom = null;
@@ -394,7 +486,7 @@ Goals:
   function boot() {
     var root = document.querySelector('.modular-editor[data-unit-id]');
     if (!root) return;
-    var ctx = root.__modularEditorCtx || { edgeMode: false, edgeFrom: null, edgeOverlay: null, sortables: [], csrfToken: '' };
+    var ctx = root.__modularEditorCtx || { edgeMode: false, edgeFrom: null, edgeOverlay: null, sortables: [], phaseSortable: null, csrfToken: '' };
     root.__modularEditorCtx = ctx;
     ctx.csrfToken = getCsrfToken(root);
     setupPanelResize(root);

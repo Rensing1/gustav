@@ -46,12 +46,16 @@ Why:
   overflow: visible;
 }
 
+.modular-editor__phases {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .modular-editor__phase {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  vertical-align: top;
   width: 280px;
-  margin-right: 12px;
 }
 
 .modular-editor__phase-header {
@@ -60,6 +64,19 @@ Why:
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.5rem 0.25rem;
+}
+
+.modular-editor__phase-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.modular-editor__phase-drag-handle {
+  cursor: grab;
+  user-select: none;
+  opacity: 0.7;
 }
 
 .modular-editor__phase-actions {

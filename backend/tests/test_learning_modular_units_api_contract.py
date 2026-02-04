@@ -424,6 +424,14 @@ async def test_learning_modular_unlock_and_locked_module_returns_404_until_prere
         r_b_locked = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{mod_b}?include=tasks")
         assert r_b_locked.status_code == 404
 
+        # Locked modules must also reject direct submissions (fail-closed).
+        # Even if a client knows the task_id, the module is not yet accessible.
+        r_submit_locked = await c.post(
+            f"/api/learning/courses/{course_id}/tasks/{task_b}/submissions",
+            json={"kind": "text", "text_body": "should-not-work"},
+        )
+        assert r_submit_locked.status_code == 404
+
         r_a_open = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{mod_a}?include=tasks")
         assert r_a_open.status_code == 200
 

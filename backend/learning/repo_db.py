@@ -489,6 +489,111 @@ class DBLearningRepo:
             }
         return state
 
+    def _is_modular_section_open_or_done(
+        self,
+        *,
+        cur,
+        course_uuid: str,
+        student_sub: str,
+        unit_uuid: str,
+        section_uuid: str,
+    ) -> bool:
+        """Return True if a modular section's module is open/done for the student.
+
+        Why:
+            For modular units, we must not accept submissions for tasks in locked
+            modules (even if a client knows the task_id). Otherwise students could
+            bypass the intended progression by submitting to hidden tasks.
+
+        Notes:
+            - For linear units this helper is not used (releases are checked elsewhere).
+            - This runs under RLS with `app.current_sub` and `app.current_course_id`
+              already set by the caller.
+        """
+        cur.execute(
+            """
+            select um.id::text
+              from public.unit_modules um
+              join public.units u on u.id = um.unit_id
+             where um.unit_id = %s::uuid
+               and um.section_id = %s::uuid
+               and u.unit_type = 'modular'
+             limit 1
+            """,
+            (unit_uuid, section_uuid),
+        )
+        row = cur.fetchone()
+        if not row:
+            return True  # not a modular module-section mapping
+        module_id = str(row[0])
+
+        cur.execute(
+            """
+            select um.id::text,
+                   um.section_id::text,
+                   um.required_prereq_count,
+                   us.tasks_total,
+                   p.position as phase_position,
+                   um.position_in_phase
+              from public.unit_modules um
+              join public.unit_sections us on us.id = um.section_id
+              join public.unit_phases p on p.id = um.phase_id
+             where um.unit_id = %s::uuid
+             order by p.position asc, um.position_in_phase asc, um.id asc
+            """,
+            (unit_uuid,),
+        )
+        modules_raw = [
+            {
+                "id": r[0],
+                "section_id": r[1],
+                "required_prereq_count": int(r[2] or 0),
+                "tasks_total": int(r[3] or 0),
+                "phase_position": int(r[4] or 1),
+                "position_in_phase": int(r[5] or 1),
+            }
+            for r in (cur.fetchall() or [])
+        ]
+        if not modules_raw:
+            return False
+
+        cur.execute(
+            """
+            select from_module_id::text, to_module_id::text
+            from public.unit_module_edges
+            where unit_id = %s
+            order by from_module_id asc, to_module_id asc
+            """,
+            (unit_uuid,),
+        )
+        edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
+
+        section_ids = [m["section_id"] for m in modules_raw]
+        tasks_done_by_section: dict[str, int] = {}
+        if section_ids:
+            cur.execute(
+                """
+                select section_id::text,
+                       count(distinct task_id)::int as tasks_done
+                  from public.learning_submissions
+                 where course_id = %s::uuid
+                   and student_sub = %s
+                   and section_id = any(%s::uuid[])
+                   and (kind <> 'h5p' or score_raw = score_max)
+                 group by section_id
+                """,
+                (course_uuid, student_sub, section_ids),
+            )
+            tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
+
+        module_state = self._compute_modular_unit_module_states(
+            ordered_modules=modules_raw,
+            edges=edges,
+            tasks_done_by_section=tasks_done_by_section,
+        )
+        status = str((module_state.get(module_id) or {}).get("status") or "")
+        return status in {"open", "done"}
+
     def get_modular_module_content(
         self,
         *,
@@ -1211,6 +1316,15 @@ class DBLearningRepo:
                 if not meta:
                     raise LookupError("task_not_visible")
                 section_uuid = str(UUID(meta[1]))
+                unit_uuid = str(UUID(meta[2]))
+                if not self._is_modular_section_open_or_done(
+                    cur=cur,
+                    course_uuid=course_uuid,
+                    student_sub=data.student_sub,
+                    unit_uuid=unit_uuid,
+                    section_uuid=section_uuid,
+                ):
+                    raise LookupError("task_not_visible")
                 task_kind = str(meta[3] or "native")
                 max_attempts = meta[5]
                 # Rubric criteria come from the helper (already filtered by RLS).
@@ -1578,13 +1692,25 @@ class DBLearningRepo:
 
                 cur.execute(
                     """
-                    select task_id::text
+                    select task_id::text,
+                           section_id::text,
+                           unit_id::text
                       from public.get_task_metadata_for_student(%s, %s, %s)
                     """,
                     (student_sub, course_uuid, task_uuid),
                 )
-                visible = cur.fetchone()
-                if not visible:
+                meta = cur.fetchone()
+                if not meta:
+                    raise LookupError("task_not_visible")
+                section_uuid = str(UUID(meta[1]))
+                unit_uuid = str(UUID(meta[2]))
+                if not self._is_modular_section_open_or_done(
+                    cur=cur,
+                    course_uuid=course_uuid,
+                    student_sub=student_sub,
+                    unit_uuid=unit_uuid,
+                    section_uuid=section_uuid,
+                ):
                     raise LookupError("task_not_visible")
 
                 cur.execute(

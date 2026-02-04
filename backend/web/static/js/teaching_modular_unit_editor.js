@@ -153,13 +153,31 @@ Goals:
     if (!unitId) return;
     var statusEl = root.querySelector('#modular-editor-status small');
 
-    function apiFetch(path, body) {
+    function apiJson(method, path, body) {
       return fetch(path, {
-        method: 'POST',
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify(body || {})
+        body: body ? JSON.stringify(body) : undefined
       });
+    }
+
+    function apiPost(path, body) { return apiJson('POST', path, body); }
+    function apiPatch(path, body) { return apiJson('PATCH', path, body); }
+    function apiDelete(path) { return apiJson('DELETE', path); }
+
+    function alertApiError(r) {
+      if (!r) return;
+      try {
+        r.json().then(function (j) {
+          var msg = (j && j.detail) ? j.detail : (j && j.error) ? j.error : '';
+          window.alert(msg || 'Fehler');
+        }).catch(function () {
+          r.text().then(function (t) { window.alert(t || 'Fehler'); });
+        });
+      } catch (e) {
+        window.alert('Fehler');
+      }
     }
 
     // Create phase (reload on success).
@@ -168,8 +186,8 @@ Goals:
       btnAddPhase.addEventListener('click', function () {
         var title = window.prompt('Titel der Phase:', 'Neue Phase');
         if (!title) return;
-        apiFetch('/api/teaching/units/' + unitId + '/phases', { title: title })
-          .then(function (r) { if (r.ok) window.location.reload(); else r.text().then(function (t) { window.alert(t || 'Fehler'); }); })
+        apiPost('/api/teaching/units/' + unitId + '/phases', { title: title })
+          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
           .catch(function (e) { window.alert('Fehler: ' + e); });
       });
     }
@@ -180,8 +198,78 @@ Goals:
         var phaseId = btn.getAttribute('data-phase-id') || '';
         var title = window.prompt('Titel des Moduls:', 'Neues Modul');
         if (!title || !phaseId) return;
-        apiFetch('/api/teaching/units/' + unitId + '/modules', { title: title, phase_id: phaseId })
-          .then(function (r) { if (r.ok) window.location.reload(); else r.text().then(function (t) { window.alert(t || 'Fehler'); }); })
+        apiPost('/api/teaching/units/' + unitId + '/modules', { title: title, phase_id: phaseId })
+          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
+          .catch(function (e) { window.alert('Fehler: ' + e); });
+      });
+    });
+
+    // Rename phase.
+    Array.from(root.querySelectorAll('[data-action="modular-editor-rename-phase"]')).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var phaseId = btn.getAttribute('data-phase-id') || '';
+        var phaseEl = btn.closest ? btn.closest('.modular-editor__phase') : null;
+        var titleEl = phaseEl ? phaseEl.querySelector('.modular-editor__phase-title') : null;
+        var current = titleEl ? (titleEl.textContent || '').trim() : '';
+        var nextTitle = window.prompt('Neuer Titel der Phase:', current || 'Phase');
+        if (!phaseId || !nextTitle) return;
+        apiPatch('/api/teaching/units/' + unitId + '/phases/' + phaseId, { title: nextTitle })
+          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
+          .catch(function (e) { window.alert('Fehler: ' + e); });
+      });
+    });
+
+    // Delete phase (destructive cascade).
+    Array.from(root.querySelectorAll('[data-action="modular-editor-delete-phase"]')).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var phaseId = btn.getAttribute('data-phase-id') || '';
+        var phaseEl = btn.closest ? btn.closest('.modular-editor__phase') : null;
+        var titleEl = phaseEl ? phaseEl.querySelector('.modular-editor__phase-title') : null;
+        var label = titleEl ? (titleEl.textContent || '').trim() : 'Phase';
+        if (!phaseId) return;
+        var ok = window.confirm(
+          'Phase „' + label + '“ wirklich löschen?\n\n' +
+          'Dabei werden alle Module, Abhängigkeiten und Inhalte dieser Phase gelöscht.\n' +
+          'Diese Aktion kann nicht rückgängig gemacht werden.'
+        );
+        if (!ok) return;
+        apiDelete('/api/teaching/units/' + unitId + '/phases/' + phaseId)
+          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
+          .catch(function (e) { window.alert('Fehler: ' + e); });
+      });
+    });
+
+    // Rename module.
+    Array.from(root.querySelectorAll('[data-action="modular-editor-rename-module"]')).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var moduleId = btn.getAttribute('data-module-id') || '';
+        var node = btn.closest ? btn.closest('.modular-editor__module-node') : null;
+        var titleBtn = node ? node.querySelector('.modular-editor__module-btn') : null;
+        var current = titleBtn ? (titleBtn.textContent || '').trim() : '';
+        var nextTitle = window.prompt('Neuer Titel des Moduls:', current || 'Modul');
+        if (!moduleId || !nextTitle) return;
+        apiPatch('/api/teaching/units/' + unitId + '/modules/' + moduleId, { title: nextTitle })
+          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
+          .catch(function (e) { window.alert('Fehler: ' + e); });
+      });
+    });
+
+    // Delete module (destructive).
+    Array.from(root.querySelectorAll('[data-action="modular-editor-delete-module"]')).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var moduleId = btn.getAttribute('data-module-id') || '';
+        var node = btn.closest ? btn.closest('.modular-editor__module-node') : null;
+        var titleBtn = node ? node.querySelector('.modular-editor__module-btn') : null;
+        var label = titleBtn ? (titleBtn.textContent || '').trim() : 'Modul';
+        if (!moduleId) return;
+        var ok = window.confirm(
+          'Modul „' + label + '“ wirklich löschen?\n\n' +
+          'Dabei werden auch alle Inhalte (Materialien/Aufgaben) gelöscht.\n' +
+          'Diese Aktion kann nicht rückgängig gemacht werden.'
+        );
+        if (!ok) return;
+        apiDelete('/api/teaching/units/' + unitId + '/modules/' + moduleId)
+          .then(function (r) { if (r.ok) window.location.reload(); else alertApiError(r); })
           .catch(function (e) { window.alert('Fehler: ' + e); });
       });
     });
@@ -240,7 +328,7 @@ Goals:
       var toId = moduleId;
       clearEdgeSelection();
 
-      apiFetch('/api/teaching/units/' + unitId + '/modules/edges', { from_module_id: fromId, to_module_id: toId })
+      apiPost('/api/teaching/units/' + unitId + '/modules/edges', { from_module_id: fromId, to_module_id: toId })
         .then(function (r) {
           if (!r.ok) return r.json().then(function (j) { throw j; });
           return r.json();

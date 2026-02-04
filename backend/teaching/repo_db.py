@@ -1267,6 +1267,262 @@ class DBTeachingRepo:
             for r in out_rows
         ]
 
+    def update_unit_module_title(self, *, unit_id: str, module_id: str, title: str, author_id: str) -> Optional[dict]:
+        """Rename a module inside a modular unit (author only).
+
+        Option B:
+            The visible module title is stored on the backing section row
+            (`public.unit_sections.title`). This method updates that title.
+
+        Returns:
+            Updated module dict (including section_id for internal wiring) or
+            None when the module is not visible to the caller.
+        """
+        t = (title or "").strip()
+        if not t or len(t) > 200:
+            raise ValueError("invalid_title")
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+
+                cur.execute(
+                    """
+                    select um.section_id::text,
+                           um.phase_id::text,
+                           um.position_in_phase,
+                           um.required_prereq_count
+                      from public.unit_modules um
+                     where um.unit_id = %s::uuid
+                       and um.id = %s::uuid
+                     for update
+                    """,
+                    (unit_id, module_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                section_id, phase_id, pos_in_phase, req_prereq = row[0], row[1], int(row[2] or 1), int(row[3] or 0)
+
+                cur.execute(
+                    """
+                    update public.unit_sections
+                    set title = %s
+                    where id = %s::uuid
+                      and unit_id = %s::uuid
+                    """,
+                    (t, section_id, unit_id),
+                )
+                conn.commit()
+        return {
+            "id": module_id,
+            "unit_id": unit_id,
+            "section_id": section_id,
+            "phase_id": phase_id,
+            "position_in_phase": pos_in_phase,
+            "required_prereq_count": req_prereq,
+            "title": t,
+        }
+
+    def delete_unit_module_for_author(self, *, unit_id: str, module_id: str, author_id: str) -> bool:
+        """Delete a module and its backing content (author only).
+
+        Option B:
+            Deletes the backing section row, which cascades to:
+              - unit_modules (via FK on unit_modules.section_id)
+              - unit_tasks/unit_materials etc. (section-owned content)
+              - unit_module_edges (via FK on from/to module ids)
+
+        Additionally resequences remaining modules within the affected phase to
+        keep positions contiguous (1..n) for stable edge validation and UX.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute("select unit_type from public.units where id = %s and author_id = %s", (unit_id, author_id))
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+
+                cur.execute(
+                    """
+                    select um.section_id::text, um.phase_id::text
+                    from public.unit_modules um
+                    where um.unit_id = %s::uuid
+                      and um.id = %s::uuid
+                    for update
+                    """,
+                    (unit_id, module_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return False
+                section_id, phase_id = row[0], row[1]
+
+                cur.execute(
+                    """
+                    delete from public.unit_sections
+                    where id = %s::uuid
+                      and unit_id = %s::uuid
+                    """,
+                    (section_id, unit_id),
+                )
+                if int(cur.rowcount or 0) == 0:
+                    return False
+
+                # Keep section positions contiguous (used by linear units; harmless for modular).
+                cur.execute(
+                    """
+                    with ordered as (
+                      select id, row_number() over (order by position asc, id) as rn
+                      from public.unit_sections
+                      where unit_id = %s::uuid
+                    )
+                    update public.unit_sections u
+                    set position = o.rn
+                    from ordered o
+                    where u.id = o.id
+                    """,
+                    (unit_id,),
+                )
+
+                # Resequence remaining modules in the phase (important for edge direction checks).
+                cur.execute("set constraints unit_modules_phase_id_position_in_phase_key deferred")
+                cur.execute(
+                    """
+                    with ordered as (
+                      select id, row_number() over (order by position_in_phase asc, id) as rn
+                      from public.unit_modules
+                      where unit_id = %s::uuid
+                        and phase_id = %s::uuid
+                    )
+                    update public.unit_modules um
+                    set position_in_phase = o.rn
+                    from ordered o
+                    where um.id = o.id
+                    """,
+                    (unit_id, phase_id),
+                )
+
+                conn.commit()
+                return True
+
+    def delete_unit_phase_for_author(self, *, unit_id: str, phase_id: str, author_id: str) -> bool:
+        """Delete a phase and all contained modules/edges/content (author only).
+
+        Why:
+            Teachers need to restructure a modular unit quickly. Deleting a
+            phase should remove all its modules and their content to avoid
+            orphaned sections (Option B).
+
+        Behavior:
+            - Deletes backing sections for all modules in the phase.
+            - Deletes the phase row.
+            - Resequences remaining phase positions to keep them contiguous.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+                cur.execute(
+                    "select unit_type from public.units where id = %s and author_id = %s for update",
+                    (unit_id, author_id),
+                )
+                unit_row = cur.fetchone()
+                if not unit_row:
+                    raise PermissionError("unit_not_found_or_not_owned")
+                unit_type = str(unit_row[0] or "linear").strip().lower()
+                if unit_type != "modular":
+                    raise ValueError("invalid_unit_type")
+
+                cur.execute(
+                    """
+                    select id::text
+                    from public.unit_phases
+                    where id = %s::uuid
+                      and unit_id = %s::uuid
+                    for update
+                    """,
+                    (phase_id, unit_id),
+                )
+                phase_row = cur.fetchone()
+                if not phase_row:
+                    return False
+
+                cur.execute(
+                    """
+                    select um.section_id::text
+                    from public.unit_modules um
+                    where um.unit_id = %s::uuid
+                      and um.phase_id = %s::uuid
+                    """,
+                    (unit_id, phase_id),
+                )
+                section_ids = [r[0] for r in (cur.fetchall() or []) if r and r[0]]
+                if section_ids:
+                    cur.execute(
+                        """
+                        delete from public.unit_sections
+                        where unit_id = %s::uuid
+                          and id = any(%s::uuid[])
+                        """,
+                        (unit_id, section_ids),
+                    )
+                    # Resequence section positions (linear-only, but keeps unit tidy).
+                    cur.execute(
+                        """
+                        with ordered as (
+                          select id, row_number() over (order by position asc, id) as rn
+                          from public.unit_sections
+                          where unit_id = %s::uuid
+                        )
+                        update public.unit_sections u
+                        set position = o.rn
+                        from ordered o
+                        where u.id = o.id
+                        """,
+                        (unit_id,),
+                    )
+
+                cur.execute(
+                    """
+                    delete from public.unit_phases
+                    where id = %s::uuid
+                      and unit_id = %s::uuid
+                    """,
+                    (phase_id, unit_id),
+                )
+                if int(cur.rowcount or 0) == 0:
+                    return False
+
+                # Resequence remaining phases to keep (unit_id, position) contiguous.
+                cur.execute("set constraints unit_phases_unit_id_position_key deferred")
+                cur.execute(
+                    """
+                    with ordered as (
+                      select id, row_number() over (order by position asc, id) as rn
+                      from public.unit_phases
+                      where unit_id = %s::uuid
+                    )
+                    update public.unit_phases p
+                    set position = o.rn
+                    from ordered o
+                    where p.id = o.id
+                    """,
+                    (unit_id,),
+                )
+                conn.commit()
+                return True
+
     def section_exists_for_author(self, unit_id: str, section_id: str, author_id: str) -> bool:
         """Check whether a section belongs to the unit and is visible to the author."""
         with psycopg.connect(self._dsn) as conn:

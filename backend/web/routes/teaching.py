@@ -1568,6 +1568,23 @@ class UnitModuleCreatePayload(BaseModel):
         return v
 
 
+class UnitModuleUpdatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            return s
+        return v
+
+
 class UnitModuleReorderPayload(BaseModel):
     # Use loose typing to avoid FastAPI 422, then validate type manually
     module_ids: object | None = None
@@ -2110,6 +2127,38 @@ async def update_unit_phase(request: Request, unit_id: str, phase_id: str, paylo
     return _json_private(_serialize_unit_phase(updated), status_code=200, vary_origin=True)
 
 
+@teaching_router.delete("/api/teaching/units/{unit_id}/phases/{phase_id}")
+async def delete_unit_phase(request: Request, unit_id: str, phase_id: str):
+    """Delete a phase (and all modules/edges/content inside it) (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        deleted = repo.delete_unit_phase_for_author(unit_id=unit_id, phase_id=phase_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
 @teaching_router.post("/api/teaching/units/{unit_id}/phases/reorder")
 async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhaseReorderPayload):
     """Reorder phases (author only) transactionally to positions 1..n as provided."""
@@ -2228,6 +2277,76 @@ async def create_unit_module(request: Request, unit_id: str, payload: UnitModule
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private(_serialize_unit_module(created), status_code=201, vary_origin=True)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}")
+async def update_unit_module(request: Request, unit_id: str, module_id: str, payload: UnitModuleUpdatePayload):
+    """Rename a module (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not updates:
+        return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+    title = updates.get("title")
+    if title is not None and (not str(title).strip() or len(str(title).strip()) > 200):
+        return _private_error({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+    try:
+        updated = repo.update_unit_module_title(unit_id=unit_id, module_id=module_id, title=title, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not updated:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private(_serialize_unit_module(updated), status_code=200, vary_origin=True)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{module_id}")
+async def delete_unit_module(request: Request, unit_id: str, module_id: str):
+    """Delete a module and its backing content (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        deleted = repo.delete_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder")

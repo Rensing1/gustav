@@ -86,25 +86,28 @@ Goals:
       svg.insertAdjacentHTML(
         'afterbegin',
         '<defs>' +
-          '<marker id="modular-editor-arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">' +
-            '<polygon points="0 0, 10 3.5, 0 7" />' +
+          '<marker id="modular-editor-arrow" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
+            '<polygon class="modular-editor__edge-arrow" points="0 0, 8 3, 0 6" />' +
           '</marker>' +
         '</defs>'
       );
     }
 
-    function nodeCenter(moduleId) {
+    function nodeInfo(moduleId) {
       var node = root.querySelector('[data-module-id="' + moduleId + '"]');
       if (!node) return null;
       var graphRect = graph.getBoundingClientRect();
       var nodeRect = node.getBoundingClientRect();
       var left = nodeRect.left - graphRect.left + graph.scrollLeft;
       var top = nodeRect.top - graphRect.top + graph.scrollTop;
+      var phaseEl = node.closest ? node.closest('.modular-editor__phase') : null;
+      var phaseId = phaseEl && phaseEl.getAttribute ? (phaseEl.getAttribute('data-phase-id') || '') : '';
       return {
         x: left + nodeRect.width / 2,
         y: top + nodeRect.height / 2,
         w: nodeRect.width,
-        h: nodeRect.height
+        h: nodeRect.height,
+        phaseId: phaseId
       };
     }
 
@@ -117,29 +120,47 @@ Goals:
 
       // Remove old edge elements (keep <defs>).
       Array.from(svg.querySelectorAll('.modular-editor__edge')).forEach(function (p) { p.remove(); });
+      var PAD = 6;
 
       edges.forEach(function (e) {
         var fromId = e.from;
         var toId = e.to;
         if (!fromId || !toId) return;
-        var a = nodeCenter(fromId);
-        var b = nodeCenter(toId);
+        var a = nodeInfo(fromId);
+        var b = nodeInfo(toId);
         if (!a || !b) return;
 
-        // Render as an orthogonal polyline similar to the student "advance organizer":
-        // start at bottom-center, end at top-center.
-        var x1 = a.x;
-        var y1 = a.y + a.h / 2;
-        var x4 = b.x;
-        var y4 = b.y - b.h / 2;
-        var midY = (y1 + y4) / 2;
-        var points = x1 + ',' + y1 + ' ' + x1 + ',' + midY + ' ' + x4 + ',' + midY + ' ' + x4 + ',' + y4;
+        // Render as an orthogonal polyline.
+        //
+        // Why:
+        // - Cross-phase edges should clearly go "down" (next phase).
+        // - Same-phase edges should go "right" (within the phase row).
+        //
+        // We use simple midpoints (readable + fast) and add padding so arrowheads
+        // do not overlap the node border.
+        var samePhase = !!(a.phaseId && b.phaseId && a.phaseId === b.phaseId);
+        var points = '';
+        if (samePhase) {
+          // Same phase: start at right-center, end at left-center.
+          var x1 = a.x + a.w / 2 + PAD;
+          var y1 = a.y;
+          var x4 = b.x - b.w / 2 - PAD;
+          var y4 = b.y;
+          var midX = (x1 + x4) / 2;
+          points = x1 + ',' + y1 + ' ' + midX + ',' + y1 + ' ' + midX + ',' + y4 + ' ' + x4 + ',' + y4;
+        } else {
+          // Cross phase: start at bottom-center, end at top-center.
+          var x1b = a.x;
+          var y1b = a.y + a.h / 2 + PAD;
+          var x4b = b.x;
+          var y4b = b.y - b.h / 2 - PAD;
+          var midY = (y1b + y4b) / 2;
+          points = x1b + ',' + y1b + ' ' + x1b + ',' + midY + ' ' + x4b + ',' + midY + ' ' + x4b + ',' + y4b;
+        }
+        if (!points) return;
 
         var line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
         line.setAttribute('points', points);
-        line.setAttribute('fill', 'none');
-        line.setAttribute('stroke', 'rgba(163, 217, 106, 0.6)');
-        line.setAttribute('stroke-width', '2');
         line.setAttribute('marker-end', 'url(#modular-editor-arrow)');
         line.setAttribute('class', 'modular-editor__edge');
         svg.appendChild(line);

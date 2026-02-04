@@ -1501,6 +1501,45 @@ class ModuleSectionVisibilityPayload(BaseModel):
     visible: object | None = None
 
 
+# --- Phases (modular Units) ----------------------------------------------------
+
+class UnitPhaseCreatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+
+    @field_validator("title")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+
+class UnitPhaseUpdatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            return s
+        return v
+
+
+class UnitPhaseReorderPayload(BaseModel):
+    # Use loose typing to avoid FastAPI 422, then validate type manually
+    phase_ids: object | None = None
+
+
 # --- Sections (per Unit) --------------------------------------------------------
 
 class SectionCreatePayload(BaseModel):
@@ -1941,6 +1980,123 @@ async def delete_unit(request: Request, unit_id: str):
         return JSONResponse({"error": "not_found"}, status_code=404)
     # No content but still enforce private, no-store to be explicit in proxies
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/phases")
+async def list_unit_phases(request: Request, unit_id: str):
+    """List phases of a modular unit (author only)."""
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    try:
+        items = _get_repo().list_unit_phases_for_author(unit_id, sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except Exception:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private([_serialize_unit_phase(p) for p in items], status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/phases")
+async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCreatePayload):
+    """Create a phase in a modular unit (author only); appends at the next position."""
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    title = payload.title or ""
+    try:
+        phase = _get_repo().create_unit_phase(unit_id, title, sub)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_unit_phase(phase), status_code=201, vary_origin=True)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/phases/{phase_id}")
+async def update_unit_phase(request: Request, unit_id: str, phase_id: str, payload: UnitPhaseUpdatePayload):
+    """Rename a phase in a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id) or not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not updates:
+        return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+    try:
+        updated = repo.update_unit_phase_title(unit_id, phase_id, updates.get("title"), sub)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    if not updated:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private(_serialize_unit_phase(updated), status_code=200, vary_origin=True)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/phases/reorder")
+async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhaseReorderPayload):
+    """Reorder phases (author only) transactionally to positions 1..n as provided."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    # Security-first: verify authorship before deep payload validation to avoid error oracle
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    ids = payload.phase_ids
+    if not isinstance(ids, list):
+        return _private_error({"error": "bad_request", "detail": "phase_ids_must_be_array"}, status_code=400)
+    if len(ids) == 0:
+        return _private_error({"error": "bad_request", "detail": "empty_phase_ids"}, status_code=400)
+    if len(ids) != len(set(ids)):
+        return _private_error({"error": "bad_request", "detail": "duplicate_phase_ids"}, status_code=400)
+    if any(not _is_uuid_like(pid) for pid in ids):
+        return _private_error({"error": "bad_request", "detail": "invalid_phase_ids"}, status_code=400)
+    try:
+        ordered = repo.reorder_unit_phases_owned(unit_id, sub, ids)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private([_serialize_unit_phase(p) for p in ordered], status_code=200, vary_origin=True)
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections")
@@ -3341,6 +3497,21 @@ def _serialize_module(m) -> dict:
         "context_notes": getattr(m, "context_notes", None),
         "created_at": getattr(m, "created_at", None),
         "updated_at": getattr(m, "updated_at", None),
+    }
+
+
+def _serialize_unit_phase(p) -> dict:
+    if is_dataclass(p):
+        return asdict(p)
+    if isinstance(p, dict):
+        return p
+    return {
+        "id": getattr(p, "id", None),
+        "unit_id": getattr(p, "unit_id", None),
+        "title": getattr(p, "title", None),
+        "position": getattr(p, "position", None),
+        "created_at": getattr(p, "created_at", None),
+        "updated_at": getattr(p, "updated_at", None),
     }
 
 

@@ -51,9 +51,12 @@ Legende:
 ### Student UI
 - **PARTIAL**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:
   - `linear`: bestehende Section‑Liste (releases)
-  - `modular`: Advance‑Organizer‑Übersicht (Graph) + Modul‑Inhalt via HTMX‑Fragment
-    (`/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment`).
-- **OPEN**: UI‑Features aus dem Dummy (Sticky Toolbar, „Übersicht/Inhalte“‑Toggle, Tabs „offene Module“, Pan/Zoom) sind noch nicht übernommen.
+  - `modular`: MVP‑Stub ist vorhanden (Advance Organizer + dynamisch geladene Modul‑Inhalte),
+    aber **noch nicht** im finalen „Student Workspace“-Layout wie im Dummy.
+- **OPEN**: Student Workspace wie `ui-dummies/student-workspace-hybrid-sticky/` übernehmen:
+  - Inhalte‑Platzierung (1A): Modul‑Inhalte erscheinen **inline** im View „Inhalte“ als Modul‑Cards (kein rechter Inhalt‑Panel).
+  - Tabs‑Semantik (2A): „Offene Module“ sind das **Arbeitsset** (nur Module, die der Schüler geöffnet hat).
+  - Persistenz (3A): Workspace‑State (View/Tabs/Graph‑Pose) via `localStorage`.
 
 ### Abweichungen vom ursprünglichen Plan (wichtig)
 - **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).
@@ -438,6 +441,11 @@ Route bleibt: `GET /learning/courses/{course_id}/units/{unit_id}`
   - Übersicht: Graph (Advance Organizer).
   - Inhalte: scrollbare Liste nur der geöffneten Module, gruppiert nach Phase.
 
+**Entscheidungen (Dummy‑Treue, bestätigt):**
+- **Inhalte‑Platzierung (1A):** Modul‑Inhalte erscheinen **inline** im View „Inhalte“ als Modul‑Cards (kein rechter Inhalt‑Panel).
+- **Tabs‑Semantik (2A):** „Offene Module“ sind das **Arbeitsset** (nur Module, die der Schüler geöffnet hat).
+- **Persistenz (3A):** Workspace‑State wird in `localStorage` persistiert.
+
 Integration ins bestehende Gustav‑Layout (Kontext, damit es „wie der Rest“ wirkt):
 - Linke Hauptnavigation bleibt wie heute (mobile off‑canvas, desktop kompakt).
 - Breadcrumbs oben bleiben wie heute (z. B. „Startseite › Meine Kurse › Kurs › Lerneinheiten › Lerneinheit“).
@@ -467,8 +475,13 @@ Content‑Ansicht:
 - Module dürfen offen bleiben; Nutzer kann einzelne Module in der Liste kollabieren/expandieren.
 
 Client‑State (Persistenz „geöffnete Module“):
-- Storage: LocalStorage (oder SessionStorage) genügt; Schlüssel pro Kurs+Unit, z. B.:
-  - `gustav.learning.open_modules:${course_id}:${unit_id}` → `["<module_uuid>", ...]`
+- Storage: `localStorage`; Schlüssel pro Kurs+Unit, z. B.:
+  - `gustav.learning.modular_workspace:${course_id}:${unit_id}` → JSON Objekt:
+    - `view`: `"overview"` | `"content"`
+    - `openTabs`: `["<module_uuid>", ...]` (Reihenfolge = Arbeitsset‑Reihenfolge)
+    - `activeTab`: `"<module_uuid>" | null`
+    - `expanded`: `{ "<module_uuid>": true|false, ... }` (UI‑Collapse/Expand pro Modul‑Card)
+    - `graphPose`: `{ tx: number, ty: number, k: number } | null` (Pan/Zoom Pose der Übersicht)
 - Wiederherstellung:
   - Beim Page‑Load Chips/Tabs aus Storage rendern.
   - Inhalte werden erst geladen, wenn der Nutzer „Inhalte“ wählt oder ein Tab geklickt wird (damit die Start‑Übersicht schnell bleibt).
@@ -484,6 +497,107 @@ Implementationsskizze:
 - Beim Öffnen eines Moduls lädt die UI per HTMX ein Fragment:
   - `/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment`
   - Fragment enthält den Modul‑Body (Materialien + Aufgaben als Cards).
+
+
+### Umsetzung (dummy‑treu, decision‑complete)
+
+**Ziel:** Den Student‑Workspace aus `ui-dummies/student-workspace-hybrid-sticky/` so übernehmen, dass
+- die **UI-Struktur** (Übersicht/Inhalte, Sticky Toolbar, Tabs) identisch ist,
+- **Content‑Leak** weiterhin ausgeschlossen ist (locked → kein Inhalt),
+- wir bestehende Server‑Components (Material/Task Cards) weiterverwenden können.
+
+#### SSR‑Skeleton (HTML, IDs wie im Dummy)
+Die SSR‑Route rendert für `unit_type='modular'` eine Shell mit den gleichen IDs/Classes wie der Dummy,
+damit das JS nur „verkabeln“ muss:
+- Sticky Toolbar
+  - `#btn-view-overview` + `#btn-view-content` (Toggle, `aria-pressed`)
+  - `#open-tabs` (Nav für Arbeitsset, standardmäßig `hidden`)
+- Views
+  - `#view-overview` enthält `#graph-shell` und `#graph-layer`
+  - `#view-content` enthält `#content-root`
+
+Wichtig: Kein rechter Inhalt‑Panel. Inhalte erscheinen ausschließlich in `#view-content`.
+
+#### Statische Assets (ohne Build‑Step)
+Wir übernehmen Styling/Interaktion aus dem Dummy als **lokale** Static Files (keine CDN‑Abhängigkeiten).
+
+Wichtiger Rahmen: `<head>` wird bei HTMX‑Navigation nicht aktualisiert, daher müssen benötigte Assets **global** geladen werden.
+
+- CSS
+  - Ziel: Wir erweitern die bestehende globale Datei `backend/web/static/css/student_modular_unit.css` um die Dummy‑Styles.
+  - Quellen (kopieren, dann selectors **unter `.modular-unit-page` scopen**, damit andere Seiten nicht beeinflusst werden):
+    - `ui-dummies/shared/student-graph-canvas.css`
+    - `ui-dummies/shared/student-module.css`
+    - `ui-dummies/student-workspace-hybrid-sticky/styles.css`
+- JS (ESM)
+  - Ziel: Neue Module unter `backend/web/static/js/`:
+    - `student_graph_view.js` (kopiert aus `ui-dummies/shared/graph-view.js`)
+    - `student_modular_workspace.js` (Glue‑Code: State + Tabs + Content‑Cards + HTMX)
+  - Loading: `backend/web/components/layout.py` lädt `student_modular_workspace.js` als `type="module"` global; Script macht **nichts**, wenn es kein `.modular-unit-page[data-unit-type="modular"]` findet.
+
+#### Datenfluss (Graph)
+JS lädt den Graph **immer frisch** (kein Graph‑Cache in localStorage), z. B. über:
+- `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/graph`
+
+Mapping (Learning‑API → Dummy‑Graph‑Shape für `graph-view.js`):
+- `graph.meta.title` ← Unit‑Titel (SSR) oder aus API falls vorhanden
+- `graph.phases[]` (in **Phase‑Reihenfolge**): `{ id, title }`
+- `graph.nodes[]`:
+  - `id` ← `module.id`
+  - `type` ← `'module'`
+  - `title` ← `module.title`
+  - `phaseId` ← `module.phase_id`
+  - `x`, `y` ← deterministisches Layout (siehe unten), **Zentrum** des Knotens
+  - `materials` ← `new Array(materials_count)` (nur für Count‑Anzeige in SVG)
+  - `cards` ← `[]` (MVP)
+- `graph.edges[]`: `{ from, to }`
+
+**Deterministisches Layout (client‑side, feste Konstanten):**
+- Knoten‑Zentrum (so wie `graph-view.js` es erwartet):
+  - `x` = `BASE_X + (position_in_phase - 1) * GAP_X`
+  - `y` = `BASE_Y + phaseIndex * GAP_Y`
+- Konstanten (Dummy‑Look & genug Abstand für Phase‑Bänder):
+  - `BASE_X = 240`, `BASE_Y = 140`
+  - `GAP_X = 260`, `GAP_Y = 200`
+
+Runtime für `graphView.update(runtime)` wird aus API‑Metadaten berechnet:
+- `runtime.statusById[id] = { status, doneTasks, totalTasks }`
+- `runtime.completedById[id] = (status == 'done')`
+- `runtime.unlockedById[id] = (status in ('open','done'))`
+- `runtime.edgePrereqProgress[id] = { total: incomingEdges, required: prereq_required, done: prereq_done }`
+
+#### Datenfluss (Inhalte in „Content“-View)
+„Inhalte“ zeigt ausschließlich das Arbeitsset (Tabs). Darstellung wie im Dummy:
+- pro Phase ein Abschnitt
+- pro Modul eine `<details class="module-card">`‑Card
+
+**Lazy‑Load pro Modul‑Card:**
+- Beim Öffnen eines Moduls (Tab‑Click oder Graph‑Click) wird (falls noch nicht geladen) via HTMX ein Fragment in den Card‑Body geladen:
+  - `/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment`
+- Security bleibt server‑seitig: locked → 404 (fail‑closed).
+- `h5p_task_player.js` bleibt auf der Seite eingebunden; es initialisiert sich über `htmx:afterSwap` automatisch.
+
+#### Client‑State (localStorage)
+Nur UI‑State wird persistiert (kein Progress):
+- Key: `gustav.learning.modular_workspace:${course_id}:${unit_id}`
+- Shape: siehe oben (`view/openTabs/activeTab/expanded/graphPose`).
+
+Robustheit:
+- Restore filtert `openTabs` auf „existiert im Graph“ und „status != locked“.
+- Wenn Module/Phasen nachträglich gelöscht/umbenannt werden, bricht die Seite nicht: State wird gepruned.
+
+#### Tests (pytest, Red → Green)
+Neue/erweiterte Tests (minimal, aber regressions‑tauglich):
+1) SSR‑HTML für modulare Unit enthält Dummy‑Skeleton‑IDs (Toolbar + Views + Graph‑Container) und bindet das Workspace‑JS ein.
+2) `modules/{module_id}/fragment` bleibt fail‑closed: locked → 404.
+3) (Optional, falls leicht) Graph‑API enthält die benötigten Felder (`phase_id`, `position_in_phase`, Status/Counts), damit das JS layouten kann.
+
+#### Definition of Done (Student Workspace)
+- Ü/T‑Toggle funktioniert, sticky toolbar wie Dummy.
+- Klick auf **open/done** Node öffnet Modul im Arbeitsset (Tab + Card), springt in Inhalte.
+- Klick auf **locked** Node tut nichts.
+- Tabs schließen Module, Content‑View zeigt nur Arbeitsset.
+- Reload behält View/Tabs/Pose (localStorage) und bricht nicht bei Graph‑Änderungen.
 
 ### NoScript‑Fallback
 Optional (nice‑to‑have, nicht MVP‑Pflicht): ohne JS eine phasen‑gruppierte Modulliste anzeigen und Modul‑Inhalte serverseitig als eigene Seite rendern.

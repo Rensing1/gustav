@@ -739,6 +739,15 @@ function initOneWorkspace(rootEl) {
 function initStudentModularWorkspace(contextEl) {
   const scope = contextEl && contextEl.querySelectorAll ? contextEl : document;
   const roots = scope.querySelectorAll('.modular-unit-page[data-unit-type="modular"]');
+
+  // HTMX navigation swaps only the <main> contents, so global <html>/<body> classes
+  // can accidentally "leak" across pages. Ensure we fail open (normal scrolling)
+  // when the modular workspace is not present anymore.
+  if (!document.querySelector('.modular-unit-page[data-unit-type="modular"]')) {
+    document.documentElement.classList.remove('mode-overview');
+    document.body.classList.remove('mode-overview');
+  }
+
   roots.forEach((root) => initOneWorkspace(root));
 }
 

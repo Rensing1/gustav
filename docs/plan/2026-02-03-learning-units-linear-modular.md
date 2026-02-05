@@ -56,6 +56,8 @@ Legende:
   - Inhalte‑Platzierung (1A): Modul‑Inhalte erscheinen **inline** im View „Inhalte“ als Modul‑Cards (kein rechter Inhalt‑Panel).
   - Tabs‑Semantik (2A): „Offene Module“ sind das **Arbeitsset** (nur Module, die der Schüler geöffnet hat).
   - Persistenz (3A): Workspace‑State (View/Tabs/Graph‑Pose) via `localStorage` (Key kurs×unit).
+  - **Fix**: Empty‑State („Noch keine Module geöffnet“) verschwindet zuverlässig, sobald mindestens ein Modul geöffnet ist.
+  - **Fix**: Nach HTMX‑Abgabe wird der Graph‑Status automatisch aktualisiert (HX‑Trigger `modularGraphRefresh` → Graph re-fetch), sodass neu freigeschaltete Module ohne Reload sichtbar/anklickbar werden (Regression‑Test vorhanden).
 
 ### Abweichungen vom ursprünglichen Plan (wichtig)
 - **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).

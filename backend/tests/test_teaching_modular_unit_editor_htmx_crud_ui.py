@@ -270,3 +270,52 @@ async def test_modular_editor_edge_delete_via_panel_removes_edge_and_refreshes_g
         graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
         assert graph.status_code == 200
         assert graph.json()["edges"] == []
+
+@pytest.mark.anyio
+async def test_modular_editor_material_and_task_create_pages_link_back_to_editor_when_return_to_provided() -> None:
+    """Regression: when leaving the editor to create content, back should return to the editor."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor HTMX CRUD UI test")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-ui-mod-editor-return-to", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        uid, _p1, _p2, mod_a, _mod_b = await _create_modular_unit_with_two_modules(c)
+
+        panel = await c.get(
+            f"/units/{uid}/modules/{mod_a}/panel",
+            headers={"HX-Request": "true"},
+        )
+        assert panel.status_code == 200, panel.text
+
+        uid_esc = re.escape(uid)
+        mat_m = re.search(
+            rf'href="(/units/{uid_esc}/sections/([0-9a-f-]+)/materials/new\?return_to=/units/{uid_esc})"',
+            panel.text,
+        )
+        assert mat_m, "+Material link not found in panel"
+        mat_href = mat_m.group(1)
+
+        task_m = re.search(
+            rf'href="(/units/{uid_esc}/sections/([0-9a-f-]+)/tasks/new\?return_to=/units/{uid_esc})"',
+            panel.text,
+        )
+        assert task_m, "+Aufgabe link not found in panel"
+        task_href = task_m.group(1)
+
+        mat_new = await c.get(mat_href)
+        assert mat_new.status_code == 200, mat_new.text
+        assert f'<a href="/units/{uid}">Zurück</a>' in mat_new.text
+
+        task_new = await c.get(task_href)
+        assert task_new.status_code == 200, task_new.text
+        assert f'<a href="/units/{uid}">Zurück</a>' in task_new.text

@@ -7,6 +7,7 @@ from httpx import ASGITransport
 
 from backend.web import main
 import re
+import json
 
 
 def _student_session():
@@ -207,7 +208,12 @@ async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pyt
         )
     # Expect HTML fragment of history, not a redirect
     assert r.status_code == 200
-    assert r.headers.get("HX-Trigger")
+    trigger = r.headers.get("HX-Trigger")
+    assert trigger
+    trigger_payload = json.loads(trigger)
+    assert trigger_payload.get("showMessage"), "expected showMessage trigger for UX feedback"
+    # Modular unit workspace: successful submissions should trigger a graph refresh.
+    assert trigger_payload.get("modularGraphRefresh") == {"courseId": course_id, "unitId": unit_id}
     html = r.text
     assert f'id="task-history-{task_id}"' in html
     # In-progress → includes hx polling

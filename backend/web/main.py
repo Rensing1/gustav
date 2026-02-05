@@ -2382,10 +2382,14 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         headers = {"Cache-Control": "private, no-store"}
         import json as _json
         if is_success:
-            # Ask client to show a success banner via HX-Trigger
-            headers["HX-Trigger"] = _json.dumps({
-                "showMessage": {"message": "Erfolgreich eingereicht", "type": "success"}
-            })
+            # Ask client to show a success banner via HX-Trigger.
+            trigger_payload = {"showMessage": {"message": "Erfolgreich eingereicht", "type": "success"}}
+            if _is_uuid_like(unit_id):
+                # Modular unit workspace is HTMX-driven; after a successful submission
+                # we must refresh the advance organizer graph so newly unlocked modules
+                # become visible/clickable without a full page reload.
+                trigger_payload["modularGraphRefresh"] = {"courseId": course_id, "unitId": unit_id}
+            headers["HX-Trigger"] = _json.dumps(trigger_payload)
             # Build the same fragment body as the /history endpoint without
             # making a nested request (keeps tests simple and avoids re-entry).
             try:

@@ -644,7 +644,16 @@ function initOneWorkspace(rootEl) {
     const st = runtime?.statusById?.[mid]?.status || 'locked';
     if (st === 'locked') return;
 
+    const hadNoTabs = state.openTabs.length === 0;
     if (!state.openTabs.includes(mid)) state.openTabs.push(mid);
+
+    // If we just opened the first tab, remove the empty-state hint card.
+    if (hadNoTabs && state.openTabs.length) {
+      contentRoot.innerHTML = '';
+      moduleEls.clear();
+      phaseEls.clear();
+    }
+
     state.openTabs = sortModuleIdsByGraphOrder(model, state.openTabs);
     state.activeTab = mid;
     state.expanded[mid] = true;
@@ -712,6 +721,71 @@ function initOneWorkspace(rootEl) {
     // View restore.
     setView(state.view, { scroll: false });
   }
+
+  let refreshBusy = false;
+  let refreshQueued = false;
+
+  async function refreshGraphRuntime() {
+    // HTMX can keep this script alive across page swaps. Fail open when the
+    // workspace root is gone.
+    if (!rootEl.isConnected) return;
+
+    if (refreshBusy) {
+      refreshQueued = true;
+      return;
+    }
+    refreshBusy = true;
+
+    try {
+      const payload = await fetchGraph({ courseId, unitId });
+      const next = buildGraphModel(payload);
+
+      model = next;
+      runtime = next.runtime;
+
+      // Keep the current transform; just refresh graph + status layer.
+      const pose = graphView.getTransform();
+      graphView.setGraph(next.graph);
+      if (pose && typeof graphView.setTransform === 'function') {
+        graphView.setTransform(pose, { clampToViewport: true });
+      }
+      graphView.update(runtime);
+
+      // Prune now-locked modules from the working set (fail-closed).
+      state.openTabs = state.openTabs.filter((id) => model.moduleById.has(String(id)));
+      state.openTabs = state.openTabs.filter((id) => (runtime?.statusById?.[String(id)]?.status || 'locked') !== 'locked');
+      state.openTabs = sortModuleIdsByGraphOrder(model, state.openTabs);
+
+      if (state.activeTab && !state.openTabs.includes(String(state.activeTab))) {
+        state.activeTab = state.openTabs[0] || null;
+      }
+
+      persistState();
+
+      renderOpenTabs();
+      updatePhaseMeta();
+      updateModuleCards();
+      renderEmptyIfNeeded();
+    } catch (err) {
+      // Best-effort: keep UI usable even if refresh fails.
+      console.warn('modular_graph_refresh_failed', err);
+    } finally {
+      refreshBusy = false;
+      if (refreshQueued) {
+        refreshQueued = false;
+        refreshGraphRuntime();
+      }
+    }
+  }
+
+  // When a task is submitted via HTMX, the server emits an HX-Trigger event.
+  // Refresh the graph/runtime so newly unlocked modules become visible.
+  rootEl.addEventListener('modularGraphRefresh', (ev) => {
+    const d = ev?.detail && typeof ev.detail === 'object' ? ev.detail : {};
+    if (String(d.courseId || '') !== String(courseId)) return;
+    if (String(d.unitId || '') !== String(unitId)) return;
+    refreshGraphRuntime();
+  });
 
   (async () => {
     const payload = await fetchGraph({ courseId, unitId });

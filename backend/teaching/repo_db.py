@@ -1059,7 +1059,18 @@ class DBTeachingRepo:
     def create_unit_module_edge_for_author(
         self, *, unit_id: str, from_module_id: str, to_module_id: str, author_id: str
     ) -> dict:
-        """Create a directed dependency edge `from -> to` (author only)."""
+        """Create a directed dependency edge `from -> to` (author only).
+
+        Option 1 (k-of-n default):
+            `unit_modules.required_prereq_count` stores the configured `k`.
+
+            When the stored `k` equals the current number of incoming edges `n`
+            (k==n), we treat the module as being in "auto" mode and keep `k`
+            synced to `n` as edges are added/removed.
+
+            This yields a sensible default (new module with 0 edges => k==0),
+            while still allowing manual overrides (set k to a different value).
+        """
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
@@ -1070,6 +1081,33 @@ class DBTeachingRepo:
                 unit_type = str(unit_row[0] or "linear").strip().lower()
                 if unit_type != "modular":
                     raise ValueError("invalid_unit_type")
+
+                # Lock the target module row so concurrent edge edits serialize.
+                cur.execute(
+                    """
+                    select required_prereq_count
+                      from public.unit_modules
+                     where unit_id = %s::uuid
+                       and id = %s::uuid
+                     for update
+                    """,
+                    (unit_id, to_module_id),
+                )
+                mod_row = cur.fetchone()
+                current_k = int((mod_row or [0])[0] or 0)
+
+                # Capture current incoming edge count (n) before inserting.
+                cur.execute(
+                    """
+                    select count(*)
+                      from public.unit_module_edges
+                     where unit_id = %s::uuid
+                       and to_module_id = %s::uuid
+                    """,
+                    (unit_id, to_module_id),
+                )
+                old_n = int((cur.fetchone() or [0])[0] or 0)
+
                 cur.execute(
                     """
                     insert into public.unit_module_edges (unit_id, from_module_id, to_module_id)
@@ -1081,6 +1119,20 @@ class DBTeachingRepo:
                 row = cur.fetchone()
                 if not row:
                     raise RuntimeError("unit_module_edges insert returned no row")
+
+                # Auto mode: when k==n, keep k in sync with n.
+                if current_k == old_n:
+                    new_n = old_n + 1
+                    cur.execute(
+                        """
+                        update public.unit_modules
+                           set required_prereq_count = %s
+                         where unit_id = %s::uuid
+                           and id = %s::uuid
+                        """,
+                        (new_n, unit_id, to_module_id),
+                    )
+
                 conn.commit()
         return {"from": row[0], "to": row[1]}
 
@@ -1098,6 +1150,32 @@ class DBTeachingRepo:
                 unit_type = str(unit_row[0] or "linear").strip().lower()
                 if unit_type != "modular":
                     raise ValueError("invalid_unit_type")
+
+                # Lock the target module row so edge + k updates remain consistent.
+                cur.execute(
+                    """
+                    select required_prereq_count
+                      from public.unit_modules
+                     where unit_id = %s::uuid
+                       and id = %s::uuid
+                     for update
+                    """,
+                    (unit_id, to_module_id),
+                )
+                mod_row = cur.fetchone()
+                current_k = int((mod_row or [0])[0] or 0)
+
+                cur.execute(
+                    """
+                    select count(*)
+                      from public.unit_module_edges
+                     where unit_id = %s::uuid
+                       and to_module_id = %s::uuid
+                    """,
+                    (unit_id, to_module_id),
+                )
+                old_n = int((cur.fetchone() or [0])[0] or 0)
+
                 cur.execute(
                     """
                     delete from public.unit_module_edges
@@ -1108,8 +1186,22 @@ class DBTeachingRepo:
                     (unit_id, from_module_id, to_module_id),
                 )
                 deleted = int(cur.rowcount or 0)
+
+                if deleted > 0 and current_k == old_n:
+                    new_n = max(old_n - 1, 0)
+                    cur.execute(
+                        """
+                        update public.unit_modules
+                           set required_prereq_count = %s
+                         where unit_id = %s::uuid
+                           and id = %s::uuid
+                        """,
+                        (new_n, unit_id, to_module_id),
+                    )
+
                 conn.commit()
         return deleted > 0
+
 
     def reorder_unit_phase_modules_owned(
         self, *, unit_id: str, phase_id: str, author_id: str, module_ids: List[str]

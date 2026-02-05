@@ -119,6 +119,16 @@ body.mode-overview {
   overflow: hidden;
 }
 
+/* NOTE: In the real app the workspace is wrapped in `.modular-unit-page`
+   inside the flex `main-content` (breadcrumbs + footer are siblings).
+   Extend the flex chain in overview mode so the graph gets a non-zero height. */
+.mode-overview .modular-unit-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .mode-overview .workspace-view--overview {
   flex: 1;
   min-height: 0;

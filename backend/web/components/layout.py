@@ -121,7 +121,7 @@ class Layout(Component):
     <link rel="stylesheet" href="/static/css/gustav.css?v=5">
     <!-- Modular units (student + teacher). Must be loaded globally because
          navigation happens via HTMX fragment swaps that do not update <head>. -->
-    <link rel="stylesheet" href="/static/css/student_modular_unit.css?v=2">
+    <link rel="stylesheet" href="/static/css/student_modular_unit.css?v=3">
     <link rel="stylesheet" href="/static/css/teaching_modular_unit_editor.css?v=5">
 
     <!-- HTMX for interactivity (local copy) -->

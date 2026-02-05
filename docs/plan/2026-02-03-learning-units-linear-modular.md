@@ -49,14 +49,13 @@ Legende:
 - **PARTIAL**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Kanten werden “always-on” gerendert (SVG hinter den Knoten) · Auto‑Layout für Knoten/Spalten noch OPEN.
 
 ### Student UI
-- **PARTIAL**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:
+- **DONE**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:
   - `linear`: bestehende Section‑Liste (releases)
-  - `modular`: MVP‑Stub ist vorhanden (Advance Organizer + dynamisch geladene Modul‑Inhalte),
-    aber **noch nicht** im finalen „Student Workspace“-Layout wie im Dummy.
-- **OPEN**: Student Workspace wie `ui-dummies/student-workspace-hybrid-sticky/` übernehmen:
+  - `modular`: Student Workspace wie `ui-dummies/student-workspace-hybrid-sticky/` (Übersicht/Content‑Toggle + Graph‑Canvas + Modul‑Cards).
+- **DONE**: Student Workspace (Dummy‑Adoption):
   - Inhalte‑Platzierung (1A): Modul‑Inhalte erscheinen **inline** im View „Inhalte“ als Modul‑Cards (kein rechter Inhalt‑Panel).
   - Tabs‑Semantik (2A): „Offene Module“ sind das **Arbeitsset** (nur Module, die der Schüler geöffnet hat).
-  - Persistenz (3A): Workspace‑State (View/Tabs/Graph‑Pose) via `localStorage`.
+  - Persistenz (3A): Workspace‑State (View/Tabs/Graph‑Pose) via `localStorage` (Key kurs×unit).
 
 ### Abweichungen vom ursprünglichen Plan (wichtig)
 - **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).

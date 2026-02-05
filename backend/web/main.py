@@ -5855,12 +5855,12 @@ async def _build_modular_editor_module_panel_html(
         '<div class="two-col">'
         f'<section class="card col-left"><h3>Materialien</h3>'
         f'<div class="actions"><a class="btn btn-primary btn-sm" '
-        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/materials/new">+ Material</a></div>'
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/materials/new?return_to=/units/{Component.escape(unit_id)}">+ Material</a></div>'
         f"{materials_html}"
         "</section>"
         f'<section class="card col-right"><h3>Aufgaben</h3>'
         f'<div class="actions"><a class="btn btn-primary btn-sm" '
-        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/tasks/new">+ Aufgabe</a></div>'
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/tasks/new?return_to=/units/{Component.escape(unit_id)}">+ Aufgabe</a></div>'
         f"{tasks_html}"
         "</section>"
         "</div>"
@@ -6605,7 +6605,7 @@ async def modular_editor_phase_delete(request: Request, unit_id: str, phase_id: 
     )
     return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
 
-def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str, back_href: str) -> str:
     """Render create page with toggle Text | Datei (upload-intent handled per JS)."""
     from teaching.services.materials import MaterialFileSettings
 
@@ -6652,7 +6652,7 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
     return (
         '<div class="container" data-material-create="true">'
         f'<h1>Material anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
-        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        f'<p><a href="{Component.escape(back_href)}">Zurück</a></p>'
         f'{choice}'
         '<div class="stacked-forms">'
         f'{text_form}'
@@ -6662,7 +6662,7 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
     )
 
 
-def _render_task_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+def _render_task_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str, back_href: str) -> str:
     from backend.storage.learning_policy import DEFAULT_POLICY
 
     # Derive allowed MIME types and max size for learning uploads from the central policy.
@@ -6730,10 +6730,32 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
     return (
         '<div class="container">'
         f'<h1>Aufgabe anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
-        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        f'<p><a href="{Component.escape(back_href)}">Zurück</a></p>'
         f'<section class="card">{form}{kind_toggle_js}</section>'
         '</div>'
     )
+
+
+
+
+def _safe_return_to_path(raw: str | None, *, default_path: str) -> str:
+    """Return a safe in-app path for UI navigation.
+
+    We only allow relative paths (starting with '/') to avoid open-redirect style
+    links in the teacher UI.
+    """
+    candidate = str(raw or "").strip()
+    if not candidate:
+        return default_path
+    if len(candidate) > 2048:
+        return default_path
+    if not candidate.startswith("/"):
+        return default_path
+    if candidate.startswith("//") or "://" in candidate:
+        return default_path
+    if "\n" in candidate or "\r" in candidate:
+        return default_path
+    return candidate
 
 
 @app.get("/units/{unit_id}/sections/{section_id}/materials/new", response_class=HTMLResponse)
@@ -6775,7 +6797,8 @@ async def materials_new(request: Request, unit_id: str, section_id: str):
                         break
     except Exception:
         pass
-    content = _render_material_create_page_html(unit_id, section_id, title, csrf_token=token)
+    back_href = _safe_return_to_path(request.query_params.get("return_to"), default_path=f"/units/{unit_id}/sections/{section_id}")
+    content = _render_material_create_page_html(unit_id, section_id, title, csrf_token=token, back_href=back_href)
     layout = Layout(title="Material anlegen", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
@@ -6812,7 +6835,8 @@ async def tasks_new(request: Request, unit_id: str, section_id: str):
                         break
     except Exception:
         pass
-    content = _render_task_create_page_html(unit_id, section_id, title, csrf_token=token)
+    back_href = _safe_return_to_path(request.query_params.get("return_to"), default_path=f"/units/{unit_id}/sections/{section_id}")
+    content = _render_task_create_page_html(unit_id, section_id, title, csrf_token=token, back_href=back_href)
     layout = Layout(title="Aufgabe anlegen", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 

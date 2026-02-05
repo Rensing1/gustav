@@ -135,6 +135,8 @@ class Layout(Component):
     <SCRIPT src="/static/js/gustav.js?v=9" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
+    <!-- Student modular unit workspace (dummy-like overview/content) -->
+    <script type="module" src="/static/js/student_modular_workspace.js?v=1"></script>
     <!-- Teacher modular unit visual editor -->
     <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=8" defer></SCRIPT>
     {self.extra_head_html}

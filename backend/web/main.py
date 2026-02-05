@@ -1641,159 +1641,45 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             # - linear: existing released-sections view
             # - modular: advance organizer (graph) + module content loading
             if unit_type == "modular":
-                graph: dict = {}
-                try:
-                    r_graph = await client.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
-                    if r_graph.status_code == 200 and isinstance(r_graph.json(), dict):
-                        graph = r_graph.json()
-                except Exception:
-                    graph = {}
-
-                phases = graph.get("phases") if isinstance(graph.get("phases"), list) else []
-                modules = graph.get("modules") if isinstance(graph.get("modules"), list) else []
-                edges = graph.get("edges") if isinstance(graph.get("edges"), list) else []
-
-                # Deterministic layout without manual coordinates:
-                # - Y by phase.position
-                # - X by position_in_phase
-                NODE_W = 220
-                NODE_H = 92
-                NODE_GAP_X = 260
-                PHASE_GAP_Y = 160
-                PAD_X = 24
-                PAD_Y = 24
-
-                # Phase order lookup (fall back to stable id ordering).
-                phases_sorted = sorted(
-                    [p for p in phases if isinstance(p, dict)],
-                    key=lambda p: (int(p.get("position") or 1), str(p.get("id") or "")),
-                )
-                phase_order: dict[str, int] = {str(p.get("id") or ""): idx for idx, p in enumerate(phases_sorted)}
-
-                coords: dict[str, tuple[int, int]] = {}
-                max_pos_in_phase = 1
-                for m in [m for m in modules if isinstance(m, dict)]:
-                    mid = str(m.get("id") or "")
-                    pid = str(m.get("phase_id") or "")
-                    pos_in_phase = int(m.get("position_in_phase") or 1)
-                    max_pos_in_phase = max(max_pos_in_phase, pos_in_phase)
-                    x = PAD_X + (max(pos_in_phase, 1) - 1) * NODE_GAP_X
-                    y = PAD_Y + (phase_order.get(pid, 0)) * PHASE_GAP_Y
-                    coords[mid] = (x, y)
-
-                canvas_w = PAD_X * 2 + (max(max_pos_in_phase, 1) - 1) * NODE_GAP_X + NODE_W
-                canvas_h = PAD_Y * 2 + (max(len(phases_sorted), 1) - 1) * PHASE_GAP_Y + NODE_H
-
-                # Edges rendered as SVG behind HTML nodes (no JS required).
-                edge_lines: list[str] = []
-                for e in [e for e in edges if isinstance(e, dict)]:
-                    from_id = str(e.get("from") or "")
-                    to_id = str(e.get("to") or "")
-                    if from_id not in coords or to_id not in coords:
-                        continue
-                    fx, fy = coords[from_id]
-                    tx, ty = coords[to_id]
-                    x1 = fx + NODE_W // 2
-                    y1 = fy + NODE_H
-                    x4 = tx + NODE_W // 2
-                    y4 = ty
-                    mid_y = (y1 + y4) // 2
-                    edge_lines.append(
-                        f'<polyline class="modular-graph__edge" '
-                        f'points="{x1},{y1} {x1},{mid_y} {x4},{mid_y} {x4},{y4}" '
-                        f'marker-end="url(#arrowhead)" />'
-                    )
-
-                edges_svg = (
-                    "<svg class=\"modular-graph__edges\" "
-                    f'viewBox="0 0 {canvas_w} {canvas_h}" '
-                    f'width="{canvas_w}" height="{canvas_h}" '
-                    "aria-hidden=\"true\" focusable=\"false\">"
-                    "<defs>"
-                    "<marker id=\"arrowhead\" markerWidth=\"10\" markerHeight=\"7\" "
-                    "refX=\"10\" refY=\"3.5\" orient=\"auto\">"
-                    "<polygon points=\"0 0, 10 3.5, 0 7\" />"
-                    "</marker>"
-                    "</defs>"
-                    + "".join(edge_lines)
-                    + "</svg>"
-                )
-
-                # Nodes rendered as HTML buttons positioned over the SVG.
-                node_buttons: list[str] = []
-                for m in sorted(
-                    [m for m in modules if isinstance(m, dict)],
-                    key=lambda m: (
-                        phase_order.get(str(m.get("phase_id") or ""), 0),
-                        int(m.get("position_in_phase") or 1),
-                        str(m.get("id") or ""),
-                    ),
-                ):
-                    mid = str(m.get("id") or "")
-                    title = Component.escape(str(m.get("title") or "Modul"))
-                    status = str(m.get("status") or "locked")
-                    tasks_done = int(m.get("tasks_done") or 0)
-                    tasks_total = int(m.get("tasks_total") or 0)
-                    materials_count = int(m.get("materials_count") or 0)
-                    prereq_done = int(m.get("prereq_done") or 0)
-                    prereq_required = int(m.get("prereq_required") or 0)
-
-                    x, y = coords.get(mid, (PAD_X, PAD_Y))
-                    hx = ""
-                    disabled = ""
-                    if status in {"open", "done"}:
-                        hx = (
-                            f' hx-get="/learning/courses/{Component.escape(course_id)}/units/{Component.escape(unit_id)}'
-                            f'/modules/{Component.escape(mid)}/fragment"'
-                            ' hx-target="#student-modular-module-content" hx-swap="innerHTML"'
-                        )
-                    else:
-                        disabled = ' disabled aria-disabled="true"'
-
-                    node_buttons.append(
-                        f'<button type="button" class="modular-graph__node modular-graph__node--{Component.escape(status)}"'
-                        f' style="left:{x}px;top:{y}px;width:{NODE_W}px;height:{NODE_H}px;"{hx}{disabled}>'
-                        f'<div class="modular-graph__node-title">{title}</div>'
-                        f'<div class="modular-graph__node-meta">'
-                        f'<span class="badge">{Component.escape(status)}</span>'
-                        f'<span class="text-muted"><small>'
-                        f'Prereqs {prereq_done}/{prereq_required} · '
-                        f'Tasks {tasks_done}/{tasks_total} · '
-                        f'Material {materials_count}'
-                        f'</small></span>'
-                        f'</div>'
-                        f'</button>'
-                    )
-
-                graph_html = (
-                    f'<section class="card" id="student-modular-unit-graph">'
-                    f'<h2>Übersicht</h2>'
-                    f'<div class="modular-graph" style="--canvas-w:{canvas_w}px;--canvas-h:{canvas_h}px;">'
-                    f"{edges_svg}"
-                    f'<div class="modular-graph__nodes" style="width:{canvas_w}px;height:{canvas_h}px;">'
-                    + "".join(node_buttons)
-                    + "</div>"
-                    + "</div>"
-                    + "</section>"
-                )
-
                 banner_html = (
-                    '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>' if success_banner else ""
+                    '<div role=\"alert\" class=\"alert alert-success\">Erfolgreich eingereicht</div>'
+                    if success_banner
+                    else ''
                 )
+                safe_course_id = Component.escape(str(course_id))
+                safe_unit_id = Component.escape(str(unit_id))
+                safe_title = Component.escape(unit_title)
                 content = (
-                    f'<div class="container modular-unit-page" data-unit-type="modular">'
-                    f"<h1>{Component.escape(unit_title)}</h1>"
-                    f'<p><a href="/learning/courses/{course_id}">Zurück zu „Lerneinheiten“</a></p>'
-                    f"{banner_html}"
-                    f"{graph_html}"
-                    '<section class="card" id="student-modular-module-content">'
-                    '<h2>Inhalte</h2>'
-                    '<p class="text-muted">Wähle ein geöffnetes Modul in der Übersicht.</p>'
-                    "</section>"
-                    # Always include the H5P player initializer on modular pages,
-                    # because module content is loaded dynamically via HTMX swaps.
-                    '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
-                    "</div>"
+                    f'<div class=\"modular-unit-page\" data-unit-type=\"modular\" '
+                    f'data-course-id=\"{safe_course_id}\" data-unit-id=\"{safe_unit_id}\">'
+                    f'<header class=\"container unit-head\">'
+                    f'<div class=\"unit-head__title\">'
+                    f'<h1 class=\"unit-title\" id=\"unit-title\">{safe_title}</h1>'
+                    f'<p class=\"text-muted\" id=\"unit-subtitle\"><small>'
+                    f'<a href=\"/learning/courses/{safe_course_id}\">Zurück zu „Lerneinheiten“</a>'
+                    f'</small></p>'
+                    f'</div>'
+                    f'</header>'
+                    f'{banner_html}'
+                    '<div class=\"sticky-toolbar\" role=\"region\" aria-label=\"Ansicht und offene Module\">'
+                    '<div class=\"container sticky-toolbar__inner\">'
+                    '<div class=\"mode-segmented\" role=\"group\" aria-label=\"Ansicht\">'
+                    '<button class=\"btn mode-segmented__btn\" type=\"button\" id=\"btn-view-overview\" aria-pressed=\"true\">Übersicht</button>'
+                    '<button class=\"btn mode-segmented__btn\" type=\"button\" id=\"btn-view-content\" aria-pressed=\"false\">Inhalte</button>'
+                    '</div>'
+                    '<nav class=\"tabs tabs--sticky\" id=\"open-tabs\" aria-label=\"Offene Module\" hidden></nav>'
+                    '</div>'
+                    '</div>'
+                    '<section class=\"container workspace-view workspace-view--overview\" id=\"view-overview\" aria-label=\"Übersicht\">'
+                    '<div class=\"graph-container graph-shell\" id=\"graph-shell\">'
+                    '<div class=\"graph-layer graph-layer--map\" id=\"graph-layer\"></div>'
+                    '</div>'
+                    '</section>'
+                    '<section class=\"container workspace-view workspace-view--content\" id=\"view-content\" aria-label=\"Inhalte\" hidden>'
+                    '<div id=\"content-root\" class=\"content-root\" aria-label=\"Phasen und Module\"></div>'
+                    '</section>'
+                    '<script type=\"module\" src=\"/static/js/h5p_task_player.js?v=20260108\"></script>'
+                    '</div>'
                 )
                 layout = Layout(
                     title=Component.escape(unit_title),
@@ -1802,7 +1688,6 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     current_path=request.url.path,
                 )
                 return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
-
             # Silence in production; errors handled gracefully below
             # Fetch released sections for this unit (with embedded materials/tasks)
             r_sections = await client.get(

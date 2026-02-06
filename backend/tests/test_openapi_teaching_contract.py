@@ -191,3 +191,12 @@ def test_teaching_get_endpoints_do_not_declare_csrf_same_origin_requirement():
         notes = (paths.get(path, {}).get("get", {}) or {}).get("x-security-notes", [])
         text = " | ".join(str(n) for n in (notes or []))
         assert "CSRF: Same-origin required" not in text
+
+
+def test_create_section_documents_modular_side_effect() -> None:
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    desc = spec["paths"]["/api/teaching/units/{unit_id}/sections"]["post"].get("description", "") or ""
+    text = desc.lower()
+    assert "modular" in text
+    assert "unit_modules" in text

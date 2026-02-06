@@ -49,6 +49,13 @@ def test_openapi_upload_proxy_documents_error_responses():
         assert status in responses, f"upload-proxy must document HTTP {status}"
 
 
+def test_openapi_upload_proxy_mentions_observability_and_no_rate_limit():
+    spec = _load_spec()
+    description = spec["paths"]["/api/learning/internal/upload-proxy"]["put"].get("description") or ""
+    assert "telemetry" in description.lower()
+    assert "no additional rate-limiting" in description.lower()
+
+
 def test_openapi_logout_paths_are_public():
     """Logout endpoints must explicitly opt out of root-level cookie auth."""
     spec = _load_spec()

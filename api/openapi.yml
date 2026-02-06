@@ -1583,6 +1583,10 @@ components:
         tasks_done:
           type: integer
           minimum: 0
+          description: >
+            Number of completed tasks in this module for the current student.
+            Non-H5P tasks count as done when at least one submission exists;
+            H5P tasks count only for full-score submissions (`score_raw = score_max`).
         tasks_total:
           type: integer
           minimum: 0

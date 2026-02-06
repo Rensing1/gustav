@@ -717,8 +717,8 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
         - 404 when the caller is not a course member or the unit is not part of
           the course (intentionally indistinguishable).
         - 400 detail=invalid_unit_type when the unit is not modular.
-        - 200 with a graph payload for modular units (stubbed until the graph
-          schema is introduced in later migrations).
+        - 200 with the modular graph payload (phases/modules/edges and unlock
+          state) for modular units.
 
     Permissions:
         Caller must have the `student` role and be enrolled in the course.

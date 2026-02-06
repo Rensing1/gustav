@@ -17,6 +17,18 @@ Vor Inbetriebnahme validieren, dass alle Abhängigkeiten erreichbar und korrekt 
   - `psql -h <DB_HOST> -U <LOGIN_USER> -c "select pg_has_role(current_user, 'gustav_limited', 'member');"` → `t`
 - App-Rolle NOLOGIN: `\du gustav_limited` → `No Login`
 
+## DB-Datenintegrität (Learning)
+- Ziel: Vor Deploy sicherstellen, dass `learning_submissions.section_id` konsistent ist.
+- Pflichtcheck 1 (Null-Werte):
+  - `psql "$SERVICE_ROLE_DSN" -c "select count(*) as missing_section_id from public.learning_submissions where section_id is null;"`
+  - Erwartung: `0`
+- Pflichtcheck 2 (Task/Submission-Mismatch):
+  - `psql "$SERVICE_ROLE_DSN" -c "select count(*) as section_mismatch from public.learning_submissions ls join public.unit_tasks t on t.id = ls.task_id where ls.section_id <> t.section_id;"`
+  - Erwartung: `0`
+- Wenn einer der beiden Checks > `0` ist:
+  - Deploy/Migration stoppen.
+  - Erst Daten bereinigen (z. B. `section_id` aus `unit_tasks.section_id` nachziehen), dann Preflight erneut ausführen.
+
 ## DSNs / ENV
 - Host‑DSN (Host‑Tests): `postgresql://$APP_DB_USER:$APP_DB_PASSWORD@127.0.0.1:54322/postgres`
 - Container‑DSN (Compose): `postgresql://$APP_DB_USER:$APP_DB_PASSWORD@supabase_db_gustav-alpha2:5432/postgres`

@@ -46,7 +46,81 @@ Legende:
   - Drag&Drop: Phasen umsortierbar; ungültige Verschiebungen werden blockiert (Edge‑Constraint).
   - Kantenmodus: Kanten per Klick Quelle→Ziel anlegen; Kanten im Panel entfernen.
   - Freischaltung: `required_prereq_count` ist im Panel editierbar (k‑of‑n).
-- **PARTIAL**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Kanten werden “always-on” gerendert (SVG hinter den Knoten) · Auto‑Layout für Knoten/Spalten noch OPEN.
+- **PARTIAL**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Kanten werden “always-on” gerendert (SVG hinter den Knoten) · Auto‑Layout für Kanten (Lane‑Routing) noch OPEN.
+
+#### Teaching‑Modul‑Editor: Optische Angleichung + Kanten‑Auto‑Layout (Graph im Zentrum, Panel rechts)
+
+**Produktentscheidung (fix):**
+- Primärer Arbeitsbereich ist der Graph (Phasen + Module + Abhängigkeiten).
+- Kanten sollen **optisch wie in der Schüler‑Übersicht** aussehen (sanfte Kurven, Pfeilspitzen, Strichstärke/Opacity).
+  - Wichtig: Im Teacher‑Editor gibt es **keine** Fortschritts-/Status‑Farben (nicht „open/done“ einfärben).
+  - Nur Interaktions‑States (z.B. Edge‑Quelle im Kantenmodus) dürfen dezent mit `primary` hervorgehoben werden.
+- Modul‑Inhalte werden im rechten Panel angezeigt/bearbeitet (HTMX‑geladen); das Panel ist resizable und die Breite wird in `localStorage` persistiert.
+- Keine Drag‑to‑connect‑Interaktion im MVP: Kanten bleiben ein expliziter **„Kantenmodus“** (Klick Quelle → Klick Ziel).
+- Module werden **nicht automatisch** neu angeordnet; Drag&Drop bleibt die Quelle der Wahrheit für die Modul‑Reihenfolge.
+
+**Warum das nötig ist:**
+- Der Editor soll sich „wie der Schüler‑Graph“ anfühlen (gleiches mentales Modell), ohne die Schüler‑UI mit Teacher‑CRUD zu überfrachten.
+- Bei vielen Modulen/Kanten wirkt das aktuelle Midpoint‑Routing schnell unprofessionell (Überlappungen, „Kabelsalat“).
+
+**Zielbild (so nutzt die Lehrkraft den Editor):**
+1. Lehrkraft erstellt/benennt Phasen.
+2. Lehrkraft erstellt Module in Phasen (Knoten erscheinen sofort im Graph).
+3. Lehrkraft verbindet Module im Kantenmodus.
+4. Klick auf ein Modul öffnet rechts Details (Voraussetzungen `k von n`, Kanten löschen, Materialien/Aufgaben verwalten).
+5. Drag&Drop ordnet Module innerhalb/zwischen Phasen; ungültige Moves werden **blockiert** und verständlich erklärt.
+
+**Umsetzungspakete (ohne neue Backend‑Features):**
+
+1) **Shared Visual Language (CSS‑Polish)**
+- Ziel: Node/Edge/Phase‑Look soll näher an der Schüleransicht sein (Farben, Radius, Schatten, Abstände).
+- Konkrete Änderungen (nur UI):
+  - `backend/web/static/css/teaching_modular_unit_editor.css` nutzt konsistent die bestehenden Theme‑Tokens (weniger harte `rgba(...)`‑Werte; stattdessen `var(--color-…)`/`color-mix(...)` wie im Student‑CSS).
+  - Kanten‑Styles werden an die Schüler‑UI angelehnt (Edge‑Opacity, Pfeilspitzen `fill: context-stroke`, keine grüne „Success“-Farbe als Default).
+  - Phase‑Container bekommt die „Band“-Anmutung (ruhiger Hintergrund + klare Phase‑Überschrift).
+  - Editor‑Controls (✎ 🗑 + Drag‑Handles) bleiben funktional, aber visuell sekundär (kleiner, weniger Kontrast), damit der Graph dominiert.
+
+2) **Kanten‑Auto‑Layout = Lane‑Routing (JS, deterministisch)**
+- Ziel: Kanten sollen auch bei vielen Edges lesbar bleiben (weniger Überlappungen, besseres „Routing“).
+- Grundidee:
+  - Wir behalten die bestehende Node‑Position (DOM + Drag&Drop).
+  - Wir berechnen pro Edge einen **Lane‑Index** und zeichnen Kanten mit Offsets in separaten „Spuren“.
+- Algorithmus (deterministisch, KISS):
+  - Node‑Metrik: `nodeInfo(moduleId)` liefert Center + Box + `phaseId`.
+  - Edge‑Gruppierung:
+    - **same‑phase**: `a.phaseId == b.phaseId` → horizontales Routing
+    - **cross‑phase**: sonst → vertikales Routing
+  - Lane‑Assignment:
+    - Sortiere Edges innerhalb der Gruppe stabil (z.B. nach `(fromIndex, toIndex, fromId, toId)`), damit das Ergebnis nicht „zufällig“ wirkt.
+    - Weisen fortlaufend `laneIndex` zu; Lane‑Offset = `laneIndex * laneGapPx`.
+  - Routing‑Geometrie (wie Schüler‑UI, aber mit Lanes):
+    - Endpunkte liegen am Node‑Rand (nicht im Center), damit Pfeile nicht in die Knoten „reinstehen“.
+    - Wir zeichnen SVG‑`<path>` mit sanften Cubic‑Kurven (Referenz: `backend/web/static/js/student_graph_view.js`).
+    - Lane‑Offset wird als zusätzlicher Versatz auf die Control‑Points angewendet, um parallele Kanten auseinanderzuziehen:
+      - same‑phase: Lane‑Offset verschiebt die Kurve in **y** (mehrere „Spuren“ übereinander).
+      - cross‑phase: Lane‑Offset verschiebt die Kurve in **x** (mehrere „Spuren“ nebeneinander).
+- Performance:
+  - `draw()` auf `scroll`/`resize` per `requestAnimationFrame` throttlen (kein ungefiltertes Redraw pro Event).
+  - Beim HTMX‑Swap nur re‑initialisieren, wenn der Graph‑Container betroffen ist (wie heute), sonst nur ein Redraw.
+
+3) **Fehler‑UX (MVP‑freundlich, aber klarer)**
+- Statuszeile bleibt die primäre Rückmeldung.
+- Zusätzlich: bei geblockten Moves/Edges betroffene Node/Phase kurz visuell hervorheben (outline + kurze Animation), damit die Ursache lokal sichtbar ist.
+
+**Akzeptanzkriterien / Definition of Done (Editor‑Feinschliff):**
+- Bei ≥ 3 Phasen und ≥ 10 Modulen sind Kanten stabil sichtbar und überlappen nicht „zufällig“ den Node‑Text.
+- Kanten‑Look entspricht der Schüler‑UI (Kurven + Pfeilspitzen), aber ohne Fortschritts-/Status‑Farben im Editor.
+- Scrollen im Graph fühlt sich flüssig an; Kanten bleiben aligned.
+- Klick Modul → Panel lädt zuverlässig; nach HTMX‑Swaps bleiben Kanten korrekt.
+- CSP bleibt strikt: keine Inline‑Scripts im Teacher‑Editor.
+- Kein Backend‑Schema/API‑Change nötig.
+
+**Tests (realistisch für unser Setup):**
+- Lightweight Contract‑Tests (string‑based) für kritische JS/CSS‑Regeln (analog zu den Student‑Workspace Contract‑Tests):
+  - Edge‑Renderer nutzt rAF‑Throttle (kein unbounded redraw pro scroll event).
+  - Redraw/Re‑Init wird nach HTMX‑Swaps des Graph‑Containers zuverlässig getriggert.
+- Manuelle UI‑Checkliste (für Felix):
+  - Kantenmodus an/aus; Edge erstellen/löschen; DnD mit geblockten Moves; Panel‑Resize persistiert; Reload.
 
 ### Student UI
 - **DONE**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:

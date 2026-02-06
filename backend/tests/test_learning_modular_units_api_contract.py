@@ -241,6 +241,10 @@ async def test_learning_modular_module_content_happy_path_via_graph():
         assert payload["module"]["unit_id"] == unit_id
         assert isinstance(payload.get("materials"), list) and len(payload["materials"]) == 1
         assert isinstance(payload.get("tasks"), list) and len(payload["tasks"]) == 1
+        # Student payload must not expose internal storage internals.
+        material = payload["materials"][0]
+        assert "storage_key" not in material
+        assert "sha256" not in material
 
 
 @pytest.mark.anyio
@@ -667,3 +671,95 @@ async def test_learning_modular_locked_task_is_hidden_in_sql_helpers():
             )
             row_after = cur.fetchone()
             assert row_after is not None and row_after[0] == str(task_b)
+
+
+@pytest.mark.anyio
+async def test_learning_modular_graph_returns_503_when_repo_lacks_graph_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi.routing import APIRoute  # noqa: E402
+    from identity_access.stores import SessionStore  # noqa: E402
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-mod-guard-graph", name="S", roles=["student"])  # type: ignore
+
+    class _RepoWithoutGraph:
+        pass
+
+    class _FakeListCourseUnitsUseCase:
+        def __init__(self, _repo):  # type: ignore[no-untyped-def]
+            pass
+
+        def execute(self, _input):  # type: ignore[no-untyped-def]
+            return [{"unit": {"id": "11111111-1111-1111-1111-111111111111", "unit_type": "modular"}}]
+
+    route = next(
+        r
+        for r in main.app.routes
+        if isinstance(r, APIRoute)
+        and r.path == "/api/learning/courses/{course_id}/units/{unit_id}/modules/graph"
+    )
+    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsUseCase", _FakeListCourseUnitsUseCase)
+    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsInput", lambda **kwargs: kwargs)
+    monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", lambda: _RepoWithoutGraph())
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as c:
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(
+            "/api/learning/courses/00000000-0000-0000-0000-000000000001/"
+            "units/11111111-1111-1111-1111-111111111111/modules/graph"
+        )
+
+    assert r.status_code == 503
+    assert r.json().get("error") == "service_unavailable"
+    assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_learning_modular_module_content_returns_503_when_repo_lacks_content_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi.routing import APIRoute  # noqa: E402
+    from identity_access.stores import SessionStore  # noqa: E402
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-mod-guard-content", name="S", roles=["student"])  # type: ignore
+
+    class _RepoWithoutModuleContent:
+        def get_modular_unit_graph(self, **_kwargs):  # pragma: no cover - defensive
+            return {}
+
+    class _FakeListCourseUnitsUseCase:
+        def __init__(self, _repo):  # type: ignore[no-untyped-def]
+            pass
+
+        def execute(self, _input):  # type: ignore[no-untyped-def]
+            return [{"unit": {"id": "11111111-1111-1111-1111-111111111111", "unit_type": "modular"}}]
+
+    route = next(
+        r
+        for r in main.app.routes
+        if isinstance(r, APIRoute)
+        and r.path == "/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"
+    )
+    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsUseCase", _FakeListCourseUnitsUseCase)
+    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsInput", lambda **kwargs: kwargs)
+    monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", lambda: _RepoWithoutModuleContent())
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as c:
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(
+            "/api/learning/courses/00000000-0000-0000-0000-000000000001/"
+            "units/11111111-1111-1111-1111-111111111111/"
+            "modules/22222222-2222-2222-2222-222222222222?include=tasks"
+        )
+
+    assert r.status_code == 503
+    assert r.json().get("error") == "service_unavailable"
+    assert r.headers.get("Cache-Control") == "private, no-store"

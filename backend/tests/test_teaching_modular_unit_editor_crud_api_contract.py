@@ -154,3 +154,157 @@ async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_
         assert r_sections.status_code == 200
         titles = {s.get("title") for s in r_sections.json()}
         assert "B" not in titles
+
+
+@pytest.mark.anyio
+async def test_teaching_modular_create_section_keeps_documented_section_to_module_bridge() -> None:
+    """`createSection` in modular units must still create the backing module entry."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-3", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        r_before = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_before.status_code == 200, r_before.text
+        modules_before = r_before.json().get("modules") or []
+
+        r_create = await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Bridge Section"})
+        assert r_create.status_code == 201, r_create.text
+
+        r_after = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_after.status_code == 200, r_after.text
+        modules_after = r_after.json().get("modules") or []
+        assert len(modules_after) == len(modules_before) + 1
+        assert any(m.get("title") == "Bridge Section" for m in modules_after)
+
+
+@pytest.mark.anyio
+async def test_teaching_modular_module_delete_clamps_required_prereq_count_after_edge_cascade() -> None:
+    """Deleting a prerequisite module must clamp target k-of-n to remaining incoming edges."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-4", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        r_phases = await c.get(f"/api/teaching/units/{uid}/phases")
+        assert r_phases.status_code == 200
+        p1 = r_phases.json()[0]["id"]
+        r_p2 = await c.post(f"/api/teaching/units/{uid}/phases", json={"title": "P2"})
+        assert r_p2.status_code == 201
+        p2 = r_p2.json()["id"]
+
+        mod_a = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "A", "phase_id": p1})).json()["id"]
+        mod_b = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "B", "phase_id": p1})).json()["id"]
+        mod_x = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "X", "phase_id": p2})).json()["id"]
+
+        r_e1 = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_a, "to_module_id": mod_x},
+        )
+        assert r_e1.status_code == 201, r_e1.text
+        r_e2 = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_b, "to_module_id": mod_x},
+        )
+        assert r_e2.status_code == 201, r_e2.text
+
+        r_patch = await c.patch(f"/api/teaching/units/{uid}/modules/{mod_x}", json={"required_prereq_count": 2})
+        assert r_patch.status_code == 200, r_patch.text
+
+        r_del = await c.delete(f"/api/teaching/units/{uid}/modules/{mod_a}")
+        assert r_del.status_code == 204, r_del.text
+
+        r_graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_graph.status_code == 200, r_graph.text
+        graph = r_graph.json()
+        mod_x_state = next((m for m in graph["modules"] if m["id"] == mod_x), None)
+        assert mod_x_state is not None
+        assert mod_x_state.get("required_prereq_count") == 1
+
+
+@pytest.mark.anyio
+async def test_teaching_modular_phase_delete_clamps_required_prereq_count_after_edge_cascade() -> None:
+    """Deleting a phase with prerequisite modules must clamp target k-of-n to zero."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-5", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        r_phases = await c.get(f"/api/teaching/units/{uid}/phases")
+        assert r_phases.status_code == 200
+        p1 = r_phases.json()[0]["id"]
+        r_p2 = await c.post(f"/api/teaching/units/{uid}/phases", json={"title": "P2"})
+        assert r_p2.status_code == 201
+        p2 = r_p2.json()["id"]
+
+        mod_a = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "A", "phase_id": p1})).json()["id"]
+        mod_b = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "B", "phase_id": p1})).json()["id"]
+        mod_x = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "X", "phase_id": p2})).json()["id"]
+
+        assert (
+            await c.post(
+                f"/api/teaching/units/{uid}/modules/edges",
+                json={"from_module_id": mod_a, "to_module_id": mod_x},
+            )
+        ).status_code == 201
+        assert (
+            await c.post(
+                f"/api/teaching/units/{uid}/modules/edges",
+                json={"from_module_id": mod_b, "to_module_id": mod_x},
+            )
+        ).status_code == 201
+
+        r_patch = await c.patch(f"/api/teaching/units/{uid}/modules/{mod_x}", json={"required_prereq_count": 2})
+        assert r_patch.status_code == 200, r_patch.text
+
+        r_del_phase = await c.delete(f"/api/teaching/units/{uid}/phases/{p1}")
+        assert r_del_phase.status_code == 204, r_del_phase.text
+
+        r_graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_graph.status_code == 200, r_graph.text
+        graph = r_graph.json()
+        mod_x_state = next((m for m in graph["modules"] if m["id"] == mod_x), None)
+        assert mod_x_state is not None
+        assert mod_x_state.get("required_prereq_count") == 0

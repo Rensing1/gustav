@@ -34,7 +34,7 @@ def test_openapi_learning_modular_graph_has_standard_error_responses() -> None:
     spec = _load_spec()
     op = spec["paths"]["/api/learning/courses/{course_id}/units/{unit_id}/modules/graph"]["get"]
     responses = op.get("responses", {})
-    for code in ("200", "400", "401", "403", "404"):
+    for code in ("200", "400", "401", "403", "404", "503"):
         assert code in responses, f"Missing {code} response for modular graph endpoint"
 
 
@@ -42,6 +42,5 @@ def test_openapi_learning_modular_module_content_has_standard_error_responses() 
     spec = _load_spec()
     op = spec["paths"]["/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"]["get"]
     responses = op.get("responses", {})
-    for code in ("200", "400", "401", "403", "404"):
+    for code in ("200", "400", "401", "403", "404", "503"):
         assert code in responses, f"Missing {code} response for module content endpoint"
-

@@ -470,3 +470,54 @@ async def test_proxy_streams_request_body_without_calling_body(monkeypatch: pyte
             headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
         )
     assert r.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_proxy_emits_telemetry_for_successful_upload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Upload proxy should emit structured telemetry without exposing payload contents."""
+
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
+
+    if "routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("routes.learning"))
+
+    import main  # noqa
+    import routes.learning as learning  # noqa
+    try:
+        import backend.web.routes.learning as learning_backend  # type: ignore
+    except Exception:
+        learning_backend = None
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-proxy-telemetry", name="S", roles=["student"])  # type: ignore
+
+    class _Resp:
+        status_code = 200
+
+    async def fake_forward(**_kwargs):  # type: ignore[no-untyped-def]
+        return _Resp()
+
+    telemetry_events: list[dict] = []
+
+    def fake_emit(**kwargs):  # type: ignore[no-untyped-def]
+        telemetry_events.append(dict(kwargs))
+
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(learning, "_emit_upload_proxy_telemetry", fake_emit, raising=False)
+    if learning_backend is not None:
+        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
+        monkeypatch.setattr(learning_backend, "_emit_upload_proxy_telemetry", fake_emit, raising=False)
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": "https://supabase.local:54321/storage/v1/object/upload/submissions/file"},
+            content=b"abc",
+            headers={"Origin": "http://test", "Content-Type": "application/octet-stream"},
+        )
+    assert r.status_code == 200
+    assert telemetry_events, "expected upload proxy telemetry event"
+    assert telemetry_events[-1].get("outcome") == "success"

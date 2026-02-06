@@ -1,12 +1,9 @@
 """
-Learning modular unlock parity — Python graph status vs DB helper.
+Learning modular unlock parity — Learning API graph status vs DB helper.
 
 Why:
-    Unlock semantics currently exist in two places:
-    - Python (`DBLearningRepo._compute_modular_unit_module_states`)
-    - SQL (`public.modular_section_is_open_or_done_for_student`)
-
-    This test keeps both paths aligned to prevent silent behavior drift.
+    The Learning API graph and DB helper must expose the same unlock semantics.
+    This test protects against behavior drift in either path.
 """
 
 from __future__ import annotations

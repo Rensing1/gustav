@@ -35,6 +35,22 @@ async def _create_course_same_origin(c: httpx.AsyncClient, *, title: str = "Kurs
     return str(r.json()["id"])
 
 
+async def _create_unit_same_origin(c: httpx.AsyncClient, *, title: str = "Unit") -> str:
+    r = await c.post("/api/teaching/units", json={"title": title}, headers={"Origin": "http://test"})
+    assert r.status_code == 201, r.text
+    return str(r.json()["id"])
+
+
+async def _create_section_same_origin(c: httpx.AsyncClient, unit_id: str, *, title: str = "Abschnitt") -> str:
+    r = await c.post(
+        f"/api/teaching/units/{unit_id}/sections",
+        json={"title": title},
+        headers={"Origin": "http://test"},
+    )
+    assert r.status_code == 201, r.text
+    return str(r.json()["id"])
+
+
 @pytest.mark.anyio
 async def test_create_course_blocks_cross_origin_and_allows_same_origin(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
@@ -208,3 +224,113 @@ async def test_modular_write_endpoints_reject_missing_origin_with_csrf_violation
     assert resp.status_code == 403
     assert resp.json().get("detail") == "csrf_violation"
     assert resp.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_course_module_create_requires_same_origin_and_sets_private_cache_headers():
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-csrf-course-mod-create", name="Teach", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        course_id = await _create_course_same_origin(c, title="Kurs Module")
+        unit_id = await _create_unit_same_origin(c, title="Unit Module")
+
+        r_missing = await c.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": unit_id},
+        )
+        assert r_missing.status_code == 403
+        assert r_missing.json().get("detail") == "csrf_violation"
+        assert r_missing.headers.get("Cache-Control") == "private, no-store"
+
+        r_ok = await c.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": unit_id},
+            headers={"Origin": "http://test"},
+        )
+        assert r_ok.status_code == 201
+        assert r_ok.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_course_module_reorder_requires_same_origin():
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-csrf-course-mod-reorder", name="Teach", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        course_id = await _create_course_same_origin(c, title="Kurs Reorder")
+        unit_id = await _create_unit_same_origin(c, title="Unit Reorder")
+        module = await c.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": unit_id},
+            headers={"Origin": "http://test"},
+        )
+        assert module.status_code == 201, module.text
+        module_id = str(module.json().get("id"))
+
+        r_missing = await c.post(
+            f"/api/teaching/courses/{course_id}/modules/reorder",
+            json={"module_ids": [module_id]},
+        )
+        assert r_missing.status_code == 403
+        assert r_missing.json().get("detail") == "csrf_violation"
+        assert r_missing.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_material_create_requires_same_origin_and_sets_private_cache_headers():
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-csrf-material-create", name="Teach", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        unit_id = await _create_unit_same_origin(c, title="Unit Material")
+        section_id = await _create_section_same_origin(c, unit_id, title="Abschnitt Material")
+
+        r_missing = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
+            json={"title": "M", "body_md": "x"},
+        )
+        assert r_missing.status_code == 403
+        assert r_missing.json().get("detail") == "csrf_violation"
+        assert r_missing.headers.get("Cache-Control") == "private, no-store"
+
+        r_ok = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
+            json={"title": "M", "body_md": "x"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_ok.status_code == 201
+        assert r_ok.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_material_reorder_requires_same_origin():
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-csrf-material-reorder", name="Teach", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        unit_id = await _create_unit_same_origin(c, title="Unit Material Reorder")
+        section_id = await _create_section_same_origin(c, unit_id, title="Abschnitt Material Reorder")
+        material = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
+            json={"title": "M", "body_md": "x"},
+            headers={"Origin": "http://test"},
+        )
+        assert material.status_code == 201, material.text
+        material_id = str(material.json().get("id"))
+
+        r_missing = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder",
+            json={"material_ids": [material_id]},
+        )
+        assert r_missing.status_code == 403
+        assert r_missing.json().get("detail") == "csrf_violation"
+        assert r_missing.headers.get("Cache-Control") == "private, no-store"

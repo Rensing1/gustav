@@ -16,6 +16,7 @@ from uuid import UUID
 import pytest
 import httpx
 from httpx import ASGITransport
+from starlette.requests import Request
 from starlette.routing import Mount
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -197,6 +198,65 @@ async def test_learning_modular_unit_module_fragment_404_when_locked() -> None:
         r = await c.get(f"/learning/courses/{course_id}/units/{unit_id}/modules/{mod_b}/fragment")
         assert r.status_code == 404
         assert "Modul nicht verfügbar" in r.text
+
+
+@pytest.mark.anyio
+async def test_learning_modular_unit_module_fragment_accepts_student_in_roles_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SSR modular fragment must treat `roles=['student']` as student access.
+
+    Why:
+        Learning API endpoints already accept both `role=="student"` and a
+        `roles` list containing `student`. The SSR fragment route should keep
+        this behavior consistent.
+    """
+
+    class _DummyResponse:
+        status_code = 404
+
+        def json(self) -> dict:
+            return {}
+
+    class _DummyClient:
+        def __init__(self) -> None:
+            self.cookies = {}
+
+        async def get(self, *args, **kwargs):  # noqa: ANN002, ANN003 - test double
+            return _DummyResponse()
+
+    class _DummyClientCtx:
+        async def __aenter__(self):
+            return _DummyClient()
+
+        async def __aexit__(self, exc_type, exc, tb):  # noqa: ANN001
+            return False
+
+    monkeypatch.setattr(main, "_internal_api_client", lambda: _DummyClientCtx())
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/learning/courses/00000000-0000-0000-0000-000000000001/units/00000000-0000-0000-0000-000000000002/modules/00000000-0000-0000-0000-000000000003/fragment",
+        "headers": [],
+        "query_string": b"",
+        "state": {},
+        "client": ("test", 12345),
+        "server": ("test", 80),
+        "scheme": "http",
+    }
+    starlette_request = Request(scope)
+    starlette_request.state.user = {"sub": "s-frag-fallback", "roles": ["student"]}
+
+    # The internal API returns 404 in this test-double setup.
+    # A 403 here would indicate the route ignored the `roles` fallback.
+    response = await main.learning_modular_unit_module_fragment(
+        starlette_request,
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003",
+    )
+    assert response.status_code == 404
+    body = response.body.decode("utf-8")
+    assert "Modul nicht verfügbar" in body
 
 @pytest.mark.anyio
 async def test_student_modular_workspace_static_js_is_served() -> None:

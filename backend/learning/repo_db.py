@@ -381,30 +381,11 @@ class DBLearningRepo:
                     (unit_uuid,),
                 )
                 edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
-
-                # Aggregate tasks_done per module-section from the student's submissions.
-                section_ids = [m["section_id"] for m in modules_raw]
-                tasks_done_by_section: dict[str, int] = {}
-                if section_ids:
-                    cur.execute(
-                        """
-                        select section_id::text,
-                               count(distinct task_id)::int as tasks_done
-                          from public.learning_submissions
-                         where course_id = %s::uuid
-                           and student_sub = %s
-                           and section_id = any(%s::uuid[])
-                           and (kind <> 'h5p' or score_raw = score_max)
-                         group by section_id
-                        """,
-                        (course_uuid, student_sub, section_ids),
-                    )
-                    tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
-
-                module_state = self._compute_modular_unit_module_states(
-                    ordered_modules=modules_raw,
-                    edges=edges,
-                    tasks_done_by_section=tasks_done_by_section,
+                module_state = self._fetch_modular_unit_module_states(
+                    cur=cur,
+                    student_sub=student_sub,
+                    course_uuid=course_uuid,
+                    unit_uuid=unit_uuid,
                 )
 
                 modules: list[dict] = []
@@ -416,11 +397,11 @@ class DBLearningRepo:
                             "title": m["title"],
                             "phase_id": m["phase_id"],
                             "position_in_phase": int(m["position_in_phase"]),
-                            "required_prereq_count": int(m["required_prereq_count"]),
+                            "required_prereq_count": int(s.get("required_prereq_count", m["required_prereq_count"]) or 0),
                             "prereq_done": int(s.get("prereq_done") or 0),
                             "prereq_required": int(s.get("prereq_required") or 0),
                             "tasks_done": int(s.get("tasks_done") or 0),
-                            "tasks_total": int(m["tasks_total"]),
+                            "tasks_total": int(s.get("tasks_total", m["tasks_total"]) or 0),
                             "materials_count": int(m["materials_count"]),
                             "status": str(s.get("status") or "locked"),
                         }
@@ -433,59 +414,43 @@ class DBLearningRepo:
             "edges": edges,
         }
 
-    @staticmethod
-    def _compute_modular_unit_module_states(
+    def _fetch_modular_unit_module_states(
+        self,
         *,
-        ordered_modules: list[dict],
-        edges: list[dict],
-        tasks_done_by_section: dict[str, int],
+        cur,
+        student_sub: str,
+        course_uuid: str,
+        unit_uuid: str,
     ) -> dict[str, dict]:
-        """Compute unlocked/done/status for a modular unit.
-
-        Why:
-            We want one deterministic implementation of the unlock algorithm,
-            shared by:
-            - the graph endpoint (advance organizer)
-            - the module content endpoint (locked -> 404)
-
-        Important:
-            The DB enforces an acyclic graph via triggers:
-            - same phase: only left -> right edges
-            - cross phase: only earlier -> later phase edges
-            Therefore, iterating modules in (phase.position, position_in_phase)
-            order is a valid topological order.
-        """
-        incoming: dict[str, list[str]] = {m["id"]: [] for m in ordered_modules}
-        for e in edges:
-            to_id = str(e.get("to") or "")
-            from_id = str(e.get("from") or "")
-            if to_id in incoming:
-                incoming[to_id].append(from_id)
-
+        """Fetch per-module unlock states from the single SQL source of truth."""
+        cur.execute(
+            """
+            select module_id::text,
+                   section_id::text,
+                   required_prereq_count,
+                   prereq_required,
+                   prereq_done,
+                   tasks_total,
+                   tasks_done,
+                   status
+              from public.get_modular_unit_module_states_for_student(%s, %s::uuid, %s::uuid)
+            """,
+            (student_sub, course_uuid, unit_uuid),
+        )
+        rows = cur.fetchall() or []
         state: dict[str, dict] = {}
-        for m in ordered_modules:
-            module_id = m["id"]
-            section_id = m["section_id"]
-            tasks_total = int(m.get("tasks_total") or 0)
-            required_prereq_count = int(m.get("required_prereq_count") or 0)
-
-            incoming_ids = incoming.get(module_id, [])
-            prereq_required = min(max(required_prereq_count, 0), len(incoming_ids))
-            prereq_done = sum(1 for from_id in incoming_ids if bool(state.get(from_id, {}).get("done")))
-            unlocked = prereq_required == 0 or prereq_done >= prereq_required
-
-            raw_tasks_done = int(tasks_done_by_section.get(section_id, 0))
-            tasks_done = min(raw_tasks_done, tasks_total) if tasks_total > 0 else 0
-            done = bool(unlocked and (tasks_total == 0 or tasks_done >= tasks_total))
-            status = "done" if done else ("open" if unlocked else "locked")
-
+        for r in rows:
+            module_id = str(r[0] or "")
+            if not module_id:
+                continue
             state[module_id] = {
-                "unlocked": unlocked,
-                "done": done,
-                "status": status,
-                "prereq_required": prereq_required,
-                "prereq_done": prereq_done,
-                "tasks_done": tasks_done,
+                "section_id": str(r[1] or ""),
+                "required_prereq_count": int(r[2] or 0),
+                "prereq_required": int(r[3] or 0),
+                "prereq_done": int(r[4] or 0),
+                "tasks_total": int(r[5] or 0),
+                "tasks_done": int(r[6] or 0),
+                "status": str(r[7] or "locked"),
             }
         return state
 
@@ -510,89 +475,28 @@ class DBLearningRepo:
             - This runs under RLS with `app.current_sub` and `app.current_course_id`
               already set by the caller.
         """
+        # Keep linear units permissive (this helper only gates modular unlocks).
         cur.execute(
             """
-            select um.id::text
-              from public.unit_modules um
-              join public.units u on u.id = um.unit_id
-             where um.unit_id = %s::uuid
-               and um.section_id = %s::uuid
-               and u.unit_type = 'modular'
-             limit 1
+            select exists(
+                     select 1
+                       from public.unit_modules um
+                       join public.units u on u.id = um.unit_id
+                      where um.unit_id = %s::uuid
+                        and um.section_id = %s::uuid
+                        and u.unit_type = 'modular'
+                   )
             """,
             (unit_uuid, section_uuid),
         )
-        row = cur.fetchone()
-        if not row:
-            return True  # not a modular module-section mapping
-        module_id = str(row[0])
+        if not bool((cur.fetchone() or [False])[0]):
+            return True
 
         cur.execute(
-            """
-            select um.id::text,
-                   um.section_id::text,
-                   um.required_prereq_count,
-                   us.tasks_total,
-                   p.position as phase_position,
-                   um.position_in_phase
-              from public.unit_modules um
-              join public.unit_sections us on us.id = um.section_id
-              join public.unit_phases p on p.id = um.phase_id
-             where um.unit_id = %s::uuid
-             order by p.position asc, um.position_in_phase asc, um.id asc
-            """,
-            (unit_uuid,),
+            "select public.modular_section_is_open_or_done_for_student(%s, %s::uuid, %s::uuid, %s::uuid)",
+            (student_sub, course_uuid, unit_uuid, section_uuid),
         )
-        modules_raw = [
-            {
-                "id": r[0],
-                "section_id": r[1],
-                "required_prereq_count": int(r[2] or 0),
-                "tasks_total": int(r[3] or 0),
-                "phase_position": int(r[4] or 1),
-                "position_in_phase": int(r[5] or 1),
-            }
-            for r in (cur.fetchall() or [])
-        ]
-        if not modules_raw:
-            return False
-
-        cur.execute(
-            """
-            select from_module_id::text, to_module_id::text
-            from public.unit_module_edges
-            where unit_id = %s
-            order by from_module_id asc, to_module_id asc
-            """,
-            (unit_uuid,),
-        )
-        edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
-
-        section_ids = [m["section_id"] for m in modules_raw]
-        tasks_done_by_section: dict[str, int] = {}
-        if section_ids:
-            cur.execute(
-                """
-                select section_id::text,
-                       count(distinct task_id)::int as tasks_done
-                  from public.learning_submissions
-                 where course_id = %s::uuid
-                   and student_sub = %s
-                   and section_id = any(%s::uuid[])
-                   and (kind <> 'h5p' or score_raw = score_max)
-                 group by section_id
-                """,
-                (course_uuid, student_sub, section_ids),
-            )
-            tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
-
-        module_state = self._compute_modular_unit_module_states(
-            ordered_modules=modules_raw,
-            edges=edges,
-            tasks_done_by_section=tasks_done_by_section,
-        )
-        status = str((module_state.get(module_id) or {}).get("status") or "")
-        return status in {"open", "done"}
+        return bool((cur.fetchone() or [False])[0])
 
     def get_modular_module_content(
         self,
@@ -659,66 +563,11 @@ class DBLearningRepo:
 
                 # Locked modules are intentionally indistinguishable from missing modules.
                 # This prevents enumeration via guessed module_ids.
-                cur.execute(
-                    """
-                    select um.id::text,
-                           um.section_id::text,
-                           um.required_prereq_count,
-                           us.tasks_total,
-                           p.position as phase_position,
-                           um.position_in_phase
-                      from public.unit_modules um
-                      join public.unit_sections us on us.id = um.section_id
-                      join public.unit_phases p on p.id = um.phase_id
-                     where um.unit_id = %s
-                     order by p.position asc, um.position_in_phase asc, um.id asc
-                    """,
-                    (unit_uuid,),
-                )
-                modules_raw = [
-                    {
-                        "id": r[0],
-                        "section_id": r[1],
-                        "required_prereq_count": int(r[2] or 0),
-                        "tasks_total": int(r[3] or 0),
-                        "phase_position": int(r[4] or 1),
-                        "position_in_phase": int(r[5] or 1),
-                    }
-                    for r in (cur.fetchall() or [])
-                ]
-                cur.execute(
-                    """
-                    select from_module_id::text, to_module_id::text
-                    from public.unit_module_edges
-                    where unit_id = %s
-                    order by from_module_id asc, to_module_id asc
-                    """,
-                    (unit_uuid,),
-                )
-                edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
-
-                section_ids = [m["section_id"] for m in modules_raw]
-                tasks_done_by_section: dict[str, int] = {}
-                if section_ids:
-                    cur.execute(
-                        """
-                        select section_id::text,
-                               count(distinct task_id)::int as tasks_done
-                          from public.learning_submissions
-                         where course_id = %s::uuid
-                           and student_sub = %s
-                           and section_id = any(%s::uuid[])
-                           and (kind <> 'h5p' or score_raw = score_max)
-                         group by section_id
-                        """,
-                        (course_uuid, student_sub, section_ids),
-                    )
-                    tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
-
-                module_state = self._compute_modular_unit_module_states(
-                    ordered_modules=modules_raw,
-                    edges=edges,
-                    tasks_done_by_section=tasks_done_by_section,
+                module_state = self._fetch_modular_unit_module_states(
+                    cur=cur,
+                    student_sub=student_sub,
+                    course_uuid=course_uuid,
+                    unit_uuid=unit_uuid,
                 )
                 # Fail closed: all state lookups use canonical UUID strings.
                 status = str((module_state.get(module_uuid) or {}).get("status") or "locked")
@@ -1140,79 +989,11 @@ class DBLearningRepo:
                         if bool((cur.fetchone() or [False])[0]):
                             return True
                     elif norm_type == "modular":
-                        # Compute unlock state from graph + student's submissions.
                         cur.execute(
-                            "select id::text from public.unit_modules where unit_id=%s::uuid and section_id=%s::uuid",
-                            (unit_id, section_id),
+                            "select public.modular_section_is_open_or_done_for_student(%s, %s::uuid, %s::uuid, %s::uuid)",
+                            (student_sub, course_uuid, unit_id, section_id),
                         )
-                        module_row = cur.fetchone()
-                        if not module_row:
-                            continue
-                        module_id = str(module_row[0])
-
-                        cur.execute(
-                            """
-                            select um.id::text,
-                                   um.section_id::text,
-                                   um.required_prereq_count,
-                                   us.tasks_total,
-                                   p.position as phase_position,
-                                   um.position_in_phase
-                              from public.unit_modules um
-                              join public.unit_sections us on us.id = um.section_id
-                              join public.unit_phases p on p.id = um.phase_id
-                             where um.unit_id = %s::uuid
-                             order by p.position asc, um.position_in_phase asc, um.id asc
-                            """,
-                            (unit_id,),
-                        )
-                        modules_raw = [
-                            {
-                                "id": r[0],
-                                "section_id": r[1],
-                                "required_prereq_count": int(r[2] or 0),
-                                "tasks_total": int(r[3] or 0),
-                                "phase_position": int(r[4] or 1),
-                                "position_in_phase": int(r[5] or 1),
-                            }
-                            for r in (cur.fetchall() or [])
-                        ]
-                        cur.execute(
-                            """
-                            select from_module_id::text, to_module_id::text
-                            from public.unit_module_edges
-                            where unit_id = %s::uuid
-                            order by from_module_id asc, to_module_id asc
-                            """,
-                            (unit_id,),
-                        )
-                        edges = [{"from": r[0], "to": r[1]} for r in (cur.fetchall() or [])]
-
-                        section_ids = [m["section_id"] for m in modules_raw]
-                        tasks_done_by_section: dict[str, int] = {}
-                        if section_ids:
-                            cur.execute(
-                                """
-                                select section_id::text,
-                                       count(distinct task_id)::int as tasks_done
-                                  from public.learning_submissions
-                                 where course_id = %s::uuid
-                                   and student_sub = %s
-                                   and section_id = any(%s::uuid[])
-                                   and (kind <> 'h5p' or score_raw = score_max)
-                                 group by section_id
-                                """,
-                                (course_uuid, student_sub, section_ids),
-                            )
-                            tasks_done_by_section = {r[0]: int(r[1] or 0) for r in (cur.fetchall() or [])}
-
-                        module_state = self._compute_modular_unit_module_states(
-                            ordered_modules=modules_raw,
-                            edges=edges,
-                            tasks_done_by_section=tasks_done_by_section,
-                        )
-                        status = str((module_state.get(module_id) or {}).get("status") or "")
-                        if status in {"open", "done"}:
+                        if bool((cur.fetchone() or [False])[0]):
                             return True
 
                 return False

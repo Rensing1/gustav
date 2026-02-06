@@ -4906,6 +4906,7 @@ paths:
             Invalid input. detail codes:
               - invalid_title
               - invalid_summary
+              - invalid_unit_type
           content:
             application/json:
               schema:
@@ -4921,6 +4922,11 @@ paths:
                   value:
                     error: bad_request
                     detail: invalid_summary
+                invalid_unit_type:
+                  summary: unit_type must be linear or modular
+                  value:
+                    error: bad_request
+                    detail: invalid_unit_type
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not a teacher), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 

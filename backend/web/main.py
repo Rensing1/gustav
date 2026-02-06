@@ -270,6 +270,20 @@ def _primary_role(roles: list[str]) -> str:
             return r
     return "student"
 
+
+def _user_has_role(user: object, role: str) -> bool:
+    """Return True when `user` has `role` either as primary role or in roles list."""
+    if not isinstance(user, Mapping):
+        return False
+    expected = str(role or "").strip().lower()
+    if not expected:
+        return False
+    primary = str(user.get("role") or "").strip().lower()
+    if primary == expected:
+        return True
+    roles = [str(r).strip().lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    return expected in roles
+
 def _set_session_cookie(response: Response, value: str, *, max_age: int | None = None, request: Request | None = None) -> None:
     opts = _session_cookie_options()
     secure_flag = opts["secure"]
@@ -2065,7 +2079,7 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
         - Locked / not accessible modules return 404 (fail-closed).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "student":
+    if not _user_has_role(user, "student"):
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(module_id)):
         return HTMLResponse("", status_code=400, headers={"Cache-Control": "private, no-store"})

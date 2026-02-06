@@ -157,6 +157,16 @@ def test_list_courses_default_limit_is_10():
     assert limit.get("schema", {}).get("default") == 10
 
 
+def test_create_unit_400_contract_lists_invalid_unit_type_detail():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    create_unit_400 = spec["paths"]["/api/teaching/units"]["post"]["responses"]["400"]
+    description = create_unit_400.get("description", "") or ""
+    assert "invalid_unit_type" in description
+    examples = create_unit_400.get("content", {}).get("application/json", {}).get("examples", {})
+    assert "invalid_unit_type" in examples
+
+
 def test_course_members_get_has_merged_security_notes_without_key_override():
     root = Path(__file__).resolve().parents[2]
     spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))

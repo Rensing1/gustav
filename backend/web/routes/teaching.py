@@ -3109,6 +3109,9 @@ async def create_section_material(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -3141,7 +3144,7 @@ async def create_section_material(
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_material(material), status_code=201)
+    return _json_private(_serialize_material(material), status_code=201)
 
 
 @teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
@@ -3524,6 +3527,9 @@ async def reorder_section_materials(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -3612,6 +3618,9 @@ async def create_course_module(request: Request, course_id: str, payload: Course
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     unit_id = payload.unit_id
     if not _is_uuid_like(unit_id):
@@ -3638,7 +3647,7 @@ async def create_course_module(request: Request, course_id: str, payload: Course
         return JSONResponse({"error": "forbidden"}, status_code=403)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse(content=_serialize_module(module), status_code=201)
+    return _json_private(_serialize_module(module), status_code=201)
 
 
 @teaching_router.post("/api/teaching/courses/{course_id}/modules/reorder")
@@ -3664,6 +3673,9 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     sub = _current_sub(user)

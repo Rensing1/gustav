@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import hmac
 import os
 import logging
 import uuid
 import secrets
+import time
 import mimetypes
 import json
 from typing import Optional, Dict, Any, List, Mapping
@@ -469,21 +471,63 @@ def _internal_api_client():
     base, origin = _teaching_internal_base()
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url=base, headers={"Origin": origin})
 
+
+def _csrf_ttl_seconds() -> int:
+    """Return SSR CSRF token TTL (bounded) with session-TTL as default."""
+    raw = (os.getenv("APP_CSRF_TTL_SECONDS") or "").strip()
+    default_seconds = _app_session_ttl_seconds()
+    try:
+        value = int(raw) if raw else default_seconds
+    except ValueError:
+        value = default_seconds
+    return max(60, min(value, 7 * 24 * 60 * 60))
+
+
+def _csrf_signing_secret() -> bytes:
+    """Resolve a stable signing secret for session-bound CSRF tokens."""
+    explicit = (os.getenv("APP_CSRF_TOKEN_SECRET") or "").strip()
+    if explicit:
+        return explicit.encode("utf-8")
+    # Reuse existing deployment secret when no dedicated CSRF secret is set.
+    shared = (os.getenv("H5P_REVIEW_TOKEN_SECRET") or "").strip()
+    if shared:
+        return shared.encode("utf-8")
+    # Dev fallback keeps local setup friction low; production should set a secret.
+    return b"gustav-dev-csrf-secret"
+
+
+def _sign_csrf_token(*, session_id: str, expires_at: int) -> str:
+    payload = f"{session_id}.{expires_at}".encode("utf-8")
+    digest = hmac.new(_csrf_signing_secret(), payload, hashlib.sha256).hexdigest()
+    return digest
+
+
 def _get_or_create_csrf_token(session_id: str) -> str:
-    token = _CSRF_BY_SESSION.get(session_id)
-    if not token:
-        token = secrets.token_urlsafe(24)
-        _CSRF_BY_SESSION[session_id] = token
-    return token
+    if not session_id:
+        return ""
+    expires_at = int(time.time()) + _csrf_ttl_seconds()
+    sig = _sign_csrf_token(session_id=session_id, expires_at=expires_at)
+    return f"v1.{expires_at}.{sig}"
 
 def _validate_csrf(session_id: Optional[str], form_value: Optional[str]) -> bool:
     if not session_id or not form_value:
         return False
+    token = str(form_value)
+    parts = token.split(".")
+    if len(parts) == 3 and parts[0] == "v1":
+        try:
+            expires_at = int(parts[1])
+        except (TypeError, ValueError):
+            return False
+        if expires_at < int(time.time()):
+            return False
+        expected_sig = _sign_csrf_token(session_id=session_id, expires_at=expires_at)
+        return hmac.compare_digest(expected_sig, parts[2])
+    # Backward-compatibility path for legacy per-process tokens during rollout.
     expected = _CSRF_BY_SESSION.get(session_id)
     if not expected:
         return False
-    import hmac
-    return hmac.compare_digest(expected, str(form_value))
+    return hmac.compare_digest(expected, token)
 
 def _clamp_pagination(limit_raw: str | None, offset_raw: str | None) -> tuple[int, int]:
     """Clamp pagination for SSR views.

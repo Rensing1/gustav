@@ -1151,6 +1151,30 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
     return JSONResponse(content=payload, status_code=status_code, headers=headers)
 
 
+def _clamp_limit_offset(
+    *,
+    limit: int | None,
+    offset: int | None,
+    default_limit: int,
+    max_limit: int = 50,
+    zero_means_default: bool = True,
+) -> tuple[int, int]:
+    """Clamp list pagination consistently across Teaching endpoints."""
+    try:
+        norm_limit = int(limit) if limit is not None else default_limit
+    except (TypeError, ValueError):
+        norm_limit = default_limit
+    if zero_means_default and norm_limit == 0:
+        norm_limit = default_limit
+    norm_limit = max(1, min(max_limit, norm_limit))
+    try:
+        norm_offset = int(offset) if offset is not None else 0
+    except (TypeError, ValueError):
+        norm_offset = 0
+    norm_offset = max(0, norm_offset)
+    return norm_limit, norm_offset
+
+
 def _require_modular_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:
     """Ensure modular endpoints run only when the repo implements required methods."""
     for method_name in method_names:
@@ -1379,8 +1403,7 @@ async def list_courses(request: Request, limit: int = 10, offset: int = 0):
     """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
-    limit = max(1, min(50, int(limit or 10)))
-    offset = max(0, int(offset or 0))
+    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
     repo = _get_repo()
     if _role_in(user, "teacher"):
         items = repo.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
@@ -1407,7 +1430,7 @@ async def create_course(request: Request, payload: CourseCreate):
     """
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     csrf = _csrf_guard(request)
     if csrf:
         return csrf
@@ -1422,7 +1445,7 @@ async def create_course(request: Request, payload: CourseCreate):
         )
     except ValueError:
         # Map repo validation to contract 400
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     # Security: return private, no-store to prevent caching of owner-scoped data
     return _json_private(_serialize_course(course), status_code=201)
 
@@ -1447,10 +1470,10 @@ async def get_course(request: Request, course_id: str):
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     # Validate path parameter format early to avoid unintended 500s
     if not _is_uuid_like(course_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     guard = _guard_course_owner(course_id, sub)
     if guard:
         return guard
@@ -1465,7 +1488,7 @@ async def get_course(request: Request, course_id: str):
     except Exception:
         c = repo.get_course(course_id)
     if not c:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_course(c), status_code=200)
 
 class CourseUpdate(BaseModel):
@@ -1946,14 +1969,13 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     user, error = _require_teacher(request)
     if error:
         return error
-    limit = max(1, min(50, int(limit or 20)))
-    offset = max(0, int(offset or 0))
+    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=20, max_limit=50)
     sub = _current_sub(user)
     try:
         units = _get_repo().list_units_for_author(author_id=sub, limit=limit, offset=offset)
     except Exception as exc:
         logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private([_serialize_unit(u) for u in units], status_code=200)
 
 
@@ -1987,10 +2009,10 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     except ValueError as exc:
         detail = str(exc)
         if detail in {"invalid_title", "invalid_summary", "invalid_unit_type"}:
-            return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-        return JSONResponse({"error": "bad_request"}, status_code=400)
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request"}, status_code=400)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private(_serialize_unit(unit), status_code=201)
 
 
@@ -2017,7 +2039,7 @@ async def get_unit(request: Request, unit_id: str):
     if error:
         return error
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -2032,7 +2054,7 @@ async def get_unit(request: Request, unit_id: str):
     except Exception:
         u = repo.get_unit_for_author(unit_id, sub)
     if not u:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_unit(u), status_code=200)
 
 
@@ -4334,8 +4356,7 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return _private_error({"error": "forbidden"}, status_code=403)
-    limit = max(1, min(50, int(limit or 20)))
-    offset = max(0, int(offset or 0))
+    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
@@ -4347,9 +4368,9 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
             # Fallback in-memory owner check
             course = repo.get_course(course_id)
             if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404)
             if _teacher_id_of(course) != sub:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "forbidden"}, status_code=403)
             pairs = repo.list_members(course_id, limit=limit, offset=offset)
     except Exception as exc:
         # Defensive default: if DB helper path fails, do not risk information leakage.

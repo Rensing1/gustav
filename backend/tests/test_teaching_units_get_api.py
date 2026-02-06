@@ -86,6 +86,7 @@ async def test_get_unit_invalid_id_returns_400():
     assert r.status_code == 400
     body = r.json()
     assert body.get("detail") == "invalid_unit_id"
+    assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

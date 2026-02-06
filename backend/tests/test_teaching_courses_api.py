@@ -141,6 +141,7 @@ async def test_student_cannot_create_course_forbidden():
         assert resp.status_code == 403
         data = resp.json()
         assert data.get("error") == "forbidden"
+        assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

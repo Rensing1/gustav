@@ -44,3 +44,13 @@ def test_openapi_learning_modular_module_content_has_standard_error_responses() 
     responses = op.get("responses", {})
     for code in ("200", "400", "401", "403", "404", "503"):
         assert code in responses, f"Missing {code} response for module content endpoint"
+
+
+def test_openapi_modular_tasks_done_semantics_are_explicit() -> None:
+    spec = _load_spec()
+    desc = (
+        spec["components"]["schemas"]["LearningUnitGraphModule"]["properties"]["tasks_done"].get("description", "")
+        or ""
+    ).lower()
+    assert "non-h5p" in desc
+    assert "score_raw = score_max" in desc

@@ -449,6 +449,8 @@ class DBLearningRepo:
                 "prereq_required": int(r[3] or 0),
                 "prereq_done": int(r[4] or 0),
                 "tasks_total": int(r[5] or 0),
+                # `tasks_done` semantics are defined in SQL:
+                # non-H5P task -> any submission; H5P task -> full score only.
                 "tasks_done": int(r[6] or 0),
                 "status": str(r[7] or "locked"),
             }

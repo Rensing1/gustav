@@ -1538,6 +1538,48 @@ class DBTeachingRepo:
             "title": t,
         }
 
+    def _clamp_required_prereq_count_to_incoming(
+        self,
+        *,
+        cur,
+        unit_id: str,
+        target_module_ids: list[str],
+    ) -> None:
+        """Clamp k-of-n setting to current incoming edge count for target modules.
+
+        Why:
+            Module/phase deletions remove edges via FK cascades. When a removed
+            prerequisite was part of a target module's incoming set, the target
+            `required_prereq_count` must be reduced to remain in the valid range
+            `0..incoming_count`.
+        """
+        module_ids = sorted({mid for mid in (target_module_ids or []) if mid})
+        if not module_ids:
+            return
+        cur.execute(
+            """
+            with incoming as (
+              select um.id as module_id,
+                     coalesce((
+                       select count(*)
+                       from public.unit_module_edges e
+                       where e.unit_id = um.unit_id
+                         and e.to_module_id = um.id
+                     ), 0)::int as incoming_count
+              from public.unit_modules um
+              where um.unit_id = %s::uuid
+                and um.id = any(%s::uuid[])
+            )
+            update public.unit_modules um
+            set required_prereq_count = least(um.required_prereq_count, incoming.incoming_count)
+            from incoming
+            where um.unit_id = %s::uuid
+              and um.id = incoming.module_id
+              and um.required_prereq_count > incoming.incoming_count
+            """,
+            (unit_id, module_ids, unit_id),
+        )
+
     def delete_unit_module_for_author(self, *, unit_id: str, module_id: str, author_id: str) -> bool:
         """Delete a module and its backing content (author only).
 
@@ -1560,6 +1602,17 @@ class DBTeachingRepo:
                 unit_type = str(unit_row[0] or "linear").strip().lower()
                 if unit_type != "modular":
                     raise ValueError("invalid_unit_type")
+
+                cur.execute(
+                    """
+                    select distinct to_module_id::text
+                    from public.unit_module_edges
+                    where unit_id = %s::uuid
+                      and from_module_id = %s::uuid
+                    """,
+                    (unit_id, module_id),
+                )
+                affected_targets = [r[0] for r in (cur.fetchall() or []) if r and r[0]]
 
                 cur.execute(
                     """
@@ -1621,6 +1674,12 @@ class DBTeachingRepo:
                     (unit_id, phase_id),
                 )
 
+                self._clamp_required_prereq_count_to_incoming(
+                    cur=cur,
+                    unit_id=unit_id,
+                    target_module_ids=affected_targets,
+                )
+
                 conn.commit()
                 return True
 
@@ -1667,14 +1726,31 @@ class DBTeachingRepo:
 
                 cur.execute(
                     """
-                    select um.section_id::text
+                    select um.id::text,
+                           um.section_id::text
                     from public.unit_modules um
                     where um.unit_id = %s::uuid
                       and um.phase_id = %s::uuid
                     """,
                     (unit_id, phase_id),
                 )
-                section_ids = [r[0] for r in (cur.fetchall() or []) if r and r[0]]
+                rows = cur.fetchall() or []
+                module_ids = [r[0] for r in rows if r and r[0]]
+                section_ids = [r[1] for r in rows if len(r) > 1 and r[1]]
+
+                affected_targets: list[str] = []
+                if module_ids:
+                    cur.execute(
+                        """
+                        select distinct to_module_id::text
+                        from public.unit_module_edges
+                        where unit_id = %s::uuid
+                          and from_module_id = any(%s::uuid[])
+                        """,
+                        (unit_id, module_ids),
+                    )
+                    affected_targets = [r[0] for r in (cur.fetchall() or []) if r and r[0]]
+
                 if section_ids:
                     cur.execute(
                         """
@@ -1726,6 +1802,12 @@ class DBTeachingRepo:
                     where p.id = o.id
                     """,
                     (unit_id,),
+                )
+
+                self._clamp_required_prereq_count_to_incoming(
+                    cur=cur,
+                    unit_id=unit_id,
+                    target_module_ids=affected_targets,
                 )
                 conn.commit()
                 return True

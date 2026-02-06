@@ -595,8 +595,6 @@ class DBLearningRepo:
                                mime_type,
                                size_bytes,
                                filename_original,
-                               storage_key,
-                               sha256,
                                alt_text,
                                position,
                                to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
@@ -617,12 +615,10 @@ class DBLearningRepo:
                                 "mime_type": r[4],
                                 "size_bytes": r[5],
                                 "filename_original": r[6],
-                                "storage_key": r[7],
-                                "sha256": r[8],
-                                "alt_text": r[9],
-                                "position": int(r[10]) if r[10] is not None else None,
-                                "created_at": r[11],
-                                "updated_at": r[12],
+                                "alt_text": r[7],
+                                "position": int(r[8]) if r[8] is not None else None,
+                                "created_at": r[9],
+                                "updated_at": r[10],
                             }
                         )
 

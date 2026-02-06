@@ -5455,7 +5455,7 @@ async def unit_phases_create(request: Request, unit_id: str):
     phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid or "")
     phase_list_html = _render_unit_phases_list_partial(unit_id, phases, csrf_token=token, error=error)
     if "HX-Request" in request.headers:
-        return HTMLResponse(phase_list_html)
+        return HTMLResponse(phase_list_html, headers={"Cache-Control": "private, no-store"})
     return RedirectResponse(url=f"/units/{unit_id}/phases", status_code=303)
 
 
@@ -5470,7 +5470,7 @@ async def unit_phases_reorder(request: Request, unit_id: str):
     csrf_header = request.headers.get("X-CSRF-Token")
     csrf_field = form.get("csrf_token")
     if not _validate_csrf(sid, csrf_header or csrf_field):
-        return Response(status_code=403)
+        return Response(status_code=403, headers={"Cache-Control": "private, no-store"})
 
     ordered_ids = [elem_id.replace("phase_", "") for elem_id in form.getlist("id")]
     try:
@@ -5482,12 +5482,20 @@ async def unit_phases_reorder(request: Request, unit_id: str):
                 json={"phase_ids": ordered_ids},
             )
     except Exception:
-        return JSONResponse({"error": "bad_request", "detail": "reorder_failed"}, status_code=400)
+        return JSONResponse(
+            {"error": "bad_request", "detail": "reorder_failed"},
+            status_code=400,
+            headers={"Cache-Control": "private, no-store"},
+        )
     if resp.status_code >= 400:
         detail = _extract_api_error_detail(resp)
         status = resp.status_code if resp.status_code in (400, 403, 404) else 400
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=status)
-    return Response(status_code=200)
+        return JSONResponse(
+            {"error": "bad_request", "detail": detail},
+            status_code=status,
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return Response(status_code=200, headers={"Cache-Control": "private, no-store"})
 
 
 async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session_id: str) -> list[dict]:

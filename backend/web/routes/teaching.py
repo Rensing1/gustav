@@ -1159,6 +1159,35 @@ def _require_modular_repo_methods(repo: object, *method_names: str) -> JSONRespo
     return None
 
 
+def _is_signature_compat_type_error(exc: TypeError) -> bool:
+    """Return True only for argument-signature mismatches in fallback repos.
+
+    Why:
+        Some older/in-memory test doubles still expose positional signatures.
+        We accept that compatibility case, but we must not mask arbitrary
+        TypeErrors raised *inside* repository code paths.
+    """
+    msg = (str(exc) or "").lower()
+    hints = (
+        "unexpected keyword argument",
+        "required positional argument",
+        "positional arguments but",
+        "takes",
+        "got multiple values for argument",
+    )
+    return any(hint in msg for hint in hints)
+
+
+def _list_unit_modules_for_author_compat(repo: object, *, unit_id: str, author_id: str):
+    """Call module listing with keyword args and controlled signature fallback."""
+    try:
+        return repo.list_unit_modules_for_author(unit_id=unit_id, author_id=author_id)  # type: ignore[attr-defined]
+    except TypeError as exc:
+        if not _is_signature_compat_type_error(exc):
+            raise
+        return repo.list_unit_modules_for_author(unit_id, author_id)  # type: ignore[attr-defined]
+
+
 def _csrf_guard(request: Request) -> JSONResponse | None:
     """Enforce strict same-origin for browser write requests (dev = prod).
 
@@ -2381,10 +2410,16 @@ async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     from_id = _canonical_uuid(from_id)
     to_id = _canonical_uuid(to_id)
     try:
-        modules = repo.list_unit_modules_for_author(unit_id=unit_id, author_id=sub)
-    except TypeError:
-        # Keep compatibility with alternate repo signatures in tests.
-        modules = repo.list_unit_modules_for_author(unit_id, sub)
+        modules = _list_unit_modules_for_author_compat(repo, unit_id=unit_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
     module_ids: set[str] = set()
     for item in (modules or []):
         raw_id = str((item or {}).get("id")) if isinstance(item, dict) else str(getattr(item, "id", ""))

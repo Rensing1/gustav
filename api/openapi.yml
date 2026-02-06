@@ -1130,15 +1130,6 @@ components:
           type: string
           nullable: true
           description: Original filename supplied by the author (files only)
-        storage_key:
-          type: string
-          nullable: true
-          description: Internal storage key used for download routing
-        sha256:
-          type: string
-          nullable: true
-          pattern: '^[0-9a-f]{64}$'
-          description: Hash provided during upload (files only)
         alt_text:
           type: string
           nullable: true
@@ -3523,6 +3514,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable (learning repo missing modular graph capability)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}:
     get:
@@ -3618,6 +3621,18 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Not found — course/unit/module not visible, or module is locked (fail-closed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable (learning repo missing modular module-content capability)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -5136,6 +5151,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [Teaching]
       summary: Create a phase in a modular learning unit (author only)
@@ -5192,6 +5208,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/phases/{phase_id}:
     patch:
@@ -5256,6 +5273,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
       tags: [Teaching]
       summary: Delete a phase (and all its modules/edges/content) (author only)
@@ -5305,6 +5323,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/phases/reorder:
     post:
@@ -5372,6 +5391,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/modules/graph:
     get:
@@ -5416,6 +5436,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/modules:
     post:
@@ -5475,6 +5496,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/modules/{module_id}:
     patch:
@@ -5545,6 +5567,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
       tags: [Teaching]
       summary: Delete a module (and its content) (author only)
@@ -5592,6 +5615,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder:
     post:
@@ -5666,6 +5690,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or phase not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/modules/edges:
     post:
@@ -5740,6 +5765,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
       tags: [Teaching]
       summary: Delete a dependency edge between two modules (author only)
@@ -5788,6 +5814,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Edge not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}:
     delete:
@@ -5843,6 +5870,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Edge not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/sections:
     get:
@@ -5897,6 +5925,10 @@ paths:
     post:
       tags: [Teaching]
       summary: Create a section within a learning unit (author only)
+      description: |
+        Creates a section at the next position.
+        For modular units (Option B bridge), this endpoint also creates the
+        backing `public.unit_modules` row linked 1:1 to the new section.
       operationId: createSection
       security:
         - cookieAuth: []
@@ -7751,7 +7783,8 @@ paths:
       description: >-
         Forwards the request body to a presigned storage URL (usually Supabase Storage) while keeping
         browser uploads on the same origin. Returns the computed `sha256` and `size_bytes` so the student
-        can finalize the submission payload. No additional rate-limiting or throttling is applied.
+        can finalize the submission payload. Structured telemetry is emitted for observability
+        (success/error volume). No additional rate-limiting or throttling is applied.
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "Host validation: Query param `url` must match the SUPABASE_URL or SUPABASE_PUBLIC_URL host (prevents SSRF/rewrites)."

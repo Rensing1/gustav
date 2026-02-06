@@ -12,6 +12,7 @@ elif __name__ == "routes.learning":
 
 import base64
 import json
+import logging
 import os
 import re
 import sys as _sys
@@ -64,6 +65,7 @@ from urllib.parse import urlparse as _urlparse, quote as _quote
 
 
 learning_router = APIRouter(tags=["Learning"])
+logger = logging.getLogger("gustav.web.learning")
 
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
 
@@ -234,6 +236,39 @@ def _cache_headers_error() -> dict[str, str]:
     # Error responses: must never be stored; protects PII-bearing error pages.
     # Include Vary: Origin for consistency with success responses.
     return {"Cache-Control": "private, no-store", "Vary": "Origin"}
+
+
+def _require_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:
+    """Ensure modular read routes fail closed when repo capabilities are missing."""
+    for method_name in method_names:
+        if not callable(getattr(repo, method_name, None)):
+            return JSONResponse({"error": "service_unavailable"}, status_code=503, headers=_cache_headers_error())
+    return None
+
+
+def _emit_upload_proxy_telemetry(
+    *,
+    outcome: str,
+    status_code: int,
+    reason: str,
+    target_host: str,
+    content_type: str,
+    size_bytes: int | None,
+) -> None:
+    """Emit low-cardinality upload proxy telemetry without PII."""
+    try:
+        logger.info(
+            "learning.upload_proxy outcome=%s status=%s reason=%s host=%s mime=%s size_bytes=%s",
+            outcome,
+            int(status_code),
+            str(reason or "n/a"),
+            str(target_host or "n/a"),
+            str(content_type or "n/a"),
+            int(size_bytes) if size_bytes is not None else -1,
+        )
+    except Exception:
+        # Telemetry must never affect API behavior.
+        return
 
 
 def _require_strict_same_origin(request: Request) -> bool:
@@ -788,8 +823,13 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
     if unit_type != "modular":
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
 
+    repo = _get_repo()
+    repo_error = _require_repo_methods(repo, "get_modular_unit_graph")
+    if repo_error:
+        return repo_error
+
     try:
-        payload = _get_repo().get_modular_unit_graph(
+        payload = repo.get_modular_unit_graph(
             student_sub=str(user.get("sub", "")),
             course_id=course_id_norm,
             unit_id=unit_id_norm,
@@ -863,8 +903,13 @@ async def get_modular_unit_module_content(
     if unit_type != "modular":
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
 
+    repo = _get_repo()
+    repo_error = _require_repo_methods(repo, "get_modular_module_content")
+    if repo_error:
+        return repo_error
+
     try:
-        payload = _get_repo().get_modular_module_content(
+        payload = repo.get_modular_module_content(
             student_sub=str(user.get("sub", "")),
             course_id=course_id_norm,
             unit_id=unit_id_norm,
@@ -1591,19 +1636,41 @@ async def internal_upload_proxy(request: Request):
         - Forwards the raw body with the incoming Content-Type header.
         - Returns {sha256, size_bytes} on success (200≤code<300).
     """
+    target_host_for_log = "n/a"
+    content_type_for_log = request.headers.get("content-type") or "application/octet-stream"
+
+    def _proxy_error(payload: dict[str, str], *, status_code: int, reason: str) -> JSONResponse:
+        _emit_upload_proxy_telemetry(
+            outcome="error",
+            status_code=status_code,
+            reason=reason,
+            target_host=target_host_for_log,
+            content_type=content_type_for_log,
+            size_bytes=None,
+        )
+        return JSONResponse(payload, status_code=status_code, headers=_cache_headers_error())
+
     user, error = _require_student(request)
     if error:
+        _emit_upload_proxy_telemetry(
+            outcome="error",
+            status_code=int(getattr(error, "status_code", 401)),
+            reason="auth",
+            target_host=target_host_for_log,
+            content_type=content_type_for_log,
+            size_bytes=None,
+        )
         return error
     if not _require_strict_same_origin(request):
-        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
+        return _proxy_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, reason="csrf_violation")
     if not _upload_proxy_enabled():
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+        return _proxy_error({"error": "not_found"}, status_code=404, reason="feature_disabled")
 
     target = str(request.query_params.get("url") or "").strip()
     header_token = str(request.query_params.get("headers") or "").strip()
     forward_headers = _filter_upload_proxy_headers(_decode_proxy_headers(header_token))
     if not target:
-        return JSONResponse({"error": "bad_request", "detail": "missing_url"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "missing_url"}, status_code=400, reason="missing_url")
     base = (os.getenv("SUPABASE_URL") or "").strip()
     public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
     try:
@@ -1611,17 +1678,18 @@ async def internal_upload_proxy(request: Request):
         parsed_base = _urlparse(base) if base else None
         parsed_public = _urlparse(public_base) if public_base else None
     except Exception:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_parse")
 
     target_scheme, target_host, target_port = _normalized_parts(parsed_target)
+    target_host_for_log = target_host or "n/a"
 
     if not target_scheme or target_scheme not in {"http", "https"} or not target_host:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_parts")
 
     local_hosts = {"localhost", "::1", "host.docker.internal"}
     is_local_http = target_host in local_hosts or target_host.startswith("127.")
     if target_scheme == "http" and not is_local_http:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_scheme")
     allowed_hosts: list[tuple[str, str, int | None]] = []
     for parsed in (parsed_base, parsed_public):
         if not parsed:
@@ -1630,7 +1698,7 @@ async def internal_upload_proxy(request: Request):
         if host:
             allowed_hosts.append((scheme, host, port))
     if not allowed_hosts:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, reason="missing_allowed_hosts")
 
     matched_scheme = None
     matched_port: int | None = None
@@ -1641,11 +1709,11 @@ async def internal_upload_proxy(request: Request):
             break
 
     if matched_scheme is None:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, reason="invalid_url_host")
     if matched_scheme == "https" and target_scheme != "https":
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_scheme")
     if matched_port and target_port and target_port != matched_port:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, reason="invalid_url_port")
 
     # Enforce that the path targets the storage upload endpoint to reduce SSRF surface.
     path = parsed_target.path or "/"
@@ -1656,18 +1724,19 @@ async def internal_upload_proxy(request: Request):
     while "//" in path:
         path = path.replace("//", "/")
     if ".." in path or re.search(r"%2e", path, flags=re.IGNORECASE):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_path")
     if not path.startswith("/storage/v1/object/"):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_url"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_path")
 
     body, body_error = await _read_request_stream_with_limit(request, _max_upload_bytes())
     if body_error:
-        return JSONResponse({"error": "bad_request", "detail": body_error}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": body_error}, status_code=400, reason=body_error)
     content_type = request.headers.get("content-type") or "application/octet-stream"
+    content_type_for_log = content_type
     # Enforce MIME allowlist for uploads proxied through our origin.
     allowed_mime = (set(ALLOWED_IMAGE_MIME) | set(ALLOWED_FILE_MIME) | {"application/octet-stream"})
     if content_type not in allowed_mime:
-        return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, reason="mime_not_allowed")
 
     try:
         resp = await _async_forward_upload(
@@ -1679,13 +1748,21 @@ async def internal_upload_proxy(request: Request):
         )
     except Exception:
         # Prod-parity: any upstream exception is a 502 (no soft-200 in dev/test).
-        return JSONResponse({"error": "bad_gateway", "detail": "proxy_failed"}, status_code=502, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_gateway", "detail": "proxy_failed"}, status_code=502, reason="proxy_failed")
     if getattr(resp, "status_code", 500) >= 300:
         # Prod-parity: non-2xx upstream is a 502 in all environments.
-        return JSONResponse({"error": "bad_gateway", "detail": "upstream_error"}, status_code=502, headers=_cache_headers_error())
+        return _proxy_error({"error": "bad_gateway", "detail": "upstream_error"}, status_code=502, reason="upstream_error")
 
     import hashlib as _hashlib
     h = _hashlib.sha256(); h.update(body)
+    _emit_upload_proxy_telemetry(
+        outcome="success",
+        status_code=200,
+        reason="ok",
+        target_host=target_host_for_log,
+        content_type=content_type_for_log,
+        size_bytes=len(body),
+    )
     return JSONResponse({"sha256": h.hexdigest(), "size_bytes": len(body)}, status_code=200, headers=_cache_headers_success())
 
 @learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")

@@ -774,14 +774,14 @@ body.mode-overview {
   scroll-margin-top: 220px;
 }
 
-.modular-unit-page .module-card summary {
+.modular-unit-page .module-card > summary {
   list-style: none;
   cursor: pointer;
   padding: var(--space-4) var(--space-5);
   display: block;
 }
 
-.modular-unit-page .module-card summary::-webkit-details-marker {
+.modular-unit-page .module-card > summary::-webkit-details-marker {
   display: none;
 }
 

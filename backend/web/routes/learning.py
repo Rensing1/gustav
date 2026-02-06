@@ -466,6 +466,27 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
     ) -> list[dict]:
         ...
 
+    def get_modular_unit_graph(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        unit_id: str,
+    ) -> dict:
+        ...
+
+    def get_modular_module_content(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        unit_id: str,
+        module_id: str,
+        include_materials: bool,
+        include_tasks: bool,
+    ) -> dict:
+        ...
+
 
 def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
     global _REPO, REPO

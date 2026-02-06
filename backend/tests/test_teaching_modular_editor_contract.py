@@ -58,3 +58,19 @@ def test_editor_edge_styles_are_neutral_like_student_ui() -> None:
 
     # Edge layer should use theme tokens.
     assert "var(--color-text-muted" in css or "color-mix(" in css
+
+def test_editor_blocked_actions_are_locally_highlighted() -> None:
+    js = _read_js()
+    css = _read_css()
+
+    # When a move/edge is blocked by backend constraints, the editor should
+    # not only show a status message — it should also highlight the affected
+    # node/phase briefly to make the error local & obvious.
+    assert "is-attention" in js
+
+    # The highlight should be implemented via CSS animation, using theme tokens.
+    assert "@keyframes modular-editor-attention" in css
+    assert "var(--color-error" in css
+    assert ".modular-editor__module-node.is-attention" in css
+    assert ".modular-editor__phase.is-attention" in css
+

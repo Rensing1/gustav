@@ -3256,7 +3256,7 @@ def _render_modular_unit_editor_page_html(
     """Build the teacher visual editor page for a modular unit.
 
     UX intent:
-        - Phases are columns (left -> right).
+        - Phases are visual bands (stacked vertically).
         - Modules are nodes inside phases.
         - Clicking a module loads its content editor into the right-side panel
           via HTMX (no page navigation).
@@ -3288,7 +3288,7 @@ def _render_modular_unit_editor_page_html(
         f'<div class="container modular-editor" data-testid="modular-unit-editor" data-unit-id="{safe_unit_id}" '
         f'data-csrf-token="{Component.escape(csrf_token)}">'
         f'<h1>Editor: {unit_title}</h1>'
-        '<p class="text-muted">Phasen (Spalten) · Module (Knoten) · Rechts: Inhalte bearbeiten.</p>'
+        '<p class="text-muted">Phasen (Zeilen) · Module (Knoten) · Rechts: Inhalte bearbeiten.</p>'
         f"{error_modules_html}"
         '<div class="modular-editor__shell">'
         '<div class="modular-editor__canvas">'

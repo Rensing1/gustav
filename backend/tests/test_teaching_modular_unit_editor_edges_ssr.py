@@ -94,10 +94,10 @@ async def test_modular_unit_editor_ssr_embeds_edges_on_reload():
         html = page.text
 
         m = re.search(
-            r'<script[^>]*id="modular-editor-edges-data"[^>]*>([^<]*)</script>',
+            r'<template[^>]*id="modular-editor-edges-data"[^>]*>([^<]*)</template>',
             html,
         )
-        assert m, "Expected SSR page to embed edges JSON in <script id=\"modular-editor-edges-data\">"
+        assert m, "Expected SSR page to embed edges JSON in <template id=\"modular-editor-edges-data\">"
         raw = (m.group(1) or "").strip()
         assert raw, "Expected non-empty edges JSON in SSR page"
 

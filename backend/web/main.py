@@ -3237,7 +3237,7 @@ def _render_modular_unit_editor_graph_html(
     oob_attr = ' hx-swap-oob="outerHTML"' if swap_oob else ""
     return (
         f'<div class="modular-editor__graph" id="modular-editor-graph"{oob_attr}>'
-        f'<script type="application/json" id="modular-editor-edges-data">{edges_json}</script>'
+        f'<template id="modular-editor-edges-data">{edges_json}</template>'
         '<svg class="modular-editor__edges" id="modular-editor-edges" aria-hidden="true" focusable="false"></svg>'
         f"{phases_html}"
         "</div>"

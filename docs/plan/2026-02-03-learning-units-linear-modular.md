@@ -61,6 +61,7 @@ Legende:
   - **Fix**: Modul‑Fragment rendert keinen zusätzlichen sichtbaren Modultitel (kein `<h3>…</h3>`), um doppelte Titel im Content‑View zu vermeiden.
   - **Fix**: CSS scoped `.module-card > summary`, damit verschachtelte `<summary>` (Task‑History/„Versuche“) weiterhin wie bei linearen Lerneinheiten gerendert werden (Regression‑Test vorhanden).
   - **UX**: Content‑View bewusst ruhiger: keine „x Module“ im Phasen‑Header und keine Material/Aufgaben‑Zähler in Modul‑Karten (Status‑Badge bleibt).
+  - **Fix**: Reopen‑Bug behoben: Wenn ein Modul über die Toolbar geschlossen wird, werden Loader‑Caches zurückgesetzt, damit das Modul beim erneuten Öffnen wieder Inhalte nachlädt.
 
 ### Abweichungen vom ursprünglichen Plan (wichtig)
 - **Abweichung 1 (bewusst / Option B):** Früherer Planvorschlag: Modul‑Metadaten direkt in `unit_sections` (`phase_id`, `position_in_phase`, `required_prereq_count`). Umsetzung jetzt: eigene Tabelle `unit_modules` mit eigener `module_id`, die 1:1 auf eine Section zeigt (`section_id`).

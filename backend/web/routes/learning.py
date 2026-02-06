@@ -411,6 +411,14 @@ def _parse_include(value: str | None) -> tuple[bool, bool]:
     return "materials" in tokens, "tasks" in tokens
 
 
+def _canonical_uuid_or_none(value: object) -> str | None:
+    """Return a canonical UUID string or None when parsing fails."""
+    try:
+        return str(UUID(str(value)))
+    except (ValueError, TypeError):
+        return None
+
+
 # Note: Pagination clamping is handled in the use case layer to keep this
 # adapter thin and framework-agnostic.
 
@@ -750,8 +758,8 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
 
     # Validate path params eagerly to align with contract detail=invalid_uuid
     try:
-        UUID(course_id)
-        UUID(unit_id)
+        course_id_norm = str(UUID(course_id))
+        unit_id_norm = str(UUID(unit_id))
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
 
@@ -761,7 +769,7 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
     # later if needed.
     try:
         rows = ListCourseUnitsUseCase(_get_repo()).execute(
-            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=str(course_id))
+            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=course_id_norm)
         )
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
@@ -769,7 +777,8 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
     unit: dict[str, Any] | None = None
     for item in rows:
         candidate = item.get("unit")
-        if isinstance(candidate, dict) and candidate.get("id") == unit_id:
+        candidate_id = _canonical_uuid_or_none((candidate or {}).get("id")) if isinstance(candidate, dict) else None
+        if candidate_id == unit_id_norm:
             unit = candidate
             break
     if not unit:
@@ -782,8 +791,8 @@ async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str)
     try:
         payload = _get_repo().get_modular_unit_graph(
             student_sub=str(user.get("sub", "")),
-            course_id=str(course_id),
-            unit_id=str(unit_id),
+            course_id=course_id_norm,
+            unit_id=unit_id_norm,
         )
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
@@ -822,9 +831,9 @@ async def get_modular_unit_module_content(
         return error
 
     try:
-        UUID(course_id)
-        UUID(unit_id)
-        UUID(module_id)
+        course_id_norm = str(UUID(course_id))
+        unit_id_norm = str(UUID(unit_id))
+        module_id_norm = str(UUID(module_id))
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
 
@@ -835,7 +844,7 @@ async def get_modular_unit_module_content(
 
     try:
         rows = ListCourseUnitsUseCase(_get_repo()).execute(
-            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=str(course_id))
+            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=course_id_norm)
         )
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
@@ -843,7 +852,8 @@ async def get_modular_unit_module_content(
     unit: dict[str, Any] | None = None
     for item in rows:
         candidate = item.get("unit")
-        if isinstance(candidate, dict) and candidate.get("id") == unit_id:
+        candidate_id = _canonical_uuid_or_none((candidate or {}).get("id")) if isinstance(candidate, dict) else None
+        if candidate_id == unit_id_norm:
             unit = candidate
             break
     if not unit:
@@ -856,9 +866,9 @@ async def get_modular_unit_module_content(
     try:
         payload = _get_repo().get_modular_module_content(
             student_sub=str(user.get("sub", "")),
-            course_id=str(course_id),
-            unit_id=str(unit_id),
-            module_id=str(module_id),
+            course_id=course_id_norm,
+            unit_id=unit_id_norm,
+            module_id=module_id_norm,
             include_materials=_include_materials,
             include_tasks=_include_tasks,
         )

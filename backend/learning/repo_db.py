@@ -720,7 +720,8 @@ class DBLearningRepo:
                     edges=edges,
                     tasks_done_by_section=tasks_done_by_section,
                 )
-                status = str((module_state.get(str(module_id)) or {}).get("status") or "")
+                # Fail closed: all state lookups use canonical UUID strings.
+                status = str((module_state.get(module_uuid) or {}).get("status") or "locked")
                 if status == "locked":
                     raise LookupError("module_locked")
 

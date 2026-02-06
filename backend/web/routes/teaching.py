@@ -1069,6 +1069,11 @@ def _is_uuid_like(value: str) -> bool:
     return True
 
 
+def _canonical_uuid(value: str) -> str:
+    """Return canonical lowercase UUID string."""
+    return str(UUID(str(value)))
+
+
 def _validate_uuid_id_list(
     raw_ids: object,
     *,
@@ -1090,7 +1095,7 @@ def _validate_uuid_id_list(
         norm = item.strip()
         if not norm or not _is_uuid_like(norm):
             return None, _private_error({"error": "bad_request", "detail": invalid_detail}, status_code=400)
-        ids.append(norm)
+        ids.append(_canonical_uuid(norm))
 
     if len(ids) != len(set(ids)):
         return None, _private_error({"error": "bad_request", "detail": duplicate_detail}, status_code=400)
@@ -2373,15 +2378,18 @@ async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     to_id = payload.to_module_id or ""
     if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    from_id = _canonical_uuid(from_id)
+    to_id = _canonical_uuid(to_id)
     try:
         modules = repo.list_unit_modules_for_author(unit_id=unit_id, author_id=sub)
     except TypeError:
         # Keep compatibility with alternate repo signatures in tests.
         modules = repo.list_unit_modules_for_author(unit_id, sub)
-    module_ids = {
-        str((item or {}).get("id")) if isinstance(item, dict) else str(getattr(item, "id", ""))
-        for item in (modules or [])
-    }
+    module_ids: set[str] = set()
+    for item in (modules or []):
+        raw_id = str((item or {}).get("id")) if isinstance(item, dict) else str(getattr(item, "id", ""))
+        if _is_uuid_like(raw_id):
+            module_ids.add(_canonical_uuid(raw_id))
     if from_id not in module_ids or to_id not in module_ids:
         return _private_error({"error": "not_found"}, status_code=404)
     try:

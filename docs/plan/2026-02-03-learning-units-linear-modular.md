@@ -38,7 +38,7 @@ Legende:
 - **DONE**: Beim Erstellen einer modularen Unit wird automatisch eine Default‑Phase (“Phase 1”) erzeugt (damit modulare Units ohne Phase‑Editor nutzbar sind).
 - **DONE**: Beim Erstellen einer Section in einer modularen Unit wird automatisch ein `unit_modules`‑Record erzeugt (Option B).
 - **DONE**: Phase‑Editor API: Phasen listen/erstellen/umbenennen/reorder.
-- **PARTIAL**: Visualer Modul‑Editor (HTMX + JS):
+- **DONE**: Visualer Modul‑Editor (HTMX + JS):
   - Layout wie im Student‑Advance‑Organizer: Phasen untereinander (Zeilen), Module horizontal (Knoten), rechte Seitenleiste (Panel) lädt Inhalte via HTMX.
   - CRUD (Anlegen/Umbenennen/Löschen) für Phasen/Module per inline HTMX‑Formulare (ohne Browser `prompt()/confirm()`).
   - Löschen ist **kaskadierend**: Phase löscht Module + Kanten + Inhalte; Modul löscht Inhalte (Option B: backing section).

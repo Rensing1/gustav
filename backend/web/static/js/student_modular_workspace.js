@@ -330,6 +330,10 @@ function initOneWorkspace(rootEl) {
     }
     moduleEls.delete(mid);
 
+    // Closing removes the module DOM. Reset loader caches so reopening can fetch again.
+    loadedModules.delete(mid);
+    loadingModules.delete(mid);
+
     // Remove empty phase sections.
     for (const [pid, p] of phaseEls.entries()) {
       if (!p.list.querySelector('.module-card')) {

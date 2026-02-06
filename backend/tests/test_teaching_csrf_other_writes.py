@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 import httpx
 from httpx import ASGITransport
+import uuid
 
 import main  # type: ignore  # noqa: E402
 import routes.teaching as teaching  # type: ignore  # noqa: E402
@@ -157,3 +158,53 @@ async def test_create_unit_blocks_cross_origin_and_allows_same_origin(monkeypatc
         assert r2.status_code == 201
         assert r2.headers.get("Cache-Control") == "private, no-store"
         assert csrf_calls["count"] == 1, "CSRF guard should be evaluated exactly once per request"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("method", "path_tpl", "payload"),
+    [
+        ("POST", "/api/teaching/units/{unit_id}/phases", {"title": "Phase 2"}),
+        ("POST", "/api/teaching/units/{unit_id}/modules", {"title": "M", "phase_id": "{phase_id}"}),
+        (
+            "POST",
+            "/api/teaching/units/{unit_id}/modules/edges",
+            {"from_module_id": "{module_a}", "to_module_id": "{module_b}"},
+        ),
+    ],
+)
+async def test_modular_write_endpoints_reject_missing_origin_with_csrf_violation(
+    method: str,
+    path_tpl: str,
+    payload: dict,
+):
+    """New modular write endpoints must enforce strict same-origin CSRF checks."""
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-csrf-modular", name="Teach", roles=["teacher"])  # type: ignore
+
+    unit_id = str(uuid.uuid4())
+    phase_id = str(uuid.uuid4())
+    module_a = str(uuid.uuid4())
+    module_b = str(uuid.uuid4())
+    path = (
+        path_tpl.replace("{unit_id}", unit_id)
+        .replace("{phase_id}", phase_id)
+        .replace("{module_a}", module_a)
+        .replace("{module_b}", module_b)
+    )
+    body = {
+        key: str(value)
+        .replace("{phase_id}", phase_id)
+        .replace("{module_a}", module_a)
+        .replace("{module_b}", module_b)
+        for key, value in payload.items()
+    }
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        resp = await c.request(method, path, json=body)
+
+    assert resp.status_code == 403
+    assert resp.json().get("detail") == "csrf_violation"
+    assert resp.headers.get("Cache-Control") == "private, no-store"

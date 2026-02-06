@@ -1146,6 +1146,14 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
     return JSONResponse(content=payload, status_code=status_code, headers=headers)
 
 
+def _require_modular_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:
+    """Ensure modular endpoints run only when the repo implements required methods."""
+    for method_name in method_names:
+        if not callable(getattr(repo, method_name, None)):
+            return _private_error({"error": "service_unavailable"}, status_code=503)
+    return None
+
+
 def _csrf_guard(request: Request) -> JSONResponse | None:
     """Enforce strict same-origin for browser write requests (dev = prod).
 
@@ -2074,6 +2082,7 @@ async def delete_unit(request: Request, unit_id: str):
 @teaching_router.get("/api/teaching/units/{unit_id}/phases")
 async def list_unit_phases(request: Request, unit_id: str):
     """List phases of a modular unit (author only)."""
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -2081,8 +2090,11 @@ async def list_unit_phases(request: Request, unit_id: str):
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "list_unit_phases_for_author")
+    if repo_error:
+        return repo_error
     try:
-        items = _get_repo().list_unit_phases_for_author(unit_id, sub)
+        items = repo.list_unit_phases_for_author(unit_id, sub)
     except ValueError as exc:
         detail = str(exc) or "bad_request"
         if detail == "invalid_unit_type":
@@ -2098,6 +2110,7 @@ async def list_unit_phases(request: Request, unit_id: str):
 @teaching_router.post("/api/teaching/units/{unit_id}/phases")
 async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCreatePayload):
     """Create a phase in a modular unit (author only); appends at the next position."""
+    repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
@@ -2108,9 +2121,12 @@ async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCr
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "create_unit_phase")
+    if repo_error:
+        return repo_error
     title = payload.title or ""
     try:
-        phase = _get_repo().create_unit_phase(unit_id, title, sub)
+        phase = repo.create_unit_phase(unit_id, title, sub)
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
         if detail in {"invalid_unit_type", "invalid_title"}:
@@ -2137,6 +2153,9 @@ async def update_unit_phase(request: Request, unit_id: str, phase_id: str, paylo
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "update_unit_phase_title")
+    if repo_error:
+        return repo_error
     updates = payload.model_dump(mode="python", exclude_unset=True)
     if not updates:
         return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
@@ -2170,6 +2189,9 @@ async def delete_unit_phase(request: Request, unit_id: str, phase_id: str):
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "delete_unit_phase_for_author")
+    if repo_error:
+        return repo_error
     try:
         deleted = repo.delete_unit_phase_for_author(unit_id=unit_id, phase_id=phase_id, author_id=sub)
     except ValueError as exc:
@@ -2201,6 +2223,9 @@ async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhase
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "reorder_unit_phases_owned")
+    if repo_error:
+        return repo_error
     ids, ids_error = _validate_uuid_id_list(
         payload.phase_ids,
         array_detail="phase_ids_must_be_array",
@@ -2245,6 +2270,14 @@ async def get_unit_modules_graph(request: Request, unit_id: str):
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(
+        repo,
+        "list_unit_phases_for_author",
+        "list_unit_modules_for_author",
+        "list_unit_module_edges_for_author",
+    )
+    if repo_error:
+        return repo_error
     try:
         phases = repo.list_unit_phases_for_author(unit_id, sub)
         modules = repo.list_unit_modules_for_author(unit_id=unit_id, author_id=sub)
@@ -2289,6 +2322,9 @@ async def create_unit_module(request: Request, unit_id: str, payload: UnitModule
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "create_unit_module_for_author")
+    if repo_error:
+        return repo_error
     title = payload.title or ""
     phase_id = payload.phase_id or ""
     if not _is_uuid_like(phase_id):
@@ -2325,11 +2361,29 @@ async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(
+        repo,
+        "list_unit_modules_for_author",
+        "create_unit_module_edge_for_author",
+    )
+    if repo_error:
+        return repo_error
 
     from_id = payload.from_module_id or ""
     to_id = payload.to_module_id or ""
     if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    try:
+        modules = repo.list_unit_modules_for_author(unit_id=unit_id, author_id=sub)
+    except TypeError:
+        # Keep compatibility with alternate repo signatures in tests.
+        modules = repo.list_unit_modules_for_author(unit_id, sub)
+    module_ids = {
+        str((item or {}).get("id")) if isinstance(item, dict) else str(getattr(item, "id", ""))
+        for item in (modules or [])
+    }
+    if from_id not in module_ids or to_id not in module_ids:
+        return _private_error({"error": "not_found"}, status_code=404)
     try:
         created = repo.create_unit_module_edge_for_author(
             unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
@@ -2368,6 +2422,9 @@ def _delete_unit_module_edge_common(*, request: Request, unit_id: str, from_id: 
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "delete_unit_module_edge_for_author")
+    if repo_error:
+        return repo_error
 
     if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
@@ -2431,6 +2488,9 @@ async def update_unit_module(request: Request, unit_id: str, module_id: str, pay
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "update_unit_module_owned")
+    if repo_error:
+        return repo_error
     title_provided = "title" in payload.model_fields_set
     k_provided = "required_prereq_count" in payload.model_fields_set
     if not (title_provided or k_provided):
@@ -2486,6 +2546,9 @@ async def delete_unit_module(request: Request, unit_id: str, module_id: str):
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "delete_unit_module_for_author")
+    if repo_error:
+        return repo_error
     try:
         deleted = repo.delete_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=sub)
     except ValueError as exc:
@@ -2523,6 +2586,9 @@ async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: s
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
+    repo_error = _require_modular_repo_methods(repo, "reorder_unit_phase_modules_owned")
+    if repo_error:
+        return repo_error
 
     ids, ids_error = _validate_uuid_id_list(
         payload.module_ids,

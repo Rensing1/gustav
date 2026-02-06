@@ -1069,6 +1069,34 @@ def _is_uuid_like(value: str) -> bool:
     return True
 
 
+def _validate_uuid_id_list(
+    raw_ids: object,
+    *,
+    array_detail: str,
+    empty_detail: str,
+    duplicate_detail: str,
+    invalid_detail: str,
+) -> tuple[list[str] | None, JSONResponse | None]:
+    """Validate reorder payload id arrays without raising on unhashable items."""
+    if not isinstance(raw_ids, list):
+        return None, _private_error({"error": "bad_request", "detail": array_detail}, status_code=400)
+    if len(raw_ids) == 0:
+        return None, _private_error({"error": "bad_request", "detail": empty_detail}, status_code=400)
+
+    ids: list[str] = []
+    for item in raw_ids:
+        if not isinstance(item, str):
+            return None, _private_error({"error": "bad_request", "detail": invalid_detail}, status_code=400)
+        norm = item.strip()
+        if not norm or not _is_uuid_like(norm):
+            return None, _private_error({"error": "bad_request", "detail": invalid_detail}, status_code=400)
+        ids.append(norm)
+
+    if len(ids) != len(set(ids)):
+        return None, _private_error({"error": "bad_request", "detail": duplicate_detail}, status_code=400)
+    return ids, None
+
+
 def _guard_unit_author(unit_id: str, author_sub: str):
     """Validate unit ownership, returning an error response when access is denied."""
     if not _is_uuid_like(unit_id):
@@ -2069,7 +2097,7 @@ async def list_unit_phases(request: Request, unit_id: str):
         return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
     except Exception:
         return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private([_serialize_unit_phase(p) for p in items], status_code=200)
+    return _json_private([_serialize_unit_phase_public(p) for p in items], status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/phases")
@@ -2095,7 +2123,7 @@ async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCr
         return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(_serialize_unit_phase(phase), status_code=201, vary_origin=True)
+    return _json_private(_serialize_unit_phase_public(phase), status_code=201, vary_origin=True)
 
 
 @teaching_router.patch("/api/teaching/units/{unit_id}/phases/{phase_id}")
@@ -2126,7 +2154,7 @@ async def update_unit_phase(request: Request, unit_id: str, phase_id: str, paylo
         return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     if not updated:
         return _private_error({"error": "not_found"}, status_code=404)
-    return _json_private(_serialize_unit_phase(updated), status_code=200, vary_origin=True)
+    return _json_private(_serialize_unit_phase_public(updated), status_code=200, vary_origin=True)
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}/phases/{phase_id}")
@@ -2178,15 +2206,15 @@ async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhase
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
-    ids = payload.phase_ids
-    if not isinstance(ids, list):
-        return _private_error({"error": "bad_request", "detail": "phase_ids_must_be_array"}, status_code=400)
-    if len(ids) == 0:
-        return _private_error({"error": "bad_request", "detail": "empty_phase_ids"}, status_code=400)
-    if len(ids) != len(set(ids)):
-        return _private_error({"error": "bad_request", "detail": "duplicate_phase_ids"}, status_code=400)
-    if any(not _is_uuid_like(pid) for pid in ids):
-        return _private_error({"error": "bad_request", "detail": "invalid_phase_ids"}, status_code=400)
+    ids, ids_error = _validate_uuid_id_list(
+        payload.phase_ids,
+        array_detail="phase_ids_must_be_array",
+        empty_detail="empty_phase_ids",
+        duplicate_detail="duplicate_phase_ids",
+        invalid_detail="invalid_phase_ids",
+    )
+    if ids_error:
+        return ids_error
     try:
         ordered = repo.reorder_unit_phases_owned(unit_id, sub, ids)
     except ValueError as exc:
@@ -2201,7 +2229,7 @@ async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhase
         if sqlstate == "23514":  # check_violation
             return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
         raise
-    return _json_private([_serialize_unit_phase(p) for p in ordered], status_code=200, vary_origin=True)
+    return _json_private([_serialize_unit_phase_public(p) for p in ordered], status_code=200, vary_origin=True)
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/modules/graph")
@@ -2473,15 +2501,15 @@ async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: s
     if guard:
         return guard
 
-    ids = payload.module_ids
-    if not isinstance(ids, list):
-        return _private_error({"error": "bad_request", "detail": "module_ids_must_be_array"}, status_code=400)
-    if len(ids) == 0:
-        return _private_error({"error": "bad_request", "detail": "empty_module_ids"}, status_code=400)
-    if len(ids) != len(set(ids)):
-        return _private_error({"error": "bad_request", "detail": "duplicate_module_ids"}, status_code=400)
-    if any(not _is_uuid_like(mid) for mid in ids):
-        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    ids, ids_error = _validate_uuid_id_list(
+        payload.module_ids,
+        array_detail="module_ids_must_be_array",
+        empty_detail="empty_module_ids",
+        duplicate_detail="duplicate_module_ids",
+        invalid_detail="invalid_module_ids",
+    )
+    if ids_error:
+        return ids_error
 
     try:
         ordered = repo.reorder_unit_phase_modules_owned(unit_id=unit_id, phase_id=phase_id, author_id=sub, module_ids=ids)

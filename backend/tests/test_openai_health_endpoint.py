@@ -12,7 +12,9 @@ Security:
 
 from __future__ import annotations
 
+import os
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -168,6 +170,51 @@ async def test_openai_health_caches_probe_result_for_short_ttl(monkeypatch: pyte
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert fake.calls == 1, "expected probe to be cached between close calls"
+
+
+@pytest.mark.anyio
+async def test_openai_health_ignores_stale_cache_from_previous_probe_callable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cache row from another probe callable must never bleed into this request."""
+    store = _install_session_store()
+    teacher = store.create(sub="t-openai-cache-isolation", roles=["teacher"], name="T")
+    import routes.operations as operations  # type: ignore  # noqa: E402
+
+    base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
+    stale_body = {
+        "status": "degraded",
+        "configured": True,
+        "reachable": False,
+        "modelsLoaded": False,
+        "modelsCount": 0,
+        "detail": "stale",
+    }
+    stale_probe = _FakeProbe(stale_body, 503)
+    now = time.monotonic()
+    monkeypatch.setitem(operations._OPENAI_HEALTH_CACHE, "key", (base_url, stale_probe))
+    monkeypatch.setitem(operations._OPENAI_HEALTH_CACHE, "at", now)
+    monkeypatch.setitem(operations._OPENAI_HEALTH_CACHE, "body", dict(stale_body))
+    monkeypatch.setitem(operations._OPENAI_HEALTH_CACHE, "status_code", 503)
+
+    fresh_body = {
+        "status": "healthy",
+        "configured": True,
+        "reachable": True,
+        "modelsLoaded": True,
+        "modelsCount": 1,
+        "detail": None,
+    }
+    fresh_probe = _FakeProbe(fresh_body, 200)
+    monkeypatch.setattr(operations, "_probe_openai_health", fresh_probe, raising=False)
+
+    async with await _client() as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        resp = await client.get("/internal/health/openai")
+
+    assert resp.status_code == 200
+    assert resp.json() == fresh_body
+    assert fresh_probe.calls == 1
 
 
 @pytest.mark.anyio

@@ -39,6 +39,12 @@ async def _create_unit(client: httpx.AsyncClient, *, title: str, unit_type: str 
     return resp.json()
 
 
+def _assert_phase_public_shape(phase: dict, *, unit_id: str) -> None:
+    """Assert TeachingUnitPhase contract shape (additionalProperties=false)."""
+    assert set(phase.keys()) == {"id", "unit_id", "title", "position"}
+    assert phase["unit_id"] == unit_id
+
+
 @pytest.mark.anyio
 async def test_unit_phases_list_create_rename_reorder_happy_path():
     main.SESSION_STORE = SessionStore()
@@ -63,13 +69,13 @@ async def test_unit_phases_list_create_rename_reorder_happy_path():
         phases = r_list.json()
         assert isinstance(phases, list) and len(phases) == 1
         phase1 = phases[0]
-        assert phase1["unit_id"] == unit["id"]
+        _assert_phase_public_shape(phase1, unit_id=unit["id"])
         assert phase1["position"] == 1
 
         r_create = await client.post(f"/api/teaching/units/{unit['id']}/phases", json={"title": "Phase 2"})
         assert r_create.status_code == 201
         phase2 = r_create.json()
-        assert phase2["unit_id"] == unit["id"]
+        _assert_phase_public_shape(phase2, unit_id=unit["id"])
         assert phase2["position"] == 2
 
         r_rename = await client.patch(
@@ -77,7 +83,9 @@ async def test_unit_phases_list_create_rename_reorder_happy_path():
             json={"title": "Praxis"},
         )
         assert r_rename.status_code == 200
-        assert r_rename.json()["title"] == "Praxis"
+        renamed = r_rename.json()
+        _assert_phase_public_shape(renamed, unit_id=unit["id"])
+        assert renamed["title"] == "Praxis"
 
         r_reorder = await client.post(
             f"/api/teaching/units/{unit['id']}/phases/reorder",
@@ -85,13 +93,65 @@ async def test_unit_phases_list_create_rename_reorder_happy_path():
         )
         assert r_reorder.status_code == 200
         reordered = r_reorder.json()
+        assert isinstance(reordered, list) and len(reordered) == 2
+        for entry in reordered:
+            _assert_phase_public_shape(entry, unit_id=unit["id"])
         assert [p["id"] for p in reordered] == [phase2["id"], phase1["id"]]
         assert [p["position"] for p in reordered] == [1, 2]
 
         # GET reflects new order.
         r_list2 = await client.get(f"/api/teaching/units/{unit['id']}/phases")
         assert r_list2.status_code == 200
-        assert [p["id"] for p in r_list2.json()] == [phase2["id"], phase1["id"]]
+        listed_again = r_list2.json()
+        assert isinstance(listed_again, list) and len(listed_again) == 2
+        for entry in listed_again:
+            _assert_phase_public_shape(entry, unit_id=unit["id"])
+        assert [p["id"] for p in listed_again] == [phase2["id"], phase1["id"]]
+
+
+@pytest.mark.anyio
+async def test_unit_phases_requires_authentication_returns_401():
+    """Phase endpoints must return 401 without an authenticated session."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    async with (await _client()) as client:
+        unit_id = "00000000-0000-0000-0000-000000000000"
+        r_get = await client.get(f"/api/teaching/units/{unit_id}/phases")
+        assert r_get.status_code == 401
+
+        r_post = await client.post(f"/api/teaching/units/{unit_id}/phases", json={"title": "X"})
+        assert r_post.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_unit_phases_non_teacher_returns_403():
+    """Phase endpoints must return 403 for authenticated non-teacher callers."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    student = main.SESSION_STORE.create(sub="student-phases-403", name="Student", roles=["student"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", student.session_id)
+        unit_id = "00000000-0000-0000-0000-000000000000"
+        r_get = await client.get(f"/api/teaching/units/{unit_id}/phases")
+        assert r_get.status_code == 403
 
 
 @pytest.mark.anyio
@@ -177,3 +237,78 @@ async def test_unit_phases_reorder_rejects_edge_constraint_violation():
         )
         assert r_reorder.status_code == 400, r_reorder.text
         assert r_reorder.json().get("detail") == "edge_constraint_violation"
+
+
+@pytest.mark.anyio
+async def test_unit_phases_reorder_rejects_non_string_ids_with_400():
+    """Reorder must not crash on unhashable items; return invalid_phase_ids."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-phases-invalid-ids", name="InvalidIds", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, title="Modular Unit", unit_type="modular")
+
+        r_list = await client.get(f"/api/teaching/units/{unit['id']}/phases")
+        assert r_list.status_code == 200
+        phase1 = r_list.json()[0]
+
+        r_create = await client.post(f"/api/teaching/units/{unit['id']}/phases", json={"title": "Phase 2"})
+        assert r_create.status_code == 201
+        phase2 = r_create.json()
+
+        r_bad = await client.post(
+            f"/api/teaching/units/{unit['id']}/phases/reorder",
+            json={"phase_ids": [phase2["id"], {"not": "a-uuid"}, phase1["id"]]},
+        )
+        assert r_bad.status_code == 400, r_bad.text
+        assert r_bad.json().get("detail") == "invalid_phase_ids"
+
+
+@pytest.mark.anyio
+async def test_unit_phase_modules_reorder_rejects_non_string_ids_with_400():
+    """Module reorder must not crash on unhashable items; return invalid_module_ids."""
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-modules-invalid-ids", name="InvalidIds", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, title="Modular Unit", unit_type="modular")
+
+        r_phases = await client.get(f"/api/teaching/units/{unit['id']}/phases")
+        assert r_phases.status_code == 200
+        phase1 = r_phases.json()[0]
+
+        r_mod = await client.post(
+            f"/api/teaching/units/{unit['id']}/modules",
+            json={"title": "A", "phase_id": phase1["id"]},
+        )
+        assert r_mod.status_code == 201
+        mod1 = r_mod.json()
+
+        r_bad = await client.post(
+            f"/api/teaching/units/{unit['id']}/phases/{phase1['id']}/modules/reorder",
+            json={"module_ids": [mod1["id"], {"not": "a-uuid"}]},
+        )
+        assert r_bad.status_code == 400, r_bad.text
+        assert r_bad.json().get("detail") == "invalid_module_ids"

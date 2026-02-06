@@ -33,3 +33,13 @@ def test_close_module_resets_loaded_cache() -> None:
     # Ensure the close handler removes the module from both caches.
     assert "loadedModules.delete(mid)" in js
     assert "loadingModules.delete(mid)" in js
+
+
+def test_error_overlay_uses_text_content_not_html_interpolation() -> None:
+    """Error text must not be interpolated into innerHTML templates."""
+    js = _read_js()
+
+    # Avoid HTML interpolation of dynamic error messages.
+    assert "${String(err" not in js
+    assert "graphLayer.replaceChildren(" in js
+    assert "msg.textContent = String(err && err.message ? err.message : err)" in js

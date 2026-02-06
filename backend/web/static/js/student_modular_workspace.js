@@ -779,6 +779,25 @@ function initOneWorkspace(rootEl) {
     refreshGraphRuntime();
   });
 
+  function renderGraphErrorOverlay(err) {
+    const card = document.createElement('div');
+    card.className = 'overlay-card';
+    card.style.margin = 'var(--space-6)';
+
+    const title = document.createElement('strong');
+    title.textContent = 'Fehler';
+
+    const para = document.createElement('p');
+    para.className = 'text-muted';
+
+    const msg = document.createElement('small');
+    msg.textContent = String(err && err.message ? err.message : err);
+
+    para.appendChild(msg);
+    card.append(title, para);
+    graphLayer.replaceChildren(card);
+  }
+
   (async () => {
     const payload = await fetchGraph({ courseId, unitId });
     model = buildGraphModel(payload);
@@ -792,12 +811,7 @@ function initOneWorkspace(rootEl) {
     // Persist once after prune.
     persistState();
   })().catch((err) => {
-    graphLayer.innerHTML = `
-      <div class="overlay-card" style="margin: var(--space-6);">
-        <strong>Fehler</strong>
-        <p class="text-muted"><small>${String(err && err.message ? err.message : err)}</small></p>
-      </div>
-    `;
+    renderGraphErrorOverlay(err);
     viewContent.hidden = true;
   });
 }

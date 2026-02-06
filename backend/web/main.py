@@ -498,6 +498,26 @@ def _is_uuid_like(value: str) -> bool:
         return False
 
 
+def _normalize_open_attempt_id_uuid(value: str | None) -> str:
+    """Normalize open_attempt_id to a strict UUID or an empty string.
+
+    Why:
+        `open_attempt_id` may come from untrusted query parameters and is
+        interpolated into HTML attributes (`data-open-attempt-id`, `hx-vals`).
+        We therefore accept only UUIDs and drop everything else.
+    """
+    candidate = str(value or "").strip()
+    if not candidate:
+        return ""
+    return candidate if _is_uuid_like(candidate) else ""
+
+
+def _hx_vals_attr_payload(payload: dict[str, Any]) -> str:
+    """Return an HTML-safe JSON string for usage inside an `hx-vals` attribute."""
+    raw = json.dumps(payload, separators=(",", ":"))
+    return Component.escape(raw)
+
+
 def _is_analysis_in_progress(status: Any) -> bool:
     """Return True while the worker is still processing the submission."""
     return str(status or "").lower() in ("pending", "extracted")
@@ -1199,6 +1219,7 @@ def _render_learning_task_history_wrapper_html(
           element that updates only `#submission-text-*` and `#submission-result-*`
           via out-of-band swaps.
     """
+    open_attempt_id = _normalize_open_attempt_id_uuid(open_attempt_id)
     safe_task_id = Component.escape(task_id)
     entries = [
         _build_history_entry_from_record(
@@ -1220,13 +1241,13 @@ def _render_learning_task_history_wrapper_html(
             latest_status = None
     pending_latest = _is_analysis_in_progress(latest_status)
 
-    hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
+    hx_vals_payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id})
     wrapper_open = (
         f'<section id="task-history-{safe_task_id}"'
         f' class="task-panel__history"'
         f' data-pending="{"true" if pending_latest else "false"}"'
         f' data-open-attempt-id="{Component.escape(open_attempt_id)}"'
-        f" hx-vals='{hx_vals_payload}'"
+        f' hx-vals="{hx_vals_payload}"'
         f' hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
     )
 
@@ -1614,7 +1635,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     unit_type = "linear"
     sections: list[dict] = []
     show_history_for = request.query_params.get("show_history_for") or ""
-    open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
+    open_attempt_id_qp = _normalize_open_attempt_id_uuid(str(request.query_params.get("open_attempt_id") or ""))
     success_banner = request.query_params.get("ok") == "submitted"
     try:
         async with _internal_api_client() as client:
@@ -1888,13 +1909,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             else:
                 # Lazy-load the history via HTMX; we include a placeholder section
                 # that fetches and swaps itself on load.
-                payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
                 history_placeholder_html = (
                     f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
                     f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
                     f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
                     f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
-                    f"hx-vals='{payload}' "
+                    f'hx-vals="{payload}" '
                     'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
                     f'<div class="text-muted">Lade Verlauf …</div>'
                     f'</section>'
@@ -1963,7 +1984,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         if tid and tid not in candidate_tids:
                             candidate_tids.append(tid)
                 if candidate_tids:
-                    open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
+                    open_attempt_id_qp = _normalize_open_attempt_id_uuid(str(request.query_params.get("open_attempt_id") or ""))
                     for tid in candidate_tids:
                         task = tasks_by_id.get(tid) or {}
                         # Basic title/instruction fallback; keep SSR logic robust even when repo shape differs.
@@ -1980,13 +2001,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         form_html = _build_task_submit_form_html(
                             course_id=course_id, unit_id=unit_id, task_id=str(tid), task_kind=task_kind
                         )
-                        hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                        hx_vals_payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
                         history_placeholder_html = (
                             f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
                             f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
                             f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
                             f'hx-target="this" hx-swap="outerHTML" '
-                            f"hx-vals='{hx_vals_payload}' "
+                            f'hx-vals="{hx_vals_payload}" '
                             'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)"></section>'
                         )
                         banner_html = (
@@ -2127,13 +2148,13 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
                 course_id=course_id, unit_id=unit_id, task_id=tid, task_kind=task_kind
             )
 
-        payload_json = json.dumps({"open_attempt_id": ""}, separators=(",", ":"))
+        payload_json = _hx_vals_attr_payload({"open_attempt_id": ""})
         history_placeholder_html = (
             f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
             f'data-pending="false" data-open-attempt-id="" '
             f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
             f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
-            f"hx-vals='{payload_json}' "
+            f'hx-vals="{payload_json}" '
             'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
             f'<div class="text-muted">Lade Verlauf …</div>'
             f"</section>"
@@ -2270,7 +2291,6 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
 
     internal_base, internal_origin = _learning_internal_base()
     api_resp = None
-    api_error = ""
     server_upload_error = ""
     try:
         import httpx
@@ -2319,9 +2339,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 )
     except Exception as exc:
         api_resp = None  # type: ignore
-        api_error = str(exc)
-    if server_upload_error and not api_error:
-        api_error = server_upload_error
+        logger.debug("learning_submit_task internal API error: %s", exc)
     # Resolve unit_id from API if not provided (robustness for direct POST tests)
     if not unit_id:
         try:
@@ -2362,19 +2380,6 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
     # HTMX: return the updated history fragment directly and trigger a success message
     is_htmx = bool(request.headers.get("HX-Request"))
     is_success = (api_resp is not None and getattr(api_resp, "status_code", 0) in (200, 201, 202))
-    # Surface diagnostics for dev/test when the API rejected the submission.
-    diag_header = None
-    if api_resp is not None and not is_success:
-        status = getattr(api_resp, "status_code", None)
-        detail = ""
-        try:
-            data = api_resp.json()
-            detail = str((data or {}).get("detail") or (data or {}).get("error") or "")
-        except Exception:
-            detail = ""
-        diag_header = f"status={status},detail={detail or 'n/a'}"
-    elif api_resp is None and api_error:
-        diag_header = f"status=error,detail={api_error}"
 
     if is_htmx:
         headers = {"Cache-Control": "private, no-store"}
@@ -2417,10 +2422,6 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         headers["HX-Trigger"] = _json.dumps({
             "showMessage": {"message": "Abgabe fehlgeschlagen", "type": "error"}
         })
-        # In non-prod, surface a minimal diagnostic header to aid debugging.
-        if diag_header and SETTINGS.environment != "prod":
-            headers["X-Diag"] = diag_header
-        # Do not leak diagnostics to clients in error cases.
         return HTMLResponse(
             content=f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history"></section>',
             status_code=400,
@@ -2466,7 +2467,7 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
-        return HTMLResponse("", status_code=403)
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
     try:
         async with _internal_api_client() as client:
             sid = _get_session_id(request)
@@ -2481,7 +2482,7 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
         items = []
     if isinstance(items, list):
         _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
-    open_attempt_id = str(request.query_params.get("open_attempt_id") or "")
+    open_attempt_id = _normalize_open_attempt_id_uuid(str(request.query_params.get("open_attempt_id") or ""))
     items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
     html = _render_learning_task_history_wrapper_html(
         course_id=course_id,
@@ -3053,19 +3054,22 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
     Inside, a div.section-list holds sortable items with ids "section_<id>" so the sortable
     extension can submit an ordered list via form parameter name "id".
     """
+    safe_unit_id = Component.escape(unit_id)
+    safe_csrf_token = Component.escape(csrf_token)
     items: list[str] = []
     for section in sections:
-        sec_id = section.get("id")
+        sec_id = str(section.get("id") or "")
+        safe_sec_id = Component.escape(sec_id)
         title = Component.escape(section.get("title"))
         items.append(f'''
-        <div class="card section-card" id="section_{sec_id}" data-section-id="{sec_id}">
+        <div class="card section-card" id="section_{safe_sec_id}" data-section-id="{safe_sec_id}">
             <div class="card-body">
                 <span class="drag-handle">☰</span>
-                <h4 class="card-title"><a href="/units/{unit_id}/sections/{sec_id}">{title}</a></h4>
+                <h4 class="card-title"><a href="/units/{safe_unit_id}/sections/{safe_sec_id}">{title}</a></h4>
                 <div class="card-actions">
-                    <a class="btn btn-sm" href="/units/{unit_id}/sections/{sec_id}">Material & Aufgaben</a>
-                    <form hx-post="/units/{unit_id}/sections/{sec_id}/delete" hx-target="#section-list-section" hx-swap="outerHTML">
-                        <input type="hidden" name="csrf_token" value="{csrf_token}">
+                    <a class="btn btn-sm" href="/units/{safe_unit_id}/sections/{safe_sec_id}">Material & Aufgaben</a>
+                    <form hx-post="/units/{safe_unit_id}/sections/{safe_sec_id}/delete" hx-target="#section-list-section" hx-swap="outerHTML">
+                        <input type="hidden" name="csrf_token" value="{safe_csrf_token}">
                         <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
                     </form>
                 </div>
@@ -3076,8 +3080,8 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
     # Always render sortable container for consistent client behavior
     sortable_open = (
         f'<div class="section-list" hx-ext="sortable" '
-        f'data-reorder-url="/units/{unit_id}/sections/reorder" '
-        f'data-csrf-token="{csrf_token}">'
+        f'data-reorder-url="/units/{safe_unit_id}/sections/reorder" '
+        f'data-csrf-token="{safe_csrf_token}">'
     )
     inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Abschnitte vorhanden.</p></div>'
     inner = sortable_open + inner_content + "</div>"
@@ -5341,18 +5345,27 @@ async def unit_modules_create(request: Request, unit_id: str):
     if not title:
         return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
     phase_id = str(form.get("phase_id", "")).strip()
+    if phase_id and not _is_uuid_like(phase_id):
+        return HTMLResponse("invalid_phase_id", status_code=400, headers={"Cache-Control": "private, no-store"})
 
     try:
         async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            if phase_id and _is_uuid_like(phase_id):
-                await client.post(f"/api/teaching/units/{unit_id}/modules", json={"title": title, "phase_id": phase_id})
+            if phase_id:
+                api_resp = await client.post(
+                    f"/api/teaching/units/{unit_id}/modules",
+                    json={"title": title, "phase_id": phase_id},
+                )
             else:
-                await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+                api_resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
     except Exception:
-        # Keep teacher flow resilient: return to editor even when backend fails.
-        return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
+        return HTMLResponse("service_unavailable", status_code=503, headers={"Cache-Control": "private, no-store"})
+
+    status = int(getattr(api_resp, "status_code", 500) or 500)
+    if status not in (200, 201, 202, 204):
+        detail = _extract_api_error_detail(api_resp) or "request_failed"
+        return HTMLResponse(detail, status_code=status, headers={"Cache-Control": "private, no-store"})
 
     return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
 

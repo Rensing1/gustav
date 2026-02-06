@@ -10,11 +10,13 @@ This test only asserts the modular branch renders a stable graph shell marker.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import UUID
 
 import pytest
 import httpx
 from httpx import ASGITransport
+from starlette.routing import Mount
 
 from utils.db import require_db_or_skip as _require_db_or_skip
 
@@ -198,11 +200,32 @@ async def test_learning_modular_unit_module_fragment_404_when_locked() -> None:
 
 @pytest.mark.anyio
 async def test_student_modular_workspace_static_js_is_served() -> None:
-    """The student workspace JS must be served as a static asset."""
-    async with (await _client()) as c:
+    """Static mount must include the student modular workspace JS asset."""
+    static_dir: Path | None = None
+    for route in main.app.routes:
+        if isinstance(route, Mount) and route.path == "/static":
+            directory = getattr(getattr(route, "app", None), "directory", None)
+            if isinstance(directory, str) and directory:
+                static_dir = Path(directory)
+                break
+
+    assert static_dir is not None, "static_mount_missing"
+    asset = static_dir / "js" / "student_modular_workspace.js"
+    assert asset.is_file(), "student_modular_workspace_js_missing"
+
+    text = asset.read_text(encoding="utf-8")
+    assert "modular_workspace" in text or "modular-unit-page" in text
+
+
+@pytest.mark.anyio
+async def test_student_modular_workspace_static_js_served_via_auth_only_app() -> None:
+    """Static asset should be retrievable via HTTP on the lightweight auth app."""
+    app = main.create_app_auth_only()  # type: ignore[attr-defined]
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.get("/static/js/student_modular_workspace.js")
-        assert r.status_code == 200
-        assert "modular_workspace" in r.text or "modular-unit-page" in r.text
+    assert r.status_code == 200
+    assert "javascript" in str(r.headers.get("content-type") or "").lower()
+    assert "modular_workspace" in r.text or "modular-unit-page" in r.text
 
 
 @pytest.mark.anyio

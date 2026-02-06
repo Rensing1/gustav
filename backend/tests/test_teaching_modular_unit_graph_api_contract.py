@@ -285,3 +285,130 @@ async def test_teaching_modular_unit_required_prereq_count_decreases_when_auto_a
         )
         assert r_del.status_code == 204, r_del.text
         assert await _get_required_prereq_count(c, unit_id=uid, module_id=mod_x) == 1
+
+
+@pytest.mark.anyio
+async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_500() -> None:
+    """Creating the same edge twice must return a stable API error, not 500."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-dup-edge", name="Teacher", roles=["teacher"])
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        r_phases = await c.get(f"/api/teaching/units/{uid}/phases")
+        assert r_phases.status_code == 200, r_phases.text
+        p1 = r_phases.json()[0]["id"]
+
+        r_p2 = await c.post(f"/api/teaching/units/{uid}/phases", json={"title": "Phase 2"})
+        assert r_p2.status_code == 201, r_p2.text
+        p2 = r_p2.json()["id"]
+
+        mod_a = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "A", "phase_id": p1})).json()["id"]
+        mod_b = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "B", "phase_id": p2})).json()["id"]
+
+        first = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_a, "to_module_id": mod_b},
+        )
+        assert first.status_code == 201, first.text
+
+        second = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_a, "to_module_id": mod_b},
+        )
+        assert second.status_code == 409, second.text
+        assert second.json().get("detail") == "duplicate_edge"
+
+
+@pytest.mark.anyio
+async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_unit_type() -> None:
+    """Edge delete endpoint must reject linear units with a typed 400 detail code."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-del-linear", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "Linear Unit"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        r_del = await c.request(
+            "DELETE",
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={
+                "from_module_id": "00000000-0000-0000-0000-000000000001",
+                "to_module_id": "00000000-0000-0000-0000-000000000002",
+            },
+        )
+        assert r_del.status_code == 400, r_del.text
+        assert r_del.json().get("detail") == "invalid_unit_type"
+
+
+@pytest.mark.anyio
+async def test_teaching_modular_unit_edge_delete_by_path_params_happy_path() -> None:
+    """Preferred edge delete endpoint should work without DELETE request body."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-del-path", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        p1 = (await c.get(f"/api/teaching/units/{uid}/phases")).json()[0]["id"]
+        p2 = (await c.post(f"/api/teaching/units/{uid}/phases", json={"title": "Phase 2"})).json()["id"]
+        mod_a = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "A", "phase_id": p1})).json()["id"]
+        mod_b = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "B", "phase_id": p2})).json()["id"]
+
+        r_edge = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_a, "to_module_id": mod_b},
+        )
+        assert r_edge.status_code == 201, r_edge.text
+
+        r_del = await c.delete(f"/api/teaching/units/{uid}/modules/{mod_a}/edges/{mod_b}")
+        assert r_del.status_code == 204, r_del.text
+
+        r_graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_graph.status_code == 200
+        assert r_graph.json()["edges"] == []

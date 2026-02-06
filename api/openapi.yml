@@ -4687,12 +4687,11 @@ paths:
         - cookieAuth: []
       x-security-notes:
         - "RLS: author-only policies control material visibility."
+        - "RLS: course_memberships select returns rows only for the logged-in student (self-only)"
+        - "Owner roster uses SECURITY DEFINER helper that verifies ownership server-side to avoid RLS recursion"
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
-      x-security-notes:
-        - "RLS: course_memberships select returns rows only for the logged-in student (self-only)"
-        - "Owner roster uses SECURITY DEFINER helper that verifies ownership server-side to avoid RLS recursion"
       parameters:
         - in: path
           name: course_id
@@ -4933,8 +4932,6 @@ paths:
       operationId: getUnit
       security:
         - cookieAuth: []
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -5720,6 +5717,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: |
+            Conflict. detail codes:
+              - duplicate_edge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                duplicate_edge:
+                  summary: Edge already exists
+                  value:
+                    error: conflict
+                    detail: duplicate_edge
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Unit or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -5727,6 +5738,7 @@ paths:
       tags: [Teaching]
       summary: Delete a dependency edge between two modules (author only)
       description: Deletes a directed edge `from -> to` within a modular unit.
+      deprecated: true
       operationId: deleteTeachingUnitModuleEdge
       security:
         - cookieAuth: []
@@ -5761,6 +5773,62 @@ paths:
           description: |
             Invalid input. detail codes:
               - invalid_unit_id
+              - invalid_unit_type
+              - invalid_module_ids
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Edge not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}:
+    delete:
+      tags: [Teaching]
+      summary: Delete a dependency edge by path params (author only)
+      description: Preferred edge delete endpoint without request body.
+      operationId: deleteTeachingUnitModuleEdgeByPath
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: from_module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: to_module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_unit_type
               - invalid_module_ids
           content:
             application/json:
@@ -5778,8 +5846,6 @@ paths:
       operationId: listSections
       security:
         - cookieAuth: []
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -6053,8 +6119,6 @@ paths:
       operationId: listSectionTasks
       security:
         - cookieAuth: []
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -6394,8 +6458,6 @@ paths:
       operationId: listSectionMaterials
       security:
         - cookieAuth: []
-      x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
         requiredRole: teacher
         authorOnly: true

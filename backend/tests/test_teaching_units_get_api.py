@@ -86,3 +86,14 @@ async def test_get_unit_invalid_id_returns_400():
     assert r.status_code == 400
     body = r.json()
     assert body.get("detail") == "invalid_unit_id"
+
+
+@pytest.mark.anyio
+async def test_get_unit_by_id_owner_without_origin_header_still_returns_200():
+    """GET must not require CSRF Origin/Referer headers."""
+    owner = main.SESSION_STORE.create(sub="t-unit-owner-no-origin", name="Owner", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        uid = await _create_unit(c, title="Evolution", teacher_cookie=owner.session_id)
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c.get(f"/api/teaching/units/{uid}")
+    assert r.status_code == 200

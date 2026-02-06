@@ -2,7 +2,7 @@
 Teacher UI — Modular unit visual editor
 
 Goals:
-  - Phases as columns, modules as nodes.
+  - Phases as bands (stacked vertically), modules as nodes.
   - Click module -> HTMX loads right-side panel.
   - Drag&drop reorder + cross-phase move (blocked when edge rules would break).
   - Show dependencies (edges) as an SVG overlay.
@@ -313,6 +313,17 @@ Goals:
     }
   }
 
+
+  function flashAttention(el) {
+    if (!el || !el.classList) return;
+    var cls = 'is-attention';
+    // Restart animation even if the class was already present.
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    window.setTimeout(function () { el.classList.remove(cls); }, 950);
+  }
+
   function setStatus(ctx, message, kind, ttlMs) {
     if (!ctx || !ctx.statusEl || !ctx.statusContainer) return;
 
@@ -423,6 +434,8 @@ Goals:
             ? 'Ungültige Kante (Regel verletzt).'
             : 'Kante konnte nicht erstellt werden.';
           setStatus(ctx, msg, 'error', 6000);
+          flashAttention(root.querySelector('[data-module-id="' + fromId + '"]'));
+          flashAttention(root.querySelector('[data-module-id="' + toId + '"]'));
         });
     }, true);
 
@@ -455,6 +468,8 @@ Goals:
         }
       }).catch(function () {
         setStatus(ctx, 'Kante konnte nicht entfernt werden.', 'error', 6000);
+        flashAttention(root.querySelector('[data-module-id="' + fromId + '"]'));
+        flashAttention(root.querySelector('[data-module-id="' + toId + '"]'));
       });
     });
 
@@ -509,6 +524,7 @@ Goals:
               ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.'
               : 'Verschieben fehlgeschlagen.';
             setStatus(ctx, msg, 'error', 6000);
+            flashAttention(evt && evt.item ? evt.item : null);
             if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
           });
         }
@@ -565,6 +581,8 @@ Goals:
                 ? 'Verschieben blockiert: Abhängigkeiten zuerst entfernen.'
                 : 'Verschieben fehlgeschlagen.';
               setStatus(ctx, msg, 'error', 6000);
+              flashAttention(evt && evt.item ? evt.item : null);
+              flashAttention(evt && evt.to && evt.to.closest ? evt.to.closest('.modular-editor__phase') : null);
               if (ctx.edgeOverlay) ctx.edgeOverlay.draw();
             });
           }

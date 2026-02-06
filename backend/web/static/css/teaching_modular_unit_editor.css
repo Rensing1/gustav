@@ -1,9 +1,9 @@
 /*
-Teacher UI — Modular unit visual editor (phases as columns + module nodes).
+Teacher UI — Modular unit visual editor (phases as bands + module nodes).
 
 Why:
   Teachers should be able to plan modular learning units visually:
-  phases are columns, modules are nodes, and dependencies are shown as edges.
+  phases are visual bands, modules are nodes, and dependencies are shown as edges.
 */
 
 .modular-editor__shell {
@@ -47,7 +47,7 @@ Why:
   position: relative;
   overflow: auto;
   padding: 0.5rem 0.25rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-border), transparent 35%);
   border-radius: 12px;
 }
 
@@ -88,9 +88,9 @@ Why:
   flex-direction: column;
   width: 100%;
   padding: 0.35rem 0.4rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 2px solid color-mix(in srgb, var(--color-border), transparent 35%);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.015);
+  background: color-mix(in srgb, var(--color-bg-surface), transparent 46%);
 }
 
 .modular-editor__phase-header {
@@ -143,9 +143,9 @@ Why:
   flex: 0 0 220px;
   width: 220px;
   padding: 0.5rem 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-border), transparent 25%);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--color-bg-surface), transparent 20%);
 }
 
 .modular-editor__module-row {
@@ -210,7 +210,7 @@ Why:
 .modular-editor__splitter {
   width: 10px;
   cursor: col-resize;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--color-border), transparent 65%);
 }
 
 .modular-editor__panel {
@@ -239,4 +239,38 @@ Why:
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+/*
+Local error highlighting
+
+Why:
+  When backend constraints block a move/edge, a status message alone is easy to miss.
+  We briefly highlight the affected node/phase so the reason is visible in context.
+*/
+
+@keyframes modular-editor-attention {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  18% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error), transparent 72%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.modular-editor__module-node.is-attention,
+.modular-editor__phase.is-attention {
+  outline: 2px solid var(--color-error);
+  outline-offset: 2px;
+  animation: modular-editor-attention 900ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modular-editor__module-node.is-attention,
+  .modular-editor__phase.is-attention {
+    animation: none;
+  }
 }

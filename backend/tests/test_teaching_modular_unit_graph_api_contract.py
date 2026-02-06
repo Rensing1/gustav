@@ -340,6 +340,41 @@ async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_
 
 
 @pytest.mark.anyio
+async def test_teaching_modular_unit_edge_create_accepts_uppercase_module_ids() -> None:
+    """Edge create must accept valid UUIDs regardless of letter casing."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-upper-edge", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        p1 = (await c.get(f"/api/teaching/units/{uid}/phases")).json()[0]["id"]
+        p2 = (await c.post(f"/api/teaching/units/{uid}/phases", json={"title": "Phase 2"})).json()["id"]
+        mod_a = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "A", "phase_id": p1})).json()["id"]
+        mod_b = (await c.post(f"/api/teaching/units/{uid}/modules", json={"title": "B", "phase_id": p2})).json()["id"]
+
+        r_edge = await c.post(
+            f"/api/teaching/units/{uid}/modules/edges",
+            json={"from_module_id": mod_a.upper(), "to_module_id": mod_b.upper()},
+        )
+        assert r_edge.status_code == 201, r_edge.text
+        assert r_edge.json() == {"from": mod_a, "to": mod_b}
+
+
+@pytest.mark.anyio
 async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_unit_type() -> None:
     """Edge delete endpoint must reject linear units with a typed 400 detail code."""
     _require_db_or_skip()

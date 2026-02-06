@@ -244,6 +244,68 @@ async def test_learning_modular_module_content_happy_path_via_graph():
 
 
 @pytest.mark.anyio
+async def test_learning_modular_endpoints_accept_uppercase_unit_id():
+    """Valid UUID casing in unit_id must not cause false 404 on modular endpoints."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-mod-uppercase-unit-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-mod-uppercase-unit-1", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(c, "Kurs UnitId Uppercase")
+
+        r_unit = await c.post("/api/teaching/units", json={"title": "Unit Modular", "unit_type": "modular"})
+        assert r_unit.status_code == 201
+        unit_id = r_unit.json()["id"]
+        UUID(unit_id)
+
+        r_sec = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Modul 1"})
+        assert r_sec.status_code == 201
+        section_id = r_sec.json()["id"]
+        UUID(section_id)
+
+        r_task = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"]},
+        )
+        assert r_task.status_code == 201
+
+        await _attach_unit(c, course_id, unit_id)
+        await _add_member(c, course_id, student.sub)
+
+        c.cookies.set("gustav_session", student.session_id)
+        r_graph = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
+        assert r_graph.status_code == 200
+        modules = r_graph.json().get("modules") or []
+        assert isinstance(modules, list) and modules
+        module_id = modules[0]["id"]
+        UUID(module_id)
+
+        unit_id_upper = unit_id.upper()
+        r_graph_upper = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id_upper}/modules/graph")
+        assert r_graph_upper.status_code == 200
+
+        r_content_upper = await c.get(
+            f"/api/learning/courses/{course_id}/units/{unit_id_upper}/modules/{module_id}?include=tasks"
+        )
+        assert r_content_upper.status_code == 200
+
+
+@pytest.mark.anyio
 async def test_learning_modular_graph_includes_edges():
     """Graph endpoint returns `edges` based on unit_module_edges (Option B module IDs)."""
     _require_db_or_skip()
@@ -423,6 +485,12 @@ async def test_learning_modular_unlock_and_locked_module_returns_404_until_prere
 
         r_b_locked = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{mod_b}?include=tasks")
         assert r_b_locked.status_code == 404
+
+        # UUID casing must not weaken fail-closed behavior for locked modules.
+        r_b_locked_upper = await c.get(
+            f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{mod_b.upper()}?include=tasks"
+        )
+        assert r_b_locked_upper.status_code == 404
 
         # Locked modules must also reject direct submissions (fail-closed).
         # Even if a client knows the task_id, the module is not yet accessible.

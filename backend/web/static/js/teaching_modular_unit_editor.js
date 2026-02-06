@@ -80,17 +80,48 @@ Goals:
     if (!graph || !svg) return null;
 
     var edges = parseEdges(root);
+    var drawScheduled = false;
 
     function ensureDefs() {
       if (svg.querySelector('defs')) return;
+      // Student-like arrow marker (inherits stroke color via `context-stroke`).
       svg.insertAdjacentHTML(
         'afterbegin',
         '<defs>' +
-          '<marker id="modular-editor-arrow" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
-            '<polygon class="modular-editor__edge-arrow" points="0 0, 8 3, 0 6" />' +
+          '<marker id="modular-editor-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">' +
+            '<path d="M 0 0 L 10 5 L 0 10 z" class="modular-editor__edge-arrow" />' +
           '</marker>' +
         '</defs>'
       );
+    }
+
+    function laneOffset(laneIndex, gap) {
+      var idx = Number(laneIndex || 0);
+      var g = Number(gap || 0);
+      if (!(idx > 0) || !(g > 0)) return 0;
+      var n = Math.floor((idx + 1) / 2);
+      return (idx % 2 ? 1 : -1) * n * g;
+    }
+
+    function intersectRectBoundary(center, toward, halfW, halfH) {
+      var cx = Number(center.x || 0);
+      var cy = Number(center.y || 0);
+      var dx = Number(toward.x || 0) - cx;
+      var dy = Number(toward.y || 0) - cy;
+      if (!(halfW > 0) || !(halfH > 0)) return { x: cx, y: cy };
+      if (!(dx || dy)) return { x: cx, y: cy };
+      var tx = dx === 0 ? Infinity : (halfW / Math.abs(dx));
+      var ty = dy === 0 ? Infinity : (halfH / Math.abs(dy));
+      var t = Math.min(tx, ty);
+      return { x: cx + dx * t, y: cy + dy * t };
+    }
+
+    function edgeEndpoints(a, b) {
+      var c1 = { x: a.x, y: a.y };
+      var c2 = { x: b.x, y: b.y };
+      var p1 = intersectRectBoundary(c1, c2, a.w / 2, a.h / 2);
+      var p2 = intersectRectBoundary(c2, c1, b.w / 2, b.h / 2);
+      return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
     }
 
     function nodeInfo(moduleId) {
@@ -111,7 +142,16 @@ Goals:
       };
     }
 
-    function draw() {
+    function scheduleDraw() {
+      if (drawScheduled) return;
+      drawScheduled = true;
+      window.requestAnimationFrame(function () {
+        drawScheduled = false;
+        drawNow();
+      });
+    }
+
+    function drawNow() {
       ensureDefs();
       // Match SVG to the scrollable content size so edges align while scrolling.
       svg.setAttribute('width', String(graph.scrollWidth));
@@ -120,56 +160,108 @@ Goals:
 
       // Remove old edge elements (keep <defs>).
       Array.from(svg.querySelectorAll('.modular-editor__edge')).forEach(function (p) { p.remove(); });
-      var PAD = 6;
+
+      var expanded = [];
+      var cache = {};
+
+      function getNode(mid) {
+        if (cache[mid]) return cache[mid];
+        var info = nodeInfo(mid);
+        cache[mid] = info;
+        return info;
+      }
 
       edges.forEach(function (e) {
         var fromId = e.from;
         var toId = e.to;
         if (!fromId || !toId) return;
-        var a = nodeInfo(fromId);
-        var b = nodeInfo(toId);
+        var a = getNode(fromId);
+        var b = getNode(toId);
         if (!a || !b) return;
-
-        // Render as an orthogonal polyline.
-        //
-        // Why:
-        // - Cross-phase edges should clearly go "down" (next phase).
-        // - Same-phase edges should go "right" (within the phase row).
-        //
-        // We use simple midpoints (readable + fast) and add padding so arrowheads
-        // do not overlap the node border.
         var samePhase = !!(a.phaseId && b.phaseId && a.phaseId === b.phaseId);
-        var points = '';
-        if (samePhase) {
-          // Same phase: start at right-center, end at left-center.
-          var x1 = a.x + a.w / 2 + PAD;
-          var y1 = a.y;
-          var x4 = b.x - b.w / 2 - PAD;
-          var y4 = b.y;
-          var midX = (x1 + x4) / 2;
-          points = x1 + ',' + y1 + ' ' + midX + ',' + y1 + ' ' + midX + ',' + y4 + ' ' + x4 + ',' + y4;
-        } else {
-          // Cross phase: start at bottom-center, end at top-center.
-          var x1b = a.x;
-          var y1b = a.y + a.h / 2 + PAD;
-          var x4b = b.x;
-          var y4b = b.y - b.h / 2 - PAD;
-          var midY = (y1b + y4b) / 2;
-          points = x1b + ',' + y1b + ' ' + x1b + ',' + midY + ' ' + x4b + ',' + midY + ' ' + x4b + ',' + y4b;
-        }
-        if (!points) return;
+        expanded.push({ from: String(fromId), to: String(toId), a: a, b: b, samePhase: samePhase });
+      });
 
-        var line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-        line.setAttribute('points', points);
-        line.setAttribute('marker-end', 'url(#modular-editor-arrow)');
-        line.setAttribute('class', 'modular-editor__edge');
-        svg.appendChild(line);
+      // Group edges so lane offsets stay local (more predictable).
+      var groups = {};
+      expanded.forEach(function (ed) {
+        var key = ed.samePhase
+          ? ('same:' + String(ed.a.phaseId || ''))
+          : ('cross:' + String(ed.a.phaseId || '') + '>' + String(ed.b.phaseId || ''));
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(ed);
+      });
+
+      function cmp(a, b) {
+        return a < b ? -1 : (a > b ? 1 : 0);
+      }
+
+      var LANE_GAP = 18;
+
+      Object.keys(groups).forEach(function (key) {
+        var list = groups[key] || [];
+        list.sort(function (e1, e2) {
+          var c = cmp(e1.a.y, e2.a.y);
+          if (c) return c;
+          c = cmp(e1.a.x, e2.a.x);
+          if (c) return c;
+          c = cmp(e1.b.y, e2.b.y);
+          if (c) return c;
+          c = cmp(e1.b.x, e2.b.x);
+          if (c) return c;
+          c = String(e1.from).localeCompare(String(e2.from));
+          if (c) return c;
+          return String(e1.to).localeCompare(String(e2.to));
+        });
+
+        list.forEach(function (ed, idx) {
+          var off = laneOffset(idx, LANE_GAP);
+          var offsetX = ed.samePhase ? 0 : off;
+          var offsetY = ed.samePhase ? off : 0;
+
+          var ep = edgeEndpoints(ed.a, ed.b);
+          var x1 = ep.x1;
+          var y1 = ep.y1;
+          var x2 = ep.x2;
+          var y2 = ep.y2;
+
+          var dx = x2 - x1;
+          var dy = y2 - y1;
+          var adx = Math.abs(dx);
+          var ady = Math.abs(dy);
+
+          // Student-like smooth cubic curves (with lane offsets on control points).
+          var d = 'M ' + x1 + ' ' + y1 + ' L ' + x2 + ' ' + y2;
+          if (adx > 8 || ady > 8) {
+            if (ady >= adx) {
+              var signY = dy === 0 ? 1 : (dy > 0 ? 1 : -1);
+              var cY = clamp(ady * 0.55, 36, 160) * signY;
+              var cx1 = x1 + offsetX;
+              var cx2 = x2 + offsetX;
+              d = 'M ' + x1 + ' ' + y1 + ' C ' + cx1 + ' ' + (y1 + cY) + ' ' + cx2 + ' ' + (y2 - cY) + ' ' + x2 + ' ' + y2;
+            } else {
+              var signX = dx === 0 ? 1 : (dx > 0 ? 1 : -1);
+              var cX = clamp(adx * 0.55, 36, 160) * signX;
+              var cy1 = y1 + offsetY;
+              var cy2 = y2 + offsetY;
+              d = 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + cX) + ' ' + cy1 + ' ' + (x2 - cX) + ' ' + cy2 + ' ' + x2 + ' ' + y2;
+            }
+          }
+
+          var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', d);
+          path.setAttribute('marker-end', 'url(#modular-editor-arrow)');
+          path.setAttribute('class', 'modular-editor__edge');
+          path.setAttribute('data-from', ed.from);
+          path.setAttribute('data-to', ed.to);
+          svg.appendChild(path);
+        });
       });
     }
 
-    // Keep edges aligned on resize and scroll.
-    function onScroll() { draw(); }
-    function onResize() { draw(); }
+    // Keep edges aligned on resize and scroll (throttled).
+    function onScroll() { scheduleDraw(); }
+    function onResize() { scheduleDraw(); }
     graph.addEventListener('scroll', onScroll);
     window.addEventListener('resize', onResize);
 
@@ -179,12 +271,13 @@ Goals:
     }
 
     return {
-      draw: draw,
+      draw: scheduleDraw,
       destroy: destroy,
       getEdges: function () { return edges; },
       setEdges: function (next) { edges = next || []; }
     };
   }
+
 
   function destroySortables(instances) {
     (instances || []).forEach(function (s) {

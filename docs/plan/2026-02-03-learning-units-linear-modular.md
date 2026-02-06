@@ -46,7 +46,7 @@ Legende:
   - Drag&Drop: Phasen umsortierbar; ungültige Verschiebungen werden blockiert (Edge‑Constraint).
   - Kantenmodus: Kanten per Klick Quelle→Ziel anlegen; Kanten im Panel entfernen.
   - Freischaltung: `required_prereq_count` ist im Panel editierbar (k‑of‑n).
-- **PARTIAL**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Kanten werden “always-on” gerendert (SVG hinter den Knoten) · Auto‑Layout für Kanten (Lane‑Routing) noch OPEN.
+- **DONE**: Editor‑Feinschliff: Fehler‑UX inline (kein `alert()` mehr) · Kanten “always-on” (SVG hinter den Knoten) · Kanten‑Auto‑Layout (Lane‑Routing, student‑like SVG‑Paths) · geblockte Aktionen highlighten lokal (Phase/Modul).
 
 #### Teaching‑Modul‑Editor: Optische Angleichung + Kanten‑Auto‑Layout (Graph im Zentrum, Panel rechts)
 

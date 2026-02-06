@@ -4,7 +4,7 @@ Ziel: Neben dem bestehenden Lerneinheiten‑Format **„linear“** (Abschnitte 
 
 Wichtig: Beide Formate werden parallel unterstützt. Lehrkräfte wählen den Typ beim Erstellen einer Lerneinheit.
 
-Referenz‑UI (Prototyp): `ui-dummies/student-workspace-hybrid-sticky/`
+Referenz‑UI (historischer Prototyp, inzwischen entfernt): ehemals `ui-dummies/student-workspace-hybrid-sticky/`
 
 ---
 
@@ -125,7 +125,7 @@ Legende:
 ### Student UI
 - **DONE**: SSR‑Seite `/learning/courses/{course_id}/units/{unit_id}` verzweigt nach `unit_type`:
   - `linear`: bestehende Section‑Liste (releases)
-  - `modular`: Student Workspace wie `ui-dummies/student-workspace-hybrid-sticky/` (Übersicht/Content‑Toggle + Graph‑Canvas + Modul‑Cards).
+  - `modular`: integrierter Student Workspace im Backend (Übersicht/Content‑Toggle + Graph‑Canvas + Modul‑Cards).
 - **DONE**: Student Workspace (Dummy‑Adoption):
   - Inhalte‑Platzierung (1A): Modul‑Inhalte erscheinen **inline** im View „Inhalte“ als Modul‑Cards (kein rechter Inhalt‑Panel).
   - Tabs‑Semantik (2A): „Offene Module“ sind das **Arbeitsset** (nur Module, die der Schüler geöffnet hat).
@@ -578,15 +578,15 @@ Implementationsskizze:
   - Fragment enthält den Modul‑Body (Materialien + Aufgaben als Cards).
 
 
-### Umsetzung (dummy‑treu, decision‑complete)
+### Umsetzung (decision‑complete)
 
-**Ziel:** Den Student‑Workspace aus `ui-dummies/student-workspace-hybrid-sticky/` so übernehmen, dass
+**Ziel:** Den integrierten Student‑Workspace so umsetzen, dass
 - die **UI-Struktur** (Übersicht/Inhalte, Sticky Toolbar, Tabs) identisch ist,
 - **Content‑Leak** weiterhin ausgeschlossen ist (locked → kein Inhalt),
 - wir bestehende Server‑Components (Material/Task Cards) weiterverwenden können.
 
-#### SSR‑Skeleton (HTML, IDs wie im Dummy)
-Die SSR‑Route rendert für `unit_type='modular'` eine Shell mit den gleichen IDs/Classes wie der Dummy,
+#### SSR‑Skeleton (HTML)
+Die SSR‑Route rendert für `unit_type='modular'` eine Shell mit stabilen IDs/Classes,
 damit das JS nur „verkabeln“ muss:
 - Sticky Toolbar
   - `#btn-view-overview` + `#btn-view-content` (Toggle, `aria-pressed`)
@@ -598,19 +598,16 @@ damit das JS nur „verkabeln“ muss:
 Wichtig: Kein rechter Inhalt‑Panel. Inhalte erscheinen ausschließlich in `#view-content`.
 
 #### Statische Assets (ohne Build‑Step)
-Wir übernehmen Styling/Interaktion aus dem Dummy als **lokale** Static Files (keine CDN‑Abhängigkeiten).
+Styling/Interaktion liegen als **lokale** Static Files im Backend (keine CDN‑Abhängigkeiten).
 
 Wichtiger Rahmen: `<head>` wird bei HTMX‑Navigation nicht aktualisiert, daher müssen benötigte Assets **global** geladen werden.
 
 - CSS
-  - Ziel: Wir erweitern die bestehende globale Datei `backend/web/static/css/student_modular_unit.css` um die Dummy‑Styles.
-  - Quellen (kopieren, dann selectors **unter `.modular-unit-page` scopen**, damit andere Seiten nicht beeinflusst werden):
-    - `ui-dummies/shared/student-graph-canvas.css`
-    - `ui-dummies/shared/student-module.css`
-    - `ui-dummies/student-workspace-hybrid-sticky/styles.css`
+  - Ziel: Wir erweitern die bestehende globale Datei `backend/web/static/css/student_modular_unit.css`.
+  - Regeln sind **unter `.modular-unit-page` gescoped**, damit andere Seiten nicht beeinflusst werden.
 - JS (ESM)
   - Ziel: Neue Module unter `backend/web/static/js/`:
-    - `student_graph_view.js` (kopiert aus `ui-dummies/shared/graph-view.js`)
+    - `student_graph_view.js`
     - `student_modular_workspace.js` (Glue‑Code: State + Tabs + Content‑Cards + HTMX)
   - Loading: `backend/web/components/layout.py` lädt `student_modular_workspace.js` als `type="module"` global; Script macht **nichts**, wenn es kein `.modular-unit-page[data-unit-type="modular"]` findet.
 
@@ -697,15 +694,15 @@ In `/units` Create‑Form:
 **Update (aktueller Vorschlag): Visual Editor (Graph) statt Tabs**
 
 Ziel (Teacher UX):
-- Lehrkräfte sollen modulare Lerneinheiten **wie im UI‑Dummy** in **einem** visuellen Editor bearbeiten:
+- Lehrkräfte sollen modulare Lerneinheiten in **einem** visuellen Editor bearbeiten:
   - Phasen als **Spalten** (links → rechts)
   - Module als **Knoten** in der Phase
   - Abhängigkeiten als **Pfeile** (Kanten)
   - Klick auf ein Modul öffnet rechts die Inhaltsbearbeitung (Material/Aufgaben) – ohne die Graph‑Ansicht zu verlassen.
 
-Referenz (UI‑Dummy im Repo):
-- `ui-dummies/student-workspace-hybrid-sticky/index.html`
-  - (Graph‑Canvas + Knoten + Kanten; wir übernehmen das Konzept, aber Teacher‑Authoring statt Student‑Progress)
+Referenz:
+- Integrierter Student‑Graph‑Workspace unter `backend/web/static/js/student_graph_view.js`
+  - (Graph‑Canvas + Knoten + Kanten; Konzept bleibt gleich, aber Teacher‑Authoring statt Student‑Progress)
 
 #### Layout (eine Seite, kein Kontextwechsel)
 - Route: `GET /units/{unit_id}` (nur wenn `unit_type='modular'`)

@@ -1,14 +1,10 @@
 /*
-Student UI — Modular learning unit workspace (dummy adoption)
+Student UI — Modular learning unit workspace.
 
 Why:
   - Students should see a modular unit as a "workspace" with two modes:
       1) Overview: an advance-organizer graph (pan/zoom)
       2) Content: opened modules as tabs + expandable cards
-  - This stylesheet adopts the reference UI dummy:
-      ui-dummies/student-workspace-hybrid-sticky/
-    and the shared SVG graph canvas styling:
-      ui-dummies/shared/student-graph-canvas.css
 
 Notes:
   - Most rules are scoped under `.modular-unit-page` to avoid affecting other pages.

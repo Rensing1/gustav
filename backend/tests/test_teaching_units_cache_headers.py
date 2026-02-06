@@ -60,3 +60,15 @@ async def test_sections_list_sets_private_no_store():
     assert r.status_code == 200
     cc = r.headers.get("Cache-Control", "")
     assert "no-store" in cc and "private" in cc
+
+
+@pytest.mark.anyio
+async def test_units_list_without_origin_header_still_returns_200():
+    """GET list endpoint must not require CSRF Origin/Referer headers."""
+    if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
+        main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-cache-no-origin", name="Teach", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r = await c.get("/api/teaching/units", params={"limit": 5, "offset": 0})
+    assert r.status_code == 200

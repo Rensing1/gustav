@@ -3,6 +3,8 @@ Teaching API — CSRF same-origin checks for additional write endpoints
 
 Covers representative endpoints beyond visibility:
 - POST /api/teaching/courses
+- PATCH /api/teaching/courses/{course_id}
+- POST /api/teaching/courses/{course_id}/members
 - POST /api/teaching/units
 
 Asserts 403 with detail=csrf_violation on cross-origin requests and success on
@@ -24,6 +26,12 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+
+
+async def _create_course_same_origin(c: httpx.AsyncClient, *, title: str = "Kurs") -> str:
+    r = await c.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
+    assert r.status_code == 201, r.text
+    return str(r.json()["id"])
 
 
 @pytest.mark.anyio
@@ -54,6 +62,71 @@ async def test_create_course_blocks_cross_origin_and_allows_same_origin(monkeypa
         assert r2.status_code == 201
         assert r2.headers.get("Cache-Control") == "private, no-store"
         assert csrf_calls["count"] == 1, "CSRF guard should be evaluated exactly once per request"
+
+
+@pytest.mark.anyio
+async def test_update_course_blocks_missing_origin_and_sets_private_cache_headers():
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-csrf-course-patch", name="Teach", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        course_id = await _create_course_same_origin(c, title="Kurs Alt")
+
+        # Missing Origin/Referer must be rejected.
+        r_missing = await c.patch(f"/api/teaching/courses/{course_id}", json={"title": "Neu"})
+        assert r_missing.status_code == 403
+        assert r_missing.json().get("detail") == "csrf_violation"
+        assert r_missing.headers.get("Cache-Control") == "private, no-store"
+
+        # Same-origin request succeeds and stays non-cacheable.
+        r_ok = await c.patch(
+            f"/api/teaching/courses/{course_id}",
+            json={"title": "Neu"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_ok.status_code == 200
+        assert r_ok.json().get("title") == "Neu"
+        assert r_ok.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_add_member_blocks_missing_origin_and_sets_private_cache_headers():
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-csrf-member-post", name="Teach", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        course_id = await _create_course_same_origin(c, title="Kurs Mitglieder")
+
+        # Missing Origin/Referer must be rejected.
+        r_missing = await c.post(
+            f"/api/teaching/courses/{course_id}/members",
+            json={"student_sub": "student-a"},
+        )
+        assert r_missing.status_code == 403
+        assert r_missing.json().get("detail") == "csrf_violation"
+        assert r_missing.headers.get("Cache-Control") == "private, no-store"
+
+        # Same-origin validation errors still must be private/no-store.
+        r_bad = await c.post(
+            f"/api/teaching/courses/{course_id}/members",
+            json={},
+            headers={"Origin": "http://test"},
+        )
+        assert r_bad.status_code == 400
+        assert r_bad.headers.get("Cache-Control") == "private, no-store"
+
+        # Same-origin happy path.
+        r_ok = await c.post(
+            f"/api/teaching/courses/{course_id}/members",
+            json={"student_sub": "student-a"},
+            headers={"Origin": "http://test"},
+        )
+        assert r_ok.status_code in (201, 204)
+        assert r_ok.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

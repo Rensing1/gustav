@@ -147,3 +147,37 @@ def test_material_patch_includes_error_examples():
         "invalid_title",
     ]:
         assert key in examples
+
+
+def test_list_courses_default_limit_is_10():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    params = spec["paths"]["/api/teaching/courses"]["get"].get("parameters", [])
+    limit = next(p for p in params if p.get("name") == "limit")
+    assert limit.get("schema", {}).get("default") == 10
+
+
+def test_course_members_get_has_merged_security_notes_without_key_override():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    notes = spec["paths"]["/api/teaching/courses/{course_id}/members"]["get"].get("x-security-notes", [])
+    assert isinstance(notes, list)
+    assert any("author-only policies control material visibility" in n for n in notes)
+    assert any("SECURITY DEFINER helper" in n for n in notes)
+
+
+def test_teaching_get_endpoints_do_not_declare_csrf_same_origin_requirement():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    paths = spec.get("paths", {})
+    for path in [
+        "/api/teaching/courses/{course_id}",
+        "/api/teaching/units",
+        "/api/teaching/units/{unit_id}",
+        "/api/teaching/units/{unit_id}/sections",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials",
+    ]:
+        notes = (paths.get(path, {}).get("get", {}) or {}).get("x-security-notes", [])
+        text = " | ".join(str(n) for n in (notes or []))
+        assert "CSRF: Same-origin required" not in text

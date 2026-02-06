@@ -1327,7 +1327,7 @@ def resolve_student_names(subs: list[str]) -> dict[str, str]:
 # --- Routes ----------------------------------------------------------------------
 
 @teaching_router.get("/api/teaching/courses")
-async def list_courses(request: Request, limit: int = 20, offset: int = 0):
+async def list_courses(request: Request, limit: int = 10, offset: int = 0):
     """
     List courses for the current user with simple pagination.
 
@@ -1337,7 +1337,7 @@ async def list_courses(request: Request, limit: int = 20, offset: int = 0):
     """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
-    limit = max(1, min(50, int(limit or 20)))
+    limit = max(1, min(50, int(limit or 10)))
     offset = max(0, int(offset or 0))
     repo = _get_repo()
     if _role_in(user, "teacher"):
@@ -1406,9 +1406,6 @@ async def get_course(request: Request, course_id: str):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     # Validate path parameter format early to avoid unintended 500s
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
@@ -1799,7 +1796,10 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     updates = payload.model_dump(mode="python", exclude_unset=True)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -1808,8 +1808,8 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
             if not repo.course_exists_for_owner(course_id, sub):
                 ex = repo.course_exists(course_id)
                 if ex is False:
-                    return JSONResponse({"error": "not_found"}, status_code=404)
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                    return _private_error({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "forbidden"}, status_code=403)
             updated = repo.update_course_owned(
                 course_id,
                 sub,
@@ -1818,21 +1818,20 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
         else:
             course = repo.get_course(course_id)
             if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404)
             owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
             if sub != owner_id:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "forbidden"}, status_code=403)
             updated = repo.update_course(
                 course_id,
                 **updates,
             )
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_field"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_field"}, status_code=400)
     if not updated:
         # Should not normally happen after existence/ownership checks; keep conservative 403
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    # Consistent API response shape: explicit JSONResponse with status 200
-    return JSONResponse(content=_serialize_course(updated), status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_course(updated), status_code=200, vary_origin=True)
 
 
 @teaching_router.delete("/api/teaching/courses/{course_id}")
@@ -1905,9 +1904,6 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
     sub = _current_sub(user)
@@ -1978,9 +1974,6 @@ async def get_unit(request: Request, unit_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
@@ -2095,8 +2088,10 @@ async def list_unit_phases(request: Request, unit_id: str):
         if detail == "invalid_unit_type":
             return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
         return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
-    except Exception:
+    except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        raise
     return _json_private([_serialize_unit_phase_public(p) for p in items], status_code=200)
 
 
@@ -2352,12 +2347,13 @@ async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitM
             return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
         if sqlstate == "23503":  # foreign_key_violation
             return _private_error({"error": "not_found"}, status_code=404)
+        if sqlstate == "23505":  # unique_violation
+            return _private_error({"error": "conflict", "detail": "duplicate_edge"}, status_code=409)
         raise
     return _json_private(_serialize_unit_graph_edge(created), status_code=201, vary_origin=True)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
-async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+def _delete_unit_module_edge_common(*, request: Request, unit_id: str, from_id: str, to_id: str):
     """Delete a directed dependency edge within a modular unit (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
@@ -2373,8 +2369,6 @@ async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     if guard:
         return guard
 
-    from_id = payload.from_module_id or ""
-    to_id = payload.to_module_id or ""
     if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
     try:
@@ -2388,6 +2382,35 @@ async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     if not deleted:
         return _private_error({"error": "not_found"}, status_code=404)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
+async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+    """Delete a dependency edge using request-body module ids (author only).
+
+    Note:
+        Kept for backward compatibility. New clients should prefer the path-based
+        delete endpoint to avoid intermediaries that ignore DELETE request bodies.
+    """
+    return _delete_unit_module_edge_common(
+        request=request,
+        unit_id=unit_id,
+        from_id=str(payload.from_module_id or ""),
+        to_id=str(payload.to_module_id or ""),
+    )
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}")
+async def delete_unit_module_edge_by_path(
+    request: Request, unit_id: str, from_module_id: str, to_module_id: str
+):
+    """Delete a dependency edge using path params (author only)."""
+    return _delete_unit_module_edge_common(
+        request=request,
+        unit_id=unit_id,
+        from_id=str(from_module_id or ""),
+        to_id=str(to_module_id or ""),
+    )
 
 
 @teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}")
@@ -4159,15 +4182,15 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
     repo = _get_repo()
     # Owner just deleted? Prefer 404 for immediate follow-ups
     if _was_recently_deleted(owner_sub, course_id):
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     try:
         ex = repo.course_exists(course_id)
     except Exception:
         ex = None
     if ex is False:
         # Deterministic contract: non-existent course -> 404
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _private_error({"error": "forbidden"}, status_code=403)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
@@ -4189,7 +4212,7 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     limit = max(1, min(50, int(limit or 20)))
     offset = max(0, int(offset or 0))
     try:
@@ -4212,7 +4235,7 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
         # Log for observability, avoid logging full identifiers to minimize PII exposure.
         cid_tail = (course_id or "").replace("-", "")[-6:]
         logger.warning("list_members failed: cid_tail=%s err=%s", cid_tail, exc.__class__.__name__)
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     subs = [sid for sid, _ in pairs]
     # Avoid blocking the event loop on synchronous network I/O
     names = await asyncio.to_thread(resolve_student_names, subs)
@@ -4248,11 +4271,14 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     # Prefer the contract key; fall back to legacy `sub` for compatibility with older callers/tests.
     student_sub = getattr(payload, "student_sub", None) or getattr(payload, "sub", None)
     if not isinstance(student_sub, str) or not student_sub.strip():
-        return JSONResponse({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
@@ -4265,15 +4291,15 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
             # Fallback owner check
             course = repo.get_course(course_id)
             if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404)
             if _teacher_id_of(course) != sub:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "forbidden"}, status_code=403)
             created = repo.add_member(course_id, student_sub.strip())
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
     if created:
-        return JSONResponse({}, status_code=201, headers={"Cache-Control": "private, no-store"})
+        return _json_private({}, status_code=201)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 

@@ -158,6 +158,7 @@ async def test_modular_editor_phase_delete_requires_csrf_and_cascades() -> None:
             headers={"HX-Request": "true"},
         )
         assert no_csrf.status_code == 403
+        assert no_csrf.headers.get("Cache-Control") == "private, no-store"
 
         # Delete phase via HTMX POST; expect OOB graph update.
         res = await c.post(
@@ -255,6 +256,15 @@ async def test_modular_editor_edge_delete_via_panel_removes_edge_and_refreshes_g
         assert panel.status_code == 200, panel.text
         csrf = _extract_csrf(panel.text)
         assert f'hx-post="/units/{uid}/modular-editor/module/{mod_a}/edges/delete"' in panel.text
+
+        # Delete the edge via panel action; expect OOB graph refresh.
+        no_csrf = await c.post(
+            f"/units/{uid}/modular-editor/module/{mod_a}/edges/delete",
+            data={"from_module_id": mod_a, "to_module_id": mod_b},
+            headers={"HX-Request": "true"},
+        )
+        assert no_csrf.status_code == 403
+        assert no_csrf.headers.get("Cache-Control") == "private, no-store"
 
         # Delete the edge via panel action; expect OOB graph refresh.
         res = await c.post(

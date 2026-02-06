@@ -2699,7 +2699,7 @@ async def courses_modules_create(request: Request, course_id: str):
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     unit_id = str(form.get("unit_id") or "").strip()
     error: str | None = None
     modules: list[dict] = []
@@ -2976,7 +2976,7 @@ async def courses_modules_delete(request: Request, course_id: str, module_id: st
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     error: str | None = None
     modules: list[dict] = []
     units: list[dict] = []
@@ -5085,7 +5085,7 @@ async def units_create(request: Request):
     unit_type = str(form.get("unit_type", "linear")).strip().lower()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
 
     if unit_type not in {"linear", "modular"}:
         token = _get_or_create_csrf_token(sid or "")
@@ -5335,7 +5335,7 @@ async def unit_modules_create(request: Request, unit_id: str):
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
 
     title = str(form.get("title", "")).strip()
     if not title:
@@ -5407,7 +5407,7 @@ async def unit_phases_create(request: Request, unit_id: str):
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid or "")
     title = str(form.get("title", "")).strip()
     error: str | None = None
@@ -5769,10 +5769,10 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     author_sub = str((user or {}).get("sub") or "")
     html, status_code = await _build_modular_editor_module_panel_html(
@@ -5802,13 +5802,13 @@ async def modular_editor_module_edge_delete(request: Request, unit_id: str, modu
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
 
     token = _get_or_create_csrf_token(sid)
     from_id = str(form.get("from_module_id") or "").strip()
@@ -5865,13 +5865,13 @@ async def modular_editor_module_settings_update(request: Request, unit_id: str, 
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
 
     author_sub = str((user or {}).get("sub") or "")
@@ -5994,10 +5994,10 @@ async def modular_editor_phase_new_fragment(request: Request, unit_id: str) -> H
     """HTMX fragment: create phase form (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
 
     target_id = "modular-editor-toolbar-form"
@@ -6027,13 +6027,13 @@ async def modular_editor_phase_create(request: Request, unit_id: str) -> HTMLRes
     """HTMX action: create a phase and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     title = str(form.get("title") or "").strip()
     error: str | None = None
@@ -6080,10 +6080,10 @@ async def modular_editor_module_new_fragment(request: Request, unit_id: str, pha
     """HTMX fragment: create module form within a phase (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
 
     target_id = f"modular-editor-phase-inline-{phase_id}"
@@ -6114,13 +6114,13 @@ async def modular_editor_module_create(request: Request, unit_id: str, phase_id:
     """HTMX action: create a module and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     title = str(form.get("title") or "").strip()
     error: str | None = None
@@ -6168,15 +6168,15 @@ async def modular_editor_module_rename_fragment(request: Request, unit_id: str, 
     """HTMX fragment: rename module form (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     author_sub = str((user or {}).get("sub") or "")
     module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
     if not isinstance(module, dict):
-        return HTMLResponse("Not Found", status_code=404)
+        return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "private, no-store"})
     current = str(module.get("title") or "Modul")
 
     target_id = f"modular-editor-module-inline-{module_id}"
@@ -6207,13 +6207,13 @@ async def modular_editor_module_rename(request: Request, unit_id: str, module_id
     """HTMX action: rename module and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     author_sub = str((user or {}).get("sub") or "")
     module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
@@ -6263,15 +6263,15 @@ async def modular_editor_phase_rename_fragment(request: Request, unit_id: str, p
     """HTMX fragment: rename phase form (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
     phase = next((p for p in (phases or []) if str(p.get("id") or "") == str(phase_id)), None)
     if not isinstance(phase, dict):
-        return HTMLResponse("Not Found", status_code=404)
+        return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "private, no-store"})
     current = str(phase.get("title") or "Phase")
 
     target_id = f"modular-editor-phase-inline-{phase_id}"
@@ -6302,13 +6302,13 @@ async def modular_editor_phase_rename(request: Request, unit_id: str, phase_id: 
     """HTMX action: rename phase and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     title = str(form.get("title") or "").strip()
     error: str | None = None
@@ -6356,15 +6356,15 @@ async def modular_editor_module_delete_fragment(request: Request, unit_id: str, 
     """HTMX fragment: delete module confirmation (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     author_sub = str((user or {}).get("sub") or "")
     module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
     if not isinstance(module, dict):
-        return HTMLResponse("Not Found", status_code=404)
+        return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "private, no-store"})
     label = str(module.get("title") or "Modul")
 
     target_id = f"modular-editor-module-inline-{module_id}"
@@ -6395,13 +6395,13 @@ async def modular_editor_module_delete(request: Request, unit_id: str, module_id
     """HTMX action: delete module and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     error: str | None = None
     try:
         async with _internal_api_client() as client:
@@ -6428,10 +6428,10 @@ async def modular_editor_phase_delete_fragment(request: Request, unit_id: str, p
     """HTMX fragment: delete phase confirmation (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid)
     phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
     phase = next((p for p in (phases or []) if str(p.get("id") or "") == str(phase_id)), None)
@@ -6465,13 +6465,13 @@ async def modular_editor_phase_delete(request: Request, unit_id: str, phase_id: 
     """HTMX action: delete phase and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
-        return HTMLResponse("Forbidden", status_code=403)
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     error: str | None = None
     try:
         async with _internal_api_client() as client:
@@ -6952,7 +6952,7 @@ async def material_detail_update(request: Request, unit_id: str, section_id: str
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     payload = {}
     if form.get("title") is not None:
         payload["title"] = str(form.get("title") or "").strip() or None
@@ -6979,7 +6979,7 @@ async def material_detail_delete(request: Request, unit_id: str, section_id: str
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -7015,7 +7015,7 @@ async def task_detail_update(request: Request, unit_id: str, section_id: str, ta
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     payload: dict[str, object] = {}
     if form.get("instruction_md") is not None:
         payload["instruction_md"] = str(form.get("instruction_md"))
@@ -7054,7 +7054,7 @@ async def task_detail_delete(request: Request, unit_id: str, section_id: str, ta
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -7090,7 +7090,7 @@ async def materials_create(request: Request, unit_id: str, section_id: str):
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     title = str(form.get("title", "")).strip()
     body_md = str(form.get("body_md", ""))
     error: str | None = None
@@ -7171,7 +7171,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     task_kind = str(form.get("task_kind") or "native").strip().lower()
     instruction_md = str(form.get("instruction_md", ""))
     # Collect up to 10 non-empty criteria from repeated fields
@@ -7288,7 +7288,7 @@ async def materials_upload_intent(request: Request, unit_id: str, section_id: st
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     filename = str(form.get("filename", "")).strip()
     mime_type = str(form.get("mime_type", "")).strip()
     size_raw = str(form.get("size_bytes", "")).strip()
@@ -7353,7 +7353,7 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     intent_id = str(form.get("intent_id", "")).strip()
     title = str(form.get("title", "")).strip()
     sha256 = str(form.get("sha256", "")).strip()
@@ -7391,7 +7391,7 @@ async def sections_create(request: Request, unit_id: str):
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid or "")
     title = str(form.get("title", "")).strip()
     error_code: str | None = None
@@ -7436,7 +7436,7 @@ async def sections_delete(request: Request, unit_id: str, section_id: str):
     sid = _get_session_id(request)
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
 
     error_code: str | None = None
     try:

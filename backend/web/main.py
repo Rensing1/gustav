@@ -2079,7 +2079,6 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
     materials = payload.get("materials", []) if isinstance(payload, dict) else []
     tasks = payload.get("tasks", []) if isinstance(payload, dict) else []
 
-    module_title = Component.escape(str(module.get("title") or "Modul"))
 
     parts: list[str] = []
     needs_h5p_player_js = False
@@ -2160,7 +2159,6 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
     )
     html = (
         f'<div class="modular-module" data-module-id="{Component.escape(str(module_id))}">'
-        f"<h3>{module_title}</h3>"
         f"{inner}"
         f"{h5p_script}"
         "</div>"

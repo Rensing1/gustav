@@ -405,7 +405,7 @@ function initOneWorkspace(rootEl) {
 
     const meta = document.createElement('div');
     meta.className = 'phase-meta';
-    meta.textContent = '—';
+    meta.hidden = true;
 
     header.appendChild(h2);
     header.appendChild(meta);
@@ -432,9 +432,10 @@ function initOneWorkspace(rootEl) {
   }
 
   function updatePhaseMeta() {
-    for (const [pid, p] of phaseEls.entries()) {
-      const count = p.list.querySelectorAll('.module-card').length;
-      p.meta.textContent = count ? `${count} Module` : '—';
+    // Student UX: keep the phase header calm. Module counts are not needed.
+    for (const [, p] of phaseEls.entries()) {
+      p.meta.textContent = '';
+      p.meta.hidden = true;
     }
   }
 
@@ -476,6 +477,7 @@ function initOneWorkspace(rootEl) {
 
     const counts = document.createElement('div');
     counts.className = 'module-card__counts';
+    counts.hidden = true;
 
     titleRow.appendChild(title);
     titleRow.appendChild(counts);
@@ -557,22 +559,8 @@ function initOneWorkspace(rootEl) {
         el.metaRow.appendChild(free);
       }
 
-      // Counts: materials + tasks.
+      // Counts are intentionally hidden in the student view (dummy adoption).
       el.counts.innerHTML = '';
-      const mats = Math.max(0, Number(m.materials_count || 0));
-      const totalTasks = Math.max(0, Number(m.tasks_total || 0));
-      const doneTasks = Math.max(0, Number(m.tasks_done || 0));
-      if (mats > 0) el.counts.appendChild(metaBadge({ label: String(mats), className: 'badge-meta--materials', title: 'Materialien' }));
-      if (totalTasks > 0) {
-        el.counts.appendChild(
-          metaBadge({
-            label: `${Math.min(doneTasks, totalTasks)}/${totalTasks}`,
-            className: 'badge-meta--tasks',
-            title: 'Aufgaben',
-          }),
-        );
-      }
-
       // Keep locked modules collapsed.
       if (status === 'locked' && el.details.open) el.details.open = false;
     }

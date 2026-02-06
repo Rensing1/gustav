@@ -21,9 +21,7 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 
-
 pytestmark = pytest.mark.anyio("asyncio")
-
 
 async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
@@ -32,14 +30,12 @@ async def _client() -> httpx.AsyncClient:
         headers={"Origin": "http://test"},
     )
 
-
 async def _create_course(client: httpx.AsyncClient, title: str = "Kurs") -> str:
     r = await client.post("/api/teaching/courses", json={"title": title})
     assert r.status_code == 201
     cid = r.json()["id"]
     UUID(cid)
     return cid
-
 
 async def _create_modular_unit(client: httpx.AsyncClient, title: str = "Unit Modular") -> str:
     r = await client.post("/api/teaching/units", json={"title": title, "unit_type": "modular"})
@@ -48,14 +44,12 @@ async def _create_modular_unit(client: httpx.AsyncClient, title: str = "Unit Mod
     UUID(uid)
     return uid
 
-
 async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = "Modul 1") -> str:
     r = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
     assert r.status_code == 201
     sid = r.json()["id"]
     UUID(sid)
     return sid
-
 
 async def _create_task(client: httpx.AsyncClient, unit_id: str, section_id: str, instruction: str = "Aufgabe") -> str:
     r = await client.post(
@@ -86,16 +80,13 @@ async def _module_id_by_title(client: httpx.AsyncClient, *, unit_id: str, title:
     raise AssertionError(f"module_not_found:{title}")
 
 
-
 async def _attach_unit(client: httpx.AsyncClient, course_id: str, unit_id: str) -> None:
     r = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
     assert r.status_code == 201
 
-
 async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: str) -> None:
     r = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub})
     assert r.status_code in (201, 204)
-
 
 @pytest.mark.anyio
 async def test_learning_modular_unit_page_renders_graph_shell():
@@ -213,3 +204,47 @@ async def test_student_modular_workspace_static_js_is_served() -> None:
         assert r.status_code == 200
         assert "modular_workspace" in r.text or "modular-unit-page" in r.text
 
+
+@pytest.mark.anyio
+async def test_learning_modular_module_fragment_does_not_repeat_module_title_heading() -> None:
+    """Module fragments should not repeat the module title visually.
+
+    The module title is already present in the module card `<summary>` in the
+    content view. Rendering another `<h3>{title}</h3>` inside the fragment
+    duplicates the title and creates confusing UI for students.
+    """
+    _require_db_or_skip()
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repo required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-mod-frag-2", name="Lehrkraft", roles=["teacher"])
+    student = main.SESSION_STORE.create(sub="s-mod-frag-2", name="Schüler", roles=["student"])
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", teacher.session_id)
+
+        course_id = await _create_course(c, "Kurs Modular Frag Title")
+        unit_id = await _create_modular_unit(c, "Unit Modular Frag Title")
+
+        module_title = "Einstieg"
+        section_id = await _create_section(c, unit_id, module_title)
+        _ = await _create_task(c, unit_id, section_id, "Aufgabe 1")
+
+        await _attach_unit(c, course_id, unit_id)
+        await _add_member(c, course_id, student.sub)
+
+        # Resolve module id and load fragment as student.
+        module_id = await _module_id_by_title(c, unit_id=unit_id, title=module_title)
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(f"/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment")
+        assert r.status_code == 200
+
+        # Guard: do not render a second visible module title heading.
+        assert f"<h3>{module_title}</h3>" not in r.text

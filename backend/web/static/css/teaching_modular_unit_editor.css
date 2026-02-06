@@ -160,6 +160,28 @@ Why:
   gap: 0.25rem;
 }
 
+
+/* Make CRUD controls visually secondary; the graph itself should dominate. */
+.modular-editor__phase-actions .btn,
+.modular-editor__node-actions .btn {
+  opacity: 0.86;
+  transition: opacity 120ms ease;
+}
+
+.modular-editor__phase-actions .btn:hover,
+.modular-editor__node-actions .btn:hover,
+.modular-editor__phase-actions .btn:focus-visible,
+.modular-editor__node-actions .btn:focus-visible {
+  opacity: 1;
+}
+
+.modular-editor__module-btn:hover,
+.modular-editor__module-btn:focus-visible {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-primary), transparent 45%);
+}
+
 .modular-editor__icon-btn {
   line-height: 1;
   padding: 0.25rem 0.4rem;

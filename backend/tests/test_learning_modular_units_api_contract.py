@@ -763,3 +763,79 @@ async def test_learning_modular_module_content_returns_503_when_repo_lacks_conte
     assert r.status_code == 503
     assert r.json().get("error") == "service_unavailable"
     assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_learning_modular_module_content_defaults_include_to_materials_and_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing include query must default to materials+tasks for deterministic clients."""
+    from fastapi.routing import APIRoute  # noqa: E402
+    from identity_access.stores import SessionStore  # noqa: E402
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-mod-include-default", name="S", roles=["student"])  # type: ignore
+    observed_flags: dict[str, bool] = {}
+
+    class _RepoWithModuleContent:
+        def get_modular_module_content(self, **kwargs):  # type: ignore[no-untyped-def]
+            observed_flags["materials"] = bool(kwargs.get("include_materials"))
+            observed_flags["tasks"] = bool(kwargs.get("include_tasks"))
+            return {
+                "module": {
+                    "id": kwargs["module_id"],
+                    "title": "Modul A",
+                    "unit_id": kwargs["unit_id"],
+                    "phase_id": "33333333-3333-3333-3333-333333333333",
+                    "position_in_phase": 1,
+                },
+                "materials": [
+                    {
+                        "id": "44444444-4444-4444-4444-444444444444",
+                        "title": "Material A",
+                        "kind": "markdown",
+                    }
+                ],
+                "tasks": [
+                    {
+                        "id": "55555555-5555-5555-5555-555555555555",
+                        "instruction_md": "Aufgabe A",
+                        "criteria": [],
+                        "kind": "native",
+                    }
+                ],
+            }
+
+    class _FakeListCourseUnitsUseCase:
+        def __init__(self, _repo):  # type: ignore[no-untyped-def]
+            pass
+
+        def execute(self, _input):  # type: ignore[no-untyped-def]
+            return [{"unit": {"id": "11111111-1111-1111-1111-111111111111", "unit_type": "modular"}}]
+
+    route = next(
+        r
+        for r in main.app.routes
+        if isinstance(r, APIRoute)
+        and r.path == "/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"
+    )
+    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsUseCase", _FakeListCourseUnitsUseCase)
+    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsInput", lambda **kwargs: kwargs)
+    monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", lambda: _RepoWithModuleContent())
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as c:
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(
+            "/api/learning/courses/00000000-0000-0000-0000-000000000001/"
+            "units/11111111-1111-1111-1111-111111111111/"
+            "modules/22222222-2222-2222-2222-222222222222"
+        )
+
+    assert r.status_code == 200
+    assert observed_flags == {"materials": True, "tasks": True}
+    body = r.json()
+    assert body.get("materials")
+    assert body.get("tasks")

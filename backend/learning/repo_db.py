@@ -754,8 +754,6 @@ class DBLearningRepo:
                        mime_type,
                        size_bytes,
                        filename_original,
-                       storage_key,
-                       sha256,
                        alt_text,
                        material_position,
                        created_at_iso,
@@ -776,12 +774,10 @@ class DBLearningRepo:
                     "mime_type": row[4],
                     "size_bytes": row[5],
                     "filename_original": row[6],
-                    "storage_key": row[7],
-                    "sha256": row[8],
-                    "alt_text": row[9],
-                    "position": int(row[10]) if row[10] is not None else None,
-                    "created_at": row[11],
-                    "updated_at": row[12],
+                    "alt_text": row[7],
+                    "position": int(row[8]) if row[8] is not None else None,
+                    "created_at": row[9],
+                    "updated_at": row[10],
                 }
             )
         return materials

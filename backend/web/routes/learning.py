@@ -436,9 +436,11 @@ def _require_student(request: Request):
 """CSRF helper imported from .security"""
 
 
-def _parse_include(value: str | None) -> tuple[bool, bool]:
+def _parse_include(
+    value: str | None, *, default_materials: bool = False, default_tasks: bool = False
+) -> tuple[bool, bool]:
     if not value:
-        return False, False
+        return default_materials, default_tasks
     tokens = [token.strip() for token in value.split(",") if token.strip()]
     allowed = {"materials", "tasks"}
     if any(token not in allowed for token in tokens):
@@ -878,7 +880,9 @@ async def get_modular_unit_module_content(
         return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
 
     try:
-        _include_materials, _include_tasks = _parse_include(include)
+        _include_materials, _include_tasks = _parse_include(
+            include, default_materials=True, default_tasks=True
+        )
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
 

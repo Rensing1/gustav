@@ -14,6 +14,7 @@
 - config(urls): Default WEB_BASE and KC_PUBLIC_BASE_URL now use `https://…` on port 443 (Caddy TLS internal).
 - config(compose): Validate compose; avoid `host.docker.internal`; bind Ollama to loopback.
 - ai(defaults): Vision=`qwen2.5vl:3b`, Feedback=`gpt-oss:latest`.
+- config(csrf): Prod/stage startup now requires dedicated `APP_CSRF_TOKEN_SECRET` (placeholder/dummy values rejected).
 ### UI
 - ui(learning): Task-Formular sendet per HTMX und tauscht nur das Verlaufs-Fragment (kein Full-Page-Reload). PRG-Fallback ohne HTMX bleibt erhalten; Erfolgsbanner via HX-Trigger.
 - ui(learning): Verlauf aktualisiert sich automatisch (hx-trigger="every 2s") solange der neueste Versuch pending ist; Polling stoppt bei completed.
@@ -62,6 +63,9 @@
  - api(learning): Submissions endpoint consistently returns 202 Accepted (async) including idempotent retries.
 - api(operations): Add `GET /internal/health/learning-worker` returning private, no-store health diagnostics (200 healthy / 503 degraded). Requires teacher or operator role.
  - api(operations): Health endpoint description clarified (no metrics scope); add healthy/degraded response examples.
+- api(learning): `GET /api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}` defaults `include` to `materials,tasks` when omitted.
+- api(learning): Student-facing material payloads no longer expose internal `storage_key`/`sha256`.
+- api(teaching): Deprecated edge delete with request body (`DELETE /api/teaching/units/{unit_id}/modules/edges`) now documents sunset date `2026-06-30` and successor path endpoint.
 - api(teaching/members): Apply sensible default paging limits and improve search/roster endpoints; SSR adjusted accordingly.
 - api(teaching/live): Align detail/unit endpoints and SSR rendering with stricter semantics and improved payloads.
 - api(learning): Align submission handlers with contract (request/response shape and headers) for student submissions UI.

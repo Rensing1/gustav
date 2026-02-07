@@ -1471,6 +1471,58 @@ def _resolve_student_material_file_url(
         return None
     return None
 
+
+async def _fetch_student_material_section_map_for_unit(
+    *,
+    course_id: str,
+    unit_id: str,
+    session_id: str,
+) -> dict[str, str]:
+    """Return a best-effort map of material_id -> section_id for a unit.
+
+    Why:
+        Modular module-content payloads do not expose section_id, but file URL
+        resolution needs section_id + material_id. We derive the mapping via the
+        released-sections Learning API under the current student session.
+    """
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
+        return {}
+    try:
+        async with _internal_api_client() as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            resp = await client.get(
+                f"/api/learning/courses/{course_id}/units/{unit_id}/sections",
+                params={"include": "materials", "limit": 100, "offset": 0},
+            )
+    except Exception:
+        return {}
+    if resp.status_code != 200:
+        return {}
+    try:
+        payload = resp.json()
+    except Exception:
+        return {}
+    if not isinstance(payload, list):
+        return {}
+    out: dict[str, str] = {}
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        section = entry.get("section")
+        if not isinstance(section, dict):
+            continue
+        section_id = str(section.get("id") or "")
+        if not _is_uuid_like(section_id):
+            continue
+        for material in (entry.get("materials") or []):
+            if not isinstance(material, dict):
+                continue
+            material_id = str(material.get("id") or "")
+            if _is_uuid_like(material_id):
+                out[material_id] = section_id
+    return out
+
 # --- Page Rendering Helpers -----------------------------------------------------
 
 def _render_course_list_partial(items: list[dict], limit: int, offset: int, has_next: bool, *, csrf_token: str) -> str:
@@ -1632,7 +1684,7 @@ async def courses_edit_form(request: Request, course_id: str):
     but the API PATCH will enforce ownership.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -2251,9 +2303,11 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
     materials = payload.get("materials", []) if isinstance(payload, dict) else []
     tasks = payload.get("tasks", []) if isinstance(payload, dict) else []
 
-
     parts: list[str] = []
     needs_h5p_player_js = False
+    student_sub = str((user or {}).get("sub") or "")
+    material_section_map: dict[str, str] | None = None
+    file_url_cache: dict[tuple[str, str], str | None] = {}
 
     # Render materials/tasks as the same cards used on the linear unit page.
     for m in (materials if isinstance(materials, list) else []):
@@ -2265,6 +2319,41 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
         preview_html = ""
         if kind == "markdown":
             preview_html = render_markdown_safe(str(m.get("body_md") or ""))
+        elif kind == "file":
+            mime = str(m.get("mime_type") or "").lower()
+            alt_text = str(m.get("alt_text") or "") or None
+            preview_url = str(m.get("file_url") or "").strip()
+            section_id = str(m.get("section_id") or "").strip()
+            if not preview_url and _is_uuid_like(mid) and student_sub:
+                if not _is_uuid_like(section_id):
+                    if material_section_map is None:
+                        material_section_map = await _fetch_student_material_section_map_for_unit(
+                            course_id=str(course_id),
+                            unit_id=str(unit_id),
+                            session_id=str(sid or ""),
+                        )
+                    section_id = str(material_section_map.get(mid) or "")
+                if _is_uuid_like(section_id):
+                    cache_key = (section_id, mid)
+                    if cache_key not in file_url_cache:
+                        file_url_cache[cache_key] = _resolve_student_material_file_url(
+                            student_sub=student_sub,
+                            course_id=str(course_id),
+                            section_id=section_id,
+                            material_id=mid,
+                        )
+                    preview_url = str(file_url_cache.get(cache_key) or "").strip()
+            if mime and preview_url:
+                try:
+                    preview_html = FilePreview(
+                        url=preview_url,
+                        mime=mime,
+                        title=title,
+                        alt=alt_text,
+                        max_height="480px",
+                    ).render()
+                except Exception:
+                    preview_html = ""
         card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
         parts.append(card.render())
 
@@ -2775,7 +2864,7 @@ async def courses_edit_submit(request: Request, course_id: str):
     Security: CSRF at UI; ownership via API + RLS.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -2804,7 +2893,7 @@ async def courses_modules_page(request: Request, course_id: str):
     Left: modules in the course (sortable, delete), Right: available units to add.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -2846,7 +2935,7 @@ async def courses_modules_create(request: Request, course_id: str):
     Requires CSRF; non-HTMX requests use PRG back to the page.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -2895,7 +2984,7 @@ async def course_module_sections_page(request: Request, course_id: str, module_i
         Owner-only via API; include CSRF token in HTMX headers for future checks.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -2991,7 +3080,7 @@ async def course_module_sections_toggle(request: Request, course_id: str, module
     Security: Requires teacher role and CSRF token (hidden field or header).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -3089,7 +3178,7 @@ async def courses_modules_reorder(request: Request, course_id: str):
         extracted from the form body (which look like `module_<uuid>`).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -3123,7 +3212,7 @@ async def courses_modules_delete(request: Request, course_id: str, module_id: st
     Requires CSRF. Non-HTMX PRG back to the modules page.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -5039,7 +5128,7 @@ async def courses_index(request: Request):
         - Renders the list and pager; sets private, no-store cache headers.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
 
@@ -5081,7 +5170,7 @@ async def courses_create(request: Request):
         partial swap depending on the request.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     title = str(form.get("title", "")).strip()
@@ -5148,7 +5237,7 @@ async def delete_course_htmx(request: Request, course_id: str):
         at the UI boundary; authorization and ownership are enforced by the API.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -5181,7 +5270,7 @@ async def delete_course_htmx(request: Request, course_id: str):
 @app.get("/units", response_class=HTMLResponse)
 async def units_index(request: Request):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5231,7 +5320,7 @@ async def units_index(request: Request):
 @app.post("/units", response_class=HTMLResponse)
 async def units_create(request: Request):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     
     form = await request.form()
@@ -5295,7 +5384,7 @@ async def units_edit_form(request: Request, unit_id: str):
     authorship. UI performs CSRF and PRG.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5344,7 +5433,7 @@ async def units_edit_submit(request: Request, unit_id: str):
     Security: CSRF at UI; authorship via API + RLS.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -5412,7 +5501,7 @@ async def unit_details_index(request: Request, unit_id: str):
     Permissions: Caller must be a teacher with a valid session.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
     sid = _get_session_id(request) or ""
@@ -5483,7 +5572,7 @@ async def unit_modules_create(request: Request, unit_id: str):
     deterministic and aligned with the modular data model.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
     form = await request.form()
@@ -5526,7 +5615,7 @@ async def unit_phases_index(request: Request, unit_id: str):
         supports phase CRUD and reorder; this SSR page exposes it to teachers.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
     sid = _get_session_id(request) or ""
@@ -5552,7 +5641,16 @@ async def unit_phases_index(request: Request, unit_id: str):
     phases, err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
     unit_vm = {"id": unit_id, "title": unit_title or "Lerneinheit", "unit_type": unit_type}
     content = _render_unit_phases_page_html(unit_vm, phases, csrf_token=token, error=err)
-    status = 200 if unit_type == "modular" and err is None else 400 if unit_type != "modular" else 200
+    if unit_type != "modular":
+        status = 400
+    elif err == "forbidden":
+        status = 403
+    elif err == "not_found":
+        status = 404
+    elif err == "backend_error":
+        status = 503
+    else:
+        status = 200
     layout = Layout(title=f"Phasen – {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, status_code=status, headers={"Cache-Control": "private, no-store"})
 
@@ -5561,7 +5659,7 @@ async def unit_phases_index(request: Request, unit_id: str):
 async def unit_phases_create(request: Request, unit_id: str):
     """Create a new phase for a modular unit via the Teaching API (SSR/HTMX)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
     form = await request.form()
@@ -5596,7 +5694,7 @@ async def unit_phases_create(request: Request, unit_id: str):
 async def unit_phases_reorder(request: Request, unit_id: str):
     """Reorder phases of a modular unit (drag & drop) via Teaching API."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -5704,7 +5802,7 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
     - Caller must be a teacher in a valid session. Ownership is enforced by API.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5761,7 +5859,7 @@ async def module_detail_index(request: Request, unit_id: str, module_id: str):
         DBTeachingRepo and then load materials/tasks using the existing API.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5936,7 +6034,7 @@ async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
         The panel reuses the existing section-based content APIs (Option B).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5969,7 +6067,7 @@ async def modular_editor_module_edge_delete(request: Request, unit_id: str, modu
         - Returns (1) an OOB graph refresh and (2) the refreshed module panel.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6032,7 +6130,7 @@ async def modular_editor_module_settings_update(request: Request, unit_id: str, 
         - AuthZ is enforced by the Teaching API (author only).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6161,7 +6259,7 @@ def _render_modular_editor_inline_form(
 async def modular_editor_phase_new_fragment(request: Request, unit_id: str) -> HTMLResponse:
     """HTMX fragment: create phase form (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6194,7 +6292,7 @@ async def modular_editor_phase_new_fragment(request: Request, unit_id: str) -> H
 async def modular_editor_phase_create(request: Request, unit_id: str) -> HTMLResponse:
     """HTMX action: create a phase and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6247,7 +6345,7 @@ async def modular_editor_phase_create(request: Request, unit_id: str) -> HTMLRes
 async def modular_editor_module_new_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
     """HTMX fragment: create module form within a phase (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6281,7 +6379,7 @@ async def modular_editor_module_new_fragment(request: Request, unit_id: str, pha
 async def modular_editor_module_create(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
     """HTMX action: create a module and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6335,7 +6433,7 @@ async def modular_editor_module_create(request: Request, unit_id: str, phase_id:
 async def modular_editor_module_rename_fragment(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
     """HTMX fragment: rename module form (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6374,7 +6472,7 @@ async def modular_editor_module_rename_fragment(request: Request, unit_id: str, 
 async def modular_editor_module_rename(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
     """HTMX action: rename module and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6430,7 +6528,7 @@ async def modular_editor_module_rename(request: Request, unit_id: str, module_id
 async def modular_editor_phase_rename_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
     """HTMX fragment: rename phase form (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6469,7 +6567,7 @@ async def modular_editor_phase_rename_fragment(request: Request, unit_id: str, p
 async def modular_editor_phase_rename(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
     """HTMX action: rename phase and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6523,7 +6621,7 @@ async def modular_editor_phase_rename(request: Request, unit_id: str, phase_id: 
 async def modular_editor_module_delete_fragment(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
     """HTMX fragment: delete module confirmation (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6562,7 +6660,7 @@ async def modular_editor_module_delete_fragment(request: Request, unit_id: str, 
 async def modular_editor_module_delete(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
     """HTMX action: delete module and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6595,7 +6693,7 @@ async def modular_editor_module_delete(request: Request, unit_id: str, module_id
 async def modular_editor_phase_delete_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
     """HTMX fragment: delete phase confirmation (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6632,7 +6730,7 @@ async def modular_editor_phase_delete_fragment(request: Request, unit_id: str, p
 async def modular_editor_phase_delete(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
     """HTMX action: delete phase and refresh the graph (teacher)."""
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6829,7 +6927,7 @@ async def materials_new(request: Request, unit_id: str, section_id: str):
     - Caller must be a logged-in teacher; ownership enforced by called APIs.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -6867,7 +6965,7 @@ async def tasks_new(request: Request, unit_id: str, section_id: str):
     Teaching API and then redirects back to the section detail.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -7082,7 +7180,7 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
 @app.get("/units/{unit_id}/sections/{section_id}/materials/{material_id}", response_class=HTMLResponse)
 async def material_detail_page(request: Request, unit_id: str, section_id: str, material_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -7115,7 +7213,7 @@ async def material_detail_page(request: Request, unit_id: str, section_id: str, 
 @app.post("/units/{unit_id}/sections/{section_id}/materials/{material_id}/update")
 async def material_detail_update(request: Request, unit_id: str, section_id: str, material_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7142,7 +7240,7 @@ async def material_detail_update(request: Request, unit_id: str, section_id: str
 @app.post("/units/{unit_id}/sections/{section_id}/materials/{material_id}/delete")
 async def material_detail_delete(request: Request, unit_id: str, section_id: str, material_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7161,7 +7259,7 @@ async def material_detail_delete(request: Request, unit_id: str, section_id: str
 @app.get("/units/{unit_id}/sections/{section_id}/tasks/{task_id}", response_class=HTMLResponse)
 async def task_detail_page(request: Request, unit_id: str, section_id: str, task_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -7178,7 +7276,7 @@ async def task_detail_page(request: Request, unit_id: str, section_id: str, task
 @app.post("/units/{unit_id}/sections/{section_id}/tasks/{task_id}/update")
 async def task_detail_update(request: Request, unit_id: str, section_id: str, task_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7217,7 +7315,7 @@ async def task_detail_update(request: Request, unit_id: str, section_id: str, ta
 @app.post("/units/{unit_id}/sections/{section_id}/tasks/{task_id}/delete")
 async def task_detail_delete(request: Request, unit_id: str, section_id: str, task_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7253,7 +7351,7 @@ async def materials_create(request: Request, unit_id: str, section_id: str):
     - Caller must be a teacher; API enforces author-only semantics.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7293,7 +7391,7 @@ async def materials_reorder(request: Request, unit_id: str, section_id: str):
     - Returns 400/403/404 JSON error mapping when API rejects the request.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7334,7 +7432,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7414,7 +7512,7 @@ async def tasks_reorder(request: Request, unit_id: str, section_id: str):
     Forwards to API `POST …/tasks/reorder`. Enforces CSRF at the UI boundary.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7451,7 +7549,7 @@ async def materials_upload_intent(request: Request, unit_id: str, section_id: st
     Returns HTML with data-upload-url and a finalize form containing intent_id.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7516,7 +7614,7 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
     Form fields: intent_id, title, sha256, alt_text?, csrf_token.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -7553,7 +7651,7 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
 @app.post("/units/{unit_id}/sections", response_class=HTMLResponse)
 async def sections_create(request: Request, unit_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     
     form = await request.form()
@@ -7598,7 +7696,7 @@ async def sections_create(request: Request, unit_id: str):
 @app.post("/units/{unit_id}/sections/{section_id}/delete", response_class=HTMLResponse)
 async def sections_delete(request: Request, unit_id: str, section_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
     sid = _get_session_id(request)
@@ -7641,7 +7739,7 @@ async def sections_reorder(request: Request, unit_id: str):
     Permissions: Caller must be a teacher (UI-only dummy store here).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     
     form = await request.form()
@@ -7686,7 +7784,7 @@ async def sections_reorder(request: Request, unit_id: str):
 @app.get("/courses/{course_id}/members", response_class=HTMLResponse)
 async def members_index(request: Request, course_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -7785,7 +7883,7 @@ async def search_students_for_course(request: Request, course_id: str):
 @app.post("/courses/{course_id}/members", response_class=HTMLResponse)
 async def add_member_htmx(request: Request, course_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request)
     form = await request.form()
@@ -7814,7 +7912,7 @@ async def add_member_htmx(request: Request, course_id: str):
 @app.post("/courses/{course_id}/members/{student_sub}/delete", response_class=HTMLResponse)
 async def remove_member_htmx(request: Request, course_id: str, student_sub: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request)
     form = await request.form()

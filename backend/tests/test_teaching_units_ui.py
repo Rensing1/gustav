@@ -17,6 +17,7 @@ import sys
 import pytest
 import httpx
 from httpx import ASGITransport
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -110,6 +111,16 @@ async def test_units_create_can_create_modular_units_via_ui_form():
         expose it so we can create modular units without calling the API
         manually.
     """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular unit create UI test")
+
     sess = main.SESSION_STORE.create(sub="t-303-mod", name="Lehrer Modular", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
@@ -141,6 +152,16 @@ async def test_units_create_can_create_modular_units_via_ui_form():
 @pytest.mark.anyio
 async def test_units_list_renders_modular_unit_badge_and_editor_link():
     """Modular units must be distinguishable and expose a single editor entrypoint."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular unit list UI test")
+
     sess = main.SESSION_STORE.create(sub="t-303-mod-ui", name="Lehrer Modular UI", roles=["teacher"])  # type: ignore
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)

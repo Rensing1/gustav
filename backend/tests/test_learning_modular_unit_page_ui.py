@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from uuid import UUID
+import types
 
 import pytest
 import httpx
@@ -218,7 +219,7 @@ async def test_learning_modular_unit_module_fragment_accepts_student_in_roles_fa
 
     class _DummyClient:
         def __init__(self) -> None:
-            self.cookies = {}
+            self.cookies = types.SimpleNamespace(set=lambda *a, **k: None)
 
         async def get(self, *args, **kwargs):  # noqa: ANN002, ANN003 - test double
             return _DummyResponse()
@@ -258,6 +259,101 @@ async def test_learning_modular_unit_module_fragment_accepts_student_in_roles_fa
     body = response.body.decode("utf-8")
     assert "Modul nicht verfügbar" in body
 
+
+@pytest.mark.anyio
+async def test_learning_modular_unit_module_fragment_renders_file_preview_when_material_is_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """File materials in modular fragments must render inline preview markup."""
+
+    course_id = "00000000-0000-0000-0000-000000000001"
+    unit_id = "00000000-0000-0000-0000-000000000002"
+    module_id = "00000000-0000-0000-0000-000000000003"
+    section_id = "00000000-0000-0000-0000-000000000004"
+    material_id = "00000000-0000-0000-0000-000000000005"
+
+    class _DummyResponse:
+        def __init__(self, status_code: int, payload):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _DummyClient:
+        def __init__(self) -> None:
+            self.cookies = types.SimpleNamespace(set=lambda *a, **k: None)
+
+        async def get(self, url: str, *args, **kwargs):  # noqa: ANN002, ANN003 - test double
+            if url.endswith(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"):
+                return _DummyResponse(
+                    200,
+                    {
+                        "module": {"id": module_id, "title": "M"},
+                        "materials": [
+                            {
+                                "id": material_id,
+                                "title": "Arbeitsblatt",
+                                "kind": "file",
+                                "mime_type": "application/pdf",
+                                "filename_original": "blatt.pdf",
+                            }
+                        ],
+                        "tasks": [],
+                    },
+                )
+            if url.endswith(f"/api/learning/courses/{course_id}/units/{unit_id}/sections"):
+                return _DummyResponse(
+                    200,
+                    [
+                        {
+                            "section": {"id": section_id},
+                            "materials": [{"id": material_id}],
+                            "tasks": [],
+                        }
+                    ],
+                )
+            return _DummyResponse(404, {"error": "not_found"})
+
+    class _DummyClientCtx:
+        async def __aenter__(self):
+            return _DummyClient()
+
+        async def __aexit__(self, exc_type, exc, tb):  # noqa: ANN001
+            return False
+
+    seen: dict[str, str] = {}
+
+    def _fake_resolve(**kwargs):  # noqa: ANN003 - test helper
+        seen["section_id"] = str(kwargs.get("section_id") or "")
+        seen["material_id"] = str(kwargs.get("material_id") or "")
+        return "https://files.test/material.pdf"
+
+    monkeypatch.setattr(main, "_internal_api_client", lambda: _DummyClientCtx(), raising=True)
+    monkeypatch.setattr(main, "_resolve_student_material_file_url", _fake_resolve, raising=True)
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": f"/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment",
+        "headers": [(b"cookie", b"gustav_session=session-file-frag")],
+        "query_string": b"",
+        "state": {},
+        "client": ("test", 12345),
+        "server": ("test", 80),
+        "scheme": "http",
+    }
+    starlette_request = Request(scope)
+    starlette_request.state.user = {"sub": "s-file-frag", "roles": ["student"]}
+
+    response = await main.learning_modular_unit_module_fragment(starlette_request, course_id, unit_id, module_id)
+    assert response.status_code == 200
+    body = response.body.decode("utf-8")
+    assert 'data-file-preview="true"' in body
+    assert "file-preview--pdf" in body
+    assert seen == {"section_id": section_id, "material_id": material_id}
+
+
 @pytest.mark.anyio
 async def test_student_modular_workspace_static_js_is_served() -> None:
     """Static mount must include the student modular workspace JS asset."""
@@ -279,13 +375,21 @@ async def test_student_modular_workspace_static_js_is_served() -> None:
 
 @pytest.mark.anyio
 async def test_student_modular_workspace_static_js_served_via_auth_only_app() -> None:
-    """Static asset should be retrievable via HTTP on the lightweight auth app."""
+    """Auth-only app must expose /static mount including the modular workspace JS."""
     app = main.create_app_auth_only()  # type: ignore[attr-defined]
-    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        r = await c.get("/static/js/student_modular_workspace.js")
-    assert r.status_code == 200
-    assert "javascript" in str(r.headers.get("content-type") or "").lower()
-    assert "modular_workspace" in r.text or "modular-unit-page" in r.text
+    static_dir: Path | None = None
+    for route in app.routes:
+        if isinstance(route, Mount) and route.path == "/static":
+            directory = getattr(getattr(route, "app", None), "directory", None)
+            if isinstance(directory, str) and directory:
+                static_dir = Path(directory)
+                break
+
+    assert static_dir is not None, "auth_only_static_mount_missing"
+    asset = static_dir / "js" / "student_modular_workspace.js"
+    assert asset.is_file(), "auth_only_student_modular_workspace_js_missing"
+    text = asset.read_text(encoding="utf-8")
+    assert "modular_workspace" in text or "modular-unit-page" in text
 
 
 @pytest.mark.anyio

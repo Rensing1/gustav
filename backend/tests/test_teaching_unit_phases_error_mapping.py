@@ -46,3 +46,38 @@ async def test_list_unit_phases_unexpected_repo_error_returns_500(monkeypatch: p
         resp = await c.get("/api/teaching/units/00000000-0000-0000-0000-000000000001/phases")
 
     assert resp.status_code == 500
+
+
+@pytest.mark.anyio
+async def test_update_unit_phase_maps_permission_error_to_403(monkeypatch: pytest.MonkeyPatch):
+    """PATCH phase rename must not leak repo PermissionError as 500."""
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-phases-perm", name="Teach", roles=["teacher"])  # type: ignore
+
+    class _StubRepo:
+        def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:
+            return True
+
+        def unit_exists(self, _unit_id: str) -> bool:
+            return True
+
+        def update_unit_phase_title(self, _unit_id: str, _phase_id: str, _title: str, _author_sub: str):
+            raise PermissionError("forbidden")
+
+    monkeypatch.setattr(teaching, "_get_repo", lambda: _StubRepo(), raising=True)
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        resp = await c.patch(
+            "/api/teaching/units/00000000-0000-0000-0000-000000000001/phases/00000000-0000-0000-0000-000000000002",
+            json={"title": "Neu"},
+        )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json().get("error") == "forbidden"
+    assert resp.headers.get("Cache-Control") == "private, no-store"

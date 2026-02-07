@@ -431,6 +431,7 @@ _DUMMY_SECTIONS_STORE = {
 # --- CSRF & Pagination Helpers --------------------------------------------------
 
 _CSRF_BY_SESSION: dict[str, str] = {}
+_DEV_CSRF_SIGNING_SECRET = secrets.token_bytes(32)
 
 def _get_session_id(request: Request) -> Optional[str]:
     return request.cookies.get(SESSION_COOKIE_NAME)
@@ -484,16 +485,24 @@ def _csrf_ttl_seconds() -> int:
 
 
 def _csrf_signing_secret() -> bytes:
-    """Resolve a stable signing secret for session-bound CSRF tokens."""
+    """Resolve a stable signing secret for session-bound CSRF tokens.
+
+    Security:
+        - Production/staging requires a dedicated APP_CSRF_TOKEN_SECRET.
+        - Dev/test may reuse H5P_REVIEW_TOKEN_SECRET for convenience.
+        - If neither env var is configured in dev/test, use a process-random
+          fallback (never a static global literal).
+    """
     explicit = (os.getenv("APP_CSRF_TOKEN_SECRET") or "").strip()
     if explicit:
         return explicit.encode("utf-8")
-    # Reuse existing deployment secret when no dedicated CSRF secret is set.
+    env = (os.getenv("GUSTAV_ENV", "dev") or "dev").strip().lower()
+    if env in {"prod", "production", "stage", "staging"}:
+        raise RuntimeError("APP_CSRF_TOKEN_SECRET is required in production/staging")
     shared = (os.getenv("H5P_REVIEW_TOKEN_SECRET") or "").strip()
     if shared:
         return shared.encode("utf-8")
-    # Dev fallback keeps local setup friction low; production should set a secret.
-    return b"gustav-dev-csrf-secret"
+    return _DEV_CSRF_SIGNING_SECRET
 
 
 def _sign_csrf_token(*, session_id: str, expires_at: int) -> str:
@@ -1378,6 +1387,90 @@ def _enrich_submission_records_with_file_urls(
         except Exception:
             continue
 
+
+def _resolve_student_material_file_url(
+    *,
+    student_sub: str,
+    course_id: str,
+    section_id: str,
+    material_id: str,
+    storage_adapter: object | None = None,
+) -> str | None:
+    """Resolve a short-lived inline URL for a released file material.
+
+    Why:
+        Student-facing learning APIs intentionally do not expose internal
+        storage metadata (`storage_key`, `sha256`). SSR still needs a preview
+        URL for file cards, so we resolve it server-side under student scope.
+
+    Security:
+        The lookup is limited to materials returned by
+        `get_released_materials_for_student(student_sub, course_id, section_id)`
+        and filtered by `material_id`. If no visible row is found, no URL is
+        returned.
+    """
+    if not (student_sub and _is_uuid_like(course_id) and _is_uuid_like(section_id) and _is_uuid_like(material_id)):
+        return None
+    try:
+        from teaching.services.materials import MaterialFileSettings  # type: ignore
+        import routes.learning as learning_routes  # type: ignore
+
+        repo = getattr(learning_routes, "REPO", None)
+        dsn = str(getattr(repo, "_dsn", "") or "").strip()
+        if not dsn:
+            return None
+
+        adapter = storage_adapter
+        if adapter is None:
+            import routes.teaching as teaching_routes  # type: ignore
+
+            adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
+        if adapter is None or not hasattr(adapter, "presign_download"):
+            return None
+
+        import psycopg  # type: ignore
+
+        storage_key = None
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                try:
+                    set_current_sub = getattr(repo, "_set_current_sub", None)
+                    if callable(set_current_sub):
+                        set_current_sub(cur, student_sub)
+                    else:
+                        cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                except Exception:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+
+                cur.execute(
+                    """
+                    select storage_key
+                      from public.get_released_materials_for_student(%s, %s::uuid, %s::uuid)
+                     where id::text = %s
+                     limit 1
+                    """,
+                    (student_sub, str(course_id), str(section_id), str(material_id)),
+                )
+                row = cur.fetchone()
+                if row and isinstance(row[0], str) and row[0].strip():
+                    storage_key = row[0].strip()
+        if not storage_key:
+            return None
+
+        settings = MaterialFileSettings()
+        presign = adapter.presign_download(  # type: ignore[call-arg]
+            bucket=settings.storage_bucket,
+            key=storage_key,
+            expires_in=settings.download_url_ttl_seconds,
+            disposition="inline",
+        )
+        url = presign.get("url") if isinstance(presign, dict) else None
+        if isinstance(url, str) and url.strip():
+            return url.strip()
+    except Exception:
+        return None
+    return None
+
 # --- Page Rendering Helpers -----------------------------------------------------
 
 def _render_course_list_partial(items: list[dict], limit: int, offset: int, has_next: bool, *, csrf_token: str) -> str:
@@ -1855,9 +1948,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     # For readability, render each material and each task as its own card.
     parts: list[str] = []
     needs_h5p_player_js = False
+    file_url_cache: dict[tuple[str, str], str | None] = {}
+    student_sub = str((user or {}).get("sub") or "")
     for idx, entry in enumerate(sections):
         mats = entry.get("materials", []) if isinstance(entry, dict) else []
         tasks = entry.get("tasks", []) if isinstance(entry, dict) else []
+        section_obj = entry.get("section", {}) if isinstance(entry, dict) else {}
+        section_id = str(section_obj.get("id") or "") if isinstance(section_obj, dict) else ""
         # Materials → MaterialCard
         for m in mats:
             mid = str(m.get("id") or "")
@@ -1870,34 +1967,30 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 preview_html = render_markdown_safe(str(m.get("body_md") or ""))
             elif kind == "file":
                 # For file materials, render an inline preview using the shared FilePreview component.
-                # Use a short-lived, signed URL from the teaching storage adapter so buckets remain private.
+                # Student payloads intentionally do not expose storage_key, so resolve
+                # a short-lived URL server-side under student visibility checks.
                 mime = str(m.get("mime_type") or "").lower()
-                storage_key = str(m.get("storage_key") or "")
                 alt_text = str(m.get("alt_text") or "") or None
-                if mime and storage_key:
+                preview_url = str(m.get("file_url") or "").strip()
+                if not preview_url and section_id and mid and student_sub:
+                    cache_key = (section_id, mid)
+                    if cache_key not in file_url_cache:
+                        file_url_cache[cache_key] = _resolve_student_material_file_url(
+                            student_sub=student_sub,
+                            course_id=str(course_id),
+                            section_id=section_id,
+                            material_id=mid,
+                        )
+                    preview_url = str(file_url_cache.get(cache_key) or "").strip()
+                if mime and preview_url:
                     try:
-                        from teaching.services.materials import MaterialFileSettings  # type: ignore
-                        import routes.teaching as teaching_routes  # type: ignore
-
-                        settings = MaterialFileSettings()
-                        adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
-                        presign = None
-                        if adapter is not None and hasattr(adapter, "presign_download"):
-                            presign = adapter.presign_download(  # type: ignore[call-arg]
-                                bucket=settings.storage_bucket,
-                                key=storage_key,
-                                expires_in=settings.download_url_ttl_seconds,
-                                disposition="inline",
-                            )
-                        url = presign.get("url") if isinstance(presign, dict) else None
-                        if url:
-                            preview_html = FilePreview(
-                                url=str(url),
-                                mime=mime,
-                                title=title,
-                                alt=alt_text,
-                                max_height="480px",
-                            ).render()
+                        preview_html = FilePreview(
+                            url=preview_url,
+                            mime=mime,
+                            title=title,
+                            alt=alt_text,
+                            max_height="480px",
+                        ).render()
                     except Exception:
                         preview_html = ""
             card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
@@ -5386,9 +5479,8 @@ async def unit_modules_create(request: Request, unit_id: str):
 
     Teachers should not need to know that Option B maps modules 1:1 to sections.
     This endpoint keeps the teacher flow stable (/modules) while delegating to
-    the Teaching API:
-      - preferred: /api/teaching/units/{unit_id}/modules when phase_id is given
-      - fallback:  /api/teaching/units/{unit_id}/sections (legacy editor flow)
+    the modular Teaching API. `phase_id` is mandatory to keep SSR behavior
+    deterministic and aligned with the modular data model.
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "teacher":
@@ -5403,20 +5495,17 @@ async def unit_modules_create(request: Request, unit_id: str):
     if not title:
         return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
     phase_id = str(form.get("phase_id", "")).strip()
-    if phase_id and not _is_uuid_like(phase_id):
+    if not phase_id or not _is_uuid_like(phase_id):
         return HTMLResponse("invalid_phase_id", status_code=400, headers={"Cache-Control": "private, no-store"})
 
     try:
         async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            if phase_id:
-                api_resp = await client.post(
-                    f"/api/teaching/units/{unit_id}/modules",
-                    json={"title": title, "phase_id": phase_id},
-                )
-            else:
-                api_resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+            api_resp = await client.post(
+                f"/api/teaching/units/{unit_id}/modules",
+                json={"title": title, "phase_id": phase_id},
+            )
     except Exception:
         return HTMLResponse("service_unavailable", status_code=503, headers={"Cache-Control": "private, no-store"})
 

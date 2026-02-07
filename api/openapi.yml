@@ -3569,7 +3569,7 @@ paths:
           schema:
             type: string
             pattern: '^(materials|tasks)(,(materials|tasks))*$'
-          description: 'Comma-separated list controlling embedded resources (supported: "materials", "tasks").'
+          description: 'Comma-separated list controlling embedded resources (supported: "materials", "tasks"). Default when omitted: "materials,tasks".'
       responses:
         '200':
           description: Module content (only for open/done modules)
@@ -5627,6 +5627,7 @@ paths:
       summary: Reorder (and move) modules for a phase (author only)
       description: |
         Sets the module order for the given phase. Modules in the request are assigned to this phase in that order.
+        Modules already in the target phase but omitted from the request are appended afterwards in stable order.
         The operation is rejected when it would violate dependency edge constraints.
       operationId: reorderTeachingUnitPhaseModules
       security:
@@ -5773,7 +5774,10 @@ paths:
     delete:
       tags: [Teaching]
       summary: Delete a dependency edge between two modules (author only)
-      description: Deletes a directed edge `from -> to` within a modular unit.
+      description: |
+        Deletes a directed edge `from -> to` within a modular unit.
+        Deprecated: use `DELETE /api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}`.
+        Sunset: 2026-06-30.
       deprecated: true
       operationId: deleteTeachingUnitModuleEdge
       security:

@@ -2506,6 +2506,12 @@ def _delete_unit_module_edge_common(*, request: Request, unit_id: str, from_id: 
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
+_LEGACY_EDGE_DELETE_SUNSET_HTTP = "Tue, 30 Jun 2026 23:59:59 GMT"
+_LEGACY_EDGE_DELETE_SUCCESSOR_LINK = (
+    '</api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}>; rel="successor-version"'
+)
+
+
 @teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
 async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
     """Delete a dependency edge using request-body module ids (author only).
@@ -2514,12 +2520,16 @@ async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitM
         Kept for backward compatibility. New clients should prefer the path-based
         delete endpoint to avoid intermediaries that ignore DELETE request bodies.
     """
-    return _delete_unit_module_edge_common(
+    response = _delete_unit_module_edge_common(
         request=request,
         unit_id=unit_id,
         from_id=str(payload.from_module_id or ""),
         to_id=str(payload.to_module_id or ""),
     )
+    response.headers.setdefault("Deprecation", "true")
+    response.headers.setdefault("Sunset", _LEGACY_EDGE_DELETE_SUNSET_HTTP)
+    response.headers.setdefault("Link", _LEGACY_EDGE_DELETE_SUCCESSOR_LINK)
+    return response
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}")

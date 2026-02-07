@@ -56,3 +56,32 @@ def test_ssr_csrf_token_expires_by_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
     # TTL is bounded (min 60s), so advance beyond that boundary.
     monkeypatch.setattr(main.time, "time", lambda: 2_062.0)
     assert main._validate_csrf(sid, token) is False
+
+
+def test_ssr_csrf_secret_dev_fallback_is_not_static_literal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dev fallback secret must not be a global static literal."""
+    monkeypatch.setenv("GUSTAV_ENV", "dev")
+    monkeypatch.delenv("APP_CSRF_TOKEN_SECRET", raising=False)
+    monkeypatch.delenv("H5P_REVIEW_TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("APP_CSRF_TTL_SECONDS", "3600")
+    monkeypatch.setattr(main.time, "time", lambda: 1_700_000_100.0)
+
+    secret = main._csrf_signing_secret()
+    assert isinstance(secret, bytes)
+    assert secret
+    assert secret != b"gustav-dev-csrf-secret"
+
+    sid = "session-dev-fallback"
+    token = main._get_or_create_csrf_token(sid)
+    assert token
+    assert main._validate_csrf(sid, token) is True
+
+
+def test_ssr_csrf_secret_prod_without_explicit_secret_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail closed in prod when no dedicated CSRF secret is configured."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.delenv("APP_CSRF_TOKEN_SECRET", raising=False)
+    monkeypatch.delenv("H5P_REVIEW_TOKEN_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError):
+        main._csrf_signing_secret()

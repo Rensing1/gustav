@@ -54,3 +54,13 @@ def test_openapi_modular_tasks_done_semantics_are_explicit() -> None:
     ).lower()
     assert "non-h5p" in desc
     assert "score_raw = score_max" in desc
+
+
+def test_openapi_modular_module_content_include_documents_default() -> None:
+    spec = _load_spec()
+    op = spec["paths"]["/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"]["get"]
+    params = op.get("parameters", [])
+    include_param = next(p for p in params if p.get("name") == "include")
+    desc = (include_param.get("description", "") or "").lower().replace(" ", "")
+    assert "default" in desc
+    assert "materials,tasks" in desc

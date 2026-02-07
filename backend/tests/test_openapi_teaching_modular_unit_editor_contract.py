@@ -75,3 +75,22 @@ def test_openapi_modular_editor_endpoints_document_503_service_unavailable() -> 
     for path, method in expected_ops:
         op = paths[path][method]
         assert "503" in (op.get("responses") or {}), f"{method.upper()} {path} must document 503"
+
+
+def test_openapi_phase_module_reorder_description_mentions_stable_append_semantics() -> None:
+    spec = _load_spec()
+    desc = (
+        spec["paths"]["/api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder"]["post"].get("description", "")
+        or ""
+    ).lower()
+    assert "appended" in desc
+    assert "stable" in desc
+
+
+def test_openapi_legacy_edge_delete_documents_sunset_date() -> None:
+    spec = _load_spec()
+    op = spec["paths"]["/api/teaching/units/{unit_id}/modules/edges"]["delete"]
+    assert op.get("deprecated") is True
+    desc = op.get("description", "") or ""
+    assert "sunset" in desc.lower()
+    assert "2026-06-30" in desc

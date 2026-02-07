@@ -88,3 +88,40 @@ async def test_unit_modules_create_invalid_phase_id_returns_400_without_sections
     assert "invalid_phase_id" in resp.text
     assert ("POST", f"/api/teaching/units/{unit_id}/sections", {"title": "Neues Modul"}) not in calls
 
+
+@pytest.mark.anyio
+async def test_unit_modules_create_missing_phase_id_returns_400_without_legacy_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-ssr-modules-create-missing-phase", name="Teacher", roles=["teacher"])  # type: ignore
+    unit_id = str(uuid.uuid4())
+    csrf_token = main._get_or_create_csrf_token(teacher.session_id)  # type: ignore[attr-defined]
+
+    calls: list[tuple[str, str, dict | None]] = []
+    routes = {
+        ("POST", f"/api/teaching/units/{unit_id}/modules"): _FakeResponse(201, {"id": str(uuid.uuid4())}),
+        ("POST", f"/api/teaching/units/{unit_id}/sections"): _FakeResponse(201, {"id": str(uuid.uuid4())}),
+    }
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _FakeInternalApiClient(routes, calls),
+        raising=True,
+    )
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        resp = await c.post(
+            f"/units/{unit_id}/modules",
+            data={"title": "Neues Modul", "csrf_token": csrf_token},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            follow_redirects=False,
+        )
+
+    assert resp.status_code == 400
+    assert "invalid_phase_id" in resp.text
+    assert calls == []

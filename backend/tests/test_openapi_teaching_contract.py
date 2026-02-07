@@ -167,6 +167,13 @@ def test_create_unit_400_contract_lists_invalid_unit_type_detail():
     assert "invalid_unit_type" in examples
 
 
+def test_create_unit_documents_503_for_modular_repo_capability_gap():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    responses = spec["paths"]["/api/teaching/units"]["post"]["responses"]
+    assert "503" in responses
+
+
 def test_course_members_get_has_merged_security_notes_without_key_override():
     root = Path(__file__).resolve().parents[2]
     spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))

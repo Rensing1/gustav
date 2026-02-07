@@ -16,6 +16,7 @@ import sys
 import pytest
 import httpx
 from httpx import ASGITransport
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -38,6 +39,16 @@ async def _client() -> httpx.AsyncClient:
 
 @pytest.mark.anyio
 async def test_modular_unit_sections_page_uses_module_headings():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular unit sections UI test")
+
     main.SESSION_STORE = SessionStore()
     teacher = main.SESSION_STORE.create(sub="t-mod-sections-ui", name="Teacher", roles=["teacher"])
 
@@ -52,4 +63,3 @@ async def test_modular_unit_sections_page_uses_module_headings():
         # The page should communicate the modular concept clearly.
         assert "Module" in page.text
         assert "Abschnitte" not in page.text.split("Module", 1)[0], "Heading should not claim sections for modular units"
-

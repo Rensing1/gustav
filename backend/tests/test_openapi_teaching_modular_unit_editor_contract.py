@@ -94,3 +94,13 @@ def test_openapi_legacy_edge_delete_documents_sunset_date() -> None:
     desc = op.get("description", "") or ""
     assert "sunset" in desc.lower()
     assert "2026-06-30" in desc
+
+
+def test_openapi_legacy_edge_delete_documents_deprecation_headers() -> None:
+    spec = _load_spec()
+    op = spec["paths"]["/api/teaching/units/{unit_id}/modules/edges"]["delete"]
+    headers = ((op.get("responses") or {}).get("204") or {}).get("headers") or {}
+
+    assert "Deprecation" in headers
+    assert "Sunset" in headers
+    assert "Link" in headers

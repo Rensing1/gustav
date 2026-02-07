@@ -1183,6 +1183,23 @@ def _require_modular_repo_methods(repo: object, *method_names: str) -> JSONRespo
     return None
 
 
+_MODULAR_UNIT_CREATE_REQUIRED_METHODS: tuple[str, ...] = (
+    "list_unit_phases_for_author",
+    "create_unit_phase",
+    "update_unit_phase_title",
+    "delete_unit_phase_for_author",
+    "reorder_unit_phases_owned",
+    "list_unit_modules_for_author",
+    "create_unit_module_for_author",
+    "update_unit_module_owned",
+    "delete_unit_module_for_author",
+    "list_unit_module_edges_for_author",
+    "create_unit_module_edge_for_author",
+    "delete_unit_module_edge_for_author",
+    "reorder_unit_phase_modules_owned",
+)
+
+
 def _is_signature_compat_type_error(exc: TypeError) -> bool:
     """Return True only for argument-signature mismatches in fallback repos.
 
@@ -2003,9 +2020,15 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     if csrf:
         return csrf
     sub = _current_sub(user)
+    repo = _get_repo()
+    unit_type = str(payload.unit_type or "").strip().lower()
+    if unit_type == "modular":
+        repo_error = _require_modular_repo_methods(repo, *_MODULAR_UNIT_CREATE_REQUIRED_METHODS)
+        if repo_error:
+            return repo_error
     try:
         title = payload.title or ""
-        unit = _get_repo().create_unit(title=title, summary=payload.summary, author_id=sub, unit_type=payload.unit_type)
+        unit = repo.create_unit(title=title, summary=payload.summary, author_id=sub, unit_type=payload.unit_type)
     except ValueError as exc:
         detail = str(exc)
         if detail in {"invalid_title", "invalid_summary", "invalid_unit_type"}:
@@ -2222,6 +2245,8 @@ async def update_unit_phase(request: Request, unit_id: str, phase_id: str, paylo
         if detail in {"invalid_unit_type", "invalid_title"}:
             return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
         return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
     if not updated:
         return _private_error({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_unit_phase_public(updated), status_code=200, vary_origin=True)
@@ -2507,9 +2532,19 @@ def _delete_unit_module_edge_common(*, request: Request, unit_id: str, from_id: 
 
 
 _LEGACY_EDGE_DELETE_SUNSET_HTTP = "Tue, 30 Jun 2026 23:59:59 GMT"
-_LEGACY_EDGE_DELETE_SUCCESSOR_LINK = (
+_LEGACY_EDGE_DELETE_SUCCESSOR_LINK_TEMPLATE = (
     '</api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}>; rel="successor-version"'
 )
+
+
+def _legacy_edge_delete_successor_link(*, unit_id: str, from_module_id: str, to_module_id: str) -> str:
+    """Build the successor Link header for the path-based delete endpoint."""
+    if not (_is_uuid_like(unit_id) and _is_uuid_like(from_module_id) and _is_uuid_like(to_module_id)):
+        return _LEGACY_EDGE_DELETE_SUCCESSOR_LINK_TEMPLATE
+    return (
+        f'</api/teaching/units/{_canonical_uuid(unit_id)}/modules/'
+        f'{_canonical_uuid(from_module_id)}/edges/{_canonical_uuid(to_module_id)}>; rel="successor-version"'
+    )
 
 
 @teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
@@ -2528,7 +2563,14 @@ async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     )
     response.headers.setdefault("Deprecation", "true")
     response.headers.setdefault("Sunset", _LEGACY_EDGE_DELETE_SUNSET_HTTP)
-    response.headers.setdefault("Link", _LEGACY_EDGE_DELETE_SUCCESSOR_LINK)
+    response.headers.setdefault(
+        "Link",
+        _legacy_edge_delete_successor_link(
+            unit_id=unit_id,
+            from_module_id=str(payload.from_module_id or ""),
+            to_module_id=str(payload.to_module_id or ""),
+        ),
+    )
     return response
 
 

@@ -73,6 +73,33 @@ async def test_create_edge_unknown_module_returns_404_instead_of_constraint_400(
 async def test_modular_phases_with_in_memory_repo_returns_503_not_500():
     main.SESSION_STORE = SessionStore()
     teacher = main.SESSION_STORE.create(sub="t-mod-fallback-503", name="Teacher", roles=["teacher"])  # type: ignore
+
+    class _NoModularRepo:
+        def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:
+            return True
+
+        def unit_exists(self, _unit_id: str) -> bool:
+            return True
+
+    teaching.set_repo(_NoModularRepo())
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        resp = await c.get("/api/teaching/units/00000000-0000-0000-0000-000000000001/phases")
+
+    assert resp.status_code == 503
+    assert resp.json().get("error") == "service_unavailable"
+    assert resp.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_create_modular_unit_with_in_memory_repo_returns_503_service_unavailable():
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-mod-fallback-create-503", name="Teacher", roles=["teacher"])  # type: ignore
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
 
     async with httpx.AsyncClient(
@@ -81,15 +108,53 @@ async def test_modular_phases_with_in_memory_repo_returns_503_not_500():
         headers={"Origin": "http://test"},
     ) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
-        assert r_unit.status_code == 201, r_unit.text
-        unit_id = r_unit.json()["id"]
+        resp = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
 
-        resp = await c.get(f"/api/teaching/units/{unit_id}/phases")
-
-    assert resp.status_code == 503
+    assert resp.status_code == 503, resp.text
     assert resp.json().get("error") == "service_unavailable"
     assert resp.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_legacy_edge_delete_sets_deprecation_headers_with_concrete_successor_link(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-legacy-edge-header", name="Teacher", roles=["teacher"])  # type: ignore
+    unit_id = str(uuid.uuid4())
+    from_id = str(uuid.uuid4())
+    to_id = str(uuid.uuid4())
+
+    class _StubRepo:
+        def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:
+            return True
+
+        def unit_exists(self, _unit_id: str) -> bool:
+            return True
+
+        def delete_unit_module_edge_for_author(self, **_kwargs):
+            return True
+
+    monkeypatch.setattr(teaching, "_get_repo", lambda: _StubRepo(), raising=True)
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        resp = await c.request(
+            "DELETE",
+            f"/api/teaching/units/{unit_id}/modules/edges",
+            json={"from_module_id": from_id, "to_module_id": to_id},
+        )
+
+    assert resp.status_code == 204, resp.text
+    assert resp.headers.get("Deprecation") == "true"
+    assert resp.headers.get("Sunset") == "Tue, 30 Jun 2026 23:59:59 GMT"
+    assert resp.headers.get("Link") == (
+        f'</api/teaching/units/{unit_id}/modules/{from_id}/edges/{to_id}>; rel="successor-version"'
+    )
 
 
 @pytest.mark.anyio

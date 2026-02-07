@@ -157,6 +157,48 @@ async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_
 
 
 @pytest.mark.anyio
+async def test_teaching_modular_create_section_after_deleting_last_phase_remains_available() -> None:
+    """Deleting the last phase must not break subsequent section creation."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-last-phase", name="Teacher", roles=["teacher"])
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+
+        r_unit = await c.post("/api/teaching/units", json={"title": "U", "unit_type": "modular"})
+        assert r_unit.status_code == 201, r_unit.text
+        uid = r_unit.json()["id"]
+
+        r_phases_before = await c.get(f"/api/teaching/units/{uid}/phases")
+        assert r_phases_before.status_code == 200, r_phases_before.text
+        phases_before = r_phases_before.json()
+        assert len(phases_before) == 1
+        only_phase_id = phases_before[0]["id"]
+
+        r_del = await c.delete(f"/api/teaching/units/{uid}/phases/{only_phase_id}")
+        assert r_del.status_code == 204, r_del.text
+
+        r_create = await c.post(f"/api/teaching/units/{uid}/sections", json={"title": "Bridge After Last Phase Delete"})
+        assert r_create.status_code == 201, r_create.text
+
+        r_graph = await c.get(f"/api/teaching/units/{uid}/modules/graph")
+        assert r_graph.status_code == 200, r_graph.text
+        graph = r_graph.json()
+        assert graph.get("phases"), "expected phase to be restored automatically"
+        assert any(m.get("title") == "Bridge After Last Phase Delete" for m in (graph.get("modules") or []))
+
+
+@pytest.mark.anyio
 async def test_teaching_modular_create_section_keeps_documented_section_to_module_bridge() -> None:
     """`createSection` in modular units must still create the backing module entry."""
     _require_db_or_skip()

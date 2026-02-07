@@ -62,6 +62,68 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 
 @pytest.mark.anyio
+async def test_learning_modular_module_content_rejects_empty_include_query_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`include=` must fail with 400 invalid_include (no silent defaulting)."""
+    import routes.learning as learning  # noqa: E402
+
+    class _StubRepo:
+        def list_units_for_student_course(self, *, student_sub: str, course_id: str):
+            assert student_sub
+            assert course_id
+            return []
+
+    monkeypatch.setattr(learning, "_get_repo", lambda: _StubRepo(), raising=True)
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-mod-include-empty-1", name="Schueler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(
+            "/api/learning/courses/11111111-1111-1111-1111-111111111111/"
+            "units/22222222-2222-2222-2222-222222222222/"
+            "modules/33333333-3333-3333-3333-333333333333?include="
+        )
+
+    assert r.status_code == 400, r.text
+    assert r.json().get("detail") == "invalid_include"
+    assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_learning_modular_module_content_rejects_trailing_comma_in_include_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`include=materials,` must fail with 400 invalid_include."""
+    import routes.learning as learning  # noqa: E402
+
+    class _StubRepo:
+        def list_units_for_student_course(self, *, student_sub: str, course_id: str):
+            assert student_sub
+            assert course_id
+            return []
+
+    monkeypatch.setattr(learning, "_get_repo", lambda: _StubRepo(), raising=True)
+
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-mod-include-trailing-1", name="Schueler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", student.session_id)
+        r = await c.get(
+            "/api/learning/courses/11111111-1111-1111-1111-111111111111/"
+            "units/22222222-2222-2222-2222-222222222222/"
+            "modules/33333333-3333-3333-3333-333333333333?include=materials,"
+        )
+
+    assert r.status_code == 400, r.text
+    assert r.json().get("detail") == "invalid_include"
+    assert r.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
 async def test_learning_course_units_include_unit_type():
     """Units list must include `unit_type` so SSR can branch (linear/modular)."""
     _require_db_or_skip()

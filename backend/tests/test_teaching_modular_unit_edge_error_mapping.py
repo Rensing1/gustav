@@ -158,6 +158,47 @@ async def test_legacy_edge_delete_sets_deprecation_headers_with_concrete_success
 
 
 @pytest.mark.anyio
+async def test_legacy_edge_delete_error_does_not_emit_deprecation_headers(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Deprecation/Sunset/Link headers are only valid for successful legacy deletes."""
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-legacy-edge-header-error", name="Teacher", roles=["teacher"])  # type: ignore
+    unit_id = str(uuid.uuid4())
+    from_id = str(uuid.uuid4())
+    to_id = str(uuid.uuid4())
+
+    class _StubRepo:
+        def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:
+            return True
+
+        def unit_exists(self, _unit_id: str) -> bool:
+            return True
+
+        def delete_unit_module_edge_for_author(self, **_kwargs):
+            return False
+
+    monkeypatch.setattr(teaching, "_get_repo", lambda: _StubRepo(), raising=True)
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        resp = await c.request(
+            "DELETE",
+            f"/api/teaching/units/{unit_id}/modules/edges",
+            json={"from_module_id": from_id, "to_module_id": to_id},
+        )
+
+    assert resp.status_code == 404, resp.text
+    assert resp.headers.get("Deprecation") is None
+    assert resp.headers.get("Sunset") is None
+    assert resp.headers.get("Link") is None
+
+
+@pytest.mark.anyio
 async def test_create_edge_does_not_mask_unexpected_typeerror_from_repo(
     monkeypatch: pytest.MonkeyPatch,
 ):

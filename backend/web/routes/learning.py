@@ -439,9 +439,15 @@ def _require_student(request: Request):
 def _parse_include(
     value: str | None, *, default_materials: bool = False, default_tasks: bool = False
 ) -> tuple[bool, bool]:
-    if not value:
+    if value is None:
         return default_materials, default_tasks
-    tokens = [token.strip() for token in value.split(",") if token.strip()]
+    raw = value.strip()
+    if not raw:
+        raise ValueError("invalid_include")
+    parts = raw.split(",")
+    tokens = [token.strip() for token in parts]
+    if any(not token for token in tokens):
+        raise ValueError("invalid_include")
     allowed = {"materials", "tasks"}
     if any(token not in allowed for token in tokens):
         raise ValueError("invalid_include")

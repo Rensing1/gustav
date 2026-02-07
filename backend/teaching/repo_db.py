@@ -1987,8 +1987,22 @@ class DBTeachingRepo:
                     )
                     phase_row = cur.fetchone()
                     if not phase_row:
-                        raise RuntimeError("modular_unit_missing_phase")
-                    phase_id = phase_row[0]
+                        # Defensive self-healing: keep modular section creation
+                        # available even if all phases were deleted earlier.
+                        cur.execute(
+                            """
+                            insert into public.unit_phases (unit_id, title, position)
+                            values (%s::uuid, %s, %s)
+                            returning id::text
+                            """,
+                            (unit_id, "Phase 1", 1),
+                        )
+                        created_phase_row = cur.fetchone()
+                        phase_id = (created_phase_row or [None])[0]
+                        if not phase_id:
+                            raise RuntimeError("modular_unit_missing_phase")
+                    else:
+                        phase_id = phase_row[0]
                     cur.execute(
                         """
                         select coalesce(max(position_in_phase), 0) + 1

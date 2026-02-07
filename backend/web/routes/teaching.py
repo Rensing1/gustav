@@ -2561,16 +2561,17 @@ async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitM
         from_id=str(payload.from_module_id or ""),
         to_id=str(payload.to_module_id or ""),
     )
-    response.headers.setdefault("Deprecation", "true")
-    response.headers.setdefault("Sunset", _LEGACY_EDGE_DELETE_SUNSET_HTTP)
-    response.headers.setdefault(
-        "Link",
-        _legacy_edge_delete_successor_link(
-            unit_id=unit_id,
-            from_module_id=str(payload.from_module_id or ""),
-            to_module_id=str(payload.to_module_id or ""),
-        ),
-    )
+    if int(getattr(response, "status_code", 0)) == 204:
+        response.headers.setdefault("Deprecation", "true")
+        response.headers.setdefault("Sunset", _LEGACY_EDGE_DELETE_SUNSET_HTTP)
+        response.headers.setdefault(
+            "Link",
+            _legacy_edge_delete_successor_link(
+                unit_id=unit_id,
+                from_module_id=str(payload.from_module_id or ""),
+                to_module_id=str(payload.to_module_id or ""),
+            ),
+        )
     return response
 
 

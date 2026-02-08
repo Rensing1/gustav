@@ -305,6 +305,7 @@ services:
       BACKUP_DIR: /backups
       SUPABASE_STORAGE_ROOT: /app/supabase/storage
       RETENTION_DAYS: 7
+      BACKUP_MAX_AGE_SECONDS: ${BACKUP_MAX_AGE_SECONDS:-129600}
       KC_DB_URL: ${KC_DB_URL:-jdbc:postgresql://keycloak-db:5432/keycloak}
       KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
@@ -312,6 +313,12 @@ services:
       - backups:/backups
       - ./scripts:/app/scripts:ro
       - ./supabase:/app/supabase:ro
+    healthcheck:
+      test: ["CMD", "/app/scripts/check_backup_freshness.sh"]
+      interval: 5m
+      timeout: 15s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     networks:
       - gustav-alpha2-network

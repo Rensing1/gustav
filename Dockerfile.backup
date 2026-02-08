@@ -8,8 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy only the backup script; storage paths and repo content are mounted at runtime.
+# Copy backup scripts (runtime mounts may override these in compose).
 COPY scripts/backup_daily.py /app/scripts/backup_daily.py
+COPY scripts/backup_cron_run.sh /app/scripts/backup_cron_run.sh
+COPY scripts/check_backup_freshness.sh /app/scripts/check_backup_freshness.sh
+RUN chmod +x /app/scripts/backup_cron_run.sh /app/scripts/check_backup_freshness.sh
 
 # Create backup user if not present (builder cache may reuse base with same UID).
 RUN if ! getent passwd backup >/dev/null; then useradd -m -u 10002 backup; fi \
@@ -21,11 +24,32 @@ USER root
 # Entry point: install crontab for the backup user and run cron in foreground.
 RUN cat >/entrypoint.sh <<'EOF'
 #!/bin/sh
-set -e
+set -eu
+
+write_env_file() {
+  env_file="/app/.backup-cron.env"
+  umask 027
+  : >"$env_file"
+  for key in \
+    KC_DB_URL KC_DB_USERNAME KC_DB_PASSWORD \
+    SUPABASE_STORAGE_ROOT BACKUP_DIR RETENTION_DAYS BACKUP_PG_TIMEOUT_SECONDS \
+    SESSION_DATABASE_URL BACKUP_DATABASE_URL DATABASE_URL; do
+    value=$(printenv "$key" || true)
+    if [ -n "$value" ]; then
+      escaped=$(printf '%s' "$value" | sed "s/'/'\"'\"'/g")
+      printf "%s='%s'\n" "$key" "$escaped" >>"$env_file"
+    fi
+  done
+  chown root:backup "$env_file"
+  chmod 0640 "$env_file"
+}
+
+write_env_file
+
 cat >/tmp/backup.cron <<'CRON'
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-0 2 * * * su -s /bin/sh backup -c "python /app/scripts/backup_daily.py --once" >>/var/log/backup.log 2>&1
+0 2 * * * su -s /bin/sh backup -c "/app/scripts/backup_cron_run.sh" >>/var/log/backup.log 2>&1
 CRON
 crontab /tmp/backup.cron
 exec cron -f

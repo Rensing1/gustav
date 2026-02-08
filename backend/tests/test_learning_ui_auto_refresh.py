@@ -2,6 +2,7 @@ import asyncio
 import re
 import types
 import uuid
+from html import unescape as _html_unescape
 
 import pytest
 import httpx
@@ -54,6 +55,19 @@ class _FakeAsyncClient:
         payload = handler(params or {})
         return _FakeResponse(200, payload)
 
+def _extract_open_attempt_id_from_hx_vals_attr(html: str) -> str | None:
+    """Return open_attempt_id from hx-vals='{"open_attempt_id":"..."}' (escaped or raw)."""
+    m = re.search(r'hx-vals="([^"]+)"', html)
+    if not m:
+        m = re.search(r"hx-vals='([^']+)'", html)
+    if not m:
+        return None
+    payload = _html_unescape(m.group(1))
+    m2 = re.search(r'\{"open_attempt_id":"([^"]*)"\}', payload)
+    if not m2:
+        return None
+    return m2.group(1)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("status", ["pending", "extracted"])
@@ -102,8 +116,8 @@ async def test_history_fragment_autopolls_for_in_progress_status(monkeypatch: py
     assert "class=\"task-panel__history\"" in html
     assert "hx-get=\"/learning/courses/c1/tasks/t1/history\"" not in html
     assert f'data-open-attempt-id="{latest["id"]}"' in html
-    hx_vals = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
-    assert hx_vals and hx_vals.group(1) == latest["id"]
+    hx_open_attempt_id = _extract_open_attempt_id_from_hx_vals_attr(html)
+    assert hx_open_attempt_id == latest["id"]
     assert 'id="task-history-poll-t1"' in html
     assert 'hx-get="/learning/courses/c1/tasks/t1/history/poll"' in html
     assert "hx-trigger=\"every 10s\"" in html
@@ -304,9 +318,8 @@ async def test_history_fragment_exposes_submission_ids_and_open_state_attrs(monk
 
     # Wrapper advertises which attempt should remain open and exposes hx-vals
     assert f'data-open-attempt-id="{open_id}"' in html
-    hx_vals_match = re.search(r'hx-vals=[\'"]\{"open_attempt_id":"([^"]*)"\}[\'"]', html)
-    assert hx_vals_match, "history wrapper must include hx-vals for open_attempt_id"
-    assert hx_vals_match.group(1) == open_id
+    hx_open_attempt_id = _extract_open_attempt_id_from_hx_vals_attr(html)
+    assert hx_open_attempt_id == open_id
 
     # Toggle handler present so HTMX polls can update the open attempt id
     assert 'hx-on="toggle:' in html
@@ -429,6 +442,105 @@ async def test_unit_page_hides_spinner_when_latest_completed(monkeypatch: pytest
     assert "Analyse läuft" not in html
     assert "status-chip" not in html
     assert "spinner" not in html
+
+@pytest.mark.anyio
+async def test_history_fragment_normalizes_invalid_open_attempt_id_to_empty_and_keeps_hx_vals_safe(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Invalid open_attempt_id must not break attributes or leak into hx-vals unescaped."""
+    student = _student_session()
+    latest = {
+        "id": str(uuid.uuid4()),
+        "attempt_nr": 1,
+        "kind": "text",
+        "text_body": "A",
+        "mime_type": None,
+        "size_bytes": None,
+        "storage_key": None,
+        "sha256": None,
+        "analysis_status": "pending",
+        "analysis_json": None,
+        "feedback_md": None,
+        "error_code": None,
+        "created_at": "2025-11-04T12:00:00+00:00",
+        "completed_at": None,
+    }
+
+    def _submissions(_params):
+        return [latest]
+
+    fake = _FakeAsyncClient({
+        "/api/learning/courses/c1/tasks/t1/submissions": _submissions,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    attack = "'><img src=x onerror=alert(1)>"
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history", params={"open_attempt_id": attack})
+    assert r.status_code == 200
+    html = r.text
+    assert attack not in html
+    assert "onerror=alert(1)" not in html
+    assert 'data-open-attempt-id=""' in html
+    hx_open_attempt_id = _extract_open_attempt_id_from_hx_vals_attr(html)
+    assert hx_open_attempt_id == ""
+
+@pytest.mark.anyio
+async def test_unit_page_lazy_history_normalizes_invalid_open_attempt_id_and_escapes_hx_vals(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Unit page history placeholders must not embed raw open_attempt_id payloads."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    unit_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+    attack = "'><svg onload=alert(1)>"
+
+    def _sections(_params):
+        return [{
+            "section": {"id": "s1", "title": "A", "position": 1, "unit_id": unit_id},
+            "materials": [],
+            "tasks": [{"id": task_id, "instruction_md": "Aufgabe", "criteria": ["K"], "position": 1}],
+        }]
+
+    fake = _FakeAsyncClient({
+        f"/api/learning/courses/{course_id}/units/{unit_id}/sections": _sections,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.get(
+            f"/learning/courses/{course_id}/units/{unit_id}",
+            params={"open_attempt_id": attack},
+        )
+    assert r.status_code == 200
+    html = r.text
+    assert attack not in html
+    assert "onload=alert(1)" not in html
+    assert f'id="task-history-{task_id}"' in html
+    assert 'data-open-attempt-id=""' in html
+    hx_open_attempt_id = _extract_open_attempt_id_from_hx_vals_attr(html)
+    assert hx_open_attempt_id == ""
+
+@pytest.mark.anyio
+async def test_history_fragment_non_student_403_sets_private_cache_headers():
+    """403 fragment responses must stay private/no-store like other learning SSR responses."""
+    from identity_access.stores import SessionStore  # type: ignore
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)  # type: ignore[attr-defined]
+        r = await client.get("/learning/courses/c1/tasks/t1/history")
+    assert r.status_code == 403
+    assert r.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio

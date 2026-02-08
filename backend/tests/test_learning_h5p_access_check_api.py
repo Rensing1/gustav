@@ -16,6 +16,8 @@ from __future__ import annotations
 import httpx
 import pytest
 from httpx import ASGITransport
+import os
+from uuid import UUID
 
 from utils.db import require_db_or_skip as _require_db_or_skip
 
@@ -95,6 +97,110 @@ async def _prepare_released_h5p_task(*, content_id: str = "1") -> dict:
         "course_id": course_id,
         "content_id": content_id,
         "task_id": task["id"],
+    }
+
+
+async def _prepare_locked_modular_h5p_task(*, content_id: str = "42") -> dict:
+    """Create a modular unit where the H5P module is locked until prereq done."""
+    _require_db_or_skip()
+
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    pytest.importorskip("psycopg")
+    import psycopg  # type: ignore  # noqa: E402
+
+    dsn = os.getenv("DATABASE_URL") or (
+        f"postgresql://{os.getenv('APP_DB_USER','gustav_app')}:{os.getenv('APP_DB_PASSWORD','CHANGE_ME_DEV')}"
+        f"@{os.getenv('TEST_DB_HOST','127.0.0.1')}:{os.getenv('TEST_DB_PORT','54322')}/postgres"
+    )
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-h5p-modular", name="Teacher", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-h5p-modular", name="Student", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+
+        course = await c.post("/api/teaching/courses", json={"title": "Kurs H5P Modular"})
+        assert course.status_code == 201
+        course_id = course.json()["id"]
+        UUID(course_id)
+
+        unit = (await c.post("/api/teaching/units", json={"title": "Unit Modular", "unit_type": "modular"})).json()
+        unit_id = unit["id"]
+        UUID(unit_id)
+
+        sec_a = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"})).json()["id"]
+        sec_b = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "B"})).json()["id"]
+        UUID(sec_a)
+        UUID(sec_b)
+
+        # A: normal task (used to unlock B)
+        task_a = (
+            await c.post(
+                f"/api/teaching/units/{unit_id}/sections/{sec_a}/tasks",
+                json={"instruction_md": "Aufgabe A", "criteria": []},
+            )
+        ).json()["id"]
+        UUID(task_a)
+
+        # B: H5P task
+        task_b = (
+            await c.post(
+                f"/api/teaching/units/{unit_id}/sections/{sec_b}/tasks",
+                json={
+                    "instruction_md": "H5P Aufgabe",
+                    "criteria": [],
+                    "h5p": {"content_id": content_id, "display_options": {}},
+                },
+            )
+        ).json()["id"]
+        UUID(task_b)
+
+        module = (await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})).json()
+        assert module.get("unit_id") == unit_id
+
+        r_member = await c.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student.sub})
+        assert r_member.status_code in (201, 204)
+
+    # Configure dependency A -> B and require 1 prereq for B.
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (teacher.sub,))
+            cur.execute("select id::text from public.unit_modules where section_id = %s::uuid", (sec_a,))
+            mod_a = (cur.fetchone() or [None])[0]
+            cur.execute("select id::text from public.unit_modules where section_id = %s::uuid", (sec_b,))
+            mod_b = (cur.fetchone() or [None])[0]
+            assert mod_a and mod_b
+            cur.execute(
+                """
+                insert into public.unit_module_edges (unit_id, from_module_id, to_module_id)
+                values (%s::uuid, %s::uuid, %s::uuid)
+                """,
+                (unit_id, mod_a, mod_b),
+            )
+            cur.execute("update public.unit_modules set required_prereq_count = 1 where id = %s::uuid", (mod_b,))
+        conn.commit()
+
+    return {
+        "teacher": teacher,
+        "student": student,
+        "course_id": course_id,
+        "unit_id": unit_id,
+        "content_id": content_id,
+        "task_a": task_a,
+        "task_b": task_b,
     }
 
 
@@ -194,3 +300,28 @@ async def test_learning_h5p_access_400_for_non_ascii_digit_content_id() -> None:
         body = r.json() or {}
         assert body.get("error") == "bad_request"
         assert body.get("detail") == "invalid_content_id"
+
+
+@pytest.mark.anyio
+async def test_learning_h5p_access_404_for_locked_modular_h5p_then_204_after_unlock() -> None:
+    fx = await _prepare_locked_modular_h5p_task(content_id="42")
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
+
+        # Locked module -> access-check must be fail-closed.
+        r1 = await c.get(f"/api/learning/courses/{fx['course_id']}/h5p/contents/{fx['content_id']}/access")
+        assert r1.status_code == 404
+        assert r1.headers.get("Cache-Control") == "private, no-store"
+
+        # Unlock via completing prereq (any submission is enough for non-H5P tasks).
+        r_submit = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_a']}/submissions",
+            json={"kind": "text", "text_body": "ok"},
+        )
+        assert r_submit.status_code == 202
+
+        r2 = await c.get(f"/api/learning/courses/{fx['course_id']}/h5p/contents/{fx['content_id']}/access")
+        assert r2.status_code == 204
+        assert r2.headers.get("Cache-Control") == "private, no-store"
+        assert (r2.text or "") == ""

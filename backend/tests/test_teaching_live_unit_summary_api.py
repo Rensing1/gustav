@@ -45,8 +45,11 @@ async def _create_course(client: httpx.AsyncClient, title: str = "Mathe") -> str
     return r.json()["id"]
 
 
-async def _create_unit(client: httpx.AsyncClient, title: str = "Einheit") -> dict:
-    r = await client.post("/api/teaching/units", json={"title": title})
+async def _create_unit(client: httpx.AsyncClient, title: str = "Einheit", unit_type: str | None = None) -> dict:
+    payload: dict = {"title": title}
+    if unit_type is not None:
+        payload["unit_type"] = unit_type
+    r = await client.post("/api/teaching/units", json=payload)
     assert r.status_code == 201
     return r.json()
 
@@ -207,6 +210,60 @@ async def test_summary_happy_path_minimal_status_matrix_and_headers():
         s2_cells = {c["task_id"]: c for c in rows[s2.sub]["tasks"]}
         assert s2_cells[t1["id"]]["has_submission"] is False
         assert s2_cells[t2["id"]]["has_submission"] is False
+
+
+@pytest.mark.anyio
+async def test_summary_includes_submissions_for_modular_units_without_section_releases():
+    """Modular units do not use teacher section releases, but submissions must still appear.
+
+    Why:
+        The live matrix is a teacher tool and must work for both unit types.
+        For modular units, students unlock modules via progress, not via
+        `module_section_releases`.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for live summary test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-mod-matrix", name="Owner", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-live-mod-1", name="Anna", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        cid = await _create_course(c, "Live Kurs Modular")
+        unit = await _create_unit(c, "Live Einheit Modular", unit_type="modular")
+        sec1 = await _create_section(c, unit["id"], "M1")
+        task = await _create_task(c, unit["id"], sec1["id"], "### A1")
+        await _attach_unit(c, cid, unit["id"])
+        await _add_member(c, cid, student.sub)
+
+        # Modular: no section release step. First module should be open by default.
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r_sub = await c.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Meine Lösung"},
+        )
+        assert r_sub.status_code in (202, 201, 200), r_sub.text
+
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary",
+            params={"limit": 100, "offset": 0},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        rows = {row["student"]["sub"]: row for row in body["rows"]}
+        cells = {cell["task_id"]: cell for cell in rows[student.sub]["tasks"]}
+        assert cells[task["id"]]["has_submission"] is True
 
 
 @pytest.mark.anyio

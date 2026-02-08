@@ -1,0 +1,298 @@
+/*
+Teacher UI — Modular unit visual editor (phases as bands + module nodes).
+
+Why:
+  Teachers should be able to plan modular learning units visually:
+  phases are visual bands, modules are nodes, and dependencies are shown as edges.
+*/
+
+.modular-editor__shell {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 60vh;
+}
+
+.modular-editor__canvas {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.modular-editor__toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+#modular-editor-status.is-info {
+  color: var(--color-text-muted);
+}
+
+#modular-editor-status.is-success {
+  color: var(--color-success);
+}
+
+#modular-editor-status.is-error {
+  color: var(--color-error);
+}
+
+.modular-editor__toolbar [data-action="modular-editor-edge-mode"][aria-pressed="true"] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary), transparent 75%);
+}
+
+.modular-editor__graph {
+  position: relative;
+  overflow: auto;
+  padding: 0.5rem 0.25rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-border), transparent 35%);
+  border-radius: 12px;
+}
+
+.modular-editor__edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 0;
+  color: var(--color-text-muted);
+}
+
+.modular-editor__edge {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.55;
+}
+
+.modular-editor__edge-arrow {
+  fill: context-stroke;
+  opacity: 0.55;
+}
+
+.modular-editor__phases {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.modular-editor__phase {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0.35rem 0.4rem;
+  border: 2px solid color-mix(in srgb, var(--color-border), transparent 35%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-bg-surface), transparent 46%);
+}
+
+.modular-editor__phase-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.5rem 0.25rem;
+}
+
+.modular-editor__phase-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.modular-editor__phase-drag-handle {
+  cursor: grab;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.modular-editor__phase-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.modular-editor__phase-title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.modular-editor__module-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  min-height: 4rem;
+}
+
+.modular-editor__module-node {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  flex: 0 0 220px;
+  width: 220px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--color-border), transparent 25%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-bg-surface), transparent 20%);
+}
+
+.modular-editor__module-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.modular-editor__node-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+
+/* Make CRUD controls visually secondary; the graph itself should dominate. */
+.modular-editor__phase-actions .btn,
+.modular-editor__node-actions .btn {
+  opacity: 0.86;
+  transition: opacity 120ms ease;
+}
+
+.modular-editor__phase-actions .btn:hover,
+.modular-editor__node-actions .btn:hover,
+.modular-editor__phase-actions .btn:focus-visible,
+.modular-editor__node-actions .btn:focus-visible {
+  opacity: 1;
+}
+
+.modular-editor__module-btn:hover,
+.modular-editor__module-btn:focus-visible {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-primary), transparent 45%);
+}
+
+.modular-editor__icon-btn {
+  line-height: 1;
+  padding: 0.25rem 0.4rem;
+}
+
+.modular-editor__drag-handle {
+  cursor: grab;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.modular-editor__module-btn {
+  flex: 1 1 auto;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.modular-editor__module-node.is-edge-source {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.modular-editor__phase-inline:empty,
+.modular-editor__node-inline:empty {
+  display: none;
+}
+
+.modular-editor__inline-card {
+  padding: 0.5rem;
+}
+
+.modular-editor__inline-card h4 {
+  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+}
+
+.modular-editor__inline-card .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.modular-editor__splitter {
+  width: 10px;
+  cursor: col-resize;
+  background: color-mix(in srgb, var(--color-border), transparent 65%);
+}
+
+.modular-editor__panel {
+  width: var(--modular-editor-panel-width, 440px);
+  min-width: 320px;
+  max-width: 60vw;
+  overflow: auto;
+  padding-left: 12px;
+}
+
+.modular-editor-panel__content .two-col {
+  gap: 0.75rem;
+}
+
+.deps-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.25rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.deps-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/*
+Local error highlighting
+
+Why:
+  When backend constraints block a move/edge, a status message alone is easy to miss.
+  We briefly highlight the affected node/phase so the reason is visible in context.
+*/
+
+@keyframes modular-editor-attention {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  18% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error), transparent 72%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.modular-editor__module-node.is-attention,
+.modular-editor__phase.is-attention {
+  outline: 2px solid var(--color-error);
+  outline-offset: 2px;
+  animation: modular-editor-attention 900ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modular-editor__module-node.is-attention,
+  .modular-editor__phase.is-attention {
+    animation: none;
+  }
+}

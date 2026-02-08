@@ -65,11 +65,11 @@ async def test_mark_extracted_updates_status_and_analysis_json():
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   storage_key, mime_type, size_bytes, sha256, attempt_nr,
                   analysis_status, analysis_json
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                   %s, 'application/pdf', 1024, %s, 1,
                   'pending', null
                 )
@@ -78,6 +78,7 @@ async def test_mark_extracted_updates_status_and_analysis_json():
                     str(sub_id),
                     str(course_id),
                     str(task_id),
+                    str(section_id),
                     student,
                     f"submissions/{course_id}/{task_id}/{student}/orig/sample.pdf",
                     "0" * 64,

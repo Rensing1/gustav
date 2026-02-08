@@ -15,6 +15,7 @@ import html
 import re
 from pathlib import Path
 import sys
+from html.parser import HTMLParser
 
 import httpx
 from httpx import ASGITransport
@@ -88,6 +89,19 @@ def _find_section_id_by_title(html: str, title: str) -> str | None:
     return None
 
 
+class _AttrNameScanner(HTMLParser):
+    """Collect start-tag attribute names for injection regression tests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.attr_names: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs):  # type: ignore[override]
+        for name, _value in attrs:
+            if isinstance(name, str):
+                self.attr_names.append(name)
+
+
 @pytest.mark.anyio
 async def test_sections_page_renders_wrapper_and_sortable():
     # Arrange: Lehrer-Session und eine Lerneinheit
@@ -101,6 +115,21 @@ async def test_sections_page_renders_wrapper_and_sortable():
     html = page.text
     assert 'id="section-list-section"' in html  # Wrapper vorhanden
     assert 'hx-ext="sortable"' in html          # Sortable aktiviert (Client-Skript separat)
+
+
+def test_render_section_list_partial_escapes_interpolated_attributes():
+    """Attribute interpolation in section list must not allow attribute injection."""
+    unit_id = 'unit-1" data-pwn="unit'
+    sec_id = 'sec-1" data-pwn="section'
+    csrf_token = 'csrf-1" data-pwn="csrf'
+    html_doc = main._render_section_list_partial(  # type: ignore[attr-defined]
+        unit_id,
+        [{"id": sec_id, "title": "Alpha"}],
+        csrf_token=csrf_token,
+    )
+    parser = _AttrNameScanner()
+    parser.feed(html_doc)
+    assert "data-pwn" not in parser.attr_names
 
 
 @pytest.mark.anyio

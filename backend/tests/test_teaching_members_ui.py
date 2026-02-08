@@ -65,7 +65,11 @@ async def test_members_search_uses_api_and_excludes_existing(monkeypatch: pytest
         cid = await _seed_course(c, title="Mathe 7", teacher_session_cookie=sess.session_id)
         # Add existing member via API
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        add = await c.post(f"/api/teaching/courses/{cid}/members", json={"student_sub": "student-1"})
+        add = await c.post(
+            f"/api/teaching/courses/{cid}/members",
+            json={"student_sub": "student-1"},
+            headers={"Origin": "http://test"},
+        )
         assert add.status_code in (200, 201, 204)
 
         # Monkeypatch directory search to return three students (one already a member)

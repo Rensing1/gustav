@@ -1,0 +1,890 @@
+/*
+Student UI — Modular learning unit workspace.
+
+Why:
+  - Students should see a modular unit as a "workspace" with two modes:
+      1) Overview: an advance-organizer graph (pan/zoom)
+      2) Content: opened modules as tabs + expandable cards
+
+Notes:
+  - Most rules are scoped under `.modular-unit-page` to avoid affecting other pages.
+  - A few global selectors (`html.mode-overview`, `body.mode-overview`) lock scrolling
+    while the overview is active. The JS implementation must remove these classes
+    when the modular workspace is not present anymore.
+*/
+
+/* -------------------------------------------------------------------------- */
+/* Page-level tokens (scoped)                                                  */
+/* -------------------------------------------------------------------------- */
+
+.modular-unit-page {
+  /* Compatibility aliases (older token names used by some Gustav rules). */
+  --text-primary: var(--color-text);
+  --text-muted: var(--color-text-muted);
+  --color-surface: var(--color-bg-surface);
+  --radius-base: var(--radius-lg);
+
+  /* Graph-local status colors (do not change global theme). */
+  --graph-status-locked: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-border));
+  --graph-status-open: var(--color-primary);
+  --graph-status-partial: var(--color-warning);
+  --graph-status-done: var(--color-success);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .modular-unit-page {
+    --graph-status-open: var(--ef-blue);
+    --graph-status-done: var(--ef-green);
+    --graph-status-partial: var(--ef-yellow);
+    --graph-status-locked: var(--ef-grey1);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .modular-unit-page {
+    --graph-status-open: var(--rp-pine);
+    --graph-status-done: var(--rp-foam);
+    --graph-status-partial: var(--rp-gold);
+    --graph-status-locked: var(--rp-muted);
+  }
+}
+
+[data-theme="everforest-dark-hard"] .modular-unit-page {
+  --graph-status-open: var(--ef-blue);
+  --graph-status-done: var(--ef-green);
+  --graph-status-partial: var(--ef-yellow);
+  --graph-status-locked: var(--ef-grey1);
+}
+
+[data-theme="rose-pine-dawn"] .modular-unit-page {
+  --graph-status-open: var(--rp-pine);
+  --graph-status-done: var(--rp-foam);
+  --graph-status-partial: var(--rp-gold);
+  --graph-status-locked: var(--rp-muted);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Header + sticky toolbar                                                     */
+/* -------------------------------------------------------------------------- */
+
+.modular-unit-page .unit-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.modular-unit-page .unit-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-3xl);
+  line-height: 1.2;
+}
+
+.modular-unit-page .unit-head__actions {
+  display: inline-flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.modular-unit-page .unit-head.container,
+.modular-unit-page .sticky-toolbar__inner.container,
+.modular-unit-page .workspace-view.container {
+  max-width: 1440px;
+}
+
+.modular-unit-page .sticky-toolbar {
+  position: sticky;
+  top: var(--space-4);
+  z-index: 50;
+  margin-bottom: var(--space-5);
+}
+
+/* Overview mode locks page scrolling (graph gets the full viewport). */
+html.mode-overview,
+body.mode-overview {
+  height: 100%;
+  overflow: hidden;
+}
+
+.mode-overview .main-content {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* NOTE: In the real app the workspace is wrapped in `.modular-unit-page`
+   inside the flex `main-content` (breadcrumbs + footer are siblings).
+   Extend the flex chain in overview mode so the graph gets a non-zero height. */
+.mode-overview .modular-unit-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mode-overview .workspace-view--overview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mode-overview .graph-shell {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+.mode-overview .graph-container {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.modular-unit-page .sticky-toolbar__inner {
+  --toolbar-control-h: 36px;
+  --toolbar-control-pad-x: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (pointer: coarse) {
+  .modular-unit-page .sticky-toolbar__inner {
+    --toolbar-control-h: 40px;
+  }
+}
+
+.modular-unit-page .mode-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-overlay);
+  flex: 0 0 auto;
+  height: var(--toolbar-control-h);
+}
+
+.modular-unit-page .mode-segmented__btn {
+  height: calc(var(--toolbar-control-h) - 4px);
+  padding: 0 var(--toolbar-control-pad-x);
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  box-shadow: none !important;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.modular-unit-page .mode-segmented__btn:hover {
+  box-shadow: none !important;
+}
+
+.modular-unit-page .mode-segmented__btn:focus-visible {
+  transform: none;
+}
+
+.modular-unit-page .mode-segmented__btn[aria-pressed="true"] {
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.modular-unit-page .tabs--sticky {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0;
+  scrollbar-width: thin;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.modular-unit-page .tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--toolbar-control-h);
+  padding: 0 var(--toolbar-control-pad-x);
+  line-height: 1;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-overlay);
+  cursor: pointer;
+}
+
+.modular-unit-page .tab.is-active {
+  border-color: var(--graph-status-open);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--graph-status-open) 22%, transparent);
+}
+
+.modular-unit-page .tab__btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: 0;
+}
+
+.modular-unit-page .tab__close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.modular-unit-page .tab__close:hover {
+  color: var(--color-text);
+}
+
+.modular-unit-page .tab__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-overlay);
+}
+
+.modular-unit-page .tab__dot--locked {
+  background: var(--color-bg-overlay);
+}
+
+.modular-unit-page .tab__dot--open {
+  background: var(--graph-status-open);
+  border-color: var(--graph-status-open);
+}
+
+.modular-unit-page .tab__dot--partial {
+  background: var(--graph-status-partial);
+  border-color: var(--graph-status-partial);
+}
+
+.modular-unit-page .tab__dot--done {
+  background: var(--graph-status-done);
+  border-color: var(--graph-status-done);
+}
+
+.modular-unit-page .workspace-view[hidden] {
+  display: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Graph canvas (SVG renderer)                                                 */
+/* -------------------------------------------------------------------------- */
+
+.modular-unit-page .graph-shell {
+  margin-bottom: var(--space-6);
+}
+
+.modular-unit-page .graph-container {
+  position: relative;
+  width: 100%;
+  height: clamp(660px, 88vh, 1160px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.modular-unit-page .graph-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  /* Subtle "canvas" frame so clipping edges feel intentional (not like a bug). */
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-border), transparent 55%),
+    inset 0 0 28px color-mix(in srgb, var(--color-border), transparent 80%);
+}
+
+.modular-unit-page .graph-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.modular-unit-page .graph-layer--map {
+  overflow: hidden;
+}
+
+.modular-unit-page .graph-overlay {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.modular-unit-page .graph-overlay--top {
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.modular-unit-page .overlay-card {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  background: color-mix(in srgb, var(--color-bg-surface), transparent 12%);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.modular-unit-page .graph-hint {
+  font-size: var(--text-sm);
+  max-width: 640px;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .modular-unit-page .graph-overlay--top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modular-unit-page .graph-hint {
+    text-align: left;
+  }
+}
+
+.modular-unit-page .legend {
+  display: inline-flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.modular-unit-page .legend-item {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.modular-unit-page .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-overlay);
+}
+
+.modular-unit-page .dot-locked {
+  background: var(--color-bg-overlay);
+}
+
+.modular-unit-page .dot-open {
+  background: var(--graph-status-open, var(--color-primary));
+  border-color: var(--graph-status-open, var(--color-primary));
+}
+
+.modular-unit-page .dot-partial {
+  background: var(--graph-status-partial, var(--color-warning));
+  border-color: var(--graph-status-partial, var(--color-warning));
+}
+
+.modular-unit-page .dot-done {
+  background: var(--graph-status-done, var(--color-success));
+  border-color: var(--graph-status-done, var(--color-success));
+}
+
+.modular-unit-page .graph-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.modular-unit-page .graph-svg:active {
+  cursor: grabbing;
+}
+
+.modular-unit-page .graph-svg--scroll {
+  touch-action: pan-x pan-y;
+}
+
+.modular-unit-page .edge {
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.modular-unit-page .edge.is-related {
+  opacity: 0.92;
+  stroke-width: 2.3;
+}
+
+.modular-unit-page .edge.is-out {
+  opacity: 0.98;
+  stroke: var(--graph-status-open, var(--color-primary));
+}
+
+.modular-unit-page .edge.is-in {
+  opacity: 0.98;
+  stroke: var(--graph-status-open, var(--color-border-focus));
+}
+
+.modular-unit-page .edge.is-related.is-out-pending,
+.modular-unit-page .edge.is-related.is-in-pending {
+  opacity: 0.42;
+}
+
+.modular-unit-page .edge.is-blocked {
+  opacity: 0.6;
+  stroke: color-mix(in srgb, var(--graph-status-open, var(--color-primary)) 68%, var(--color-text-muted));
+}
+
+.modular-unit-page .edge.is-related.is-blocked {
+  opacity: 0.64;
+}
+
+.modular-unit-page .edge.is-ws-edge {
+  opacity: 0.64;
+}
+
+.modular-unit-page .edge.is-ws-edge-from-done:not(.is-blocked) {
+  opacity: 0.74;
+  stroke: color-mix(in srgb, var(--graph-status-open, var(--color-primary)) 62%, var(--color-text-muted));
+}
+
+.modular-unit-page .edge.is-dim {
+  opacity: 0.14;
+}
+
+.modular-unit-page .edge.is-blocked.is-dim {
+  opacity: 0.22;
+}
+
+.modular-unit-page .edge.is-ws-edge.is-dim {
+  opacity: 0.22;
+}
+
+.modular-unit-page .edge.is-ws-edge-from-done.is-dim:not(.is-blocked) {
+  opacity: 0.42;
+}
+
+.modular-unit-page .edge-arrow {
+  fill: context-stroke;
+  opacity: 0.55;
+}
+
+.modular-unit-page .phase-band {
+  fill: var(--color-bg-surface);
+  fill: color-mix(in srgb, var(--color-bg-surface), transparent 46%);
+  opacity: 1;
+  stroke: var(--color-border);
+  stroke: color-mix(in srgb, var(--color-border), transparent 35%);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.modular-unit-page .phase-label {
+  font-family: var(--font-base);
+  font-size: 12px;
+  font-weight: 900;
+  fill: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.modular-unit-page .node {
+  cursor: pointer;
+}
+
+.modular-unit-page .node.is-dim {
+  opacity: 0.28;
+}
+
+.modular-unit-page .node.is-in-working-set {
+  opacity: 1;
+}
+
+.modular-unit-page .node.is-in-working-set .node-shape {
+  stroke-width: 3.2;
+}
+
+.modular-unit-page .node.is-in-working-set:not(.is-locked):not(.is-done) .node-shape {
+  stroke: color-mix(in srgb, var(--color-border), var(--color-text-muted) 35%);
+}
+
+.modular-unit-page .node.is-dim.is-in-working-set {
+  opacity: 0.78;
+}
+
+.modular-unit-page .node.is-neighbor:not(.is-selected) .node-shape {
+  stroke-width: 3.5;
+}
+
+.modular-unit-page .node .node-shape {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border);
+  stroke-width: 3;
+  transition:
+    fill var(--transition-fast),
+    stroke var(--transition-fast),
+    opacity var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.modular-unit-page .node:not(.is-locked):hover .node-shape {
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.16));
+}
+
+.modular-unit-page .node-status,
+.modular-unit-page .node-badge {
+  pointer-events: none;
+}
+
+.modular-unit-page .node-badge-bg {
+  fill: var(--color-bg-surface);
+  stroke: none;
+  opacity: 0.96;
+}
+
+.modular-unit-page .node-badge-ring-track {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 3;
+  opacity: 1;
+}
+
+.modular-unit-page .node-badge-ring-progress {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-text-muted) 30%, #fff);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.95;
+}
+
+.modular-unit-page .node.is-locked .node-badge-ring-track {
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+}
+
+.modular-unit-page .node.is-done .node-badge-ring-track {
+  stroke: var(--graph-status-done, var(--color-success));
+}
+
+.modular-unit-page .node-status-badge {
+  display: none;
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border);
+  stroke-width: 2;
+  opacity: 0.96;
+}
+
+.modular-unit-page .node.is-locked .node-status-badge {
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+}
+
+.modular-unit-page .node.is-done .node-status-badge {
+  stroke: var(--graph-status-done, var(--color-success));
+}
+
+.modular-unit-page .node-status-icon {
+  display: none;
+}
+
+.modular-unit-page .node.is-locked .node-status-badge,
+.modular-unit-page .node.is-done .node-status-badge {
+  display: block;
+}
+
+.modular-unit-page .node.is-locked .node-status-icon--lock,
+.modular-unit-page .node.is-done .node-status-icon--done {
+  display: block;
+}
+
+.modular-unit-page .node-status-lock-body,
+.modular-unit-page .node-status-lock-shackle {
+  fill: none;
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.modular-unit-page .node-badge .node-status-lock-body,
+.modular-unit-page .node-badge .node-status-lock-shackle {
+  stroke-width: 2.4;
+}
+
+.modular-unit-page .node-status-icon--done {
+  fill: none;
+  stroke: var(--graph-status-done, var(--color-success));
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.modular-unit-page .node-status-partial-fill {
+  fill: var(--graph-status-partial, var(--color-warning));
+  opacity: 0.5;
+}
+
+.modular-unit-page .node-status-partial-outline {
+  fill: none;
+  stroke: var(--graph-status-partial, var(--color-warning));
+  stroke-width: 2.4;
+}
+
+.modular-unit-page .graph-svg.is-interacting .node .node-shape,
+.modular-unit-page .graph-svg.is-interacting .node:hover .node-shape {
+  filter: none !important;
+  transition: none;
+}
+
+.modular-unit-page .node text {
+  font-family: var(--font-base);
+  font-size: 14px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.modular-unit-page .node .node-title {
+  fill: var(--color-text);
+  font-weight: 800;
+}
+
+.modular-unit-page .node .node-sub,
+.modular-unit-page .node .node-icon,
+.modular-unit-page .node .node-prereq {
+  fill: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.modular-unit-page .node.is-selected .node-shape {
+  stroke: var(--graph-status-open, var(--color-primary));
+  stroke-width: 3;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+}
+
+.modular-unit-page .node.is-selected:hover .node-shape {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+}
+
+.modular-unit-page .node.is-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modular-unit-page .node.is-locked.is-dim {
+  opacity: 0.28;
+}
+
+.modular-unit-page .node.is-locked .node-shape {
+  fill: var(--color-bg-surface);
+  stroke: var(--graph-status-locked, var(--color-text-muted));
+  stroke-dasharray: 5 4;
+}
+
+.modular-unit-page .node.is-done .node-shape {
+  stroke: var(--graph-status-done, var(--color-success));
+  fill: color-mix(in srgb, var(--graph-status-done, var(--color-success)) 7%, var(--color-bg-surface));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Content view                                                                */
+/* -------------------------------------------------------------------------- */
+
+.modular-unit-page .content-root {
+  display: grid;
+  gap: var(--space-6);
+  padding-bottom: var(--space-12);
+}
+
+.modular-unit-page .phase-card {
+  padding: var(--space-6);
+}
+
+.modular-unit-page .phase-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.modular-unit-page .phase-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+}
+
+.modular-unit-page .phase-meta {
+  display: inline-flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.modular-unit-page .phase-modules {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.modular-unit-page .module-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: clip;
+  scroll-margin-top: 220px;
+}
+
+.modular-unit-page .module-card > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: var(--space-4) var(--space-5);
+  display: block;
+}
+
+.modular-unit-page .module-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.modular-unit-page .module-card__summary-inner {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.modular-unit-page .module-card__title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.modular-unit-page .module-card__title {
+  font-weight: 800;
+}
+
+.modular-unit-page .module-card__meta {
+  display: inline-flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.modular-unit-page .module-card__counts {
+  display: inline-flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.modular-unit-page .module-card__body {
+  padding: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+.modular-unit-page .module-card.is-locked {
+  opacity: 0.65;
+}
+
+.modular-unit-page .module-card.is-locked summary {
+  cursor: not-allowed;
+}
+
+.modular-unit-page .module-card.is-jumped {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.modular-unit-page .badge-meta {
+  background: var(--color-bg-overlay);
+  border-color: var(--color-border);
+}
+
+.modular-unit-page .badge-meta--tasks::before {
+  content: "A ";
+}
+
+.modular-unit-page .badge-meta--materials::before {
+  content: "M ";
+}
+
+.modular-unit-page .badge-meta--cards::before {
+  content: "K ";
+}
+
+@media (max-width: 900px) {
+  .modular-unit-page .sticky-toolbar {
+    top: var(--space-2);
+  }
+
+  .modular-unit-page .module-card {
+    scroll-margin-top: 260px;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Container padding overrides                                                */
+/* -------------------------------------------------------------------------- */
+
+/* Why:
+   `gustav.css` adds generous vertical padding to `.container` on some pages.
+   The modular workspace uses multiple `.container` wrappers (header + views).
+   On iPads this wastes viewport height and makes the graph feel cramped. */
+.modular-unit-page .unit-head.container,
+.modular-unit-page .workspace-view.container {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Overview-mode overrides (must come last)                                    */
+/* -------------------------------------------------------------------------- */
+
+/* Why:
+   The "overview" mode is intended to be a viewport-filling workspace.
+   A generic rule later in this file sets `height: clamp(...)` on the graph
+   container and can override the earlier `.mode-overview` flex rules. This
+   leads to visible cropping on iPads (graph height > available viewport). */
+html.mode-overview .modular-unit-page .graph-shell {
+  margin-bottom: 0;
+}
+
+html.mode-overview .modular-unit-page .graph-container {
+  height: auto;
+  min-height: 0;
+}

@@ -141,6 +141,7 @@ async def test_student_cannot_create_course_forbidden():
         assert resp.status_code == 403
         data = resp.json()
         assert data.get("error") == "forbidden"
+        assert resp.headers.get("Cache-Control") == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -283,3 +284,27 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
         assert lst.status_code == 200
         ids = [c.get("id") for c in lst.json()]
         assert course_id in ids
+
+
+@pytest.mark.anyio
+async def test_list_courses_default_limit_matches_contract_10(monkeypatch: pytest.MonkeyPatch):
+    """GET /api/teaching/courses without `limit` must default to 10."""
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching
+
+    # Isolate behavior from DB state.
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+
+    teacher = main.SESSION_STORE.create(sub="teacher-default-limit-10", name="T", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        for i in range(12):
+            r = await client.post("/api/teaching/courses", json={"title": f"Kurs {i + 1}"})
+            assert r.status_code == 201, r.text
+
+        listed = await client.get("/api/teaching/courses")
+        assert listed.status_code == 200
+        payload = listed.json()
+        assert isinstance(payload, list)
+        assert len(payload) == 10

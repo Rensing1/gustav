@@ -147,3 +147,63 @@ def test_material_patch_includes_error_examples():
         "invalid_title",
     ]:
         assert key in examples
+
+
+def test_list_courses_default_limit_is_10():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    params = spec["paths"]["/api/teaching/courses"]["get"].get("parameters", [])
+    limit = next(p for p in params if p.get("name") == "limit")
+    assert limit.get("schema", {}).get("default") == 10
+
+
+def test_create_unit_400_contract_lists_invalid_unit_type_detail():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    create_unit_400 = spec["paths"]["/api/teaching/units"]["post"]["responses"]["400"]
+    description = create_unit_400.get("description", "") or ""
+    assert "invalid_unit_type" in description
+    examples = create_unit_400.get("content", {}).get("application/json", {}).get("examples", {})
+    assert "invalid_unit_type" in examples
+
+
+def test_create_unit_documents_503_for_modular_repo_capability_gap():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    responses = spec["paths"]["/api/teaching/units"]["post"]["responses"]
+    assert "503" in responses
+
+
+def test_course_members_get_has_merged_security_notes_without_key_override():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    notes = spec["paths"]["/api/teaching/courses/{course_id}/members"]["get"].get("x-security-notes", [])
+    assert isinstance(notes, list)
+    assert any("author-only policies control material visibility" in n for n in notes)
+    assert any("SECURITY DEFINER helper" in n for n in notes)
+
+
+def test_teaching_get_endpoints_do_not_declare_csrf_same_origin_requirement():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    paths = spec.get("paths", {})
+    for path in [
+        "/api/teaching/courses/{course_id}",
+        "/api/teaching/units",
+        "/api/teaching/units/{unit_id}",
+        "/api/teaching/units/{unit_id}/sections",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials",
+    ]:
+        notes = (paths.get(path, {}).get("get", {}) or {}).get("x-security-notes", [])
+        text = " | ".join(str(n) for n in (notes or []))
+        assert "CSRF: Same-origin required" not in text
+
+
+def test_create_section_documents_modular_side_effect() -> None:
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    desc = spec["paths"]["/api/teaching/units/{unit_id}/sections"]["post"].get("description", "") or ""
+    text = desc.lower()
+    assert "modular" in text
+    assert "unit_modules" in text

@@ -101,6 +101,10 @@ def main() -> None:
     if not h5p_review_secret or h5p_review_secret.upper().startswith("CHANGE_ME"):
         _update_env("H5P_REVIEW_TOKEN_SECRET", secrets.token_urlsafe(32))
 
+    app_csrf_secret = (_read_env_value("APP_CSRF_TOKEN_SECRET") or "").strip()
+    if not app_csrf_secret or app_csrf_secret.upper().startswith("CHANGE_ME"):
+        _update_env("APP_CSRF_TOKEN_SECRET", secrets.token_urlsafe(32))
+
     print("Synced .env for prod-like local runs (secrets not printed).")
 
 

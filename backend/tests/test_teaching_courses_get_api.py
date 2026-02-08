@@ -102,3 +102,14 @@ async def test_get_course_invalid_id_returns_400():
     assert r.status_code == 400
     body = r.json()
     assert body.get("detail") == "invalid_course_id"
+
+
+@pytest.mark.anyio
+async def test_get_course_by_id_owner_without_origin_header_still_returns_200():
+    """GET must not require CSRF Origin/Referer headers."""
+    owner = main.SESSION_STORE.create(sub="t-owner-no-origin", name="Owner", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        cid = await _create_course(c, title="Physik 11", teacher_cookie=owner.session_id)
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c.get(f"/api/teaching/courses/{cid}")
+    assert r.status_code == 200

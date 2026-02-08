@@ -856,3 +856,35 @@ body.mode-overview {
     scroll-margin-top: 260px;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Container padding overrides                                                */
+/* -------------------------------------------------------------------------- */
+
+/* Why:
+   `gustav.css` adds generous vertical padding to `.container` on some pages.
+   The modular workspace uses multiple `.container` wrappers (header + views).
+   On iPads this wastes viewport height and makes the graph feel cramped. */
+.modular-unit-page .unit-head.container,
+.modular-unit-page .workspace-view.container {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Overview-mode overrides (must come last)                                    */
+/* -------------------------------------------------------------------------- */
+
+/* Why:
+   The "overview" mode is intended to be a viewport-filling workspace.
+   A generic rule later in this file sets `height: clamp(...)` on the graph
+   container and can override the earlier `.mode-overview` flex rules. This
+   leads to visible cropping on iPads (graph height > available viewport). */
+html.mode-overview .modular-unit-page .graph-shell {
+  margin-bottom: 0;
+}
+
+html.mode-overview .modular-unit-page .graph-container {
+  height: auto;
+  min-height: 0;
+}

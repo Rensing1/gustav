@@ -18,6 +18,7 @@
 import { createGraphView } from './student_graph_view.js';
 
 const STORAGE_PREFIX = 'gustav.learning.modular_workspace:';
+const STATE_VERSION = 2;
 
 function readJsonFromLocalStorage(key) {
   try {
@@ -65,6 +66,7 @@ function tabDotClass(status) {
 
 function defaultWorkspaceState() {
   return {
+    version: STATE_VERSION,
     view: 'overview',
     openTabs: [],
     activeTab: null,
@@ -75,12 +77,14 @@ function defaultWorkspaceState() {
 
 function normalizeWorkspaceState(raw) {
   const st = raw && typeof raw === 'object' ? raw : {};
+  const version = Number(st.version || 0);
   const view = st.view === 'content' ? 'content' : 'overview';
   const openTabs = Array.isArray(st.openTabs) ? st.openTabs.map(String).filter(Boolean) : [];
   const activeTab = st.activeTab ? String(st.activeTab) : null;
   const expanded = st.expanded && typeof st.expanded === 'object' ? st.expanded : {};
-  const graphPose = st.graphPose && typeof st.graphPose === 'object' ? st.graphPose : null;
-  return { view, openTabs, activeTab, expanded, graphPose };
+  const graphPoseRaw = st.graphPose && typeof st.graphPose === 'object' ? st.graphPose : null;
+  const graphPose = version === STATE_VERSION ? graphPoseRaw : null;
+  return { version: STATE_VERSION, view, openTabs, activeTab, expanded, graphPose };
 }
 
 async function fetchGraph({ courseId, unitId }) {
@@ -248,6 +252,7 @@ function initOneWorkspace(rootEl) {
     showNodeTypeIcon: false,
     selectOnClick: false,
     limitZoomOutToFit: true,
+    fitMaxZoom: 0.9,
     autoFitOnSetGraph: false,
     onNodeClick: (id) => {
       const st = runtime?.statusById?.[String(id)]?.status || 'locked';

@@ -640,6 +640,23 @@ function initOneWorkspace(rootEl) {
     if (btn) btn.addEventListener('click', () => setView('overview'));
   }
 
+  function jumpToModuleCard(detailsEl) {
+    if (!detailsEl) return;
+    detailsEl.classList.add('is-jumped');
+    detailsEl.scrollIntoView({ block: 'start', inline: 'nearest' });
+    window.setTimeout(() => detailsEl.classList.remove('is-jumped'), 900);
+  }
+
+  function openModuleCard(mid, { jump } = { jump: false }) {
+    const card = ensureModuleCard(mid);
+    if (!card || !card.details) return false;
+    state.expanded[mid] = true;
+    card.details.open = true;
+    ensureModuleLoaded(mid);
+    if (jump) jumpToModuleCard(card.details);
+    return true;
+  }
+
   function openModuleInContent(id) {
     const mid = String(id);
     const st = runtime?.statusById?.[mid]?.status || 'locked';
@@ -664,21 +681,18 @@ function initOneWorkspace(rootEl) {
     renderOpenTabs();
 
     // Ensure content DOM exists for this module.
-    const card = ensureModuleCard(mid);
+    ensureModuleCard(mid);
     updatePhaseMeta();
     updateModuleCards();
 
-    // Switch view and scroll.
-    if (state.view !== 'content') setView('content', { scroll: false });
-
-    if (card && card.details) {
-      card.details.open = true;
-      ensureModuleLoaded(mid);
-
-      const node = card.details;
-      node.classList.add('is-jumped');
-      node.scrollIntoView({ block: 'start', inline: 'nearest' });
-      window.setTimeout(() => node.classList.remove('is-jumped'), 900);
+    // Switch view and force expanded card state.
+    const switchedToContent = state.view !== 'content';
+    if (switchedToContent) setView('content', { scroll: false });
+    openModuleCard(mid, { jump: true });
+    if (switchedToContent) {
+      window.requestAnimationFrame(() => {
+        openModuleCard(mid, { jump: false });
+      });
     }
   }
 

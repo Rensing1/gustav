@@ -91,6 +91,18 @@ def _fallback_add_member(*, course_id: str, student_sub: str, teacher_sub: str) 
 
 
 async def _prepare_learning_fixture():
+    return await _prepare_learning_fixture_with_task(
+        task_payload={"instruction_md": "### Aufgabe A", "criteria": ["Kriterium 1"], "max_attempts": 2}
+    )
+
+
+async def _prepare_learning_h5p_fixture():
+    return await _prepare_learning_fixture_with_task(
+        task_payload={"instruction_md": "### H5P Aufgabe", "h5p": {"content_id": None}}
+    )
+
+
+async def _prepare_learning_fixture_with_task(*, task_payload: dict):
     main.SESSION_STORE = SessionStore()
     student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
     teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
@@ -106,7 +118,7 @@ async def _prepare_learning_fixture():
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
-            json={"instruction_md": "### Aufgabe A", "criteria": ["Kriterium 1"], "max_attempts": 2},
+            json=task_payload,
         )
         task_id = r_task.json()["id"]
         r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id})
@@ -177,6 +189,30 @@ async def test_ui_text_field_is_not_required_to_allow_upload_mode():
     m = re.search(r"<textarea[^>]*name=\"text_body\"[^>]*>", html)
     assert m, "text_body textarea must be present"
     assert "required" not in m.group(0), "textarea must not be HTML-required"
+
+
+@pytest.mark.anyio
+async def test_non_h5p_task_keeps_history_placeholder():
+    """Only H5P should hide the attempt history block."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(f"/learning/courses/{course_id}/units/{unit_id}")
+    assert r.status_code == 200
+    html = r.text
+    assert f'<section id="task-history-{task_id}"' in html
+
+
+@pytest.mark.anyio
+async def test_h5p_task_does_not_render_history_placeholder():
+    """H5P cards should not render the generic attempt accordion placeholder."""
+    sid, course_id, unit_id, task_id = await _prepare_learning_h5p_fixture()
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sid)
+        r = await c.get(f"/learning/courses/{course_id}/units/{unit_id}")
+    assert r.status_code == 200
+    html = r.text
+    assert f'<section id="task-history-{task_id}"' not in html
 
 
 @pytest.mark.anyio

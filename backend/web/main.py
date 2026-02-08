@@ -2084,45 +2084,46 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             # Optionally load submission history for this task only (latest open)
             history_entries = []
             history_placeholder_html = ""
-            if show_history_for and show_history_for == tid:
-                try:
-                    async with _internal_api_client() as client:
-                        sid = _get_session_id(request) or ""
-                        if sid:
-                            client.cookies.set(SESSION_COOKIE_NAME, sid)
-                        r_hist = await client.get(
-                            f"/api/learning/courses/{course_id}/tasks/{tid}/submissions",
-                            params={"limit": 10, "offset": 0},
-                        )
-                    if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
-                        records = r_hist.json()
-                        _enrich_submission_records_with_file_urls(
-                            [rec for rec in records if isinstance(rec, dict)]
-                        )
-                        # Render the full history wrapper directly so the poller can
-                        # update only the dynamic zones without re-rendering previews.
-                        history_placeholder_html = _render_learning_task_history_wrapper_html(
-                            course_id=course_id,
-                            task_id=tid,
-                            items=[rec for rec in records if isinstance(rec, dict)],
-                            open_attempt_id=open_attempt_id_qp,
-                        )
-                except Exception:
-                    history_entries = []
-            else:
-                # Lazy-load the history via HTMX; we include a placeholder section
-                # that fetches and swaps itself on load.
-                payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
-                history_placeholder_html = (
-                    f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                    f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
-                    f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
-                    f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
-                    f'hx-vals="{payload}" '
-                    'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-                    f'<div class="text-muted">Lade Verlauf …</div>'
-                    f'</section>'
-                )
+            if task_kind != "h5p":
+                if show_history_for and show_history_for == tid:
+                    try:
+                        async with _internal_api_client() as client:
+                            sid = _get_session_id(request) or ""
+                            if sid:
+                                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                            r_hist = await client.get(
+                                f"/api/learning/courses/{course_id}/tasks/{tid}/submissions",
+                                params={"limit": 10, "offset": 0},
+                            )
+                        if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
+                            records = r_hist.json()
+                            _enrich_submission_records_with_file_urls(
+                                [rec for rec in records if isinstance(rec, dict)]
+                            )
+                            # Render the full history wrapper directly so the poller can
+                            # update only the dynamic zones without re-rendering previews.
+                            history_placeholder_html = _render_learning_task_history_wrapper_html(
+                                course_id=course_id,
+                                task_id=tid,
+                                items=[rec for rec in records if isinstance(rec, dict)],
+                                open_attempt_id=open_attempt_id_qp,
+                            )
+                    except Exception:
+                        history_entries = []
+                else:
+                    # Lazy-load the history via HTMX; we include a placeholder section
+                    # that fetches and swaps itself on load.
+                    payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
+                    history_placeholder_html = (
+                        f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                        f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                        f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+                        f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
+                        f'hx-vals="{payload}" '
+                        'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+                        f'<div class="text-muted">Lade Verlauf …</div>'
+                        f'</section>'
+                    )
 
             banner_html = '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>' if (success_banner and show_history_for == tid) else None
             tcard = TaskCard(
@@ -2204,15 +2205,17 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         form_html = _build_task_submit_form_html(
                             course_id=course_id, unit_id=unit_id, task_id=str(tid), task_kind=task_kind
                         )
-                        hx_vals_payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
-                        history_placeholder_html = (
-                            f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                            f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
-                            f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
-                            f'hx-target="this" hx-swap="outerHTML" '
-                            f'hx-vals="{hx_vals_payload}" '
-                            'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)"></section>'
-                        )
+                        history_placeholder_html = ""
+                        if task_kind != "h5p":
+                            hx_vals_payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
+                            history_placeholder_html = (
+                                f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                                f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
+                                f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
+                                f'hx-target="this" hx-swap="outerHTML" '
+                                f'hx-vals="{hx_vals_payload}" '
+                                'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)"></section>'
+                            )
                         banner_html = (
                             '<div role="alert" class="alert alert-success">Erfolgreich eingereicht</div>'
                             if (success_banner and show_history_for == tid)
@@ -2388,17 +2391,19 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
                 course_id=course_id, unit_id=unit_id, task_id=tid, task_kind=task_kind
             )
 
-        payload_json = _hx_vals_attr_payload({"open_attempt_id": ""})
-        history_placeholder_html = (
-            f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-            f'data-pending="false" data-open-attempt-id="" '
-            f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
-            f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
-            f'hx-vals="{payload_json}" '
-            'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-            f'<div class="text-muted">Lade Verlauf …</div>'
-            f"</section>"
-        )
+        history_placeholder_html = ""
+        if task_kind != "h5p":
+            payload_json = _hx_vals_attr_payload({"open_attempt_id": ""})
+            history_placeholder_html = (
+                f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+                f'data-pending="false" data-open-attempt-id="" '
+                f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+                f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
+                f'hx-vals="{payload_json}" '
+                'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+                f'<div class="text-muted">Lade Verlauf …</div>'
+                f"</section>"
+            )
         tcard = TaskCard(
             task_id=tid,
             title=title,

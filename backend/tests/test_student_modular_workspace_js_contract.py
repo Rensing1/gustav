@@ -70,3 +70,22 @@ def test_workspace_state_normalization_always_resets_graph_pose() -> None:
     js = _read_js()
     assert "graphPose: null" in js
     assert "return { version: STATE_VERSION, view, openTabs, activeTab, expanded, graphPose: null };" in js
+
+
+def test_open_module_from_graph_forces_expanded_card_after_view_switch() -> None:
+    """Opening from graph must end with an expanded module card.
+
+    Why:
+        On slower layout transitions (or when content view is hidden), an
+        immediate open attempt can be lost. A second pass after the view switch
+        keeps behavior deterministic for students.
+    """
+    js = _read_js()
+    assert "function openModuleCard(mid, { jump } = { jump: false })" in js
+    assert "state.expanded[mid] = true;" in js
+    assert "card.details.open = true;" in js
+    assert "const switchedToContent = state.view !== 'content';" in js
+    assert "openModuleCard(mid, { jump: true });" in js
+    assert "if (switchedToContent) {" in js
+    assert "window.requestAnimationFrame(() => {" in js
+    assert "openModuleCard(mid, { jump: false });" in js

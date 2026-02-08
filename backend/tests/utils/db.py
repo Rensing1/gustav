@@ -48,4 +48,8 @@ def require_db_or_skip() -> None:
                 return
         except Exception:
             continue
-    pytest.skip("Database not reachable; ensure local DB at 127.0.0.1:54322 or set DATABASE_URL")
+    strict = (os.getenv("REQUIRE_DB_TESTS", "0") or "").strip().lower() in {"1", "true", "yes", "on"}
+    message = "Database not reachable; ensure local DB at 127.0.0.1:54322 or set DATABASE_URL"
+    if strict:
+        pytest.fail(message)
+    pytest.skip(message)

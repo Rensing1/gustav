@@ -793,11 +793,11 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
                 cur.execute(
                     """
                     insert into public.learning_submissions (
-                        id, course_id, task_id, student_sub, kind,
+                        id, course_id, task_id, section_id, student_sub, kind,
                         text_body, storage_key, mime_type, size_bytes, sha256,
                         attempt_nr, analysis_status, analysis_json
                     ) values (
-                        %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                        %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                         %s, null, null, null, null,
                         %s, 'pending', null
                     )
@@ -806,6 +806,7 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
                         submission_id,
                         course_id,
                         task_id,
+                        section_id,
                         student_sub,
                         f"Text answer {idx}",
                         attempt_nr,
@@ -902,16 +903,16 @@ async def test_worker_feedback_retry_uses_cached_ocr(monkeypatch: pytest.MonkeyP
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                    id, course_id, task_id, student_sub, kind,
+                    id, course_id, task_id, section_id, student_sub, kind,
                     text_body, storage_key, mime_type, size_bytes, sha256,
                     attempt_nr, analysis_status, analysis_json
                 ) values (
-                    %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                    %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                     null, 'dummy/storage', 'application/pdf', 1024, %s,
                     1, 'extracted', null
                 )
                 """,
-                (submission_id, course_id, task_id, student_sub, "0" * 64),
+                (submission_id, course_id, task_id, section_id, student_sub, "0" * 64),
             )
             payload = {
                 "submission_id": submission_id,
@@ -967,6 +968,11 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
     telemetry.reset_for_tests()
     monkeypatch.setenv("WORKER_CONCURRENCY", "1")
     monkeypatch.setenv("WORKER_LEASE_SECONDS", "60")
+    # Keep this test deterministic across environments:
+    # - local run_once must lease pytest-tagged jobs (explicit false),
+    # - external docker workers (default true) should skip them.
+    monkeypatch.setenv("WORKER_SKIP_PYTEST_JOBS", "false")
+    lease_now = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
 
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or _dsn()
     teacher_sub = f"teacher-{uuid.uuid4()}"
@@ -1004,11 +1010,11 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                    id, course_id, task_id, student_sub, kind,
+                    id, course_id, task_id, section_id, student_sub, kind,
                     text_body, storage_key, mime_type, size_bytes, sha256,
                     attempt_nr, analysis_status, analysis_json
                 ) values (
-                    %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                    %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                     %s, null, null, null, null,
                     1, 'pending', null
                 )
@@ -1017,11 +1023,13 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
                     submission_id,
                     course_id,
                     task_id,
+                    section_id,
                     student_sub,
                     "Crash submission",
                 ),
             )
             payload = {
+                "_gustav_source": "pytest",
                 "submission_id": submission_id,
                 "course_id": str(course_id),
                 "task_id": str(task_id),
@@ -1031,8 +1039,11 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
                 "criteria": ["Kriterium A"],
             }
             cur.execute(
-                "insert into public.learning_submission_jobs (submission_id, payload) values (%s::uuid, %s::jsonb)",
-                (submission_id, json.dumps(payload)),
+                """
+                insert into public.learning_submission_jobs (submission_id, payload, visible_at)
+                values (%s::uuid, %s::jsonb, %s)
+                """,
+                (submission_id, json.dumps(payload), lease_now),
             )
         conn.commit()
 
@@ -1046,7 +1057,7 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
             dsn=worker_dsn,
             vision_adapter=_StubVisionAdapter(text_md="# boom"),
             feedback_adapter=_StubFeedbackAdapter(feedback_md="unused"),
-            now=datetime.now(tz=timezone.utc),
+            now=lease_now,
         )
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
@@ -1113,11 +1124,11 @@ async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
                 cur.execute(
                     """
                     insert into public.learning_submissions (
-                        id, course_id, task_id, student_sub, kind,
+                        id, course_id, task_id, section_id, student_sub, kind,
                         text_body, storage_key, mime_type, size_bytes, sha256,
                         attempt_nr, analysis_status, analysis_json
                     ) values (
-                        %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                        %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                         %s, null, null, null, null,
                         %s, 'pending', null
                     )
@@ -1126,6 +1137,7 @@ async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
                         submission_id,
                         course_id,
                         task_id,
+                        section_id,
                         student_sub,
                         f"Text answer {idx}",
                         idx + 1,

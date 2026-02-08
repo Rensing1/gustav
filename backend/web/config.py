@@ -58,6 +58,18 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: H5P_REVIEW_TOKEN_SECRET is unset or a placeholder in production."
         )
 
+    # 1d) SSR/browser CSRF token secret must be independent from H5P secrets.
+    # Keep secrets separated so rotation/leak blast radius stays minimal.
+    csrf_secret = (os.getenv("APP_CSRF_TOKEN_SECRET", "") or "").strip()
+    if (
+        not csrf_secret
+        or csrf_secret.upper().startswith("CHANGE_ME")
+        or csrf_secret.upper() == "DUMMY_DO_NOT_USE"
+    ):
+        raise SystemExit(
+            "Refusing to start: APP_CSRF_TOKEN_SECRET is unset or a placeholder in production."
+        )
+
     # 2) Postgres TLS: forbid explicit disable in all configured DSNs
     for key in ("DATABASE_URL", "TEACHING_DATABASE_URL", "LEARNING_DATABASE_URL", "SESSION_DATABASE_URL"):
         dsn = os.getenv(key, "") or ""

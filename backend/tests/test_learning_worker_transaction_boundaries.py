@@ -79,6 +79,7 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
                 insert into public.learning_submissions (
                     course_id,
                     task_id,
+                    section_id,
                     student_sub,
                     kind,
                     storage_key,
@@ -90,6 +91,7 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
                     idempotency_key
                 )
                 values (
+                    %s::uuid,
                     %s::uuid,
                     %s::uuid,
                     %s,
@@ -107,6 +109,7 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
                 (
                     fixture.course_id,
                     fixture.task["id"],
+                    fixture.section_id,
                     fixture.student_sub,
                     "storage://bucket/key.png",
                     "image/png",

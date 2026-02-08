@@ -115,7 +115,11 @@ async def test_module_titles_link_to_unit_pages():
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         course_id = await _create_course_via_api(c, title="UI-Kurs Modules Links")
         u1 = await _create_unit_via_api(c, title="Verlinkte Einheit")
-        r = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": u1})
+        r = await c.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": u1},
+            headers={"Origin": "http://test"},
+        )
         assert r.status_code == 201
 
         page = await c.get(f"/courses/{course_id}/modules")
@@ -140,7 +144,11 @@ async def test_modules_ui_posts_require_csrf():
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         # Missing CSRF on delete
-        mod = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": u})
+        mod = await c.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": u},
+            headers={"Origin": "http://test"},
+        )
         assert mod.status_code == 201
         mid = mod.json().get("id")
         r2 = await c.post(
@@ -169,7 +177,11 @@ async def test_delete_updates_available_units_oob():
         u1 = await _create_unit_via_api(c, title="Einheit 1")
         u2 = await _create_unit_via_api(c, title="Einheit 2")
         # Attach u1 only
-        mod = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": u1})
+        mod = await c.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": u1},
+            headers={"Origin": "http://test"},
+        )
         assert mod.status_code == 201
 
         page = await c.get(f"/courses/{course_id}/modules")

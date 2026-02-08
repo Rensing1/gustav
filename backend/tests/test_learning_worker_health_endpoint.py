@@ -159,6 +159,20 @@ async def test_learning_worker_health_returns_503_on_db_failure(monkeypatch: pyt
     monkeypatch.setattr(worker_health, "psycopg", _BadPsy, raising=False)
     monkeypatch.setattr(worker_health, "dict_row", object(), raising=False)
 
+    # Keep the endpoint contract test deterministic by avoiding threadpool shutdown
+    # edge-cases in the AnyIO test runner. We still exercise the same sync probe
+    # branch (`db_connect_failed`) but call it directly in-process.
+    class _SyncProbeHealthService(worker_health.LearningWorkerHealthService):
+        async def probe(self) -> worker_health.HealthProbeResult:  # type: ignore[override]
+            return self._probe_sync()
+
+    monkeypatch.setattr(
+        worker_health,
+        "LEARNING_WORKER_HEALTH_SERVICE",
+        _SyncProbeHealthService(),
+        raising=False,
+    )
+
     async with await _client() as client:
         client.cookies.set("gustav_session", teacher.session_id)
         resp = await client.get("/internal/health/learning-worker")
@@ -194,3 +208,32 @@ async def test_learning_worker_health_requires_authentication(monkeypatch: pytes
     assert fake_service.probe_calls == 0
     assert resp.headers.get("Cache-Control") == "private, no-store"
     assert resp.headers.get("Vary") == "Origin"
+
+
+@pytest.mark.anyio
+async def test_learning_worker_health_service_probe_uses_run_in_executor(monkeypatch: pytest.MonkeyPatch):
+    """Service probe should delegate blocking work via run_in_executor."""
+    expected = _probe_result(
+        status="healthy",
+        current_role="gustav_worker",
+        checks=[("db_role", "ok", None)],
+    )
+    calls: dict[str, object] = {}
+
+    class _FakeLoop:
+        async def run_in_executor(self, executor, fn):  # noqa: ANN001 - test double mirrors asyncio API
+            calls["executor"] = executor
+            calls["fn"] = fn
+            return expected
+
+    monkeypatch.setattr(worker_health.asyncio, "get_running_loop", lambda: _FakeLoop(), raising=True)
+    service = worker_health.LearningWorkerHealthService()
+
+    result = await service.probe()
+
+    assert result == expected
+    assert calls.get("executor") is None
+    fn = calls.get("fn")
+    assert callable(fn)
+    assert getattr(fn, "__name__", "") == "_probe_sync"
+    assert getattr(fn, "__self__", None) is service

@@ -20,7 +20,8 @@ class Layout(Component):
         user: Optional[Dict[str, Any]] = None,
         show_nav: bool = True,
         show_header: bool = True,
-        current_path: str = "/"
+        current_path: str = "/",
+        extra_head_html: str = "",
     ):
         """
         Args:
@@ -30,6 +31,8 @@ class Layout(Component):
             show_nav: Whether to show navigation (default: True)
             show_header: Whether to show header (default: True)
             current_path: Current URL path for active navigation highlighting
+            extra_head_html: Optional raw HTML injected into the <head>.
+                             Intended for page-specific CSS/JS includes.
         """
         self.title = title
         self.content = content
@@ -37,6 +40,7 @@ class Layout(Component):
         self.show_nav = show_nav
         self.show_header = show_header
         self.current_path = current_path
+        self.extra_head_html = extra_head_html
 
     def render(self) -> str:
         """Render the complete HTML document including navigation and chrome."""
@@ -115,6 +119,10 @@ class Layout(Component):
 
     <!-- Custom CSS (no external dependencies) -->
     <link rel="stylesheet" href="/static/css/gustav.css?v=5">
+    <!-- Modular units (student + teacher). Must be loaded globally because
+         navigation happens via HTMX fragment swaps that do not update <head>. -->
+    <link rel="stylesheet" href="/static/css/student_modular_unit.css?v=4">
+    <link rel="stylesheet" href="/static/css/teaching_modular_unit_editor.css?v=5">
 
     <!-- HTMX for interactivity (local copy) -->
     <SCRIPT src="/static/js/vendor/htmx.min.js"></SCRIPT>
@@ -127,6 +135,11 @@ class Layout(Component):
     <SCRIPT src="/static/js/gustav.js?v=9" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
+    <!-- Student modular unit workspace (dummy-like overview/content) -->
+    <SCRIPT type="module" src="/static/js/student_modular_workspace.js?v=4"></SCRIPT>
+    <!-- Teacher modular unit visual editor -->
+    <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=8" defer></SCRIPT>
+    {self.extra_head_html}
     """
 
     def _render_main_inner(self, breadcrumb_html: str) -> str:

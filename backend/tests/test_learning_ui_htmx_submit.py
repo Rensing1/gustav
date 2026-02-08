@@ -7,6 +7,7 @@ from httpx import ASGITransport
 
 from backend.web import main
 import re
+import json
 
 
 def _student_session():
@@ -62,7 +63,12 @@ class _FakeAsyncClient:
         if handler is None:
             return _FakeResponse(404, {})
         payload = handler(json or {}) if callable(handler) else handler
-        return _FakeResponse(201, payload)
+        status = 201
+        body = payload
+        if isinstance(payload, tuple) and len(payload) == 2:
+            status = int(payload[0])
+            body = payload[1]
+        return _FakeResponse(status, body)
 
 
 @pytest.mark.anyio
@@ -207,7 +213,12 @@ async def test_htmx_submit_returns_history_fragment_and_message(monkeypatch: pyt
         )
     # Expect HTML fragment of history, not a redirect
     assert r.status_code == 200
-    assert r.headers.get("HX-Trigger")
+    trigger = r.headers.get("HX-Trigger")
+    assert trigger
+    trigger_payload = json.loads(trigger)
+    assert trigger_payload.get("showMessage"), "expected showMessage trigger for UX feedback"
+    # Modular unit workspace: successful submissions should trigger a graph refresh.
+    assert trigger_payload.get("modularGraphRefresh") == {"courseId": course_id, "unitId": unit_id}
     html = r.text
     assert f'id="task-history-{task_id}"' in html
     # In-progress → includes hx polling
@@ -246,6 +257,35 @@ async def test_non_htmx_submit_keeps_prg(monkeypatch: pytest.MonkeyPatch):
         )
     assert r.status_code in (302, 303)
     assert r.headers.get("location", "").startswith(f"/learning/courses/{course_id}/units/{unit_id}")
+
+@pytest.mark.anyio
+async def test_htmx_submit_error_does_not_expose_x_diag_header(monkeypatch: pytest.MonkeyPatch):
+    """Error responses must not leak internal diagnostics via response headers."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    unit_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+
+    def _create_submission_error(_json):
+        return (400, {"error": "bad_request", "detail": "invalid_input"})
+
+    fake = _FakeAsyncClient({
+        f"POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions": _create_submission_error,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.post(
+            f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+            data={"mode": "text", "unit_id": unit_id, "text_body": "Hallo"},
+            headers={"HX-Request": "true", "Origin": "http://test"},
+        )
+
+    assert r.status_code == 400
+    assert r.headers.get("X-Diag") is None
 
 
 @pytest.mark.anyio

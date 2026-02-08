@@ -17,6 +17,7 @@ import sys
 import pytest
 import httpx
 from httpx import ASGITransport
+from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -99,6 +100,85 @@ async def test_units_create_prg_success():
         list_r = await c.get("/units")
         assert list_r.status_code == 200
         assert "Genetik" in list_r.text
+
+
+@pytest.mark.anyio
+async def test_units_create_can_create_modular_units_via_ui_form():
+    """Teachers should be able to select unit_type=modular in the SSR create form.
+
+    Why:
+        The JSON API already supports `unit_type`, but the teacher SSR UI must
+        expose it so we can create modular units without calling the API
+        manually.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular unit create UI test")
+
+    sess = main.SESSION_STORE.create(sub="t-303-mod", name="Lehrer Modular", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        get_r = await c.get("/units")
+        assert get_r.status_code == 200
+        token = _extract_csrf_token(get_r.text)
+        assert token, "csrf_token not found in form"
+        # The form must expose a unit_type selector with a modular option.
+        assert 'name="unit_type"' in get_r.text
+        assert 'value="modular"' in get_r.text
+
+        post_r = await c.post(
+            "/units",
+            data={"title": "Modulare Einheit", "unit_type": "modular", "csrf_token": token},
+            follow_redirects=False,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert post_r.status_code in (302, 303)
+
+        # Verify through the Teaching JSON API that the unit was created as modular.
+        api_r = await c.get("/api/teaching/units", headers={"Origin": "http://test"})
+        assert api_r.status_code == 200
+        units = api_r.json() or []
+        created = next((u for u in units if u.get("title") == "Modulare Einheit"), None)
+        assert created is not None, "Created unit not found via API list"
+        assert created.get("unit_type") == "modular"
+
+
+@pytest.mark.anyio
+async def test_units_list_renders_modular_unit_badge_and_editor_link():
+    """Modular units must be distinguishable and expose a single editor entrypoint."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for modular unit list UI test")
+
+    sess = main.SESSION_STORE.create(sub="t-303-mod-ui", name="Lehrer Modular UI", roles=["teacher"])  # type: ignore
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        # Seed: create one modular unit via API (bypasses SSR create form).
+        r = await c.post("/api/teaching/units", json={"title": "U Modular", "unit_type": "modular"}, headers={"Origin": "http://test"})
+        assert r.status_code == 201, r.text
+        uid = r.json()["id"]
+
+        page = await c.get("/units")
+        assert page.status_code == 200
+        html = page.text
+        assert "U Modular" in html
+        # Badge/label so teachers can see that this is not a linear unit.
+        assert "Modular" in html
+        # Single entrypoint: open the editor (phases + modules).
+        assert "Editor öffnen" in html
+        assert f'href="/units/{uid}"' in html
 
 
 @pytest.mark.anyio

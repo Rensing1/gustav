@@ -286,11 +286,11 @@ async def test_latest_detail_includes_text_and_files_for_pdf_submission():
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   storage_key, mime_type, size_bytes, sha256, attempt_nr,
                   text_body, analysis_status, completed_at
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                   %s, %s, %s, %s, 1,
                   %s, 'completed', now()
                 )
@@ -299,6 +299,7 @@ async def test_latest_detail_includes_text_and_files_for_pdf_submission():
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     storage_key,
                     "application/pdf",
@@ -407,10 +408,10 @@ async def test_latest_detail_includes_feedback_and_analysis():
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                   %s, 1, 'completed', now(), %s, %s
                 )
                 """,
@@ -418,6 +419,7 @@ async def test_latest_detail_includes_feedback_and_analysis():
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     "Antwort für Feedback",
                     feedback_md,
@@ -517,10 +519,10 @@ async def test_latest_detail_logs_unhandled_analysis_shape(caplog: pytest.LogCap
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                   %s, 1, 'completed', now(), %s, %s
                 )
                 """,
@@ -528,6 +530,7 @@ async def test_latest_detail_logs_unhandled_analysis_shape(caplog: pytest.LogCap
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     "Antwort für Logging",
                     feedback_md,
@@ -615,11 +618,11 @@ async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   storage_key, mime_type, size_bytes, sha256, attempt_nr,
                   text_body, analysis_status, completed_at
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                   %s, %s, %s, %s, 1,
                   %s, 'completed', now()
                 )
@@ -628,6 +631,7 @@ async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     storage_key,
                     "application/pdf",
@@ -728,11 +732,11 @@ async def test_latest_detail_omits_files_when_size_unknown():
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   storage_key, mime_type, size_bytes, sha256, attempt_nr,
                   text_body, analysis_status, completed_at
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                   %s, %s, NULL, %s, 1,
                   %s, 'completed', now()
                 )
@@ -741,6 +745,7 @@ async def test_latest_detail_omits_files_when_size_unknown():
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     storage_key,
                     "application/pdf",
@@ -847,10 +852,10 @@ async def test_latest_detail_falls_back_to_learning_submissions_when_primary_que
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                   %s, 1, 'completed', now(), %s, %s
                 )
                 """,
@@ -858,6 +863,7 @@ async def test_latest_detail_falls_back_to_learning_submissions_when_primary_que
                     submission_id,
                     cid,
                     task["id"],
+                    section["id"],
                     learner.sub,
                     "Antwort für Fallback",
                     feedback_md,
@@ -968,10 +974,10 @@ async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   text_body, attempt_nr, analysis_status, completed_at, feedback_md, analysis_json
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'text',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'text',
                   %s, 1, 'completed', now(), %s, %s
                 )
                 """,
@@ -979,6 +985,7 @@ async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest
                     submission_id,
                     cid,
                     task_a["id"],
+                    section_a["id"],
                     learner.sub,
                     "Antwort für Fallback Relation",
                     feedback_md,

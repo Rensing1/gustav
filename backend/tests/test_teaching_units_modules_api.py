@@ -153,6 +153,14 @@ async def test_unit_validation_errors():
         assert resp_long.status_code == 400
         assert resp_long.json().get("detail") == "invalid_title"
 
+        # Invalid unit_type → 400
+        resp_invalid_type = await client.post(
+            "/api/teaching/units",
+            json={"title": "Valid", "unit_type": "unknown"},
+        )
+        assert resp_invalid_type.status_code == 400
+        assert resp_invalid_type.json().get("detail") == "invalid_unit_type"
+
         # Patch without fields → 400
         created = await _create_unit(client, title="Valid Unit")
         resp_empty_patch = await client.patch(f"/api/teaching/units/{created['id']}", json={})

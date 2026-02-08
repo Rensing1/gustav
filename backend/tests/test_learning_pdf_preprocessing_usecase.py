@@ -101,11 +101,11 @@ def _seed_pdf_submission(*, size_bytes: int) -> SeededSubmission:
             cur.execute(
                 """
                 insert into public.learning_submissions (
-                  id, course_id, task_id, student_sub, kind,
+                  id, course_id, task_id, section_id, student_sub, kind,
                   storage_key, mime_type, size_bytes, sha256, attempt_nr,
                   analysis_status, analysis_json, text_body, feedback_md, error_code
                 ) values (
-                  %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                   %s, 'application/pdf', %s, %s, 1,
                   'pending', null, null, null, null
                 )
@@ -114,6 +114,7 @@ def _seed_pdf_submission(*, size_bytes: int) -> SeededSubmission:
                     str(submission_id),
                     str(course_id),
                     str(task_id),
+                    str(section_id),
                     student,
                     storage_key,
                     int(size_bytes),

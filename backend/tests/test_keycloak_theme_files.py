@@ -190,12 +190,17 @@ def test_email_templates_present_for_verification_and_reset():
 
 
 def test_email_templates_reference_support_contact():
-    """Email templates should mention the support address in the footer."""
+    """Email templates should reference the centralized support contact."""
     html_root = EMAIL_THEME_ROOT / "html"
-    support_email = "support@school.example"
+    theme_props = EMAIL_THEME_ROOT / "theme.properties"
+    assert theme_props.exists(), "email theme.properties missing"
+    props_text = theme_props.read_text(encoding="utf-8")
+    assert "supportEmail=" in props_text, "theme.properties must define supportEmail"
+    assert "support@school.example" not in props_text, "placeholder support email must not remain"
 
     for name in ["email-verification.ftl", "password-reset.ftl"]:
         tpl = html_root / name
         assert tpl.exists(), f"{name} missing"
         text = tpl.read_text(encoding="utf-8")
-        assert support_email in text, f"{name} should include support email {support_email}"
+        assert "support@school.example" not in text, f"{name} must not contain placeholder support email"
+        assert "${properties.supportEmail!" in text, f"{name} should read support contact from theme.properties"

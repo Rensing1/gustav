@@ -130,7 +130,7 @@ test-openai:
 
 .PHONY: verify
 verify:
-	@$(MAKE) test
+	@REQUIRE_DB_TESTS=1 $(MAKE) test
 	@$(MAKE) test-h5p
 	@$(MAKE) test-supabase
 	@$(MAKE) test-openai

@@ -72,6 +72,7 @@ class Course:
 @dataclass
 class Unit:
     id: str
+    unit_type: str
     title: str
     summary: str | None
     author_id: str
@@ -241,7 +242,7 @@ class _Repo:
         items.sort(key=lambda u: u.created_at, reverse=True)
         return items[offset: offset + limit]
 
-    def create_unit(self, *, title: str, summary: str | None, author_id: str) -> Unit:
+    def create_unit(self, *, title: str, summary: str | None, author_id: str, unit_type: str | None = None) -> Unit:
         title = (title or "").strip()
         if not title or len(title) > 200:
             raise ValueError("invalid_title")
@@ -251,10 +252,14 @@ class _Repo:
                 raise ValueError("invalid_summary")
             if summary == "":
                 summary = None
+        norm_type = (unit_type or "linear").strip().lower()
+        if norm_type not in ("linear", "modular"):
+            raise ValueError("invalid_unit_type")
         now = datetime.now(timezone.utc).isoformat()
         uid = str(uuid4())
         unit = Unit(
             id=uid,
+            unit_type=norm_type,
             title=title,
             summary=summary,
             author_id=author_id,
@@ -1064,6 +1069,39 @@ def _is_uuid_like(value: str) -> bool:
     return True
 
 
+def _canonical_uuid(value: str) -> str:
+    """Return canonical lowercase UUID string."""
+    return str(UUID(str(value)))
+
+
+def _validate_uuid_id_list(
+    raw_ids: object,
+    *,
+    array_detail: str,
+    empty_detail: str,
+    duplicate_detail: str,
+    invalid_detail: str,
+) -> tuple[list[str] | None, JSONResponse | None]:
+    """Validate reorder payload id arrays without raising on unhashable items."""
+    if not isinstance(raw_ids, list):
+        return None, _private_error({"error": "bad_request", "detail": array_detail}, status_code=400)
+    if len(raw_ids) == 0:
+        return None, _private_error({"error": "bad_request", "detail": empty_detail}, status_code=400)
+
+    ids: list[str] = []
+    for item in raw_ids:
+        if not isinstance(item, str):
+            return None, _private_error({"error": "bad_request", "detail": invalid_detail}, status_code=400)
+        norm = item.strip()
+        if not norm or not _is_uuid_like(norm):
+            return None, _private_error({"error": "bad_request", "detail": invalid_detail}, status_code=400)
+        ids.append(_canonical_uuid(norm))
+
+    if len(ids) != len(set(ids)):
+        return None, _private_error({"error": "bad_request", "detail": duplicate_detail}, status_code=400)
+    return ids, None
+
+
 def _guard_unit_author(unit_id: str, author_sub: str):
     """Validate unit ownership, returning an error response when access is denied."""
     if not _is_uuid_like(unit_id):
@@ -1111,6 +1149,84 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
     if vary_origin:
         headers["Vary"] = "Origin"
     return JSONResponse(content=payload, status_code=status_code, headers=headers)
+
+
+def _clamp_limit_offset(
+    *,
+    limit: int | None,
+    offset: int | None,
+    default_limit: int,
+    max_limit: int = 50,
+    zero_means_default: bool = True,
+) -> tuple[int, int]:
+    """Clamp list pagination consistently across Teaching endpoints."""
+    try:
+        norm_limit = int(limit) if limit is not None else default_limit
+    except (TypeError, ValueError):
+        norm_limit = default_limit
+    if zero_means_default and norm_limit == 0:
+        norm_limit = default_limit
+    norm_limit = max(1, min(max_limit, norm_limit))
+    try:
+        norm_offset = int(offset) if offset is not None else 0
+    except (TypeError, ValueError):
+        norm_offset = 0
+    norm_offset = max(0, norm_offset)
+    return norm_limit, norm_offset
+
+
+def _require_modular_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:
+    """Ensure modular endpoints run only when the repo implements required methods."""
+    for method_name in method_names:
+        if not callable(getattr(repo, method_name, None)):
+            return _private_error({"error": "service_unavailable"}, status_code=503)
+    return None
+
+
+_MODULAR_UNIT_CREATE_REQUIRED_METHODS: tuple[str, ...] = (
+    "list_unit_phases_for_author",
+    "create_unit_phase",
+    "update_unit_phase_title",
+    "delete_unit_phase_for_author",
+    "reorder_unit_phases_owned",
+    "list_unit_modules_for_author",
+    "create_unit_module_for_author",
+    "update_unit_module_owned",
+    "delete_unit_module_for_author",
+    "list_unit_module_edges_for_author",
+    "create_unit_module_edge_for_author",
+    "delete_unit_module_edge_for_author",
+    "reorder_unit_phase_modules_owned",
+)
+
+
+def _is_signature_compat_type_error(exc: TypeError) -> bool:
+    """Return True only for argument-signature mismatches in fallback repos.
+
+    Why:
+        Some older/in-memory test doubles still expose positional signatures.
+        We accept that compatibility case, but we must not mask arbitrary
+        TypeErrors raised *inside* repository code paths.
+    """
+    msg = (str(exc) or "").lower()
+    hints = (
+        "unexpected keyword argument",
+        "required positional argument",
+        "positional arguments but",
+        "takes",
+        "got multiple values for argument",
+    )
+    return any(hint in msg for hint in hints)
+
+
+def _list_unit_modules_for_author_compat(repo: object, *, unit_id: str, author_id: str):
+    """Call module listing with keyword args and controlled signature fallback."""
+    try:
+        return repo.list_unit_modules_for_author(unit_id=unit_id, author_id=author_id)  # type: ignore[attr-defined]
+    except TypeError as exc:
+        if not _is_signature_compat_type_error(exc):
+            raise
+        return repo.list_unit_modules_for_author(unit_id, author_id)  # type: ignore[attr-defined]
 
 
 def _csrf_guard(request: Request) -> JSONResponse | None:
@@ -1294,7 +1410,7 @@ def resolve_student_names(subs: list[str]) -> dict[str, str]:
 # --- Routes ----------------------------------------------------------------------
 
 @teaching_router.get("/api/teaching/courses")
-async def list_courses(request: Request, limit: int = 20, offset: int = 0):
+async def list_courses(request: Request, limit: int = 10, offset: int = 0):
     """
     List courses for the current user with simple pagination.
 
@@ -1304,8 +1420,7 @@ async def list_courses(request: Request, limit: int = 20, offset: int = 0):
     """
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
-    limit = max(1, min(50, int(limit or 20)))
-    offset = max(0, int(offset or 0))
+    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
     repo = _get_repo()
     if _role_in(user, "teacher"):
         items = repo.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
@@ -1332,7 +1447,7 @@ async def create_course(request: Request, payload: CourseCreate):
     """
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     csrf = _csrf_guard(request)
     if csrf:
         return csrf
@@ -1347,7 +1462,7 @@ async def create_course(request: Request, payload: CourseCreate):
         )
     except ValueError:
         # Map repo validation to contract 400
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     # Security: return private, no-store to prevent caching of owner-scoped data
     return _json_private(_serialize_course(course), status_code=201)
 
@@ -1372,13 +1487,10 @@ async def get_course(request: Request, course_id: str):
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
+        return _private_error({"error": "forbidden"}, status_code=403)
     # Validate path parameter format early to avoid unintended 500s
     if not _is_uuid_like(course_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     guard = _guard_course_owner(course_id, sub)
     if guard:
         return guard
@@ -1393,7 +1505,7 @@ async def get_course(request: Request, course_id: str):
     except Exception:
         c = repo.get_course(course_id)
     if not c:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_course(c), status_code=200)
 
 class CourseUpdate(BaseModel):
@@ -1413,8 +1525,19 @@ class CourseUpdate(BaseModel):
 
 
 class UnitCreatePayload(BaseModel):
+    unit_type: str | None = Field(default=None)
     title: str | None = Field(default=None)
     summary: str | None = Field(default=None)
+
+    @field_validator("unit_type")
+    @classmethod
+    def _normalize_unit_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip().lower()
+            return stripped or None
+        return v
 
     @field_validator("title")
     @classmethod
@@ -1483,6 +1606,113 @@ class CourseModuleReorderPayload(BaseModel):
 class ModuleSectionVisibilityPayload(BaseModel):
     # Accept loose typing to avoid FastAPI 422 and surface contract error codes.
     visible: object | None = None
+
+
+# --- Phases (modular Units) ----------------------------------------------------
+
+class UnitPhaseCreatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+
+    @field_validator("title")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+
+class UnitPhaseUpdatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            return s
+        return v
+
+
+class UnitPhaseReorderPayload(BaseModel):
+    # Use loose typing to avoid FastAPI 422, then validate type manually
+    phase_ids: object | None = None
+
+
+# --- Modules (modular Units; Option B) ---------------------------------------
+
+class UnitModuleCreatePayload(BaseModel):
+    # Accept raw strings (including empty) and validate in handler to return 400
+    title: str | None = Field(default=None)
+    phase_id: str | None = Field(default=None)
+
+    @field_validator("title")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+    @field_validator("phase_id")
+    @classmethod
+    def _normalize_phase_id(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
+
+
+class UnitModuleUpdatePayload(BaseModel):
+    # Accept any length; enforce 1..200 in handler to return 400 (not 422)
+    title: str | None = Field(default=None)
+    # Use loose typing to avoid FastAPI 422, then validate type manually.
+    required_prereq_count: object | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _normalize_title(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            return s
+        return v
+
+
+class UnitModuleReorderPayload(BaseModel):
+    # Use loose typing to avoid FastAPI 422, then validate type manually
+    module_ids: object | None = None
+
+
+class UnitModuleEdgePayload(BaseModel):
+    # Accept raw strings (including empty) and validate in handler to return 400
+    from_module_id: str | None = Field(default=None)
+    to_module_id: str | None = Field(default=None)
+
+    @field_validator("from_module_id", "to_module_id")
+    @classmethod
+    def _normalize_ids(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        return v
 
 
 # --- Sections (per Unit) --------------------------------------------------------
@@ -1648,7 +1878,10 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     updates = payload.model_dump(mode="python", exclude_unset=True)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -1657,8 +1890,8 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
             if not repo.course_exists_for_owner(course_id, sub):
                 ex = repo.course_exists(course_id)
                 if ex is False:
-                    return JSONResponse({"error": "not_found"}, status_code=404)
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                    return _private_error({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "forbidden"}, status_code=403)
             updated = repo.update_course_owned(
                 course_id,
                 sub,
@@ -1667,21 +1900,20 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
         else:
             course = repo.get_course(course_id)
             if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404)
             owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
             if sub != owner_id:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "forbidden"}, status_code=403)
             updated = repo.update_course(
                 course_id,
                 **updates,
             )
     except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_field"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_field"}, status_code=400)
     if not updated:
         # Should not normally happen after existence/ownership checks; keep conservative 403
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    # Consistent API response shape: explicit JSONResponse with status 200
-    return JSONResponse(content=_serialize_course(updated), status_code=200)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_course(updated), status_code=200, vary_origin=True)
 
 
 @teaching_router.delete("/api/teaching/courses/{course_id}")
@@ -1754,17 +1986,13 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
-    limit = max(1, min(50, int(limit or 20)))
-    offset = max(0, int(offset or 0))
+    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=20, max_limit=50)
     sub = _current_sub(user)
     try:
         units = _get_repo().list_units_for_author(author_id=sub, limit=limit, offset=offset)
     except Exception as exc:
         logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private([_serialize_unit(u) for u in units], status_code=200)
 
 
@@ -1792,16 +2020,22 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     if csrf:
         return csrf
     sub = _current_sub(user)
+    repo = _get_repo()
+    unit_type = str(payload.unit_type or "").strip().lower()
+    if unit_type == "modular":
+        repo_error = _require_modular_repo_methods(repo, *_MODULAR_UNIT_CREATE_REQUIRED_METHODS)
+        if repo_error:
+            return repo_error
     try:
         title = payload.title or ""
-        unit = _get_repo().create_unit(title=title, summary=payload.summary, author_id=sub)
+        unit = repo.create_unit(title=title, summary=payload.summary, author_id=sub, unit_type=payload.unit_type)
     except ValueError as exc:
         detail = str(exc)
-        if detail in {"invalid_title", "invalid_summary"}:
-            return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-        return JSONResponse({"error": "bad_request"}, status_code=400)
+        if detail in {"invalid_title", "invalid_summary", "invalid_unit_type"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request"}, status_code=400)
     except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private(_serialize_unit(unit), status_code=201)
 
 
@@ -1827,11 +2061,8 @@ async def get_unit(request: Request, unit_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
     if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
     guard = _guard_unit_author(unit_id, sub)
     if guard:
@@ -1846,7 +2077,7 @@ async def get_unit(request: Request, unit_id: str):
     except Exception:
         u = repo.get_unit_for_author(unit_id, sub)
     if not u:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_unit(u), status_code=200)
 
 
@@ -1925,6 +2156,589 @@ async def delete_unit(request: Request, unit_id: str):
         return JSONResponse({"error": "not_found"}, status_code=404)
     # No content but still enforce private, no-store to be explicit in proxies
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/phases")
+async def list_unit_phases(request: Request, unit_id: str):
+    """List phases of a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "list_unit_phases_for_author")
+    if repo_error:
+        return repo_error
+    try:
+        items = repo.list_unit_phases_for_author(unit_id, sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        raise
+    return _json_private([_serialize_unit_phase_public(p) for p in items], status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/phases")
+async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCreatePayload):
+    """Create a phase in a modular unit (author only); appends at the next position."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "create_unit_phase")
+    if repo_error:
+        return repo_error
+    title = payload.title or ""
+    try:
+        phase = repo.create_unit_phase(unit_id, title, sub)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_unit_phase_public(phase), status_code=201, vary_origin=True)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/phases/{phase_id}")
+async def update_unit_phase(request: Request, unit_id: str, phase_id: str, payload: UnitPhaseUpdatePayload):
+    """Rename a phase in a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id) or not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "update_unit_phase_title")
+    if repo_error:
+        return repo_error
+    updates = payload.model_dump(mode="python", exclude_unset=True)
+    if not updates:
+        return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+    try:
+        updated = repo.update_unit_phase_title(unit_id, phase_id, updates.get("title"), sub)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not updated:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private(_serialize_unit_phase_public(updated), status_code=200, vary_origin=True)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/phases/{phase_id}")
+async def delete_unit_phase(request: Request, unit_id: str, phase_id: str):
+    """Delete a phase (and all modules/edges/content inside it) (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "delete_unit_phase_for_author")
+    if repo_error:
+        return repo_error
+    try:
+        deleted = repo.delete_unit_phase_for_author(unit_id=unit_id, phase_id=phase_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/phases/reorder")
+async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhaseReorderPayload):
+    """Reorder phases (author only) transactionally to positions 1..n as provided."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    # Security-first: verify authorship before deep payload validation to avoid error oracle
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "reorder_unit_phases_owned")
+    if repo_error:
+        return repo_error
+    ids, ids_error = _validate_uuid_id_list(
+        payload.phase_ids,
+        array_detail="phase_ids_must_be_array",
+        empty_detail="empty_phase_ids",
+        duplicate_detail="duplicate_phase_ids",
+        invalid_detail="invalid_phase_ids",
+    )
+    if ids_error:
+        return ids_error
+    try:
+        ordered = repo.reorder_unit_phases_owned(unit_id, sub, ids)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23514":  # check_violation
+            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+        raise
+    return _json_private([_serialize_unit_phase_public(p) for p in ordered], status_code=200, vary_origin=True)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/modules/graph")
+async def get_unit_modules_graph(request: Request, unit_id: str):
+    """Return the authoring graph payload for a modular unit (author only).
+
+    Why:
+        The teacher UI needs a single endpoint to load the visual editor state:
+        phases (columns), modules (nodes) and dependency edges.
+    """
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(
+        repo,
+        "list_unit_phases_for_author",
+        "list_unit_modules_for_author",
+        "list_unit_module_edges_for_author",
+    )
+    if repo_error:
+        return repo_error
+    try:
+        phases = repo.list_unit_phases_for_author(unit_id, sub)
+        modules = repo.list_unit_modules_for_author(unit_id=unit_id, author_id=sub)
+        edges = repo.list_unit_module_edges_for_author(unit_id=unit_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+    payload = {
+        "unit_id": unit_id,
+        "phases": [_serialize_unit_phase_public(p) for p in phases],
+        "modules": [_serialize_unit_module(m) for m in modules],
+        "edges": [_serialize_unit_graph_edge(e) for e in edges],
+    }
+    return _json_private(payload, status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules")
+async def create_unit_module(request: Request, unit_id: str, payload: UnitModuleCreatePayload):
+    """Create a module (graph node) inside a phase (author only).
+
+    Option B:
+        Internally this creates a backing `unit_sections` row and a 1:1
+        `unit_modules` row. The API returns module metadata only.
+    """
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "create_unit_module_for_author")
+    if repo_error:
+        return repo_error
+    title = payload.title or ""
+    phase_id = payload.phase_id or ""
+    if not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
+    if not title or len(title) > 200:
+        return _private_error({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+    try:
+        created = repo.create_unit_module_for_author(unit_id=unit_id, phase_id=phase_id, title=title, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    return _json_private(_serialize_unit_module(created), status_code=201, vary_origin=True)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/edges")
+async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+    """Create a directed dependency edge within a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(
+        repo,
+        "list_unit_modules_for_author",
+        "create_unit_module_edge_for_author",
+    )
+    if repo_error:
+        return repo_error
+
+    from_id = payload.from_module_id or ""
+    to_id = payload.to_module_id or ""
+    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    from_id = _canonical_uuid(from_id)
+    to_id = _canonical_uuid(to_id)
+    try:
+        modules = _list_unit_modules_for_author_compat(repo, unit_id=unit_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    module_ids: set[str] = set()
+    for item in (modules or []):
+        raw_id = str((item or {}).get("id")) if isinstance(item, dict) else str(getattr(item, "id", ""))
+        if _is_uuid_like(raw_id):
+            module_ids.add(_canonical_uuid(raw_id))
+    if from_id not in module_ids or to_id not in module_ids:
+        return _private_error({"error": "not_found"}, status_code=404)
+    try:
+        created = repo.create_unit_module_edge_for_author(
+            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
+        )
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23514":  # check_violation
+            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+        if sqlstate == "23503":  # foreign_key_violation
+            return _private_error({"error": "not_found"}, status_code=404)
+        if sqlstate == "23505":  # unique_violation
+            return _private_error({"error": "conflict", "detail": "duplicate_edge"}, status_code=409)
+        raise
+    return _json_private(_serialize_unit_graph_edge(created), status_code=201, vary_origin=True)
+
+
+def _delete_unit_module_edge_common(*, request: Request, unit_id: str, from_id: str, to_id: str):
+    """Delete a directed dependency edge within a modular unit (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "delete_unit_module_edge_for_author")
+    if repo_error:
+        return repo_error
+
+    if not _is_uuid_like(from_id) or not _is_uuid_like(to_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    try:
+        deleted = repo.delete_unit_module_edge_for_author(
+            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
+        )
+    except ValueError:
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+_LEGACY_EDGE_DELETE_SUNSET_HTTP = "Tue, 30 Jun 2026 23:59:59 GMT"
+_LEGACY_EDGE_DELETE_SUCCESSOR_LINK_TEMPLATE = (
+    '</api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}>; rel="successor-version"'
+)
+
+
+def _legacy_edge_delete_successor_link(*, unit_id: str, from_module_id: str, to_module_id: str) -> str:
+    """Build the successor Link header for the path-based delete endpoint."""
+    if not (_is_uuid_like(unit_id) and _is_uuid_like(from_module_id) and _is_uuid_like(to_module_id)):
+        return _LEGACY_EDGE_DELETE_SUCCESSOR_LINK_TEMPLATE
+    return (
+        f'</api/teaching/units/{_canonical_uuid(unit_id)}/modules/'
+        f'{_canonical_uuid(from_module_id)}/edges/{_canonical_uuid(to_module_id)}>; rel="successor-version"'
+    )
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
+async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
+    """Delete a dependency edge using request-body module ids (author only).
+
+    Note:
+        Kept for backward compatibility. New clients should prefer the path-based
+        delete endpoint to avoid intermediaries that ignore DELETE request bodies.
+    """
+    response = _delete_unit_module_edge_common(
+        request=request,
+        unit_id=unit_id,
+        from_id=str(payload.from_module_id or ""),
+        to_id=str(payload.to_module_id or ""),
+    )
+    if int(getattr(response, "status_code", 0)) == 204:
+        response.headers.setdefault("Deprecation", "true")
+        response.headers.setdefault("Sunset", _LEGACY_EDGE_DELETE_SUNSET_HTTP)
+        response.headers.setdefault(
+            "Link",
+            _legacy_edge_delete_successor_link(
+                unit_id=unit_id,
+                from_module_id=str(payload.from_module_id or ""),
+                to_module_id=str(payload.to_module_id or ""),
+            ),
+        )
+    return response
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}")
+async def delete_unit_module_edge_by_path(
+    request: Request, unit_id: str, from_module_id: str, to_module_id: str
+):
+    """Delete a dependency edge using path params (author only)."""
+    return _delete_unit_module_edge_common(
+        request=request,
+        unit_id=unit_id,
+        from_id=str(from_module_id or ""),
+        to_id=str(to_module_id or ""),
+    )
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}")
+async def update_unit_module(request: Request, unit_id: str, module_id: str, payload: UnitModuleUpdatePayload):
+    """Update module settings (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "update_unit_module_owned")
+    if repo_error:
+        return repo_error
+    title_provided = "title" in payload.model_fields_set
+    k_provided = "required_prereq_count" in payload.model_fields_set
+    if not (title_provided or k_provided):
+        return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
+
+    title = payload.title if title_provided else _UNSET
+    if title is not _UNSET and (title is None or (not str(title).strip()) or len(str(title).strip()) > 200):
+        return _private_error({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+
+    k = payload.required_prereq_count if k_provided else _UNSET
+    if k is not _UNSET:
+        if k is None or isinstance(k, bool) or (not isinstance(k, int)) or int(k) < 0:
+            return _private_error({"error": "bad_request", "detail": "invalid_required_prereq_count"}, status_code=400)
+    try:
+        update_kwargs: dict[str, object] = {}
+        if title_provided:
+            update_kwargs["title"] = title
+        if k_provided:
+            update_kwargs["required_prereq_count"] = k
+        updated = repo.update_unit_module_owned(
+            unit_id=unit_id,
+            module_id=module_id,
+            author_id=sub,
+            **update_kwargs,
+        )
+    except ValueError as exc:
+        detail = str(exc) or "invalid_input"
+        if detail in {"invalid_unit_type", "invalid_title", "invalid_required_prereq_count"}:
+            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not updated:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private(_serialize_unit_module(updated), status_code=200, vary_origin=True)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{module_id}")
+async def delete_unit_module(request: Request, unit_id: str, module_id: str):
+    """Delete a module and its backing content (author only)."""
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "delete_unit_module_for_author")
+    if repo_error:
+        return repo_error
+    try:
+        deleted = repo.delete_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=sub)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not deleted:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder")
+async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: str, payload: UnitModuleReorderPayload):
+    """Reorder (and move) modules for a phase (author only).
+
+    Contract:
+        - Rejects requests that would violate dependency edge constraints with
+          detail=edge_constraint_violation.
+    """
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(phase_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    repo_error = _require_modular_repo_methods(repo, "reorder_unit_phase_modules_owned")
+    if repo_error:
+        return repo_error
+
+    ids, ids_error = _validate_uuid_id_list(
+        payload.module_ids,
+        array_detail="module_ids_must_be_array",
+        empty_detail="empty_module_ids",
+        duplicate_detail="duplicate_module_ids",
+        invalid_detail="invalid_module_ids",
+    )
+    if ids_error:
+        return ids_error
+
+    try:
+        ordered = repo.reorder_unit_phase_modules_owned(unit_id=unit_id, phase_id=phase_id, author_id=sub, module_ids=ids)
+    except ValueError as exc:
+        detail = str(exc) or "bad_request"
+        if detail == "invalid_unit_type":
+            return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError as exc:
+        detail = str(exc) or ""
+        if detail in {"module_not_in_unit", "phase_not_found"}:
+            return _private_error({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23514":  # check_violation
+            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+        raise
+
+    return _json_private([_serialize_unit_module(m) for m in ordered], status_code=200, vary_origin=True)
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/sections")
@@ -2405,6 +3219,9 @@ async def create_section_material(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2437,7 +3254,7 @@ async def create_section_material(
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_material(material), status_code=201)
+    return _json_private(_serialize_material(material), status_code=201)
 
 
 @teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
@@ -2820,6 +3637,9 @@ async def reorder_section_materials(
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     if not _is_uuid_like(section_id):
@@ -2908,6 +3728,9 @@ async def create_course_module(request: Request, course_id: str, payload: Course
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     sub = _current_sub(user)
     unit_id = payload.unit_id
     if not _is_uuid_like(unit_id):
@@ -2934,7 +3757,7 @@ async def create_course_module(request: Request, course_id: str, payload: Course
         return JSONResponse({"error": "forbidden"}, status_code=403)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse(content=_serialize_module(module), status_code=201)
+    return _json_private(_serialize_module(module), status_code=201)
 
 
 @teaching_router.post("/api/teaching/courses/{course_id}/modules/reorder")
@@ -2960,6 +3783,9 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     user, error = _require_teacher(request)
     if error:
         return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     sub = _current_sub(user)
@@ -3303,6 +4129,7 @@ def _serialize_unit(u) -> dict:
         return u
     return {
         "id": getattr(u, "id", None),
+        "unit_type": getattr(u, "unit_type", None),
         "title": getattr(u, "title", None),
         "summary": getattr(u, "summary", None),
         "author_id": getattr(u, "author_id", None),
@@ -3325,6 +4152,95 @@ def _serialize_module(m) -> dict:
         "created_at": getattr(m, "created_at", None),
         "updated_at": getattr(m, "updated_at", None),
     }
+
+
+def _serialize_unit_phase(p) -> dict:
+    if is_dataclass(p):
+        return asdict(p)
+    if isinstance(p, dict):
+        return p
+    return {
+        "id": getattr(p, "id", None),
+        "unit_id": getattr(p, "unit_id", None),
+        "title": getattr(p, "title", None),
+        "position": getattr(p, "position", None),
+        "created_at": getattr(p, "created_at", None),
+        "updated_at": getattr(p, "updated_at", None),
+    }
+
+def _serialize_unit_phase_public(p) -> dict:
+    """Serialize a unit phase for public Teaching API schemas.
+
+    The OpenAPI contract for `TeachingUnitPhase` intentionally exposes only
+    the editor-relevant fields (id/unit_id/title/position).
+    """
+    if isinstance(p, dict):
+        return {
+            "id": p.get("id"),
+            "unit_id": p.get("unit_id"),
+            "title": p.get("title"),
+            "position": p.get("position"),
+        }
+    if is_dataclass(p):
+        return {
+            "id": getattr(p, "id", None),
+            "unit_id": getattr(p, "unit_id", None),
+            "title": getattr(p, "title", None),
+            "position": getattr(p, "position", None),
+        }
+    return {
+        "id": getattr(p, "id", None),
+        "unit_id": getattr(p, "unit_id", None),
+        "title": getattr(p, "title", None),
+        "position": getattr(p, "position", None),
+    }
+
+
+def _serialize_unit_module(m) -> dict:
+    """Serialize a unit module for the teacher visual editor APIs.
+
+    Option B:
+        Modules map 1:1 to sections via `unit_modules.section_id`, but the
+        editor API does not expose section ids to keep the UX vocabulary clean.
+    """
+    if isinstance(m, dict):
+        return {
+            "id": m.get("id"),
+            "unit_id": m.get("unit_id"),
+            "phase_id": m.get("phase_id"),
+            "title": m.get("title"),
+            "position_in_phase": m.get("position_in_phase"),
+            "required_prereq_count": m.get("required_prereq_count", 0),
+        }
+    if is_dataclass(m):
+        return {
+            "id": getattr(m, "id", None),
+            "unit_id": getattr(m, "unit_id", None),
+            "phase_id": getattr(m, "phase_id", None),
+            "title": getattr(m, "title", None),
+            "position_in_phase": getattr(m, "position_in_phase", None),
+            "required_prereq_count": getattr(m, "required_prereq_count", 0),
+        }
+    return {
+        "id": getattr(m, "id", None),
+        "unit_id": getattr(m, "unit_id", None),
+        "phase_id": getattr(m, "phase_id", None),
+        "title": getattr(m, "title", None),
+        "position_in_phase": getattr(m, "position_in_phase", None),
+        "required_prereq_count": getattr(m, "required_prereq_count", 0),
+    }
+
+
+def _serialize_unit_graph_edge(e) -> dict:
+    """Serialize a module edge as {from, to}."""
+    if isinstance(e, dict):
+        # Repo helpers already use `from`/`to` keys.
+        if "from" in e and "to" in e:
+            return {"from": e.get("from"), "to": e.get("to")}
+        return {"from": e.get("from_module_id"), "to": e.get("to_module_id")}
+    if is_dataclass(e):
+        return {"from": getattr(e, "from", None), "to": getattr(e, "to", None)}
+    return {"from": getattr(e, "from", None), "to": getattr(e, "to", None)}
 
 
 def _serialize_section(s) -> dict:
@@ -3462,15 +4378,15 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
     repo = _get_repo()
     # Owner just deleted? Prefer 404 for immediate follow-ups
     if _was_recently_deleted(owner_sub, course_id):
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        return _private_error({"error": "not_found"}, status_code=404)
     try:
         ex = repo.course_exists(course_id)
     except Exception:
         ex = None
     if ex is False:
         # Deterministic contract: non-existent course -> 404
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _private_error({"error": "forbidden"}, status_code=403)
 
 
 @teaching_router.get("/api/teaching/courses/{course_id}/members")
@@ -3492,9 +4408,8 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    limit = max(1, min(50, int(limit or 20)))
-    offset = max(0, int(offset or 0))
+        return _private_error({"error": "forbidden"}, status_code=403)
+    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
@@ -3506,16 +4421,16 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
             # Fallback in-memory owner check
             course = repo.get_course(course_id)
             if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404)
             if _teacher_id_of(course) != sub:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "forbidden"}, status_code=403)
             pairs = repo.list_members(course_id, limit=limit, offset=offset)
     except Exception as exc:
         # Defensive default: if DB helper path fails, do not risk information leakage.
         # Log for observability, avoid logging full identifiers to minimize PII exposure.
         cid_tail = (course_id or "").replace("-", "")[-6:]
         logger.warning("list_members failed: cid_tail=%s err=%s", cid_tail, exc.__class__.__name__)
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     subs = [sid for sid, _ in pairs]
     # Avoid blocking the event loop on synchronous network I/O
     names = await asyncio.to_thread(resolve_student_names, subs)
@@ -3551,11 +4466,14 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     user = getattr(request.state, "user", None)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
     # Prefer the contract key; fall back to legacy `sub` for compatibility with older callers/tests.
     student_sub = getattr(payload, "student_sub", None) or getattr(payload, "sub", None)
     if not isinstance(student_sub, str) or not student_sub.strip():
-        return JSONResponse({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
+        return _private_error({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
@@ -3568,15 +4486,15 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
             # Fallback owner check
             course = repo.get_course(course_id)
             if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
+                return _private_error({"error": "not_found"}, status_code=404)
             if _teacher_id_of(course) != sub:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
+                return _private_error({"error": "forbidden"}, status_code=403)
             created = repo.add_member(course_id, student_sub.strip())
     except Exception:
         # Fail closed: do not attempt mutation without clear ownership/existence semantics
         return _resp_non_owner_or_unknown(course_id, sub)
     if created:
-        return JSONResponse({}, status_code=201, headers={"Cache-Control": "private, no-store"})
+        return _json_private({}, status_code=201)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 

@@ -50,11 +50,14 @@ def _require_teacher_or_operator(request: Request):
     return user, None
 
 
-def _openai_health_cache_key() -> tuple[str, int]:
+def _openai_health_cache_key() -> tuple[str, object]:
     """Return a cache key for the OpenAI health probe."""
     base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
-    # Include probe identity so test monkeypatches never hit stale cache.
-    return base_url, id(_probe_openai_health)
+    # Include the callable object itself, not its integer id.
+    # Why:
+    #   CPython may reuse object ids after GC. Using the callable reference
+    #   avoids accidental cache collisions across monkeypatched probe objects.
+    return base_url, _probe_openai_health
 
 
 def _join_openai_models_url(base_url: str) -> str:

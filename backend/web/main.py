@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import hmac
 import os
 import logging
 import uuid
 import secrets
+import time
 import mimetypes
 import json
 from typing import Optional, Dict, Any, List, Mapping
@@ -270,6 +272,20 @@ def _primary_role(roles: list[str]) -> str:
             return r
     return "student"
 
+
+def _user_has_role(user: object, role: str) -> bool:
+    """Return True when `user` has `role` either as primary role or in roles list."""
+    if not isinstance(user, Mapping):
+        return False
+    expected = str(role or "").strip().lower()
+    if not expected:
+        return False
+    primary = str(user.get("role") or "").strip().lower()
+    if primary == expected:
+        return True
+    roles = [str(r).strip().lower() for r in (user.get("roles") or []) if isinstance(r, str)]
+    return expected in roles
+
 def _set_session_cookie(response: Response, value: str, *, max_age: int | None = None, request: Request | None = None) -> None:
     opts = _session_cookie_options()
     secure_flag = opts["secure"]
@@ -415,6 +431,7 @@ _DUMMY_SECTIONS_STORE = {
 # --- CSRF & Pagination Helpers --------------------------------------------------
 
 _CSRF_BY_SESSION: dict[str, str] = {}
+_DEV_CSRF_SIGNING_SECRET = secrets.token_bytes(32)
 
 def _get_session_id(request: Request) -> Optional[str]:
     return request.cookies.get(SESSION_COOKIE_NAME)
@@ -455,21 +472,71 @@ def _internal_api_client():
     base, origin = _teaching_internal_base()
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url=base, headers={"Origin": origin})
 
+
+def _csrf_ttl_seconds() -> int:
+    """Return SSR CSRF token TTL (bounded) with session-TTL as default."""
+    raw = (os.getenv("APP_CSRF_TTL_SECONDS") or "").strip()
+    default_seconds = _app_session_ttl_seconds()
+    try:
+        value = int(raw) if raw else default_seconds
+    except ValueError:
+        value = default_seconds
+    return max(60, min(value, 7 * 24 * 60 * 60))
+
+
+def _csrf_signing_secret() -> bytes:
+    """Resolve a stable signing secret for session-bound CSRF tokens.
+
+    Security:
+        - Production/staging requires a dedicated APP_CSRF_TOKEN_SECRET.
+        - Dev/test may reuse H5P_REVIEW_TOKEN_SECRET for convenience.
+        - If neither env var is configured in dev/test, use a process-random
+          fallback (never a static global literal).
+    """
+    explicit = (os.getenv("APP_CSRF_TOKEN_SECRET") or "").strip()
+    if explicit:
+        return explicit.encode("utf-8")
+    env = (os.getenv("GUSTAV_ENV", "dev") or "dev").strip().lower()
+    if env in {"prod", "production", "stage", "staging"}:
+        raise RuntimeError("APP_CSRF_TOKEN_SECRET is required in production/staging")
+    shared = (os.getenv("H5P_REVIEW_TOKEN_SECRET") or "").strip()
+    if shared:
+        return shared.encode("utf-8")
+    return _DEV_CSRF_SIGNING_SECRET
+
+
+def _sign_csrf_token(*, session_id: str, expires_at: int) -> str:
+    payload = f"{session_id}.{expires_at}".encode("utf-8")
+    digest = hmac.new(_csrf_signing_secret(), payload, hashlib.sha256).hexdigest()
+    return digest
+
+
 def _get_or_create_csrf_token(session_id: str) -> str:
-    token = _CSRF_BY_SESSION.get(session_id)
-    if not token:
-        token = secrets.token_urlsafe(24)
-        _CSRF_BY_SESSION[session_id] = token
-    return token
+    if not session_id:
+        return ""
+    expires_at = int(time.time()) + _csrf_ttl_seconds()
+    sig = _sign_csrf_token(session_id=session_id, expires_at=expires_at)
+    return f"v1.{expires_at}.{sig}"
 
 def _validate_csrf(session_id: Optional[str], form_value: Optional[str]) -> bool:
     if not session_id or not form_value:
         return False
+    token = str(form_value)
+    parts = token.split(".")
+    if len(parts) == 3 and parts[0] == "v1":
+        try:
+            expires_at = int(parts[1])
+        except (TypeError, ValueError):
+            return False
+        if expires_at < int(time.time()):
+            return False
+        expected_sig = _sign_csrf_token(session_id=session_id, expires_at=expires_at)
+        return hmac.compare_digest(expected_sig, parts[2])
+    # Backward-compatibility path for legacy per-process tokens during rollout.
     expected = _CSRF_BY_SESSION.get(session_id)
     if not expected:
         return False
-    import hmac
-    return hmac.compare_digest(expected, str(form_value))
+    return hmac.compare_digest(expected, token)
 
 def _clamp_pagination(limit_raw: str | None, offset_raw: str | None) -> tuple[int, int]:
     """Clamp pagination for SSR views.
@@ -496,6 +563,26 @@ def _is_uuid_like(value: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _normalize_open_attempt_id_uuid(value: str | None) -> str:
+    """Normalize open_attempt_id to a strict UUID or an empty string.
+
+    Why:
+        `open_attempt_id` may come from untrusted query parameters and is
+        interpolated into HTML attributes (`data-open-attempt-id`, `hx-vals`).
+        We therefore accept only UUIDs and drop everything else.
+    """
+    candidate = str(value or "").strip()
+    if not candidate:
+        return ""
+    return candidate if _is_uuid_like(candidate) else ""
+
+
+def _hx_vals_attr_payload(payload: dict[str, Any]) -> str:
+    """Return an HTML-safe JSON string for usage inside an `hx-vals` attribute."""
+    raw = json.dumps(payload, separators=(",", ":"))
+    return Component.escape(raw)
 
 
 def _is_analysis_in_progress(status: Any) -> bool:
@@ -1199,6 +1286,7 @@ def _render_learning_task_history_wrapper_html(
           element that updates only `#submission-text-*` and `#submission-result-*`
           via out-of-band swaps.
     """
+    open_attempt_id = _normalize_open_attempt_id_uuid(open_attempt_id)
     safe_task_id = Component.escape(task_id)
     entries = [
         _build_history_entry_from_record(
@@ -1220,13 +1308,13 @@ def _render_learning_task_history_wrapper_html(
             latest_status = None
     pending_latest = _is_analysis_in_progress(latest_status)
 
-    hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id}, separators=(",", ":"))
+    hx_vals_payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id})
     wrapper_open = (
         f'<section id="task-history-{safe_task_id}"'
         f' class="task-panel__history"'
         f' data-pending="{"true" if pending_latest else "false"}"'
         f' data-open-attempt-id="{Component.escape(open_attempt_id)}"'
-        f" hx-vals='{hx_vals_payload}'"
+        f' hx-vals="{hx_vals_payload}"'
         f' hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
     )
 
@@ -1298,6 +1386,142 @@ def _enrich_submission_records_with_file_urls(
                 rec["file_url"] = url.strip()
         except Exception:
             continue
+
+
+def _resolve_student_material_file_url(
+    *,
+    student_sub: str,
+    course_id: str,
+    section_id: str,
+    material_id: str,
+    storage_adapter: object | None = None,
+) -> str | None:
+    """Resolve a short-lived inline URL for a released file material.
+
+    Why:
+        Student-facing learning APIs intentionally do not expose internal
+        storage metadata (`storage_key`, `sha256`). SSR still needs a preview
+        URL for file cards, so we resolve it server-side under student scope.
+
+    Security:
+        The lookup is limited to materials returned by
+        `get_released_materials_for_student(student_sub, course_id, section_id)`
+        and filtered by `material_id`. If no visible row is found, no URL is
+        returned.
+    """
+    if not (student_sub and _is_uuid_like(course_id) and _is_uuid_like(section_id) and _is_uuid_like(material_id)):
+        return None
+    try:
+        from teaching.services.materials import MaterialFileSettings  # type: ignore
+        import routes.learning as learning_routes  # type: ignore
+
+        repo = getattr(learning_routes, "REPO", None)
+        dsn = str(getattr(repo, "_dsn", "") or "").strip()
+        if not dsn:
+            return None
+
+        adapter = storage_adapter
+        if adapter is None:
+            import routes.teaching as teaching_routes  # type: ignore
+
+            adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
+        if adapter is None or not hasattr(adapter, "presign_download"):
+            return None
+
+        import psycopg  # type: ignore
+
+        storage_key = None
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                try:
+                    set_current_sub = getattr(repo, "_set_current_sub", None)
+                    if callable(set_current_sub):
+                        set_current_sub(cur, student_sub)
+                    else:
+                        cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                except Exception:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+
+                cur.execute(
+                    """
+                    select storage_key
+                      from public.get_released_materials_for_student(%s, %s::uuid, %s::uuid)
+                     where id::text = %s
+                     limit 1
+                    """,
+                    (student_sub, str(course_id), str(section_id), str(material_id)),
+                )
+                row = cur.fetchone()
+                if row and isinstance(row[0], str) and row[0].strip():
+                    storage_key = row[0].strip()
+        if not storage_key:
+            return None
+
+        settings = MaterialFileSettings()
+        presign = adapter.presign_download(  # type: ignore[call-arg]
+            bucket=settings.storage_bucket,
+            key=storage_key,
+            expires_in=settings.download_url_ttl_seconds,
+            disposition="inline",
+        )
+        url = presign.get("url") if isinstance(presign, dict) else None
+        if isinstance(url, str) and url.strip():
+            return url.strip()
+    except Exception:
+        return None
+    return None
+
+
+async def _fetch_student_material_section_map_for_unit(
+    *,
+    course_id: str,
+    unit_id: str,
+    session_id: str,
+) -> dict[str, str]:
+    """Return a best-effort map of material_id -> section_id for a unit.
+
+    Why:
+        Modular module-content payloads do not expose section_id, but file URL
+        resolution needs section_id + material_id. We derive the mapping via the
+        released-sections Learning API under the current student session.
+    """
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
+        return {}
+    try:
+        async with _internal_api_client() as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            resp = await client.get(
+                f"/api/learning/courses/{course_id}/units/{unit_id}/sections",
+                params={"include": "materials", "limit": 100, "offset": 0},
+            )
+    except Exception:
+        return {}
+    if resp.status_code != 200:
+        return {}
+    try:
+        payload = resp.json()
+    except Exception:
+        return {}
+    if not isinstance(payload, list):
+        return {}
+    out: dict[str, str] = {}
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        section = entry.get("section")
+        if not isinstance(section, dict):
+            continue
+        section_id = str(section.get("id") or "")
+        if not _is_uuid_like(section_id):
+            continue
+        for material in (entry.get("materials") or []):
+            if not isinstance(material, dict):
+                continue
+            material_id = str(material.get("id") or "")
+            if _is_uuid_like(material_id):
+                out[material_id] = section_id
+    return out
 
 # --- Page Rendering Helpers -----------------------------------------------------
 
@@ -1460,7 +1684,7 @@ async def courses_edit_form(request: Request, course_id: str):
     but the API PATCH will enforce ownership.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -1611,9 +1835,10 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
         return RedirectResponse(url=f"/learning/courses/{course_id}", status_code=303)
     unit_title = "Lerneinheit"
+    unit_type = "linear"
     sections: list[dict] = []
     show_history_for = request.query_params.get("show_history_for") or ""
-    open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
+    open_attempt_id_qp = _normalize_open_attempt_id_uuid(str(request.query_params.get("open_attempt_id") or ""))
     success_banner = request.query_params.get("ok") == "submitted"
     try:
         async with _internal_api_client() as client:
@@ -1630,9 +1855,63 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                             t = u.get("title")
                             if isinstance(t, str) and t:
                                 unit_title = t
+                            ut = str(u.get("unit_type") or "").strip().lower()
+                            unit_type = ut if ut in {"linear", "modular"} else unit_type
                             break
             except Exception:
                 pass
+
+            # Branch SSR page by unit_type:
+            # - linear: existing released-sections view
+            # - modular: advance organizer (graph) + module content loading
+            if unit_type == "modular":
+                banner_html = (
+                    '<div role=\"alert\" class=\"alert alert-success\">Erfolgreich eingereicht</div>'
+                    if success_banner
+                    else ''
+                )
+                safe_course_id = Component.escape(str(course_id))
+                safe_unit_id = Component.escape(str(unit_id))
+                safe_title = Component.escape(unit_title)
+                content = (
+                    f'<div class=\"modular-unit-page\" data-unit-type=\"modular\" '
+                    f'data-course-id=\"{safe_course_id}\" data-unit-id=\"{safe_unit_id}\">'
+                    f'<header class=\"container unit-head\">'
+                    f'<div class=\"unit-head__title\">'
+                    f'<h1 class=\"unit-title\" id=\"unit-title\">{safe_title}</h1>'
+                    f'<p class=\"text-muted\" id=\"unit-subtitle\"><small>'
+                    f'<a href=\"/learning/courses/{safe_course_id}\">Zurück zu „Lerneinheiten“</a>'
+                    f'</small></p>'
+                    f'</div>'
+                    f'</header>'
+                    f'{banner_html}'
+                    '<div class=\"sticky-toolbar\" role=\"region\" aria-label=\"Ansicht und offene Module\">'
+                    '<div class=\"container sticky-toolbar__inner\">'
+                    '<div class=\"mode-segmented\" role=\"group\" aria-label=\"Ansicht\">'
+                    '<button class=\"btn mode-segmented__btn\" type=\"button\" id=\"btn-view-overview\" aria-pressed=\"true\">Übersicht</button>'
+                    '<button class=\"btn mode-segmented__btn\" type=\"button\" id=\"btn-view-content\" aria-pressed=\"false\">Inhalte</button>'
+                    '</div>'
+                    '<nav class=\"tabs tabs--sticky\" id=\"open-tabs\" aria-label=\"Offene Module\" hidden></nav>'
+                    '</div>'
+                    '</div>'
+                    '<section class=\"container workspace-view workspace-view--overview\" id=\"view-overview\" aria-label=\"Übersicht\">'
+                    '<div class=\"graph-container graph-shell\" id=\"graph-shell\">'
+                    '<div class=\"graph-layer graph-layer--map\" id=\"graph-layer\"></div>'
+                    '</div>'
+                    '</section>'
+                    '<section class=\"container workspace-view workspace-view--content\" id=\"view-content\" aria-label=\"Inhalte\" hidden>'
+                    '<div id=\"content-root\" class=\"content-root\" aria-label=\"Phasen und Module\"></div>'
+                    '</section>'
+                    '<script type=\"module\" src=\"/static/js/h5p_task_player.js?v=20260108\"></script>'
+                    '</div>'
+                )
+                layout = Layout(
+                    title=Component.escape(unit_title),
+                    content=content,
+                    user=user,
+                    current_path=request.url.path,
+                )
+                return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
             # Silence in production; errors handled gracefully below
             # Fetch released sections for this unit (with embedded materials/tasks)
             r_sections = await client.get(
@@ -1721,9 +2000,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     # For readability, render each material and each task as its own card.
     parts: list[str] = []
     needs_h5p_player_js = False
+    file_url_cache: dict[tuple[str, str], str | None] = {}
+    student_sub = str((user or {}).get("sub") or "")
     for idx, entry in enumerate(sections):
         mats = entry.get("materials", []) if isinstance(entry, dict) else []
         tasks = entry.get("tasks", []) if isinstance(entry, dict) else []
+        section_obj = entry.get("section", {}) if isinstance(entry, dict) else {}
+        section_id = str(section_obj.get("id") or "") if isinstance(section_obj, dict) else ""
         # Materials → MaterialCard
         for m in mats:
             mid = str(m.get("id") or "")
@@ -1736,34 +2019,30 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                 preview_html = render_markdown_safe(str(m.get("body_md") or ""))
             elif kind == "file":
                 # For file materials, render an inline preview using the shared FilePreview component.
-                # Use a short-lived, signed URL from the teaching storage adapter so buckets remain private.
+                # Student payloads intentionally do not expose storage_key, so resolve
+                # a short-lived URL server-side under student visibility checks.
                 mime = str(m.get("mime_type") or "").lower()
-                storage_key = str(m.get("storage_key") or "")
                 alt_text = str(m.get("alt_text") or "") or None
-                if mime and storage_key:
+                preview_url = str(m.get("file_url") or "").strip()
+                if not preview_url and section_id and mid and student_sub:
+                    cache_key = (section_id, mid)
+                    if cache_key not in file_url_cache:
+                        file_url_cache[cache_key] = _resolve_student_material_file_url(
+                            student_sub=student_sub,
+                            course_id=str(course_id),
+                            section_id=section_id,
+                            material_id=mid,
+                        )
+                    preview_url = str(file_url_cache.get(cache_key) or "").strip()
+                if mime and preview_url:
                     try:
-                        from teaching.services.materials import MaterialFileSettings  # type: ignore
-                        import routes.teaching as teaching_routes  # type: ignore
-
-                        settings = MaterialFileSettings()
-                        adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
-                        presign = None
-                        if adapter is not None and hasattr(adapter, "presign_download"):
-                            presign = adapter.presign_download(  # type: ignore[call-arg]
-                                bucket=settings.storage_bucket,
-                                key=storage_key,
-                                expires_in=settings.download_url_ttl_seconds,
-                                disposition="inline",
-                            )
-                        url = presign.get("url") if isinstance(presign, dict) else None
-                        if url:
-                            preview_html = FilePreview(
-                                url=str(url),
-                                mime=mime,
-                                title=title,
-                                alt=alt_text,
-                                max_height="480px",
-                            ).render()
+                        preview_html = FilePreview(
+                            url=preview_url,
+                            mime=mime,
+                            title=title,
+                            alt=alt_text,
+                            max_height="480px",
+                        ).render()
                     except Exception:
                         preview_html = ""
             card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
@@ -1833,13 +2112,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
             else:
                 # Lazy-load the history via HTMX; we include a placeholder section
                 # that fetches and swaps itself on load.
-                payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
                 history_placeholder_html = (
                     f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
                     f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
                     f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
                     f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
-                    f"hx-vals='{payload}' "
+                    f'hx-vals="{payload}" '
                     'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
                     f'<div class="text-muted">Lade Verlauf …</div>'
                     f'</section>'
@@ -1908,7 +2187,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         if tid and tid not in candidate_tids:
                             candidate_tids.append(tid)
                 if candidate_tids:
-                    open_attempt_id_qp = str(request.query_params.get("open_attempt_id") or "")
+                    open_attempt_id_qp = _normalize_open_attempt_id_uuid(str(request.query_params.get("open_attempt_id") or ""))
                     for tid in candidate_tids:
                         task = tasks_by_id.get(tid) or {}
                         # Basic title/instruction fallback; keep SSR logic robust even when repo shape differs.
@@ -1925,13 +2204,13 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         form_html = _build_task_submit_form_html(
                             course_id=course_id, unit_id=unit_id, task_id=str(tid), task_kind=task_kind
                         )
-                        hx_vals_payload = json.dumps({"open_attempt_id": open_attempt_id_qp}, separators=(",", ":"))
+                        hx_vals_payload = _hx_vals_attr_payload({"open_attempt_id": open_attempt_id_qp})
                         history_placeholder_html = (
                             f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
                             f'data-pending="false" data-open-attempt-id="{Component.escape(open_attempt_id_qp)}" '
                             f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" hx-trigger="load" '
                             f'hx-target="this" hx-swap="outerHTML" '
-                            f"hx-vals='{hx_vals_payload}' "
+                            f'hx-vals="{hx_vals_payload}" '
                             'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)"></section>'
                         )
                         banner_html = (
@@ -1969,6 +2248,183 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     )
     layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get(
+    "/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment",
+    response_class=HTMLResponse,
+)
+async def learning_modular_unit_module_fragment(request: Request, course_id: str, unit_id: str, module_id: str):
+    """Render a module body (HTML fragment) for modular learning units.
+
+    Why:
+        The modular unit page loads module contents on demand (HTMX) after the
+        student unlocked the module. This keeps the initial page lightweight
+        and avoids leaking locked content.
+
+    Behavior:
+        - Requires role "student".
+        - Uses the Learning API (cookie-auth) to fetch module content.
+        - Locked / not accessible modules return 404 (fail-closed).
+    """
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "student"):
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(module_id)):
+        return HTMLResponse("", status_code=400, headers={"Cache-Control": "private, no-store"})
+
+    payload: dict[str, Any] | None = None
+    try:
+        async with _internal_api_client() as client:
+            sid = _get_session_id(request) or ""
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.get(
+                f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}",
+                params={"include": "materials,tasks"},
+            )
+        if r.status_code == 200 and isinstance(r.json(), dict):
+            payload = r.json()
+        else:
+            # Fail-closed: do not distinguish "locked" vs "missing".
+            return HTMLResponse(
+                '<p class="text-muted">Modul nicht verfügbar.</p>',
+                status_code=404,
+                headers={"Cache-Control": "private, no-store"},
+            )
+    except Exception:
+        return HTMLResponse(
+            '<p class="text-muted">Modul konnte nicht geladen werden.</p>',
+            status_code=503,
+            headers={"Cache-Control": "private, no-store"},
+        )
+
+    module = payload.get("module", {}) if isinstance(payload, dict) else {}
+    materials = payload.get("materials", []) if isinstance(payload, dict) else []
+    tasks = payload.get("tasks", []) if isinstance(payload, dict) else []
+
+    parts: list[str] = []
+    needs_h5p_player_js = False
+    student_sub = str((user or {}).get("sub") or "")
+    material_section_map: dict[str, str] | None = None
+    file_url_cache: dict[tuple[str, str], str | None] = {}
+
+    # Render materials/tasks as the same cards used on the linear unit page.
+    for m in (materials if isinstance(materials, list) else []):
+        if not isinstance(m, dict):
+            continue
+        mid = str(m.get("id") or "")
+        title = str(m.get("title") or "Material")
+        kind = str(m.get("kind") or "")
+        preview_html = ""
+        if kind == "markdown":
+            preview_html = render_markdown_safe(str(m.get("body_md") or ""))
+        elif kind == "file":
+            mime = str(m.get("mime_type") or "").lower()
+            alt_text = str(m.get("alt_text") or "") or None
+            preview_url = str(m.get("file_url") or "").strip()
+            section_id = str(m.get("section_id") or "").strip()
+            if not preview_url and _is_uuid_like(mid) and student_sub:
+                if not _is_uuid_like(section_id):
+                    if material_section_map is None:
+                        material_section_map = await _fetch_student_material_section_map_for_unit(
+                            course_id=str(course_id),
+                            unit_id=str(unit_id),
+                            session_id=str(sid or ""),
+                        )
+                    section_id = str(material_section_map.get(mid) or "")
+                if _is_uuid_like(section_id):
+                    cache_key = (section_id, mid)
+                    if cache_key not in file_url_cache:
+                        file_url_cache[cache_key] = _resolve_student_material_file_url(
+                            student_sub=student_sub,
+                            course_id=str(course_id),
+                            section_id=section_id,
+                            material_id=mid,
+                        )
+                    preview_url = str(file_url_cache.get(cache_key) or "").strip()
+            if mime and preview_url:
+                try:
+                    preview_html = FilePreview(
+                        url=preview_url,
+                        mime=mime,
+                        title=title,
+                        alt=alt_text,
+                        max_height="480px",
+                    ).render()
+                except Exception:
+                    preview_html = ""
+        card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
+        parts.append(card.render())
+
+    for t in (tasks if isinstance(tasks, list) else []):
+        if not isinstance(t, dict):
+            continue
+        tid = str(t.get("id") or "")
+        title = str(t.get("title") or "Aufgabe")
+        task_kind = str(t.get("kind") or "native")
+
+        if task_kind == "h5p":
+            needs_h5p_player_js = True
+            instruction_html = ""
+            content_id = ""
+            h5p_cfg = t.get("h5p") if isinstance(t.get("h5p"), dict) else {}
+            if isinstance(h5p_cfg, dict):
+                content_id = str(h5p_cfg.get("content_id") or "")
+            if not content_id:
+                form_html = '<p class="text-muted">Kein H5P-Inhalt verknüpft.</p>'
+            else:
+                form_html = (
+                    f'<div class="h5p-task-player" data-h5p-task-player="true" '
+                    f'data-course-id="{Component.escape(course_id)}" '
+                    f'data-task-id="{Component.escape(tid)}" '
+                    f'data-content-id="{Component.escape(content_id)}">'
+                    f'<p class="text-muted" data-h5p-status>Initialisiere H5P …</p>'
+                    "</div>"
+                )
+        else:
+            instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
+            form_html = _build_task_submit_form_html(
+                course_id=course_id, unit_id=unit_id, task_id=tid, task_kind=task_kind
+            )
+
+        payload_json = _hx_vals_attr_payload({"open_attempt_id": ""})
+        history_placeholder_html = (
+            f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
+            f'data-pending="false" data-open-attempt-id="" '
+            f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
+            f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
+            f'hx-vals="{payload_json}" '
+            'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
+            f'<div class="text-muted">Lade Verlauf …</div>'
+            f"</section>"
+        )
+        tcard = TaskCard(
+            task_id=tid,
+            title=title,
+            instruction_html=instruction_html,
+            history_entries=[],
+            history_placeholder_html=history_placeholder_html,
+            feedback_banner_html=None,
+            form_html=form_html,
+        )
+        parts.append(tcard.render())
+
+    inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte.</p>"
+    # We normally include the H5P player init script on the modular unit page.
+    # Keep this fragment robust when opened directly.
+    h5p_script = (
+        '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
+        if needs_h5p_player_js
+        else ""
+    )
+    html = (
+        f'<div class="modular-module" data-module-id="{Component.escape(str(module_id))}">'
+        f"{inner}"
+        f"{h5p_script}"
+        "</div>"
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/learning/courses/{course_id}/tasks/{task_id}/submit", response_class=HTMLResponse)
@@ -2075,7 +2531,6 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
 
     internal_base, internal_origin = _learning_internal_base()
     api_resp = None
-    api_error = ""
     server_upload_error = ""
     try:
         import httpx
@@ -2124,9 +2579,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 )
     except Exception as exc:
         api_resp = None  # type: ignore
-        api_error = str(exc)
-    if server_upload_error and not api_error:
-        api_error = server_upload_error
+        logger.debug("learning_submit_task internal API error: %s", exc)
     # Resolve unit_id from API if not provided (robustness for direct POST tests)
     if not unit_id:
         try:
@@ -2167,28 +2620,19 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
     # HTMX: return the updated history fragment directly and trigger a success message
     is_htmx = bool(request.headers.get("HX-Request"))
     is_success = (api_resp is not None and getattr(api_resp, "status_code", 0) in (200, 201, 202))
-    # Surface diagnostics for dev/test when the API rejected the submission.
-    diag_header = None
-    if api_resp is not None and not is_success:
-        status = getattr(api_resp, "status_code", None)
-        detail = ""
-        try:
-            data = api_resp.json()
-            detail = str((data or {}).get("detail") or (data or {}).get("error") or "")
-        except Exception:
-            detail = ""
-        diag_header = f"status={status},detail={detail or 'n/a'}"
-    elif api_resp is None and api_error:
-        diag_header = f"status=error,detail={api_error}"
 
     if is_htmx:
         headers = {"Cache-Control": "private, no-store"}
         import json as _json
         if is_success:
-            # Ask client to show a success banner via HX-Trigger
-            headers["HX-Trigger"] = _json.dumps({
-                "showMessage": {"message": "Erfolgreich eingereicht", "type": "success"}
-            })
+            # Ask client to show a success banner via HX-Trigger.
+            trigger_payload = {"showMessage": {"message": "Erfolgreich eingereicht", "type": "success"}}
+            if _is_uuid_like(unit_id):
+                # Modular unit workspace is HTMX-driven; after a successful submission
+                # we must refresh the advance organizer graph so newly unlocked modules
+                # become visible/clickable without a full page reload.
+                trigger_payload["modularGraphRefresh"] = {"courseId": course_id, "unitId": unit_id}
+            headers["HX-Trigger"] = _json.dumps(trigger_payload)
             # Build the same fragment body as the /history endpoint without
             # making a nested request (keeps tests simple and avoids re-entry).
             try:
@@ -2218,10 +2662,6 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
         headers["HX-Trigger"] = _json.dumps({
             "showMessage": {"message": "Abgabe fehlgeschlagen", "type": "error"}
         })
-        # In non-prod, surface a minimal diagnostic header to aid debugging.
-        if diag_header and SETTINGS.environment != "prod":
-            headers["X-Diag"] = diag_header
-        # Do not leak diagnostics to clients in error cases.
         return HTMLResponse(
             content=f'<section id="task-history-{Component.escape(task_id)}" class="task-panel__history"></section>',
             status_code=400,
@@ -2267,7 +2707,7 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
-        return HTMLResponse("", status_code=403)
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
     try:
         async with _internal_api_client() as client:
             sid = _get_session_id(request)
@@ -2282,7 +2722,7 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
         items = []
     if isinstance(items, list):
         _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
-    open_attempt_id = str(request.query_params.get("open_attempt_id") or "")
+    open_attempt_id = _normalize_open_attempt_id_uuid(str(request.query_params.get("open_attempt_id") or ""))
     items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
     html = _render_learning_task_history_wrapper_html(
         course_id=course_id,
@@ -2424,7 +2864,7 @@ async def courses_edit_submit(request: Request, course_id: str):
     Security: CSRF at UI; ownership via API + RLS.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -2453,7 +2893,7 @@ async def courses_modules_page(request: Request, course_id: str):
     Left: modules in the course (sortable, delete), Right: available units to add.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -2495,12 +2935,12 @@ async def courses_modules_create(request: Request, course_id: str):
     Requires CSRF; non-HTMX requests use PRG back to the page.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     unit_id = str(form.get("unit_id") or "").strip()
     error: str | None = None
     modules: list[dict] = []
@@ -2544,7 +2984,7 @@ async def course_module_sections_page(request: Request, course_id: str, module_i
         Owner-only via API; include CSRF token in HTMX headers for future checks.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -2640,7 +3080,7 @@ async def course_module_sections_toggle(request: Request, course_id: str, module
     Security: Requires teacher role and CSRF token (hidden field or header).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -2738,7 +3178,7 @@ async def courses_modules_reorder(request: Request, course_id: str):
         extracted from the form body (which look like `module_<uuid>`).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -2772,12 +3212,12 @@ async def courses_modules_delete(request: Request, course_id: str, module_id: st
     Requires CSRF. Non-HTMX PRG back to the modules page.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     error: str | None = None
     modules: list[dict] = []
     units: list[dict] = []
@@ -2808,14 +3248,18 @@ async def courses_modules_delete(request: Request, course_id: str, module_id: st
 def _render_unit_list_partial(items: list[dict]) -> str:
     cards = []
     for u in items:
+        unit_type = str(u.get("unit_type") or "linear").strip().lower()
+        type_label = "Modular" if unit_type == "modular" else "Linear"
+        primary_label = "Editor öffnen" if unit_type == "modular" else "Abschnitte verwalten"
         cards.append(f'''
         <div class="card unit-card" data-unit-id="{u.get("id", "")}">
             <div class="card-body">
                 <h3 class="card-title"><a href="/units/{u.get("id")}">{Component.escape(u.get("title"))}</a></h3>
+                <p class="text-muted"><span class="badge">{type_label}</span></p>
                 <p class="text-muted">{Component.escape(u.get("summary"))}</p>
                 <div class="card-actions">
                     <a href="/units/{u.get("id")}/edit" class="btn btn-secondary">Umbenennen</a>
-                    <a href="/units/{u.get("id")}" class="btn btn-primary">Abschnitte verwalten</a>
+                    <a href="/units/{u.get("id")}" class="btn btn-primary">{primary_label}</a>
                 </div>
             </div>
         </div>
@@ -2850,19 +3294,22 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
     Inside, a div.section-list holds sortable items with ids "section_<id>" so the sortable
     extension can submit an ordered list via form parameter name "id".
     """
+    safe_unit_id = Component.escape(unit_id)
+    safe_csrf_token = Component.escape(csrf_token)
     items: list[str] = []
     for section in sections:
-        sec_id = section.get("id")
+        sec_id = str(section.get("id") or "")
+        safe_sec_id = Component.escape(sec_id)
         title = Component.escape(section.get("title"))
         items.append(f'''
-        <div class="card section-card" id="section_{sec_id}" data-section-id="{sec_id}">
+        <div class="card section-card" id="section_{safe_sec_id}" data-section-id="{safe_sec_id}">
             <div class="card-body">
                 <span class="drag-handle">☰</span>
-                <h4 class="card-title"><a href="/units/{unit_id}/sections/{sec_id}">{title}</a></h4>
+                <h4 class="card-title"><a href="/units/{safe_unit_id}/sections/{safe_sec_id}">{title}</a></h4>
                 <div class="card-actions">
-                    <a class="btn btn-sm" href="/units/{unit_id}/sections/{sec_id}">Material & Aufgaben</a>
-                    <form hx-post="/units/{unit_id}/sections/{sec_id}/delete" hx-target="#section-list-section" hx-swap="outerHTML">
-                        <input type="hidden" name="csrf_token" value="{csrf_token}">
+                    <a class="btn btn-sm" href="/units/{safe_unit_id}/sections/{safe_sec_id}">Material & Aufgaben</a>
+                    <form hx-post="/units/{safe_unit_id}/sections/{safe_sec_id}/delete" hx-target="#section-list-section" hx-swap="outerHTML">
+                        <input type="hidden" name="csrf_token" value="{safe_csrf_token}">
                         <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
                     </form>
                 </div>
@@ -2873,8 +3320,8 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
     # Always render sortable container for consistent client behavior
     sortable_open = (
         f'<div class="section-list" hx-ext="sortable" '
-        f'data-reorder-url="/units/{unit_id}/sections/reorder" '
-        f'data-csrf-token="{csrf_token}">'
+        f'data-reorder-url="/units/{safe_unit_id}/sections/reorder" '
+        f'data-csrf-token="{safe_csrf_token}">'
     )
     inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Abschnitte vorhanden.</p></div>'
     inner = sortable_open + inner_content + "</div>"
@@ -2886,22 +3333,227 @@ def _render_section_list_partial(unit_id: str, sections: list[dict], csrf_token:
     return f'<section id="section-list-section">{error_html}{inner}</section>'
 
 def _render_sections_page_html(unit: dict, sections: list[dict], csrf_token: str, error: str | None = None) -> str:
-    """Build the sections management page content HTML."""
+    """Build the sections management page content HTML.
+
+    Notes:
+        Option B: For modular units, each "module" maps 1:1 to a unit section.
+        Teachers still manage content via sections, but the UI uses "Module"
+        wording to avoid confusion.
+    """
     from components import SectionCreateForm
-    form_component = SectionCreateForm(unit_id=unit["id"], csrf_token=csrf_token, error=error)
+    unit_type = str(unit.get("unit_type") or "linear").strip().lower()
+    is_modular = unit_type == "modular"
+    noun = "Modul" if is_modular else "Abschnitt"
+    plural = "Module" if is_modular else "Abschnitte"
+
+    form_component = SectionCreateForm(
+        unit_id=unit["id"],
+        csrf_token=csrf_token,
+        error=error,
+        noun=noun,
+    )
     create_form_html = form_component.render()
     section_list_html = _render_section_list_partial(unit["id"], sections, csrf_token=csrf_token)
 
+    modular_hint = ""
+    if is_modular:
+        modular_hint = (
+            '<p class="text-muted">'
+            "Hinweis: In modularen Lerneinheiten entspricht jeder Abschnitt einem Modul."
+            "</p>"
+        )
+
     return f'''
         <div class="container">
-            <h1 id="sections-heading">Abschnitte für: {Component.escape(unit.get("title", ""))}</h1>
+            <h1 id="sections-heading">{plural} für: {Component.escape(unit.get("title", ""))}</h1>
+            {modular_hint}
             <section class="card create-section-section" id="create-section-form-container">
-                <h2 id="create-section-heading">Neuen Abschnitt erstellen</h2>
+                <h2 id="create-section-heading">Neues {noun} erstellen</h2>
                 {create_form_html}
             </section>
             {section_list_html}
         </div>
     '''
+
+
+def _render_modular_unit_editor_graph_html(
+    *,
+    unit_id: str,
+    phases: list[dict],
+    modules: list[dict],
+    edges: list[dict],
+    swap_oob: bool,
+) -> str:
+    """Render the modular editor graph container (phases + nodes + edges overlay).
+
+    Why:
+        After CRUD actions, HTMX updates the graph via out-of-band swaps.
+        We render the graph HTML in one place so SSR and OOB refresh match.
+    """
+    safe_unit_id = Component.escape(str(unit_id or ""))
+    edges_json = json.dumps(edges or [], ensure_ascii=False, separators=(",", ":"))
+
+    # Group modules by phase for a simple, readable editor layout.
+    modules_by_phase: dict[str, list[dict]] = {}
+    for m in modules:
+        pid = str(m.get("phase_id") or "")
+        modules_by_phase.setdefault(pid, []).append(m)
+
+    phase_columns: list[str] = []
+    for p in phases:
+        pid = str(p.get("id") or "")
+        safe_pid = Component.escape(pid)
+        ptitle = Component.escape(str(p.get("title") or "Phase"))
+        entries = modules_by_phase.get(pid, [])
+
+        node_html: list[str] = []
+        for m in entries:
+            mid = str(m.get("id") or "")
+            safe_mid = Component.escape(mid)
+            title = Component.escape(str(m.get("title") or "Modul"))
+            panel_url = f"/units/{safe_unit_id}/modules/{safe_mid}/panel"
+            inline_id = f"modular-editor-module-inline-{mid}"
+            safe_inline_id = Component.escape(inline_id)
+            node_html.append(
+                '<div class="modular-editor__module-node" '
+                f'id="module_{safe_mid}" data-module-id="{safe_mid}">'
+                '<div class="modular-editor__module-row">'
+                '<span class="modular-editor__drag-handle" title="Verschieben" aria-hidden="true">⠿</span>'
+                f'<button type="button" class="modular-editor__module-btn" '
+                f'hx-get="{panel_url}" hx-target="#modular-editor-panel" hx-swap="innerHTML">'
+                f"{title}"
+                "</button>"
+                '<div class="modular-editor__node-actions" role="group" aria-label="Modul Aktionen">'
+                f'<button type="button" class="btn btn-sm btn-secondary modular-editor__icon-btn" '
+                f'data-action="modular-editor-rename-module" data-module-id="{safe_mid}" '
+                f'hx-get="/units/{safe_unit_id}/modular-editor/module/{safe_mid}/rename" '
+                f'hx-target="#{safe_inline_id}" hx-swap="innerHTML" '
+                f'title="Modul umbenennen" aria-label="Modul umbenennen">✎</button>'
+                f'<button type="button" class="btn btn-sm btn-danger modular-editor__icon-btn" '
+                f'data-action="modular-editor-delete-module" data-module-id="{safe_mid}" '
+                f'hx-get="/units/{safe_unit_id}/modular-editor/module/{safe_mid}/delete" '
+                f'hx-target="#{safe_inline_id}" hx-swap="innerHTML" '
+                f'title="Modul löschen" aria-label="Modul löschen">🗑</button>'
+                "</div>"
+                "</div>"
+                f'<div class="modular-editor__node-inline" id="{safe_inline_id}"></div>'
+                "</div>"
+            )
+        inner_nodes = "".join(node_html) if node_html else '<div class="empty-state"><p>Noch keine Module.</p></div>'
+
+        phase_inline_id = f"modular-editor-phase-inline-{pid}"
+        safe_phase_inline_id = Component.escape(phase_inline_id)
+        phase_columns.append(
+            '<section class="modular-editor__phase" '
+            f'data-phase-id="{safe_pid}">'
+            '<header class="modular-editor__phase-header">'
+            '<div class="modular-editor__phase-heading">'
+            '<span class="modular-editor__phase-drag-handle" title="Phase verschieben" aria-hidden="true">⠿</span>'
+            f'<h3 class="modular-editor__phase-title">{ptitle}</h3>'
+            "</div>"
+            '<div class="modular-editor__phase-actions" role="group" aria-label="Phase Aktionen">'
+            f'<button type="button" class="btn btn-sm btn-secondary" '
+            f'data-action="modular-editor-add-module" data-phase-id="{safe_pid}" '
+            f'hx-get="/units/{safe_unit_id}/modular-editor/phase/{safe_pid}/module/new" '
+            f'hx-target="#{safe_phase_inline_id}" hx-swap="innerHTML">+ Modul</button>'
+            f'<button type="button" class="btn btn-sm btn-secondary" '
+            f'data-action="modular-editor-rename-phase" data-phase-id="{safe_pid}" '
+            f'hx-get="/units/{safe_unit_id}/modular-editor/phase/{safe_pid}/rename" '
+            f'hx-target="#{safe_phase_inline_id}" hx-swap="innerHTML" '
+            f'title="Phase umbenennen" aria-label="Phase umbenennen">✎</button>'
+            f'<button type="button" class="btn btn-sm btn-danger" '
+            f'data-action="modular-editor-delete-phase" data-phase-id="{safe_pid}" '
+            f'hx-get="/units/{safe_unit_id}/modular-editor/phase/{safe_pid}/delete" '
+            f'hx-target="#{safe_phase_inline_id}" hx-swap="innerHTML" '
+            f'title="Phase löschen" aria-label="Phase löschen">🗑</button>'
+            "</div>"
+            "</header>"
+            f'<div class="modular-editor__phase-inline" id="{safe_phase_inline_id}"></div>'
+            f'<div class="modular-editor__module-list" data-unit-id="{safe_unit_id}" '
+            f'data-phase-id="{safe_pid}">'
+            f"{inner_nodes}"
+            "</div>"
+            "</section>"
+        )
+
+    phases_inner = "".join(phase_columns) if phase_columns else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
+    phases_html = f'<div class="modular-editor__phases" id="modular-editor-phases">{phases_inner}</div>'
+    oob_attr = ' hx-swap-oob="outerHTML"' if swap_oob else ""
+    return (
+        f'<div class="modular-editor__graph" id="modular-editor-graph"{oob_attr}>'
+        f'<template id="modular-editor-edges-data">{edges_json}</template>'
+        '<svg class="modular-editor__edges" id="modular-editor-edges" aria-hidden="true" focusable="false"></svg>'
+        f"{phases_html}"
+        "</div>"
+    )
+
+def _render_modular_unit_editor_page_html(
+    *,
+    unit: dict,
+    phases: list[dict],
+    modules: list[dict],
+    edges: list[dict],
+    csrf_token: str,
+    error_phases: str | None = None,
+    error_modules: str | None = None,
+) -> str:
+    """Build the teacher visual editor page for a modular unit.
+
+    UX intent:
+        - Phases are visual bands (stacked vertically).
+        - Modules are nodes inside phases.
+        - Clicking a module loads its content editor into the right-side panel
+          via HTMX (no page navigation).
+        - Edges (dependencies) are rendered as an overlay and manipulated via
+          dedicated Teaching APIs (JS + HTMX hybrid).
+
+    Option B (implementation detail):
+        Each module (unit_modules.id) maps 1:1 to a backing section
+        (unit_sections.id). The teacher UX should not expose sections.
+    """
+    unit_id = str(unit.get("id") or "")
+    safe_unit_id = Component.escape(unit_id)
+    unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
+    graph_html = _render_modular_unit_editor_graph_html(
+        unit_id=unit_id,
+        phases=phases,
+        modules=modules,
+        edges=edges,
+        swap_oob=False,
+    )
+
+    error_modules_html = (
+        f'<div class="section-error" role="alert" data-testid="module-error">{Component.escape(error_modules)}</div>'
+        if error_modules
+        else ""
+    )
+
+    return (
+        f'<div class="container modular-editor" data-testid="modular-unit-editor" data-unit-id="{safe_unit_id}" '
+        f'data-csrf-token="{Component.escape(csrf_token)}">'
+        f'<h1>Editor: {unit_title}</h1>'
+        '<p class="text-muted">Phasen (Zeilen) · Module (Knoten) · Rechts: Inhalte bearbeiten.</p>'
+        f"{error_modules_html}"
+        '<div class="modular-editor__shell">'
+        '<div class="modular-editor__canvas">'
+        '<div class="modular-editor__toolbar">'
+        f'<button type="button" class="btn btn-secondary" data-action="modular-editor-add-phase" '
+        f'hx-get="/units/{safe_unit_id}/modular-editor/phase/new" '
+        f'hx-target="#modular-editor-toolbar-form" hx-swap="innerHTML">+ Phase</button> '
+        f'<button type="button" class="btn btn-secondary" data-action="modular-editor-edge-mode" aria-pressed="false">Kantenmodus</button>'
+        '<span class="text-muted" id="modular-editor-status" aria-live="polite"><small></small></span>'
+        '</div>'
+        '<div id="modular-editor-toolbar-form"></div>'
+        f"{graph_html}"
+        "</div>"
+        '<div class="modular-editor__splitter" id="modular-editor-splitter" aria-hidden="true"></div>'
+        '<aside class="modular-editor__panel" id="modular-editor-panel">'
+        '<h2>Modul</h2>'
+        '<p class="text-muted">Klicke links auf ein Modul, um Inhalte zu bearbeiten.</p>'
+        "</aside>"
+        "</div>"
+        "</div>"
+    )
 
 
 def _render_material_list_partial(unit_id: str, section_id: str, materials: list[dict], *, csrf_token: str, error: str | None = None) -> str:
@@ -3086,6 +3738,46 @@ def _render_section_detail_page_html(
     )
 
 
+def _render_module_detail_page_html(
+    *,
+    unit: dict,
+    module: dict,
+    section_id: str,
+    materials: list[dict],
+    tasks: list[dict],
+    csrf_token: str,
+) -> str:
+    """Build the module content page (teacher) without exposing sections.
+
+    Note:
+        Internally, content lives in a section (`section_id`). Links in the
+        materials/tasks lists still point to section routes for now; the teacher
+        entrypoint is module-first so the UX stays understandable.
+    """
+    unit_id = str(unit.get("id") or "")
+    module_id = str(module.get("id") or "")
+
+    materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=csrf_token)
+    tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=csrf_token)
+
+    return (
+        '<div class="container">'
+        f'<h1>Modul: {Component.escape(module.get("title") or "Modul")}</h1>'
+        f'<p><a href="/units/{Component.escape(unit_id)}">Zurück zum Editor</a></p>'
+        '<div class="two-col">'
+        f'<section class="card col-left"><h2>Materialien</h2>'
+        f'<div class="actions"><a class="btn btn-primary" id="btn-create-material" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/materials/new">+ Material</a></div>'
+        f'{materials_html}</section>'
+        f'<section class="card col-right"><h2>Aufgaben</h2>'
+        f'<div class="actions"><a class="btn btn-primary" id="btn-create-task" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/tasks/new">+ Aufgabe</a></div>'
+        f'{tasks_html}</section>'
+        '</div>'
+        '</div>'
+    )
+
+
 def _extract_api_error_detail(response) -> str:
     """Return the error `detail`/`error` field from an API response for display."""
     try:
@@ -3124,6 +3816,176 @@ async def _fetch_sections_for_unit(unit_id: str, *, session_id: str) -> list[dic
             continue
         cleaned.append({"id": item.get("id"), "title": item.get("title")})
     return cleaned
+
+
+def _fetch_unit_modules_for_unit(unit_id: str, *, author_sub: str) -> list[dict]:
+    """Fetch unit modules for the modular teacher editor via DBTeachingRepo (Option B).
+
+    Why:
+        The teaching JSON API exposes sections and phases. For the new modular
+        editor we need module_ids (unit_modules.id) to generate stable teacher
+        URLs like /units/{unit_id}/modules/{module_id} without leaking sections.
+
+    Security:
+        Uses the same DBTeachingRepo (RLS via app.current_sub) as the teaching API.
+    """
+    if not author_sub:
+        return []
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if not isinstance(repo, DBTeachingRepo):
+            return []
+        return repo.list_unit_modules_for_author(unit_id=unit_id, author_id=author_sub)
+    except Exception:
+        return []
+
+def _fetch_unit_module_edges_for_unit(unit_id: str, *, author_sub: str) -> list[dict]:
+    """Fetch module dependency edges for the modular teacher editor.
+
+    Returns:
+        List of dicts: { "from": <module_id>, "to": <module_id> }.
+        Returns an empty list on any error (editor stays usable).
+    """
+    if not author_sub:
+        return []
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if not isinstance(repo, DBTeachingRepo):
+            return []
+        return repo.list_unit_module_edges_for_author(unit_id=unit_id, author_id=author_sub)
+    except Exception:
+        return []
+
+
+def _get_unit_module_for_teacher(unit_id: str, module_id: str, *, author_sub: str) -> dict | None:
+    """Resolve a teacher-facing module_id to its backing section_id.
+
+    Option B:
+        `public.unit_modules.id` is the module_id.
+        `public.unit_modules.section_id` points to the content container.
+    """
+    if not author_sub:
+        return None
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if not isinstance(repo, DBTeachingRepo):
+            return None
+        return repo.get_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=author_sub)
+    except Exception:
+        return None
+
+
+async def _fetch_unit_phases_for_unit(unit_id: str, *, session_id: str) -> tuple[list[dict], str | None]:
+    """Fetch modular unit phases for the teacher UI.
+
+    Returns:
+        (phases, error_code). When phases are available, error_code is None.
+        When the unit is linear, error_code is "invalid_unit_type".
+        When the unit is not visible, error_code is "not_found" or "forbidden".
+    """
+    try:
+        async with _internal_api_client() as client:
+            if session_id:
+                client.cookies.set(SESSION_COOKIE_NAME, session_id)
+            resp = await client.get(f"/api/teaching/units/{unit_id}/phases")
+    except Exception:
+        return [], "backend_error"
+
+    if resp.status_code == 200:
+        try:
+            payload = resp.json()
+        except Exception:
+            return [], "backend_error"
+        if not isinstance(payload, list):
+            return [], "backend_error"
+        cleaned: list[dict] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            cleaned.append(
+                {
+                    "id": item.get("id"),
+                    "title": item.get("title"),
+                    "position": item.get("position"),
+                }
+            )
+        return cleaned, None
+
+    # Map API error semantics to short UI codes.
+    if resp.status_code == 400:
+        detail = _extract_api_error_detail(resp)
+        return [], detail or "bad_request"
+    if resp.status_code == 403:
+        return [], "forbidden"
+    if resp.status_code == 404:
+        return [], "not_found"
+    return [], "backend_error"
+
+
+def _render_unit_phases_list_partial(unit_id: str, phases: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    items: list[str] = []
+    for p in phases:
+        pid = str(p.get("id") or "")
+        title = Component.escape(str(p.get("title") or "Phase"))
+        items.append(
+            f'<div class="card phase-card" id="phase_{pid}" data-phase-id="{pid}">'
+            f'<div class="card-body"><span class="drag-handle">☰</span> {title}</div>'
+            f"</div>"
+        )
+    inner_content = "\n".join(items) if items else '<div class="empty-state"><p>Noch keine Phasen.</p></div>'
+    sortable_open = (
+        f'<div class="phase-list" hx-ext="sortable" '
+        f'data-reorder-url="/units/{unit_id}/phases/reorder" '
+        f'data-csrf-token="{Component.escape(csrf_token)}">'
+    )
+    error_html = (
+        f'<div class="section-error" role="alert" data-testid="phase-error">{Component.escape(error)}</div>'
+        if error
+        else ""
+    )
+    return f'<section id="phase-list-section">{error_html}{sortable_open}{inner_content}</div></section>'
+
+
+def _render_unit_phases_page_html(unit: dict, phases: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    unit_id = str(unit.get("id") or "")
+    unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
+    unit_type = str(unit.get("unit_type") or "linear").strip().lower()
+    if unit_type != "modular":
+        return (
+            '<div class="container">'
+            f'<h1>Phasen</h1>'
+            '<p class="text-muted">Phasen sind nur für modulare Lerneinheiten verfügbar.</p>'
+            f'<p><a href="/units/{unit_id}">Zurück zur Lerneinheit</a></p>'
+            '</div>'
+        )
+
+    create_form = (
+        f'<form method="post" action="/units/{unit_id}/phases" '
+        f'hx-post="/units/{unit_id}/phases" hx-target="#phase-list-section" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        '<label>Titel der Phase<input class="form-input" type="text" name="title" required></label>'
+        '<div class="form-actions"><button class="btn btn-primary" type="submit">Phase hinzufügen</button></div>'
+        '</form>'
+    )
+    phase_list = _render_unit_phases_list_partial(unit_id, phases, csrf_token=csrf_token, error=error)
+
+    return (
+        '<div class="container">'
+        f'<h1>Phasen für: {unit_title}</h1>'
+        f'<p><a href="/units/{unit_id}">Zurück zu den Modulen</a></p>'
+        f'<section class="card"><h2>Neue Phase erstellen</h2>{create_form}</section>'
+        f'{phase_list}'
+        '</div>'
+    )
 
 
 def _render_unit_edit_response(
@@ -4266,7 +5128,7 @@ async def courses_index(request: Request):
         - Renders the list and pager; sets private, no-store cache headers.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
 
@@ -4308,7 +5170,7 @@ async def courses_create(request: Request):
         partial swap depending on the request.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     title = str(form.get("title", "")).strip()
@@ -4375,7 +5237,7 @@ async def delete_course_htmx(request: Request, course_id: str):
         at the UI boundary; authorization and ownership are enforced by the API.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -4408,7 +5270,7 @@ async def delete_course_htmx(request: Request, course_id: str):
 @app.get("/units", response_class=HTMLResponse)
 async def units_index(request: Request):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -4425,6 +5287,7 @@ async def units_index(request: Request):
         vm = [
             {
                 "id": getattr(u, "id", None) if not isinstance(u, dict) else u.get("id"),
+                "unit_type": getattr(u, "unit_type", None) if not isinstance(u, dict) else u.get("unit_type"),
                 "title": getattr(u, "title", None) if not isinstance(u, dict) else u.get("title"),
                 "summary": getattr(u, "summary", None) if not isinstance(u, dict) else u.get("summary"),
             }
@@ -4457,15 +5320,21 @@ async def units_index(request: Request):
 @app.post("/units", response_class=HTMLResponse)
 async def units_create(request: Request):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     
     form = await request.form()
     title = str(form.get("title", "")).strip()
     summary = str(form.get("summary", "")).strip()
+    unit_type = str(form.get("unit_type", "linear")).strip().lower()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+
+    if unit_type not in {"linear", "modular"}:
+        token = _get_or_create_csrf_token(sid or "")
+        form_component = UnitCreateForm(csrf_token=token, error="invalid_unit_type", values=dict(form))
+        return HTMLResponse(form_component.render(), headers={"HX-Reswap": "outerHTML"})
 
     if not title:
         token = _get_or_create_csrf_token(sid or "")
@@ -4474,7 +5343,12 @@ async def units_create(request: Request):
 
     try:
         from routes import teaching as teaching_routes  # type: ignore
-        teaching_routes._get_repo().create_unit(title=title, summary=summary or None, author_id=str((user or {}).get("sub") or ""))
+        teaching_routes._get_repo().create_unit(
+            title=title,
+            summary=summary or None,
+            author_id=str((user or {}).get("sub") or ""),
+            unit_type=unit_type,
+        )
     except Exception:
         pass
 
@@ -4485,6 +5359,7 @@ async def units_create(request: Request):
             vm = [
                 {
                     "id": getattr(u, "id", None) if not isinstance(u, dict) else u.get("id"),
+                    "unit_type": getattr(u, "unit_type", None) if not isinstance(u, dict) else u.get("unit_type"),
                     "title": getattr(u, "title", None) if not isinstance(u, dict) else u.get("title"),
                     "summary": getattr(u, "summary", None) if not isinstance(u, dict) else u.get("summary"),
                 }
@@ -4509,7 +5384,7 @@ async def units_edit_form(request: Request, unit_id: str):
     authorship. UI performs CSRF and PRG.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -4558,7 +5433,7 @@ async def units_edit_submit(request: Request, unit_id: str):
     Security: CSRF at UI; authorship via API + RLS.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
@@ -4626,7 +5501,7 @@ async def unit_details_index(request: Request, unit_id: str):
     Permissions: Caller must be a teacher with a valid session.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
     sid = _get_session_id(request) or ""
@@ -4636,7 +5511,7 @@ async def unit_details_index(request: Request, unit_id: str):
 
     unit_title: str | None = None
     unit_summary: str | None = None
-    sections: list[dict] = []
+    unit_type: str = "linear"
     try:
         async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -4650,20 +5525,208 @@ async def unit_details_index(request: Request, unit_id: str):
             ud = u.json()
             unit_title = str(ud.get("title") or "") or None
             unit_summary = str(ud.get("summary") or "") or None
-            s = await client.get(f"/api/teaching/units/{unit_id}/sections")
-            if s.status_code == 200 and isinstance(s.json(), list):
-                # Keep only fields needed for rendering
-                sections = [
-                    {"id": it.get("id"), "title": it.get("title")}
-                    for it in s.json()
-                ]
+            unit_type = str(ud.get("unit_type") or "linear").strip().lower()
     except Exception:
         return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
 
-    unit_vm = {"id": unit_id, "title": unit_title or "Lerneinheit", "summary": unit_summary or None}
+    unit_vm = {
+        "id": unit_id,
+        "title": unit_title or "Lerneinheit",
+        "summary": unit_summary or None,
+        "unit_type": unit_type,
+    }
+
+    if unit_type == "modular":
+        phases, phases_err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+        modules = _fetch_unit_modules_for_unit(unit_id, author_sub=str((user or {}).get("sub") or ""))
+        edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=str((user or {}).get("sub") or ""))
+        content = _render_modular_unit_editor_page_html(
+            unit=unit_vm,
+            phases=phases,
+            modules=modules,
+            edges=edges,
+            csrf_token=token,
+            error_phases=phases_err,
+        )
+        layout = Layout(
+            title=f"Editor – {unit_vm['title']}",
+            content=content,
+            user=user,
+            current_path=request.url.path,
+        )
+        return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+    sections = await _fetch_sections_for_unit(unit_id, session_id=sid)
     content = _render_sections_page_html(unit_vm, sections, csrf_token=token)
     layout = Layout(title=f"Abschnitte für {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modules", response_class=HTMLResponse)
+async def unit_modules_create(request: Request, unit_id: str):
+    """Create a new module (backed by a section) for a modular unit.
+
+    Teachers should not need to know that Option B maps modules 1:1 to sections.
+    This endpoint keeps the teacher flow stable (/modules) while delegating to
+    the modular Teaching API. `phase_id` is mandatory to keep SSR behavior
+    deterministic and aligned with the modular data model.
+    """
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return RedirectResponse(url="/", status_code=303)
+
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+
+    title = str(form.get("title", "")).strip()
+    if not title:
+        return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
+    phase_id = str(form.get("phase_id", "")).strip()
+    if not phase_id or not _is_uuid_like(phase_id):
+        return HTMLResponse("invalid_phase_id", status_code=400, headers={"Cache-Control": "private, no-store"})
+
+    try:
+        async with _internal_api_client() as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            api_resp = await client.post(
+                f"/api/teaching/units/{unit_id}/modules",
+                json={"title": title, "phase_id": phase_id},
+            )
+    except Exception:
+        return HTMLResponse("service_unavailable", status_code=503, headers={"Cache-Control": "private, no-store"})
+
+    status = int(getattr(api_resp, "status_code", 500) or 500)
+    if status not in (200, 201, 202, 204):
+        detail = _extract_api_error_detail(api_resp) or "request_failed"
+        return HTMLResponse(detail, status_code=status, headers={"Cache-Control": "private, no-store"})
+
+    return RedirectResponse(url=f"/units/{unit_id}", status_code=303)
+
+
+@app.get("/units/{unit_id}/phases", response_class=HTMLResponse)
+async def unit_phases_index(request: Request, unit_id: str):
+    """SSR phase editor page for modular units (teacher-only).
+
+    Why:
+        Modular units organize modules into phases. The Teaching JSON API
+        supports phase CRUD and reorder; this SSR page exposes it to teachers.
+    """
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return RedirectResponse(url="/", status_code=303)
+
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+
+    # Load unit meta so we can fail clearly for linear units.
+    unit_title: str | None = None
+    unit_type: str = "linear"
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            u = await client.get(f"/api/teaching/units/{unit_id}")
+            if u.status_code != 200 or not isinstance(u.json(), dict):
+                return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+            ud = u.json()
+            unit_title = str(ud.get("title") or "") or None
+            unit_type = str(ud.get("unit_type") or "linear").strip().lower()
+    except Exception:
+        return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+
+    phases, err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+    unit_vm = {"id": unit_id, "title": unit_title or "Lerneinheit", "unit_type": unit_type}
+    content = _render_unit_phases_page_html(unit_vm, phases, csrf_token=token, error=err)
+    if unit_type != "modular":
+        status = 400
+    elif err == "forbidden":
+        status = 403
+    elif err == "not_found":
+        status = 404
+    elif err == "backend_error":
+        status = 503
+    else:
+        status = 200
+    layout = Layout(title=f"Phasen – {unit_vm['title']}", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, status_code=status, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/phases", response_class=HTMLResponse)
+async def unit_phases_create(request: Request, unit_id: str):
+    """Create a new phase for a modular unit via the Teaching API (SSR/HTMX)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return RedirectResponse(url="/", status_code=303)
+
+    form = await request.form()
+    sid = _get_session_id(request)
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid or "")
+    title = str(form.get("title", "")).strip()
+    error: str | None = None
+
+    if not title:
+        error = "invalid_title"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                if sid:
+                    client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.post(f"/api/teaching/units/{unit_id}/phases", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "phase_create_failed"
+
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid or "")
+    phase_list_html = _render_unit_phases_list_partial(unit_id, phases, csrf_token=token, error=error)
+    if "HX-Request" in request.headers:
+        return HTMLResponse(phase_list_html, headers={"Cache-Control": "private, no-store"})
+    return RedirectResponse(url=f"/units/{unit_id}/phases", status_code=303)
+
+
+@app.post("/units/{unit_id}/phases/reorder", response_class=Response)
+async def unit_phases_reorder(request: Request, unit_id: str):
+    """Reorder phases of a modular unit (drag & drop) via Teaching API."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    sid = _get_session_id(request)
+    csrf_header = request.headers.get("X-CSRF-Token")
+    csrf_field = form.get("csrf_token")
+    if not _validate_csrf(sid, csrf_header or csrf_field):
+        return Response(status_code=403, headers={"Cache-Control": "private, no-store"})
+
+    ordered_ids = [elem_id.replace("phase_", "") for elem_id in form.getlist("id")]
+    try:
+        async with _internal_api_client() as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            resp = await client.post(
+                f"/api/teaching/units/{unit_id}/phases/reorder",
+                json={"phase_ids": ordered_ids},
+            )
+    except Exception:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "reorder_failed"},
+            status_code=400,
+            headers={"Cache-Control": "private, no-store"},
+        )
+    if resp.status_code >= 400:
+        detail = _extract_api_error_detail(resp)
+        status = resp.status_code if resp.status_code in (400, 403, 404) else 400
+        return JSONResponse(
+            {"error": "bad_request", "detail": detail},
+            status_code=status,
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return Response(status_code=200, headers={"Cache-Control": "private, no-store"})
 
 
 async def _fetch_materials_for_section(unit_id: str, section_id: str, *, session_id: str) -> list[dict]:
@@ -4739,7 +5802,7 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
     - Caller must be a teacher in a valid session. Ownership is enforced by API.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -4783,7 +5846,919 @@ async def section_detail_index(request: Request, unit_id: str, section_id: str):
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
-def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+@app.get("/units/{unit_id}/modules/{module_id}", response_class=HTMLResponse)
+async def module_detail_index(request: Request, unit_id: str, module_id: str):
+    """SSR module content page (teacher).
+
+    UX intent:
+        A teacher clicks a module inside the modular unit editor and lands on a
+        page where they can add materials/tasks for that module.
+
+    Option B:
+        Modules map 1:1 to sections. We resolve module_id -> section_id via
+        DBTeachingRepo and then load materials/tasks using the existing API.
+    """
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return RedirectResponse(url="/", status_code=303)
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    token = _get_or_create_csrf_token(sid)
+
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return HTMLResponse("Modul nicht gefunden", status_code=404)
+    section_id = str(module.get("section_id") or "")
+    if not section_id:
+        return HTMLResponse("Modul nicht gefunden", status_code=404)
+
+    unit_title: str | None = None
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            u = await client.get(f"/api/teaching/units/{unit_id}")
+            if u.status_code != 200:
+                return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+            ud = u.json() if isinstance(u.json(), dict) else {}
+            unit_title = str(ud.get("title") or "") or None
+    except Exception:
+        return HTMLResponse("Lerneinheit nicht gefunden", status_code=404)
+
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=sid)
+    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=sid)
+    content = _render_module_detail_page_html(
+        unit={"id": unit_id, "title": unit_title or "Lerneinheit"},
+        module={"id": module_id, "title": module.get("title") or "Modul"},
+        section_id=section_id,
+        materials=materials,
+        tasks=tasks,
+        csrf_token=token,
+    )
+    layout = Layout(title=f"Modul – {str(module.get('title') or '')}", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+
+
+async def _build_modular_editor_module_panel_html(
+    *,
+    unit_id: str,
+    module_id: str,
+    session_id: str,
+    csrf_token: str,
+    author_sub: str,
+    deps_error: str | None,
+) -> tuple[str, int]:
+    """Build right-side panel HTML for the modular unit teacher editor.
+
+    Why:
+        Multiple HTMX actions (panel load, edge delete) need to re-render the
+        panel consistently. Keeping the rendering in one function avoids UI
+        drift and makes behavior testable.
+    """
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return "Modul nicht gefunden", 404
+    section_id = str(module.get("section_id") or "")
+    if not section_id:
+        return "Modul nicht gefunden", 404
+
+    materials = await _fetch_materials_for_section(unit_id, section_id, session_id=session_id)
+    tasks = await _fetch_tasks_for_section(unit_id, section_id, session_id=session_id)
+
+    module_title = str(module.get("title") or "Modul")
+    materials_html = _render_material_list_partial(unit_id, section_id, materials, csrf_token=csrf_token)
+    tasks_html = _render_task_list_partial(unit_id, section_id, tasks, csrf_token=csrf_token)
+
+    # Unlock settings (k-of-n prerequisites).
+    required_prereq_count = int(module.get("required_prereq_count") or 0)
+    settings_target_id = f"modular-editor-module-settings-{module_id}"
+    settings_action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/settings"
+    settings_html = (
+        f'<section class="card" id="{Component.escape(settings_target_id)}">'
+        "<h3>Freischaltung</h3>"
+        '<p class="text-muted"><small>'
+        "Wie viele erfüllte Voraussetzungen (eingehende Kanten) benötigt dieses Modul, "
+        "bevor es für Schüler öffnet?"
+        "</small></p>"
+        f'<form method="post" action="{settings_action}" hx-post="{settings_action}" '
+        f'hx-target="#{Component.escape(settings_target_id)}" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+        '<label><span class="sr-only">required_prereq_count</span>'
+        f'<input class="form-input" type="number" name="required_prereq_count" min="0" '
+        f'value="{required_prereq_count}" required>'
+        "</label>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button>'
+        "</div>"
+        "</form>"
+        "</section>"
+    )
+
+    # Dependency edges (graph): allow teachers to remove edges to unblock moves.
+    edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=author_sub)
+    outgoing = [e for e in edges if str(e.get("from") or "") == str(module_id)]
+    incoming = [e for e in edges if str(e.get("to") or "") == str(module_id)]
+    title_by_id = {
+        str(m.get("id") or ""): str(m.get("title") or "")
+        for m in _fetch_unit_modules_for_unit(unit_id, author_sub=author_sub)
+    }
+
+    edge_delete_action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/edges/delete"
+
+    def _deps_list(items: list[dict], *, direction: str) -> str:
+        if not items:
+            return '<p class="text-muted"><small>Keine.</small></p>'
+        lis: list[str] = []
+        for e in items:
+            from_id = str(e.get("from") or "")
+            to_id = str(e.get("to") or "")
+            other_id = from_id if direction == "incoming" else to_id
+            label = title_by_id.get(other_id) or other_id
+            lis.append(
+                "<li>"
+                f"<span>{Component.escape(label)}</span>"
+                f'<form method="post" action="{edge_delete_action}" hx-post="{edge_delete_action}" '
+                f'hx-target="#modular-editor-panel" hx-swap="innerHTML">'
+                f'<input type="hidden" name="csrf_token" value="{Component.escape(csrf_token)}">'
+                f'<input type="hidden" name="from_module_id" value="{Component.escape(from_id)}">'
+                f'<input type="hidden" name="to_module_id" value="{Component.escape(to_id)}">'
+                '<button type="submit" class="btn btn-danger btn-sm">Entfernen</button>'
+                "</form>"
+                "</li>"
+            )
+        return '<ul class="deps-list">' + "".join(lis) + "</ul>"
+
+    deps_error_html = f'<div class="section-error" role="alert">{Component.escape(deps_error)}</div>' if deps_error else ""
+    deps_html = (
+        '<section class="card">'
+        "<h3>Abhängigkeiten</h3>"
+        f"{deps_error_html}"
+        '<div class="two-col">'
+        f'<div><h4>Voraussetzungen</h4>{_deps_list(incoming, direction="incoming")}</div>'
+        f'<div><h4>Folgemodule</h4>{_deps_list(outgoing, direction="outgoing")}</div>'
+        "</div>"
+        '<p class="text-muted"><small>Hinweis: Ungültige Verschiebungen sind blockiert. Entferne zuerst Abhängigkeiten.</small></p>'
+        "</section>"
+    )
+
+    html = (
+        f'<div class="modular-editor-panel__content" data-module-id="{Component.escape(module_id)}">'
+        f'<h2>{Component.escape(module_title)}</h2>'
+        '<div class="two-col">'
+        f'<section class="card col-left"><h3>Materialien</h3>'
+        f'<div class="actions"><a class="btn btn-primary btn-sm" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/materials/new?return_to=/units/{Component.escape(unit_id)}">+ Material</a></div>'
+        f"{materials_html}"
+        "</section>"
+        f'<section class="card col-right"><h3>Aufgaben</h3>'
+        f'<div class="actions"><a class="btn btn-primary btn-sm" '
+        f'href="/units/{Component.escape(unit_id)}/sections/{Component.escape(section_id)}/tasks/new?return_to=/units/{Component.escape(unit_id)}">+ Aufgabe</a></div>'
+        f"{tasks_html}"
+        "</section>"
+        "</div>"
+        f"{settings_html}"
+        f"{deps_html}"
+        f'<p class="text-muted"><small>Vollansicht: <a href="/units/{Component.escape(unit_id)}/modules/{Component.escape(module_id)}">Modul öffnen</a></small></p>'
+        "</div>"
+    )
+    return html, 200
+
+
+@app.get("/units/{unit_id}/modules/{module_id}/panel", response_class=HTMLResponse)
+async def module_panel_fragment(request: Request, unit_id: str, module_id: str):
+    """HTMX fragment for the modular unit editor's right-side panel (teacher).
+
+    Intent:
+        Keep the teacher inside the visual editor while editing module content.
+        The panel reuses the existing section-based content APIs (Option B).
+    """
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    html, status_code = await _build_modular_editor_module_panel_html(
+        unit_id=unit_id,
+        module_id=module_id,
+        session_id=sid,
+        csrf_token=token,
+        author_sub=author_sub,
+        deps_error=None,
+    )
+    return HTMLResponse(html, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/edges/delete", response_class=HTMLResponse)
+async def modular_editor_module_edge_delete(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: delete a dependency edge from the module panel (teacher).
+
+    Why:
+        Teachers need a reliable way to remove edges without relying on custom
+        browser fetch() quirks (e.g., DELETE request bodies). A plain HTML form
+        via HTMX keeps this robust and testable.
+
+    Behavior:
+        - Validates synchronizer CSRF token (dev = prod).
+        - Deletes the edge via Teaching API.
+        - Returns (1) an OOB graph refresh and (2) the refreshed module panel.
+    """
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+
+    token = _get_or_create_csrf_token(sid)
+    from_id = str(form.get("from_module_id") or "").strip()
+    to_id = str(form.get("to_module_id") or "").strip()
+
+    error: str | None = None
+    if not from_id or not to_id:
+        error = "invalid_edge"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.request(
+                    "DELETE",
+                    f"/api/teaching/units/{unit_id}/modules/edges",
+                    json={"from_module_id": from_id, "to_module_id": to_id},
+                )
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "edge_delete_failed"
+
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+
+    # Re-render the panel so the dependency lists reflect the current DB state.
+    # Even on errors we re-render to keep the UI consistent.
+    # (Error is displayed inline in the dependencies card.)
+    html, status_code = await _build_modular_editor_module_panel_html(
+        unit_id=unit_id,
+        module_id=module_id,
+        session_id=sid,
+        csrf_token=token,
+        author_sub=author_sub,
+        deps_error=error,
+    )
+    if status_code != 200:
+        return HTMLResponse(html, status_code=status_code, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(graph_oob + html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/settings", response_class=HTMLResponse)
+async def modular_editor_module_settings_update(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: update module unlock settings (teacher).
+
+    Why:
+        Teachers need to model k-of-n prerequisites without leaving the visual
+        editor. This endpoint translates a simple form POST into a Teaching API
+        PATCH call.
+
+    Security:
+        - Synchronizer CSRF validation (dev = prod).
+        - AuthZ is enforced by the Teaching API (author only).
+    """
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    current_k = int((module or {}).get("required_prereq_count") or 0)
+
+    raw = str(form.get("required_prereq_count") or "").strip()
+    error: str | None = None
+    new_k: int = current_k
+    if raw == "":
+        error = "invalid_required_prereq_count"
+    else:
+        try:
+            new_k = int(raw)
+        except Exception:
+            error = "invalid_required_prereq_count"
+    if error is None and new_k < 0:
+        error = "invalid_required_prereq_count"
+
+    if error is None:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.patch(
+                    f"/api/teaching/units/{unit_id}/modules/{module_id}",
+                    json={"required_prereq_count": new_k},
+                )
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+                else:
+                    try:
+                        payload = r.json() if isinstance(r.json(), dict) else {}
+                        new_k = int(payload.get("required_prereq_count") or new_k)
+                    except Exception:
+                        pass
+        except Exception:
+            error = "update_failed"
+
+    settings_target_id = f"modular-editor-module-settings-{module_id}"
+    settings_action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/settings"
+    error_html = f'<div class="form-error" role="alert">{Component.escape(error)}</div>' if error else ""
+    success_html = "" if error else '<div class="form-success" role="status">Gespeichert.</div>'
+    html = (
+        f'<section class="card" id="{Component.escape(settings_target_id)}">'
+        "<h3>Freischaltung</h3>"
+        f"{error_html}{success_html}"
+        '<p class="text-muted"><small>'
+        "Wie viele erfüllte Voraussetzungen (eingehende Kanten) benötigt dieses Modul, "
+        "bevor es für Schüler öffnet?"
+        "</small></p>"
+        f'<form method="post" action="{settings_action}" hx-post="{settings_action}" '
+        f'hx-target="#{Component.escape(settings_target_id)}" hx-swap="outerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label><span class="sr-only">required_prereq_count</span>'
+        f'<input class="form-input" type="number" name="required_prereq_count" min="0" '
+        f'value="{int(new_k)}" required>'
+        "</label>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button>'
+        "</div>"
+        "</form>"
+        "</section>"
+    )
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/fragments/empty", response_class=HTMLResponse)
+async def empty_fragment(request: Request) -> HTMLResponse:
+    """Return an empty HTML fragment (useful as an HTMX cancel target)."""
+    return HTMLResponse("", headers={"Cache-Control": "private, no-store"})
+
+
+def _modular_editor_oob_clear(div_id: str) -> str:
+    """Clear a container's inner HTML via HTMX out-of-band swap."""
+    return f'<div id="{Component.escape(div_id)}" hx-swap-oob="innerHTML"></div>'
+
+
+def _modular_editor_oob_reset_panel() -> str:
+    """Reset the right-side panel to its empty state via HTMX OOB swap."""
+    return (
+        '<aside id="modular-editor-panel" hx-swap-oob="innerHTML">'
+        "<h2>Modul</h2>"
+        '<p class="text-muted">Klicke links auf ein Modul, um Inhalte zu bearbeiten.</p>'
+        "</aside>"
+    )
+
+
+async def _build_modular_editor_graph_oob(*, unit_id: str, session_id: str, author_sub: str) -> str:
+    """Fetch current graph state and render an OOB graph container."""
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=session_id)
+    modules = _fetch_unit_modules_for_unit(unit_id, author_sub=author_sub)
+    edges = _fetch_unit_module_edges_for_unit(unit_id, author_sub=author_sub)
+    return _render_modular_unit_editor_graph_html(
+        unit_id=unit_id,
+        phases=phases,
+        modules=modules,
+        edges=edges,
+        swap_oob=True,
+    )
+
+
+def _render_modular_editor_inline_form(
+    *,
+    heading: str,
+    form_html: str,
+    error: str | None,
+) -> str:
+    error_html = f'<div class="form-error" role="alert">{Component.escape(error)}</div>' if error else ""
+    return (
+        '<div class="card modular-editor__inline-card">'
+        f"<h4>{Component.escape(heading)}</h4>"
+        f"{error_html}"
+        f"{form_html}"
+        "</div>"
+    )
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/new", response_class=HTMLResponse)
+async def modular_editor_phase_new_fragment(request: Request, unit_id: str) -> HTMLResponse:
+    """HTMX fragment: create phase form (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+
+    target_id = "modular-editor-toolbar-form"
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/new"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="phase-title">Titel</label>'
+        '<input id="phase-title" class="form-input" type="text" name="title" placeholder="Phase" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Phase anlegen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Neue Phase", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/new", response_class=HTMLResponse)
+async def modular_editor_phase_create(request: Request, unit_id: str) -> HTMLResponse:
+    """HTMX action: create a phase and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.post(f"/api/teaching/units/{unit_id}/phases", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "phase_create_failed"
+    if error:
+        target_id = "modular-editor-toolbar-form"
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/new"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{Component.escape(target_id)}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="phase-title">Titel</label>'
+            f'<input id="phase-title" class="form-input" type="text" name="title" value="{Component.escape(title)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Phase anlegen</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Neue Phase", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear("modular-editor-toolbar-form")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/{phase_id}/module/new", response_class=HTMLResponse)
+async def modular_editor_module_new_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX fragment: create module form within a phase (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+
+    target_id = f"modular-editor-phase-inline-{phase_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/module/new"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="module-title">Titel</label>'
+        '<input id="module-title" class="form-input" type="text" name="title" placeholder="Modul" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Modul anlegen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Neues Modul", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/{phase_id}/module/new", response_class=HTMLResponse)
+async def modular_editor_module_create(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX action: create a module and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.post(f"/api/teaching/units/{unit_id}/modules", json={"title": title, "phase_id": phase_id})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "module_create_failed"
+    if error:
+        target_id = f"modular-editor-phase-inline-{phase_id}"
+        safe_target = Component.escape(target_id)
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/module/new"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="module-title">Titel</label>'
+            f'<input id="module-title" class="form-input" type="text" name="title" value="{Component.escape(title)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Modul anlegen</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Neues Modul", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear(f"modular-editor-phase-inline-{phase_id}")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/module/{module_id}/rename", response_class=HTMLResponse)
+async def modular_editor_module_rename_fragment(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX fragment: rename module form (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "private, no-store"})
+    current = str(module.get("title") or "Modul")
+
+    target_id = f"modular-editor-module-inline-{module_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/rename"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="module-rename-title">Titel</label>'
+        f'<input id="module-rename-title" class="form-input" type="text" name="title" value="{Component.escape(current)}" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Modul umbenennen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/rename", response_class=HTMLResponse)
+async def modular_editor_module_rename(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: rename module and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    current = str((module or {}).get("title") or "Modul")
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.patch(f"/api/teaching/units/{unit_id}/modules/{module_id}", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "module_rename_failed"
+    if error:
+        target_id = f"modular-editor-module-inline-{module_id}"
+        safe_target = Component.escape(target_id)
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/rename"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="module-rename-title">Titel</label>'
+            f'<input id="module-rename-title" class="form-input" type="text" name="title" value="{Component.escape(title or current)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Modul umbenennen", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear(f"modular-editor-module-inline-{module_id}")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/{phase_id}/rename", response_class=HTMLResponse)
+async def modular_editor_phase_rename_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX fragment: rename phase form (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+    phase = next((p for p in (phases or []) if str(p.get("id") or "") == str(phase_id)), None)
+    if not isinstance(phase, dict):
+        return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "private, no-store"})
+    current = str(phase.get("title") or "Phase")
+
+    target_id = f"modular-editor-phase-inline-{phase_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/rename"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        '<label class="sr-only" for="phase-rename-title">Titel</label>'
+        f'<input id="phase-rename-title" class="form-input" type="text" name="title" value="{Component.escape(current)}" required>'
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Phase umbenennen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/{phase_id}/rename", response_class=HTMLResponse)
+async def modular_editor_phase_rename(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX action: rename phase and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    title = str(form.get("title") or "").strip()
+    error: str | None = None
+    if not title:
+        error = "Titel fehlt"
+    else:
+        try:
+            async with _internal_api_client() as client:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+                r = await client.patch(f"/api/teaching/units/{unit_id}/phases/{phase_id}", json={"title": title})
+                if r.status_code >= 400:
+                    error = _extract_api_error_detail(r)
+        except Exception:
+            error = "phase_rename_failed"
+    if error:
+        target_id = f"modular-editor-phase-inline-{phase_id}"
+        safe_target = Component.escape(target_id)
+        action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/rename"
+        cancel = (
+            f'<button type="button" class="btn btn-secondary btn-sm" '
+            f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+        )
+        form_html = (
+            f'<form method="post" action="{action}" hx-post="{action}" '
+            f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+            f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+            '<label class="sr-only" for="phase-rename-title">Titel</label>'
+            f'<input id="phase-rename-title" class="form-input" type="text" name="title" value="{Component.escape(title)}" required>'
+            '<div class="form-actions">'
+            '<button type="submit" class="btn btn-success btn-sm">Speichern</button> '
+            f"{cancel}"
+            "</div>"
+            "</form>"
+        )
+        html = _render_modular_editor_inline_form(heading="Phase umbenennen", form_html=form_html, error=error)
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = graph_oob + _modular_editor_oob_clear(f"modular-editor-phase-inline-{phase_id}")
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/module/{module_id}/delete", response_class=HTMLResponse)
+async def modular_editor_module_delete_fragment(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX fragment: delete module confirmation (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    author_sub = str((user or {}).get("sub") or "")
+    module = _get_unit_module_for_teacher(unit_id, module_id, author_sub=author_sub)
+    if not isinstance(module, dict):
+        return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "private, no-store"})
+    label = str(module.get("title") or "Modul")
+
+    target_id = f"modular-editor-module-inline-{module_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/module/{Component.escape(module_id)}/delete"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        f'<p>Modul <strong>{Component.escape(label)}</strong> wirklich löschen? '
+        "Dabei werden auch alle Inhalte (Materialien/Aufgaben) gelöscht.</p>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-danger btn-sm">Löschen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Modul löschen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/module/{module_id}/delete", response_class=HTMLResponse)
+async def modular_editor_module_delete(request: Request, unit_id: str, module_id: str) -> HTMLResponse:
+    """HTMX action: delete module and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    error: str | None = None
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.delete(f"/api/teaching/units/{unit_id}/modules/{module_id}")
+            if r.status_code >= 400:
+                error = _extract_api_error_detail(r)
+    except Exception:
+        error = "module_delete_failed"
+    if error:
+        return await modular_editor_module_delete_fragment(request, unit_id, module_id)
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = (
+        graph_oob
+        + _modular_editor_oob_clear(f"modular-editor-module-inline-{module_id}")
+        + _modular_editor_oob_reset_panel()
+    )
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/units/{unit_id}/modular-editor/phase/{phase_id}/delete", response_class=HTMLResponse)
+async def modular_editor_phase_delete_fragment(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX fragment: delete phase confirmation (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    token = _get_or_create_csrf_token(sid)
+    phases, _err = await _fetch_unit_phases_for_unit(unit_id, session_id=sid)
+    phase = next((p for p in (phases or []) if str(p.get("id") or "") == str(phase_id)), None)
+    label = str((phase or {}).get("title") or "Phase")
+
+    target_id = f"modular-editor-phase-inline-{phase_id}"
+    safe_target = Component.escape(target_id)
+    action = f"/units/{Component.escape(unit_id)}/modular-editor/phase/{Component.escape(phase_id)}/delete"
+    cancel = (
+        f'<button type="button" class="btn btn-secondary btn-sm" '
+        f'hx-get="/fragments/empty" hx-target="#{safe_target}" hx-swap="innerHTML">Abbrechen</button>'
+    )
+    form_html = (
+        f'<form method="post" action="{action}" hx-post="{action}" '
+        f'hx-target="#{safe_target}" hx-swap="innerHTML">'
+        f'<input type="hidden" name="csrf_token" value="{Component.escape(token)}">'
+        f'<p>Phase <strong>{Component.escape(label)}</strong> wirklich löschen? '
+        "Dabei werden alle Module, Abhängigkeiten und Inhalte dieser Phase gelöscht.</p>"
+        '<div class="form-actions">'
+        '<button type="submit" class="btn btn-danger btn-sm">Phase löschen</button> '
+        f"{cancel}"
+        "</div>"
+        "</form>"
+    )
+    html = _render_modular_editor_inline_form(heading="Phase löschen", form_html=form_html, error=None)
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
+
+
+@app.post("/units/{unit_id}/modular-editor/phase/{phase_id}/delete", response_class=HTMLResponse)
+async def modular_editor_phase_delete(request: Request, unit_id: str, phase_id: str) -> HTMLResponse:
+    """HTMX action: delete phase and refresh the graph (teacher)."""
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    sid = _get_session_id(request) or ""
+    if not sid:
+        return HTMLResponse("Forbidden", status_code=403, headers={"Cache-Control": "private, no-store"})
+    form = await request.form()
+    if not _validate_csrf(sid, form.get("csrf_token")):
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
+    error: str | None = None
+    try:
+        async with _internal_api_client() as client:
+            client.cookies.set(SESSION_COOKIE_NAME, sid)
+            r = await client.delete(f"/api/teaching/units/{unit_id}/phases/{phase_id}")
+            if r.status_code >= 400:
+                error = _extract_api_error_detail(r)
+    except Exception:
+        error = "phase_delete_failed"
+    if error:
+        return await modular_editor_phase_delete_fragment(request, unit_id, phase_id)
+    author_sub = str((user or {}).get("sub") or "")
+    graph_oob = await _build_modular_editor_graph_oob(unit_id=unit_id, session_id=sid, author_sub=author_sub)
+    body = (
+        graph_oob
+        + _modular_editor_oob_clear(f"modular-editor-phase-inline-{phase_id}")
+        + _modular_editor_oob_reset_panel()
+    )
+    return HTMLResponse(body, headers={"Cache-Control": "private, no-store"})
+
+def _render_material_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str, back_href: str) -> str:
     """Render create page with toggle Text | Datei (upload-intent handled per JS)."""
     from teaching.services.materials import MaterialFileSettings
 
@@ -4830,7 +6805,7 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
     return (
         '<div class="container" data-material-create="true">'
         f'<h1>Material anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
-        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        f'<p><a href="{Component.escape(back_href)}">Zurück</a></p>'
         f'{choice}'
         '<div class="stacked-forms">'
         f'{text_form}'
@@ -4840,7 +6815,7 @@ def _render_material_create_page_html(unit_id: str, section_id: str, section_tit
     )
 
 
-def _render_task_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str) -> str:
+def _render_task_create_page_html(unit_id: str, section_id: str, section_title: str, *, csrf_token: str, back_href: str) -> str:
     from backend.storage.learning_policy import DEFAULT_POLICY
 
     # Derive allowed MIME types and max size for learning uploads from the central policy.
@@ -4908,10 +6883,32 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
     return (
         '<div class="container">'
         f'<h1>Aufgabe anlegen — Abschnitt: {Component.escape(section_title)}</h1>'
-        f'<p><a href="/units/{unit_id}/sections/{section_id}">Zurück</a></p>'
+        f'<p><a href="{Component.escape(back_href)}">Zurück</a></p>'
         f'<section class="card">{form}{kind_toggle_js}</section>'
         '</div>'
     )
+
+
+
+
+def _safe_return_to_path(raw: str | None, *, default_path: str) -> str:
+    """Return a safe in-app path for UI navigation.
+
+    We only allow relative paths (starting with '/') to avoid open-redirect style
+    links in the teacher UI.
+    """
+    candidate = str(raw or "").strip()
+    if not candidate:
+        return default_path
+    if len(candidate) > 2048:
+        return default_path
+    if not candidate.startswith("/"):
+        return default_path
+    if candidate.startswith("//") or "://" in candidate:
+        return default_path
+    if "\n" in candidate or "\r" in candidate:
+        return default_path
+    return candidate
 
 
 @app.get("/units/{unit_id}/sections/{section_id}/materials/new", response_class=HTMLResponse)
@@ -4930,7 +6927,7 @@ async def materials_new(request: Request, unit_id: str, section_id: str):
     - Caller must be a logged-in teacher; ownership enforced by called APIs.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -4953,7 +6950,8 @@ async def materials_new(request: Request, unit_id: str, section_id: str):
                         break
     except Exception:
         pass
-    content = _render_material_create_page_html(unit_id, section_id, title, csrf_token=token)
+    back_href = _safe_return_to_path(request.query_params.get("return_to"), default_path=f"/units/{unit_id}/sections/{section_id}")
+    content = _render_material_create_page_html(unit_id, section_id, title, csrf_token=token, back_href=back_href)
     layout = Layout(title="Material anlegen", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
@@ -4967,7 +6965,7 @@ async def tasks_new(request: Request, unit_id: str, section_id: str):
     Teaching API and then redirects back to the section detail.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -4990,7 +6988,8 @@ async def tasks_new(request: Request, unit_id: str, section_id: str):
                         break
     except Exception:
         pass
-    content = _render_task_create_page_html(unit_id, section_id, title, csrf_token=token)
+    back_href = _safe_return_to_path(request.query_params.get("return_to"), default_path=f"/units/{unit_id}/sections/{section_id}")
+    content = _render_task_create_page_html(unit_id, section_id, title, csrf_token=token, back_href=back_href)
     layout = Layout(title="Aufgabe anlegen", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
@@ -5181,7 +7180,7 @@ def _render_task_detail_page_html(unit_id: str, section_id: str, task: dict, *, 
 @app.get("/units/{unit_id}/sections/{section_id}/materials/{material_id}", response_class=HTMLResponse)
 async def material_detail_page(request: Request, unit_id: str, section_id: str, material_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5214,12 +7213,12 @@ async def material_detail_page(request: Request, unit_id: str, section_id: str, 
 @app.post("/units/{unit_id}/sections/{section_id}/materials/{material_id}/update")
 async def material_detail_update(request: Request, unit_id: str, section_id: str, material_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     payload = {}
     if form.get("title") is not None:
         payload["title"] = str(form.get("title") or "").strip() or None
@@ -5241,12 +7240,12 @@ async def material_detail_update(request: Request, unit_id: str, section_id: str
 @app.post("/units/{unit_id}/sections/{section_id}/materials/{material_id}/delete")
 async def material_detail_delete(request: Request, unit_id: str, section_id: str, material_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -5260,7 +7259,7 @@ async def material_detail_delete(request: Request, unit_id: str, section_id: str
 @app.get("/units/{unit_id}/sections/{section_id}/tasks/{task_id}", response_class=HTMLResponse)
 async def task_detail_page(request: Request, unit_id: str, section_id: str, task_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5277,12 +7276,12 @@ async def task_detail_page(request: Request, unit_id: str, section_id: str, task
 @app.post("/units/{unit_id}/sections/{section_id}/tasks/{task_id}/update")
 async def task_detail_update(request: Request, unit_id: str, section_id: str, task_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     payload: dict[str, object] = {}
     if form.get("instruction_md") is not None:
         payload["instruction_md"] = str(form.get("instruction_md"))
@@ -5316,12 +7315,12 @@ async def task_detail_update(request: Request, unit_id: str, section_id: str, ta
 @app.post("/units/{unit_id}/sections/{section_id}/tasks/{task_id}/delete")
 async def task_detail_delete(request: Request, unit_id: str, section_id: str, task_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -5352,12 +7351,12 @@ async def materials_create(request: Request, unit_id: str, section_id: str):
     - Caller must be a teacher; API enforces author-only semantics.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     title = str(form.get("title", "")).strip()
     body_md = str(form.get("body_md", ""))
     error: str | None = None
@@ -5392,7 +7391,7 @@ async def materials_reorder(request: Request, unit_id: str, section_id: str):
     - Returns 400/403/404 JSON error mapping when API rejects the request.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -5433,12 +7432,12 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     task_kind = str(form.get("task_kind") or "native").strip().lower()
     instruction_md = str(form.get("instruction_md", ""))
     # Collect up to 10 non-empty criteria from repeated fields
@@ -5513,7 +7512,7 @@ async def tasks_reorder(request: Request, unit_id: str, section_id: str):
     Forwards to API `POST …/tasks/reorder`. Enforces CSRF at the UI boundary.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     form = await request.form()
     sid = _get_session_id(request)
@@ -5550,12 +7549,12 @@ async def materials_upload_intent(request: Request, unit_id: str, section_id: st
     Returns HTML with data-upload-url and a finalize form containing intent_id.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     filename = str(form.get("filename", "")).strip()
     mime_type = str(form.get("mime_type", "")).strip()
     size_raw = str(form.get("size_bytes", "")).strip()
@@ -5615,12 +7614,12 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
     Form fields: intent_id, title, sha256, alt_text?, csrf_token.
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     intent_id = str(form.get("intent_id", "")).strip()
     title = str(form.get("title", "")).strip()
     sha256 = str(form.get("sha256", "")).strip()
@@ -5652,13 +7651,13 @@ async def materials_finalize(request: Request, unit_id: str, section_id: str):
 @app.post("/units/{unit_id}/sections", response_class=HTMLResponse)
 async def sections_create(request: Request, unit_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     
     form = await request.form()
     sid = _get_session_id(request)
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
     token = _get_or_create_csrf_token(sid or "")
     title = str(form.get("title", "")).strip()
     error_code: str | None = None
@@ -5697,13 +7696,13 @@ async def sections_create(request: Request, unit_id: str):
 @app.post("/units/{unit_id}/sections/{section_id}/delete", response_class=HTMLResponse)
 async def sections_delete(request: Request, unit_id: str, section_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
     sid = _get_session_id(request)
     form = await request.form()
     if not _validate_csrf(sid, form.get("csrf_token")):
-        return HTMLResponse("CSRF Error", status_code=403)
+        return HTMLResponse("CSRF Error", status_code=403, headers={"Cache-Control": "private, no-store"})
 
     error_code: str | None = None
     try:
@@ -5740,7 +7739,7 @@ async def sections_reorder(request: Request, unit_id: str):
     Permissions: Caller must be a teacher (UI-only dummy store here).
     """
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return Response(status_code=403)
     
     form = await request.form()
@@ -5785,7 +7784,7 @@ async def sections_reorder(request: Request, unit_id: str):
 @app.get("/courses/{course_id}/members", response_class=HTMLResponse)
 async def members_index(request: Request, course_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request) or ""
     if not sid:
@@ -5884,7 +7883,7 @@ async def search_students_for_course(request: Request, course_id: str):
 @app.post("/courses/{course_id}/members", response_class=HTMLResponse)
 async def add_member_htmx(request: Request, course_id: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request)
     form = await request.form()
@@ -5913,7 +7912,7 @@ async def add_member_htmx(request: Request, course_id: str):
 @app.post("/courses/{course_id}/members/{student_sub}/delete", response_class=HTMLResponse)
 async def remove_member_htmx(request: Request, course_id: str, student_sub: str):
     user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "teacher":
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
     sid = _get_session_id(request)
     form = await request.form()

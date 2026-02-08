@@ -77,14 +77,18 @@ function defaultWorkspaceState() {
 
 function normalizeWorkspaceState(raw) {
   const st = raw && typeof raw === 'object' ? raw : {};
-  const version = Number(st.version || 0);
   const view = st.view === 'content' ? 'content' : 'overview';
   const openTabs = Array.isArray(st.openTabs) ? st.openTabs.map(String).filter(Boolean) : [];
   const activeTab = st.activeTab ? String(st.activeTab) : null;
   const expanded = st.expanded && typeof st.expanded === 'object' ? st.expanded : {};
-  const graphPoseRaw = st.graphPose && typeof st.graphPose === 'object' ? st.graphPose : null;
-  const graphPose = version === STATE_VERSION ? graphPoseRaw : null;
-  return { version: STATE_VERSION, view, openTabs, activeTab, expanded, graphPose };
+  return { version: STATE_VERSION, view, openTabs, activeTab, expanded, graphPose: null };
+}
+
+function computeFitMaxZoom() {
+  const viewportW = Number(window.innerWidth || 0);
+  if (viewportW < 900) return 0.9;
+  if (viewportW < 1280) return 1.05;
+  return 1.2;
 }
 
 async function fetchGraph({ courseId, unitId }) {
@@ -252,7 +256,7 @@ function initOneWorkspace(rootEl) {
     showNodeTypeIcon: false,
     selectOnClick: false,
     limitZoomOutToFit: true,
-    fitMaxZoom: 0.9,
+    fitMaxZoom: computeFitMaxZoom(),
     autoFitOnSetGraph: false,
     onNodeClick: (id) => {
       const st = runtime?.statusById?.[String(id)]?.status || 'locked';

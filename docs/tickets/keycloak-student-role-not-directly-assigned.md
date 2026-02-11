@@ -2,7 +2,7 @@
 
 Status: offen  
 Priorität: hoch  
-Betroffene Umgebung: Produktion (`gustav-lernplattform.de`)
+Betroffene Umgebung: Produktion (`gustav.example`)
 
 ## Kontext
 
@@ -68,4 +68,3 @@ Hinweise:
 - Ein frisch registrierter Nutzer ist ohne manuelle Keycloak-Nachpflege in der Lehrkräfte-UI als „Schüler“-Kandidat auffindbar.
 - `/api/users/list` und `/api/users/search` liefern konsistente Ergebnisse auch für Nutzer mit nur effektiver `student`-Rolle.
 - Neue Tests decken den Composite-Fall ab; bestehende CI bleibt grün.
-

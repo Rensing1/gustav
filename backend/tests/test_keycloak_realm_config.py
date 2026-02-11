@@ -88,16 +88,17 @@ def test_realm_configures_smtp_from_address():
     assert smtp.get("fromDisplayName") == "GUSTAV-Lernplattform"
 
 
-def test_realm_allows_prod_redirect_uri():
-    """Realm export must include the prod web redirect URI.
+def test_realm_allows_public_example_redirect_uri():
+    """Realm export must include a public placeholder redirect URI.
 
     Why:
-        - Importing the realm in prod without the prod redirect breaks the OIDC flow
-          with "Invalid redirect URI".
+        This repository is intended to be publishable as open source. Therefore
+        the realm export must not hardcode a real production domain, but it
+        should still show the expected shape of the prod redirect URI.
     """
     data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
     clients = data.get("clients", [])
     client = next((c for c in clients if c.get("clientId") == "gustav-web"), None)
     assert client, "gustav-web client definition missing"
     redirect_uris = client.get("redirectUris", [])
-    assert "https://gustav-lernplattform.de/*" in redirect_uris, "prod redirect URI missing"
+    assert "https://app.gustav.example/*" in redirect_uris, "public example redirect URI missing"

@@ -9,7 +9,7 @@
 - Im Dev-System (lokal, ohne strikte Content Security Policy) funktioniert derselbe Flow erwartungsgemäß.
 
 ## Umgebung
-- Prod-Domain: `https://app.gustav-lernplattform.de` (Caddy/Keycloak/Supabase/Ollama, Stand nach PR #52 vom 2025-12-04).
+- Prod-Domain: `https://app.gustav.example` (Caddy/Keycloak/Supabase/Ollama, Stand nach PR #52 vom 2025-12-04).
 - Code-Basis:
   - `origin/master` @ `826784b` („Merge pull request #52 … Teaching Live: sichere Detail-Tabs“).
   - `ops/prod-local` enthält `master` + lokale Deploy-Anpassungen, wurde nach `supabase migration up`, `docker compose build`, `docker compose up -d` ausgerollt.
@@ -18,7 +18,7 @@
   - ähnlich für Inline-Styles (style-src-attr/-elem) und weitere Inline-Snippets.
 
 ## Reproduktion (Prod)
-1. Als Lehrkraft in Prod unter `https://app.gustav-lernplattform.de` einloggen.
+1. Als Lehrkraft in Prod unter `https://app.gustav.example` einloggen.
 2. In einen Kurs mit mindestens einer Lerneinheit und Aufgaben gehen.
 3. „Unterricht – Live“ öffnen und eine Einheit auswählen, für die bereits Schüler-Einreichungen vorliegen.
 4. In der Live-Matrix eine Zelle mit „✅“ anklicken:
@@ -126,4 +126,3 @@ Ziel: Tabs in Prod funktionsfähig machen, **ohne die CSP aufzuweichen** (kein `
 ## Offene Fragen
 - Soll im Zuge dieser Änderung ein generelles CSP-Review des Frontends angestoßen werden (Notifications, Tooltips, weitere Inline-Styles / -Scripts)?
 - Gibt es Präferenzen für den Ort der Tab-Initialisierung (global in `init()` vs. gezielte Reaktion auf `htmx:afterSwap`), um die JS-Layer möglichst einheitlich zu halten?
-

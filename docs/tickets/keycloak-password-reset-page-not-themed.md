@@ -2,7 +2,7 @@
 
 Status: offen  
 Priorität: mittel  
-Betroffene Umgebung: Produktion (`gustav-lernplattform.de`)
+Betroffene Umgebung: Produktion (`gustav.example`)
 
 ## Kontext
 

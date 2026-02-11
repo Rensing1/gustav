@@ -2,7 +2,7 @@
 
 Status: offen  
 Priorität: niedrig–mittel  
-Betroffene Umgebung: Produktion (`gustav-lernplattform.de`)
+Betroffene Umgebung: Produktion (`gustav.example`)
 
 ## Kontext
 
@@ -49,4 +49,3 @@ Faktisch ist das Remember-me-Feature IdP-seitig aktivierbar, aber in der GUSTAV-
 - Bei deaktiviertem „Remember me“ im Realm:
   - erscheint keine Checkbox, das Verhalten entspricht dem aktuellen Stand.
 - Theme- und ggf. Contract-Tests laufen grün; der neue Block ist in einem Snapshot-/Markup-Test abgesichert (analog zu anderen Theme-Datei-Checks).
-

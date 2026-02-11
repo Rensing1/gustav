@@ -20,6 +20,8 @@ help:
 	@echo "  test-openai        - Run OpenAI endpoint smoke tests (requires local inference endpoint)"
 	@echo "  supabase-status    - Show local Supabase status"
 	@echo "  verify             - Run all test suites (unit + integrations + e2e)"
+	@echo "  import-legacy      - Import legacy Supabase dump into local DB"
+	@echo "  import-legacy-dry  - Dry-run legacy import (no writes)"
 	@echo "  docker-validate    - Validate docker compose config (catches syntax/vars)"
 
 .PHONY: up
@@ -145,6 +147,70 @@ verify:
 	@$(MAKE) test-supabase
 	@$(MAKE) test-openai
 	@$(MAKE) test-e2e
+
+# --- Legacy data import shortcuts -------------------------------------------
+# Defaults (overridable):
+DUMP ?= docs/migration/supabase_backup_20251101_103457.tar.gz
+DSN ?= postgresql://postgres:postgres@127.0.0.1:54322/postgres
+LEGACY_SCHEMA ?= legacy_raw
+WORKDIR ?= .tmp/migration_run
+
+# Keycloak admin/API via Caddy with proper hostname for TLS
+KC_BASE_URL ?= https://id.localhost
+KC_HOST_HEADER ?= id.localhost
+KC_REALM ?= gustav
+KC_ADMIN_USER ?= admin
+KC_ADMIN_PASS ?= admin
+
+.PHONY: import-legacy
+ifeq ($(VERBOSE),)
+.SILENT: import-legacy import-legacy-dry
+endif
+import-legacy:
+	# Auto-load .env into the environment for this target (export all)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	# Ensure local CA bundle from Caddy is available for Keycloak admin HTTPS
+	mkdir -p .tmp; \
+	touch .tmp/caddy-root.crt; \
+	if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
+	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	fi; \
+	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
+	./.venv/bin/python -m backend.tools.import_legacy_backup \
+	  --dump $(DUMP) \
+	  --dsn $(DSN) \
+	  --legacy-schema $(LEGACY_SCHEMA) \
+	  --workdir $(WORKDIR) \
+	  --kc-base-url $(KC_BASE_URL) \
+	  --kc-host-header $(KC_HOST_HEADER) \
+	  --kc-realm $(KC_REALM) \
+	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --verbose
+
+.PHONY: import-legacy-dry
+import-legacy-dry:
+	# Auto-load .env into the environment for this target (export all)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	# Ensure local CA bundle from Caddy is available for Keycloak admin HTTPS
+	mkdir -p .tmp; \
+	touch .tmp/caddy-root.crt; \
+	if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
+	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	fi; \
+	KEYCLOAK_ADMIN_PASSWORD="$(KC_ADMIN_PASS)" \
+	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
+	./.venv/bin/python -m backend.tools.import_legacy_backup \
+	  --dump $(DUMP) \
+	  --dsn $(DSN) \
+	  --legacy-schema $(LEGACY_SCHEMA) \
+	  --workdir $(WORKDIR) \
+	  --kc-base-url $(KC_BASE_URL) \
+	  --kc-host-header $(KC_HOST_HEADER) \
+	  --kc-realm $(KC_REALM) \
+	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --dry-run \
+	  --verbose
 
 .PHONY: docker-validate
 docker-validate:

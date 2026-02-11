@@ -106,7 +106,37 @@ def ensure_secure_config_on_startup() -> None:
                 "Create an environment-specific login role that is IN ROLE gustav_limited and use that instead."
             )
 
-    # 4) Keycloak endpoints must use HTTPS in production-like environments
+    # 4) Keycloak endpoints:
+    #    - KC_PUBLIC_BASE_URL is browser-facing and must use HTTPS in prod-like envs.
+    #    - KC_BASE_URL is server-to-server. In our docker-compose deployments,
+    #      this commonly targets the internal service hostname (e.g. http://keycloak:8080).
+    #      Allow plain HTTP only for clearly internal hostnames to avoid the
+    #      common *.localhost-inside-container footgun and to keep E2E (prod-like)
+    #      runnable in local compose.
+    def _must_be_https_or_internal_http(url_value: str, var_name: str) -> None:
+        try:
+            if not url_value:
+                return
+            raw = url_value.strip()
+            val = raw.lower()
+            if val.startswith("https://"):
+                return
+            if not val.startswith("http://"):
+                raise SystemExit(f"Refusing to start: invalid {var_name} value in production.")
+            from urllib.parse import urlparse
+
+            host = (urlparse(raw).hostname or "").lower()
+            allowed_internal = {"keycloak", "gustav-keycloak", "localhost", "127.0.0.1", "::1"}
+            if host not in allowed_internal:
+                raise SystemExit(
+                    f"Refusing to start: {var_name} must use https in production unless it targets an internal hostname."
+                )
+        except SystemExit:
+            raise
+        except Exception:
+            # If parsing fails, be conservative and abort
+            raise SystemExit(f"Refusing to start: invalid {var_name} value in production.")
+
     def _must_be_https(url_value: str, var_name: str) -> None:
         try:
             if not url_value:
@@ -119,10 +149,9 @@ def ensure_secure_config_on_startup() -> None:
         except SystemExit:
             raise
         except Exception:
-            # If parsing fails, be conservative and abort
             raise SystemExit(f"Refusing to start: invalid {var_name} value in production.")
 
-    _must_be_https(os.getenv("KC_BASE_URL", ""), "KC_BASE_URL")
+    _must_be_https_or_internal_http(os.getenv("KC_BASE_URL", ""), "KC_BASE_URL")
     _must_be_https(os.getenv("KC_PUBLIC_BASE_URL", ""), "KC_PUBLIC_BASE_URL")
 
     # 5) Storage verification must be enforced in prod-like envs

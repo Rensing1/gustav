@@ -42,7 +42,7 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 - Cookies httpOnly; in PROD optional `Max-Age=<TTL>`; Flags bleiben `Secure; SameSite=lax` (host‑only).
 - Open Redirects verhindert: In‑App‑Pfadprüfung für Redirect‑Parameter.
 - Keycloak-Client `gustav-web`:
-  - `webOrigins` soll nur explizite Origins (z. B. `https://gustav-lernplattform.de`, `https://localhost/*`, `https://app.localhost/*`) enthalten – niemals `*`.
+  - `webOrigins` soll nur explizite Origins (z. B. `https://app.gustav.example`, `https://localhost/*`, `https://app.localhost/*`) enthalten – niemals `*`.
   - Das Plan-Dokument `docs/plan/2025-11-30-PR-fix.md` dokumentiert den Must-Fix, die Referenz-`realm-gustav.json` an dieser Stelle auf konkrete Origins umzustellen.
 
 ## Remember-me (IdP-Session vs. App-Session)

@@ -92,12 +92,12 @@
     }
   ],
       "redirectUris": [
-        "https://gustav-lernplattform.de/*",
+        "https://app.gustav.example/*",
         "https://localhost/*",
         "https://app.localhost/*"
       ],
       "webOrigins": [
-        "https://gustav-lernplattform.de",
+        "https://app.gustav.example",
         "https://localhost/*",
         "https://app.localhost/*"
       ],

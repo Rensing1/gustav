@@ -1,7 +1,7 @@
 ## Ticket: Hohe Rate an 0/10-Kriterien-Scores bei KI-Auswertung (28.11.2025)
 
 **Status:** offen  
-**Betroffene Umgebung:** Produktion (`gustav-lernplattform.de`)  
+**Betroffene Umgebung:** Produktion (`gustav.example`)  
 **Datum der Beobachtung:** 2025-11-28 (Analyse bis 2025-11-29)  
 **Komponenten:** Learning-Worker, DSPy-Feedbackpipeline, `criteria.v2`-Auswertung, Frontend-History-Ansicht
 

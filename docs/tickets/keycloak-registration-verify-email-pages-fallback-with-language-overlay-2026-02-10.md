@@ -2,7 +2,7 @@
 
 Status: offen  
 Priorität: hoch  
-Betroffene Umgebung: Produktion (`app.gustav-lernplattform.de`, `id.gustav-lernplattform.de`)  
+Betroffene Umgebung: Produktion (`app.gustav.example`, `id.gustav.example`)  
 Erstellt am: 10. Februar 2026
 
 ## Kontext
@@ -32,7 +32,7 @@ Betroffen laut Beobachtung:
 
 ## Reproduktion
 
-1. Registrierung über `https://app.gustav-lernplattform.de/auth/register` starten.
+1. Registrierung über `https://app.gustav.example/auth/register` starten.
 2. Im Keycloak-Flow auf „Registrieren“ klicken und Formular absenden.
 3. Beobachten: Redirect auf `required-action?execution=VERIFY_EMAIL` zeigt Standard-Keycloak-Seite inkl. Sprachmenü.
 4. Verifizierungslink aus E-Mail öffnen.

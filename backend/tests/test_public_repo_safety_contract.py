@@ -22,6 +22,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+THIS_FILE = Path(__file__).resolve()
 
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -78,6 +79,8 @@ def _iter_public_text_files() -> list[Path]:
             continue
         for path in root.rglob("*"):
             if not path.is_file():
+                continue
+            if path.resolve() == THIS_FILE:
                 continue
             if path.suffix not in _PUBLIC_TEXT_SUFFIXES:
                 continue

@@ -7,6 +7,8 @@ services:
       - "443:443"
     volumes:
       - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - web
       - keycloak
@@ -55,7 +57,9 @@ services:
       - ENABLE_STORAGE_UPLOAD_PROXY=false
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - KC_BASE_URL=${KC_BASE_URL:-http://keycloak:8080}
+      # Internal Keycloak base URL for server-to-server calls (token exchange, JWKS).
+      # Do NOT set this to a *.localhost hostname inside containers: it resolves to loopback.
+      - KC_BASE_URL=http://keycloak:8080
       - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}
       - KC_REALM=${KC_REALM:-gustav}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
@@ -101,7 +105,7 @@ services:
     container_name: gustav-h5p
     # behind proxy; no direct host port mapping
     volumes:
-      # H5P content/libraries (single-host, included in backup-cron via SUPABASE_STORAGE_ROOT)
+      # H5P content/libraries (single-host dev bind mount)
       - ./supabase/storage/h5p:/data/h5p:z
     environment:
       # Service listens on this port inside the compose network
@@ -247,30 +251,6 @@ services:
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
-
-  backup-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile.backup
-    container_name: gustav-backup-cron
-    env_file:
-      - .env
-    environment:
-      BACKUP_DIR: /backups
-      SUPABASE_STORAGE_ROOT: /app/supabase/storage
-      RETENTION_DAYS: 7
-      KC_DB_URL: ${KC_DB_URL:-jdbc:postgresql://keycloak-db:5432/keycloak}
-      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
-      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
-    volumes:
-      - backups:/backups
-      - ./scripts:/app/scripts:ro
-      - ./supabase:/app/supabase:ro
-    restart: unless-stopped
-    networks:
-      - gustav-alpha2-network
-      - supabase_network_gustav-alpha2
-
 networks:
   gustav-alpha2-network:
     driver: bridge
@@ -279,5 +259,7 @@ networks:
 volumes:
   keycloak_pg_data:
     driver: local
-  backups:
+  caddy_data:
+    driver: local
+  caddy_config:
     driver: local

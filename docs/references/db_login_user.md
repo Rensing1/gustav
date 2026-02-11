@@ -6,8 +6,8 @@ Warum: Die App-Rolle `gustav_limited` ist NOLOGIN (Least Privilege, keine festen
 1) Secret setzen:
    - `export APP_DB_USER=gustav_app`
    - `export APP_DB_PASSWORD=CHANGE_ME_DEV`
-2) Skript ausführen:
-   - `psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/dev/create_login_user.sql`
+2) Login-User anlegen/aktualisieren:
+   - `make db-login-user`
 3) DSNs konfigurieren (z. B. in `.env`):
    - `DATABASE_URL=postgresql://$APP_DB_USER:$APP_DB_PASSWORD@127.0.0.1:54322/postgres`
    - optional: `TEACHING_DATABASE_URL`, `RLS_TEST_DSN`, `SESSION_DATABASE_URL`

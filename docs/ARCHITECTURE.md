@@ -233,10 +233,9 @@ E2E‑Tests (Identity):
 - Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
   (`Cache-Control: no-store`).
 
-#### Runbooks & Migration
-- Preflight‑Checkliste: `docs/runbooks/preflight_checklist.md`.
+#### Migration & Ops Notes
+- Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
 - Hardware Cutover Playbook: `docs/migration/hardware_cutover_playbook.md`.
-- Release‑Prozess: `docs/runbooks/release_process.md`.
 - DB Provisioning/DSN/Netz: `docs/references/db_provisioning.md`, `docs/references/config_matrix.md`, `docs/references/network_topology.md`, `docs/references/compose_env.md`.
 - Make‑Ziele: `docs/references/make_targets.md`.
 - E2E How‑To: `docs/tests/e2e_howto.md`.

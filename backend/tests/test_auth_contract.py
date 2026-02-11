@@ -7,6 +7,7 @@ interactions (Keycloak) are not performed here; we only assert HTTP contracts.
 """
 
 import os
+import base64
 from http.cookies import SimpleCookie
 
 import pytest
@@ -18,6 +19,8 @@ import sys
 import time
 from typing import Dict, Callable
 from jose import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 import types
 import requests
 import yaml
@@ -25,6 +28,23 @@ import yaml
 TEST_ISSUER = "http://keycloak:8080/realms/gustav"
 TEST_AUDIENCE = "gustav-web"
 TEST_KID = "gustav-test-key"
+
+
+def _b64url_uint(value: int) -> str:
+    raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+# Generate an ephemeral RSA keypair per test run. This keeps the repo free of
+# PEM blocks that secret scanners might flag as real credentials.
+_TEST_RSA_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+TEST_PRIVATE_KEY_PEM = _TEST_RSA_PRIVATE_KEY.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption(),
+).decode("ascii")
+
+_public_numbers = _TEST_RSA_PRIVATE_KEY.public_key().public_numbers()
 TEST_JWKS = {
     "keys": [
         {
@@ -32,39 +52,12 @@ TEST_JWKS = {
             "use": "sig",
             "alg": "RS256",
             "kid": TEST_KID,
-            "n": "vczfjmjDdWlk6rICRYDB-3Gp4WGtdu57_jsGphyr24OsCFuLf1N_mN17K1arvHudVqu38JR2j2Llj-XUqDJ1NCuyfG2l0O8GlPsO8CnzE3ql5UoFizdaWbLABAY2zBBkoHuWfvtA5y1rVT8E3-W4XrhJ7l8LoPyjCP1NB0n6mmebbYWLBDA7q8E-OcFluzq4kgyXj88KKcltALAWGsj9TjSgMdHXlX4AQfDLCewq_yUsB65UJFdJyl65lhWGqI23eIhJcI1hu6Qv5L0ROXyKnKvEH-UDxC7dIwl7oPAwxsJRGaWpjp3Re8wBmcw3j4DCRQE-auC3fzhM2Wyq4fhvZQ",
-            "e": "AQAB",
+            "n": _b64url_uint(_public_numbers.n),
+            "e": _b64url_uint(_public_numbers.e),
         }
     ]
 }
-TEST_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC9zN+OaMN1aWTq
-sgJFgMH7canhYa127nv+OwamHKvbg6wIW4t/U3+Y3XsrVqu8e51Wq7fwlHaPYuWP
-5dSoMnU0K7J8baXQ7waU+w7wKfMTeqXlSgWLN1pZssAEBjbMEGSge5Z++0DnLWtV
-PwTf5bheuEnuXwug/KMI/U0HSfqaZ5tthYsEMDurwT45wWW7OriSDJePzwopyW0A
-sBYayP1ONKAx0deVfgBB8MsJ7Cr/JSwHrlQkV0nKXrmWFYaojbd4iElwjWG7pC/k
-vRE5fIqcq8Qf5QPELt0jCXug8DDGwlEZpamOndF7zAGZzDePgMJFAT5q4Ld/OEzZ
-bKrh+G9lAgMBAAECggEABmLm4Mv99leUruBM0EQ2rWcT2sK7y0/XTzodjVL9+2Bm
-Vk+nlXdcner8knw+QhTSD1EEMEL77EjdGubrrWR+lMH6+vyA2FNlSs0EdyifhmJu
-7j9RNBp+3pweTDmzTVF94/fUnAgzP7QZCPYaYWLsPbpWDoBsi+mu81tROgi6DHOX
-fIj8Wfncn4zb3QF7OFTZZLIJL/lgh4Y/+L4GW/5qZLbjKdeBZaQhrUI/K1KC4DIV
-j1p2Vlpe8WWxXCSJJh7RKFN2iX3JTZ1Wj3RBk0VHtVkfm/JESnKDRpLmB7qo7GRK
-Oj8ES+i/GKJIgqatxtvi74Q9ITC8JWdv7FL2KyS6rwKBgQDp6skJuPBq/cr8hlP1
-B+I//AOiOabEUtH0cQrlEIS/tFYkAMtzlZqzWMAHRly6KwdpkdQ5ChlBi5LGIkD2
-9gxyjcJk1N4c0Ce5W2eXANpIUD6rKD6y6OYyuEqan05d65Brc3iC+56f3BX6Fua5
-qL66qzWLy2DiTAKzHAtwyHiK8wKBgQDPt+PQpYYiq1oa3WShOp9MlRhan/HsJskX
-0cxXVCBmpLrNI2w2oTFpgFmPSGLbr4hq5XOYQC4N/9caxLMmu58/GI6SeqN4nHhI
-ZSKCk6CT/gup10Fd1XuVm3baC6Hw/sV5PDv8bCPbzszJKKISFlEivRYiQLUZT1oN
-x/Ubv7wCRwKBgQCbtFUty5T9IwLDJQcty5mmzbH9gjKn7BklhTmjUGOM2BWe0Yib
-37GiQClSrlt68Ll2ZEPH1BkLsER67sIfoZiXiBUl2SwgMc6/a0CBG2gxSnjspVVW
-8gCJMnM2iWQ40FzJqYtGZQcpke5vEl9ypgiPaPezniVXfREu+DQFVuwmUQKBgDQI
-i5/7puNOa07pgMjGp5sGikhBYtfWS2+VFYwWvdsYjtbOddAlhvw3s7ep2WHQ0ep9
-Ofy8rwzAtwC0n3AnddfXbfeRkxumjpcMBp4RHxuTexZ7nptD3CZ5AEfUvCdjmtIo
-3Zn4+O6aGkCV1iuTvZVnKoFAFl2VvChRm7vsxssHAoGAHjSZQqXAJxdEWx9xbwfT
-Pczky567SfCjAPAKohA6cx4kCGpqxkXh6/XliBCoPaHAL78pLfUCVPaIdWs85AGC
-pgHzCSzRQhVtXzZZ0A2UCNpeFvXOwRy64fo17PJnjpKTnwX7lLv4C8p//HcMYNYS
-GN5WQjPSsFmIFF2zP1JWIbM=
------END PRIVATE KEY-----"""
+
 
 def _make_id_token(
     claim_overrides: Dict[str, object] | None = None,
@@ -88,12 +81,8 @@ def _make_id_token(
     headers = {"kid": TEST_KID, "typ": "JWT"}
     if header_overrides:
         headers.update(header_overrides)
-    return jwt.encode(
-        claims,
-        TEST_PRIVATE_KEY,
-        algorithm="RS256",
-        headers=headers,
-    )
+    return jwt.encode(claims, TEST_PRIVATE_KEY_PEM, algorithm="RS256", headers=headers)
+
 
 def _make_invalid_signature_token() -> str:
     valid = _make_id_token()

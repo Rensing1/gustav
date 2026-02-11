@@ -10,8 +10,8 @@ User Story
 
 BDD Scenarios (Given–When–Then)
 - Happy Path (Allowed Domain)
-  - Given `ALLOWED_REGISTRATION_DOMAINS=@gymalf.de` in `.env`
-  - And a user opens `/auth/register?login_hint=alice@gymalf.de`
+  - Given `ALLOWED_REGISTRATION_DOMAINS=@school.example` in `.env`
+  - And a user opens `/auth/register?login_hint=alice@school.example`
   - When the server validates the email domain
   - Then the request is redirected (302 or HX-Redirect) to Keycloak with `kc_action=register`
   - And no error banner is shown.
@@ -22,21 +22,21 @@ BDD Scenarios (Given–When–Then)
   - Then the request is still redirected to Keycloak
   - And the domain check is deferred entirely to Keycloak policies.
 - Edge: Mixed Case + Whitespace
-  - Given `ALLOWED_REGISTRATION_DOMAINS` is set to `" @GymALF.de "`
-  - And a user opens `/auth/register?login_hint=Bob@GYMalf.DE`
+  - Given `ALLOWED_REGISTRATION_DOMAINS` is set to `" @School.Example "`
+  - And a user opens `/auth/register?login_hint=Bob@SCHOOL.EXAMPLE`
   - When the server normalizes domains (trim + lowercase)
   - Then the domain is treated as allowed
   - And the redirect proceeds as in the Happy Path.
 - Error: Disallowed Domain in login_hint
-  - Given `ALLOWED_REGISTRATION_DOMAINS=@gymalf.de`
+  - Given `ALLOWED_REGISTRATION_DOMAINS=@school.example`
   - And a user opens `/auth/register?login_hint=mallory@gmail.com`
   - When the server validates the email domain
   - Then the server DOES NOT redirect to Keycloak
   - And responds with a 400 error page or a small HTML screen
-  - And the page shows the message: „Die Registrierung ist nur mit deiner IServ-Adresse (@gymalf.de) möglich.“
+  - And the page shows a generic message and MAY include the configured domains.
   - And no information about which domains are allowed is leaked in machine-readable form (only generic message for students).
 - Error: Invalid Email Format in login_hint
-  - Given `ALLOWED_REGISTRATION_DOMAINS=@gymalf.de`
+  - Given `ALLOWED_REGISTRATION_DOMAINS=@school.example`
   - And a user opens `/auth/register?login_hint=not-an-email`
   - When the server validates the email format
   - Then the server behaves like the "Disallowed Domain" case
@@ -55,7 +55,7 @@ Design/Contract (API Contract-First)
     - Introduce a 400 error response for invalid/disallowed `login_hint` with a generic `Error` payload.
 - Environment (no code yet)
   - New variable `ALLOWED_REGISTRATION_DOMAINS`:
-    - Comma-separated list of domains, each starting with `@` (initially `@gymalf.de`).
+    - Comma-separated list of domains, each starting with `@` (example: `@school.example`).
     - Evaluated in application code; Keycloak must still be configured separately to enforce the same rule.
 
 TDD Plan (Red → Green)

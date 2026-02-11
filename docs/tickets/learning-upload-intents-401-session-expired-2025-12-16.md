@@ -9,9 +9,9 @@ Problem:
   - `backend/web/static/js/gustav.js` (File-Change-Prepare) zeigt bei `!intentResp.ok` eine generische Notification „Upload fehlgeschlagen. Bitte erneut versuchen.“ (`intent_failed_<status>`), ohne Hinweis auf „Session abgelaufen“ oder Auto-Redirect.
 - Das Backend liefert für fehlende/abgelaufene Sessions korrekt `401 {"error":"unauthenticated"}` (Auth-Middleware in `backend/web/main.py`), daher bleibt der Upload-Flow stecken, obwohl die Seite ggf. noch offen ist.
 
-Beobachtung (Prod, gemeldet für mathea.wolfram@gymalf.de):
-- `2025-12-16T07:21:31Z` und `2025-12-16T07:21:49Z`: `POST /api/learning/courses/d6ced2b1-82a6-490c-bb0a-3d660ae4ba6f/tasks/3aea0299-9ea3-4e26-b9a7-14af6b8141f2/upload-intents` → `401 Unauthorized` (zweimal hintereinander).
-- DB-Sessionstore (`public.app_sessions`) für den User-Sub `5e4d0813-4466-4b1e-9297-aa3078bbdf98` hatte zum Analysezeitpunkt keine aktive Session; letzte `expires_at` lag bei `2025-12-16 00:44:58+00` (passt zu Login-Callback `2025-12-15T23:44:58Z`).
+Beobachtung (Prod, gemeldet durch ein Nutzerkonto):
+- `2025-12-16T07:21:31Z` und `2025-12-16T07:21:49Z`: `POST /api/learning/courses/<course_id>/tasks/<task_id>/upload-intents` → `401 Unauthorized` (zweimal hintereinander).
+- DB-Sessionstore (`public.app_sessions`) für den User-Sub `<user_sub>` hatte zum Analysezeitpunkt keine aktive Session; letzte `expires_at` lag bei `2025-12-16 00:44:58+00` (passt zu Login-Callback `2025-12-15T23:44:58Z`).
 - User-Feedback im Browser war „Upload fehlgeschlagen“ (konsistent mit `backend/web/static/js/gustav.js` Default-Error-Notification).
 
 Impact:

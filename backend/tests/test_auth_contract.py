@@ -78,7 +78,7 @@ def _make_id_token(
         "sub": "123456",
         "exp": now + 300,
         "iat": now,
-        "email": "student@gymalf.de",
+        "email": "student@school.example",
         "preferred_username": "student",
         "realm_access": {"roles": ["student"]},
         "email_verified": True,

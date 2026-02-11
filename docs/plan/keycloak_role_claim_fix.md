@@ -1,7 +1,7 @@
 # Keycloak Role Claim Fix – Implementation Plan
 
 ## Kontext
-- Felix meldet, dass nach dem Legacy-Import der Rollen in Keycloak zwar korrekt gesetzt sind (`teacher` für `hennecke@gymalf.de`), die Web-App in der Sidebar aber weiterhin „Schüler“ anzeigt.
+- Felix meldet, dass nach dem Legacy-Import der Rollen in Keycloak zwar korrekt gesetzt sind (`teacher` für `teacher@school.example`), die Web-App in der Sidebar aber weiterhin „Schüler“ anzeigt.
 - Die Analyse zeigt: Unser Backend liest Rollen ausschließlich aus dem `realm_access.roles` Claim des **ID-Tokens** (`backend/web/main.py:708 ff.`). Weil der Client Scope `roles` in Keycloak diese Information nur ins **Access-Token** schreibt, landet in der Session (`app_sessions.roles`) der Fallback `["student"]`.
 
 ## Problemstellung
@@ -20,7 +20,7 @@
 
 ## Lösungsidee
 1. **Keycloak-Config erweitern**
-   - Im Realm Scope `roles` (Client Scope ID `f5d7de15-084b-433c-9d1c-58767838aec0`) den Mapper „realm roles“ so anpassen, dass `id.token.claim = true`.
+   - Im Realm Scope `roles` (Client Scope ID `<roles_client_scope_id>`) den Mapper „realm roles“ so anpassen, dass `id.token.claim = true`.
    - Alternativ (falls `roles` für andere Clients unverändert bleiben soll) einen dedizierten Client Scope für `gustav-web` anlegen, der denselben Mapper besitzt und `id.token.claim=true`.
    - Realm-JSON (`keycloak/realm-gustav.json`) aktualisieren, damit `start-dev --import-realm` dieselbe Konfiguration erzeugt.
 
@@ -32,8 +32,8 @@
    - E2E/Integration: Falls möglich, bestehenden `backend/tests_e2e/test_identity_login_register_logout_e2e.py` erweitern, damit er nach dem Login `realm_access.roles` im ID-Token erwartet.
 
 4. **Verifikation**
-   - Nach Anwendung der Realm-Änderung: manueller Login mit `hennecke@gymalf.de`, anschließend `/api/me` prüfen (Rollenausgabe).
-   - DB-Prüfung `SELECT roles FROM public.app_sessions WHERE name='hennecke'` → Erwartung `["teacher"]`.
+   - Nach Anwendung der Realm-Änderung: manueller Login mit `teacher@school.example`, anschließend `/api/me` prüfen (Rollenausgabe).
+   - DB-Prüfung `SELECT roles FROM public.app_sessions WHERE name='teacher'` → Erwartung `["teacher"]`.
 
 ## Abhängigkeiten / Risiken
 - Änderungen an `realm-gustav.json` müssen mit Keycloak-Neustart importiert werden (`--import-realm` auf frischer Datenbank oder manuelle Anpassung via Admin-Konsole).
@@ -43,4 +43,3 @@
 1. Config-Änderung vorbereiten (30 min).
 2. Tests anpassen/schreiben (45 min).
 3. Manuelle Verifikation + Dokumentation (30 min).
-

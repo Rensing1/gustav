@@ -49,7 +49,7 @@ async def test_callback_accepts_verified_email(monkeypatch: pytest.MonkeyPatch):
     def claims(id_token: str, cfg: object, cache=None):
         return {
             "sub": "user-1",
-            "email": "student@gymalf.de",
+            "email": "student@school.example",
             "realm_access": {"roles": ["student"]},
             "email_verified": True,
         }
@@ -78,7 +78,7 @@ async def test_callback_allows_unverified_email(monkeypatch: pytest.MonkeyPatch)
     def claims(id_token: str, cfg: object, cache=None):
         return {
             "sub": "user-2",
-            "email": "student@gymalf.de",
+            "email": "student@school.example",
             "realm_access": {"roles": ["student"]},
             "email_verified": False,
         }
@@ -108,7 +108,7 @@ async def test_callback_treats_missing_claim_as_verified(monkeypatch: pytest.Mon
         # No email_verified claim on purpose
         return {
             "sub": "user-4",
-            "email": "student@gymalf.de",
+            "email": "student@school.example",
             "realm_access": {"roles": ["student"]},
         }
 

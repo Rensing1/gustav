@@ -8,7 +8,7 @@ Betroffene Umgebung: Produktion (`gustav-lernplattform.de`)
 
 - IdP: Keycloak 24.0.5, Realm `gustav`, Login-Theme `gustav`, E-Mail-Theme `gustav`.
 - Login- und Registrierungsseiten sind bereits mit dem `gustav`-Theme gebrandet (gemeinsames CSS, eigenes `login.ftl` / `register.ftl`).
-- SMTP ist auf `info@gustav-lernplattform.de` umgestellt und Passwort-Reset-E-Mails werden korrekt versendet.
+- SMTP ist konfiguriert und Passwort-Reset-E-Mails werden korrekt versendet.
 - Flow: `/auth/forgot` → Keycloak Reset-Credentials-Seite → E-Mail mit Reset-Link → Klick auf Link führt nun korrekt auf eine Seite zum Setzen eines neuen Passworts.
 
 ## Problem
@@ -46,4 +46,3 @@ Technisch funktioniert der Reset-Flow inzwischen (Required Action `UPDATE_PASSWO
   - Nutzer können ein neues Passwort setzen und werden danach zurück zur App geleitet.
 - Alle Theme-Dateien liegen weiterhin unter `keycloak/themes/gustav/...` und werden beim Container-Build sauber ins Image übernommen.
 - CI-Tests für Theme/Realm-Config sind grün.
-

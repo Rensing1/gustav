@@ -14,10 +14,10 @@
   - `AI_FEEDBACK_MODEL=gpt-oss:120b`
 
 ## Timeline (aus Logs/DB rekonstruiert)
-- **2026-01-14 15:07Z**: Merge/Update auf `ops/prod-local` (Compose: u. a. `ddns` + H5P-Healthcheck; keine gezielte Ollama/Netzwerk-Änderung).
+- **2026-01-14 15:07Z**: Merge/Update auf `ops/prod-local` (Compose: u. a. Reverse-Proxy/H5P-Healthcheck; keine gezielte Ollama/Netzwerk-Änderung).
 - **2026-01-14 20:28:44Z**: Erste klare Blockierung:
   - Postgres `pg_stat_activity` zeigt eine `gustav_app` Session `idle in transaction`, `xact_start=2026-01-14 20:28:44Z`, letztes Query `select set_config('app.current_sub', $1, true)`.
-  - Parallel dazu Ollama-Logeintrag: `POST /api/generate` endet `500` nach `2m54s` (Client `172.19.0.7` = learning-worker).
+  - Parallel dazu Ollama-Logeintrag: `POST /api/generate` endet `500` nach `2m54s` (Client = learning-worker; docker-intern).
 - **2026-01-15 morgens**: Job-Stau sichtbar (queued/pending), Unterricht startet → neue Einreichungen kommen rein, aber Backlog wächst.
 - **2026-01-15**: Nach Ollama-Restart ist `/api/generate` wieder responsiv; der Worker verarbeitet kurzfristig wieder Einreichungen (siehe „Erfolge nach Restart“), fällt aber unter Last erneut in Blockierungs-/Retry-Muster.
 
@@ -25,7 +25,7 @@
 
 ### 1) Worker blockiert durch offene DB-Transaktion (RLS-Context + externe Calls)
 - Postgres zeigt während der Störung wiederholt:
-  - `usename=gustav_app`, `client_addr=172.18.0.16` (learning-worker im Supabase-Netz),
+  - `usename=gustav_app`, `client_addr=(docker-intern)` (learning-worker im Supabase-Netz),
   - `state=idle in transaction`,
   - letztes Query häufig `set_config('app.current_sub', ...)` oder ein `update public.learning_submission_jobs set payload = payload || ...`.
 - Das ist kritisch, weil der Worker bei `WORKER_CONCURRENCY=1` Lease + Verarbeitung in **einer** Connection/Transaktion ausführt. Wenn danach ein externer Call (Ollama/Vision/HTTP) hängt, wird die Queue praktisch blockiert.
@@ -108,4 +108,3 @@ select pid, usename, state, client_addr, now()-xact_start as xact_age, left(quer
 - Keine `gustav_app` Sessions `idle in transaction` > 2 Minuten.
 - Keine Retries mit `unexpected keyword argument 'think'`.
 - `AI_TIMEOUT_*` wirkt tatsächlich (Requests werden nach Budget abgebrochen und requeued).
-

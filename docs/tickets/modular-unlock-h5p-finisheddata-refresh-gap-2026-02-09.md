@@ -30,9 +30,9 @@ Die Analyse zeigt: Der aktuelle Frontend-Fix triggert den Graph-Refresh nur im B
   - `docs/plan/2025-12-15-h5p-integration.md:356`
 - E2E deckt den serverseitigen `finishedData`-Persistenzpfad explizit ab:
   - `backend/tests_e2e/test_h5p_finisheddata_origin_null_e2e.py:291`
-- Live-Log-Befund:
-  - `POST /api/learning/.../submissions` kommt von `172.19.0.6` (Container `gustav-h5p`).
-  - `GET /api/learning/.../modules/graph` kommt von `172.19.0.9` (Browser via Caddy).
+- Live-Log-Befund (docker-intern, IPs weggelassen):
+  - `POST /api/learning/.../submissions` kommt vom H5P-Service (Container `gustav-h5p`).
+  - `GET /api/learning/.../modules/graph` kommt vom Browser (via Caddy).
   - Daraus folgt: Submissions werden oft serverseitig erzeugt, ohne Browser-`xAPI`-Trigger.
 
 ## Root Cause

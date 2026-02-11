@@ -29,7 +29,7 @@ BDD Scenarios (Given–When–Then)
   - Then Keycloak logs an error and the user sees a generic error message on the IdP page
   - And GUSTAV itself does not expose SMTP details or internal error messages.
 - Edge: Local vs Production
-  - Given local and production environments use the same SMTP variables from `.env` (Host `gymalf.de`, Port `587`, User `hennecke`)
+  - Given local and production environments use the same SMTP variables from `.env` (Host `smtp.school.example`, Port `587`, User `gustav-smtp-user`)
   - When a developer tests registration and password reset flows locally
   - Then the same Keycloak email flows work without Codeänderungen
   - And switching to a mail catcher is possible by overriding only the SMTP ENV values (optional, not required).
@@ -45,13 +45,13 @@ Design/Contract (Architecture & Config)
     - Configure `emailTheme="gustav"` to use the custom theme.
   - SMTP settings (via environment or admin UI, values kommen aus `.env`):
     - Host/Port/User an das bestehende Schul-Setup angelehnt:
-      - `KC_SMTP_HOST=gymalf.de`
+      - `KC_SMTP_HOST=smtp.school.example`
       - `KC_SMTP_PORT=587` (STARTTLS)
-      - `KC_SMTP_USER=hennecke`
+      - `KC_SMTP_USER=gustav-smtp-user`
     - Passwort nur als Secret in der Umgebung:
       - `KC_SMTP_PASSWORD=` (wird in `.env` gesetzt, bleibt im Repo leer).
     - Absenderadresse und Anzeigename:
-      - `KC_SMTP_FROM=hennecke@gymalf.de`
+      - `KC_SMTP_FROM=noreply@school.example`
       - `KC_SMTP_FROM_NAME="GUSTAV-Lernplattform"`
 - Email Theme (Keycloak)
   - Extend existing theme under `keycloak/themes/gustav`:
@@ -62,7 +62,7 @@ Design/Contract (Architecture & Config)
   - Use a single shared HTML layout (logo, colors, typography, footer) for all email types and vary only:
     - Subject line and main text (via `messages_{locale}.properties`, z.B. `messages_de.properties`), in a friendly, neutral tone (gleiche Formulierungen für Schüler*innen und Lehrkräfte).
     - The call-to-action label and target link (Keycloak-provided URL).
-    - A simple footer with school name and a contact line such as „Bei Fragen melde dich unter: hennecke@gymalf.de“.
+    - A simple footer with school name and a contact line such as „Bei Fragen melde dich unter: support@school.example“.
   - Verwende ein einheitliches Template für alle Rollen; neue Nutzer*innen starten als „student“, die Lehrer-Rolle wird später manuell vergeben.
 - GUSTAV App Contract
   - No changes to `api/openapi.yml` endpoints are required for email sending itself.
@@ -80,7 +80,7 @@ TDD / Validation Plan (Red → Green)
    - Update the Keycloak realm config (JSON or Admin UI) to set `emailTheme="gustav"` and configure SMTP (via environment variables in Docker Compose).
    - Introduce environment variables in `docker-compose.yml` and `.env.example` for SMTP settings (without hardcoding secrets in the repo).
 3) Refactor / Hardening
-   - Document the setup clearly in a dedicated runbook (`docs/runbooks/`), including:
+   - Document the setup clearly in a dedicated ops document (not part of this public repo), including:
      - Required DNS and SPF/DKIM/DMARC steps for the school domain.
      - How to test emails locally with a mail catcher.
    - Keep theme logic simple and KISS-compliant (no complex dynamic content; focus on clear instructions for students).

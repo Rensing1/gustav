@@ -2,7 +2,7 @@
 Auth registration: environment-driven domain whitelist for login_hint.
 
 Why:
-    To keep self-service registration limited to school accounts (e.g. @gymalf.de),
+    To keep self-service registration limited to school accounts (e.g. @school.example),
     the /auth/register endpoint must reject disallowed email domains when the
     allow-list is configured via ALLOWED_REGISTRATION_DOMAINS.
 
@@ -38,17 +38,17 @@ async def test_register_allows_allowed_domain_when_env_configured(monkeypatch: p
     import main  # type: ignore
 
     # Configure allow-list and ensure no stray value from the host leaks in.
-    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@gymalf.de")
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        resp = await client.get("/auth/register?login_hint=alice@gymalf.de", follow_redirects=False)
+        resp = await client.get("/auth/register?login_hint=alice@school.example", follow_redirects=False)
 
     assert resp.status_code == 302
     loc = resp.headers.get("location", "")
     assert loc, "Expected redirect location for allowed domain"
     qs = parse_qs(urlparse(loc).query)
     # login_hint should be propagated unchanged to Keycloak
-    assert qs.get("login_hint") == ["alice@gymalf.de"]
+    assert qs.get("login_hint") == ["alice@school.example"]
 
 
 @pytest.mark.anyio
@@ -60,16 +60,16 @@ async def test_register_allows_mixed_case_and_whitespace(monkeypatch: pytest.Mon
     import main  # type: ignore
 
     # Leading/trailing whitespace and mixed case in env variable
-    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "  @GymALF.de  ")
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "  @School.Example  ")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        resp = await client.get("/auth/register?login_hint=Bob@GYMalf.DE", follow_redirects=False)
+        resp = await client.get("/auth/register?login_hint=Bob@SCHOOL.EXAMPLE", follow_redirects=False)
 
     assert resp.status_code == 302
     loc = resp.headers.get("location", "")
     assert loc
     qs = parse_qs(urlparse(loc).query)
-    assert qs.get("login_hint") == ["Bob@GYMalf.DE"]
+    assert qs.get("login_hint") == ["Bob@SCHOOL.EXAMPLE"]
 
 
 @pytest.mark.anyio
@@ -81,7 +81,7 @@ async def test_register_without_login_hint_behaves_as_before(monkeypatch: pytest
     import main  # type: ignore
 
     # Even with an allow-list configured, missing login_hint should pass through.
-    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@gymalf.de")
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/register", follow_redirects=False)
@@ -98,7 +98,7 @@ async def test_register_rejects_disallowed_domain(monkeypatch: pytest.MonkeyPatc
     sys.path.insert(0, str(WEB_DIR))
     import main  # type: ignore
 
-    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@gymalf.de")
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/register?login_hint=mallory@gmail.com", follow_redirects=False)
@@ -109,7 +109,7 @@ async def test_register_rejects_disallowed_domain(monkeypatch: pytest.MonkeyPatc
     body = resp.json()
     assert body.get("error") == "invalid_email_domain"
     assert body.get("detail") == (
-        "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @gymalf.de"
+        "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @school.example"
     )
 
 
@@ -121,7 +121,7 @@ async def test_register_rejects_invalid_email(monkeypatch: pytest.MonkeyPatch):
     sys.path.insert(0, str(WEB_DIR))
     import main  # type: ignore
 
-    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@gymalf.de")
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/register?login_hint=not-an-email", follow_redirects=False)
@@ -130,5 +130,5 @@ async def test_register_rejects_invalid_email(monkeypatch: pytest.MonkeyPatch):
     body = resp.json()
     assert body.get("error") == "invalid_email_domain"
     assert body.get("detail") == (
-        "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @gymalf.de"
+        "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @school.example"
     )

@@ -152,8 +152,8 @@ Interpretation:
 
 Beispiel-Submission mit komplett 0-bewerteten Kriterien:
 
-- `id = 958d88cf-d12f-5182-885e-4b17daedf781`  
-- `Task = 0093383d-c176-41e4-b3f6-0f81cda32b22` (Pressefreiheit in Russland/Deutschland)  
+- `id = 958d88cf-...`  
+- `Task = 0093383d-...` (Pressefreiheit in Russland/Deutschland)  
 - `overall_score = 0`  
 - `criteria_results = 9` Einträge, alle `score = 0`, alle `max_score = 10`, alle `explanation_md = "Kein Beleg im Schülertext gefunden."`
 
@@ -162,7 +162,7 @@ Text-Snippet (Prod-DB, gekürzt):
 ```sql
 SELECT id, LEFT(text_body, 400) AS snippet
 FROM public.learning_submissions
-WHERE id = '958d88cf-d12f-5182-885e-4b17daedf781';
+WHERE id = '<submission_id>';
 ```
 
 Der Text beschreibt u.a. konkrete Einschränkungen der Pressefreiheit in Russland (Drangsalierung von Journalisten, Druck auf unabhängige Medien, Informationszugang), ist also aus Lehrkraftsicht nicht „leer“.
@@ -184,7 +184,7 @@ Der Text beschreibt u.a. konkrete Einschränkungen der Pressefreiheit in Russlan
 
 - Logs zeigen:
   - Normale Aktivität: `POST /api/generate`, `POST /api/chat`, `GET /api/tags`, gelegentliche `500` und lange Laufzeiten.
-  - Für den **28.11.** sind 500er und Runtime-Warnungen dokumentiert (siehe `docs/runbooks/ops_report_2025-11-27.md`), aber für die hier betrachteten 13 Submissions liegen in den Auszügen keine klar zuordenbaren Fehler exakt bei deren Zeitstempeln vor.
+  - Für den **28.11.** sind 500er und Runtime-Warnungen dokumentiert (siehe interner Ops-Report; nicht Teil des öffentlichen Repos), aber für die hier betrachteten 13 Submissions liegen in den Auszügen keine klar zuordenbaren Fehler exakt bei deren Zeitstempeln vor.
 - Wichtiger Punkt: Die Zero-Fälle sind `completed` und haben voll ausgefüllte `criteria.v2`-JSONs – das deutet eher auf ein Problem bei Interpretation/Normalisierung der Modellantwort hin, nicht auf einen harten Timeout/Abbruch.
 
 ### Relevante Codepfade (stark vereinfacht)

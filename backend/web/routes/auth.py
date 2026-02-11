@@ -34,7 +34,7 @@ def _parse_allowed_registration_domains(raw: str | None) -> set[str]:
     """Parse ALLOWED_REGISTRATION_DOMAINS env var into a normalized set of domains.
 
     Intent:
-        - Accept a comma-separated list like "@gymalf.de, @example.org".
+        - Accept a comma-separated list like "@school.example, @example.org".
         - Normalize by trimming whitespace and lowercasing.
         - Ignore empty entries so accidental trailing commas are harmless.
     """

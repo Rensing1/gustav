@@ -95,7 +95,7 @@ BDD‑Szenarien (Auszug)
   - When ich in Keycloak einen Reset anfordere
   - Then wird aus Sicherheitsgründen keine Existenz bestätigt (neutrale Bestätigung)
  - Domain‑Beschränkung (prod)
-  - Given Keycloak erzwingt E‑Mails mit `@gymalf.de`
+  - Given Keycloak erzwingt E‑Mails mit `@school.example`
   - When Registrierung oder Reset mit anderer Domain versucht wird
   - Then wird dies abgelehnt bzw. kein Reset‑Link versendet
 

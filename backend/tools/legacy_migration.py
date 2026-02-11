@@ -1051,23 +1051,26 @@ def _apply_tasks(
 def _load_staging_submissions(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str, str, str | None, str | None, str | None, int | None, str | None, object]]:
     """Load legacy submissions if the staging table exists; otherwise return empty.
 
-    Tests may prepare only a subset der Staging-Tabellen (Units/Sections/Tasks). Die
-    Submissions-Phase ist optional und darf keinen Fehler werfen, wenn
-    `staging.submissions` nicht existiert.
+    Tests may prepare only a subset of staging tables (units/sections/tasks).
+    The submissions phase is optional and must not fail when `staging.submissions`
+    is missing.
+
+    Important:
+        In Postgres, querying a missing table aborts the current transaction.
+        We therefore check for table existence before selecting from it.
     """
-    try:
-        with conn.cursor() as cur:  # type: ignore[attr-defined]
-            cur.execute(
-                """
-                select id::text, task_id::text, student_sub, kind, text_body, storage_key, mime_type, size_bytes, sha256, created_at
-                from staging.submissions
-                order by created_at asc
-                """
-            )
-            rows = cur.fetchall()
-    except Exception:
-        # Treat missing table as no submissions to migrate
-        return []
+    with conn.cursor() as cur:  # type: ignore[attr-defined]
+        cur.execute("select to_regclass('staging.submissions')")
+        if cur.fetchone()[0] is None:
+            return []
+        cur.execute(
+            """
+            select id::text, task_id::text, student_sub, kind, text_body, storage_key, mime_type, size_bytes, sha256, created_at
+            from staging.submissions
+            order by created_at asc
+            """
+        )
+        rows = cur.fetchall()
     return [
         (
             row[0], row[1], row[2], row[3], row[4], row[5], row[6], (int(row[7]) if row[7] is not None else None), row[8], row[9]

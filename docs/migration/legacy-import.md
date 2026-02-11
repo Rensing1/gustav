@@ -135,7 +135,7 @@ make import-legacy-dry DUMP=/secure/dumps/legacy_2025-11-01.tar.gz
 make import-legacy DUMP=/secure/dumps/legacy_2025-11-01.tar.gz
 ```
 
-Die Targets verwenden `scripts/import_legacy_backup.py` und erzeugen einen JSON‑Report
+Die Targets rufen `python -m backend.tools.import_legacy_backup` auf und erzeugen einen JSON‑Report
 unter `docs/migration/reports/`. Achte darauf, dass sensible Rohdaten nicht
 in das Repository gelangen.
 - Setze `released_by`, falls im Legacy-Datensatz kein eindeutiger Lehrer vorhanden ist. Nutze dafür den Kurs-Owner oder den Fallback `system`.
@@ -264,17 +264,17 @@ Nutze diesen Abschnitt als Referenz, wenn du während des ETL-Laufs Feldzuordnun
 - `legacy-code-alpha1/backend/tools/` – Python-Hilfsprogramme für Transformationen.
 
 ## 11. Automatisierter Gesamtlauf (Fallback)
-Wenn du alle Schritte oben nicht einzeln ausführen möchtest, kannst du den gesamten Prozess mit dem neuen Skript `scripts/import_legacy_backup.py` automatisieren. Das Skript erledigt:
+Wenn du alle Schritte oben nicht einzeln ausführen möchtest, kannst du den gesamten Prozess mit dem CLI‑Tool `backend.tools.import_legacy_backup` automatisieren. Das Tool erledigt:
 - Restore des Dumps in ein isoliertes Schema (Standard `legacy_raw`).
 - Aufbau der `legacy_user_map` inklusive Fallback-Subs für Legacy-Benutzer.
 - ETL sämtlicher relevanter Tabellen (Kurse, Units, Materialien, Aufgaben, Abgaben, Releases) unter Beachtung der Mapping-Regeln.
-- Provisionierung des lokalen App-Logins (`make db-login-user`), sofern dieser noch fehlt. Das Skript liest `APP_DB_USER`/`APP_DB_PASSWORD` aus der Umgebung (keine Übergabe von Passwörtern auf der CLI). Zusätzlich werden `DB_HOST`, `DB_PORT`, `DB_SUPERUSER`, `DB_SUPERPASSWORD` genutzt. Stelle sicher, dass diese Werte vor dem Lauf gesetzt sind (Standard: `postgres`/`postgres` auf 127.0.0.1:54322).
+- Provisionierung des lokalen App-Logins (entspricht `make db-login-user`), sofern dieser noch fehlt. Das Tool liest `APP_DB_USER`/`APP_DB_PASSWORD` aus der Umgebung (keine Übergabe von Passwörtern auf der CLI). Zusätzlich werden `DB_HOST`, `DB_PORT`, `DB_SUPERUSER`, `DB_SUPERPASSWORD` genutzt. Stelle sicher, dass diese Werte vor dem Lauf gesetzt sind (Standard: `postgres`/`postgres` auf 127.0.0.1:54322).
 - Erstellung eines detaillierten JSON-Reports mit Zählwerten und eventuellen Warnungen (`docs/migration/reports/legacy_import_<timestamp>.json`).
 
 Beispielaufruf:
 
 ```bash
-.venv/bin/python scripts/import_legacy_backup.py \
+.venv/bin/python -m backend.tools.import_legacy_backup \
   --dump docs/migration/supabase_backup_20251101_103457.tar.gz \
   --dsn "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   --legacy-schema legacy_raw \

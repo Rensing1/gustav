@@ -6,7 +6,7 @@
 - API‑Klarheit: 404 für Upload‑Intents dokumentieren (Task nicht sichtbar/gefunden).
 
 ## Änderungen
-- scripts/import_legacy_backup.py: Entferne DSN‑Log/Reportfeld, Hinweis im Code.
+- backend/tools/import_legacy_backup.py: Entferne DSN‑Log/Reportfeld, Hinweis im Code.
 - backend/web/routes/learning.py: In PROD immer `_require_strict_same_origin` bei POST /submissions.
 - api/openapi.yml: 404‑Response für POST /upload‑intents mit Cache/Vary‑Headern.
 

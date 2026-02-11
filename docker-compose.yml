@@ -21,13 +21,14 @@ services:
   web:
     build: .
     container_name: gustav-alpha2
-    # behind proxy; no direct host port mapping
     extra_hosts:
       # Prod-like: containers must be able to reach the public TLS endpoints via the host gateway.
-      # Otherwise `*.localhost` resolves to 127.0.0.1 inside containers (loopback), which breaks
-      # server-to-server OIDC (KC_BASE_URL=https://id.localhost) in `GUSTAV_ENV=prod`.
+      # This avoids the common `*.localhost` -> 127.0.0.1 (loopback) trap inside containers.
       - "app.localhost:host-gateway"
       - "id.localhost:host-gateway"
+      # Dev convenience: reach host-local inference endpoints (e.g. localhost:11434) from the container.
+      - "host.docker.internal:host-gateway"
+    # behind proxy; no direct host port mapping
     volumes:
       # Live-Reload: Web-Code (SSR) wird eingebunden
       - ./backend/web:/app:z
@@ -68,7 +69,6 @@ services:
       - KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-admin}
       # Trust the local dev CA for HTTPS calls to `https://id.localhost` (OIDC + Admin API).
       - KEYCLOAK_CA_BUNDLE=/app/.tmp/caddy-root.crt
-      - REQUESTS_CA_BUNDLE=/app/.tmp/caddy-root.crt
       # Browser-facing app base controls callback host
       - WEB_BASE=${WEB_BASE:-https://app.localhost}
       - REDIRECT_URI=${WEB_BASE:-https://app.localhost}/auth/callback
@@ -139,6 +139,9 @@ services:
   learning-worker:
     build: .
     container_name: gustav-learning-worker
+    extra_hosts:
+      # Ensure host-local inference endpoints (e.g. localhost:8111) are reachable from the container.
+      - "host.docker.internal:host-gateway"
     command: ["python", "-m", "backend.learning.workers.process_learning_submission_jobs"]
     volumes:
       - ./backend/learning:/app/backend/learning:z
@@ -251,6 +254,7 @@ services:
     restart: unless-stopped
     networks:
       - gustav-alpha2-network
+
 networks:
   gustav-alpha2-network:
     driver: bridge

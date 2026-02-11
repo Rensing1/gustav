@@ -1106,7 +1106,7 @@ Offene Tasks:
 - Dienste hochfahren: `docker compose up -d db supabase web learning-worker`. Vor Start `supabase status` kontrollieren.
 - Testnutzer: Lehrer (`test2@test.de`) und Schüler (`test1@test.de`), Passwort jeweils `123456`; falls Accounts fehlen, via `scripts/dev/create_login_user.sql` anlegen.
 - Browser-Setup: Zwei Profile oder getrennte Tabs (Privatmodus für Lehrer, normaler Tab für Schüler), damit parallele Sessions möglich sind.
-- Seed-Daten: Sicherstellen, dass mindestens eine Aufgabe im Kurs verfügbar ist (`scripts/import_legacy_backup.py --minimal` oder manuelle Task-Erstellung).
+- Seed-Daten: Sicherstellen, dass mindestens eine Aufgabe im Kurs verfügbar ist (`make import-legacy` oder manuelle Task-Erstellung).
 - Monitoring: 
   - Worker-Logs (`docker compose logs -f learning-worker`).
   - Healthcheck beobachten (`watch -n 15 curl -s http://localhost:8000/internal/health/learning-worker`).

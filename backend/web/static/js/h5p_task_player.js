@@ -98,6 +98,20 @@
       return data;
     };
 
+    const emitModularGraphRefresh = () => {
+      const workspaceRoot = root.closest('.modular-unit-page[data-unit-type="modular"]');
+      if (!workspaceRoot) return;
+      const unitId = workspaceRoot.dataset.unitId || '';
+      const refreshCourseId = workspaceRoot.dataset.courseId || courseId || '';
+      if (!unitId || !refreshCourseId) return;
+      const ev = new CustomEvent('modularGraphRefresh', {
+        bubbles: true,
+        composed: true,
+        detail: { courseId: refreshCourseId, unitId },
+      });
+      workspaceRoot.dispatchEvent(ev);
+    };
+
     const run = async () => {
       if (!contentId) {
         setStatus('Kein H5P-Inhalt verknüpft.');
@@ -148,6 +162,7 @@
             const statementId = String(statement.id || '');
             await submitAttempt({ statementId, scoreRaw: score.raw, scoreMax: score.max });
             setStatus(`Gespeichert (${score.raw}/${score.max}).`);
+            emitModularGraphRefresh();
           } catch (e) {
             // Keep UI usable even when persistence fails (network/CSRF/etc).
             setStatus(String(e?.message || e));

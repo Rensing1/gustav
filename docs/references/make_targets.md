@@ -15,10 +15,14 @@ Status: Stable
 - `make verify` – Alles (Unit + Integrationen + E2E)
 - `make supabase-status` – Supabase Status/URLs
 - `make docker-validate` – `docker compose config` (Syntax/ENV)
+- `make import-legacy` – Legacy Dump importieren (lokal; schreibt Report nach `docs/migration/reports/`)
+- `make import-legacy-dry` – Dry-Run des Legacy-Imports (keine Writes)
 
 ## ENV
 - `APP_DB_USER`/`APP_DB_PASSWORD` – für DSNs/`db-login-user`
 - `DB_HOST`/`DB_PORT`/`DB_SUPERUSER`/`DB_SUPERPASSWORD` – für psql im Make‑Target
+- `DUMP`/`DSN`/`LEGACY_SCHEMA`/`WORKDIR` – Parameter für `import-legacy*`
+- `KC_BASE_URL`/`KC_HOST_HEADER`/`KC_REALM`/`KC_ADMIN_USER`/`KC_ADMIN_PASS` – Keycloak Admin Lookup für `import-legacy*`
 
 ## Hinweis (KISS)
 - RUN_* Flags (`RUN_E2E`, `RUN_SUPABASE_E2E`) immer zusammen mit den passenden Markern laufen lassen (`-m e2e` / `-m supabase_integration`). Sonst mischt man bewusst „ohne externe Services“ mit „mit echten Services“ und bekommt vermeidbare Rotläufe.

@@ -19,9 +19,9 @@ Weitere Funktionalitäten (z. B. Karteikarten, Datenvisualisierung) sind geplant
 git clone https://github.com/Rensing1/gustav.git gustav
 cd gustav
 
-cp .env.example .env
-# Für eine lokale Demo reichen die Default-Werte.
-# Für eine echte Schul-Installation siehe docs/runbooks/deploy_new_system.md
+	cp .env.example .env
+	# Für eine lokale Demo reichen die Default-Werte.
+	# Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
 
 supabase init
 supabase start
@@ -30,9 +30,8 @@ docker compose up -d --build
 
 Dann im Browser öffnen:
 - App: `https://app.localhost`
-- (Keycloak-Login ist im Demo-Setup vorkonfiguriert; Details siehe `docs/runbooks/deploy_new_system.md`.)
-Für eine produktionsnahe Installation auf einem Schulserver nutze bitte das Runbook:
-- `docs/runbooks/deploy_new_system.md`
+- (Keycloak-Login ist im Demo-Setup vorkonfiguriert.)
+- Für Produktion müssen Domain/TLS/SMTP/Secrets pro Umgebung sauber konfiguriert werden (siehe Hinweise in `.env.example` und `docs/ARCHITECTURE.md`).
 
 ---
 
@@ -44,7 +43,7 @@ Ein kurzer Blick in die wichtigsten Verzeichnisse:
 - `backend/web/` – FastAPI-App, serverseitig gerenderte UI, HTMX-Komponenten
 - `backend/learning-worker/` – Hintergrundprozesse für automatische Auswertung & KI-Feedback
 - `supabase/` – Datenbank- und Storage-Konfiguration (Migrationen, RLS, Policies)
-- `docs/` – Architektur, Runbooks, wissenschaftliche Hintergründe und Implementierungspläne
+- `docs/` – Architektur, wissenschaftliche Hintergründe und Implementierungspläne
 
 Weitere Ordner (z. B. `keycloak/`, `reverse-proxy/`) enthalten die Infrastruktur rund um Identity und TLS.
 
@@ -59,7 +58,7 @@ GUSTAV wird entwickelt nach dem Prinzip „Contract‑First“ und setzt stark a
   - oder `.venv/bin/pytest -q`
   - H5P Sidecar (Node) Unit-Tests: `make test-h5p` (installiert Dependencies via `npm ci`, kein `node_modules/` im Repo)
   - Gesamter Durchlauf (Unit + Supabase + OpenAI-Endpoint + E2E): `make verify`
-  - Nach `supabase db reset`: `make reset-local` (resync + service recreate)
+  - Nach `supabase db reset`: `make reset-local` (DB reset + service recreate; Keys ggf. via `supabase status` aktualisieren)
   - `make test-supabase`
   - KI-Integration: OpenAI-kompatibler Endpoint via `OPENAI_BASE_URL` (LLM/VLM-Server). Für Unit-Tests werden Netzwerkanfragen stubbbar gehalten.
   - Für die JS-Behaviour-Tests (Teaching-Live-UI in `gustav.js`) wird eine aktuelle Node.js-Installation benötigt; in CI sollte Node verfügbar sein, damit diese Tests nicht dauerhaft „skipped“ laufen.
@@ -83,8 +82,8 @@ Nutze die README als Wegweiser. Details stehen hier:
   - Glossar der Fachbegriffe: `docs/glossary.md`
 
 - **Deployment & Betrieb**
-  - Neues System (z. B. Schulserver): `docs/runbooks/deploy_new_system.md`
-  - Preflight-Checks vor dem Rollout: `docs/runbooks/preflight_checklist.md`
+  - Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
+  - Lokale Demo: `docker-compose.yml` + `reverse-proxy/Caddyfile` (TLS via `tls internal` für `app.localhost`/`id.localhost`)
 
 - **Datenbank & Storage**
   - Datenbank-Schema: `docs/database_schema.md`
@@ -104,5 +103,4 @@ Nutze die README als Wegweiser. Details stehen hier:
 ## Healthcheck & Status
 
 - Healthcheck-Endpunkt: `GET /health` → `{ "status": "healthy" }`
-- Für einen vollständigen Systemcheck (inkl. Supabase, Keycloak, RLS) siehe:
-  - `docs/runbooks/preflight_checklist.md`
+- Für einen vollständigen Systemcheck (inkl. Supabase, Keycloak, RLS) siehe die Hinweise in `docs/ARCHITECTURE.md`.

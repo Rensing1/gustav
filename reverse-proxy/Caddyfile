@@ -1,7 +1,3 @@
-{
-  email {$LETSENCRYPT_EMAIL}
-}
-
 (app_proxy) {
   # Path-based routing for the self-hosted H5P service (same origin).
   # NOTE: `handle_path` strips the `/h5p` prefix before proxying.
@@ -25,24 +21,7 @@
   reverse_proxy gustav-alpha2:8000
 }
 
-# Production domains (Let’s Encrypt)
-app.{$DOMAIN_NAME}:443 {
-  import app_proxy
-}
-
-id.{$DOMAIN_NAME}:443 {
-  reverse_proxy keycloak:8080
-}
-
-{$DOMAIN_NAME}:443 {
-  redir https://app.{$DOMAIN_NAME}{uri} permanent
-}
-
-www.{$DOMAIN_NAME}:443 {
-  redir https://app.{$DOMAIN_NAME}{uri} permanent
-}
-
-# Local development / fallback (internal CA)
+# Local development (internal CA)
 app.localhost:443 {
   tls internal
   import app_proxy

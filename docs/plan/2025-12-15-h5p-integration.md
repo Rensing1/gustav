@@ -1,5 +1,7 @@
 # Plan: H5P‑Integration + Visual‑Tasks (Editor, Player, Ergebnisse, Feedback)
 
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
+
 Goal: (1) H5P als zusätzlichen `Task`‑Typ in GUSTAV integrieren (Editor/Player + auto‑scorable Ergebnisse), sodass Lehrkräfte interaktive Aufgaben erstellen können und Schüler diese lösen können; und (2) `Task.kind="visual"` als Upload‑Only‑Variante von Aufgaben ergänzen, deren Auswertung + Rückmeldung via Vision Language Model (VLM) in den bestehenden Abgabe‑/Worker‑Flow passt.
 
 Kontext:

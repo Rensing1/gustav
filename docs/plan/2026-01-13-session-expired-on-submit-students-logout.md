@@ -1,4 +1,6 @@
 # Plan: Session expires on submit (students get logged out)
+
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
 Stand: 2026-01-13 · Ticket: `docs/tickets/session-expired-on-submit-students-logout-2026-01-13.md`
 
 ## Why

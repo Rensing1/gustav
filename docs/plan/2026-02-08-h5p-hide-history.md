@@ -1,5 +1,7 @@
 # Plan: H5P-History im Schueler-UI entfernen (2026-02-08)
 
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
+
 ## Ziel
 - H5P-Aufgaben sollen keinen "Versuch"-Block (History-Accordion) mehr anzeigen.
 - Andere Aufgabenarten bleiben unveraendert.

@@ -1,5 +1,7 @@
 # Plan: Learning AI — nur DSPy (Feedback + Vision-Textextraktion/OCR) über OpenAI-kompatiblen Endpoint (ohne Ollama)
 
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
+
 Aktualisierung (2026-01-13):
 - Erweitert den bisherigen „DSPy-only Feedback“-Plan, sodass auch **direkte Ollama-Calls für Vision/OCR** entfernt werden.
 - Wechselt von Ollama-spezifischer Konfiguration auf **einen einzigen OpenAI-kompatiblen Endpoint** (z.B. Lemonade/Open-WebUI-Proxy), den Betreiber frei konfigurieren können.

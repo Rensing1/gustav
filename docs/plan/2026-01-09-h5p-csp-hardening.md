@@ -1,5 +1,7 @@
 # Plan: CSP‑Hardening für `/h5p/*` (H5P‑Service) – minimal, robust, DSGVO‑freundlich
 
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
+
 Related plans:
 - Feature/Integration: `docs/plan/2025-12-15-h5p-integration.md`
 - UI/Theming: `docs/plan/2026-01-08-h5p-ui-theming.md`

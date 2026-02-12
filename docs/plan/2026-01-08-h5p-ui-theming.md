@@ -1,5 +1,7 @@
 # Plan: H5P‑UI Theming (Native‑Look) – Dark/Light, GUSTAV‑Design‑Tokens
 
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
+
 Related plan (Feature/Integration): `docs/plan/2025-12-15-h5p-integration.md`
 
 ## Goal

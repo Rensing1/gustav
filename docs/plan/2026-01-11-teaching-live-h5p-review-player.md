@@ -1,4 +1,6 @@
 # Plan: Teaching Live – H5P Review Player (Read‑Only) im Detail‑Panel
+
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
 **Datum:** 2026‑01‑11  
 
 ## Ziel / Motivation

@@ -1,5 +1,7 @@
 # Plan: H5P unlock refresh in modular workspace (2026-02-08)
 
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
+
 ## Ziel
 - Nach erfolgreicher H5P-Abgabe muss der modulare Graph im selben View aktualisiert werden.
 - Kein Reload noetig; nur ein UI-Event, keine Backend-Aenderungen.

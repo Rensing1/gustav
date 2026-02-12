@@ -1,5 +1,7 @@
 # Plan: Lineare & modulare Lerneinheiten (Module als Graph)
 
+Status: abgeschlossen (Hinweis ergänzt am 2026-02-12)
+
 Ziel: Neben dem bestehenden Lerneinheiten‑Format **„linear“** (Abschnitte untereinander) ein neues Format **„modular“** einführen, bei dem eine Lerneinheit aus **Modulen** besteht, die in **Phasen** organisiert sind und über **Abhängigkeiten (Kanten)** freigeschaltet werden.
 
 Wichtig: Beide Formate werden parallel unterstützt. Lehrkräfte wählen den Typ beim Erstellen einer Lerneinheit.

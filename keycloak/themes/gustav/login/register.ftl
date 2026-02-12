@@ -22,7 +22,7 @@
   <main id="kc-content" class="kc-gustav">
     <section class="kc-card">
       <h1 class="kc-title">${msg("doRegister")}</h1>
-      <p class="kc-hint">${msg("gustavPasswordPolicyHint", "Hinweis: Mindestens 8 Zeichen, mit Groß-/Kleinbuchstaben und Ziffer. Keine Sonderzeichen erforderlich.")}</p>
+      <p class="kc-hint">${msg("gustavPasswordPolicyHint", "Hinweis: Mindestens 8 Zeichen, mit Groß-/Kleinbuchstaben, Ziffer und mindestens einem Sonderzeichen.")}</p>
 
       <#if message?has_content>
         <div class="kc-message kc-${message.type}">${message.summary}</div>

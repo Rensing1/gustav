@@ -32,6 +32,8 @@ def test_theme_templates_present():
         "login-reset-password.ftl": (THEME_ROOT / "login-reset-password.ftl").exists(),
         "update-password.ftl": (THEME_ROOT / "update-password.ftl").exists(),
         "login-update-password.ftl": (THEME_ROOT / "login-update-password.ftl").exists(),
+        "login-verify-email.ftl": (THEME_ROOT / "login-verify-email.ftl").exists(),
+        "info.ftl": (THEME_ROOT / "info.ftl").exists(),
     }
     tmpl_dir = THEME_ROOT / "templates"
     dir_files = {
@@ -40,6 +42,8 @@ def test_theme_templates_present():
         "login-reset-password.ftl": (tmpl_dir / "login-reset-password.ftl").exists(),
         "update-password.ftl": (tmpl_dir / "update-password.ftl").exists(),
         "login-update-password.ftl": (tmpl_dir / "login-update-password.ftl").exists(),
+        "login-verify-email.ftl": (tmpl_dir / "login-verify-email.ftl").exists(),
+        "info.ftl": (tmpl_dir / "info.ftl").exists(),
     }
     for name in [
         "login.ftl",
@@ -48,8 +52,18 @@ def test_theme_templates_present():
         # Keycloak default uses login-update-password.ftl; allow update-password.ftl alias.
         "update-password.ftl",
         "login-update-password.ftl",
+        "login-verify-email.ftl",
+        "info.ftl",
     ]:
         assert root_files[name] or dir_files[name], f"{name} missing"
+
+
+def _resolve_login_template(name: str) -> Path:
+    root_tpl = THEME_ROOT / name
+    dir_tpl = THEME_ROOT / "templates" / name
+    tpl = root_tpl if root_tpl.exists() else dir_tpl
+    assert tpl.exists(), f"{name} missing"
+    return tpl
 
 
 def test_theme_messages_de_present_and_has_keys():
@@ -114,10 +128,7 @@ def test_login_has_conditional_remember_me_checkbox():
 def test_update_password_templates_use_login_css_hooks():
     """Update-password templates should reuse the login layout hooks for consistency."""
     for name in ["update-password.ftl", "login-update-password.ftl"]:
-        root_tpl = THEME_ROOT / name
-        dir_tpl = (THEME_ROOT / "templates" / name)
-        tpl = root_tpl if root_tpl.exists() else dir_tpl
-        assert tpl.exists(), f"{name} missing"
+        tpl = _resolve_login_template(name)
         text = tpl.read_text(encoding="utf-8")
         for cls in [
             "kc-card",
@@ -134,14 +145,37 @@ def test_update_password_templates_use_login_css_hooks():
 def test_update_password_templates_use_keycloak_field_names():
     """Update-password form must use Keycloak's expected field names and autocomplete hints."""
     for name in ["update-password.ftl", "login-update-password.ftl"]:
-        root_tpl = THEME_ROOT / name
-        dir_tpl = (THEME_ROOT / "templates" / name)
-        tpl = root_tpl if root_tpl.exists() else dir_tpl
-        assert tpl.exists(), f"{name} missing"
+        tpl = _resolve_login_template(name)
         text = tpl.read_text(encoding="utf-8")
         assert 'name="password-new"' in text, f"{name} must post password-new"
         assert 'name="password-confirm"' in text, f"{name} must post password-confirm"
         assert 'autocomplete="new-password"' in text, f"{name} should set autocomplete=new-password"
+
+
+def test_verify_email_template_uses_gustav_layout_hooks():
+    """Verify-email page should keep the same compact GUSTAV layout."""
+    tpl = _resolve_login_template("login-verify-email.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for marker in [
+        'class="kc-gustav"',
+        'class="kc-card"',
+        "app-gustav-base.css",
+        "gustav.css",
+    ]:
+        assert marker in text, f"login-verify-email.ftl should include {marker}"
+
+
+def test_info_template_uses_gustav_layout_hooks():
+    """Info page should keep the same compact GUSTAV layout."""
+    tpl = _resolve_login_template("info.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for marker in [
+        'class="kc-gustav"',
+        'class="kc-card"',
+        "app-gustav-base.css",
+        "gustav.css",
+    ]:
+        assert marker in text, f"info.ftl should include {marker}"
 
 
 def test_messages_en_present_and_has_email_label():
@@ -153,6 +187,8 @@ def test_messages_en_present_and_has_email_label():
     assert "usernameOrEmail=Email address" in content
     # Remember-me label should be present so the checkbox is announced correctly
     assert "rememberMe=" in content, "Missing i18n key: rememberMe="
+    # Password policy hint must exist to avoid rendering key names on the register page.
+    assert "gustavPasswordPolicyHint=" in content, "Missing i18n key: gustavPasswordPolicyHint="
 
 
 def test_register_uses_display_name_only():
@@ -177,6 +213,18 @@ def test_register_display_name_required_and_styled():
     assert 'class="kc-label"' in text and 'for="display_name"' in text
     # Input uses kc-input and is required
     assert 'id="display_name"' in text and 'class="kc-input"' in text and 'required' in text
+
+
+def test_register_policy_hint_does_not_contradict_realm_policy():
+    """Hint text must not claim special characters are unnecessary."""
+    disallowed_text = "Keine Sonderzeichen erforderlich"
+    reg = THEME_ROOT / "register.ftl"
+    reg_text = reg.read_text(encoding="utf-8")
+    assert disallowed_text not in reg_text, "register.ftl fallback hint contradicts realm password policy"
+
+    msgs = THEME_ROOT / "messages" / "messages_de.properties"
+    msg_text = msgs.read_text(encoding="utf-8")
+    assert disallowed_text not in msg_text, "German password policy hint contradicts realm password policy"
 
 
 def test_email_templates_present_for_verification_and_reset():

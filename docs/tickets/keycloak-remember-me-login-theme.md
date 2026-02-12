@@ -1,8 +1,10 @@
 # Ticket: Keycloak „Remember me“ im GUSTAV-Login-Theme sichtbar machen
 
-Status: offen  
+Status: abgeschlossen  
 Priorität: niedrig–mittel  
 Betroffene Umgebung: Produktion (`gustav.example`)
+
+Abschluss-Hinweis (2026-02-12): Remember-me-Checkbox und i18n-Labels sind im Login-Theme umgesetzt und testseitig abgesichert (u. a. `keycloak/themes/gustav/login/login.ftl`, `keycloak/themes/gustav/login/messages/messages_de.properties`, `keycloak/themes/gustav/login/messages/messages_en.properties`, `backend/tests/test_keycloak_theme_files.py`).
 
 ## Kontext
 

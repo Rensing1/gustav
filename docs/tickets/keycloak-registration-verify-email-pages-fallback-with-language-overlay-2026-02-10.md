@@ -1,9 +1,11 @@
 # Ticket: Registrierung/Verifizierung landet auf Keycloak-Standardseiten mit dominanter Sprach-Auswahl
 
-Status: offen  
+Status: abgeschlossen  
 Priorität: hoch  
 Betroffene Umgebung: Produktion (`app.gustav.example`, `id.gustav.example`)  
 Erstellt am: 10. Februar 2026
+
+Abschluss-Hinweis (2026-02-12): Verify-/Info-Seiten wurden als eigene GUSTAV-Templates ergänzt und per Theme-Tests abgesichert (u. a. `keycloak/themes/gustav/login/login-verify-email.ftl`, `keycloak/themes/gustav/login/info.ftl`, `backend/tests/test_keycloak_theme_files.py`).
 
 ## Kontext
 

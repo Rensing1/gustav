@@ -1,8 +1,10 @@
 # Ticket: Keycloak Passwort-Reset-Seite nicht im GUSTAV-Theme
 
-Status: offen  
+Status: abgeschlossen  
 Priorität: mittel  
 Betroffene Umgebung: Produktion (`gustav.example`)
+
+Abschluss-Hinweis (2026-02-12): Reset-/Update-Password-Seiten laufen im GUSTAV-Theme und sind über Template-Checks abgesichert (u. a. `keycloak/themes/gustav/login/update-password.ftl`, `keycloak/themes/gustav/login/login-update-password.ftl`, `backend/tests/test_keycloak_theme_files.py`).
 
 ## Kontext
 

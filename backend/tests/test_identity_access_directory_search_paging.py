@@ -56,8 +56,13 @@ def test_directory_search_pages_over_role_members(monkeypatch: pytest.MonkeyPatc
 
     # Patch requests.get to simulate two pages of role members
     def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
-        # We care about role listing endpoint only
-        assert "/roles/student/users" in url
+        # We care about student role listing endpoints only
+        assert (
+            "/roles/student/users" in url
+            or "/roles/default-roles-gustav/users" in url
+        )
+        if "/roles/default-roles-gustav/users" in url:
+            return _Resp(200, [])
         first = int((params or {}).get("first", 0))
         maxn = int((params or {}).get("max", 200))
         if first == 0:
@@ -79,3 +84,44 @@ def test_directory_search_pages_over_role_members(monkeypatch: pytest.MonkeyPatc
     assert any("Zelda" in (n or "") for n in names)
     assert any(s.startswith("sub-") for s in subs)
 
+
+def test_directory_search_includes_default_role_members_for_student(monkeypatch: pytest.MonkeyPatch):
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+    called_urls: list[str] = []
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        called_urls.append(str(url))
+        if "/roles/student/users" in url:
+            return _Resp(200, [])
+        if "/roles/default-roles-gustav/users" in url:
+            return _Resp(200, [_mk_user(1, name="Fresh Student", username="fresh.student")])
+        return _Resp(200, [])
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+
+    out = dir.search_users_by_name(role="student", q="fresh", limit=5)
+    assert out == [{"sub": "sub-0001", "name": "Fresh Student"}]
+    assert any("/roles/default-roles-gustav/users" in url for url in called_urls)
+
+
+def test_directory_list_includes_default_role_members_for_student(monkeypatch: pytest.MonkeyPatch):
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+    called_urls: list[str] = []
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        called_urls.append(str(url))
+        if "/roles/student/users" in url:
+            return _Resp(200, [])
+        if "/roles/default-roles-gustav/users" in url:
+            return _Resp(200, [_mk_user(2, name="Auto Student", username="auto.student")])
+        return _Resp(200, [])
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+
+    out = dir.list_users_by_role(role="student", limit=20, offset=0)
+    assert out == [{"sub": "sub-0002", "name": "Auto Student"}]
+    assert any("/roles/default-roles-gustav/users" in url for url in called_urls)

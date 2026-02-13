@@ -1,6 +1,6 @@
 # Plan: Teaching Modular Editor - Edges fehlen nach Reload (2026-02-13)
 
-Status: vorgeschlagen
+Status: abgeschlossen (2026-02-13)
 
 ## Ziel
 - Das Problem reproduzierbar dokumentieren: Im Lehrer-Editor fuer modulare Lerneinheiten werden persistierte Kanten nach Seiten-Reload nicht gerendert.
@@ -103,3 +103,17 @@ Als Lehrkraft moechte ich nach einem Reload im modularen Editor weiterhin alle b
   - Mitigation: Parser mit klaren Fallbacks + Test fuer erwarteten Container-Typ.
 - Risiko: Reine SSR-Regex-Tests decken Runtime-Verhalten nicht.
   - Mitigation: Mindestens ein JS-Contract-Test auf Parser-Ebene.
+
+## Umsetzung (abgeschlossen am 2026-02-13)
+- Green-Fix umgesetzt:
+  - `backend/web/static/js/teaching_modular_unit_editor.js`
+  - `parseEdges(root)` liest jetzt fuer `<template>` zuerst `el.content.textContent`, mit defensivem Fallback auf `el.textContent`.
+- Neuer Regressionstest umgesetzt (Node-Behavior):
+  - `backend/tests/test_teaching_modular_unit_editor_js_behaviour.py`
+  - Deckt ab:
+    - Reload-Happy-Path (Template-Content wird geparst)
+    - leerer Container -> `[]`
+    - ungueltiges JSON -> `[]`
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_teaching_modular_unit_editor_js_behaviour.py` -> `3 passed`
+  - `.venv/bin/pytest -q backend/tests/test_teaching_modular_editor_contract.py backend/tests/test_teaching_modular_unit_editor_edges_ssr.py` -> `4 passed, 1 skipped`

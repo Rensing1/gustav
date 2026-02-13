@@ -14,7 +14,15 @@ Goals:
     var el = root.querySelector('#modular-editor-edges-data');
     if (!el) return [];
     try {
-      var raw = (el.textContent || '').trim();
+      // For <template>, the serialized payload lives in `content`, not on the
+      // template element itself.
+      var raw = '';
+      if (el.content && typeof el.content.textContent === 'string') {
+        raw = el.content.textContent;
+      } else {
+        raw = el.textContent || '';
+      }
+      raw = raw.trim();
       return raw ? JSON.parse(raw) : [];
     } catch (e) {
       return [];

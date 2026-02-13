@@ -1,5 +1,17 @@
 # Lehrer-Kursansicht: Vollstaendige Mitgliederliste, saubere Kandidatenfilterung, Name aus E-Mail (2026-02-13)
 
+## Status
+- ✅ Abgeschlossen am 2026-02-13.
+- Umgesetzt:
+  - SSR laedt die komplette Mitgliederliste seitenweise (statt nur `limit=10`).
+  - Kandidatenfilter arbeitet gegen die komplette Mitgliedschaft und blendet bestehende Mitglieder robust aus.
+  - Label fuer Mitglieder/Kandidaten priorisiert E-Mail-Localpart (Login-Style).
+  - Sortierung der Mitglieder- und Kandidatenlisten ist alphabetisch (case-insensitive).
+  - Directory-Suche/-Liste verwendet robusten Retry bei `403` auf Role-User-Endpoints.
+- Verifiziert mit:
+  - `.venv/bin/pytest -q backend/tests/test_identity_access_directory_search_paging.py backend/tests/test_users_search_api.py backend/tests/test_teaching_members_ui_search_global.py backend/tests/test_teaching_members_ui_roster_limit.py backend/tests/test_teaching_members_ui_filter_full_roster.py backend/tests/test_teaching_members_ui_localpart_labels.py backend/tests/test_identity_access_directory_login_labels.py`
+  - Ergebnis: `13 passed`.
+
 ## Kontext (Ist-Stand)
 - Die SSR-Seite `/courses/{course_id}/members` laedt aktuell nur 10 Mitglieder:
   - `backend/web/main.py:7807` (`limit=10`)

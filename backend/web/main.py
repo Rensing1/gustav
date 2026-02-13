@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
 import hashlib
 import hmac
 import os
@@ -4020,9 +4021,112 @@ def _render_unit_edit_response(
     )
 
 
+def _email_localpart_identifier(value: str) -> str:
+    """Return the technical localpart for email-like identifiers.
+
+    Why:
+        Members UI should prefer login-style labels (`max.mustermann`) over
+        humanized full names where possible.
+    """
+    s = str(value or "").strip()
+    if not s:
+        return ""
+    if s.startswith("legacy-email:"):
+        s = s.split(":", 1)[1]
+    if "@" in s:
+        return s.split("@", 1)[0].strip()
+    return ""
+
+
+def _member_localpart_label(raw_name: str, fallback_sub: str) -> str:
+    """Build a members-page display label with localpart priority.
+
+    Behavior:
+        1) Use localpart from `raw_name` when it encodes an email-like value.
+        2) Else use localpart from `fallback_sub` (legacy/email migration cases).
+        3) Else keep a non-empty non-unknown raw name.
+        4) Final fallback is `Unbekannt`.
+    """
+    primary = _email_localpart_identifier(raw_name)
+    if primary:
+        return primary
+    secondary = _email_localpart_identifier(fallback_sub)
+    if secondary:
+        return secondary
+    raw = str(raw_name or "").strip()
+    if raw and raw.lower() != "unbekannt":
+        return raw
+    return "Unbekannt"
+
+
+def _resolve_member_login_labels(subs: list[str]) -> dict[str, str]:
+    """Resolve members-page labels using directory login identifiers.
+
+    Why:
+        Teaching members UI should prefer login-like labels (localpart) over
+        humanized names when Keycloak data is available.
+    """
+    if not subs:
+        return {}
+    try:
+        from identity_access import directory  # type: ignore
+        resolver = getattr(directory, "resolve_student_login_labels", None)
+        if callable(resolver):
+            mapping = resolver(subs)
+            if isinstance(mapping, dict):
+                out: dict[str, str] = {}
+                for sid in subs:
+                    val = str(mapping.get(sid, "")).strip()
+                    if val:
+                        out[sid] = val
+                return out
+    except Exception:
+        pass
+    return {}
+
+
+async def _apply_member_login_labels(rows: list[dict]) -> list[dict]:
+    """Overlay login-style labels onto API rows when directory labels are available."""
+    if not rows:
+        return rows
+    subs = [str(row.get("sub") or "") for row in rows if isinstance(row, dict) and row.get("sub")]
+    if not subs:
+        return rows
+    labels = await asyncio.to_thread(_resolve_member_login_labels, subs)
+    if not labels:
+        return rows
+    normalized: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        sub = str(row.get("sub") or "")
+        if not sub:
+            continue
+        label = str(labels.get(sub) or "").strip()
+        if label and label.lower() != "unbekannt":
+            item = dict(row)
+            item["name"] = label
+            normalized.append(item)
+        else:
+            normalized.append(row)
+    return normalized
+
+
 def _render_members_list_partial(course_id: str, members: list[dict], *, csrf_token: str) -> str:
-    items = []
+    normalized: list[dict] = []
     for member in members:
+        sub = str(member.get("sub") or "").strip()
+        if not sub:
+            continue
+        normalized.append(
+            {
+                "sub": sub,
+                "name": _member_localpart_label(str(member.get("name") or ""), sub),
+            }
+        )
+    normalized.sort(key=lambda it: (str(it.get("name") or "").casefold(), str(it.get("sub") or "")))
+    items = []
+    for member in normalized:
         items.append(
             f'''<li class="member-item">
                 <span>{Component.escape(member.get("name"))}</span>
@@ -4036,7 +4140,6 @@ def _render_members_list_partial(course_id: str, members: list[dict], *, csrf_to
     return f'<ul class="member-list">{joined_items}</ul>' if items else "<p>Keine Mitglieder.</p>"
 
 def _render_candidate_list(course_id: str, current_members: list[dict], candidates: list[dict] | None, *, csrf_token: str) -> str:
-    """Render only the <ul> with candidate add-actions, excluding current members."""
     """Render the add-student search UI using API-provided candidates.
 
     Parameters:
@@ -4053,12 +4156,17 @@ def _render_candidate_list(course_id: str, current_members: list[dict], candidat
     safe_candidates = []
     for s in (candidates or [])[:50]:
         sub = str(s.get('sub', ''))
-        name = str(s.get('name', ''))
-        if not sub or not name:
+        if not sub:
             continue
         if sub in member_subs:
             continue
-        safe_candidates.append({'sub': sub, 'name': name})
+        safe_candidates.append(
+            {
+                "sub": sub,
+                "name": _member_localpart_label(str(s.get("name") or ""), sub),
+            }
+        )
+    safe_candidates.sort(key=lambda it: (str(it.get("name") or "").casefold(), str(it.get("sub") or "")))
 
     items = []
     for student in safe_candidates:
@@ -4092,11 +4200,23 @@ def _render_add_student_wrapper(course_id: str, *, csrf_token: str) -> str:
     )
     return f'<div class="search-form">{search_input_html}</div>{results_div}'
 
-def _render_members_page_html(request: Request, course: dict, members: list[dict], *, csrf_token: str, error: str | None = None) -> str:
-    members_list_html = _render_members_list_partial(course['id'], members, csrf_token=csrf_token)
-    add_student_html = _render_add_student_wrapper(course['id'], csrf_token=csrf_token)
+
+def _render_members_layout_html(course_id: str, members: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    """Render the members two-column layout used by initial page and HTMX updates."""
+    members_list_html = _render_members_list_partial(course_id, members, csrf_token=csrf_token)
+    add_student_html = _render_add_student_wrapper(course_id, csrf_token=csrf_token)
     error_html = f'<div class="alert alert-error" role="alert">{Component.escape(error)}</div>' if error else ''
-    return f'''<div class="container"><h1 id="members-heading">Mitglieder für: {Component.escape(course.get("title", ""))}</h1><div class="members-layout" id="members-layout">{error_html}<section class="members-column card" id="members-current"><h2>Aktuelle Kursmitglieder</h2>{members_list_html}</section><section class="members-column card" id="members-add"><h2>Schüler hinzufügen</h2>{add_student_html}</section></div></div>'''
+    return (
+        f'<div class="members-layout" id="members-layout">{error_html}'
+        f'<section class="members-column card" id="members-current"><h2>Aktuelle Kursmitglieder</h2>{members_list_html}</section>'
+        f'<section class="members-column card" id="members-add"><h2>Schüler hinzufügen</h2>{add_student_html}</section>'
+        f"</div>"
+    )
+
+
+def _render_members_page_html(request: Request, course: dict, members: list[dict], *, csrf_token: str, error: str | None = None) -> str:
+    layout_html = _render_members_layout_html(course["id"], members, csrf_token=csrf_token, error=error)
+    return f'''<div class="container"><h1 id="members-heading">Mitglieder für: {Component.escape(course.get("title", ""))}</h1>{layout_html}</div>'''
 
 # --- Route Handlers -------------------------------------------------------------
 
@@ -7795,18 +7915,12 @@ async def members_index(request: Request, course_id: str):
     if not sid:
         return RedirectResponse(url="/auth/login", status_code=302)
     token = _get_or_create_csrf_token(sid)
-    # Fetch members via API and course title via direct GET
-    members: list[dict] = []
+    # Fetch full roster for SSR (internal pagination remains in API contract).
+    members: list[dict] = await _fetch_all_course_members_for_ssr(course_id, sid)
     course_title = "Kurs"
     try:
-        import httpx
-        from httpx import ASGITransport
         async with _internal_api_client() as client:
             client.cookies.set(SESSION_COOKIE_NAME, sid)
-            # Reduce visible roster to 10 for compact UI
-            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 10, "offset": 0})
-            if m.status_code == 200 and isinstance(m.json(), list):
-                members = m.json()
             # Course title via direct GET
             c = await client.get(f"/api/teaching/courses/{course_id}")
             if c.status_code == 200 and isinstance(c.json(), dict):
@@ -7815,7 +7929,7 @@ async def members_index(request: Request, course_id: str):
                 if isinstance(t, str) and t:
                     course_title = t
     except Exception:
-        members = []
+        pass
     course_vm = {"id": course_id, "title": course_title}
     content = _render_members_page_html(request, course=course_vm, members=members, csrf_token=token)
     layout = Layout(title=f"Mitglieder für {course_vm['title']}", content=content, user=user, current_path=request.url.path)
@@ -7847,20 +7961,13 @@ async def search_students_for_course(request: Request, course_id: str):
     # Read sid/token
     sid = _get_session_id(request) or ""
     token = _get_or_create_csrf_token(sid) if sid else ""
-    # Fetch current members via API to filter candidates
-    members: list[dict] = []
+    # Fetch full current roster to exclude all enrolled students from candidates.
+    members: list[dict] = await _fetch_all_course_members_for_ssr(course_id, sid)
     candidates: list[dict] = []
     try:
-        import httpx
-        from httpx import ASGITransport
         async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
-            # Fetch a subset of current members to exclude from candidates (not displayed here)
-            # After mutation, refresh compact roster (10)
-            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 10, "offset": 0})
-            if m.status_code == 200 and isinstance(m.json(), list):
-                members = m.json()
             # Global search across all students when q is provided (>=2)
             limit = int(request.query_params.get("limit", 10) or 10)
             limit = max(1, min(10, limit))
@@ -7876,14 +7983,48 @@ async def search_students_for_course(request: Request, course_id: str):
                 if u.status_code == 200 and isinstance(u.json(), list):
                     candidates = u.json()
     except Exception:
-        members = []
         candidates = []
+    candidates = await _apply_member_login_labels(candidates)
     # No local filtering when search endpoint already applied q; retain server-provided order
-    q_norm = (q or "").strip().lower()
     # Return only the list portion for injection into #search-results
     return HTMLResponse(content=_render_candidate_list(course_id, members, candidates, csrf_token=token))
 
 # Removed dummy handler — all member changes reflect the API state.
+
+
+async def _fetch_all_course_members_for_ssr(course_id: str, sid: str | None) -> list[dict]:
+    """Load all course members via paged Teaching API calls for SSR.
+
+    Why:
+        The API contract remains paginated, but the members SSR page requires a
+        complete roster (no visible pagination) for rendering and robust
+        candidate exclusion.
+    """
+    page_size = 50
+    max_pages = 200
+    out: list[dict] = []
+    offset = 0
+    try:
+        async with _internal_api_client() as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            for _ in range(max_pages):
+                resp = await client.get(
+                    f"/api/teaching/courses/{course_id}/members",
+                    params={"limit": page_size, "offset": offset},
+                )
+                if resp.status_code != 200:
+                    break
+                payload = resp.json()
+                if not isinstance(payload, list) or not payload:
+                    break
+                out.extend([row for row in payload if isinstance(row, dict)])
+                if len(payload) < page_size:
+                    break
+                offset += page_size
+    except Exception:
+        return []
+    return await _apply_member_login_labels(out)
 
 @app.post("/courses/{course_id}/members", response_class=HTMLResponse)
 async def add_member_htmx(request: Request, course_id: str):
@@ -7896,10 +8037,7 @@ async def add_member_htmx(request: Request, course_id: str):
         return HTMLResponse(content="CSRF Error", status_code=403)
     student_sub = str(form.get("student_sub"))
     error_msg: str | None = None
-    success = False
     try:
-        import httpx
-        from httpx import ASGITransport
         async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
@@ -7907,8 +8045,6 @@ async def add_member_htmx(request: Request, course_id: str):
                 resp = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub})
                 if resp.status_code not in (200, 201, 204):
                     error_msg = f"Hinzufügen fehlgeschlagen ({resp.status_code})."
-                else:
-                    success = True
     except Exception:
         error_msg = "Hinzufügen fehlgeschlagen (Netzwerkfehler)."
     # Re-render layout
@@ -7924,61 +8060,24 @@ async def remove_member_htmx(request: Request, course_id: str, student_sub: str)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse(content="CSRF Error", status_code=403)
     error_msg: str | None = None
-    success = False
     try:
-        import httpx
-        from httpx import ASGITransport
         async with _internal_api_client() as client:
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             resp = await client.delete(f"/api/teaching/courses/{course_id}/members/{student_sub}")
             if resp.status_code not in (200, 204):
                 error_msg = f"Entfernen fehlgeschlagen ({resp.status_code})."
-            else:
-                success = True
     except Exception:
         error_msg = "Entfernen fehlgeschlagen (Netzwerkfehler)."
-    # Ensure UI consistency even with eventual consistency: filter removed sub locally
-    return await _handle_member_change_api(course_id, sid, error=error_msg, removed_sub=(student_sub if success else None))
+    return await _handle_member_change_api(course_id, sid, error=error_msg)
 
-async def _handle_member_change_api(course_id: str, sid: str | None, *, error: str | None = None, removed_sub: str | None = None) -> HTMLResponse:
-    members: list[dict] = []
-    title = "Kurs"
+async def _handle_member_change_api(course_id: str, sid: str | None, *, error: str | None = None) -> HTMLResponse:
+    members: list[dict] = await _fetch_all_course_members_for_ssr(course_id, sid)
     token = _get_or_create_csrf_token(sid or "")
-    try:
-        import httpx
-        from httpx import ASGITransport
-        async with _internal_api_client() as client:
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            # Compact roster after mutation (default page-size 10)
-            m = await client.get(f"/api/teaching/courses/{course_id}/members", params={"limit": 10, "offset": 0})
-            if m.status_code == 200 and isinstance(m.json(), list):
-                members = m.json()
-            c = await client.get(f"/api/teaching/courses/{course_id}")
-            if c.status_code == 200 and isinstance(c.json(), dict):
-                it = c.json()
-                t = it.get("title")
-                if isinstance(t, str) and t:
-                    title = t
-    except Exception:
-        members = []
-    # Do not hide locally: rely on the roster fetched from API.
-    members_list_html = _render_members_list_partial(course_id, members, csrf_token=token)
-    # Refresh candidates from list endpoint so removed users reappear
-    candidates: list[dict] = []
-    try:
-        async with _internal_api_client() as client:
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            u = await client.get("/api/users/list", params={"role": "student", "limit": 50, "offset": 0})
-            if u.status_code == 200 and isinstance(u.json(), list):
-                candidates = u.json()
-    except Exception:
-        candidates = []
-    add_student_html = _render_add_student_wrapper(course_id, csrf_token=token)
-    error_html = f'<div class="alert alert-error" role="alert">{Component.escape(error)}</div>' if error else ''
-    return HTMLResponse(content=f'<div class="members-layout" id="members-layout">{error_html}<section class="members-column card" id="members-current"><h2>Aktuelle Kursmitglieder</h2>{members_list_html}</section><section class="members-column card" id="members-add"><h2>Schüler hinzufügen</h2>{add_student_html}</section></div>', headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(
+        content=_render_members_layout_html(course_id, members, csrf_token=token, error=error),
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 # --- Other Routes & App Includes -----------------------------------------------
 

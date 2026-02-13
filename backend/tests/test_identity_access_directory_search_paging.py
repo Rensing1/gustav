@@ -125,3 +125,105 @@ def test_directory_list_includes_default_role_members_for_student(monkeypatch: p
     out = dir.list_users_by_role(role="student", limit=20, offset=0)
     assert out == [{"sub": "sub-0002", "name": "Auto Student"}]
     assert any("/roles/default-roles-gustav/users" in url for url in called_urls)
+
+
+def test_directory_search_retries_with_admin_fallback_token(monkeypatch: pytest.MonkeyPatch):
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+    monkeypatch.setattr(dir._KC, "token_admin_fallback", lambda self: "admin-token")
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        auth = str((headers or {}).get("Authorization", ""))
+        if "/roles/student/users" in url and "dummy-token" in auth:
+            return _Resp(403, {"error": "forbidden"})
+        if "/roles/student/users" in url:
+            return _Resp(
+                200,
+                [
+                    {
+                        "id": "sub-1111",
+                        "email": "sebastian.keyser@example.test",
+                        "username": "sebastian.keyser@example.test",
+                        "firstName": "",
+                        "lastName": "",
+                        "attributes": {},
+                    }
+                ],
+            )
+        if "/roles/default-roles-gustav/users" in url:
+            return _Resp(200, [])
+        return _Resp(200, [])
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+
+    out = dir.search_users_by_name(role="student", q="seb", limit=5)
+    assert out == [{"sub": "sub-1111", "name": "Sebastian Keyser"}]
+
+
+def test_directory_search_by_surname_works_after_admin_fallback(monkeypatch: pytest.MonkeyPatch):
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+    monkeypatch.setattr(dir._KC, "token_admin_fallback", lambda self: "admin-token")
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        auth = str((headers or {}).get("Authorization", ""))
+        if "/roles/student/users" in url and "dummy-token" in auth:
+            return _Resp(403, {"error": "forbidden"})
+        if "/roles/student/users" in url:
+            return _Resp(
+                200,
+                [
+                    {
+                        "id": "sub-otto",
+                        "email": "otto.mustermann@example.test",
+                        "username": "otto.mustermann@example.test",
+                        "firstName": "",
+                        "lastName": "",
+                        "attributes": {},
+                    }
+                ],
+            )
+        if "/roles/default-roles-gustav/users" in url:
+            return _Resp(200, [])
+        return _Resp(200, [])
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+
+    out = dir.search_users_by_name(role="student", q="mustermann", limit=10)
+    assert out == [{"sub": "sub-otto", "name": "Otto Mustermann"}]
+
+
+def test_directory_list_retries_with_admin_fallback_token(monkeypatch: pytest.MonkeyPatch):
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+    monkeypatch.setattr(dir._KC, "token_admin_fallback", lambda self: "admin-token")
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        auth = str((headers or {}).get("Authorization", ""))
+        if "/roles/student/users" in url and "dummy-token" in auth:
+            return _Resp(403, {"error": "forbidden"})
+        if "/roles/student/users" in url:
+            return _Resp(
+                200,
+                [
+                    {
+                        "id": "sub-student",
+                        "email": "student@example.test",
+                        "username": "student@example.test",
+                        "firstName": "Stu",
+                        "lastName": "Dent",
+                        "attributes": {},
+                    }
+                ],
+            )
+        if "/roles/default-roles-gustav/users" in url:
+            return _Resp(200, [])
+        return _Resp(200, [])
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+
+    out = dir.list_users_by_role(role="student", limit=10, offset=0)
+    assert out == [{"sub": "sub-student", "name": "Stu Dent"}]

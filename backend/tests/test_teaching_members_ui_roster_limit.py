@@ -1,10 +1,10 @@
 """
-SSR UI — Members page shows at most 10 current members by default.
+SSR UI — Members page shows the full current roster.
 
 BDD
 - Given a course with >10 members
 - When the owner opens /courses/{id}/members
-- Then the "Aktuelle Kursmitglieder" list renders exactly 10 items.
+- Then the "Aktuelle Kursmitglieder" list renders all members.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def _count_current_members(html: str) -> int:
 
 
 @pytest.mark.anyio
-async def test_members_page_renders_max_10_current_members():
+async def test_members_page_renders_all_current_members():
     _require_db_or_skip()
     main.SESSION_STORE = SessionStore()
     t = main.SESSION_STORE.create(sub="teacher-roster-10", name="Owner", roles=["teacher"])
@@ -49,4 +49,4 @@ async def test_members_page_renders_max_10_current_members():
             assert resp.status_code in (200, 201, 204)
         page = await c.get(f"/courses/{cid}/members")
         assert page.status_code == 200
-        assert _count_current_members(page.text) == 10
+        assert _count_current_members(page.text) == 15

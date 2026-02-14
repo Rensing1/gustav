@@ -71,3 +71,64 @@ def test_student_modular_unit_css_does_not_use_global_container_vertical_padding
     assert ".modular-unit-page .workspace-view.container" in css
     assert "padding-top: 0" in css
     assert "padding-bottom: 0" in css
+
+
+def test_student_modular_unit_css_ipad_overview_compacts_page_chrome_without_hiding() -> None:
+    """iPad overview mode should compact breadcrumb/footer, not hide them.
+
+    Why:
+        Students reported that the graph feels too small on iPads. We keep
+        breadcrumb/footer visible for orientation but reduce vertical chrome
+        only in overview mode and iPad-like widths.
+    """
+    css_path = Path("backend/web/static/css/student_modular_unit.css")
+    css = css_path.read_text(encoding="utf-8")
+
+    # iPad-focused compact mode block should exist.
+    assert "@media (min-width: 768px) and (max-width: 1366px)" in css
+    assert "html.mode-overview .main-content" in css
+    assert "html.mode-overview .breadcrumb" in css
+    assert "html.mode-overview .content-footer" in css
+    assert "html.mode-overview .footer-content" in css
+
+    # Keep footer/breadcrumb visible in compact mode (no hidden chrome).
+    assert re.search(r"html\.mode-overview\s+\.breadcrumb\s*\{[^}]*display\s*:\s*none", css, re.S) is None
+    assert re.search(r"html\.mode-overview\s+\.content-footer\s*\{[^}]*display\s*:\s*none", css, re.S) is None
+    assert re.search(r"html\.mode-overview\s+\.footer-content\s*\{[^}]*display\s*:\s*none", css, re.S) is None
+
+
+def test_student_modular_unit_css_ipad_overview_compacts_header_and_toolbar() -> None:
+    """iPad overview mode should reduce vertical space above the graph."""
+    css_path = Path("backend/web/static/css/student_modular_unit.css")
+    css = css_path.read_text(encoding="utf-8")
+
+    assert "html.mode-overview .modular-unit-page .unit-head" in css
+    assert "html.mode-overview .modular-unit-page .unit-title" in css
+    assert "html.mode-overview .modular-unit-page .sticky-toolbar" in css
+    assert "html.mode-overview .modular-unit-page .sticky-toolbar__inner" in css
+    assert "html.mode-overview .modular-unit-page .graph-overlay--top" in css
+
+
+def test_student_modular_unit_css_ipad_profiles_differentiate_11_and_12_9() -> None:
+    """iPad 11 and 12.9 should use separate overview density profiles.
+
+    Why:
+        The 11" viewport needs stronger compaction than 12.9". We model this
+        via a general iPad compact profile plus a larger-iPad override.
+    """
+    css_path = Path("backend/web/static/css/student_modular_unit.css")
+    css = css_path.read_text(encoding="utf-8")
+
+    # Base iPad profile (covers 11") must exist.
+    assert "@media (min-width: 768px) and (max-width: 1366px)" in css
+
+    # Large iPad profile (12.9") should be an explicit override.
+    assert "@media (min-width: 1024px) and (min-height: 1024px)" in css
+
+    # 11" profile: denser controls and tighter top spacing.
+    assert "--toolbar-control-h: 32px;" in css
+    assert "top: var(--space-1);" in css
+
+    # 12.9" override: slightly roomier controls and spacing.
+    assert "--toolbar-control-h: 34px;" in css
+    assert "top: var(--space-2);" in css

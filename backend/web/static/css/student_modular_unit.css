@@ -872,6 +872,105 @@ body.mode-overview {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Overview iPad compact chrome                                                */
+/* -------------------------------------------------------------------------- */
+
+/* Why:
+   Keep orientation context (breadcrumb + footer) visible in overview mode,
+   but reduce vertical chrome on iPads so the graph gets more useful height. */
+@media (min-width: 768px) and (max-width: 1366px) {
+  html.mode-overview .main-content {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  html.mode-overview .breadcrumb {
+    margin-bottom: var(--space-1);
+  }
+
+  html.mode-overview .content-footer {
+    padding: var(--space-1) 0 0;
+  }
+
+  html.mode-overview .footer-content {
+    padding-top: var(--space-1);
+  }
+
+  html.mode-overview .modular-unit-page .unit-head {
+    gap: var(--space-1);
+    margin-bottom: var(--space-1);
+  }
+
+  html.mode-overview .modular-unit-page .unit-title {
+    margin-bottom: 0;
+    font-size: var(--text-xl);
+  }
+
+  html.mode-overview .modular-unit-page .sticky-toolbar {
+    top: var(--space-1);
+    margin-bottom: var(--space-2);
+  }
+
+  html.mode-overview .modular-unit-page .sticky-toolbar__inner {
+    --toolbar-control-h: 32px;
+    padding: var(--space-1) var(--space-2);
+    gap: var(--space-1);
+  }
+
+  html.mode-overview .modular-unit-page .graph-overlay--top {
+    top: var(--space-1);
+    left: var(--space-1);
+    right: var(--space-1);
+    gap: var(--space-1);
+  }
+}
+
+/* 12.9" devices (both dimensions >= 1024) get a slightly roomier compact profile. */
+@media (min-width: 1024px) and (min-height: 1024px) {
+  html.mode-overview .main-content {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  html.mode-overview .breadcrumb {
+    margin-bottom: var(--space-2);
+  }
+
+  html.mode-overview .content-footer {
+    padding: var(--space-2) 0 var(--space-1);
+  }
+
+  html.mode-overview .footer-content {
+    padding-top: var(--space-2);
+  }
+
+  html.mode-overview .modular-unit-page .unit-head {
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+  }
+
+  html.mode-overview .modular-unit-page .unit-title {
+    margin-bottom: var(--space-1);
+    font-size: var(--text-2xl);
+  }
+
+  html.mode-overview .modular-unit-page .sticky-toolbar {
+    top: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  html.mode-overview .modular-unit-page .sticky-toolbar__inner {
+    --toolbar-control-h: 34px;
+    gap: var(--space-2);
+  }
+
+  html.mode-overview .modular-unit-page .graph-overlay--top {
+    top: var(--space-2);
+    left: var(--space-2);
+    right: var(--space-2);
+    gap: var(--space-2);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Overview-mode overrides (must come last)                                    */
 /* -------------------------------------------------------------------------- */
 

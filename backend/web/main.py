@@ -4031,6 +4031,17 @@ def _email_localpart_identifier(value: str) -> str:
     s = str(value or "").strip()
     if not s:
         return ""
+    # Keep extraction logic aligned with the directory adapter used by APIs.
+    try:
+        from identity_access import directory  # type: ignore
+
+        extractor = getattr(directory, "localpart_identifier", None)
+        if callable(extractor):
+            extracted = str(extractor(s) or "").strip()
+            if extracted:
+                return extracted
+    except Exception:
+        pass
     if s.startswith("legacy-email:"):
         s = s.split(":", 1)[1]
     if "@" in s:
@@ -4066,16 +4077,17 @@ def _resolve_member_login_labels(subs: list[str]) -> dict[str, str]:
         Teaching members UI should prefer login-like labels (localpart) over
         humanized names when Keycloak data is available.
     """
-    if not subs:
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    if not unique_subs:
         return {}
     try:
         from identity_access import directory  # type: ignore
         resolver = getattr(directory, "resolve_student_login_labels", None)
         if callable(resolver):
-            mapping = resolver(subs)
+            mapping = resolver(unique_subs)
             if isinstance(mapping, dict):
                 out: dict[str, str] = {}
-                for sid in subs:
+                for sid in unique_subs:
                     val = str(mapping.get(sid, "")).strip()
                     if val:
                         out[sid] = val
@@ -4085,6 +4097,16 @@ def _resolve_member_login_labels(subs: list[str]) -> dict[str, str]:
     return {}
 
 
+def _member_login_label_timeout_seconds() -> float:
+    """Return timeout for directory label-resolution calls in seconds."""
+    raw = str(os.getenv("MEMBER_LOGIN_LABEL_RESOLVE_TIMEOUT_SECONDS", "2.0") or "").strip()
+    try:
+        timeout = float(raw)
+    except Exception:
+        timeout = 2.0
+    return max(0.1, min(10.0, timeout))
+
+
 async def _apply_member_login_labels(rows: list[dict]) -> list[dict]:
     """Overlay login-style labels onto API rows when directory labels are available."""
     if not rows:
@@ -4092,7 +4114,14 @@ async def _apply_member_login_labels(rows: list[dict]) -> list[dict]:
     subs = [str(row.get("sub") or "") for row in rows if isinstance(row, dict) and row.get("sub")]
     if not subs:
         return rows
-    labels = await asyncio.to_thread(_resolve_member_login_labels, subs)
+    unique_subs = list(dict.fromkeys(subs))
+    try:
+        labels = await asyncio.wait_for(
+            asyncio.to_thread(_resolve_member_login_labels, unique_subs),
+            timeout=_member_login_label_timeout_seconds(),
+        )
+    except (TimeoutError, Exception):
+        return rows
     if not labels:
         return rows
     normalized: list[dict] = []

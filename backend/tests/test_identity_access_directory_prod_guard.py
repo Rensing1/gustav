@@ -62,3 +62,69 @@ async def test_client_credentials_in_prod_uses_secret(monkeypatch: pytest.Monkey
     tok = directory._KC().token()
     assert tok == "ABC123"
 
+
+@pytest.mark.anyio
+async def test_fallback_token_in_prod_requires_fallback_secret(monkeypatch: pytest.MonkeyPatch):
+    """Fallback token acquisition must fail closed when no fallback secret exists."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("KC_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("KC_ADMIN_PASSWORD", "admin")
+    monkeypatch.delenv("KC_ADMIN_FALLBACK_CLIENT_SECRET", raising=False)
+
+    import requests
+
+    def _deny_post(*args, **kwargs):  # pragma: no cover - should not be reached
+        raise AssertionError("Fallback must not try any token HTTP call without fallback secret")
+
+    monkeypatch.setattr(requests, "post", _deny_post)
+
+    from backend.identity_access import directory
+
+    assert directory._KC().token_admin_fallback() is None
+
+
+@pytest.mark.anyio
+async def test_fallback_token_uses_client_credentials_only(monkeypatch: pytest.MonkeyPatch):
+    """Fallback token must use client_credentials with dedicated fallback client secret."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("KC_ADMIN_FALLBACK_REALM", "master")
+    monkeypatch.setenv("KC_ADMIN_FALLBACK_CLIENT_ID", "fallback-client")
+    monkeypatch.setenv("KC_ADMIN_FALLBACK_CLIENT_SECRET", "FALLBACK_SECRET")
+    monkeypatch.setenv("KC_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("KC_ADMIN_PASSWORD", "admin")
+
+    import requests
+    captured_calls: list[dict] = []
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"access_token": "FALLBACK_TOKEN"}
+
+    def _fake_post(url, data=None, timeout=None, verify=None, allow_redirects=None):
+        captured_calls.append(
+            {
+                "url": str(url),
+                "data": dict(data or {}),
+                "timeout": timeout,
+                "verify": verify,
+                "allow_redirects": allow_redirects,
+            }
+        )
+        return _Resp()
+
+    monkeypatch.setattr(requests, "post", _fake_post)
+
+    from backend.identity_access import directory
+
+    tok = directory._KC().token_admin_fallback()
+    assert tok == "FALLBACK_TOKEN"
+    assert len(captured_calls) == 1
+    payload = captured_calls[0]["data"]
+    assert payload["grant_type"] == "client_credentials"
+    assert payload["client_id"] == "fallback-client"
+    assert payload["client_secret"] == "FALLBACK_SECRET"
+    assert "username" not in payload
+    assert "password" not in payload

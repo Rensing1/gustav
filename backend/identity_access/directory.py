@@ -41,14 +41,23 @@ class _KC:
         ca = os.getenv("KEYCLOAK_CA_BUNDLE")
         return ca if ca else True
 
-    def _token_client_credentials(self) -> str:
-        if not self.admin_client_secret:
+    def _token_client_credentials(
+        self,
+        *,
+        realm: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+    ) -> str:
+        secret = client_secret or self.admin_client_secret
+        if not secret:
             raise RuntimeError("missing_client_secret")
-        url = f"{self.base_url}/realms/{self.admin_realm}/protocol/openid-connect/token"
+        rid = str(realm or self.admin_realm)
+        cid = str(client_id or self.admin_client_id)
+        url = f"{self.base_url}/realms/{rid}/protocol/openid-connect/token"
         data = {
             "grant_type": "client_credentials",
-            "client_id": self.admin_client_id,
-            "client_secret": self.admin_client_secret,
+            "client_id": cid,
+            "client_secret": secret,
         }
         r = requests.post(url, data=data, timeout=10, verify=self._verify_opt(), allow_redirects=False)
         r.raise_for_status()
@@ -88,7 +97,7 @@ class _KC:
         )
 
     def token_admin_fallback(self) -> str | None:
-        """Best-effort fallback token via built-in admin-cli (master realm).
+        """Best-effort fallback token via dedicated fallback confidential client.
 
         Why:
             Some deployments grant enough rights for `/users` but not for
@@ -97,12 +106,15 @@ class _KC:
             broad users scan.
         """
         client_id = os.getenv("KC_ADMIN_FALLBACK_CLIENT_ID", "admin-cli")
+        client_secret = os.getenv("KC_ADMIN_FALLBACK_CLIENT_SECRET")
         realm = os.getenv("KC_ADMIN_FALLBACK_REALM", "master")
+        if not client_secret:
+            return None
         try:
-            return self._token_password_grant(
+            return self._token_client_credentials(
                 realm=realm,
                 client_id=client_id,
-                allow_in_prod=True,
+                client_secret=client_secret,
             )
         except Exception:
             return None
@@ -152,7 +164,7 @@ def humanize_identifier(s: str) -> str:
     return " ".join(p[:1].upper() + p[1:].lower() for p in parts)
 
 
-def _localpart_identifier(s: str) -> str:
+def localpart_identifier(s: str) -> str:
     """Return localpart from email/legacy-email-like identifier."""
     if not s:
         return ""
@@ -164,16 +176,21 @@ def _localpart_identifier(s: str) -> str:
     return ""
 
 
+def _localpart_identifier(s: str) -> str:
+    """Backward-compatible wrapper around localpart extraction helper."""
+    return localpart_identifier(s)
+
+
 def _login_label(u: dict) -> str:
     """Return login-like user label for members UI (prefer email localpart)."""
     email = (u.get("email") or "").strip()
     if email:
-        lp = _localpart_identifier(email)
+        lp = localpart_identifier(email)
         if lp:
             return lp
     uname = (u.get("username") or "").strip()
     if uname:
-        lp = _localpart_identifier(uname)
+        lp = localpart_identifier(uname)
         if lp:
             return lp
     return _display_name(u)
@@ -431,7 +448,8 @@ def resolve_student_login_labels(subs: List[str]) -> Dict[str, str]:
     out: Dict[str, str] = {}
     ca = os.getenv("KEYCLOAK_CA_BUNDLE")
     verify_opt = ca if ca else True
-    for sid in subs:
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    for sid in unique_subs:
         try:
             url = f"{kc.base_url}/admin/realms/{kc.realm}/users/{sid}"
             r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt, allow_redirects=False)

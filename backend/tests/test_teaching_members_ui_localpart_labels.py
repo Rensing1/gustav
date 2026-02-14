@@ -8,6 +8,7 @@ BDD
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 import sys
 
@@ -93,3 +94,47 @@ async def test_members_ui_renders_localpart_for_members_and_candidates(monkeypat
         assert "max.von.beispiel" in search_html
         assert "@schule.example" not in search_html
         assert "legacy-email:" not in search_html
+
+
+@pytest.mark.anyio
+async def test_apply_member_login_labels_deduplicates_subs_before_directory_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [
+        {"sub": "stud-a", "name": "Alpha"},
+        {"sub": "stud-a", "name": "Alpha Duplicate"},
+        {"sub": "stud-b", "name": "Beta"},
+    ]
+    seen_subs: list[str] = []
+
+    def fake_resolver(subs: list[str]) -> dict[str, str]:
+        seen_subs.extend(subs)
+        return {"stud-a": "anna.a", "stud-b": "berta.b"}
+
+    monkeypatch.setattr(main, "_resolve_member_login_labels", fake_resolver)
+    monkeypatch.setattr(main, "_member_login_label_timeout_seconds", lambda: 2.0)
+
+    out = await main._apply_member_login_labels(rows)
+
+    assert seen_subs == ["stud-a", "stud-b"]
+    assert out[0]["name"] == "anna.a"
+    assert out[1]["name"] == "anna.a"
+    assert out[2]["name"] == "berta.b"
+
+
+@pytest.mark.anyio
+async def test_apply_member_login_labels_returns_original_rows_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"sub": "stud-a", "name": "Alpha"}]
+
+    def fake_resolver(subs: list[str]) -> dict[str, str]:
+        return {"stud-a": "anna.a"}
+
+    async def fake_wait_for(awaitable, timeout):
+        if hasattr(awaitable, "close"):
+            awaitable.close()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(main, "_resolve_member_login_labels", fake_resolver)
+    monkeypatch.setattr(main.asyncio, "wait_for", fake_wait_for)
+    monkeypatch.setattr(main, "_member_login_label_timeout_seconds", lambda: 0.01)
+
+    out = await main._apply_member_login_labels(rows)
+    assert out == rows

@@ -122,3 +122,49 @@ async def test_members_search_too_short_query_returns_empty(monkeypatch: pytest.
     assert r.status_code == 200
     # Expect empty results markup
     assert "Keine Treffer." in r.text
+
+
+@pytest.mark.anyio
+async def test_members_search_requires_session_redirects_to_login() -> None:
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        r = await c.get("/courses/any-course/members/search?q=ab")
+
+    assert r.status_code == 302
+    location = r.headers.get("location", "")
+    assert location.startswith("/auth/login")
+    cache = r.headers.get("Cache-Control", "")
+    assert "private" in cache and "no-store" in cache
+
+
+@pytest.mark.anyio
+async def test_members_search_requires_teacher_role_returns_forbidden() -> None:
+    main.SESSION_STORE = SessionStore()
+    student = main.SESSION_STORE.create(sub="s-members-unauthorized", name="Schueler", roles=["student"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        r = await c.get("/courses/any-course/members/search?q=ab")
+
+    assert r.status_code == 403
+    cache = r.headers.get("Cache-Control", "")
+    assert "private" in cache and "no-store" in cache
+
+
+@pytest.mark.anyio
+async def test_members_search_success_sets_private_no_store_cache_header(monkeypatch: pytest.MonkeyPatch):
+    sess = main.SESSION_STORE.create(sub="t-members-cache-header", name="Lehrer", roles=["teacher"])
+
+    def fake_search_users_by_name(*, role: str, q: str, limit: int) -> list[dict]:
+        assert role == "student"
+        return [{"sub": "student-2", "name": "Erika Mustermann"}][:limit]
+
+    monkeypatch.setattr(users_routes, "search_users_by_name", fake_search_users_by_name)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        cid = await _seed_course(c, title="Mathe Cache Header", teacher_session_cookie=sess.session_id)
+        r = await c.get(f"/courses/{cid}/members/search?q=Er")
+
+    assert r.status_code == 200
+    cache = r.headers.get("Cache-Control", "")
+    assert "private" in cache and "no-store" in cache

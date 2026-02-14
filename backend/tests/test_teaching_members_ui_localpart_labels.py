@@ -8,7 +8,6 @@ BDD
 """
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 import sys
 
@@ -110,7 +109,6 @@ async def test_apply_member_login_labels_deduplicates_subs_before_directory_look
         return {"stud-a": "anna.a", "stud-b": "berta.b"}
 
     monkeypatch.setattr(main, "_resolve_member_login_labels", fake_resolver)
-    monkeypatch.setattr(main, "_member_login_label_timeout_seconds", lambda: 2.0)
 
     out = await main._apply_member_login_labels(rows)
 
@@ -121,20 +119,17 @@ async def test_apply_member_login_labels_deduplicates_subs_before_directory_look
 
 
 @pytest.mark.anyio
-async def test_apply_member_login_labels_returns_original_rows_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_apply_member_login_labels_avoids_timeout_cancel_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [{"sub": "stud-a", "name": "Alpha"}]
 
     def fake_resolver(subs: list[str]) -> dict[str, str]:
         return {"stud-a": "anna.a"}
 
-    async def fake_wait_for(awaitable, timeout):
-        if hasattr(awaitable, "close"):
-            awaitable.close()
-        raise asyncio.TimeoutError
+    async def _forbidden_wait_for(*args, **kwargs):
+        raise AssertionError("asyncio.wait_for must not be used")
 
     monkeypatch.setattr(main, "_resolve_member_login_labels", fake_resolver)
-    monkeypatch.setattr(main.asyncio, "wait_for", fake_wait_for)
-    monkeypatch.setattr(main, "_member_login_label_timeout_seconds", lambda: 0.01)
+    monkeypatch.setattr(main.asyncio, "wait_for", _forbidden_wait_for)
 
     out = await main._apply_member_login_labels(rows)
-    assert out == rows
+    assert out == [{"sub": "stud-a", "name": "anna.a"}]

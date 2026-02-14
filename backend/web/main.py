@@ -4097,18 +4097,67 @@ def _resolve_member_login_labels(subs: list[str]) -> dict[str, str]:
     return {}
 
 
-def _member_login_label_timeout_seconds() -> float:
-    """Return timeout for directory label-resolution calls in seconds."""
-    raw = str(os.getenv("MEMBER_LOGIN_LABEL_RESOLVE_TIMEOUT_SECONDS", "2.0") or "").strip()
+_MEMBER_SUBS_CACHE: dict[str, tuple[float, tuple[str, ...]]] = {}
+
+
+def _member_subs_cache_ttl_seconds() -> float:
+    """Return TTL for members-search sub cache in seconds."""
+    raw = str(os.getenv("MEMBERS_SEARCH_SUBS_CACHE_TTL_SECONDS", "30.0") or "").strip()
     try:
-        timeout = float(raw)
+        ttl = float(raw)
     except Exception:
-        timeout = 2.0
-    return max(0.1, min(10.0, timeout))
+        ttl = 30.0
+    return max(1.0, min(300.0, ttl))
+
+
+def _member_subs_cache_key(course_id: str, sid: str | None) -> str:
+    return f"{str(course_id or '').strip()}::{str(sid or '').strip()}"
+
+
+def _member_subs_cache_get(course_id: str, sid: str | None) -> set[str] | None:
+    key = _member_subs_cache_key(course_id, sid)
+    cached = _MEMBER_SUBS_CACHE.get(key)
+    if not cached:
+        return None
+    expires_at, subs = cached
+    if time.monotonic() >= expires_at:
+        _MEMBER_SUBS_CACHE.pop(key, None)
+        return None
+    return set(subs)
+
+
+def _member_subs_cache_set(course_id: str, sid: str | None, subs: set[str]) -> None:
+    key = _member_subs_cache_key(course_id, sid)
+    _MEMBER_SUBS_CACHE[key] = (time.monotonic() + _member_subs_cache_ttl_seconds(), tuple(sorted(subs)))
+
+
+def _invalidate_member_subs_cache(course_id: str, sid: str | None) -> None:
+    _MEMBER_SUBS_CACHE.pop(_member_subs_cache_key(course_id, sid), None)
+
+
+async def _member_subs_for_search(course_id: str, sid: str | None) -> set[str]:
+    """Return enrolled member subs for candidate filtering with a short TTL cache."""
+    cached = _member_subs_cache_get(course_id, sid)
+    if cached is not None:
+        return cached
+    members = await _fetch_all_course_members_for_ssr(course_id, sid)
+    subs = {
+        str(row.get("sub") or "").strip()
+        for row in members
+        if isinstance(row, dict) and str(row.get("sub") or "").strip()
+    }
+    _member_subs_cache_set(course_id, sid, subs)
+    return subs
 
 
 async def _apply_member_login_labels(rows: list[dict]) -> list[dict]:
-    """Overlay login-style labels onto API rows when directory labels are available."""
+    """Overlay login-style labels onto API rows when directory labels are available.
+
+    Important:
+        We intentionally avoid `wait_for(to_thread(...))`. Cancelling the await
+        does not cancel the underlying blocking thread and can accumulate
+        detached worker activity under load.
+    """
     if not rows:
         return rows
     subs = [str(row.get("sub") or "") for row in rows if isinstance(row, dict) and row.get("sub")]
@@ -4116,11 +4165,8 @@ async def _apply_member_login_labels(rows: list[dict]) -> list[dict]:
         return rows
     unique_subs = list(dict.fromkeys(subs))
     try:
-        labels = await asyncio.wait_for(
-            asyncio.to_thread(_resolve_member_login_labels, unique_subs),
-            timeout=_member_login_label_timeout_seconds(),
-        )
-    except (TimeoutError, Exception):
+        labels = await asyncio.to_thread(_resolve_member_login_labels, unique_subs)
+    except Exception:
         return rows
     if not labels:
         return rows
@@ -4178,8 +4224,9 @@ def _render_candidate_list(course_id: str, current_members: list[dict], candidat
     - csrf_token: Synchronizer token required for POST
 
     Behavior:
-    - Renders up to 10 candidate results with an add form each
+    - Renders up to 50 candidate results with an add form each
     - Excludes candidates that are already members
+    - Sorts candidates by rendered label for deterministic UI order
     """
     member_subs = {m['sub'] for m in current_members}
     safe_candidates = []
@@ -7946,6 +7993,15 @@ async def members_index(request: Request, course_id: str):
     token = _get_or_create_csrf_token(sid)
     # Fetch full roster for SSR (internal pagination remains in API contract).
     members: list[dict] = await _fetch_all_course_members_for_ssr(course_id, sid)
+    _member_subs_cache_set(
+        course_id,
+        sid,
+        {
+            str(row.get("sub") or "").strip()
+            for row in members
+            if isinstance(row, dict) and str(row.get("sub") or "").strip()
+        },
+    )
     course_title = "Kurs"
     try:
         async with _internal_api_client() as client:
@@ -7986,12 +8042,21 @@ async def search_students_for_course(request: Request, course_id: str):
         Caller must be a teacher and owner of the course (enforced by the API
         endpoints used here). This SSR route simply orchestrates the UI.
     """
+    headers = {"Cache-Control": "private, no-store"}
+    user = getattr(request.state, "user", None)
+    if not _user_has_role(user, "teacher"):
+        return HTMLResponse(content="forbidden", status_code=403, headers=headers)
+
     q = request.query_params.get("q", "")
     # Read sid/token
     sid = _get_session_id(request) or ""
+    if not sid:
+        login_url = _login_url_with_return_to(request.url.path)
+        return RedirectResponse(url=login_url, status_code=302, headers=headers)
     token = _get_or_create_csrf_token(sid) if sid else ""
-    # Fetch full current roster to exclude all enrolled students from candidates.
-    members: list[dict] = await _fetch_all_course_members_for_ssr(course_id, sid)
+    # Fetch current roster subs once and reuse via short-lived cache.
+    member_subs = await _member_subs_for_search(course_id, sid)
+    members: list[dict] = [{"sub": sid_item} for sid_item in member_subs]
     candidates: list[dict] = []
     try:
         async with _internal_api_client() as client:
@@ -8014,9 +8079,11 @@ async def search_students_for_course(request: Request, course_id: str):
     except Exception:
         candidates = []
     candidates = await _apply_member_login_labels(candidates)
-    # No local filtering when search endpoint already applied q; retain server-provided order
     # Return only the list portion for injection into #search-results
-    return HTMLResponse(content=_render_candidate_list(course_id, members, candidates, csrf_token=token))
+    return HTMLResponse(
+        content=_render_candidate_list(course_id, members, candidates, csrf_token=token),
+        headers=headers,
+    )
 
 # Removed dummy handler — all member changes reflect the API state.
 
@@ -8043,7 +8110,8 @@ async def _fetch_all_course_members_for_ssr(course_id: str, sid: str | None) -> 
                     params={"limit": page_size, "offset": offset},
                 )
                 if resp.status_code != 200:
-                    break
+                    # Fail closed: avoid returning stale/partial roster slices.
+                    return []
                 payload = resp.json()
                 if not isinstance(payload, list) or not payload:
                     break
@@ -8066,6 +8134,7 @@ async def add_member_htmx(request: Request, course_id: str):
         return HTMLResponse(content="CSRF Error", status_code=403)
     student_sub = str(form.get("student_sub"))
     error_msg: str | None = None
+    membership_changed = False
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -8074,8 +8143,12 @@ async def add_member_htmx(request: Request, course_id: str):
                 resp = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub})
                 if resp.status_code not in (200, 201, 204):
                     error_msg = f"Hinzufügen fehlgeschlagen ({resp.status_code})."
+                else:
+                    membership_changed = True
     except Exception:
         error_msg = "Hinzufügen fehlgeschlagen (Netzwerkfehler)."
+    if membership_changed:
+        _invalidate_member_subs_cache(course_id, sid)
     # Re-render layout
     return await _handle_member_change_api(course_id, sid, error=error_msg)
 
@@ -8089,6 +8162,7 @@ async def remove_member_htmx(request: Request, course_id: str, student_sub: str)
     if not _validate_csrf(sid, form.get("csrf_token")):
         return HTMLResponse(content="CSRF Error", status_code=403)
     error_msg: str | None = None
+    membership_changed = False
     try:
         async with _internal_api_client() as client:
             if sid:
@@ -8096,12 +8170,25 @@ async def remove_member_htmx(request: Request, course_id: str, student_sub: str)
             resp = await client.delete(f"/api/teaching/courses/{course_id}/members/{student_sub}")
             if resp.status_code not in (200, 204):
                 error_msg = f"Entfernen fehlgeschlagen ({resp.status_code})."
+            else:
+                membership_changed = True
     except Exception:
         error_msg = "Entfernen fehlgeschlagen (Netzwerkfehler)."
+    if membership_changed:
+        _invalidate_member_subs_cache(course_id, sid)
     return await _handle_member_change_api(course_id, sid, error=error_msg)
 
 async def _handle_member_change_api(course_id: str, sid: str | None, *, error: str | None = None) -> HTMLResponse:
     members: list[dict] = await _fetch_all_course_members_for_ssr(course_id, sid)
+    _member_subs_cache_set(
+        course_id,
+        sid,
+        {
+            str(row.get("sub") or "").strip()
+            for row in members
+            if isinstance(row, dict) and str(row.get("sub") or "").strip()
+        },
+    )
     token = _get_or_create_csrf_token(sid or "")
     return HTMLResponse(
         content=_render_members_layout_html(course_id, members, csrf_token=token, error=error),

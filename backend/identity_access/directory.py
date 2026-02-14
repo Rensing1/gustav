@@ -17,8 +17,11 @@ from __future__ import annotations
 from typing import Callable, Dict, List
 import re
 import os
+import logging
 import requests
 from identity_access.domain import ALLOWED_ROLES
+
+logger = logging.getLogger(__name__)
 
 
 class _KC:
@@ -116,7 +119,8 @@ class _KC:
                 client_id=client_id,
                 client_secret=client_secret,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Directory fallback token acquisition failed: %s", exc.__class__.__name__)
             return None
 
     def hdr(self, token: str) -> Dict[str, str]:
@@ -234,6 +238,15 @@ def _role_sources(*, role: str, realm: str) -> List[str]:
     return [role]
 
 
+def _int_env_clamped(name: str, default: int, min_value: int, max_value: int) -> int:
+    raw = str(os.getenv(name, str(default)) or "").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        value = default
+    return max(min_value, min(max_value, value))
+
+
 def _fetch_role_users_page(
     *,
     kc: _KC,
@@ -273,10 +286,37 @@ def _execute_with_role_users_retry(
     try:
         return operation(kc.token())
     except PermissionError:
+        logger.warning("Directory role-users request forbidden for primary admin token; trying fallback token")
         retry_token = kc.token_admin_fallback()
         if not retry_token:
+            logger.warning("Directory fallback token unavailable; returning empty role-users result")
             return []
-        return operation(retry_token)
+        try:
+            return operation(retry_token)
+        except PermissionError:
+            logger.warning("Directory role-users request forbidden for fallback token; returning empty result")
+            return []
+
+
+def _execute_with_role_users_retry_map(
+    *,
+    kc: _KC,
+    operation: Callable[[str], Dict[str, str]],
+) -> Dict[str, str]:
+    """Run role-users map operation and retry once with fallback admin token on 403."""
+    try:
+        return operation(kc.token())
+    except PermissionError:
+        logger.warning("Directory role-users map request forbidden for primary token; trying fallback token")
+        retry_token = kc.token_admin_fallback()
+        if not retry_token:
+            logger.warning("Directory fallback token unavailable; returning empty role-users map")
+            return {}
+        try:
+            return operation(retry_token)
+        except PermissionError:
+            logger.warning("Directory role-users map request forbidden for fallback token; returning empty result")
+            return {}
 
 
 def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
@@ -444,22 +484,55 @@ def resolve_student_login_labels(subs: List[str]) -> Dict[str, str]:
     identifiers consistent with classroom logins.
     """
     kc = _KC()
-    token = kc.token()
-    out: Dict[str, str] = {}
-    ca = os.getenv("KEYCLOAK_CA_BUNDLE")
-    verify_opt = ca if ca else True
+    verify_opt = kc._verify_opt()
     unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    if not unique_subs:
+        return {}
+    max_requested_subs = _int_env_clamped("DIRECTORY_LOGIN_LABEL_MAX_SUBS", 200, 1, 1000)
+    requested_subs = unique_subs[:max_requested_subs]
+    unresolved = set(requested_subs)
+    role_names = _role_sources(role="student", realm=kc.realm)
+    batch = _int_env_clamped("DIRECTORY_LOGIN_LABEL_BATCH_SIZE", 200, 50, 200)
+    scan_cap = _int_env_clamped("DIRECTORY_LOGIN_LABEL_SCAN_CAP", 4000, 200, 20000)
+
+    def _resolve_with_token(current_token: str) -> Dict[str, str]:
+        found: Dict[str, str] = {}
+        remaining = set(unresolved)
+        scanned_total = 0
+        for idx, role_name in enumerate(role_names):
+            first = 0
+            while remaining and scanned_total < scan_cap:
+                arr = _fetch_role_users_page(
+                    kc=kc,
+                    token=current_token,
+                    role_name=role_name,
+                    first=first,
+                    max_items=batch,
+                    verify_opt=verify_opt,
+                    allow_missing_role=(idx > 0),
+                )
+                if not arr:
+                    break
+                scanned_total += len(arr)
+                for u in arr:
+                    sub = str(u.get("id") or "")
+                    if not sub or sub not in remaining:
+                        continue
+                    label = _login_label(u)
+                    found[sub] = label if label else "Unbekannt"
+                    remaining.discard(sub)
+                    if not remaining:
+                        break
+                first += batch
+                if len(arr) < batch:
+                    break
+        return found
+
+    found = _execute_with_role_users_retry_map(kc=kc, operation=_resolve_with_token)
+    out: Dict[str, str] = {}
     for sid in unique_subs:
-        try:
-            url = f"{kc.base_url}/admin/realms/{kc.realm}/users/{sid}"
-            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt, allow_redirects=False)
-            if r.status_code == 404:
-                out[sid] = "Unbekannt"
-                continue
-            r.raise_for_status()
-            u = r.json() or {}
-            label = _login_label(u)
-            out[sid] = label if label else "Unbekannt"
-        except Exception:
+        if sid in found:
+            out[sid] = found[sid]
+        else:
             out[sid] = "Unbekannt"
     return out

@@ -89,3 +89,22 @@ def test_open_module_from_graph_forces_expanded_card_after_view_switch() -> None
     assert "if (switchedToContent) {" in js
     assert "window.requestAnimationFrame(() => {" in js
     assert "openModuleCard(mid, { jump: false });" in js
+
+
+def test_build_graph_model_centers_nodes_per_phase_instead_of_left_anchor() -> None:
+    """Node X positions should be centered per phase, not left-anchored.
+
+    Why:
+        With a fixed left anchor, phases with few modules appear visually
+        shifted to the left. Per-phase centering keeps the overview balanced.
+    """
+    js = _read_js()
+
+    assert "const phaseCenterX = BASE_X + GAP_X * 1.5;" in js
+    assert "const modulesByPhaseId = new Map();" in js
+    assert "const phaseXByModuleId = new Map();" in js
+    assert "const startX = phaseCenterX - ((phaseModules.length - 1) * GAP_X) / 2;" in js
+    assert "const x = phaseXByModuleId.get(id) ?? phaseCenterX;" in js
+
+    # Old left-anchored formula must not be used anymore.
+    assert "const x = BASE_X + (pos - 1) * GAP_X;" not in js

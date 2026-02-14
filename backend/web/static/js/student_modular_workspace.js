@@ -115,6 +115,7 @@ function buildGraphModel(payload) {
   const BASE_Y = 140;
   const GAP_X = 260;
   const GAP_Y = 200;
+  const phaseCenterX = BASE_X + GAP_X * 1.5;
 
   const moduleById = new Map();
   const modules = modulesRaw.filter((m) => m && typeof m === 'object');
@@ -122,6 +123,32 @@ function buildGraphModel(payload) {
     const id = String(m.id || '');
     if (!id) continue;
     moduleById.set(id, m);
+  }
+
+  // Center each phase row around a shared anchor so sparse phases do not look left-shifted.
+  const modulesByPhaseId = new Map();
+  for (const m of modules) {
+    const pid = String(m.phase_id || '');
+    if (!modulesByPhaseId.has(pid)) modulesByPhaseId.set(pid, []);
+    modulesByPhaseId.get(pid).push(m);
+  }
+  for (const phaseModules of modulesByPhaseId.values()) {
+    phaseModules.sort((a, b) => {
+      const pa = Math.max(1, Number(a.position_in_phase || 1));
+      const pb = Math.max(1, Number(b.position_in_phase || 1));
+      if (pa !== pb) return pa - pb;
+      return String(a.id || '').localeCompare(String(b.id || ''), 'de');
+    });
+  }
+
+  const phaseXByModuleId = new Map();
+  for (const phaseModules of modulesByPhaseId.values()) {
+    const startX = phaseCenterX - ((phaseModules.length - 1) * GAP_X) / 2;
+    for (let idx = 0; idx < phaseModules.length; idx += 1) {
+      const mid = String(phaseModules[idx]?.id || '');
+      if (!mid) continue;
+      phaseXByModuleId.set(mid, startX + idx * GAP_X);
+    }
   }
 
   const incomingCount = new Map();
@@ -144,7 +171,6 @@ function buildGraphModel(payload) {
     if (!id) continue;
     const pid = String(m.phase_id || '');
     const pIdx = phaseIndexById.get(pid) ?? 0;
-    const pos = Math.max(1, Number(m.position_in_phase || 1));
 
     const status = String(m.status || 'locked');
     const tasksDone = Math.max(0, Number(m.tasks_done || 0));
@@ -155,7 +181,7 @@ function buildGraphModel(payload) {
     const prereqDone = Math.max(0, Number(m.prereq_done || 0));
     const prereqReq = Math.max(0, Number(m.prereq_required || 0));
 
-    const x = BASE_X + (pos - 1) * GAP_X;
+    const x = phaseXByModuleId.get(id) ?? phaseCenterX;
     const y = BASE_Y + pIdx * GAP_Y;
 
     nodes.push({

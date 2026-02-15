@@ -85,11 +85,11 @@ async def test_members_search_reuses_member_sub_cache_within_ttl(monkeypatch: py
     if isinstance(existing_cache, dict):
         existing_cache.clear()
 
-    calls = {"roster_fetch": 0}
+    calls = {"subs_fetch": 0}
 
-    async def fake_fetch_members(course_id: str, sid: str | None) -> list[dict]:
-        calls["roster_fetch"] += 1
-        return [{"sub": "stud-14", "name": "Outside Fourteen"}]
+    async def fake_fetch_member_subs(course_id: str, sid: str | None) -> set[str]:
+        calls["subs_fetch"] += 1
+        return {"stud-14"}
 
     def fake_search_users_by_name(*, role: str, q: str, limit: int) -> list[dict]:
         assert role == "student"
@@ -98,7 +98,7 @@ async def test_members_search_reuses_member_sub_cache_within_ttl(monkeypatch: py
             {"sub": "stud-new", "name": "Fresh Student"},
         ][:limit]
 
-    monkeypatch.setattr(main, "_fetch_all_course_members_for_ssr", fake_fetch_members)
+    monkeypatch.setattr(main, "_fetch_all_course_member_subs_for_filter", fake_fetch_member_subs, raising=False)
     monkeypatch.setattr(main, "_member_subs_cache_ttl_seconds", lambda: 60.0, raising=False)
     monkeypatch.setattr(users_routes, "search_users_by_name", fake_search_users_by_name)
 
@@ -112,7 +112,43 @@ async def test_members_search_reuses_member_sub_cache_within_ttl(monkeypatch: py
         assert "Fresh Student" in r1.text
         assert "Fresh Student" in r2.text
 
-    assert calls["roster_fetch"] == 1
+    assert calls["subs_fetch"] == 1
+
+
+@pytest.mark.anyio
+async def test_member_subs_for_search_uses_sub_only_fetch_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_subs_fetch(_course_id: str, _sid: str | None) -> set[str]:
+        return {"stud-01", "stud-02"}
+
+    async def fail_if_full_roster_fetch_is_used(*_args, **_kwargs):
+        raise AssertionError("full-roster fetch path must not be used for candidate filtering")
+
+    existing_cache = getattr(main, "_MEMBER_SUBS_CACHE", None)
+    if isinstance(existing_cache, dict):
+        existing_cache.clear()
+
+    monkeypatch.setattr(main, "_fetch_all_course_member_subs_for_filter", fake_subs_fetch, raising=False)
+    monkeypatch.setattr(main, "_fetch_all_course_members_for_ssr", fail_if_full_roster_fetch_is_used)
+
+    subs = await main._member_subs_for_search("course-sub-only", "sid-sub-only")
+    assert subs == {"stud-01", "stud-02"}
+
+
+def test_member_subs_cache_is_bounded_and_evicts_oldest(monkeypatch: pytest.MonkeyPatch) -> None:
+    existing_cache = getattr(main, "_MEMBER_SUBS_CACHE", None)
+    assert isinstance(existing_cache, dict)
+    existing_cache.clear()
+
+    monkeypatch.setenv("MEMBERS_SEARCH_SUBS_CACHE_MAX_ENTRIES", "2")
+    monkeypatch.setattr(main, "_member_subs_cache_ttl_seconds", lambda: 60.0, raising=False)
+
+    main._member_subs_cache_set("course-1", "sid-1", {"stud-1"})
+    main._member_subs_cache_set("course-2", "sid-2", {"stud-2"})
+    main._member_subs_cache_set("course-3", "sid-3", {"stud-3"})
+
+    assert len(existing_cache) <= 2
+    assert "course-1::sid-1" not in existing_cache
+    assert "course-3::sid-3" in existing_cache
 
 
 @pytest.mark.anyio

@@ -63,3 +63,15 @@ async def test_candidates_list_max_10(monkeypatch: pytest.MonkeyPatch):
         frag = await c.get(f"/courses/{cid}/members/search")
         assert frag.status_code == 200
         assert _count_candidate_items(frag.text) <= 10
+
+
+def test_render_candidate_list_caps_items_at_10() -> None:
+    current_members = []
+    candidates = [{"sub": f"stud-{i:02d}", "name": f"Name {i:02d}"} for i in range(25)]
+    html = main._render_candidate_list(
+        "course-candidates-cap",
+        current_members,
+        candidates,
+        csrf_token="csrf-token",
+    )
+    assert len(re.findall(r'<li class=\"member-item\">', html)) <= 10

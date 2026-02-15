@@ -122,8 +122,11 @@ def test_student_modular_unit_css_ipad_profiles_differentiate_11_and_12_9() -> N
     # Base iPad profile (covers 11") must exist.
     assert "@media (min-width: 768px) and (max-width: 1366px)" in css
 
-    # Large iPad profile (12.9") should be an explicit override.
-    assert "@media (min-width: 1024px) and (min-height: 1024px)" in css
+    # Large iPad profile (12.9") should be explicit and avoid desktop spillover.
+    assert (
+        "@media (min-width: 1024px) and (max-width: 1366px) and (min-height: 1024px) and (hover: none) and (pointer: coarse)"
+        in css
+    )
 
     # 11" profile: denser controls and tighter top spacing.
     assert "--toolbar-control-h: 32px;" in css

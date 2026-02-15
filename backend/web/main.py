@@ -4098,6 +4098,9 @@ def _resolve_member_login_labels(subs: list[str]) -> dict[str, str]:
 
 
 _MEMBER_SUBS_CACHE: dict[str, tuple[float, tuple[str, ...]]] = {}
+MEMBERS_SEARCH_RESULT_LIMIT = 10
+MEMBERS_ROSTER_PAGE_SIZE = 50
+MEMBERS_ROSTER_MAX_PAGES = 200
 
 
 def _member_subs_cache_ttl_seconds() -> float:
@@ -4110,11 +4113,39 @@ def _member_subs_cache_ttl_seconds() -> float:
     return max(1.0, min(300.0, ttl))
 
 
+def _member_subs_cache_max_entries() -> int:
+    """Return maximum cache entries for members-search sub cache."""
+    raw = str(os.getenv("MEMBERS_SEARCH_SUBS_CACHE_MAX_ENTRIES", "512") or "").strip()
+    try:
+        max_entries = int(raw)
+    except Exception:
+        max_entries = 512
+    return max(1, min(5000, max_entries))
+
+
 def _member_subs_cache_key(course_id: str, sid: str | None) -> str:
     return f"{str(course_id or '').strip()}::{str(sid or '').strip()}"
 
 
+def _prune_member_subs_cache(now: float | None = None) -> None:
+    """Remove expired cache entries and enforce max cache size."""
+    current = time.monotonic() if now is None else now
+    expired_keys = [
+        key
+        for key, cached in _MEMBER_SUBS_CACHE.items()
+        if current >= float(cached[0])
+    ]
+    for key in expired_keys:
+        _MEMBER_SUBS_CACHE.pop(key, None)
+
+    max_entries = _member_subs_cache_max_entries()
+    while len(_MEMBER_SUBS_CACHE) > max_entries:
+        oldest_key = next(iter(_MEMBER_SUBS_CACHE))
+        _MEMBER_SUBS_CACHE.pop(oldest_key, None)
+
+
 def _member_subs_cache_get(course_id: str, sid: str | None) -> set[str] | None:
+    _prune_member_subs_cache()
     key = _member_subs_cache_key(course_id, sid)
     cached = _MEMBER_SUBS_CACHE.get(key)
     if not cached:
@@ -4127,12 +4158,57 @@ def _member_subs_cache_get(course_id: str, sid: str | None) -> set[str] | None:
 
 
 def _member_subs_cache_set(course_id: str, sid: str | None, subs: set[str]) -> None:
+    _prune_member_subs_cache()
     key = _member_subs_cache_key(course_id, sid)
+    if key in _MEMBER_SUBS_CACHE:
+        # Reinsert to keep deterministic oldest-entry eviction order.
+        _MEMBER_SUBS_CACHE.pop(key, None)
     _MEMBER_SUBS_CACHE[key] = (time.monotonic() + _member_subs_cache_ttl_seconds(), tuple(sorted(subs)))
+    _prune_member_subs_cache()
 
 
 def _invalidate_member_subs_cache(course_id: str, sid: str | None) -> None:
     _MEMBER_SUBS_CACHE.pop(_member_subs_cache_key(course_id, sid), None)
+
+
+async def _fetch_all_course_member_subs_for_filter(course_id: str, sid: str | None) -> set[str]:
+    """Load enrolled member ids for candidate filtering without label lookup.
+
+    Why:
+        Candidate filtering needs only stable `sub` values. Avoiding login-label
+        resolution in this path prevents unnecessary directory load.
+    """
+    page_size = MEMBERS_ROSTER_PAGE_SIZE
+    max_pages = MEMBERS_ROSTER_MAX_PAGES
+    out: set[str] = set()
+    offset = 0
+    try:
+        async with _internal_api_client() as client:
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+            for _ in range(max_pages):
+                resp = await client.get(
+                    f"/api/teaching/courses/{course_id}/members",
+                    params={"limit": page_size, "offset": offset},
+                )
+                if resp.status_code != 200:
+                    # Fail closed: do not use partial sub sets for filtering.
+                    return set()
+                payload = resp.json()
+                if not isinstance(payload, list) or not payload:
+                    break
+                for row in payload:
+                    if not isinstance(row, dict):
+                        continue
+                    sub = str(row.get("sub") or "").strip()
+                    if sub:
+                        out.add(sub)
+                if len(payload) < page_size:
+                    break
+                offset += page_size
+    except Exception:
+        return set()
+    return out
 
 
 async def _member_subs_for_search(course_id: str, sid: str | None) -> set[str]:
@@ -4140,12 +4216,7 @@ async def _member_subs_for_search(course_id: str, sid: str | None) -> set[str]:
     cached = _member_subs_cache_get(course_id, sid)
     if cached is not None:
         return cached
-    members = await _fetch_all_course_members_for_ssr(course_id, sid)
-    subs = {
-        str(row.get("sub") or "").strip()
-        for row in members
-        if isinstance(row, dict) and str(row.get("sub") or "").strip()
-    }
+    subs = await _fetch_all_course_member_subs_for_filter(course_id, sid)
     _member_subs_cache_set(course_id, sid, subs)
     return subs
 
@@ -4224,13 +4295,17 @@ def _render_candidate_list(course_id: str, current_members: list[dict], candidat
     - csrf_token: Synchronizer token required for POST
 
     Behavior:
-    - Renders up to 50 candidate results with an add form each
+    - Renders up to MEMBERS_SEARCH_RESULT_LIMIT candidate results with an add form each
     - Excludes candidates that are already members
     - Sorts candidates by rendered label for deterministic UI order
     """
-    member_subs = {m['sub'] for m in current_members}
+    member_subs = {
+        str(m.get("sub") or "").strip()
+        for m in current_members
+        if isinstance(m, dict) and str(m.get("sub") or "").strip()
+    }
     safe_candidates = []
-    for s in (candidates or [])[:50]:
+    for s in (candidates or [])[:MEMBERS_SEARCH_RESULT_LIMIT]:
         sub = str(s.get('sub', ''))
         if not sub:
             continue
@@ -4268,9 +4343,9 @@ def _render_add_student_wrapper(course_id: str, *, csrf_token: str) -> str:
         f'<input type="search" name="q" class="form-input" placeholder="Schüler suchen..." '
         f'hx-get="/courses/{course_id}/members/search" hx-trigger="keyup changed delay:300ms" hx-target="#search-results">'
     )
-    # Auto-load candidate list on initial render (limit 10)
+    # Auto-load candidate list on initial render.
     results_div = (
-        f'<div id="search-results" hx-get="/courses/{course_id}/members/search?limit=10&offset=0" '
+        f'<div id="search-results" hx-get="/courses/{course_id}/members/search?limit={MEMBERS_SEARCH_RESULT_LIMIT}&offset=0" '
         f'hx-trigger="load" hx-swap="innerHTML">'
         f'<ul class="member-list"><li class="member-item text-muted">Lade Kandidaten…</li></ul></div>'
     )
@@ -8063,8 +8138,8 @@ async def search_students_for_course(request: Request, course_id: str):
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             # Global search across all students when q is provided (>=2)
-            limit = int(request.query_params.get("limit", 10) or 10)
-            limit = max(1, min(10, limit))
+            limit = int(request.query_params.get("limit", MEMBERS_SEARCH_RESULT_LIMIT) or MEMBERS_SEARCH_RESULT_LIMIT)
+            limit = max(1, min(MEMBERS_SEARCH_RESULT_LIMIT, limit))
             offset = int(request.query_params.get("offset", 0) or 0)
             q_norm = (q or "").strip()
             if len(q_norm) >= 2:
@@ -8096,8 +8171,8 @@ async def _fetch_all_course_members_for_ssr(course_id: str, sid: str | None) -> 
         complete roster (no visible pagination) for rendering and robust
         candidate exclusion.
     """
-    page_size = 50
-    max_pages = 200
+    page_size = MEMBERS_ROSTER_PAGE_SIZE
+    max_pages = MEMBERS_ROSTER_MAX_PAGES
     out: list[dict] = []
     offset = 0
     try:

@@ -925,7 +925,7 @@ body.mode-overview {
 }
 
 /* 12.9" devices (both dimensions >= 1024) get a slightly roomier compact profile. */
-@media (min-width: 1024px) and (min-height: 1024px) {
+@media (min-width: 1024px) and (max-width: 1366px) and (min-height: 1024px) and (hover: none) and (pointer: coarse) {
   html.mode-overview .main-content {
     padding: var(--space-3) var(--space-4);
   }

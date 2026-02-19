@@ -1656,15 +1656,26 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
     try:
         supabase_base = (os.getenv("SUPABASE_URL") or "").strip()
         public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
-        sup_host = _urlparse(supabase_base).hostname or ""
-        pub_host = _urlparse(public_base).hostname or ""
+        sup_host = (_urlparse(supabase_base).hostname or "").lower()
+        pub_host = (_urlparse(public_base).hostname or "").lower()
         target = _urlparse(url)
         if (target.scheme or "").lower() not in {"http", "https"}:
             return None
         tgt_host = (target.hostname or "").lower()
-        allowed_hosts = {h.lower() for h in (sup_host, pub_host) if h}
+        allowed_hosts = {h for h in (sup_host, pub_host) if h}
         if not allowed_hosts or (tgt_host not in allowed_hosts):
             return None
+        # Prefer internal gateway for server-side downloads to avoid TLS trust
+        # issues against the browser-facing host (e.g., local Caddy CA). If the
+        # presigned URL uses the public host and an internal SUPABASE_URL exists,
+        # rewrite scheme/host/port to the internal base while preserving path/query.
+        if pub_host and sup_host and tgt_host == pub_host and supabase_base:
+            try:
+                internal = _urlparse(supabase_base)
+                if internal.scheme and internal.netloc:
+                    url = target._replace(scheme=internal.scheme, netloc=internal.netloc).geturl()
+            except Exception:
+                pass
     except Exception:
         return None
     try:

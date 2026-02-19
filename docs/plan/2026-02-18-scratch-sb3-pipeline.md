@@ -124,6 +124,25 @@ KI-Kontext (Pflicht-Hinweis):
 - Keine Extraktion auf Dateisystem (nur Lesen in-memory).
 - Keine Logs mit Studentendaten oder kompletten Evidence-Reports.
 
+## Update (2026-02-19): SB3-Validation Download (TLS / `app.localhost`)
+In lokalen Setups ist `SUPABASE_PUBLIC_URL` oft `https://app.localhost` (Caddy Reverse Proxy mit lokaler CA).
+Signed Download URLs werden im Storage-Adapter **auf diese Public-Base umgeschrieben** (für Browser korrekt).
+
+Problem:
+- Server-seitige Validierung (SB3 `project.json`) läuft **im Container** und lädt Bytes via `httpx`.
+- `httpx` vertraut der lokalen Caddy-CA nicht → `CERTIFICATE_VERIFY_FAILED`.
+- Ergebnis: `_load_storage_bytes_for_validation()` liefert `None` → `503 sb3_validation_unavailable` → UI-Submit endet in „Request failed“.
+
+Fix (dev = prod, sicher):
+- Beim server-seitigen Download (Validation) wird — falls die presigned URL auf den Public-Host zeigt —
+  **scheme/host/port auf `SUPABASE_URL` umgeschrieben**, Pfad + Query bleiben unverändert.
+- Dadurch wird der interne Supabase-Gateway (typisch `http://supabase_kong_…:8000`) genutzt, ohne TLS-CA-Probleme.
+
+Nebenwirkung/UX:
+- Die SSR-Submit-Route liefert bei erwartbaren Validierungsfehlern absichtlich non-2xx zurück, damit HTMX `detail.successful=false`
+  bleibt (u.a. um Draft-Clearing zu vermeiden). Das UI zeigt dann sonst den generischen Toast „Request failed“.
+- Client-seitig wird bei `htmx:responseError` jetzt ein vom Server geliefertes `HX-Trigger.showMessage` bevorzugt.
+
 ## Tests (pytest)
 - OpenAPI Contract Tests: Scratch in enums + error codes vorhanden.
 - Teaching API: Erstellen von Scratch-Tasks setzt `kind=scratch`.

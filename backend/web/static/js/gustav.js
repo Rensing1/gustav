@@ -1053,12 +1053,32 @@ class Gustav {
     });
 
     document.body.addEventListener('htmx:responseError', (evt) => {
-      const status = evt.detail.xhr.status;
+      const xhr = evt.detail.xhr;
+      const status = xhr.status;
       if (status === 401) {
         // Session expired (app-level cookie). HTMX will follow HX-Redirect; we
         // set a flag so the unit page can explain what happened after re-login.
         this.markSessionExpired();
       }
+
+      // If the server already provided a user-facing message via HX-Trigger,
+      // prefer that over a generic "Request failed" toast.
+      // This is especially relevant for expected validation errors where the
+      // HTTP status is intentionally non-2xx to keep HTMX `detail.successful`
+      // false (e.g., prevent clearing drafts).
+      try {
+        const triggerHeader = xhr.getResponseHeader('HX-Trigger');
+        if (triggerHeader) {
+          const parsed = JSON.parse(triggerHeader);
+          const sm = parsed && parsed.showMessage;
+          if (sm && typeof sm === 'object' && sm.message) {
+            this.showNotification(String(sm.message), sm.type || 'error');
+            this.updateLiveStatusForError(evt, liveStatusErrorMessage);
+            return;
+          }
+        }
+      } catch (_) {}
+
       const message = status === 404 ? 'Resource not found' :
                       status === 403 ? 'Access denied' :
                       status === 401 ? 'Session expired. Please login again.' :

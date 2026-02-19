@@ -75,3 +75,21 @@ async def test_buckets_materials_and_submissions_exist_and_private():
             assert "submissions" in got, "submissions bucket must be provisioned via migration"
             assert got["submissions"] is False, "submissions bucket must be private (public=false)"
 
+            # Scratch SB3 uploads require this MIME to be accepted by the bucket.
+            cur.execute(
+                """
+                select count(*)
+                from information_schema.columns
+                where table_schema='storage' and table_name='buckets' and column_name='allowed_mime_types'
+                """
+            )
+            has_allowlist = int(cur.fetchone()[0]) > 0
+            if not has_allowlist:
+                pytest.skip("storage.buckets.allowed_mime_types not available in this DB")
+
+            cur.execute("select allowed_mime_types from storage.buckets where id='submissions'")
+            row = cur.fetchone()
+            assert row, "submissions bucket row must exist"
+            allowed = row[0]
+            assert allowed, "submissions bucket must define allowed_mime_types"
+            assert "application/x.scratch.sb3" in allowed, "submissions bucket must accept application/x.scratch.sb3"

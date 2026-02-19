@@ -891,6 +891,13 @@ components:
         Marker config for upload-only visual tasks. Students submit exactly one
         file (image/jpeg|image/png|application/pdf). Text submissions are
         rejected (400 invalid_input). Empty object in MVP.
+    ScratchTaskConfig:
+      type: object
+      additionalProperties: false
+      description: >-
+        Marker config for upload-only Scratch tasks. Students submit exactly one
+        `.sb3` file (application/x.scratch.sb3). Image/PDF/text submissions are
+        rejected (400 invalid_input). Empty object in MVP.
     Task:
       type: object
       required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
@@ -935,13 +942,16 @@ components:
           readOnly: true
           default: native
           description: >-
-            Task type (native|h5p|visual). This field is read-only and must not
+            Task type (native|h5p|visual|scratch). This field is read-only and must not
             be provided by clients.
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
         visual:
           $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+        scratch:
+          $ref: '#/components/schemas/ScratchTaskConfig'
           nullable: true
         created_at:
           type: string
@@ -980,11 +990,15 @@ components:
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
-          description: Optional. When set, creates an H5P task. Mutually exclusive with `visual`.
+          description: Optional. When set, creates an H5P task. Mutually exclusive with `visual` and `scratch`.
         visual:
           $ref: '#/components/schemas/VisualTaskConfig'
           nullable: true
-          description: Optional. When set, creates a visual task. Mutually exclusive with `h5p`.
+          description: Optional. When set, creates a visual task. Mutually exclusive with `h5p` and `scratch`.
+        scratch:
+          $ref: '#/components/schemas/ScratchTaskConfig'
+          nullable: true
+          description: Optional. When set, creates a Scratch task. Mutually exclusive with `h5p` and `visual`.
     TaskUpdate:
       type: object
       properties:
@@ -1013,11 +1027,15 @@ components:
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
-          description: Optional. When set, updates the H5P configuration. Mutually exclusive with `visual`.
+          description: Optional. When set, updates the H5P configuration. Mutually exclusive with `visual` and `scratch`.
         visual:
           $ref: '#/components/schemas/VisualTaskConfig'
           nullable: true
-          description: Optional. When set, updates the visual configuration. Mutually exclusive with `h5p`.
+          description: Optional. When set, updates the visual configuration. Mutually exclusive with `h5p` and `scratch`.
+        scratch:
+          $ref: '#/components/schemas/ScratchTaskConfig'
+          nullable: true
+          description: Optional. When set, updates the Scratch configuration. Mutually exclusive with `h5p` and `visual`.
     TaskReorder:
       type: object
       required: [task_ids]
@@ -1176,13 +1194,16 @@ components:
           nullable: true
         kind:
           type: string
-          enum: [native, h5p, visual]
+          enum: [native, h5p, visual, scratch]
           description: Backend task type identifier.
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
         visual:
           $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+        scratch:
+          $ref: '#/components/schemas/ScratchTaskConfig'
           nullable: true
     LearningSection:
       type: object
@@ -3945,6 +3966,7 @@ paths:
         
         Task-type rules:
         - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).
+        - For `Task.kind=scratch`, only `kind=file` with `mime_type=application/x.scratch.sb3` is accepted (upload-only).
         - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously (response 201).
         
         Security: Requests must be same-origin when sent from a browser; cross-site
@@ -4026,7 +4048,7 @@ paths:
                       minLength: 1
                     mime_type:
                       type: string
-                      enum: ['application/pdf']
+                      enum: ['application/pdf', 'application/x.scratch.sb3']
                     size_bytes:
                       type: integer
                       minimum: 1
@@ -4072,7 +4094,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '400':
-          description: Bad request (invalid_input | invalid_image_payload | invalid_file_payload | invalid_h5p_payload | max_attempts_exceeded | invalid_uuid)
+          description: >-
+            Bad request (invalid_input | invalid_image_payload | invalid_file_payload | invalid_h5p_payload |
+            invalid_sb3_archive | missing_project_json | max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -7587,7 +7611,7 @@ paths:
           maxLength: 255
         mime_type:
           type: string
-          description: Expected MIME type (image/jpeg, image/png, application/pdf)
+          description: Expected MIME type (image/jpeg, image/png, application/pdf, application/x.scratch.sb3)
         size_bytes:
           type: integer
           minimum: 1
@@ -7984,7 +8008,7 @@ paths:
                         position: { type: integer }
                         kind:
                           type: string
-                          enum: [native, h5p, visual]
+                          enum: [native, h5p, visual, scratch]
                           description: Backend task type identifier.
                   rows:
                     type: array

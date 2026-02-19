@@ -95,17 +95,36 @@
       return false;
     }
     const file = fileInput.files[0];
+    const taskKind = (form.getAttribute('data-task-kind') || '').trim().toLowerCase();
+    const isScratchTask = (taskKind === 'scratch');
     const courseId = form.getAttribute('data-course-id');
     const taskId = form.getAttribute('data-task-id');
     if (!courseId || !taskId) return true; // fall back to native submit
 
     // Validate client-side (non-authoritative)
-    const isImage = (mode === 'image') || (mode === 'upload' && file.type.startsWith('image/'));
+    const filename = (file && file.name) ? String(file.name) : '';
+    const lowerName = filename.toLowerCase();
+    let mime = file.type || '';
+    // Some browsers do not provide `file.type` for unknown extensions; fall back to filename.
+    if (!mime) {
+      if (lowerName.endsWith('.png')) mime = 'image/png';
+      else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) mime = 'image/jpeg';
+      else if (lowerName.endsWith('.pdf')) mime = 'application/pdf';
+      else if (lowerName.endsWith('.sb3')) mime = 'application/x.scratch.sb3';
+    }
+    const isImage = (!isScratchTask) && ((mode === 'image') || (mode === 'upload' && mime.startsWith('image/')));
     const allowedImage = ['image/png', 'image/jpeg'];
     const allowedPdf = ['application/pdf'];
-    if ((isImage && allowedImage.indexOf(file.type) === -1) || (!isImage && allowedPdf.indexOf(file.type) === -1)) {
-      e.preventDefault();
-      return false;
+    if (isScratchTask) {
+      if (mime !== 'application/x.scratch.sb3') {
+        e.preventDefault();
+        return false;
+      }
+    } else {
+      if ((isImage && allowedImage.indexOf(mime) === -1) || (!isImage && allowedPdf.indexOf(mime) === -1)) {
+        e.preventDefault();
+        return false;
+      }
     }
     const maxBytes = 10 * 1024 * 1024;
     if (file.size <= 0 || file.size > maxBytes) {
@@ -118,11 +137,12 @@
     const sha = await sha256Hex(buf);
 
     // Request upload intent
+    const apiKind = isScratchTask ? 'file' : (isImage ? 'image' : 'file');
     const intentResp = await fetch(`/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ kind: isImage ? 'image' : 'file', filename: file.name || '', mime_type: file.type, size_bytes: file.size })
+      body: JSON.stringify({ kind: apiKind, filename: file.name || '', mime_type: mime, size_bytes: file.size })
     });
     if (!intentResp.ok) {
       if (intentResp.status === 401) {
@@ -143,7 +163,7 @@
     }
     // Fill hidden fields and proceed with SSR submit
     if (storageKeyInput) storageKeyInput.value = intent.storage_key || '';
-    if (mimeInput) mimeInput.value = file.type;
+    if (mimeInput) mimeInput.value = mime;
     if (sizeInput) sizeInput.value = String(file.size);
     if (shaInput) shaInput.value = sha;
     return true;

@@ -60,6 +60,7 @@ from backend.storage.learning_policy import (
 from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 from backend.storage.keys import make_submission_key
+from backend.storage.sb3_validation import SCRATCH_SB3_MIME
 import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
 
@@ -515,6 +516,9 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
         limit: int,
         offset: int,
     ) -> list[dict]:
+        ...
+
+    def get_task_kind_for_student(self, *, student_sub: str, course_id: str, task_id: str) -> str:
         ...
 
     def get_modular_unit_graph(
@@ -1120,6 +1124,45 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
             detail = "invalid_image_payload" if kind == "image" else "invalid_file_payload"
             return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
 
+    # Scratch `.sb3` validation (fail early with stable detail codes).
+    if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == SCRATCH_SB3_MIME:
+        try:
+            task_kind = _get_repo().get_task_kind_for_student(
+                student_sub=str(user.get("sub", "")),
+                course_id=str(course_id),
+                task_id=str(task_id),
+            )
+        except PermissionError:
+            return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+        except LookupError:
+            return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+        except Exception:
+            return JSONResponse(
+                {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
+                status_code=503,
+                headers=_cache_headers_error(),
+            )
+
+        if str(task_kind or "").strip().lower() == "scratch":
+            storage_key = str(clean_payload.get("storage_key") or "")
+            sb3_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
+            if not sb3_bytes:
+                return JSONResponse(
+                    {"error": "service_unavailable", "detail": "sb3_validation_unavailable"},
+                    status_code=503,
+                    headers=_cache_headers_error(),
+                )
+            from backend.storage.sb3_validation import SB3ValidationError, load_project_json
+
+            try:
+                _ = load_project_json(sb3_bytes)
+            except SB3ValidationError as exc:
+                return JSONResponse(
+                    {"error": "bad_request", "detail": str(exc.code)},
+                    status_code=400,
+                    headers=_cache_headers_error(),
+                )
+
     submission_input = CreateSubmissionInput(
         course_id=course_id,
         task_id=task_id,
@@ -1344,22 +1387,13 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
     if size_int <= 0 or size_int > _max_upload_bytes():
         return JSONResponse({"error": "bad_request", "detail": "size_exceeded"}, status_code=400, headers=_cache_headers_error())
-    if kind == "image":
-        if mime_type not in ALLOWED_IMAGE_MIME:
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        accepted = sorted(list(ALLOWED_IMAGE_MIME))
-    elif kind == "file":
-        if mime_type not in ALLOWED_FILE_MIME:
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        accepted = sorted(list(ALLOWED_FILE_MIME))
-    else:
+    if kind not in {"image", "file"}:
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
 
-    # Authorization/visibility: ensure the caller is a member and the task is
-    # visible to the student. We reuse the submissions listing use case which
-    # already enforces membership and task visibility at the DB boundary.
+    # Authorization/visibility: ensure the caller is a member and the task is visible.
+    # We use the existing submissions read-path as an access check; the repo enforces
+    # membership and released visibility (RLS + helpers in the DB implementation).
     try:
-        # Any positive limit triggers the underlying checks; results are ignored.
         _ = ListSubmissionsUseCase(_get_repo()).execute(
             ListSubmissionsInput(
                 course_id=str(course_id),
@@ -1375,48 +1409,57 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         # Task not visible (or course/unit mismatch) should not leak existence
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
     except Exception:
-        # DB may be unavailable in dev/test; attempt a conservative in-memory check
+        # Fail closed: without a reliable authorization check we must not hand out
+        # a presigned upload capability.
+        return JSONResponse(
+            {"error": "service_unavailable", "detail": "authorization_unavailable"},
+            status_code=503,
+            headers=_cache_headers_error(),
+        )
+
+    # Optional: fetch Task.kind for stricter per-task allowlists (e.g., Scratch is SB3-only).
+    task_kind = "native"
+    repo = _get_repo()
+    if callable(getattr(repo, "get_task_kind_for_student", None)):
         try:
-            import importlib
-            t = importlib.import_module("routes.teaching")
-            repo = getattr(t, "REPO", None)
-            student_sub = str(user.get("sub", ""))
-            # Membership
-            members = getattr(repo, "members", {}) or {}
-            if student_sub not in (members.get(str(course_id)) or {}):
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-            # Task and section visibility
-            tasks = getattr(repo, "tasks", {}) or {}
-            task = tasks.get(str(task_id))
-            if not task:
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-            section_id = getattr(task, "section_id", None) or (task.get("section_id") if isinstance(task, dict) else None)
-            unit_id = getattr(task, "unit_id", None) or (task.get("unit_id") if isinstance(task, dict) else None)
-            modules_by_course = getattr(repo, "modules_by_course", {}) or {}
-            course_modules = getattr(repo, "course_modules", {}) or {}
-            mod_ids = modules_by_course.get(str(course_id)) or []
-            module_id = None
-            for mid in mod_ids:
-                mod = course_modules.get(mid)
-                uid = getattr(mod, "unit_id", None) or (mod.get("unit_id") if isinstance(mod, dict) else None)
-                if str(uid) == str(unit_id):
-                    module_id = mid
-                    break
-            if not module_id or not section_id:
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-            releases = getattr(repo, "module_section_releases", {}) or {}
-            rec = releases.get((str(module_id), str(section_id)))
-            visible = bool((rec or {}).get("visible")) if isinstance(rec, dict) else False
-            if not visible:
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+            task_kind = str(
+                repo.get_task_kind_for_student(
+                    student_sub=str(user.get("sub", "")),
+                    course_id=str(course_id),
+                    task_id=str(task_id),
+                )
+            )
+        except PermissionError:
+            return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+        except LookupError:
+            return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
         except Exception:
-            # Fail closed: without a reliable authorization check we must not
-            # hand out a presigned upload capability.
             return JSONResponse(
                 {"error": "service_unavailable", "detail": "authorization_unavailable"},
                 status_code=503,
                 headers=_cache_headers_error(),
             )
+
+    task_kind = (task_kind or "native").strip().lower()
+    if task_kind == "scratch":
+        # Scratch is SB3-only (upload-only). We do not accept images/PDF here.
+        if kind != "file":
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        if mime_type != SCRATCH_SB3_MIME:
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        accepted = [SCRATCH_SB3_MIME]
+    else:
+        if kind == "image":
+            if mime_type not in ALLOWED_IMAGE_MIME:
+                return JSONResponse(
+                    {"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error()
+                )
+            accepted = sorted(list(ALLOWED_IMAGE_MIME))
+        else:  # kind == "file"
+            # Non-scratch tasks accept only PDFs in MVP.
+            if mime_type != "application/pdf":
+                return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+            accepted = ["application/pdf"]
 
     # Build a storage key (lowercase path, no traversal) — the value is later
     # validated again at submission time with a strict regex.
@@ -1424,7 +1467,14 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     from uuid import uuid4 as _uuid4
     student_sub = str(user.get("sub", "student")).lower()
     ts = int(_time.time() * 1000)
-    ext = ".png" if mime_type == "image/png" else (".jpg" if mime_type == "image/jpeg" else ".pdf")
+    if mime_type == "image/png":
+        ext = ".png"
+    elif mime_type == "image/jpeg":
+        ext = ".jpg"
+    elif mime_type == SCRATCH_SB3_MIME:
+        ext = ".sb3"
+    else:
+        ext = ".pdf"
     storage_key = make_submission_key(
         course_id=str(course_id),
         task_id=str(task_id),
@@ -1570,6 +1620,95 @@ def _verify_storage_object(storage_key: str, sha256: str, size_bytes: int, mime_
         mime_type=mime_type,
         config=config,
     )
+
+
+def _load_local_storage_bytes_for_validation(*, root: str, storage_key: str, max_bytes: int) -> bytes | None:
+    """Read a local file beneath STORAGE_VERIFY_ROOT with path containment checks."""
+    if not root or not storage_key:
+        return None
+    try:
+        from pathlib import Path
+
+        base = Path(root).resolve()
+        target = (base / storage_key).resolve()
+        common = os.path.commonpath([str(base), str(target)])
+    except Exception:
+        return None
+    if common != str(base) or (not target.exists()) or (not target.is_file()):
+        return None
+    try:
+        size = int(target.stat().st_size)
+    except Exception:
+        return None
+    if size <= 0 or size > int(max_bytes):
+        return None
+    try:
+        return target.read_bytes()
+    except Exception:
+        return None
+
+
+async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[str, str] | None = None) -> bytes | None:
+    """Download bytes from a presigned URL with a hard cap (no redirects)."""
+    if not url:
+        return None
+    # Defense-in-depth: allowlist known storage hosts only (avoid SSRF).
+    try:
+        supabase_base = (os.getenv("SUPABASE_URL") or "").strip()
+        public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
+        sup_host = _urlparse(supabase_base).hostname or ""
+        pub_host = _urlparse(public_base).hostname or ""
+        target = _urlparse(url)
+        if (target.scheme or "").lower() not in {"http", "https"}:
+            return None
+        tgt_host = (target.hostname or "").lower()
+        allowed_hosts = {h.lower() for h in (sup_host, pub_host) if h}
+        if not allowed_hosts or (tgt_host not in allowed_hosts):
+            return None
+    except Exception:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            async with client.stream("GET", url, headers=headers) as resp:
+                code = int(getattr(resp, "status_code", 500))
+                if 300 <= code < 400:
+                    return None
+                if code >= 400:
+                    return None
+                out = bytearray()
+                async for chunk in resp.aiter_bytes():
+                    if not chunk:
+                        continue
+                    out.extend(chunk)
+                    if len(out) > int(max_bytes):
+                        return None
+                return bytes(out)
+    except Exception:
+        return None
+
+
+async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes | None:
+    """Fetch bytes for validation either from local verify root or via presigned download."""
+    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    local = _load_local_storage_bytes_for_validation(root=root, storage_key=storage_key, max_bytes=max_bytes)
+    if local is not None:
+        return local
+
+    bucket = _storage_bucket()
+    adapter = STORAGE_ADAPTER
+    if not bucket or isinstance(adapter, NullStorageAdapter):
+        return None
+    try:
+        presigned = adapter.presign_download(bucket=bucket, key=storage_key, expires_in=60, disposition="inline")
+    except Exception:
+        return None
+    url = str((presigned or {}).get("url") or "").strip()
+    headers = presigned.get("headers") if isinstance(presigned, dict) else None
+    try:
+        hdrs = {str(k): str(v) for k, v in dict(headers or {}).items() if k and v}
+    except Exception:
+        hdrs = None
+    return await _download_bytes_with_limit(url=url, max_bytes=max_bytes, headers=hdrs)
 
 
 @learning_router.put("/api/learning/internal/upload-stub")

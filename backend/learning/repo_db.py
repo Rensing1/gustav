@@ -1118,9 +1118,21 @@ class DBLearningRepo:
                     # Visual tasks are upload-only. Text or H5P payloads are rejected.
                     if data.kind not in ("image", "file"):
                         raise ValueError("invalid_input")
+                    # Defense-in-depth: Visual tasks must not accept SB3 archives.
+                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == "application/x.scratch.sb3":
+                        raise ValueError("invalid_file_payload")
+                elif task_kind == "scratch":
+                    # Scratch tasks are SB3 upload-only.
+                    if data.kind != "file":
+                        raise ValueError("invalid_input")
+                    if str(data.mime_type or "").strip().lower() != "application/x.scratch.sb3":
+                        raise ValueError("invalid_file_payload")
                 else:
                     if data.kind == "h5p":
                         raise ValueError("invalid_h5p_payload")
+                    # Defense-in-depth: only scratch tasks may accept SB3 MIME.
+                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == "application/x.scratch.sb3":
+                        raise ValueError("invalid_file_payload")
 
                 cur.execute(
                     "select public.next_attempt_nr(%s, %s, %s)",
@@ -1523,6 +1535,62 @@ class DBLearningRepo:
                 rows = cur.fetchall()
 
         return [self._row_to_submission(row) for row in rows]
+
+    def get_task_kind_for_student(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_id: str,
+    ) -> str:
+        """Return the backend task kind for a student-visible task.
+
+        Intent:
+            Provide a minimal, framework-free way for web adapters to make
+            task-kind decisions (e.g., upload allowlists) without duplicating
+            SQL helpers across layers.
+
+        Security:
+            Enforces course membership and released visibility using the same
+            DB guards as submissions/listing paths (RLS + helpers).
+        """
+        course_uuid = str(UUID(course_id))
+        task_uuid = str(UUID(task_id))
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                self._set_current_course_id(cur, course_uuid)
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise PermissionError("not_course_member")
+                cur.execute(
+                    """
+                    select task_id::text,
+                           section_id::text,
+                           unit_id::text,
+                           kind
+                      from public.get_task_metadata_for_student(%s, %s, %s)
+                    """,
+                    (student_sub, course_uuid, task_uuid),
+                )
+                meta = cur.fetchone()
+                if not meta:
+                    raise LookupError("task_not_visible")
+                section_uuid = str(UUID(meta[1]))
+                unit_uuid = str(UUID(meta[2]))
+                if not self._is_modular_section_open_or_done(
+                    cur=cur,
+                    course_uuid=course_uuid,
+                    student_sub=student_sub,
+                    unit_uuid=unit_uuid,
+                    section_uuid=section_uuid,
+                ):
+                    raise LookupError("task_not_visible")
+                kind = str(meta[3] or "native").strip() or "native"
+        return kind
 
     def _resolve_queue_table(self, cur) -> str:
         """

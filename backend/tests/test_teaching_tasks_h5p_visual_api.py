@@ -1,13 +1,14 @@
 """
-Teaching API — Task kinds (H5P + Visual)
+Teaching API — Task kinds (H5P + Visual + Scratch)
 
 Why:
     GUSTAV integrates H5P as an additional task kind (`h5p`) and introduces a
-    second special kind (`visual`). Both are configured via optional config
+    special kind (`visual`) and adds Scratch (`scratch`). All are configured via optional config
     objects on TaskCreate/TaskUpdate:
 
         - `h5p`: creates/updates an H5P task (stores `content_id`)
         - `visual`: creates/updates a visual task (upload-only in learning)
+        - `scratch`: creates/updates a Scratch task (SB3 upload-only in learning)
 
     The `kind` field is read-only in the API. Clients choose the task kind by
     providing exactly one of these config objects.
@@ -125,6 +126,39 @@ async def test_create_visual_task_sets_kind_and_returns_visual_config():
 
 
 @pytest.mark.anyio
+async def test_create_scratch_task_sets_kind_and_returns_scratch_config():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed teaching repo required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-scratch", name="T", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+
+        unit = await _create_unit(c)
+        section = await _create_section(c, unit["id"])
+
+        r = await c.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={"instruction_md": "Scratch task", "scratch": {}},
+        )
+        assert r.status_code == 201
+        task = r.json()
+        assert task["kind"] == "scratch"
+        assert task.get("h5p") is None
+        assert task.get("visual") is None
+        assert task.get("scratch") == {}
+
+
+@pytest.mark.anyio
 async def test_create_task_rejects_h5p_and_visual_together():
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -150,6 +184,40 @@ async def test_create_task_rejects_h5p_and_visual_together():
             json={
                 "instruction_md": "Invalid",
                 "h5p": {"content_id": None},
+                "visual": {},
+            },
+        )
+        assert r.status_code == 400
+        assert r.json()["error"] == "bad_request"
+        assert r.json()["detail"] in {"invalid_input", "invalid_task_kind_config"}
+
+
+@pytest.mark.anyio
+async def test_create_task_rejects_scratch_and_visual_together():
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed teaching repo required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-conflict-scratch-visual", name="T", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+
+        unit = await _create_unit(c)
+        section = await _create_section(c, unit["id"])
+
+        r = await c.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={
+                "instruction_md": "Invalid",
+                "scratch": {},
                 "visual": {},
             },
         )

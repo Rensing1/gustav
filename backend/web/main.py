@@ -645,7 +645,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         course_id: ID of the learning course context.
         unit_id: ID of the unit whose sections/tasks are shown.
         task_id: ID of the task for which the form is rendered.
-        task_kind: Optional task type selector (native|h5p|visual).
+        task_kind: Optional task type selector (native|h5p|visual|scratch).
 
     Returns:
         HTML string containing the <form> element.
@@ -656,18 +656,23 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     uid_escaped = Component.escape(unit_id)
     kind_norm = (task_kind or "native").strip().lower()
 
-    if kind_norm == "visual":
-        # Visual tasks are upload-only: no mode switch and no textarea.
+    if kind_norm in {"visual", "scratch"}:
+        # Visual/Scratch tasks are upload-only: no mode switch and no textarea.
+        accept = "image/png,image/jpeg,application/pdf"
+        hint = "JPG/PNG/PDF, bis 10 MB"
+        if kind_norm == "scratch":
+            accept = ".sb3,application/x.scratch.sb3"
+            hint = "SB3 bis 10 MB"
         return (
             f'<form method="post" action="{form_action}" class="task-submit-form" '
             f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
-            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="upload">'
+            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="upload">'
             f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
             '<input type="hidden" name="mode" value="upload">'
             '<div class="task-form-fields fields-upload">'
             '<label>Datei auswählen '
-            '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-            '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+            f'<input type="file" name="upload_file" accept="{accept}"></label>'
+            f'<p class="text-muted">{Component.escape(hint)}</p>'
             '<input type="hidden" name="storage_key" value="">'
             '<input type="hidden" name="mime_type" value="">'
             '<input type="hidden" name="size_bytes" value="">'
@@ -680,7 +685,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     return (
         f'<form method="post" action="{form_action}" class="task-submit-form" '
         f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
-        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="text">'
+        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="text">'
         f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
         '<fieldset class="choice-cards" aria-label="Abgabeart">'
         '<label class="choice-card choice-card--text">'
@@ -738,6 +743,8 @@ async def _server_side_prepare_submission_upload(
     filename = str(getattr(upload_file, "filename", "") or "").strip() or "upload.bin"
     declared_mime = str(getattr(upload_file, "content_type", "") or "").strip()
     mime_type = declared_mime or (mimetypes.guess_type(filename)[0] or "application/octet-stream")
+    if filename.lower().endswith(".sb3"):
+        mime_type = "application/x.scratch.sb3"
     try:
         file_bytes = await upload_file.read()  # type: ignore[attr-defined]
     except AttributeError:
@@ -7105,12 +7112,14 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         '<option value="native" selected>Normal</option>'
         '<option value="h5p">H5P (interaktiv)</option>'
         '<option value="visual">Visual (Upload‑Only)</option>'
+        '<option value="scratch">Scratch (SB3 Upload‑Only)</option>'
         "</select>"
         "</label>"
         '<p id="task-kind-hint" class="text-muted">'
         "Normal: Markdown‑Aufgabe mit Kriterien. "
         "H5P: Interaktive Übung (Editor wird direkt eingeblendet). "
-        "Visual: wie Normal, aber Abgabe nur als Bild/PDF."
+        "Visual: wie Normal, aber Abgabe nur als Bild/PDF. "
+        "Scratch: wie Normal, aber Abgabe nur als `.sb3`."
         "</p>"
     )
 
@@ -7702,7 +7711,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
 
     Parameters form fields:
     - instruction_md: Required Markdown instruction
-    - task_kind: Optional task type selector (native|h5p|visual)
+    - task_kind: Optional task type selector (native|h5p|visual|scratch)
     - csrf_token: Required
 
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
@@ -7754,6 +7763,8 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
                 payload["h5p"] = {"content_id": h5p_content_id, "display_options": {}}
             elif task_kind == "visual":
                 payload["visual"] = {}
+            elif task_kind == "scratch":
+                payload["scratch"] = {}
             resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)
             if resp.status_code >= 400:
                 error = _extract_api_error_detail(resp)

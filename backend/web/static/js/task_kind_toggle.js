@@ -2,13 +2,13 @@
  * Task kind toggle (Teacher UI)
  *
  * Why:
- * - The task create page supports multiple task kinds (native|h5p|visual).
+ * - The task create page supports multiple task kinds (native|h5p|visual|scratch).
  * - The UI needs to show/hide the correct field groups without relying on
  *   inline <script> blocks (CSP: `script-src 'self'`).
  *
  * Behavior:
  * - When the teacher selects "H5P", hide the native fields and show the H5P editor block.
- * - For "native" and "visual", show the native fields and hide the H5P editor block.
+ * - For "native", "visual", and "scratch", show the native fields and hide the H5P editor block.
  *
  * Notes:
  * - This script is safe to include globally; it no-ops when the expected elements
@@ -35,4 +35,3 @@
   sel.addEventListener('change', apply);
   apply();
 })();
-

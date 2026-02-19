@@ -42,6 +42,8 @@ services:
       - ./backend/vision:/app/backend/vision:z
       # Shared storage helpers (learning upload policy, verification)
       - ./backend/storage:/app/backend/storage:z
+      # Scratch SB3 extraction helpers
+      - ./backend/scratch:/app/backend/scratch:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
       # Shared dev uploads directory for vision to access uploaded files
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
@@ -146,6 +148,8 @@ services:
     volumes:
       - ./backend/learning:/app/backend/learning:z
       - ./backend/vision:/app/backend/vision:z
+      - ./backend/storage:/app/backend/storage:z
+      - ./backend/scratch:/app/backend/scratch:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
       # Shared dev uploads directory (same path as in web)
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z

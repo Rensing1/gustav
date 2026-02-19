@@ -242,15 +242,16 @@ class Gustav {
     // Normalize headers to avoid duplicate Content-Type entries in browsers
     const uploadHeaders = new Headers();
     const rawHeaders = intent.headers || intent.upload_headers || {};
-    if (rawHeaders && typeof rawHeaders === 'object') {
-      Object.keys(rawHeaders).forEach((k) => {
-        const v = rawHeaders[k];
-        if (v !== undefined && v !== null) uploadHeaders.set(k, v);
-      });
-    }
-    if (!uploadHeaders.has('content-type')) {
-      uploadHeaders.set('Content-Type', file.type || 'application/octet-stream');
-    }
+	    if (rawHeaders && typeof rawHeaders === 'object') {
+	      Object.keys(rawHeaders).forEach((k) => {
+	        const v = rawHeaders[k];
+	        if (v !== undefined && v !== null) uploadHeaders.set(k, v);
+	      });
+	    }
+	    if (!uploadHeaders.has('content-type')) {
+	      const declaredMime = (payload && payload.mime_type) ? String(payload.mime_type) : '';
+	      uploadHeaders.set('Content-Type', declaredMime || file.type || 'application/octet-stream');
+	    }
     if (!uploadUrl) {
       throw new Error('upload_url_missing');
     }
@@ -352,12 +353,17 @@ class Gustav {
             this.markSessionExpired();
             this.redirectToLoginWithReturnTo();
             return;
-          }
-          if (code === 'mime_not_allowed') {
-            this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
-          } else if (code === 'size_exceeded') {
-            this.showNotification('Datei zu groß. Bitte das Größenlimit beachten.', 'error');
-          } else {
+	          }
+	          if (code === 'mime_not_allowed') {
+	            const allowedMimeAttr = (form.dataset.allowedMime || '').split(',').map((s) => s.trim()).filter(Boolean);
+	            if (allowedMimeAttr.indexOf('application/x.scratch.sb3') !== -1) {
+	              this.showNotification('Dateiformat nicht erlaubt. Erlaubt ist nur .sb3.', 'error');
+	            } else {
+	              this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
+	            }
+	          } else if (code === 'size_exceeded') {
+	            this.showNotification('Datei zu groß. Bitte das Größenlimit beachten.', 'error');
+	          } else {
             this.showNotification('Upload fehlgeschlagen. Bitte erneut versuchen.', 'error');
           }
           // Clear hidden fields to avoid submitting invalid payload
@@ -836,27 +842,36 @@ class Gustav {
    * 2) PUT file to returned URL
    * 3) Fill hidden fields for final submission
     */
-  async prepareLearningUpload(form, file) {
-    const courseId = form.dataset.courseId;
-    const taskId = form.dataset.taskId;
-    if (!courseId || !taskId) throw new Error('missing form dataset');
+	  async prepareLearningUpload(form, file) {
+	    const courseId = form.dataset.courseId;
+	    const taskId = form.dataset.taskId;
+	    if (!courseId || !taskId) throw new Error('missing form dataset');
 
-    const mime = file.type;
-    const size = file.size;
-    const filename = file.name || 'upload.bin';
-    const kind = mime === 'application/pdf' ? 'file' : (mime.startsWith('image/') ? 'image' : 'file');
+	    const filename = file.name || 'upload.bin';
+	    const lowerName = filename.toLowerCase();
+	    let mime = file.type || '';
+	    // Some browsers do not provide `file.type` for unknown extensions (e.g., `.sb3`).
+	    // Fall back to filename-based detection for the allowlisted formats.
+	    if (!mime || mime === 'application/octet-stream') {
+	      if (lowerName.endsWith('.sb3')) mime = 'application/x.scratch.sb3';
+	      else if (lowerName.endsWith('.png')) mime = 'image/png';
+	      else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) mime = 'image/jpeg';
+	      else if (lowerName.endsWith('.pdf')) mime = 'application/pdf';
+	    }
+	    const size = file.size;
+	    const kind = mime === 'application/pdf' ? 'file' : (mime.startsWith('image/') ? 'image' : 'file');
 
-    // Client-side checks mirror server (non-authoritative).
-    // Types and max size are derived from data attributes that SSR renders from the central policy.
-    const allowedMimeAttr = (form.dataset.allowedMime || '').split(',').map((s) => s.trim()).filter(Boolean);
-    const maxBytesAttr = parseInt(form.dataset.maxBytes || '0', 10);
-    const allowed = allowedMimeAttr.length ? allowedMimeAttr : ['image/png', 'image/jpeg', 'application/pdf'];
-    const maxBytes = maxBytesAttr > 0 ? maxBytesAttr : 10 * 1024 * 1024;
-    this.validateFile(file, allowed, maxBytes);
+	    // Client-side checks mirror server (non-authoritative).
+	    // Types and max size are derived from data attributes that SSR renders from the central policy.
+	    const allowedMimeAttr = (form.dataset.allowedMime || '').split(',').map((s) => s.trim()).filter(Boolean);
+	    const maxBytesAttr = parseInt(form.dataset.maxBytes || '0', 10);
+	    const allowed = allowedMimeAttr.length ? allowedMimeAttr : ['image/png', 'image/jpeg', 'application/pdf'];
+	    const maxBytes = maxBytesAttr > 0 ? maxBytesAttr : 10 * 1024 * 1024;
+	    this.validateFile({ type: mime, size }, allowed, maxBytes);
 
-    const { intent, sha, size: sizeBytes } = await this.requestIntentAndUpload(
-      `/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`,
-      file,
+	    const { intent, sha, size: sizeBytes } = await this.requestIntentAndUpload(
+	      `/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`,
+	      file,
       { kind, filename, mime_type: mime, size_bytes: size }
     );
     const sha256 = sha;

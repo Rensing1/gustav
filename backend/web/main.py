@@ -655,18 +655,24 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     cid_escaped = Component.escape(course_id)
     uid_escaped = Component.escape(unit_id)
     kind_norm = (task_kind or "native").strip().lower()
+    from backend.storage.learning_policy import DEFAULT_POLICY
 
     if kind_norm in {"visual", "scratch"}:
         # Visual/Scratch tasks are upload-only: no mode switch and no textarea.
+        max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
+        max_mb = round(max_bytes / (1024 * 1024), 2)
         accept = "image/png,image/jpeg,application/pdf"
-        hint = "JPG/PNG/PDF, bis 10 MB"
+        hint = f"JPG/PNG/PDF, bis {max_mb} MB"
+        allowed_mime = "image/png,image/jpeg,application/pdf"
         if kind_norm == "scratch":
             accept = ".sb3,application/x.scratch.sb3"
-            hint = "SB3 bis 10 MB"
+            hint = f".sb3 bis {max_mb} MB"
+            allowed_mime = "application/x.scratch.sb3"
         return (
             f'<form method="post" action="{form_action}" class="task-submit-form" '
             f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
-            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="upload">'
+            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="upload" '
+            f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
             f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
             '<input type="hidden" name="mode" value="upload">'
             '<div class="task-form-fields fields-upload">'
@@ -682,10 +688,14 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
             "</form>"
         )
 
+    max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
+    allowed_mime = "image/png,image/jpeg,application/pdf"
+    max_mb = round(max_bytes / (1024 * 1024), 2)
     return (
         f'<form method="post" action="{form_action}" class="task-submit-form" '
         f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
-        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="text">'
+        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="text" '
+        f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
         f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
         '<fieldset class="choice-cards" aria-label="Abgabeart">'
         '<label class="choice-card choice-card--text">'
@@ -695,7 +705,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         '<label class="choice-card choice-card--upload">'
         '<input type="radio" name="mode" value="upload">'
         '<span class="choice-card__title">⬆️ Upload</span>'
-        '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
+        f'<span class="choice-card__hint">JPG/PNG/PDF · bis {max_mb} MB</span>'
         '</label>'
         '</fieldset>'
         '<div class="task-form-fields fields-text">'
@@ -704,7 +714,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         '<div class="task-form-fields fields-upload" hidden>'
         '<label>Datei auswählen '
         '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-        '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+        f'<p class="text-muted">JPG/PNG/PDF, bis {max_mb} MB</p>'
         '<input type="hidden" name="storage_key" value="">'
         '<input type="hidden" name="mime_type" value="">'
         '<input type="hidden" name="size_bytes" value="">'

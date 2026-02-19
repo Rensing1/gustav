@@ -84,5 +84,6 @@ async def test_ui_renders_scratch_tasks_as_sb3_upload_only() -> None:
     # Must render upload input and preselect upload mode via hidden field
     assert re.search(r'name=\"upload_file\"', html), "upload input must be present"
     assert 'accept=".sb3,application/x.scratch.sb3"' in html
+    assert 'data-allowed-mime="application/x.scratch.sb3"' in html
+    assert re.search(r'data-max-bytes=\"[0-9]+\"', html)
     assert re.search(r'type=\"hidden\"[^>]*name=\"mode\"[^>]*value=\"upload\"', html)
-

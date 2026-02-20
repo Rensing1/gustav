@@ -1130,7 +1130,7 @@ def _render_submission_text_container(
 
     text_html = render_markdown_safe(text_src)
     if text_html and (text_src.lstrip().startswith("# scratch.evidence.")):
-        text_html = f'<div class="scratch-evidence">{text_html}</div>'
+        text_html = f'<div class="scratch-evidence scratch-evidence--ide">{text_html}</div>'
     if not text_html and not has_artifact:
         text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
 

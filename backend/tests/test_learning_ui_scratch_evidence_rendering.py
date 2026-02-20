@@ -14,7 +14,7 @@ def test_scratch_evidence_is_wrapped_for_scoped_css() -> None:
         }
     }
     html = _render_submission_text_container(record, submission_id=submission_id, has_artifact=False, oob=False)
-    assert 'class="scratch-evidence"' in html
+    assert 'class="scratch-evidence' in html
 
 
 def test_non_scratch_markdown_is_not_wrapped() -> None:
@@ -23,4 +23,3 @@ def test_non_scratch_markdown_is_not_wrapped() -> None:
     record = {"text_body": "## Hello\n\n- A\n"}
     html = _render_submission_text_container(record, submission_id=submission_id, has_artifact=False, oob=False)
     assert "scratch-evidence" not in html
-

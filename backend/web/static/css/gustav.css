@@ -1283,7 +1283,7 @@ pre {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
+  white-space: normal;
 }
 
 .scratch-evidence h4 + ul > li:hover {
@@ -1291,10 +1291,86 @@ pre {
 }
 
 .scratch-evidence h4 + ul ul {
-  margin-top: var(--space-1);
+  margin-top: 0;
   padding-left: var(--space-4);
   border-left: 1px dashed var(--color-border);
   opacity: 0.95;
+}
+
+/* Scratch evidence: IDE-like view for script panels */
+.scratch-evidence--ide {
+  --scratch-editor-gutter-width: 3.25rem;
+  --scratch-editor-gutter-bg: var(--color-bg-overlay);
+  --scratch-editor-code-bg: var(--color-bg-surface);
+  --scratch-editor-divider: var(--color-border);
+}
+
+.scratch-evidence--ide h4 {
+  background-color: var(--scratch-editor-gutter-bg);
+  border-color: var(--scratch-editor-divider);
+}
+
+.scratch-evidence--ide h4 + ul {
+  display: block;
+  gap: 0;
+  padding: 0;
+  background-color: var(--scratch-editor-code-bg);
+  counter-reset: scratch-editor-line;
+}
+
+.scratch-evidence--ide h4 + ul > li {
+  position: relative;
+  counter-increment: scratch-editor-line;
+  border-radius: 0;
+  padding: var(--space-1) var(--space-3);
+  padding-left: calc(var(--scratch-editor-gutter-width) + var(--space-3));
+  border-top: 1px solid var(--scratch-editor-divider);
+  background-color: var(--scratch-editor-code-bg);
+  background-image: linear-gradient(
+    to right,
+    var(--scratch-editor-gutter-bg) 0,
+    var(--scratch-editor-gutter-bg) var(--scratch-editor-gutter-width),
+    transparent var(--scratch-editor-gutter-width)
+  );
+}
+
+.scratch-evidence--ide h4 + ul > li:first-child {
+  border-top: none;
+}
+
+.scratch-evidence--ide h4 + ul > li::before {
+  content: counter(scratch-editor-line);
+  position: absolute;
+  top: var(--space-1);
+  left: var(--space-2);
+  width: calc(var(--scratch-editor-gutter-width) - var(--space-2));
+  text-align: right;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.scratch-evidence--ide h4 + ul > li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--scratch-editor-gutter-width);
+  width: 1px;
+  background-color: var(--scratch-editor-divider);
+  opacity: 0.6;
+}
+
+.scratch-evidence--ide h4 + ul li:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.scratch-evidence--ide h4 + ul ul {
+  border-left-style: solid;
+  opacity: 0.9;
+}
+
+.scratch-evidence--ide h4 + ul ul > li {
+  padding: var(--space-1) var(--space-2);
 }
 
 .task-panel__history-body .history-feedback {

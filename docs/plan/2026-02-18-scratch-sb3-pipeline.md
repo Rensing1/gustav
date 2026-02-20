@@ -155,6 +155,20 @@ Umsetzung (minimal-invasiv):
 Test:
 - `backend/tests/test_learning_ui_scratch_evidence_rendering.py` stellt sicher, dass nur Scratch-Evidence den Wrapper erhält.
 
+## Update (2026-02-20): Schüler-UI — Script-Panels im IDE-Look (optional)
+Ziel: Die Script-Listen sollen sich mehr wie ein Code-Editor anfühlen (Gutter, Zeilennummern, klare Hierarchie),
+ohne das Evidence-Format zu verändern.
+
+Beobachtung:
+- In verschachtelten Kontrollstrukturen (`control_forever` mit SUBSTACK) kann MarkdownIt im HTML eine Newline zwischen
+  Text und dem verschachtelten `<ul>` erzeugen. Mit `white-space: pre-wrap` wurde das als „extra Leerzeile“ sichtbar.
+
+Umsetzung:
+- SSR: Wrapper erweitert auf `<div class="scratch-evidence scratch-evidence--ide">…</div>` (Theme nur per CSS).
+- CSS:
+  - Entfernt `white-space: pre-wrap` für Script-Zeilen, damit HTML-Whitespace nicht als zusätzliche Zeile sichtbar wird.
+  - IDE-Styling nur für Script-Panels (`h4 + ul`): Gutter, Zeilennummern (Top-Level Blocks), Divider und Hover.
+
 ## Tests (pytest)
 - OpenAPI Contract Tests: Scratch in enums + error codes vorhanden.
 - Teaching API: Erstellen von Scratch-Tasks setzt `kind=scratch`.

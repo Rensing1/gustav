@@ -1,7 +1,7 @@
 # Plan: PR-Cleanup — Scratch SB3 Pipeline (Wartbarkeit + Konsistenz)
 
 Datum: 2026-02-20  
-Status: In progress (Cleanup vor Merge)
+Status: Implemented (Cleanup abgeschlossen; ready for review)
 
 ## Kontext / Problem
 Der Scratch-SB3-PR hat die Kernfunktionalität bereits geliefert (Scratch Tasks, SB3 Upload, deterministische Evidence v2).
@@ -53,3 +53,6 @@ Vor dem Merge gab es jedoch ein paar wartbarkeitskritische Punkte:
 - Manuell (Smoke):
   - Scratch Task: `.sb3` auswählen → Upload vorbereitet → Abgeben → Evidence sichtbar.
   - Visual Task: PNG/PDF auswählen → Abgeben.
+
+Ergebnis (lokal):
+- `pytest` (Auswahl oben): grün (35 Tests).

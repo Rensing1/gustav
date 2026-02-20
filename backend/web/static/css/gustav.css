@@ -1208,6 +1208,63 @@ pre {
   border: 1px solid var(--color-border);
 }
 
+.scratch-evidence {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.scratch-evidence > * {
+  margin: 0;
+}
+
+.scratch-evidence > h1:first-child {
+  display: none;
+}
+
+.scratch-evidence h2 {
+  font-size: var(--text-lg);
+}
+
+.scratch-evidence h3 {
+  font-size: var(--text-base);
+}
+
+.scratch-evidence h4 {
+  font-size: var(--text-sm);
+}
+
+.scratch-evidence ul,
+.scratch-evidence ol {
+  padding-left: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.scratch-evidence li > p {
+  margin: 0;
+}
+
+.scratch-evidence h4 + ul {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-surface);
+  overflow-x: auto;
+}
+
+.scratch-evidence h4 + ul > li {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.scratch-evidence h4 + ul ul {
+  margin-top: var(--space-1);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-border);
+}
+
 .task-panel__history-body .history-feedback {
   border-color: var(--color-success);
 }

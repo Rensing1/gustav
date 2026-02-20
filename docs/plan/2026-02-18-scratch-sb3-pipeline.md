@@ -143,6 +143,18 @@ Nebenwirkung/UX:
   bleibt (u.a. um Draft-Clearing zu vermeiden). Das UI zeigt dann sonst den generischen Toast „Request failed“.
 - Client-seitig wird bei `htmx:responseError` jetzt ein vom Server geliefertes `HX-Trigger.showMessage` bevorzugt.
 
+## Update (2026-02-20): Schüler-UI — Evidence lesbarer darstellen (Typografie/Outline)
+Ziel: `scratch.evidence.v2` soll **für Schüler** weniger wie ein Logdump wirken, ohne das Evidence-Format zu verändern.
+
+Umsetzung (minimal-invasiv):
+- SSR: Evidence-Markdown wird beim Rendern als `<div class="scratch-evidence">…</div>` gekapselt, wenn der Text mit `# scratch.evidence.` beginnt.
+- CSS: Styles sind dadurch scoped:
+  - Schema-Zeile (`# scratch.evidence.v2`) wird visuell ausgeblendet (bleibt im Text für Pipeline/Debug).
+  - Überschriften kompakter; Listen in Monospace; Script-Block-Listen (`h4 + ul`) als Panel mit klarer Einrückung für Substacks.
+
+Test:
+- `backend/tests/test_learning_ui_scratch_evidence_rendering.py` stellt sicher, dass nur Scratch-Evidence den Wrapper erhält.
+
 ## Tests (pytest)
 - OpenAPI Contract Tests: Scratch in enums + error codes vorhanden.
 - Teaching API: Erstellen von Scratch-Tasks setzt `kind=scratch`.

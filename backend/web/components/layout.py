@@ -118,7 +118,7 @@ class Layout(Component):
     <link rel="icon" href="/static/favicon.ico">
 
     <!-- Custom CSS (no external dependencies) -->
-    <link rel="stylesheet" href="/static/css/gustav.css?v=6">
+    <link rel="stylesheet" href="/static/css/gustav.css?v=7">
     <!-- Modular units (student + teacher). Must be loaded globally because
          navigation happens via HTMX fragment swaps that do not update <head>. -->
     <link rel="stylesheet" href="/static/css/student_modular_unit.css?v=6">

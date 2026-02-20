@@ -1209,10 +1209,8 @@ pre {
 }
 
 .scratch-evidence {
-  display: grid;
-  gap: var(--space-2);
   font-size: var(--text-sm);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .scratch-evidence > * {
@@ -1225,14 +1223,34 @@ pre {
 
 .scratch-evidence h2 {
   font-size: var(--text-lg);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.scratch-evidence h2:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .scratch-evidence h3 {
   font-size: var(--text-base);
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-weight: 600;
 }
 
 .scratch-evidence h4 {
   font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  background-color: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
 }
 
 .scratch-evidence ul,
@@ -1240,6 +1258,7 @@ pre {
   padding-left: var(--space-4);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
+  font-variant-ligatures: none;
 }
 
 .scratch-evidence li > p {
@@ -1247,22 +1266,35 @@ pre {
 }
 
 .scratch-evidence h4 + ul {
-  padding: var(--space-3);
+  margin-top: 0;
+  padding: var(--space-2);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   background-color: var(--color-bg-surface);
   overflow-x: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  display: grid;
+  gap: var(--space-1);
 }
 
 .scratch-evidence h4 + ul > li {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.scratch-evidence h4 + ul > li:hover {
+  background-color: var(--color-bg-hover);
 }
 
 .scratch-evidence h4 + ul ul {
   margin-top: var(--space-1);
   padding-left: var(--space-4);
-  border-left: 2px solid var(--color-border);
+  border-left: 1px dashed var(--color-border);
+  opacity: 0.95;
 }
 
 .task-panel__history-body .history-feedback {

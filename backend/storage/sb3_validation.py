@@ -72,36 +72,37 @@ def extract_project_json_bytes(sb3_bytes: bytes, *, limits: SB3Limits | None = N
         raise SB3ValidationError("invalid_sb3_archive")
     limits = limits or SB3Limits()
     try:
-        zf = zipfile.ZipFile(io.BytesIO(bytes(sb3_bytes)))
+        with zipfile.ZipFile(io.BytesIO(bytes(sb3_bytes))) as zf:
+            try:
+                infos = zf.infolist()
+            except Exception:
+                raise SB3ValidationError("invalid_sb3_archive")
+            if len(infos) > int(limits.max_zip_entries):
+                raise SB3ValidationError("invalid_sb3_archive")
+            try:
+                total_uncompressed = sum(int(i.file_size or 0) for i in infos)
+            except Exception:
+                raise SB3ValidationError("invalid_sb3_archive")
+            if total_uncompressed > int(limits.max_total_uncompressed_bytes):
+                raise SB3ValidationError("invalid_sb3_archive")
+
+            try:
+                info = zf.getinfo("project.json")
+            except KeyError:
+                raise SB3ValidationError("missing_project_json")
+            except Exception:
+                raise SB3ValidationError("invalid_sb3_archive")
+
+            data = _bounded_read(zf, info, max_bytes=int(limits.max_project_json_bytes))
+            if not data:
+                raise SB3ValidationError("invalid_sb3_archive")
+            return data
+    except SB3ValidationError:
+        raise
     except zipfile.BadZipFile:
         raise SB3ValidationError("invalid_sb3_archive")
     except Exception:
         raise SB3ValidationError("invalid_sb3_archive")
-
-    try:
-        infos = zf.infolist()
-    except Exception:
-        raise SB3ValidationError("invalid_sb3_archive")
-    if len(infos) > int(limits.max_zip_entries):
-        raise SB3ValidationError("invalid_sb3_archive")
-    try:
-        total_uncompressed = sum(int(i.file_size or 0) for i in infos)
-    except Exception:
-        raise SB3ValidationError("invalid_sb3_archive")
-    if total_uncompressed > int(limits.max_total_uncompressed_bytes):
-        raise SB3ValidationError("invalid_sb3_archive")
-
-    try:
-        info = zf.getinfo("project.json")
-    except KeyError:
-        raise SB3ValidationError("missing_project_json")
-    except Exception:
-        raise SB3ValidationError("invalid_sb3_archive")
-
-    data = _bounded_read(zf, info, max_bytes=int(limits.max_project_json_bytes))
-    if not data:
-        raise SB3ValidationError("invalid_sb3_archive")
-    return data
 
 
 def load_project_json(sb3_bytes: bytes, *, limits: SB3Limits | None = None) -> dict[str, Any]:
@@ -127,4 +128,3 @@ def load_project_json(sb3_bytes: bytes, *, limits: SB3Limits | None = None) -> d
     if not isinstance(targets, list):
         raise SB3ValidationError("invalid_sb3_archive")
     return parsed  # type: ignore[return-value]
-

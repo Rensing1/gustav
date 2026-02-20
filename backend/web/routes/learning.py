@@ -1322,7 +1322,7 @@ def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, cou
 
 @learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents")
 async def create_upload_intent(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
-    """Create a short-lived upload intent for a submission asset (image/PDF).
+    """Create a short-lived upload intent for a submission asset (image/PDF/SB3).
 
     Why:
         Client-side uploads avoid sending large binaries through our API server.
@@ -1335,7 +1335,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         course_id: UUID string of the course context (path).
         task_id: UUID string of the task (path).
         payload: JSON object with keys:
-            - kind: "image" | "file" (PDF)
+            - kind: "image" | "file" (PDF or Scratch SB3, depending on Task.kind)
             - filename: original filename for intent construction
             - mime_type: declared content-type (validated against allowlist)
             - size_bytes: integer size of the upload in bytes (≤ 10 MiB)

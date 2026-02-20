@@ -89,7 +89,8 @@ async def test_submission_artifact_reload_returns_stable_container(monkeypatch: 
     html = resp.text
 
     assert f'id="submission-artifact-{submission_id}"' in html
-    assert 'data-artifact-reload="true"' in html
+    assert "Neu laden" not in html
+    assert 'data-artifact-reload="true"' not in html
     assert 'file-preview--image' in html
 
 

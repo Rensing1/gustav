@@ -1130,7 +1130,7 @@ def _render_submission_text_container(
 
     text_html = render_markdown_safe(text_src)
     if text_html and (text_src.lstrip().startswith("# scratch.evidence.")):
-        text_html = f'<div class="scratch-evidence scratch-evidence--ide">{text_html}</div>'
+        text_html = f'<div class="scratch-evidence">{text_html}</div>'
     if not text_html and not has_artifact:
         text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
 
@@ -1258,12 +1258,6 @@ def _render_submission_artifact_container(
 
     safe_sid = Component.escape(submission_id)
     container_id = f"submission-artifact-{safe_sid}"
-    reload_url = f"/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/artifact"
-    reload_btn = (
-        f'<button type="button" class="btn btn-sm" data-artifact-reload="true" hidden'
-        f' hx-get="{Component.escape(reload_url)}"'
-        f' hx-target="#{container_id}" hx-swap="outerHTML">Neu laden</button>'
-    )
 
     open_tab_link = ""
     if mime == "application/pdf":
@@ -1272,7 +1266,7 @@ def _render_submission_artifact_container(
             f'<a class="btn btn-sm" href="{safe_url}" target="_blank" rel="noopener">In neuem Tab öffnen</a>'
         )
 
-    return f'<div id="{container_id}">{preview_html}{open_tab_link}{reload_btn}</div>'
+    return f'<div id="{container_id}">{preview_html}{open_tab_link}</div>'
 
 
 def _strip_task_history_outer_wrapper(html: str) -> str:

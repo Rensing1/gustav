@@ -118,7 +118,7 @@ class Layout(Component):
     <link rel="icon" href="/static/favicon.ico">
 
     <!-- Custom CSS (no external dependencies) -->
-    <link rel="stylesheet" href="/static/css/gustav.css?v=8">
+    <link rel="stylesheet" href="/static/css/gustav.css?v=9">
     <!-- Modular units (student + teacher). Must be loaded globally because
          navigation happens via HTMX fragment swaps that do not update <head>. -->
     <link rel="stylesheet" href="/static/css/student_modular_unit.css?v=6">
@@ -132,7 +132,7 @@ class Layout(Component):
     <SCRIPT src="/static/js/vendor/sortable.js?v=4"></SCRIPT>
 
     <!-- Minimal custom JavaScript -->
-    <SCRIPT src="/static/js/gustav.js?v=9" defer></SCRIPT>
+    <SCRIPT src="/static/js/gustav.js?v=10" defer></SCRIPT>
     <!-- Learning uploads enhancement (toggle + upload-intents) -->
     <SCRIPT src="/static/js/learning_upload.js?v=3" defer></SCRIPT>
     <!-- Student modular unit workspace (dummy-like overview/content) -->

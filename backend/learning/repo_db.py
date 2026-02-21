@@ -8,6 +8,7 @@ import json
 import os
 import re
 from uuid import UUID, uuid5
+from backend.storage.sb3_validation import SCRATCH_SB3_MIME
 
 try:  # pragma: no cover -- optional dependency in some environments
     import psycopg
@@ -1119,19 +1120,19 @@ class DBLearningRepo:
                     if data.kind not in ("image", "file"):
                         raise ValueError("invalid_input")
                     # Defense-in-depth: Visual tasks must not accept SB3 archives.
-                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == "application/x.scratch.sb3":
+                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == SCRATCH_SB3_MIME:
                         raise ValueError("invalid_file_payload")
                 elif task_kind == "scratch":
                     # Scratch tasks are SB3 upload-only.
                     if data.kind != "file":
                         raise ValueError("invalid_input")
-                    if str(data.mime_type or "").strip().lower() != "application/x.scratch.sb3":
+                    if str(data.mime_type or "").strip().lower() != SCRATCH_SB3_MIME:
                         raise ValueError("invalid_file_payload")
                 else:
                     if data.kind == "h5p":
                         raise ValueError("invalid_h5p_payload")
                     # Defense-in-depth: only scratch tasks may accept SB3 MIME.
-                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == "application/x.scratch.sb3":
+                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == SCRATCH_SB3_MIME:
                         raise ValueError("invalid_file_payload")
 
                 cur.execute(

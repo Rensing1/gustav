@@ -1126,22 +1126,28 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
 
     # Scratch `.sb3` validation (fail early with stable detail codes).
     if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == SCRATCH_SB3_MIME:
-        try:
-            task_kind = _get_repo().get_task_kind_for_student(
-                student_sub=str(user.get("sub", "")),
-                course_id=str(course_id),
-                task_id=str(task_id),
-            )
-        except PermissionError:
-            return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-        except LookupError:
-            return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-        except Exception:
-            return JSONResponse(
-                {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
-                status_code=503,
-                headers=_cache_headers_error(),
-            )
+        task_kind = "native"
+        repo = _get_repo()
+        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
+        if callable(task_kind_reader):
+            try:
+                task_kind = str(
+                    task_kind_reader(
+                        student_sub=str(user.get("sub", "")),
+                        course_id=str(course_id),
+                        task_id=str(task_id),
+                    )
+                )
+            except PermissionError:
+                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+            except LookupError:
+                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+            except Exception:
+                return JSONResponse(
+                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
+                    status_code=503,
+                    headers=_cache_headers_error(),
+                )
 
         if str(task_kind or "").strip().lower() == "scratch":
             storage_key = str(clean_payload.get("storage_key") or "")
@@ -1654,6 +1660,8 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
         return None
     # Defense-in-depth: allowlist known storage hosts only (avoid SSRF).
     try:
+        env = (_current_environment() or "").strip().lower()
+        allow_insecure_env = env in {"dev", "development", "test", "testing", "local"}
         supabase_base = (os.getenv("SUPABASE_URL") or "").strip()
         public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
 
@@ -1674,6 +1682,8 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
         if (target.scheme or "").lower() not in {"http", "https"}:
             return None
         tgt_scheme = (target.scheme or "").lower()
+        if (not allow_insecure_env) and tgt_scheme != "https":
+            return None
         tgt_host = (target.hostname or "").lower()
         tgt_port = target.port or (443 if tgt_scheme == "https" else 80)
         allowed_origins = {o for o in (sup_origin, pub_origin) if o is not None}
@@ -1697,6 +1707,9 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
                     url = target._replace(scheme=internal.scheme, netloc=internal.netloc).geturl()
             except Exception:
                 pass
+        effective = _urlparse(url)
+        if (not allow_insecure_env) and (effective.scheme or "").lower() != "https":
+            return None
     except Exception:
         return None
     try:

@@ -4144,7 +4144,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Service unavailable (submission persistence not available)
+          description: >-
+            Service unavailable (submission_persistence_unavailable |
+            submission_validation_unavailable | sb3_validation_unavailable)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -7650,10 +7652,12 @@ paths:
       tags: [Learning]
       summary: Create a presigned upload intent for a student submission asset
       description: >-
-        Returns a short-lived presigned URL to upload an image or PDF asset
-        for a task submission. The client must later call the submissions
-        endpoint with storage metadata (storage_key, mime_type, size_bytes,
-        sha256) to finalize the submission.
+        Returns a short-lived presigned URL to upload a task submission asset.
+        For `Task.kind=scratch`, only `.sb3`
+        (`application/x.scratch.sb3`) is accepted. For other task kinds in MVP,
+        uploads are image/PDF assets. The client must later call the
+        submissions endpoint with storage metadata (storage_key, mime_type,
+        size_bytes, sha256) to finalize the submission.
       operationId: createLearningSubmissionUploadIntent
       security:
         - cookieAuth: []

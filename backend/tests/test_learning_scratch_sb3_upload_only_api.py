@@ -94,8 +94,8 @@ def _make_zip_missing_project_json() -> bytes:
     return buf.read()
 
 
-async def _prepare_scratch_task_fixture() -> dict:
-    """Create course/unit/section with one released scratch task and one enrolled student."""
+async def _prepare_task_fixture(*, task_payload: dict[str, object], course_title: str) -> dict:
+    """Create course/unit/section with one released task and one enrolled student."""
     _require_db_or_skip()
 
     import routes.teaching as teaching  # noqa: E402
@@ -116,16 +116,10 @@ async def _prepare_scratch_task_fixture() -> dict:
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
 
-        course = (await c.post("/api/teaching/courses", json={"title": "Kurs Scratch"})).json()
+        course = (await c.post("/api/teaching/courses", json={"title": course_title})).json()
         unit = (await c.post("/api/teaching/units", json={"title": "Unit"})).json()
         section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "Abschnitt"})).json()
-
-        task = (
-            await c.post(
-                f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
-                json={"instruction_md": "### Scratch Aufgabe", "criteria": ["K1"], "scratch": {}},
-            )
-        ).json()
+        task = (await c.post(f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks", json=task_payload)).json()
 
         module = (await c.post(f"/api/teaching/courses/{course['id']}/modules", json={"unit_id": unit["id"]})).json()
         r = await c.patch(
@@ -143,6 +137,20 @@ async def _prepare_scratch_task_fixture() -> dict:
     return {"teacher": teacher, "student": student, "course_id": course["id"], "task_id": task["id"]}
 
 
+async def _prepare_scratch_task_fixture() -> dict:
+    return await _prepare_task_fixture(
+        task_payload={"instruction_md": "### Scratch Aufgabe", "criteria": ["K1"], "scratch": {}},
+        course_title="Kurs Scratch",
+    )
+
+
+async def _prepare_native_task_fixture() -> dict:
+    return await _prepare_task_fixture(
+        task_payload={"instruction_md": "### Native Aufgabe", "criteria": ["K1"]},
+        course_title="Kurs Native",
+    )
+
+
 @pytest.mark.anyio
 async def test_scratch_upload_intent_allows_only_sb3(monkeypatch: pytest.MonkeyPatch) -> None:
     fx = await _prepare_scratch_task_fixture()
@@ -157,6 +165,21 @@ async def test_scratch_upload_intent_allows_only_sb3(monkeypatch: pytest.MonkeyP
     assert r.status_code == 200
     body = r.json() or {}
     assert body.get("accepted_mime_types") == ["application/x.scratch.sb3"]
+
+
+@pytest.mark.anyio
+async def test_non_scratch_upload_intent_rejects_sb3(monkeypatch: pytest.MonkeyPatch) -> None:
+    fx = await _prepare_native_task_fixture()
+    monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
+    with _UseStorageAdapter(FakeStorageAdapter()):
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
+            r = await c.post(
+                f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/upload-intents",
+                json={"kind": "file", "filename": "projekt.sb3", "mime_type": "application/x.scratch.sb3", "size_bytes": 1024},
+            )
+    assert r.status_code == 400
+    assert r.json().get("detail") == "mime_not_allowed"
 
 
 @pytest.mark.anyio
@@ -184,6 +207,39 @@ async def test_scratch_task_rejects_text_and_image_submissions() -> None:
     assert r_text.json().get("detail") == "invalid_input"
     assert r_img.status_code == 400
     assert r_img.json().get("detail") == "invalid_input"
+
+
+@pytest.mark.anyio
+async def test_non_scratch_submission_rejects_sb3_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    fx = await _prepare_native_task_fixture()
+    sb3_bytes = _make_valid_sb3_bytes()
+    digest = sha256(sb3_bytes).hexdigest()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
+        monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+
+        storage_key = "submissions/x/y/z/projekt.sb3"
+        path = root / storage_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(sb3_bytes)
+
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
+            r = await c.post(
+                f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+                headers={"Idempotency-Key": "native-sb3-reject"},
+                json={
+                    "kind": "file",
+                    "storage_key": storage_key,
+                    "mime_type": "application/x.scratch.sb3",
+                    "size_bytes": len(sb3_bytes),
+                    "sha256": digest,
+                },
+            )
+    assert r.status_code == 400
+    assert r.json().get("detail") == "invalid_file_payload"
 
 
 @pytest.mark.anyio

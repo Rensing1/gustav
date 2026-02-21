@@ -57,3 +57,24 @@ def test_openapi_learning_submission_file_mime_includes_sb3() -> None:
 
     mime_type = (((file_variants[0].get("properties") or {}).get("mime_type") or {}).get("enum") or [])
     assert "application/x.scratch.sb3" in mime_type
+
+
+def test_openapi_upload_intent_description_mentions_sb3_for_scratch() -> None:
+    spec = load_spec()
+    paths = spec.get("paths", {}) or {}
+    endpoint = paths.get("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents", {}) or {}
+    post = endpoint.get("post", {}) or {}
+    description = str(post.get("description") or "")
+    assert "sb3" in description.lower()
+    assert "scratch" in description.lower()
+
+
+def test_openapi_submission_503_mentions_sb3_validation_detail_codes() -> None:
+    spec = load_spec()
+    paths = spec.get("paths", {}) or {}
+    endpoint = paths.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions", {}) or {}
+    post = endpoint.get("post", {}) or {}
+    responses = post.get("responses", {}) or {}
+    desc_503 = str((responses.get("503") or {}).get("description") or "")
+    assert "submission_validation_unavailable" in desc_503
+    assert "sb3_validation_unavailable" in desc_503

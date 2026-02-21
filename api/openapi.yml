@@ -896,8 +896,10 @@ components:
       additionalProperties: false
       description: >-
         Marker config for upload-only Scratch tasks. Students submit exactly one
-        `.sb3` file (application/x.scratch.sb3). Image/PDF/text submissions are
-        rejected (400 invalid_input). Empty object in MVP.
+        `.sb3` file (application/x.scratch.sb3). Image/text submissions are
+        rejected (400 invalid_input). Other `kind=file` MIME types (e.g.
+        application/pdf) are rejected (400 invalid_file_payload). Empty object
+        in MVP.
     Task:
       type: object
       required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
@@ -7757,7 +7759,8 @@ paths:
       tags: [Learning]
       summary: Dev-only local upload target (student-only)
       description: >-
-        Accepts a small file upload and writes to STORAGE_VERIFY_ROOT under the provided `storage_key`.
+        Accepts a small file upload and writes to STORAGE_VERIFY_ROOT (or `./.tmp/dev_uploads` when unset)
+        under the provided `storage_key`.
         Returns computed `sha256` and `size_bytes` used to finalize the submission.
         Route is gated by the `ENABLE_DEV_UPLOAD_STUB` feature flag (default: false); when disabled the endpoint returns 404.
       x-security-notes:

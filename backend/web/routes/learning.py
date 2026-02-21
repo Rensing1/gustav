@@ -1768,7 +1768,7 @@ async def internal_upload_stub(request: Request):
     Behavior:
         - Requires same-origin (Origin/Referer) and an authenticated student.
         - Query string must include `storage_key` (path-like; validated).
-        - Body bytes are written to STORAGE_VERIFY_ROOT/storage_key.
+        - Body bytes are written to STORAGE_VERIFY_ROOT/storage_key (or `./.tmp/dev_uploads/...` when unset).
         - Responds with JSON: {sha256, size_bytes}.
     """
     if not _dev_upload_stub_enabled():

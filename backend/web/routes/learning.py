@@ -1656,20 +1656,41 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
     try:
         supabase_base = (os.getenv("SUPABASE_URL") or "").strip()
         public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
-        sup_host = (_urlparse(supabase_base).hostname or "").lower()
-        pub_host = (_urlparse(public_base).hostname or "").lower()
+
+        def _origin(raw: str) -> tuple[str, str, int] | None:
+            parsed = _urlparse(raw)
+            scheme = (parsed.scheme or "").lower()
+            host = (parsed.hostname or "").lower()
+            if scheme not in {"http", "https"} or not host:
+                return None
+            port = parsed.port or (443 if scheme == "https" else 80)
+            return (scheme, host, int(port))
+
+        sup_origin = _origin(supabase_base)
+        pub_origin = _origin(public_base)
+        sup_host = sup_origin[1] if sup_origin else ""
+        pub_host = pub_origin[1] if pub_origin else ""
         target = _urlparse(url)
         if (target.scheme or "").lower() not in {"http", "https"}:
             return None
+        tgt_scheme = (target.scheme or "").lower()
         tgt_host = (target.hostname or "").lower()
-        allowed_hosts = {h for h in (sup_host, pub_host) if h}
-        if not allowed_hosts or (tgt_host not in allowed_hosts):
+        tgt_port = target.port or (443 if tgt_scheme == "https" else 80)
+        allowed_origins = {o for o in (sup_origin, pub_origin) if o is not None}
+        if not allowed_origins or ((tgt_scheme, tgt_host, int(tgt_port)) not in allowed_origins):
+            return None
+        path = target.path or "/"
+        while "//" in path:
+            path = path.replace("//", "/")
+        if ".." in path or re.search(r"%2e", path, flags=re.IGNORECASE):
+            return None
+        if not path.startswith("/storage/v1/object/"):
             return None
         # Prefer internal gateway for server-side downloads to avoid TLS trust
         # issues against the browser-facing host (e.g., local Caddy CA). If the
         # presigned URL uses the public host and an internal SUPABASE_URL exists,
         # rewrite scheme/host/port to the internal base while preserving path/query.
-        if pub_host and sup_host and tgt_host == pub_host and supabase_base:
+        if pub_origin and sup_origin and tgt_host == pub_host and supabase_base:
             try:
                 internal = _urlparse(supabase_base)
                 if internal.scheme and internal.netloc:

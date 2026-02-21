@@ -22,15 +22,20 @@ begin
       and column_name = 'allowed_mime_types'
   ) then
     update storage.buckets
-       set allowed_mime_types = array[
-         'application/pdf',
-         'application/x.scratch.sb3',
-         'image/png',
-         'image/jpeg'
-       ]
+       set allowed_mime_types = (
+         select array_agg(distinct mime order by mime)
+         from unnest(
+           coalesce(allowed_mime_types, array[]::text[]) ||
+           array[
+             'application/pdf',
+             'application/x.scratch.sb3',
+             'image/png',
+             'image/jpeg'
+           ]::text[]
+         ) as mime
+       )
      where id = 'submissions';
   end if;
 end$$;
 
 commit;
-

@@ -20,6 +20,7 @@ Notes:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import pytest
 
 
@@ -93,3 +94,13 @@ async def test_buckets_materials_and_submissions_exist_and_private():
             allowed = row[0]
             assert allowed, "submissions bucket must define allowed_mime_types"
             assert "application/x.scratch.sb3" in allowed, "submissions bucket must accept application/x.scratch.sb3"
+
+
+def test_sb3_storage_migration_updates_allowlist_additively() -> None:
+    """The SB3 migration must preserve existing MIME entries instead of replacing them."""
+    migration = Path("supabase/migrations/20260219193000_storage_submissions_bucket_allow_sb3.sql")
+    sql = migration.read_text(encoding="utf-8").lower()
+
+    assert "coalesce(allowed_mime_types" in sql
+    assert "unnest(" in sql
+    assert "application/x.scratch.sb3" in sql

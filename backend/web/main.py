@@ -660,7 +660,8 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     if kind_norm in {"visual", "scratch"}:
         # Visual/Scratch tasks are upload-only: no mode switch and no textarea.
         max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
-        max_mb = round(max_bytes / (1024 * 1024), 2)
+        max_mb_value = max_bytes / (1024 * 1024)
+        max_mb = str(int(max_mb_value)) if max_mb_value.is_integer() else f"{max_mb_value:.2f}".rstrip("0").rstrip(".")
         accept = "image/png,image/jpeg,application/pdf"
         hint = f"JPG/PNG/PDF, bis {max_mb} MB"
         allowed_mime = "image/png,image/jpeg,application/pdf"
@@ -690,7 +691,8 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
 
     max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
     allowed_mime = "image/png,image/jpeg,application/pdf"
-    max_mb = round(max_bytes / (1024 * 1024), 2)
+    max_mb_value = max_bytes / (1024 * 1024)
+    max_mb = str(int(max_mb_value)) if max_mb_value.is_integer() else f"{max_mb_value:.2f}".rstrip("0").rstrip(".")
     return (
         f'<form method="post" action="{form_action}" class="task-submit-form" '
         f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '

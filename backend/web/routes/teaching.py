@@ -1843,6 +1843,7 @@ class TaskCreatePayload(BaseModel):
     max_attempts: object | None = None
     h5p: object | None = None
     visual: object | None = None
+    scratch: object | None = None
 
 
 class TaskUpdatePayload(BaseModel):
@@ -1853,6 +1854,7 @@ class TaskUpdatePayload(BaseModel):
     max_attempts: object | None = None
     h5p: object | None = None
     visual: object | None = None
+    scratch: object | None = None
 
 
 class TaskReorderPayload(BaseModel):
@@ -2976,6 +2978,7 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             max_attempts=payload.max_attempts,
             h5p=payload.h5p,
             visual=payload.visual,
+            scratch=payload.scratch,
         )
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404)
@@ -2989,6 +2992,7 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
             "invalid_teacher_context_md",
             "invalid_h5p_config",
             "invalid_visual_config",
+            "invalid_scratch_config",
             "invalid_task_kind_config",
         }:
             detail = "invalid_input"
@@ -3042,6 +3046,8 @@ async def update_section_task(
         kwargs["h5p"] = raw_updates["h5p"]
     if "visual" in raw_updates:
         kwargs["visual"] = raw_updates["visual"]
+    if "scratch" in raw_updates:
+        kwargs["scratch"] = raw_updates["scratch"]
     try:
         updated = _get_tasks_service().update_task(
             unit_id,
@@ -3060,6 +3066,7 @@ async def update_section_task(
             "invalid_teacher_context_md",
             "invalid_h5p_config",
             "invalid_visual_config",
+            "invalid_scratch_config",
             "invalid_task_kind_config",
         }:
             detail = "invalid_input"
@@ -4309,13 +4316,21 @@ def _serialize_task(t) -> dict:
             h5p_cfg = {"content_id": content_id, "display_options": display_options}
         data["h5p"] = h5p_cfg
         data["visual"] = None
+        data["scratch"] = None
     elif kind == "visual":
         visual_cfg = data.get("visual")
         data["visual"] = visual_cfg if isinstance(visual_cfg, dict) else {}
         data["h5p"] = None
+        data["scratch"] = None
+    elif kind == "scratch":
+        scratch_cfg = data.get("scratch")
+        data["scratch"] = scratch_cfg if isinstance(scratch_cfg, dict) else {}
+        data["h5p"] = None
+        data["visual"] = None
     else:
         data.setdefault("h5p", None)
         data.setdefault("visual", None)
+        data.setdefault("scratch", None)
     # Do not expose internal storage columns; the API uses nested objects.
     data.pop("h5p_content_id", None)
     data.pop("h5p_display_options", None)

@@ -16,7 +16,7 @@ from .verification import VerificationConfig
 from backend.storage.config import get_learning_max_upload_bytes, get_submissions_bucket
 
 ALLOWED_IMAGE_MIME = frozenset({"image/jpeg", "image/png"})
-ALLOWED_FILE_MIME = frozenset({"application/pdf"})
+ALLOWED_FILE_MIME = frozenset({"application/pdf", "application/x.scratch.sb3"})
 # Pull the size limit from central config to keep routers and policy in sync.
 # Defaults to 10 MiB when LEARNING_MAX_UPLOAD_BYTES is not set.
 MAX_UPLOAD_BYTES = get_learning_max_upload_bytes()

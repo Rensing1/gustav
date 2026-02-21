@@ -9,7 +9,7 @@ Bezug: `docs/tickets/learning-history-polling-scroll-jump-image-preview-2026-01-
 - Stable history wrapper: kein `outerHTML`-Polling mehr auf dem kompletten History-Container.
 - Neuer Poll-Endpunkt: `GET /learning/courses/{course_id}/tasks/{task_id}/history/poll` liefert nur OOB-Updates für Text/Result.
 - Polling endet automatisch bei `completed/failed`.
-- Preview bleibt stabil (signed URL wird nicht ständig neu gerendert); Reload-Button nur bei Preview-Fehler.
+- Preview bleibt stabil (signed URL wird nicht ständig neu gerendert); bei Artefakt-Problemen hilft ein normaler Seiten-Reload.
 - Tests angepasst/ergänzt (Scroll-Jump Regression + Poll-Endpunkt + Preview-Schutz).
 
 ## Kontext / Problem
@@ -81,7 +81,7 @@ Wir wählen **Option B (granulare Updates pro Submission)**, weil sie am robuste
 - **Open/Closed-State bleibt:** Was offen/zu ist, bleibt offen/zu; Polling darf nicht automatisch öffnen oder schließen.
 - **PDF-Preview:** PDFs sollen im Verlauf **inline** angezeigt werden; optional zusätzlich „in neuem Tab öffnen“ als Fallback.
 - **Fehleranzeige:** Bei Fehlern sollen **Fehlercode + Abgabe-ID + Zeitstempel** sichtbar sein (für Support/Admin).
-- **„Neu laden“ nur bei Ladefehler:** Ein „Neu laden“-Button/Link soll nur sichtbar werden, wenn das Artefakt nicht lädt.
+- **Kein „Neu laden“ Button:** Artefakt-Probleme werden durch normales Neuladen der Seite behoben (UI bleibt bewusst minimal).
 
 ## Technischer Ansatz (Option B: Granulare Updates pro Submission)
 
@@ -152,7 +152,7 @@ Zusätzliche Assertions (UX-relevant):
 - [ ] Poll-Endpunkt: Status prüfen, Teilblöcke für die betroffene Submission (idR neueste) serverseitig neu rendern und per `hx-swap-oob` zurückgeben; Poller stoppt sich selbst bei `completed/failed`.
 - [ ] `gustav.js`: prüfen, ob `open_attempt_id` für Initialzustand reicht (bei Option B ist DOM stabiler; ggf. Vereinfachung möglich).
 - [ ] PDF-Preview: PDFs inline anzeigen (eingebettet) + optional „in neuem Tab öffnen“.
-- [ ] „Neu laden“-Fallback: Wenn Bild/PDF nicht lädt, sichtbaren „Neu laden“-Link anbieten (erzeugt neue Signed URL und aktualisiert nur Artefakt-Zone).
+- [ ] (Removed) „Neu laden“-Fallback: Kein separater Reload-Button/Link im UI.
 - [ ] Fehleranzeige: Fehlercode + Abgabe-ID + Zeitstempel im UI sichtbar machen.
 - [ ] Tests erweitern/anpassen (Red/Green).
 - [ ] Manuell verifizieren: Upload-Abgabe (Bild/PDF), scrollen während Pending, kein Jumping; Feedback erscheint nach Abschluss.
@@ -164,6 +164,6 @@ Zusätzliche Assertions (UX-relevant):
   - langfristig: stabiler App-Download-Endpunkt (Option 4 aus Ticket).
 - **PDF inline + Fehlererkennung:** Ein eingebettetes PDF (z. B. per `<iframe>`) lässt Ladefehler nicht in allen Browsern zuverlässig erkennen (Cross-Origin/Viewer). Wir brauchen ggf. eine pragmatische UX:
   - immer „in neuem Tab öffnen“ als Fallback,
-  - und ggf. „Neu laden“ als manuellen Link (auch wenn „nur bei Fehler“ technisch schwer sicher erkennbar ist).
+  - (optional) Seite neu laden (kein separater Button).
 - **Mehr Template-Struktur:** Option B erfordert saubere, stabile IDs pro Submission und klar getrennte Render-Funktionen (sonst wird es schwer testbar).
 - **Mehrere parallele Pending-Tasks:** Pro Aufgabe maximal ein Poller; trotzdem entsteht bei vielen parallelen Pending-Aufgaben Netzlast. Optionaler Follow-up: Polling nur aktivieren, wenn die jeweilige History tatsächlich geladen/benutzt wird.

@@ -31,11 +31,11 @@ from backend.learning.adapters.ports import (
 from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
+from backend.storage.sb3_validation import SCRATCH_SB3_MIME
 
 LOG = logging.getLogger(__name__)
 
-
-SUPPORTED_MIME = {"image/jpeg", "image/png", "application/pdf"}
+SUPPORTED_MIME = {"image/jpeg", "image/png", "application/pdf", SCRATCH_SB3_MIME}
 _LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
 
 def _require_secure_openai_base_url(base_url: str) -> None:
@@ -670,6 +670,49 @@ class _LocalVisionAdapter:
         image_b64: Optional[str] = None
         image_data_uri: str | None = None
         bucket = _submissions_bucket()
+
+        # Scratch SB3: deterministic evidence extraction (no OCR).
+        if mime == SCRATCH_SB3_MIME:
+            from backend.storage.sb3_validation import SB3ValidationError, load_project_json
+            from backend.scratch.sb3_evidence_v2 import EVIDENCE_SCHEMA_V2, build_evidence_markdown_v2
+
+            meta = {"adapter": "local_vision", "backend": "sb3", "schema": EVIDENCE_SCHEMA_V2}
+            root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+            storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
+            size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
+            sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""
+            submission_id = (submission or {}).get("id") or ""
+            data: bytes | None = None
+            if root and storage_key:
+                data = _load_local_storage_bytes(
+                    root=root,
+                    storage_key=storage_key,
+                    size_bytes=size_bytes,
+                    sha256_hex=sha256_hex,
+                )
+            if data is None and storage_key:
+                srk = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+                if srk:
+                    obj = _strip_bucket_prefix(str(storage_key), bucket)
+                    data = _remote_fetch_submission_object(
+                        bucket=bucket,
+                        object_key=obj,
+                        srk=srk,
+                        max_bytes=max_download_bytes,
+                        submission_id=str(submission_id),
+                        success_action="fetch_remote_sb3",
+                    )
+            if not data:
+                raise VisionTransientError("sb3_unavailable")
+            meta["bytes_read"] = len(data)
+            try:
+                project = load_project_json(data)
+            except SB3ValidationError as exc:
+                raise VisionPermanentError(str(exc.code))
+            evidence_md = build_evidence_markdown_v2(project=project)
+            if not evidence_md.strip():
+                raise VisionPermanentError("empty_evidence")
+            return VisionResult(text_md=evidence_md, raw_metadata=meta)
 
         if mime in {"image/jpeg", "image/png"}:
             image_b64 = _resolve_submission_image_bytes(

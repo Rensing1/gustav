@@ -325,6 +325,52 @@ async def test_h5p_task_create_page_shows_embedded_editor_when_needed():
 
 
 @pytest.mark.anyio
+async def test_task_create_page_includes_scratch_kind_option() -> None:
+    """Teachers must be able to select Scratch tasks (SB3 upload-only) in the SSR UI."""
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    sess = main.SESSION_STORE.create(sub="t-entry-task-scratch-opt", name="Lehrer Scratch Opt", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit = (await c.post("/api/teaching/units", json={"title": "UnitScratch"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "SectionScratch"})).json()
+
+        page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/new")
+    assert page.status_code == 200
+    assert 'value="scratch"' in page.text
+
+
+@pytest.mark.anyio
+async def test_scratch_task_can_be_created_via_ui_kind_selector() -> None:
+    """Submitting `task_kind=scratch` must create a Task with kind=scratch and config scratch:{}."""
+    teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    sess = main.SESSION_STORE.create(sub="t-entry-task-scratch-create", name="Lehrer Scratch Create", roles=["teacher"])  # type: ignore
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
+        unit = (await c.post("/api/teaching/units", json={"title": "UnitScratch2"})).json()
+        section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "SectionScratch2"})).json()
+
+        new_page = await c.get(f"/units/{unit['id']}/sections/{section['id']}/tasks/new")
+        token = _extract_csrf_token(new_page.text) or ""
+        resp = await c.post(
+            f"/units/{unit['id']}/sections/{section['id']}/tasks/create",
+            data={
+                "task_kind": "scratch",
+                "instruction_md": "Scratch Aufgabe",
+                "csrf_token": token,
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303)
+
+        lst = await c.get(f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks")
+        assert lst.status_code == 200
+        tasks = lst.json()
+        assert isinstance(tasks, list) and tasks
+        assert tasks[0].get("kind") == "scratch"
+        assert tasks[0].get("scratch") == {}
+
+
+@pytest.mark.anyio
 async def test_h5p_task_create_uses_h5p_content_id_from_form():
     """When the UI submits a content id, it must be stored on the task config."""
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]

@@ -56,7 +56,6 @@ class Gustav {
     this.initLearningTaskForms(); // Progressive enhancement for student task forms
     this.initMaterialCreateForms(); // Toggle + upload-intent flow for teacher materials
     this.initFilePreviewZoom(); // Zoom toggle for inline file previews
-    this.initSubmissionArtifactReload(); // Show reload control only when preview fails
     this.initOpenAIStatusIndicator(); // Footer hint for AI connectivity/models (teacher/operator)
     this.initTeachingLivePolling(); // Auto-refresh for teaching live matrix
     // Explain what happened after we had to redirect to login.
@@ -248,8 +247,9 @@ class Gustav {
         if (v !== undefined && v !== null) uploadHeaders.set(k, v);
       });
     }
+    const declaredMime = (payload && payload.mime_type) ? String(payload.mime_type) : '';
     if (!uploadHeaders.has('content-type')) {
-      uploadHeaders.set('Content-Type', file.type || 'application/octet-stream');
+      uploadHeaders.set('Content-Type', declaredMime || file.type || 'application/octet-stream');
     }
     if (!uploadUrl) {
       throw new Error('upload_url_missing');
@@ -274,7 +274,7 @@ class Gustav {
     if (!sha) {
       sha = await this.hashFileSha256(file);
     }
-    return { intent, sha, mime: file.type || 'application/octet-stream', size: file.size };
+    return { intent, sha, mime: declaredMime || file.type || 'application/octet-stream', size: file.size };
   }
 
   /**
@@ -354,7 +354,12 @@ class Gustav {
             return;
           }
           if (code === 'mime_not_allowed') {
-            this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
+            const allowedMimeAttr = (form.dataset.allowedMime || '').split(',').map((s) => s.trim()).filter(Boolean);
+            if (allowedMimeAttr.indexOf('application/x.scratch.sb3') !== -1) {
+              this.showNotification('Dateiformat nicht erlaubt. Erlaubt ist nur .sb3.', 'error');
+            } else {
+              this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
+            }
           } else if (code === 'size_exceeded') {
             this.showNotification('Datei zu groß. Bitte das Größenlimit beachten.', 'error');
           } else {
@@ -519,47 +524,6 @@ class Gustav {
       event.preventDefault();
       toggleZoom(wrapper);
     });
-  }
-
-  /**
-   * Show the "Neu laden" button only when an artifact preview fails to load.
-   *
-   * Why:
-   * - Signed download URLs can expire while a learner keeps the page open.
-   * - Network hiccups should not break the whole history UI.
-   *
-   * Behavior:
-   * - Listens for load errors on <img> / <iframe> inside #submission-artifact-*
-   * - Unhides the corresponding reload button (data-artifact-reload="true")
-   *
-   * Note:
-   * - Image errors are reliable. For PDFs, browsers may not always surface an
-   *   error event, but we still try.
-   */
-  initSubmissionArtifactReload() {
-    if (this.submissionArtifactReloadInit) return;
-    this.submissionArtifactReloadInit = true;
-
-    const revealReloadButton = (target) => {
-      if (!target || !target.closest) return;
-      const container = target.closest('[id^="submission-artifact-"]');
-      if (!container) return;
-      const btn = container.querySelector('[data-artifact-reload="true"]');
-      if (!btn) return;
-      btn.hidden = false;
-      btn.removeAttribute('hidden');
-    };
-
-    // "error" does not bubble, so we must use capture.
-    document.addEventListener('error', (event) => {
-      const t = event && event.target ? event.target : null;
-      if (!t) return;
-      // Only handle common preview elements to avoid false positives.
-      if (!(t instanceof HTMLImageElement) && !(t instanceof HTMLIFrameElement)) {
-        return;
-      }
-      revealReloadButton(t);
-    }, true);
   }
 
   /**
@@ -835,15 +799,25 @@ class Gustav {
    * 1) POST upload-intent → get storage_key + PUT URL
    * 2) PUT file to returned URL
    * 3) Fill hidden fields for final submission
-    */
+   */
   async prepareLearningUpload(form, file) {
     const courseId = form.dataset.courseId;
     const taskId = form.dataset.taskId;
     if (!courseId || !taskId) throw new Error('missing form dataset');
 
-    const mime = file.type;
-    const size = file.size;
     const filename = file.name || 'upload.bin';
+    const lowerName = filename.toLowerCase();
+    let mime = file.type || '';
+    // Some browsers do not provide `file.type` for unknown extensions (e.g., `.sb3`).
+    // Fall back to filename-based detection for the allowlisted formats.
+    if (!mime || mime === 'application/octet-stream') {
+      if (lowerName.endsWith('.sb3')) mime = 'application/x.scratch.sb3';
+      else if (lowerName.endsWith('.png')) mime = 'image/png';
+      else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) mime = 'image/jpeg';
+      else if (lowerName.endsWith('.pdf')) mime = 'application/pdf';
+    }
+
+    const size = file.size;
     const kind = mime === 'application/pdf' ? 'file' : (mime.startsWith('image/') ? 'image' : 'file');
 
     // Client-side checks mirror server (non-authoritative).
@@ -852,9 +826,9 @@ class Gustav {
     const maxBytesAttr = parseInt(form.dataset.maxBytes || '0', 10);
     const allowed = allowedMimeAttr.length ? allowedMimeAttr : ['image/png', 'image/jpeg', 'application/pdf'];
     const maxBytes = maxBytesAttr > 0 ? maxBytesAttr : 10 * 1024 * 1024;
-    this.validateFile(file, allowed, maxBytes);
+    this.validateFile({ type: mime, size }, allowed, maxBytes);
 
-    const { intent, sha, size: sizeBytes } = await this.requestIntentAndUpload(
+    const { intent, sha, size: sizeBytes, mime: finalMime } = await this.requestIntentAndUpload(
       `/api/learning/courses/${courseId}/tasks/${taskId}/upload-intents`,
       file,
       { kind, filename, mime_type: mime, size_bytes: size }
@@ -867,7 +841,7 @@ class Gustav {
       if (el) el.value = value;
     };
     set('storage_key', intent.storage_key || '');
-    set('mime_type', mime);
+    set('mime_type', finalMime);
     set('size_bytes', String(sizeBytes));
     set('sha256', sha256);
   }
@@ -1038,12 +1012,32 @@ class Gustav {
     });
 
     document.body.addEventListener('htmx:responseError', (evt) => {
-      const status = evt.detail.xhr.status;
+      const xhr = evt.detail.xhr;
+      const status = xhr.status;
       if (status === 401) {
         // Session expired (app-level cookie). HTMX will follow HX-Redirect; we
         // set a flag so the unit page can explain what happened after re-login.
         this.markSessionExpired();
       }
+
+      // If the server already provided a user-facing message via HX-Trigger,
+      // prefer that over a generic "Request failed" toast.
+      // This is especially relevant for expected validation errors where the
+      // HTTP status is intentionally non-2xx to keep HTMX `detail.successful`
+      // false (e.g., prevent clearing drafts).
+      try {
+        const triggerHeader = xhr.getResponseHeader('HX-Trigger');
+        if (triggerHeader) {
+          const parsed = JSON.parse(triggerHeader);
+          const sm = parsed && parsed.showMessage;
+          if (sm && typeof sm === 'object' && sm.message) {
+            this.showNotification(String(sm.message), sm.type || 'error');
+            this.updateLiveStatusForError(evt, liveStatusErrorMessage);
+            return;
+          }
+        }
+      } catch (_) {}
+
       const message = status === 404 ? 'Resource not found' :
                       status === 403 ? 'Access denied' :
                       status === 401 ? 'Session expired. Please login again.' :

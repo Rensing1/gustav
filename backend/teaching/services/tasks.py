@@ -172,6 +172,12 @@ def _normalize_visual_config(value: object) -> None:
     if value:
         raise ValueError("invalid_visual_config")
 
+def _normalize_scratch_config(value: object) -> None:
+    if not isinstance(value, dict):
+        raise ValueError("invalid_scratch_config")
+    if value:
+        raise ValueError("invalid_scratch_config")
+
 
 @dataclass
 class TasksService:
@@ -197,6 +203,7 @@ class TasksService:
         max_attempts: object = None,
         h5p: object | None = None,
         visual: object | None = None,
+        scratch: object | None = None,
     ) -> dict:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
@@ -205,7 +212,8 @@ class TasksService:
         teacher_context = _normalize_teacher_context(teacher_context_md)
         due_dt = _parse_due_at(due_at)
         attempts = _normalize_max_attempts(max_attempts)
-        if h5p is not None and visual is not None:
+        kind_configs = [h5p is not None, visual is not None, scratch is not None]
+        if sum(1 for flag in kind_configs if flag) > 1:
             raise ValueError("invalid_task_kind_config")
         if h5p is not None:
             h5p_content_id, h5p_display_options = _normalize_h5p_config(h5p)
@@ -214,6 +222,10 @@ class TasksService:
             _normalize_visual_config(visual)
             h5p_content_id, h5p_display_options = None, {}
             kind = "visual"
+        elif scratch is not None:
+            _normalize_scratch_config(scratch)
+            h5p_content_id, h5p_display_options = None, {}
+            kind = "scratch"
         else:
             h5p_content_id, h5p_display_options = None, {}
             kind = "native"
@@ -245,6 +257,7 @@ class TasksService:
         max_attempts: object = _UNSET,
         h5p: object = _UNSET,
         visual: object = _UNSET,
+        scratch: object = _UNSET,
     ) -> dict:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
@@ -259,7 +272,8 @@ class TasksService:
             repo_kwargs["due_at"] = _parse_due_at(due_at)
         if max_attempts is not _UNSET:
             repo_kwargs["max_attempts"] = _normalize_max_attempts(max_attempts)
-        if h5p is not _UNSET and visual is not _UNSET:
+        kind_updates = [h5p is not _UNSET, visual is not _UNSET, scratch is not _UNSET]
+        if sum(1 for flag in kind_updates if flag) > 1:
             raise ValueError("invalid_task_kind_config")
         if h5p is not _UNSET:
             if h5p is None:
@@ -279,6 +293,16 @@ class TasksService:
             else:
                 _normalize_visual_config(visual)
                 repo_kwargs["kind"] = "visual"
+                repo_kwargs["h5p_content_id"] = None
+                repo_kwargs["h5p_display_options"] = {}
+        if scratch is not _UNSET:
+            if scratch is None:
+                repo_kwargs["kind"] = "native"
+                repo_kwargs["h5p_content_id"] = None
+                repo_kwargs["h5p_display_options"] = {}
+            else:
+                _normalize_scratch_config(scratch)
+                repo_kwargs["kind"] = "scratch"
                 repo_kwargs["h5p_content_id"] = None
                 repo_kwargs["h5p_display_options"] = {}
         result = self.repo.update_task(

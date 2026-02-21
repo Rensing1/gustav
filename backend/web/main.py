@@ -645,7 +645,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         course_id: ID of the learning course context.
         unit_id: ID of the unit whose sections/tasks are shown.
         task_id: ID of the task for which the form is rendered.
-        task_kind: Optional task type selector (native|h5p|visual).
+        task_kind: Optional task type selector (native|h5p|visual|scratch).
 
     Returns:
         HTML string containing the <form> element.
@@ -655,19 +655,31 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     cid_escaped = Component.escape(course_id)
     uid_escaped = Component.escape(unit_id)
     kind_norm = (task_kind or "native").strip().lower()
+    from backend.storage.learning_policy import DEFAULT_POLICY
 
-    if kind_norm == "visual":
-        # Visual tasks are upload-only: no mode switch and no textarea.
+    if kind_norm in {"visual", "scratch"}:
+        # Visual/Scratch tasks are upload-only: no mode switch and no textarea.
+        max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
+        max_mb_value = max_bytes / (1024 * 1024)
+        max_mb = str(int(max_mb_value)) if max_mb_value.is_integer() else f"{max_mb_value:.2f}".rstrip("0").rstrip(".")
+        accept = "image/png,image/jpeg,application/pdf"
+        hint = f"JPG/PNG/PDF, bis {max_mb} MB"
+        allowed_mime = "image/png,image/jpeg,application/pdf"
+        if kind_norm == "scratch":
+            accept = ".sb3,application/x.scratch.sb3"
+            hint = f".sb3 bis {max_mb} MB"
+            allowed_mime = "application/x.scratch.sb3"
         return (
             f'<form method="post" action="{form_action}" class="task-submit-form" '
             f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
-            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="upload">'
+            f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="upload" '
+            f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
             f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
             '<input type="hidden" name="mode" value="upload">'
             '<div class="task-form-fields fields-upload">'
             '<label>Datei auswählen '
-            '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-            '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+            f'<input type="file" name="upload_file" accept="{accept}"></label>'
+            f'<p class="text-muted">{Component.escape(hint)}</p>'
             '<input type="hidden" name="storage_key" value="">'
             '<input type="hidden" name="mime_type" value="">'
             '<input type="hidden" name="size_bytes" value="">'
@@ -677,10 +689,15 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
             "</form>"
         )
 
+    max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
+    allowed_mime = "image/png,image/jpeg,application/pdf"
+    max_mb_value = max_bytes / (1024 * 1024)
+    max_mb = str(int(max_mb_value)) if max_mb_value.is_integer() else f"{max_mb_value:.2f}".rstrip("0").rstrip(".")
     return (
         f'<form method="post" action="{form_action}" class="task-submit-form" '
         f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
-        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-mode="text">'
+        f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="text" '
+        f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
         f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
         '<fieldset class="choice-cards" aria-label="Abgabeart">'
         '<label class="choice-card choice-card--text">'
@@ -690,7 +707,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         '<label class="choice-card choice-card--upload">'
         '<input type="radio" name="mode" value="upload">'
         '<span class="choice-card__title">⬆️ Upload</span>'
-        '<span class="choice-card__hint">JPG/PNG/PDF · bis 10 MB</span>'
+        f'<span class="choice-card__hint">JPG/PNG/PDF · bis {max_mb} MB</span>'
         '</label>'
         '</fieldset>'
         '<div class="task-form-fields fields-text">'
@@ -699,7 +716,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         '<div class="task-form-fields fields-upload" hidden>'
         '<label>Datei auswählen '
         '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
-        '<p class="text-muted">JPG/PNG/PDF, bis 10 MB</p>'
+        f'<p class="text-muted">JPG/PNG/PDF, bis {max_mb} MB</p>'
         '<input type="hidden" name="storage_key" value="">'
         '<input type="hidden" name="mime_type" value="">'
         '<input type="hidden" name="size_bytes" value="">'
@@ -738,6 +755,8 @@ async def _server_side_prepare_submission_upload(
     filename = str(getattr(upload_file, "filename", "") or "").strip() or "upload.bin"
     declared_mime = str(getattr(upload_file, "content_type", "") or "").strip()
     mime_type = declared_mime or (mimetypes.guess_type(filename)[0] or "application/octet-stream")
+    if filename.lower().endswith(".sb3"):
+        mime_type = "application/x.scratch.sb3"
     try:
         file_bytes = await upload_file.read()  # type: ignore[attr-defined]
     except AttributeError:
@@ -1112,6 +1131,8 @@ def _render_submission_text_container(
             text_src = extracted
 
     text_html = render_markdown_safe(text_src)
+    if text_html and (text_src.lstrip().startswith("# scratch.evidence.")):
+        text_html = f'<div class="scratch-evidence">{text_html}</div>'
     if not text_html and not has_artifact:
         text_html = '<p class="text-muted">Keine Antwort hinterlegt.</p>'
 
@@ -1239,12 +1260,6 @@ def _render_submission_artifact_container(
 
     safe_sid = Component.escape(submission_id)
     container_id = f"submission-artifact-{safe_sid}"
-    reload_url = f"/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/artifact"
-    reload_btn = (
-        f'<button type="button" class="btn btn-sm" data-artifact-reload="true" hidden'
-        f' hx-get="{Component.escape(reload_url)}"'
-        f' hx-target="#{container_id}" hx-swap="outerHTML">Neu laden</button>'
-    )
 
     open_tab_link = ""
     if mime == "application/pdf":
@@ -1253,7 +1268,7 @@ def _render_submission_artifact_container(
             f'<a class="btn btn-sm" href="{safe_url}" target="_blank" rel="noopener">In neuem Tab öffnen</a>'
         )
 
-    return f'<div id="{container_id}">{preview_html}{open_tab_link}{reload_btn}</div>'
+    return f'<div id="{container_id}">{preview_html}{open_tab_link}</div>'
 
 
 def _strip_task_history_outer_wrapper(html: str) -> str:
@@ -2786,82 +2801,6 @@ async def learning_task_history_poll(request: Request, course_id: str, task_id: 
     result_oob = _render_submission_result_container(latest, submission_id=latest_id, oob=True)
     return HTMLResponse(content=poller_html + text_oob + result_oob, headers={"Cache-Control": "private, no-store"})
 
-
-@app.get(
-    "/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/artifact",
-    response_class=HTMLResponse,
-)
-async def learning_task_submission_artifact_fragment(
-    request: Request, course_id: str, task_id: str, submission_id: str
-):
-    """Refresh the artifact preview (image/PDF) for a submission.
-
-    Why:
-        Signed URLs can expire. The UI keeps the reload control hidden by default
-        and only reveals it on load errors.
-    """
-    user = getattr(request.state, "user", None)
-    if (user or {}).get("role") != "student":
-        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
-
-    try:
-        async with _internal_api_client() as client:
-            sid = _get_session_id(request)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r_latest = await client.get(
-                f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
-                params={"limit": 1, "offset": 0},
-            )
-            items_latest = r_latest.json() if r_latest.status_code == 200 else []
-            items = items_latest
-    except Exception:
-        items = []
-
-    items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
-    target = None
-    for rec in items_dicts:
-        if str(rec.get("id") or "") == str(submission_id):
-            target = rec
-            break
-
-    # If the requested submission is not the newest, fall back to the first
-    # 10 items (matches the history list on the page).
-    if target is None:
-        try:
-            async with _internal_api_client() as client:
-                sid = _get_session_id(request)
-                if sid:
-                    client.cookies.set(SESSION_COOKIE_NAME, sid)
-                r = await client.get(
-                    f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions",
-                    params={"limit": 10, "offset": 0},
-                )
-                items_fallback = r.json() if r.status_code == 200 else []
-        except Exception:
-            items_fallback = []
-        items_dicts = (
-            [rec for rec in items_fallback if isinstance(rec, dict)] if isinstance(items_fallback, list) else []
-        )
-        for rec in items_dicts:
-            if str(rec.get("id") or "") == str(submission_id):
-                target = rec
-                break
-    if target is not None:
-        _enrich_submission_records_with_file_urls([target])
-        html = _render_submission_artifact_container(
-            target,
-            course_id=course_id,
-            task_id=task_id,
-            submission_id=str(submission_id),
-        )
-    else:
-        html = ""
-
-    if not html:
-        safe_sid = Component.escape(str(submission_id))
-        html = f'<div id="submission-artifact-{safe_sid}"></div>'
-    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 @app.post("/courses/{course_id}/edit", response_class=HTMLResponse)
 async def courses_edit_submit(request: Request, course_id: str):
@@ -7105,12 +7044,14 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         '<option value="native" selected>Normal</option>'
         '<option value="h5p">H5P (interaktiv)</option>'
         '<option value="visual">Visual (Upload‑Only)</option>'
+        '<option value="scratch">Scratch (SB3 Upload‑Only)</option>'
         "</select>"
         "</label>"
         '<p id="task-kind-hint" class="text-muted">'
         "Normal: Markdown‑Aufgabe mit Kriterien. "
         "H5P: Interaktive Übung (Editor wird direkt eingeblendet). "
-        "Visual: wie Normal, aber Abgabe nur als Bild/PDF."
+        "Visual: wie Normal, aber Abgabe nur als Bild/PDF. "
+        "Scratch: wie Normal, aber Abgabe nur als `.sb3`."
         "</p>"
     )
 
@@ -7702,7 +7643,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
 
     Parameters form fields:
     - instruction_md: Required Markdown instruction
-    - task_kind: Optional task type selector (native|h5p|visual)
+    - task_kind: Optional task type selector (native|h5p|visual|scratch)
     - csrf_token: Required
 
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
@@ -7754,6 +7695,8 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
                 payload["h5p"] = {"content_id": h5p_content_id, "display_options": {}}
             elif task_kind == "visual":
                 payload["visual"] = {}
+            elif task_kind == "scratch":
+                payload["scratch"] = {}
             resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)
             if resp.status_code >= 400:
                 error = _extract_api_error_detail(resp)

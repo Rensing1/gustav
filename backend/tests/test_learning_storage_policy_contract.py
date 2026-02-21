@@ -28,7 +28,7 @@ def test_learning_upload_policy_exposes_shared_limits():
     assert getattr(policy, "STORAGE_KEY_RE")
 
     assert policy.ALLOWED_IMAGE_MIME == {"image/jpeg", "image/png"}
-    assert policy.ALLOWED_FILE_MIME == {"application/pdf"}
+    assert policy.ALLOWED_FILE_MIME == {"application/pdf", "application/x.scratch.sb3"}
     assert policy.MAX_UPLOAD_BYTES == 10 * 1024 * 1024
     assert re.fullmatch(policy.STORAGE_KEY_RE, "a/b/file.pdf")
 
@@ -37,4 +37,3 @@ def test_storage_verification_helper_available_for_learning():
     verification = _import("backend.storage.verification")
     helper = getattr(verification, "verify_storage_object_integrity", None)
     assert callable(helper), "Expected verify_storage_object_integrity helper to be callable"
-

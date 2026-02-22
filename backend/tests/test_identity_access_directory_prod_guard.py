@@ -64,6 +64,53 @@ async def test_client_credentials_in_prod_uses_secret(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.anyio
+async def test_client_credentials_fallbacks_to_master_realm_when_primary_realm_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """If configured admin realm fails, token acquisition retries once via master realm."""
+    monkeypatch.setenv("GUSTAV_ENV", "prod")
+    monkeypatch.setenv("KC_ADMIN_REALM", "gustav")
+    monkeypatch.setenv("KC_ADMIN_CLIENT_ID", "gustav-admin-cli")
+    monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_SECRET")
+
+    import requests
+
+    calls: list[str] = []
+
+    class _RespFail:
+        def __init__(self, url: str) -> None:
+            self.url = url
+
+        def raise_for_status(self):
+            raise requests.HTTPError("401", response=types.SimpleNamespace(status_code=401), request=None)
+
+        def json(self):
+            return {}
+
+    class _RespOk:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"access_token": "MASTER_TOKEN"}
+
+    def _fake_post(url, data=None, timeout=None, verify=None, allow_redirects=None):
+        calls.append(str(url))
+        if "/realms/gustav/" in str(url):
+            return _RespFail(str(url))
+        return _RespOk()
+
+    monkeypatch.setattr(requests, "post", _fake_post)
+
+    from backend.identity_access import directory
+
+    tok = directory._KC().token()
+    assert tok == "MASTER_TOKEN"
+    assert any("/realms/gustav/" in c for c in calls)
+    assert any("/realms/master/" in c for c in calls)
+
+
+@pytest.mark.anyio
 async def test_fallback_token_in_prod_requires_fallback_secret(monkeypatch: pytest.MonkeyPatch):
     """Fallback token acquisition must fail closed when no fallback secret exists."""
     monkeypatch.setenv("GUSTAV_ENV", "prod")

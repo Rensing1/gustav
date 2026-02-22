@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import gzip
 import tarfile
 from pathlib import Path
 
@@ -225,3 +226,88 @@ def test_guess_content_type_prefers_key_extension(tmp_path: Path) -> None:
 def test_guess_content_type_falls_back_to_octet_stream(tmp_path: Path) -> None:
     file_path = tmp_path / "bucket" / "noext"
     assert mod._guess_content_type(file_path, "bucket/noext") == "application/octet-stream"
+
+
+def test_resolve_snapshot_files_reads_optional_keycloak_dump(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "supabase_db.sql.gz").write_bytes(b"db")
+    (snapshot / "storage_buckets.tar.gz").write_bytes(b"storage")
+    (snapshot / "keycloak_db.sql.gz").write_bytes(b"kc")
+
+    files = mod.resolve_snapshot_files(snapshot, tmp_path / "extract")
+
+    assert files.keycloak_db_sql_gz is not None
+    assert files.keycloak_db_sql_gz.name == "keycloak_db.sql.gz"
+
+
+def test_resolve_snapshot_files_keeps_keycloak_dump_optional(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "supabase_db.sql.gz").write_bytes(b"db")
+    (snapshot / "storage_buckets.tar.gz").write_bytes(b"storage")
+
+    files = mod.resolve_snapshot_files(snapshot, tmp_path / "extract")
+
+    assert files.keycloak_db_sql_gz is None
+
+
+def test_is_unsupported_pg_setting_line() -> None:
+    assert mod._is_unsupported_pg_setting_line(b"SET transaction_timeout = 0;")
+    assert not mod._is_unsupported_pg_setting_line(b"SET statement_timeout = 0;")
+
+
+def test_build_keycloak_localization_sql_contains_local_values() -> None:
+    sql = mod._build_keycloak_localization_sql(
+        realm="gustav",
+        web_client_id="gustav-web",
+        app_base_url="https://app.localhost",
+    )
+
+    assert "https://app.localhost/*" in sql
+    assert "https://app.localhost" in sql
+    assert "client_id = 'gustav-web'" in sql
+    assert "name = 'gustav'" in sql
+
+
+def test_build_keycloak_admin_client_secret_sql_contains_target_values() -> None:
+    sql = mod._build_keycloak_admin_client_secret_sql(
+        admin_realm="master",
+        admin_client_id="gustav-admin-cli",
+        admin_client_secret="LOCAL_SECRET",
+    )
+
+    assert "update client set secret = 'LOCAL_SECRET'" in sql
+    assert "name = 'master'" in sql
+    assert "client_id = 'gustav-admin-cli'" in sql
+
+
+def test_restore_keycloak_db_resets_before_replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    keycloak_sql_gz = tmp_path / "keycloak_db.sql.gz"
+    with gzip.open(keycloak_sql_gz, "wb") as f:
+        f.write(b"select 1;\n")
+
+    called = {"reset": 0}
+
+    def fake_reset_keycloak_db_for_restore(**_kwargs) -> None:
+        called["reset"] += 1
+
+    monkeypatch.setattr(mod, "_reset_keycloak_db_for_restore", fake_reset_keycloak_db_for_restore)
+
+    class FakeProc:
+        def __init__(self) -> None:
+            self.stdin = io.BytesIO()
+
+        def wait(self) -> int:
+            return 0
+
+    monkeypatch.setattr(mod.subprocess, "Popen", lambda *_args, **_kwargs: FakeProc())
+
+    mod._restore_keycloak_db_sql_gz(
+        db_sql_gz=keycloak_sql_gz,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+    )
+
+    assert called["reset"] == 1

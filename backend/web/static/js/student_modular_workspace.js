@@ -15,12 +15,16 @@
  *   return 404 for locked/missing modules).
  */
 
-import { createGraphView } from './student_graph_view.js?v=3';
+import { createGraphView } from './student_graph_view.js?v=4';
 
 const STORAGE_PREFIX = 'gustav.learning.modular_workspace:';
 const STATE_VERSION = 2;
 const CONFLICT_DEGREE_THRESHOLD = 3;
 const TWO_LEVEL_GAP_Y = 132;
+const TOP_SEED_WEIGHT = 3;
+const BOTTOM_SEED_WEIGHT = 3;
+const TOP_NEIGHBOR_WEIGHT = 2;
+const BOTTOM_NEIGHBOR_WEIGHT = 2;
 
 function readJsonFromLocalStorage(key) {
   try {
@@ -246,10 +250,12 @@ function buildGraphModel(payload) {
         if (!neighbors || !neighbors.size) continue;
 
         const queue = [startId];
+        let queueIndex = 0;
         visited.add(startId);
         const comp = [];
-        while (queue.length) {
-          const cur = String(queue.shift() || '');
+        while (queueIndex < queue.length) {
+          const cur = String(queue[queueIndex] || '');
+          queueIndex += 1;
           if (!cur) continue;
           comp.push(cur);
           const nextIds = Array.from(undirected.get(cur) || []);
@@ -286,17 +292,17 @@ function buildGraphModel(payload) {
           const outdeg = Number(outdegree.get(id) || 0);
           const indeg = Number(indegree.get(id) || 0);
           if (outdeg >= CONFLICT_DEGREE_THRESHOLD) {
-            topScore.set(id, Number(topScore.get(id) || 0) + 3);
+            topScore.set(id, Number(topScore.get(id) || 0) + TOP_SEED_WEIGHT);
             for (const toId of (outgoing.get(id) || [])) {
               if (!compSet.has(toId)) continue;
-              bottomScore.set(toId, Number(bottomScore.get(toId) || 0) + 2);
+              bottomScore.set(toId, Number(bottomScore.get(toId) || 0) + BOTTOM_NEIGHBOR_WEIGHT);
             }
           }
           if (indeg >= CONFLICT_DEGREE_THRESHOLD) {
-            bottomScore.set(id, Number(bottomScore.get(id) || 0) + 3);
+            bottomScore.set(id, Number(bottomScore.get(id) || 0) + BOTTOM_SEED_WEIGHT);
             for (const fromId of (incoming.get(id) || [])) {
               if (!compSet.has(fromId)) continue;
-              topScore.set(fromId, Number(topScore.get(fromId) || 0) + 2);
+              topScore.set(fromId, Number(topScore.get(fromId) || 0) + TOP_NEIGHBOR_WEIGHT);
             }
           }
         }

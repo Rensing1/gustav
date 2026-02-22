@@ -139,3 +139,12 @@ def test_build_graph_model_applies_local_phase_sublevels_with_bounded_offsets() 
     assert "if (outdeg >= CONFLICT_DEGREE_THRESHOLD)" in js
     assert "if (indeg >= CONFLICT_DEGREE_THRESHOLD)" in js
     assert "const y = displayYByModuleId.get(id) ?? baseY;" in js
+
+
+def test_two_level_assignment_uses_named_score_weights() -> None:
+    """Two-level scoring should use named constants instead of raw +3/+2 values."""
+    js = _read_js()
+    assert "const TOP_SEED_WEIGHT = 3;" in js
+    assert "const BOTTOM_SEED_WEIGHT = 3;" in js
+    assert "const TOP_NEIGHBOR_WEIGHT = 2;" in js
+    assert "const BOTTOM_NEIGHBOR_WEIGHT = 2;" in js

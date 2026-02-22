@@ -22,6 +22,11 @@ const NODE_BADGE_OVERLAP = 6; // how much the badge overlaps into the node
 const NODE_BADGE_CX = NODE_BADGE_R - NODE_BADGE_OVERLAP;
 const NODE_BADGE_CY = -NODE_BADGE_R + NODE_BADGE_OVERLAP;
 const NODE_BADGE_RING_CIRC = 2 * Math.PI * NODE_BADGE_RING_R;
+const LANE_GAP_PX = 18;
+const SAME_LEVEL_EPSILON = 8;
+const CURVE_FACTOR = 0.55;
+const CURVE_MIN = 36;
+const CURVE_MAX = 160;
 
 function svgEl(name, attrs = {}) {
   const el = document.createElementNS(SVG_NS, name);
@@ -143,6 +148,121 @@ function laneOffsetForIndex(index, count, gap) {
   if (!(size > 1) || !(g > 0)) return 0;
   const mid = (size - 1) / 2;
   return (i - mid) * g;
+}
+
+function isSameLevel(a, b) {
+  return Math.abs(safeNum(a?.y) - safeNum(b?.y)) < SAME_LEVEL_EPSILON;
+}
+
+function collectRenderableEdges(edges, nodeById) {
+  const expanded = [];
+  for (const e of edges || []) {
+    const fromId = String(e?.from || "");
+    const toId = String(e?.to || "");
+    const a = nodeById.get(fromId);
+    const b = nodeById.get(toId);
+    if (!a || !b) continue;
+    const samePhase = String(a.phaseId || "") && String(a.phaseId || "") === String(b.phaseId || "");
+    const sameLevel = isSameLevel(a, b);
+    expanded.push({ fromId, toId, a, b, samePhase, sameLevel });
+  }
+  return expanded;
+}
+
+function buildLaneGroups(expanded) {
+  const grouped = new Map();
+  const stackedOutCount = new Map();
+  const stackedInCount = new Map();
+
+  for (const ed of expanded || []) {
+    if (!(ed.samePhase === true) || ed.sameLevel === true) continue;
+    stackedOutCount.set(ed.fromId, Number(stackedOutCount.get(ed.fromId) || 0) + 1);
+    stackedInCount.set(ed.toId, Number(stackedInCount.get(ed.toId) || 0) + 1);
+  }
+
+  for (const ed of expanded || []) {
+    const samePhase = ed.samePhase === true;
+    let key = "";
+    if (samePhase) {
+      if (ed.sameLevel === true) {
+        key = `same:${String(ed.a?.phaseId || "")}:flat:${String(ed.fromId || "")}`;
+      } else {
+        const outC = Number(stackedOutCount.get(ed.fromId) || 0);
+        const inC = Number(stackedInCount.get(ed.toId) || 0);
+        const anchor = outC >= inC ? `from:${String(ed.fromId || "")}` : `to:${String(ed.toId || "")}`;
+        key = `same:${String(ed.a?.phaseId || "")}:stack:${anchor}`;
+      }
+    } else {
+      key = `cross:${String(ed.a?.phaseId || "")}>${String(ed.b?.phaseId || "")}:from:${String(ed.fromId || "")}`;
+    }
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(ed);
+  }
+  return grouped;
+}
+
+function sortEdgesDeterministically(list) {
+  if (!Array.isArray(list)) return;
+  list.sort((x, y) => {
+    const xay = safeNum(x.a?.y);
+    const yay = safeNum(y.a?.y);
+    if (xay !== yay) return xay - yay;
+    const xax = safeNum(x.a?.x);
+    const yax = safeNum(y.a?.x);
+    if (xax !== yax) return xax - yax;
+    const xby = safeNum(x.b?.y);
+    const yby = safeNum(y.b?.y);
+    if (xby !== yby) return xby - yby;
+    const xbx = safeNum(x.b?.x);
+    const ybx = safeNum(y.b?.x);
+    if (xbx !== ybx) return xbx - ybx;
+    const fromCmp = String(x.fromId || "").localeCompare(String(y.fromId || ""));
+    if (fromCmp !== 0) return fromCmp;
+    return String(x.toId || "").localeCompare(String(y.toId || ""));
+  });
+}
+
+function computeLaneOffsets(ed, lane) {
+  const samePhase = ed?.samePhase === true;
+  const sameLevel = ed?.sameLevel === true;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (samePhase) {
+    // Same phase: horizontal edges separate vertically.
+    // Stacked edges (top->bottom) separate horizontally.
+    if (sameLevel) offsetY = lane;
+    else offsetX = lane;
+  } else {
+    // Cross phase edges separate in x to keep lanes visible.
+    offsetX = lane;
+  }
+  return { offsetX, offsetY };
+}
+
+function buildEdgePath(endpoints, offsets) {
+  const x1 = safeNum(endpoints?.x1);
+  const y1 = safeNum(endpoints?.y1);
+  const x2 = safeNum(endpoints?.x2);
+  const y2 = safeNum(endpoints?.y2);
+  const offsetX = safeNum(offsets?.offsetX);
+  const offsetY = safeNum(offsets?.offsetY);
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+  let d = `M ${x1} ${y1} L ${x2} ${y2}`;
+  if (adx > 8 || ady > 8) {
+    if (ady >= adx) {
+      const c = clamp(ady * CURVE_FACTOR, CURVE_MIN, CURVE_MAX) * Math.sign(dy || 1);
+      d = `M ${x1} ${y1} C ${x1 + offsetX} ${y1 + c + offsetY} ${x2 + offsetX} ${y2 - c + offsetY} ${x2} ${y2}`;
+    } else {
+      const c = clamp(adx * CURVE_FACTOR, CURVE_MIN, CURVE_MAX) * Math.sign(dx || 1);
+      d = `M ${x1} ${y1} C ${x1 + c + offsetX} ${y1 + offsetY} ${x2 - c + offsetX} ${y2 + offsetY} ${x2} ${y2}`;
+    }
+  }
+  return d;
 }
 
 export function createGraphView(container, opts = {}) {
@@ -679,80 +799,17 @@ export function createGraphView(container, opts = {}) {
     if (!graph) return;
 
     const edges = computeVisibleEdges();
-    const expanded = [];
-    for (const e of edges) {
-      const fromId = String(e.from || "");
-      const toId = String(e.to || "");
-      const a = nodeById.get(fromId);
-      const b = nodeById.get(toId);
-      if (!a || !b) continue;
-      const samePhase = String(a.phaseId || "") && String(a.phaseId || "") === String(b.phaseId || "");
-      expanded.push({ fromId, toId, a, b, samePhase });
-    }
-
-    const grouped = new Map();
-    for (const ed of expanded) {
-      const samePhase = ed.samePhase === true;
-      const sameLevel = Math.abs(safeNum(ed.a?.y) - safeNum(ed.b?.y)) < 8;
-      const key = samePhase
-        ? `same:${String(ed.a?.phaseId || "")}:${sameLevel ? "flat" : "stack"}`
-        : `cross:${String(ed.a?.phaseId || "")}>${String(ed.b?.phaseId || "")}`;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(ed);
-    }
-
-    const LANE_GAP = 18;
+    const expanded = collectRenderableEdges(edges, nodeById);
+    const grouped = buildLaneGroups(expanded);
+    const LANE_GAP = LANE_GAP_PX;
     for (const list of grouped.values()) {
-      list.sort((x, y) => {
-        const xay = safeNum(x.a?.y);
-        const yay = safeNum(y.a?.y);
-        if (xay !== yay) return xay - yay;
-        const xax = safeNum(x.a?.x);
-        const yax = safeNum(y.a?.x);
-        if (xax !== yax) return xax - yax;
-        const xby = safeNum(x.b?.y);
-        const yby = safeNum(y.b?.y);
-        if (xby !== yby) return xby - yby;
-        const xbx = safeNum(x.b?.x);
-        const ybx = safeNum(y.b?.x);
-        if (xbx !== ybx) return xbx - ybx;
-        const fromCmp = String(x.fromId || "").localeCompare(String(y.fromId || ""));
-        if (fromCmp !== 0) return fromCmp;
-        return String(x.toId || "").localeCompare(String(y.toId || ""));
-      });
+      sortEdgesDeterministically(list);
 
       list.forEach((ed, idx) => {
         const lane = laneOffsetForIndex(idx, list.length, LANE_GAP);
-        const samePhase = ed.samePhase === true;
-        const sameLevel = Math.abs(safeNum(ed.a?.y) - safeNum(ed.b?.y)) < 8;
-        let offsetX = 0;
-        let offsetY = 0;
-        if (samePhase) {
-          // Same phase: separate horizontal edges vertically; separate stacked
-          // (top->bottom) edges horizontally so fan-out remains readable.
-          if (sameLevel) offsetY = lane;
-          else offsetX = lane;
-        } else {
-          offsetX = lane;
-        }
-
-        const { x1, y1, x2, y2 } = edgeEndpoints(ed.a, ed.b);
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const adx = Math.abs(dx);
-        const ady = Math.abs(dy);
-        let d = `M ${x1} ${y1} L ${x2} ${y2}`;
-        // Default to a gentle cubic for "tree-like" readability.
-        // Lane offsets keep parallel dependencies visually distinct.
-        if (adx > 8 || ady > 8) {
-          if (ady >= adx) {
-            const c = clamp(ady * 0.55, 36, 160) * Math.sign(dy || 1);
-            d = `M ${x1} ${y1} C ${x1 + offsetX} ${y1 + c} ${x2 + offsetX} ${y2 - c} ${x2} ${y2}`;
-          } else {
-            const c = clamp(adx * 0.55, 36, 160) * Math.sign(dx || 1);
-            d = `M ${x1} ${y1} C ${x1 + c} ${y1 + offsetY} ${x2 - c} ${y2 + offsetY} ${x2} ${y2}`;
-          }
-        }
+        const offsets = computeLaneOffsets(ed, lane);
+        const endpoints = edgeEndpoints(ed.a, ed.b);
+        const d = buildEdgePath(endpoints, offsets);
         const path = svgEl("path", {
           d,
           class: "edge",

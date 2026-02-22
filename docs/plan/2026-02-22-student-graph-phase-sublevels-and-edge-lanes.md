@@ -1,6 +1,6 @@
 # Plan: Student Graph - Dense Same-Phase Dependencies as Strict Two Levels (2026-02-22)
 
-Status: implemented (2026-02-22, revised after UX feedback)
+Status: implemented (2026-02-22, revised after UX feedback and quality hardening)
 
 ## Goal
 - Improve readability in the student modular graph when many dependencies exist
@@ -107,11 +107,29 @@ structure so I can instantly see which module unlocks the others.
 
 ## Validation
 - `.venv/bin/pytest -q backend/tests/test_student_modular_workspace_js_contract.py`
-  - result: 8 passed
+  - result: 9 passed
 - `.venv/bin/pytest -q backend/tests/test_student_graph_view_sync_contract.py`
-  - result: 3 passed
+  - result: 6 passed
 - `.venv/bin/pytest -q backend/tests/test_learning_modular_unit_page_ui.py`
   - result: 4 passed, 3 skipped
+
+## Quality hardening (maintainability)
+- Refactored edge rendering pipeline in `student_graph_view.js` into small
+  helpers:
+  - `collectRenderableEdges`
+  - `buildLaneGroups`
+  - `sortEdgesDeterministically`
+  - `computeLaneOffsets`
+  - `buildEdgePath`
+- Replaced edge-rendering magic numbers with named constants:
+  - `LANE_GAP_PX`, `SAME_LEVEL_EPSILON`, `CURVE_FACTOR`, `CURVE_MIN`, `CURVE_MAX`
+- Fixed lane offset application so both curve branches apply x/y offsets
+  consistently, reducing overlap risk in stacked same-phase edges.
+- Introduced named score constants for two-level assignment in workspace:
+  - `TOP_SEED_WEIGHT`, `BOTTOM_SEED_WEIGHT`,
+    `TOP_NEIGHBOR_WEIGHT`, `BOTTOM_NEIGHBOR_WEIGHT`
+- Replaced BFS queue `shift()` with index-based traversal in workspace
+  component detection to reduce avoidable overhead.
 
 ## Risks and mitigations
 - Risk: two-level assignment in unusual mixed graphs can still be imperfect.

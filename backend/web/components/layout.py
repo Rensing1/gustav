@@ -134,7 +134,7 @@ class Layout(Component):
     <!-- Minimal custom JavaScript -->
     <SCRIPT src="/static/js/gustav.js?v=11" defer></SCRIPT>
     <!-- Student modular unit workspace (dummy-like overview/content) -->
-    <SCRIPT type="module" src="/static/js/student_modular_workspace.js?v=6"></SCRIPT>
+    <SCRIPT type="module" src="/static/js/student_modular_workspace.js?v=7"></SCRIPT>
     <!-- Teacher modular unit visual editor -->
     <SCRIPT src="/static/js/teaching_modular_unit_editor.js?v=8" defer></SCRIPT>
     {self.extra_head_html}

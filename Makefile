@@ -22,6 +22,8 @@ help:
 	@echo "  verify             - Run all test suites (unit + integrations + e2e)"
 	@echo "  import-legacy      - Import legacy Supabase dump into local DB"
 	@echo "  import-legacy-dry  - Dry-run legacy import (no writes)"
+	@echo "  import-snapshot    - Import snapshot backup (DB + storage) into local Supabase"
+	@echo "  import-snapshot-dry - Dry-run snapshot import (no writes)"
 	@echo "  docker-validate    - Validate docker compose config (catches syntax/vars)"
 
 .PHONY: up
@@ -151,9 +153,11 @@ verify:
 # --- Legacy data import shortcuts -------------------------------------------
 # Defaults (overridable):
 DUMP ?= docs/migration/supabase_backup_20251101_103457.tar.gz
+SNAPSHOT ?= .tmp/snapshot_backup_latest.tar.gz
 DSN ?= postgresql://postgres:postgres@127.0.0.1:54322/postgres
 LEGACY_SCHEMA ?= legacy_raw
 WORKDIR ?= .tmp/migration_run
+SNAPSHOT_WORKDIR ?= .tmp/snapshot_import_run
 
 # Keycloak admin/API via Caddy with proper hostname for TLS
 KC_BASE_URL ?= https://id.localhost
@@ -209,6 +213,31 @@ import-legacy-dry:
 	  --kc-host-header $(KC_HOST_HEADER) \
 	  --kc-realm $(KC_REALM) \
 	  --kc-admin-user $(KC_ADMIN_USER) \
+	  --dry-run \
+	  --verbose
+
+# --- Snapshot restore (dev convenience) -------------------------------------
+.PHONY: import-snapshot
+ifeq ($(VERBOSE),)
+.SILENT: import-snapshot import-snapshot-dry
+endif
+import-snapshot:
+	# Auto-load .env into the environment for this target (export all)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	./.venv/bin/python -m backend.tools.import_snapshot_backup \
+	  --snapshot $(SNAPSHOT) \
+	  --dsn $(DSN) \
+	  --workdir $(SNAPSHOT_WORKDIR) \
+	  --verbose
+
+.PHONY: import-snapshot-dry
+import-snapshot-dry:
+	# Auto-load .env into the environment for this target (export all)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	./.venv/bin/python -m backend.tools.import_snapshot_backup \
+	  --snapshot $(SNAPSHOT) \
+	  --dsn $(DSN) \
+	  --workdir $(SNAPSHOT_WORKDIR) \
 	  --dry-run \
 	  --verbose
 

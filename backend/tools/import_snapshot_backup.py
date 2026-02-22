@@ -5,6 +5,11 @@ Purpose
 Restore a snapshot produced by the backup cron (`supabase_db.sql.gz` +
 `storage_buckets.tar.gz`) into a *local* Supabase instance after tests wiped the DB.
 
+This tool restores a full Postgres dump that recreates Supabase-managed schemas
+(`auth`, `storage`, `pgbouncer`, ...). For that reason the DSN user must be able
+to drop and recreate those schemas. In Supabase local that typically means using
+the `supabase_admin` role (superuser).
+
 Security & Safety
 -----------------
 - Snapshot files contain real user data (PII). Never commit them.
@@ -136,6 +141,43 @@ def ensure_local_dsn(dsn: str, *, allow_remote: bool) -> None:
     )
 
 
+def _psql_query_scalar(dsn: str, query: str) -> str:
+    res = subprocess.run(
+        ["psql", dsn, "-v", "ON_ERROR_STOP=1", "-At", "-c", query],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    out = (res.stdout or "").strip()
+    if not out:
+        raise RuntimeError("psql query returned no output")
+    return out.splitlines()[0].strip()
+
+
+def _is_superuser_dsn(dsn: str) -> bool:
+    # psql prints booleans as `t`/`f` in unaligned tuples-only mode.
+    val = _psql_query_scalar(dsn, "select rolsuper from pg_roles where rolname=current_user;")
+    return val.lower() in {"t", "true", "1", "yes"}
+
+
+def ensure_superuser_for_reset(dsn: str) -> bool:
+    """Fail fast when the DSN role cannot do a full schema reset.
+
+    The snapshot dump uses `CREATE SCHEMA ...` without `IF NOT EXISTS`, so the
+    restore must start from a clean DB. On Supabase local, many schemas are
+    owned by `supabase_admin` (superuser), not by `postgres`.
+    """
+
+    is_superuser = _is_superuser_dsn(dsn)
+    if is_superuser:
+        return True
+    raise RuntimeError(
+        "Snapshot restore requires a superuser DSN to drop/recreate Supabase schemas. "
+        "In Supabase local, use `supabase_admin` (e.g. "
+        "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres) or pass --no-reset."
+    )
+
+
 def _safe_extract_tar(tar: tarfile.TarFile, dest: Path) -> None:
     dest = dest.resolve()
     for member in tar.getmembers():
@@ -196,10 +238,61 @@ def _psql_check(dsn: str) -> None:
     )
 
 
-def _drop_all_non_system_schemas(dsn: str) -> None:
+def _drop_non_plpgsql_extensions(dsn: str) -> None:
+    # You cannot drop a schema that is required by an extension (e.g. `net` for
+    # `pg_net`). Therefore we drop extensions first, then schemas.
     sql = """
 do $$
 declare
+  e record;
+begin
+  for e in (
+    select extname
+    from pg_extension
+    where extname <> 'plpgsql'
+  ) loop
+    execute format('drop extension if exists %I cascade', e.extname);
+  end loop;
+end $$;
+"""
+    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
+
+
+def _drop_publications(dsn: str) -> None:
+    # Full snapshots may re-create publication `supabase_realtime` (or other logical
+    # replication publications). Those must not exist before replaying the SQL dump.
+    sql = """
+do $$
+declare
+  p record;
+begin
+  for p in (
+    select pubname
+    from pg_publication
+  ) loop
+    execute format('drop publication if exists %I cascade', p.pubname);
+  end loop;
+end $$;
+"""
+    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
+
+
+def _reset_db_for_restore(dsn: str) -> None:
+    _drop_non_plpgsql_extensions(dsn)
+    _drop_publications(dsn)
+    _drop_all_non_system_schemas(dsn)
+    # `pg_dump` typically assumes `public` exists and therefore might not emit
+    # a `CREATE SCHEMA public;`. Ensure it is present for the restore.
+    subprocess.run(
+        ["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", "create schema if not exists public;"],
+        check=True,
+    )
+
+
+def _drop_all_non_system_schemas(dsn: str) -> None:
+    sql = """
+	do $$
+	declare
   r record;
 begin
   for r in (
@@ -225,7 +318,10 @@ def _restore_db_sql_gz(db_sql_gz: Path, dsn: str) -> None:
     assert proc.stdin is not None
     try:
         with gzip.open(db_sql_gz, "rb") as f:
-            shutil.copyfileobj(f, proc.stdin)
+            for raw_line in f:
+                if _is_graphql_public_grant_line(raw_line):
+                    continue
+                proc.stdin.write(raw_line)
     finally:
         try:
             proc.stdin.close()
@@ -236,6 +332,51 @@ def _restore_db_sql_gz(db_sql_gz: Path, dsn: str) -> None:
         raise RuntimeError(f"psql restore failed with exit code {rc}")
 
     LOG.info("DB restore done in %.1fs", time.monotonic() - start)
+
+
+def _is_graphql_public_grant_line(line: bytes) -> bool:
+    return line.lstrip().startswith(b"GRANT ALL ON FUNCTION graphql_public.graphql(")
+
+
+def _ensure_graphql_public_function(dsn: str) -> None:
+    has_wrapper = _psql_query_scalar(
+        dsn,
+        "SELECT to_regprocedure('graphql_public.graphql(text, text, jsonb, jsonb)') IS NOT NULL;",
+    )
+    if has_wrapper.lower() in {"t", "true", "1", "yes"}:
+        return
+
+    has_resolve = _psql_query_scalar(
+        dsn,
+        "SELECT to_regprocedure('graphql.resolve(text, jsonb, text, jsonb)') IS NOT NULL;",
+    )
+    if has_resolve.lower() not in {"t", "true", "1", "yes"}:
+        return
+
+    create_sql = """
+CREATE OR REPLACE FUNCTION graphql_public.graphql(
+    "operationName" text default null,
+    query text default null,
+    variables jsonb default null,
+    extensions jsonb default null
+) RETURNS jsonb
+    LANGUAGE sql
+AS $$
+    select graphql.resolve(
+        query := query,
+        variables := coalesce(variables, '{}'),
+        "operationName" := "operationName",
+        extensions := extensions
+    );
+$$;
+"""
+    grant_sql = """
+GRANT ALL ON FUNCTION graphql_public.graphql("operationName" text, query text, variables jsonb, extensions jsonb) TO postgres;
+GRANT ALL ON FUNCTION graphql_public.graphql("operationName" text, query text, variables jsonb, extensions jsonb) TO anon;
+GRANT ALL ON FUNCTION graphql_public.graphql("operationName" text, query text, variables jsonb, extensions jsonb) TO authenticated;
+GRANT ALL ON FUNCTION graphql_public.graphql("operationName" text, query text, variables jsonb, extensions jsonb) TO service_role;
+"""
+    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", create_sql + grant_sql], check=True)
 
 
 def _inspect_storage_tar(storage_tar_gz: Path) -> tuple[list[str], int, int]:
@@ -380,8 +521,7 @@ def _upload_storage_objects(
     skipped = 0  # dry-run skips
 
     for bucket, key, file_path in objects:
-        mime, _ = mimetypes.guess_type(file_path.name)
-        content_type = mime or "application/octet-stream"
+        content_type = _guess_content_type(file_path, key)
         url = _build_object_url(base_url, bucket, key)
         if dry_run:
             skipped += 1
@@ -406,6 +546,16 @@ def _upload_storage_objects(
     if skipped_files:
         result["skipped_files"] = len(skipped_files)
     return result
+
+
+def _guess_content_type(file_path: Path, key: str) -> str:
+    # Some archive paths place the meaningful extension in an intermediate path
+    # segment (for example, when uploads are keyed by digest directories).
+    for candidate in [*Path(key).parts[::-1], file_path.name]:
+        mime, _ = mimetypes.guess_type(candidate)
+        if mime:
+            return mime
+    return "application/octet-stream"
 
 
 def main() -> int:
@@ -441,6 +591,9 @@ def main() -> int:
         LOG.info("Preflight: checking DB connectivity ...")
         _psql_check(dsn)
 
+        if not args.no_reset:
+            report["dsn_is_superuser"] = ensure_superuser_for_reset(dsn)
+
         if not args.skip_storage:
             base_url = (args.supabase_url or os.getenv("SUPABASE_URL") or "").strip()
             key = (args.supabase_service_role_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
@@ -459,10 +612,11 @@ def main() -> int:
             return 0
 
         if not args.no_reset:
-            LOG.warning("Dropping all non-system schemas before restore (destructive).")
-            _drop_all_non_system_schemas(dsn)
+            LOG.warning("Dropping non-system extensions + schemas before restore (destructive).")
+            _reset_db_for_restore(dsn)
 
         _restore_db_sql_gz(files.supabase_db_sql_gz, dsn)
+        _ensure_graphql_public_function(dsn)
 
         if not args.skip_storage:
             base_url = (args.supabase_url or os.getenv("SUPABASE_URL") or "").strip()

@@ -76,6 +76,47 @@ def test_ensure_local_dsn_blocks_remote_hosts() -> None:
     mod.ensure_local_dsn("postgresql://u:p@db.example.com:5432/postgres", allow_remote=True)
 
 
+def test_ensure_superuser_for_reset_blocks_non_superuser(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mod, "_is_superuser_dsn", lambda _dsn: False, raising=False)
+    with pytest.raises(RuntimeError, match="superuser"):
+        mod.ensure_superuser_for_reset("postgresql://u:p@127.0.0.1:54322/postgres")
+
+    monkeypatch.setattr(mod, "_is_superuser_dsn", lambda _dsn: True, raising=False)
+    mod.ensure_superuser_for_reset("postgresql://u:p@127.0.0.1:54322/postgres")
+
+
+def test_reset_db_for_restore_drops_extensions_before_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    class FakeCompleted:
+        def __init__(self) -> None:
+            self.stdout = ""
+
+    def fake_run(cmd: list[str], **_kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return FakeCompleted()
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    mod._reset_db_for_restore("postgresql://u:p@127.0.0.1:54322/postgres")
+
+    assert len(calls) == 4
+    assert "drop extension" in (calls[0][-1] or "").lower()
+    assert "drop publication" in (calls[1][-1] or "").lower()
+    assert "drop schema" in (calls[2][-1] or "").lower()
+    assert "create schema" in (calls[3][-1] or "").lower()
+    assert "public" in (calls[3][-1] or "").lower()
+
+
+def test_is_graphql_public_grant_line() -> None:
+    assert mod._is_graphql_public_grant_line(
+        b'GRANT ALL ON FUNCTION graphql_public.graphql("operationName" text, query text, variables jsonb, extensions jsonb) TO anon;'
+    )
+    assert not mod._is_graphql_public_grant_line(
+        b"-- GRANT ALL ON FUNCTION graphql_public.graphql(\"operationName\" text, query text, variables jsonb, extensions jsonb) TO anon;"
+    )
+
+
 def test_build_object_url_encodes_bucket_and_key() -> None:
     url = mod._build_object_url("http://127.0.0.1:54321", "section materials", "a b/ü.txt")
     assert url.endswith("/storage/v1/object/section%20materials/a%20b/%C3%BC.txt")
@@ -174,3 +215,13 @@ def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPa
         assert headers["apikey"] == "srk"
         assert headers["Authorization"] == "Bearer srk"
         assert headers["x-upsert"] == "true"
+
+
+def test_guess_content_type_prefers_key_extension(tmp_path: Path) -> None:
+    file_path = tmp_path / "bucket" / "x" / "1763317293475-e36ed3455e6249f5baa87127aa42991c.pdf" / "59682179-f7aa-48d4-bb51-a723705c3791"
+    assert mod._guess_content_type(file_path, "bucket/1763317293475-e36ed3455e6249f5baa87127aa42991c.pdf/59682179-f7aa-48d4-bb51-a723705c3791") == "application/pdf"
+
+
+def test_guess_content_type_falls_back_to_octet_stream(tmp_path: Path) -> None:
+    file_path = tmp_path / "bucket" / "noext"
+    assert mod._guess_content_type(file_path, "bucket/noext") == "application/octet-stream"

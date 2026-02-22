@@ -154,7 +154,9 @@ verify:
 # Defaults (overridable):
 DUMP ?= docs/migration/supabase_backup_20251101_103457.tar.gz
 SNAPSHOT ?= .tmp/snapshot_backup_latest.tar.gz
-DSN ?= postgresql://postgres:postgres@127.0.0.1:54322/postgres
+# Supabase local uses `supabase_admin` as DB superuser; `postgres` is not a superuser.
+# Snapshot restores need superuser privileges to drop/recreate Supabase-managed schemas.
+DSN ?= postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres
 LEGACY_SCHEMA ?= legacy_raw
 WORKDIR ?= .tmp/migration_run
 SNAPSHOT_WORKDIR ?= .tmp/snapshot_import_run

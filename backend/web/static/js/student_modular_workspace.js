@@ -15,10 +15,12 @@
  *   return 404 for locked/missing modules).
  */
 
-import { createGraphView } from './student_graph_view.js';
+import { createGraphView } from './student_graph_view.js?v=3';
 
 const STORAGE_PREFIX = 'gustav.learning.modular_workspace:';
 const STATE_VERSION = 2;
+const CONFLICT_DEGREE_THRESHOLD = 3;
+const TWO_LEVEL_GAP_Y = 132;
 
 function readJsonFromLocalStorage(key) {
   try {
@@ -151,6 +153,231 @@ function buildGraphModel(payload) {
     }
   }
 
+  function computePhaseTwoLevelDisplayYByModuleId({ modules, edgesRaw }) {
+    const displayYByModuleId = new Map();
+    const moduleByIdLocal = new Map();
+    const sortIndex = new Map();
+    const modulesByPhase = new Map();
+
+    const modulesSorted = [...modules].sort((a, b) => {
+      const pa = String(a.phase_id || '');
+      const pb = String(b.phase_id || '');
+      const ia = phaseIndexById.get(pa) ?? 9999;
+      const ib = phaseIndexById.get(pb) ?? 9999;
+      if (ia !== ib) return ia - ib;
+      const xa = Math.max(1, Number(a.position_in_phase || 1));
+      const xb = Math.max(1, Number(b.position_in_phase || 1));
+      if (xa !== xb) return xa - xb;
+      return String(a.id || '').localeCompare(String(b.id || ''), 'de');
+    });
+
+    for (let idx = 0; idx < modulesSorted.length; idx += 1) {
+      const m = modulesSorted[idx];
+      const id = String(m.id || '');
+      if (!id) continue;
+      moduleByIdLocal.set(id, m);
+      sortIndex.set(id, idx);
+      const pid = String(m.phase_id || '');
+      if (!modulesByPhase.has(pid)) modulesByPhase.set(pid, []);
+      modulesByPhase.get(pid).push(id);
+
+      const pIdx = phaseIndexById.get(pid) ?? 0;
+      const baseY = BASE_Y + pIdx * GAP_Y;
+      displayYByModuleId.set(id, baseY);
+    }
+
+    const phaseEdges = new Map();
+    for (const e of edgesRaw.filter((e) => e && typeof e === 'object')) {
+      const fromId = String(e.from || '');
+      const toId = String(e.to || '');
+      if (!fromId || !toId) continue;
+      const fromModule = moduleByIdLocal.get(fromId) || null;
+      const toModule = moduleByIdLocal.get(toId) || null;
+      if (!fromModule || !toModule) continue;
+      const fromPhase = String(fromModule.phase_id || '');
+      const toPhase = String(toModule.phase_id || '');
+      if (!fromPhase || fromPhase !== toPhase) continue;
+      if (!phaseEdges.has(fromPhase)) phaseEdges.set(fromPhase, []);
+      phaseEdges.get(fromPhase).push({ from: fromId, to: toId });
+    }
+
+    for (const [phaseId, localEdges] of phaseEdges.entries()) {
+      const phaseModuleIds = modulesByPhase.get(phaseId) || [];
+      if (!phaseModuleIds.length || !localEdges.length) continue;
+
+      const indegree = new Map();
+      const outdegree = new Map();
+      const incoming = new Map();
+      const outgoing = new Map();
+      const undirected = new Map();
+      for (const id of phaseModuleIds) {
+        indegree.set(id, 0);
+        outdegree.set(id, 0);
+        incoming.set(id, []);
+        outgoing.set(id, []);
+        undirected.set(id, new Set());
+      }
+
+      for (const e of localEdges) {
+        indegree.set(e.to, Number(indegree.get(e.to) || 0) + 1);
+        outdegree.set(e.from, Number(outdegree.get(e.from) || 0) + 1);
+        incoming.get(e.to)?.push(e.from);
+        outgoing.get(e.from)?.push(e.to);
+        undirected.get(e.from)?.add(e.to);
+        undirected.get(e.to)?.add(e.from);
+      }
+
+      const conflictSeeds = new Set();
+      for (const id of phaseModuleIds) {
+        const indeg = Number(indegree.get(id) || 0);
+        const outdeg = Number(outdegree.get(id) || 0);
+        if (indeg >= CONFLICT_DEGREE_THRESHOLD || outdeg >= CONFLICT_DEGREE_THRESHOLD) {
+          conflictSeeds.add(id);
+        }
+      }
+      if (!conflictSeeds.size) continue;
+
+      const visited = new Set();
+      const components = [];
+
+      for (const startId of phaseModuleIds) {
+        if (visited.has(startId)) continue;
+        const neighbors = undirected.get(startId);
+        if (!neighbors || !neighbors.size) continue;
+
+        const queue = [startId];
+        visited.add(startId);
+        const comp = [];
+        while (queue.length) {
+          const cur = String(queue.shift() || '');
+          if (!cur) continue;
+          comp.push(cur);
+          const nextIds = Array.from(undirected.get(cur) || []);
+          nextIds.sort((a, b) => {
+            const ia = Number(sortIndex.get(a) ?? 999999);
+            const ib = Number(sortIndex.get(b) ?? 999999);
+            if (ia !== ib) return ia - ib;
+            return String(a).localeCompare(String(b), 'de');
+          });
+          for (const nId of nextIds) {
+            if (visited.has(nId)) continue;
+            visited.add(nId);
+            queue.push(nId);
+          }
+        }
+        if (comp.length) components.push(comp);
+      }
+
+      for (const comp of components) {
+        const hasConflict = comp.some((id) => conflictSeeds.has(id));
+        if (!hasConflict) continue;
+
+        const compOrdered = [...comp].sort((a, b) => {
+          const ia = Number(sortIndex.get(a) ?? 999999);
+          const ib = Number(sortIndex.get(b) ?? 999999);
+          if (ia !== ib) return ia - ib;
+          return String(a).localeCompare(String(b), 'de');
+        });
+        const compSet = new Set(compOrdered);
+        const topScore = new Map(compOrdered.map((id) => [id, 0]));
+        const bottomScore = new Map(compOrdered.map((id) => [id, 0]));
+
+        for (const id of compOrdered) {
+          const outdeg = Number(outdegree.get(id) || 0);
+          const indeg = Number(indegree.get(id) || 0);
+          if (outdeg >= CONFLICT_DEGREE_THRESHOLD) {
+            topScore.set(id, Number(topScore.get(id) || 0) + 3);
+            for (const toId of (outgoing.get(id) || [])) {
+              if (!compSet.has(toId)) continue;
+              bottomScore.set(toId, Number(bottomScore.get(toId) || 0) + 2);
+            }
+          }
+          if (indeg >= CONFLICT_DEGREE_THRESHOLD) {
+            bottomScore.set(id, Number(bottomScore.get(id) || 0) + 3);
+            for (const fromId of (incoming.get(id) || [])) {
+              if (!compSet.has(fromId)) continue;
+              topScore.set(fromId, Number(topScore.get(fromId) || 0) + 2);
+            }
+          }
+        }
+
+        const topIds = [];
+        const bottomIds = [];
+
+        for (const id of compOrdered) {
+          const top = Number(topScore.get(id) || 0);
+          const bottom = Number(bottomScore.get(id) || 0);
+          const outdeg = Number(outdegree.get(id) || 0);
+          const indeg = Number(indegree.get(id) || 0);
+          if (top > bottom) {
+            topIds.push(id);
+            continue;
+          }
+          if (bottom > top) {
+            bottomIds.push(id);
+            continue;
+          }
+
+          if (top === 0 && bottom === 0) {
+            bottomIds.push(id);
+            continue;
+          }
+
+          if (outdeg > indeg) {
+            topIds.push(id);
+            continue;
+          }
+          bottomIds.push(id);
+        }
+
+        if (!topIds.length && bottomIds.length) {
+          const promote = bottomIds.shift();
+          if (promote) topIds.push(promote);
+        }
+        if (!bottomIds.length && topIds.length) {
+          const demote = topIds.pop();
+          if (demote) bottomIds.push(demote);
+        }
+        if (!topIds.length || !bottomIds.length) continue;
+
+        const pIdx = phaseIndexById.get(phaseId) ?? 0;
+        const baseY = BASE_Y + pIdx * GAP_Y;
+        const yTop = baseY - TWO_LEVEL_GAP_Y / 2;
+        const yBottom = baseY + TWO_LEVEL_GAP_Y / 2;
+        for (const id of topIds) displayYByModuleId.set(id, yTop);
+        for (const id of bottomIds) displayYByModuleId.set(id, yBottom);
+
+        const centerX =
+          compOrdered.reduce((acc, id) => acc + Number(phaseXByModuleId.get(id) || 0), 0) / compOrdered.length;
+        const topSorted = [...topIds].sort((a, b) => {
+          const xa = Number(phaseXByModuleId.get(a) || 0);
+          const xb = Number(phaseXByModuleId.get(b) || 0);
+          if (xa !== xb) return xa - xb;
+          return String(a).localeCompare(String(b), 'de');
+        });
+        const bottomSorted = [...bottomIds].sort((a, b) => {
+          const xa = Number(phaseXByModuleId.get(a) || 0);
+          const xb = Number(phaseXByModuleId.get(b) || 0);
+          if (xa !== xb) return xa - xb;
+          return String(a).localeCompare(String(b), 'de');
+        });
+
+        const topStartX = centerX - ((topSorted.length - 1) * GAP_X) / 2;
+        const bottomStartX = centerX - ((bottomSorted.length - 1) * GAP_X) / 2;
+        for (let idx = 0; idx < topSorted.length; idx += 1) {
+          phaseXByModuleId.set(topSorted[idx], topStartX + idx * GAP_X);
+        }
+        for (let idx = 0; idx < bottomSorted.length; idx += 1) {
+          phaseXByModuleId.set(bottomSorted[idx], bottomStartX + idx * GAP_X);
+        }
+      }
+    }
+
+    return displayYByModuleId;
+  }
+
+  const displayYByModuleId = computePhaseTwoLevelDisplayYByModuleId({ modules, edgesRaw });
+
   const incomingCount = new Map();
   for (const e of edgesRaw.filter((e) => e && typeof e === 'object')) {
     const to = String(e.to || '');
@@ -182,7 +409,8 @@ function buildGraphModel(payload) {
     const prereqReq = Math.max(0, Number(m.prereq_required || 0));
 
     const x = phaseXByModuleId.get(id) ?? phaseCenterX;
-    const y = BASE_Y + pIdx * GAP_Y;
+    const baseY = BASE_Y + pIdx * GAP_Y;
+    const y = displayYByModuleId.get(id) ?? baseY;
 
     nodes.push({
       id,

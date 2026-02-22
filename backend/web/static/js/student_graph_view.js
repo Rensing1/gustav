@@ -136,6 +136,15 @@ function edgeEndpoints(a, b) {
   return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
 }
 
+function laneOffsetForIndex(index, count, gap) {
+  const i = Number(index || 0);
+  const size = Math.max(0, Number(count || 0));
+  const g = Number(gap || 0);
+  if (!(size > 1) || !(g > 0)) return 0;
+  const mid = (size - 1) / 2;
+  return (i - mid) * g;
+}
+
 export function createGraphView(container, opts = {}) {
   const onNodeClick = typeof opts.onNodeClick === "function" ? opts.onNodeClick : () => {};
   const onTransformChange =
@@ -670,39 +679,90 @@ export function createGraphView(container, opts = {}) {
     if (!graph) return;
 
     const edges = computeVisibleEdges();
+    const expanded = [];
     for (const e of edges) {
       const fromId = String(e.from || "");
       const toId = String(e.to || "");
       const a = nodeById.get(fromId);
       const b = nodeById.get(toId);
       if (!a || !b) continue;
+      const samePhase = String(a.phaseId || "") && String(a.phaseId || "") === String(b.phaseId || "");
+      expanded.push({ fromId, toId, a, b, samePhase });
+    }
 
-      const { x1, y1, x2, y2 } = edgeEndpoints(a, b);
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const adx = Math.abs(dx);
-      const ady = Math.abs(dy);
-      let d = `M ${x1} ${y1} L ${x2} ${y2}`;
-      // Default to a gentle cubic for "tree-like" readability.
-      // This reduces "spaghetti" when multiple arrows leave/enter a node.
-      if (adx > 8 || ady > 8) {
-        if (ady >= adx) {
-          const c = clamp(ady * 0.55, 36, 160) * Math.sign(dy || 1);
-          d = `M ${x1} ${y1} C ${x1} ${y1 + c} ${x2} ${y2 - c} ${x2} ${y2}`;
-        } else {
-          const c = clamp(adx * 0.55, 36, 160) * Math.sign(dx || 1);
-          d = `M ${x1} ${y1} C ${x1 + c} ${y1} ${x2 - c} ${y2} ${x2} ${y2}`;
-        }
-      }
-      const path = svgEl("path", {
-        d,
-        class: "edge",
-        "data-from": fromId,
-        "data-to": toId,
-        "marker-end": "url(#arrow)",
+    const grouped = new Map();
+    for (const ed of expanded) {
+      const samePhase = ed.samePhase === true;
+      const sameLevel = Math.abs(safeNum(ed.a?.y) - safeNum(ed.b?.y)) < 8;
+      const key = samePhase
+        ? `same:${String(ed.a?.phaseId || "")}:${sameLevel ? "flat" : "stack"}`
+        : `cross:${String(ed.a?.phaseId || "")}>${String(ed.b?.phaseId || "")}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(ed);
+    }
+
+    const LANE_GAP = 18;
+    for (const list of grouped.values()) {
+      list.sort((x, y) => {
+        const xay = safeNum(x.a?.y);
+        const yay = safeNum(y.a?.y);
+        if (xay !== yay) return xay - yay;
+        const xax = safeNum(x.a?.x);
+        const yax = safeNum(y.a?.x);
+        if (xax !== yax) return xax - yax;
+        const xby = safeNum(x.b?.y);
+        const yby = safeNum(y.b?.y);
+        if (xby !== yby) return xby - yby;
+        const xbx = safeNum(x.b?.x);
+        const ybx = safeNum(y.b?.x);
+        if (xbx !== ybx) return xbx - ybx;
+        const fromCmp = String(x.fromId || "").localeCompare(String(y.fromId || ""));
+        if (fromCmp !== 0) return fromCmp;
+        return String(x.toId || "").localeCompare(String(y.toId || ""));
       });
-      edgesGroup.appendChild(path);
-      edgeEls.push({ el: path, from: fromId, to: toId });
+
+      list.forEach((ed, idx) => {
+        const lane = laneOffsetForIndex(idx, list.length, LANE_GAP);
+        const samePhase = ed.samePhase === true;
+        const sameLevel = Math.abs(safeNum(ed.a?.y) - safeNum(ed.b?.y)) < 8;
+        let offsetX = 0;
+        let offsetY = 0;
+        if (samePhase) {
+          // Same phase: separate horizontal edges vertically; separate stacked
+          // (top->bottom) edges horizontally so fan-out remains readable.
+          if (sameLevel) offsetY = lane;
+          else offsetX = lane;
+        } else {
+          offsetX = lane;
+        }
+
+        const { x1, y1, x2, y2 } = edgeEndpoints(ed.a, ed.b);
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const adx = Math.abs(dx);
+        const ady = Math.abs(dy);
+        let d = `M ${x1} ${y1} L ${x2} ${y2}`;
+        // Default to a gentle cubic for "tree-like" readability.
+        // Lane offsets keep parallel dependencies visually distinct.
+        if (adx > 8 || ady > 8) {
+          if (ady >= adx) {
+            const c = clamp(ady * 0.55, 36, 160) * Math.sign(dy || 1);
+            d = `M ${x1} ${y1} C ${x1 + offsetX} ${y1 + c} ${x2 + offsetX} ${y2 - c} ${x2} ${y2}`;
+          } else {
+            const c = clamp(adx * 0.55, 36, 160) * Math.sign(dx || 1);
+            d = `M ${x1} ${y1} C ${x1 + c} ${y1 + offsetY} ${x2 - c} ${y2 + offsetY} ${x2} ${y2}`;
+          }
+        }
+        const path = svgEl("path", {
+          d,
+          class: "edge",
+          "data-from": ed.fromId,
+          "data-to": ed.toId,
+          "marker-end": "url(#arrow)",
+        });
+        edgesGroup.appendChild(path);
+        edgeEls.push({ el: path, from: ed.fromId, to: ed.toId });
+      });
     }
   }
 

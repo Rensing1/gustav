@@ -108,3 +108,34 @@ def test_build_graph_model_centers_nodes_per_phase_instead_of_left_anchor() -> N
 
     # Old left-anchored formula must not be used anymore.
     assert "const x = BASE_X + (pos - 1) * GAP_X;" not in js
+
+
+def test_phase_sublevels_activate_only_for_degree_three_conflicts() -> None:
+    """Vertical sublevels should start at degree >= 3 (in or out).
+
+    Why:
+        For degree 2 conflicts, lane-routed edges are usually enough and avoid
+        unnecessary node movement. Dense conflicts (>=3) need extra vertical
+        structure.
+    """
+    js = _read_js()
+    assert "const CONFLICT_DEGREE_THRESHOLD = 3;" in js
+    assert "if (indeg >= CONFLICT_DEGREE_THRESHOLD || outdeg >= CONFLICT_DEGREE_THRESHOLD)" in js
+
+
+def test_build_graph_model_applies_local_phase_sublevels_with_bounded_offsets() -> None:
+    """Graph model should switch to strict two levels for dense conflicts.
+
+    Why:
+        The student view should remain stable and readable:
+        - degree 2: stay on one row + lane-routed edges
+        - degree >= 3: move to two clear rows (source/target)
+    """
+    js = _read_js()
+    assert "const TWO_LEVEL_GAP_Y = 132;" in js
+    assert "const displayYByModuleId = computePhaseTwoLevelDisplayYByModuleId({ modules, edgesRaw });" in js
+    assert "const yTop = baseY - TWO_LEVEL_GAP_Y / 2;" in js
+    assert "const yBottom = baseY + TWO_LEVEL_GAP_Y / 2;" in js
+    assert "if (outdeg >= CONFLICT_DEGREE_THRESHOLD)" in js
+    assert "if (indeg >= CONFLICT_DEGREE_THRESHOLD)" in js
+    assert "const y = displayYByModuleId.get(id) ?? baseY;" in js

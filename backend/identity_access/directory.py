@@ -92,7 +92,23 @@ class _KC:
     def token(self) -> str:
         """Obtain the primary admin bearer token."""
         if self.admin_client_secret:
-            return self._token_client_credentials()
+            try:
+                return self._token_client_credentials()
+            except Exception as primary_exc:
+                # Snapshot imports can replace realm data where the configured
+                # admin client exists in `master` but not in the app realm.
+                # Retry once via `master` while keeping client_credentials.
+                if str(self.admin_realm).strip().lower() == "master":
+                    raise
+                try:
+                    logger.warning(
+                        "Primary admin token acquisition failed for realm=%s client_id=%s; retrying via master realm",
+                        self.admin_realm,
+                        self.admin_client_id,
+                    )
+                    return self._token_client_credentials(realm="master")
+                except Exception:
+                    raise primary_exc
         return self._token_password_grant(
             realm=self.admin_realm,
             client_id=self.admin_client_id,

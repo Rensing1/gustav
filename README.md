@@ -19,11 +19,11 @@ Weitere Funktionalitäten (z. B. Karteikarten, Datenvisualisierung) sind geplant
 git clone https://github.com/Rensing1/gustav.git gustav
 cd gustav
 
-	cp .env.example .env
-	# Für eine lokale Demo reichen die Default-Werte.
-	# Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
+cp .env.example .env
+# Für eine lokale Demo reichen die Default-Werte.
+# Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
 
-supabase init
+# Dieses Repo enthält bereits ein `supabase/`-Projekt; `supabase init` ist nicht nötig.
 supabase start
 docker compose up -d --build
 ```
@@ -41,7 +41,7 @@ Ein kurzer Blick in die wichtigsten Verzeichnisse:
 
 - `api/` – OpenAPI-Vertrag (API-Definition)
 - `backend/web/` – FastAPI-App, serverseitig gerenderte UI, HTMX-Komponenten
-- `backend/learning-worker/` – Hintergrundprozesse für automatische Auswertung & KI-Feedback
+- `backend/learning/workers/` – Hintergrundprozesse für automatische Auswertung & KI-Feedback (Compose-Service: `learning-worker`)
 - `supabase/` – Datenbank- und Storage-Konfiguration (Migrationen, RLS, Policies)
 - `docs/` – Architektur, wissenschaftliche Hintergründe und Implementierungspläne
 
@@ -90,7 +90,7 @@ Nutze die README als Wegweiser. Details stehen hier:
   - Storage & Uploads (Materialien, Abgaben): `docs/references/storage_and_gateway.md`
 
 - **KI & Wissenschaft**
-  - Wissenschaftliche Hintergründe und Experimente: `docs/science/`
+  - Wissenschaftliche Hintergründe und Experimente: `docs/research/`
 
 - **Planung & Roadmap**
   - Implementierungspläne: `docs/plan/`

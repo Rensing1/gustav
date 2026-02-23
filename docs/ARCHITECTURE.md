@@ -88,17 +88,17 @@ Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` 
 - `docs/` – Projektdokumentation
   - `glossary.md` – Begriffe (bitte konsistent mit API/DB nutzen)
   - `bounded_contexts.md` – Kontextzuschnitte
-  - `database_schema.md` – Schema (derzeit leer; geplant über Migrationen zu füllen)
+  - `database_schema.md` – Schema‑Übersicht (aus Migrationen abgeleitet)
   - `UI-UX-Leitfaden.md` – Richtlinien für Gestaltung/Interaktionen
 - `Dockerfile`, `docker-compose.yml` – Containerisierung (Dev‑Setup)
   - Runtime Layout: Der Container kopiert `backend/web/` sowie die Domänenpakete `identity_access`, `teaching` und `backend/learning`. `PYTHONPATH=/app:/app/backend` stellt sicher, dass Import-Pfade (`from backend.learning...`) sowohl lokal als auch im Image identisch bleiben.
   - Keycloak läuft in allen Umgebungen gegen den dedizierten Compose-Service `keycloak-db` (PostgreSQL 16) anstelle des früheren lokalen Volumes. Startparameter (`KC_DB_URL`, Benutzer/Passwort) kommen aus `.env` bzw. Secret-Store; die Datenbank hält Realm- und Benutzerzustand persistent.
 - `legacy-code-alpha1/` – Referenz Altcode
 
-Geplante Ergänzungen (separat anlegen, wenn benötigt):
+Weitere wichtige Ordner:
 - `supabase/migrations/` – SQL‑Migrationen (via Supabase CLI)
 - `backend/tests/` – pytest‑Tests für API/Use Cases
-- `docs/ROADMAP.md`, `docs/CHANGELOG.md`, `docs/LICENCE.md`, `docs/science/*`, `docs/plan/*`
+- `docs/ROADMAP.md`, `docs/CHANGELOG.md`, `docs/LICENCE.md`, `docs/research/*`, `docs/plan/*`
 
 ## Request‑Flow (heute)
 1) Browser sendet Request an FastAPI (`backend/web/main.py:1`).
@@ -154,14 +154,14 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 5) Refactoring: Aufräumen, Entkopplung, Performance/Security prüfen.
 
 ## Sicherheit & Datenschutz (Grundsätze)
-- AuthN/A: Supabase/IServ (Single Sign‑On) – Implementierung folgt.
+- AuthN: Keycloak (OIDC Authorization Code Flow mit PKCE). IServ‑Anbindung (SSO) ist geplant.
 - DB‑Zugriff: RLS‑Prinzip (Row Level Security) – Architektur bereitet darauf vor.
 - PII‑Minimierung: Nur notwendige personenbezogene Daten speichern.
 - Cookies: httpOnly, Secure, SameSite; CSRF‑Schutz bei Formularen.
 - CORS: Nicht nötig in SSR‑Setup (gleiche Origin); bei zukünftiger SPA strikt konfigurieren.
 - Logging: Keine sensiblen Inhalte; zweckgebundenes Monitoring.
 
-## Datenbank & Migrationen (geplant)
+## Datenbank & Migrationen
 - PostgreSQL (Supabase). Migrationen als versionierte SQL‑Dateien unter `supabase/migrations/`.
 - Namenskonventionen: snake_case Tabellen/Spalten, Präfixe pro Kontext (z. B. `learning_submissions`).
 - Test‑DB: Separate Testumgebung für pytest, Transaktions‑Rollback/Fixture‑Strategie.

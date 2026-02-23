@@ -1213,6 +1213,25 @@ pre {
   line-height: 1.5;
 }
 
+.makecode-evidence {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.makecode-evidence > h2:first-child {
+  margin-top: 0;
+  font-size: var(--text-base);
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  color: var(--color-text-muted);
+}
+
+.makecode-evidence pre {
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
 .scratch-evidence > * {
   margin: 0;
 }

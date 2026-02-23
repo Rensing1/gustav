@@ -67,3 +67,17 @@ def test_makecode_evidence_hides_irrelevant_files_when_no_main_found() -> None:
     assert "main.ts" in html
     assert "pxt.json" not in html
     assert 'class="makecode-evidence"' in html
+
+
+def test_makecode_marker_does_not_override_regular_markdown() -> None:
+    """
+    Defense-in-depth: Do not compact arbitrary user text just because it starts
+    with the MakeCode evidence marker.
+    """
+    submission_id = str(uuid.uuid4())
+    record = {"text_body": "# makecode.evidence.v1\n\nHallo Welt\n\nDas ist normaler Text."}
+
+    html = _render_submission_text_container(record, submission_id=submission_id, has_artifact=False, oob=False)
+
+    assert "Hallo Welt" in html
+    assert "Kein" not in html

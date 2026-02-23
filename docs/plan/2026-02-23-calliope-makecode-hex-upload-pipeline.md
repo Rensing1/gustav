@@ -111,6 +111,8 @@ UI-Strategie (Lesbarkeit):
 - Lehrkraft-Ansicht (Live-Matrix Detail): nutzt die gleiche kompakte Darstellung fuer Calliope.
 - Scratch Evidence wird in beiden Views mit einer CSS-scope Wrapperklasse gerendert (`.scratch-evidence`), damit die Darstellung
   konsistent bleibt.
+- Fail-open Hardening: Wenn ein Text zufaellig mit `# makecode.evidence.v1` beginnt, aber kein gueltiges Evidence-Format enthaelt,
+  wird er als normaler Markdown-Text gerendert (defense-in-depth gegen False Positives).
 
 ## Security / Hardening
 - strikte Intel-HEX Parser/Checksum-Validierung (kein "best effort")

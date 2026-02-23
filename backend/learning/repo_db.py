@@ -9,6 +9,7 @@ import os
 import re
 from uuid import UUID, uuid5
 from backend.storage.sb3_validation import SCRATCH_SB3_MIME
+from backend.storage.makecode_hex_validation import MAKECODE_HEX_MIME
 
 try:  # pragma: no cover -- optional dependency in some environments
     import psycopg
@@ -1119,21 +1120,31 @@ class DBLearningRepo:
                     # Visual tasks are upload-only. Text or H5P payloads are rejected.
                     if data.kind not in ("image", "file"):
                         raise ValueError("invalid_input")
-                    # Defense-in-depth: Visual tasks must not accept SB3 archives.
-                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == SCRATCH_SB3_MIME:
-                        raise ValueError("invalid_file_payload")
+                    # Defense-in-depth: Visual tasks must not accept Scratch SB3 or MakeCode HEX archives.
+                    if data.kind == "file":
+                        mime = str(data.mime_type or "").strip().lower()
+                        if mime in {SCRATCH_SB3_MIME, MAKECODE_HEX_MIME}:
+                            raise ValueError("invalid_file_payload")
                 elif task_kind == "scratch":
                     # Scratch tasks are SB3 upload-only.
                     if data.kind != "file":
                         raise ValueError("invalid_input")
                     if str(data.mime_type or "").strip().lower() != SCRATCH_SB3_MIME:
                         raise ValueError("invalid_file_payload")
+                elif task_kind == "calliope":
+                    # Calliope tasks are MakeCode HEX upload-only.
+                    if data.kind != "file":
+                        raise ValueError("invalid_input")
+                    if str(data.mime_type or "").strip().lower() != MAKECODE_HEX_MIME:
+                        raise ValueError("invalid_file_payload")
                 else:
                     if data.kind == "h5p":
                         raise ValueError("invalid_h5p_payload")
-                    # Defense-in-depth: only scratch tasks may accept SB3 MIME.
-                    if (data.kind == "file") and str(data.mime_type or "").strip().lower() == SCRATCH_SB3_MIME:
-                        raise ValueError("invalid_file_payload")
+                    # Defense-in-depth: only Scratch tasks may accept SB3 MIME and only Calliope tasks may accept HEX MIME.
+                    if data.kind == "file":
+                        mime = str(data.mime_type or "").strip().lower()
+                        if mime in {SCRATCH_SB3_MIME, MAKECODE_HEX_MIME}:
+                            raise ValueError("invalid_file_payload")
 
                 cur.execute(
                     "select public.next_attempt_nr(%s, %s, %s)",

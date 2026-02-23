@@ -1,109 +1,88 @@
-## Bounded Contexts
-1. **Benutzerverwaltung:** Verwaltet die Identitäten, Rollen und Gruppenzugehörigkeiten von allen Benutzern.
-2. **Unterrichten:** Ermöglicht Lehrern das Erstellen, Verwalten und Wiederverwenden von Lerninhalten (Lerneinheiten) und deren Organisation in Kursen.
-3. **Lernen:** Wickelt den interaktiven Prozess der Aufgabenbearbeitung durch Schüler und die Generierung von Feedback ab.
-4. **Diagnostik:** Bereitet Leistungsdaten aus dem Lernprozess zur Analyse für Lehrer auf.
+# Bounded Contexts
 
-### Unterrichten
-**1. `Kurs`-Aggregat** Dieses Aggregat ist nun deutlich "leichter". Es verwaltet nicht mehr den Inhalt der Lerneinheiten, sondern nur noch die _Beziehung_ zu ihnen und die kurs-spezifischen Konfigurationen.
-- **`Kurs` (Aggregats-Stamm)**
-    - Kurs-ID
-    - Titel
-    - Lehrer-ID (Autor) (externe Referenz)
-    - Kontextwissen (kurs-spezifisch)
-    - **Liste von `Kursmodulen` (Entitäten innerhalb des Kurs-Aggregats)**
-        - **Lerneinheit-ID** (externe Referenz zum `Lerneinheit`-Aggregat)
-        - **Reihenfolge** im Kurs
-        - **Liste der freigegebenen Abschnitts-IDs** (Hier leben die Freigaben!)
-**2. `Lerneinheit`-Aggregat** Dies ist der wiederverwendbare Baustein. Er existiert unabhängig von einem Kurs.
-- **`Lerneinheit` (Aggregats-Stamm)**
-    - Lerneinheit-ID
-    - Titel
-    - Autor-ID (wer hat diesen Baustein erstellt?)
-    - Liste von `Abschnitten`
-        - Liste von `Material`
-        - Liste von `Aufgaben`
-            - ... (inkl. Kriterien, Lösungshinweise, Versuchszahl etc.)
-### Lernen
-**`Einreichung` (Aggregats-Stamm)**
-- Einreichung-ID
-- **Schüler-ID** (externe Referenz zur `Benutzerverwaltung`)
-- **Aufgaben-ID** (externe Referenz zur `Lerneinheit` im "Unterrichten"-Kontext)
-- **Kurs-ID** (wichtiger Kontext, externe Referenz)
-- Eingereichter Inhalt (z.B. Text, Dateipfad)
-- Zeitstempel der Einreichung
-- Liste von **`Bewertungen` (Entitäten innerhalb des Aggregats)**
-    - Bezug zum `Analysekriterium` der Aufgabe
-    - Ergebnis/Score
-- **`Formatives Feedback` (Wertobjekt oder Entität innerhalb des Aggregats)**
-    - Generierter Feedback-Text
+Last reviewed: 2026-02-23
 
-### Beziehungen zwischen den Kontexten
-Die Benutzerverwaltung muss folgendes über jeden Nutzer wissen:
-- ID
-- E-Mail
-- Name
-- Rolle
-- Account erstellt an:
-- Passwort-Hash
-  
-Weitergeben muss die Benutzerverwaltung aber nur folgende Informationen:
-- Name
-- ID
-- Rolle
+Dieses Dokument beschreibt die fachliche Aufteilung (Bounded Contexts) in GUSTAV alpha‑2.
+Es ist bewusst konzeptionell gehalten. Terminologie bitte konsistent mit `docs/glossary.md` verwenden.
 
+## Kontexte (alpha‑2)
+1. **`identity_access` (Benutzerverwaltung)**: Authentifizierung/Session‑Handling und Rollen/Identität als minimaler, datenschutzfreundlicher Kontext für alle nachgelagerten Bereiche.
+2. **`teaching` (Unterrichten)**: Lehrkräfte erstellen/verwalten wiederverwendbare Inhalte (`Unit`) und organisieren sie in Kursen inkl. Freigaben.
+3. **`learning` (Lernen)**: Schüler bearbeiten freigegebene Inhalte, erstellen Abgaben (`Submission`) und erhalten Auswertung/Feedback.
+4. **`analytics` (Diagnostik)**: Aggregierte Sichten für Lehrkräfte. (Noch kein eigenes Paket; erste diagnostische Sichten sind aktuell Teil von `teaching`.)
 
-Der Unterrichten-Kontext weiß über einen Kurs:
-- ID
-- Name
-- Lehrer-ID
-- Kontextwissen
-- Liste von Lerneinheiten, inkl. Reihenfolge im Kurs und Abschnittsfreigaben
+## `identity_access` (Benutzerverwaltung)
 
-Der Unterrichten-Kontext weiß über eine Lerneinheit:
-- ID
-- Titel
-- Ersteller (Autor-ID)
-- Liste von Abschnitten (inkl. Liste von Material, Liste von Aufgaben)
+Ziel: Andere Kontexte sollen Nutzer eindeutig adressieren können, ohne E‑Mail/PII als technische Schlüssel zu verwenden.
 
-Der Unterrichten-Kontext muss an den Lernen-Kontext weitergeben:
-- alles über eine Lerneinheit
-- Freigabestatus der Abschnitte
-- Kontextwissen
-  
-Der Unterrichten-Kontext muss an den Diagnostik-Kontext weitergeben:
-- alles, was auch an den Lernen-Kontext weitergegeben wurde
-  
-Der Lernen-Kontext muss an den Diagnostik-Kontext weitergeben:
-- Einreichungen der Schüler
-- KI-Analyse und KI-Feedback
+**Verantwortung**
+- Login/SSO via Keycloak (OIDC Authorization Code Flow + PKCE)
+- Serverseitige App‑Session (`gustav_session` Cookie) und Ableitung eines minimalen User‑Kontexts
+- Bereitstellung eines **UserContextDTO** (kontextübergreifend), der ohne PII auskommt:
+  - `sub` (OIDC Subject, stabiler opaker String)
+  - `roles` (Realm‑Rollen, gefiltert auf `student|teacher|admin`)
+  - `name` (Anzeigename; z. B. aus `gustav_display_name` oder Fallback‑Humanisierung)
 
-Außerdem muss der Lernen-Kontext auch an den Unterricht-Kontext weitergeben (für die Live-Unterrichts-Ansicht):
-- Einreichungen der Schüler
-- KI-Analyse und KI-Feedback (in der Implementierung vor allem als `analysis_json` und `feedback_md` im Contract `TeachingLatestSubmission`)
+**Nicht-Ziele**
+- Keine Speicherung/Weitergabe von Passwörtern oder Passwort‑Hashes in der App‑Domäne.
+- E‑Mail ist (wenn überhaupt) ein IdP‑Attribut, aber kein fachlicher Identifikator für nachgelagerte Kontexte.
 
-### **Context Map**
+Siehe Referenz: `docs/references/user_management.md`.
 
-```
+## `teaching` (Unterrichten)
+
+Ziel: Lehrkräfte modellieren Lerninhalte und steuern Sichtbarkeit im Kurs.
+
+**Kernbegriffe**
+- `Course` (Kurs): organisatorische Hülle; enthält Mitglieder und Kurs‑Konfiguration.
+- `CourseModule` (Kursmodul): Beziehung zwischen `Course` und `Unit` inkl. Reihenfolge im Kurs.
+- `Unit` (Lerneinheit): wiederverwendbarer Inhaltsbaustein (autor‑scoped).
+- `Section` (Abschnitt): Unterteilung einer Unit; kleinste Einheit für Freigaben.
+- `Material` (Material): Markdown oder Datei‑Material innerhalb eines Abschnitts.
+- `Task` (Aufgabe): Aufgaben innerhalb eines Abschnitts, inkl. Kriterien für Auswertung.
+- `Release`/Sichtbarkeit: pro Kursmodul/Abschnitt wird Sichtbarkeit geschaltet (Freigabe).
+
+**Datenhoheit**
+- `teaching` ist Quelle der Wahrheit für Struktur (Kurse/Units/Sections/Materials/Tasks) und Freigaben.
+
+Siehe Referenzen: `docs/references/teaching.md`, `docs/database_schema.md`.
+
+## `learning` (Lernen)
+
+Ziel: Schüler bearbeiten freigegebene Aufgaben und erhalten Feedback/Auswertung.
+
+**Kernbegriffe**
+- `Submission` (Abgabe): immutable Einreichung eines Schülers zu einer Aufgabe.
+  - enthält u. a. `analysis_status`, `analysis_json` (Auswertung) und `feedback_md` (Rückmeldung)
+  - Versuchszähler wird serverseitig geführt (attempts/max_attempts)
+
+**Abhängigkeiten**
+- `learning` konsumiert Struktur/Freigaben aus `teaching` (fail‑closed: ohne Freigabe kein Zugriff).
+- Für Lehrkräfte‑Sichten (z. B. Live‑Übersicht) liefert `learning` aggregierte Abgabe‑Signale, nicht die Roh‑Inhalte.
+
+Siehe Referenzen: `docs/references/learning.md`, `docs/references/learning_ai.md`.
+
+## Beziehungen zwischen den Kontexten (Context Map)
+
+```mermaid
 graph TD
-    subgraph "Core Services (Upstream)"
-        Benutzerverwaltung
-        Unterrichten
+    subgraph "Upstream"
+        identity_access[identity_access]
+        teaching[teaching]
     end
 
-    subgraph "Process & Analytics (Downstream)"
-        Lernen
-        Diagnostik
+    subgraph "Downstream"
+        learning[learning]
+        analytics[analytics]
     end
 
-    Benutzerverwaltung -- UserContextDTO --> Unterrichten
-    Benutzerverwaltung -- UserContextDTO --> Lernen
-    Benutzerverwaltung -- UserContextDTO --> Diagnostik
+    identity_access -- UserContextDTO (sub, roles, name) --> teaching
+    identity_access -- UserContextDTO (sub, roles, name) --> learning
+    identity_access -- UserContextDTO (sub, roles, name) --> analytics
 
-    Unterrichten -- LerninhaltFuerLernprozessDTO --> Lernen
+    teaching -- Released content (structure + visibility) --> learning
 
-    Lernen -- EinreichungsdatenDTO --> Diagnostik
-    Unterrichten -- (Strukturdaten) --> Diagnostik
-
-    %% Die NEUE Feedback-Schleife für die Live-Ansicht
-    Lernen -- EinreichungsdatenDTO (Echtzeit) --> Unterrichten
+    learning -- Aggregates (e.g. latest submissions status) --> teaching
+    learning -- Aggregates --> analytics
+    teaching -- Structure --> analytics
+```

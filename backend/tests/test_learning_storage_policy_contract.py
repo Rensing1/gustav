@@ -28,7 +28,13 @@ def test_learning_upload_policy_exposes_shared_limits():
     assert getattr(policy, "STORAGE_KEY_RE")
 
     assert policy.ALLOWED_IMAGE_MIME == {"image/jpeg", "image/png"}
-    assert policy.ALLOWED_FILE_MIME == {"application/pdf", "application/x.scratch.sb3"}
+    # Global allowlist for file uploads in the learning flow.
+    # Per-task constraints (e.g. Scratch vs Calliope) are enforced downstream.
+    assert policy.ALLOWED_FILE_MIME == {
+        "application/pdf",
+        "application/x.scratch.sb3",
+        "application/x.makecode.hex",
+    }
     assert policy.MAX_UPLOAD_BYTES == 10 * 1024 * 1024
     assert re.fullmatch(policy.STORAGE_KEY_RE, "a/b/file.pdf")
 

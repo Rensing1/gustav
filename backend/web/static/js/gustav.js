@@ -357,6 +357,8 @@ class Gustav {
             const allowedMimeAttr = (form.dataset.allowedMime || '').split(',').map((s) => s.trim()).filter(Boolean);
             if (allowedMimeAttr.indexOf('application/x.scratch.sb3') !== -1) {
               this.showNotification('Dateiformat nicht erlaubt. Erlaubt ist nur .sb3.', 'error');
+            } else if (allowedMimeAttr.indexOf('application/x.makecode.hex') !== -1) {
+              this.showNotification('Dateiformat nicht erlaubt. Erlaubt ist nur .hex.', 'error');
             } else {
               this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
             }
@@ -812,6 +814,7 @@ class Gustav {
     // Fall back to filename-based detection for the allowlisted formats.
     if (!mime || mime === 'application/octet-stream') {
       if (lowerName.endsWith('.sb3')) mime = 'application/x.scratch.sb3';
+      else if (lowerName.endsWith('.hex')) mime = 'application/x.makecode.hex';
       else if (lowerName.endsWith('.png')) mime = 'image/png';
       else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) mime = 'image/jpeg';
       else if (lowerName.endsWith('.pdf')) mime = 'application/pdf';

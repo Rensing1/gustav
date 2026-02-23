@@ -1,106 +1,100 @@
-# GUSTAV – KI‑gestützte Lernplattform für Schulen
+# GUSTAV — AI‑assisted learning platform for schools (alpha‑2)
 
-GUSTAV (**G**USTAV **u**nterstützt **S**chüler **t**adellos **a**ls **V**ertretungslehrer) ist eine KI-gestützte Lernplattform, die ich für den Einsatz in meinem eigenen Unterricht an einer weiterführenden Schule einsetze. Damit verfolge ich konkret zwei Ziele:
-1. Schüler erhalten für ihre Aufgaben zeitnahes pädagogisches Feedback.
-2. Lehrer erhalten einen schnellen Überblick über den Lernstand einer Klasse.
-Weitere Funktionalitäten (z. B. Karteikarten, Datenvisualisierung) sind geplant, aber die Umsetzung ist neben den anderen unterrichtsbezogenen Aufgaben recht zeitintensiv. Über Unterstützung bin ich daher recht dankbar!
+GUSTAV (recursive acronym in German: “GUSTAV unterstützt Schüler tadellos als Vertretungslehrer”) is a self‑hosted, AI‑assisted learning platform built for classroom use. It focuses on fast formative feedback for students and a clear overview for teachers.
 
---- 
+Status: **alpha‑2** (breaking changes expected).
 
-## Schnellstart (lokale Demo)
-**Voraussetzungen**
-- aktuelle Linux-Distribution
-- Docker & Docker Compose
-- Supabase
-- Ports `80` und `443` sind frei (für `https://app.localhost`)
+## What it does
 
-**Demo in wenigen Schritten starten**
+- Server‑side rendered web app (FastAPI) with HTMX for progressive interactions
+- Keycloak login (OIDC Authorization Code Flow + PKCE) with server‑side sessions
+- Teaching workflows: courses, reusable units, sections, materials, tasks, and per‑course section releases
+- Learning workflows: student submissions (text + uploads) and asynchronous analysis/feedback via `learning-worker`
+- Supabase (Postgres + Storage) with SQL migrations under `supabase/migrations/`
+- Contract‑first API: `api/openapi.yml`
+
+## Tech stack (high level)
+
+- Web: FastAPI (SSR) + HTMX
+- Identity: Keycloak (theme included)
+- DB/Storage: Supabase (Postgres + Storage)
+- Reverse proxy / TLS: Caddy (`app.localhost`, `id.localhost`)
+
+## Local demo (quickstart)
+
+### Prerequisites
+
+- Linux
+- Docker + Docker Compose
+- Supabase CLI
+- Free ports `80` and `443` (for `https://app.localhost`)
+
+### Start
+
 ```bash
 git clone https://github.com/Rensing1/gustav.git gustav
 cd gustav
 
-	cp .env.example .env
-	# Für eine lokale Demo reichen die Default-Werte.
-	# Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
+cp .env.example .env
 
-supabase init
+# Start local Supabase services.
 supabase start
+
+# Apply SQL migrations (first-time setup).
+supabase db reset --yes
+
+# Update SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env (see `.env.example` for guidance).
+supabase status
+
+# Start the app stack (web + keycloak + caddy + worker + h5p).
 docker compose up -d --build
 ```
 
-Dann im Browser öffnen:
+Open:
 - App: `https://app.localhost`
-- (Keycloak-Login ist im Demo-Setup vorkonfiguriert.)
-- Für Produktion müssen Domain/TLS/SMTP/Secrets pro Umgebung sauber konfiguriert werden (siehe Hinweise in `.env.example` und `docs/ARCHITECTURE.md`).
 
----
+Notes:
+- Caddy uses an internal local CA (`tls internal`). Your browser may show a TLS warning unless you trust the CA.
+- If `app.localhost` / `id.localhost` do not resolve to `127.0.0.1`, add them to `/etc/hosts` (see `docs/references/network_topology.md`).
+- This public repo does not ship production ops runbooks. Production requires environment‑specific TLS/SMTP/secrets (see `.env.example` and `docs/ARCHITECTURE.md`).
 
-## Projektstruktur (Überblick)
+## Tests
 
-Ein kurzer Blick in die wichtigsten Verzeichnisse:
+Most common:
 
-- `api/` – OpenAPI-Vertrag (API-Definition)
-- `backend/web/` – FastAPI-App, serverseitig gerenderte UI, HTMX-Komponenten
-- `backend/learning-worker/` – Hintergrundprozesse für automatische Auswertung & KI-Feedback
-- `supabase/` – Datenbank- und Storage-Konfiguration (Migrationen, RLS, Policies)
-- `docs/` – Architektur, wissenschaftliche Hintergründe und Implementierungspläne
+```bash
+make test
+make verify
+```
 
-Weitere Ordner (z. B. `keycloak/`, `reverse-proxy/`) enthalten die Infrastruktur rund um Identity und TLS.
+See `docs/references/make_targets.md` for all targets and prerequisites.
 
----
+## Documentation
 
-## Tests & Qualität
+Start here:
+- Architecture: `docs/ARCHITECTURE.md`
+- Domain boundaries: `docs/bounded_contexts.md`
+- API contract: `api/openapi.yml`
 
-GUSTAV wird entwickelt nach dem Prinzip „Contract‑First“ und setzt stark auf automatisierte Tests:
+References:
+- Teaching: `docs/references/teaching.md`
+- Learning: `docs/references/learning.md`
+- Identity & sessions: `docs/references/user_management.md`
+- Storage wiring: `docs/references/storage_and_gateway.md`
+- Research notes: `docs/research/`
+- Changelog: `docs/CHANGELOG.md`
+- Roadmap (placeholder): `docs/ROADMAP.md`
 
-- Unit- und Integrationstests:
-  - `make test`
-  - oder `.venv/bin/pytest -q`
-  - H5P Sidecar (Node) Unit-Tests: `make test-h5p` (installiert Dependencies via `npm ci`, kein `node_modules/` im Repo)
-  - Gesamter Durchlauf (Unit + Supabase + OpenAI-Endpoint + E2E): `make verify`
-  - Nach `supabase db reset`: `make reset-local` (DB reset + service recreate; Keys ggf. via `supabase status` aktualisieren)
-  - `make test-supabase`
-  - KI-Integration: OpenAI-kompatibler Endpoint via `OPENAI_BASE_URL` (LLM/VLM-Server). Für Unit-Tests werden Netzwerkanfragen stubbbar gehalten.
-  - Für die JS-Behaviour-Tests (Teaching-Live-UI in `gustav.js`) wird eine aktuelle Node.js-Installation benötigt; in CI sollte Node verfügbar sein, damit diese Tests nicht dauerhaft „skipped“ laufen.
-- API-Verhalten wird gegen den OpenAPI-Vertrag in `api/openapi.yml` geprüft.
-- Für neue Features sind Tests und Dokumentation Teil der Definition of Done.
+## Issue reporting
 
-Mehr zur Architektur und zu Clean‑Code‑Prinzipien findest du in:
+Please open a GitHub Issue and include:
 
-- `docs/ARCHITECTURE.md`
-- `docs/bounded_contexts.md`
+- Steps to reproduce
+- Expected vs actual behavior
+- Relevant logs (e.g. `docker compose logs --tail=200 web`), with secrets and PII removed
+- `supabase status` output (redact keys)
+- Your OS + Docker/Supabase CLI versions
 
----
+## License
 
-## Wichtige Dokumente
-
-Nutze die README als Wegweiser. Details stehen hier:
-
-- **Architektur & Domäne**
-  - Gesamtarchitektur: `docs/ARCHITECTURE.md`
-  - Bounded Contexts: `docs/bounded_contexts.md`
-  - Glossar der Fachbegriffe: `docs/glossary.md`
-
-- **Deployment & Betrieb**
-  - Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
-  - Lokale Demo: `docker-compose.yml` + `reverse-proxy/Caddyfile` (TLS via `tls internal` für `app.localhost`/`id.localhost`)
-
-- **Datenbank & Storage**
-  - Datenbank-Schema: `docs/database_schema.md`
-  - Storage & Uploads (Materialien, Abgaben): `docs/references/storage_and_gateway.md`
-
-- **KI & Wissenschaft**
-  - Wissenschaftliche Hintergründe und Experimente: `docs/science/`
-
-- **Planung & Roadmap**
-  - Implementierungspläne: `docs/plan/`
-  - Roadmap: `docs/ROADMAP.md`
-  - Änderungsverlauf: `docs/CHANGELOG.md`
-  - Lizenz: `docs/LICENCE.md` und `LICENCE.md`
-
----
-
-## Healthcheck & Status
-
-- Healthcheck-Endpunkt: `GET /health` → `{ "status": "healthy" }`
-- Für einen vollständigen Systemcheck (inkl. Supabase, Keycloak, RLS) siehe die Hinweise in `docs/ARCHITECTURE.md`.
+AGPL‑3.0. See `LICENCE.md` (and `docs/LICENCE.md`). Third‑party notices: `THIRD_PARTY_NOTICES.md`.

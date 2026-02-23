@@ -241,7 +241,10 @@ def extract_makecode_project_from_hex(hex_bytes: bytes, *, limits: MakeCodeHexLi
         else:
             merged.append((addr, data))
 
-    # Find the first valid embedded project.
+    # Find the first valid embedded project. HEX payloads may contain multiple
+    # embedded-source markers; we scan fail-soft so a corrupted marker does not
+    # hide a later valid one.
+    saw_marker = False
     for seg_addr, seg_bytes in merged:
         start = 0
         while True:
@@ -255,6 +258,7 @@ def extract_makecode_project_from_hex(hex_bytes: bytes, *, limits: MakeCodeHexLi
                 continue
             if idx + 16 > len(seg_bytes):
                 continue
+            saw_marker = True
             json_len = int.from_bytes(seg_bytes[idx + 8 : idx + 10], "little")
             text_len = int.from_bytes(seg_bytes[idx + 10 : idx + 14], "little")
             if json_len <= 0 or json_len > int(limits.max_header_json_bytes):
@@ -271,55 +275,66 @@ def extract_makecode_project_from_hex(hex_bytes: bytes, *, limits: MakeCodeHexLi
                 header_text = header_bytes.decode("utf-8")
                 header = json.loads(header_text)
             except Exception:
-                raise MakeCodeHexValidationError("invalid_hex_file")
+                continue
             if not isinstance(header, dict):
-                raise MakeCodeHexValidationError("invalid_hex_file")
+                continue
 
             compression = str(header.get("compression") or "").strip().upper()
             if compression and compression != "LZMA":
-                raise MakeCodeHexValidationError("invalid_hex_file")
-            if compression == "LZMA":
-                decompressed = _decompress_lzma_with_limit(text_bytes, max_bytes=int(limits.max_decompressed_text_bytes))
-            else:
-                decompressed = bytes(text_bytes)
-                if len(decompressed) > int(limits.max_decompressed_text_bytes):
-                    raise MakeCodeHexValidationError("makecode_source_too_large")
+                continue
+            try:
+                if compression == "LZMA":
+                    decompressed = _decompress_lzma_with_limit(
+                        text_bytes, max_bytes=int(limits.max_decompressed_text_bytes)
+                    )
+                else:
+                    decompressed = bytes(text_bytes)
+                    if len(decompressed) > int(limits.max_decompressed_text_bytes):
+                        raise MakeCodeHexValidationError("makecode_source_too_large")
+            except MakeCodeHexValidationError as exc:
+                if str(exc.code) == "makecode_source_too_large":
+                    raise
+                continue
 
             try:
                 text_str = decompressed.decode("utf-8")
-            except Exception as exc:
-                raise MakeCodeHexValidationError("invalid_hex_file") from exc
+            except Exception:
+                continue
 
             header_size = header.get("headerSize") or 0
             if header_size is None:
                 header_size = 0
             if not isinstance(header_size, int):
-                raise MakeCodeHexValidationError("invalid_hex_file")
+                continue
             if header_size < 0 or header_size > len(text_str):
-                raise MakeCodeHexValidationError("invalid_hex_file")
+                continue
 
             extra_header: dict[str, Any] = {}
             if header_size:
                 try:
                     extra_header = json.loads(text_str[:header_size])
-                except Exception as exc:
-                    raise MakeCodeHexValidationError("invalid_hex_file") from exc
+                except Exception:
+                    continue
                 if not isinstance(extra_header, dict):
-                    raise MakeCodeHexValidationError("invalid_hex_file")
+                    continue
 
             try:
                 files_raw = json.loads(text_str[header_size:])
-            except Exception as exc:
-                raise MakeCodeHexValidationError("invalid_hex_file") from exc
+            except Exception:
+                continue
             if not isinstance(files_raw, dict):
-                raise MakeCodeHexValidationError("invalid_hex_file")
+                continue
 
             files = _bounded_files_map(files_raw, limits=limits)
             if not files:
-                raise MakeCodeHexValidationError("invalid_hex_file")
+                continue
             meta = {"header": header, "extra_header": extra_header}
             return MakeCodeProject(files=files, meta=meta)
 
+    # Distinguish "no marker present" from "marker present but corrupted" so
+    # clients can guide students appropriately (re-export vs enable source embedding).
+    if saw_marker:
+        raise MakeCodeHexValidationError("invalid_hex_file")
     raise MakeCodeHexValidationError("missing_makecode_source")
 
 

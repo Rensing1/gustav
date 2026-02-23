@@ -182,7 +182,8 @@ async def _prepare_native_task_fixture() -> dict:
 
 
 @pytest.mark.anyio
-async def test_calliope_upload_intent_allows_only_hex(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("mime_type", ["application/x.makecode.hex", "Application/X.MakeCode.Hex"])
+async def test_calliope_upload_intent_allows_only_hex(monkeypatch: pytest.MonkeyPatch, mime_type: str) -> None:
     fx = await _prepare_calliope_task_fixture()
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     with _UseStorageAdapter(FakeStorageAdapter()):
@@ -190,7 +191,7 @@ async def test_calliope_upload_intent_allows_only_hex(monkeypatch: pytest.Monkey
             c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
             r = await c.post(
                 f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/upload-intents",
-                json={"kind": "file", "filename": "projekt.hex", "mime_type": "application/x.makecode.hex", "size_bytes": 1024},
+                json={"kind": "file", "filename": "projekt.hex", "mime_type": mime_type, "size_bytes": 1024},
             )
     assert r.status_code == 200
     body = r.json() or {}
@@ -273,7 +274,8 @@ async def test_non_calliope_submission_rejects_hex_payload(monkeypatch: pytest.M
 
 
 @pytest.mark.anyio
-async def test_calliope_task_accepts_valid_hex_and_validates_source(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("mime_type", ["application/x.makecode.hex", "Application/X.MakeCode.Hex"])
+async def test_calliope_task_accepts_valid_hex_and_validates_source(monkeypatch: pytest.MonkeyPatch, mime_type: str) -> None:
     fx = await _prepare_calliope_task_fixture()
     hex_bytes = _make_hex_with_embedded_source(eurl="https://makecode.calliope.cc/#editor")
     digest = sha256(hex_bytes).hexdigest()
@@ -296,7 +298,7 @@ async def test_calliope_task_accepts_valid_hex_and_validates_source(monkeypatch:
                 json={
                     "kind": "file",
                     "storage_key": storage_key,
-                    "mime_type": "application/x.makecode.hex",
+                    "mime_type": mime_type,
                     "size_bytes": len(hex_bytes),
                     "sha256": digest,
                 },

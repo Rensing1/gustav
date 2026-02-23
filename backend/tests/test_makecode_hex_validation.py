@@ -83,6 +83,38 @@ def _make_hex_without_magic() -> bytes:
     return ("\n".join(lines) + "\n").encode("ascii")
 
 
+def _make_makecode_embedding_blob(*, eurl: str) -> bytes:
+    """Build one MakeCode source-embedding blob (magic + header + compressed text)."""
+    files = {
+        "main.ts": 'basic.showString("Hi")\n',
+        "pxt.json": json.dumps({"name": "test-project", "dependencies": {}}, separators=(",", ":")),
+    }
+    extra_header = {"name": "test-project"}
+    extra_header_json = json.dumps(extra_header, separators=(",", ":"))
+    files_json = json.dumps(files, separators=(",", ":"))
+    text = (extra_header_json + files_json).encode("utf-8")
+    compressed = lzma.compress(text, format=lzma.FORMAT_ALONE)
+
+    header = {
+        "eURL": eurl,
+        "compression": "LZMA",
+        "headerSize": len(extra_header_json),
+        "textSize": len(text.decode("utf-8")),
+    }
+    header_bytes = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    magic = b"\x41\x14\x0E\x2F\xB8\x2F\xA2\xBB"
+    blob = magic + struct.pack("<H", len(header_bytes)) + struct.pack("<I", len(compressed)) + b"\x00\x00"
+    return blob + header_bytes + compressed
+
+
+def _make_hex_from_blob(blob: bytes, *, record_type: int = 0x0E) -> bytes:
+    lines: list[str] = []
+    for i in range(0, len(blob), 16):
+        lines.append(_hex_record(addr=i, record_type=record_type, data=blob[i : i + 16]))
+    lines.append(_hex_record(addr=0, record_type=0x01, data=b""))
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
 def test_extract_makecode_project_from_hex_returns_files() -> None:
     from backend.storage.makecode_hex_validation import extract_makecode_project_from_hex
 
@@ -139,4 +171,42 @@ def test_invalid_checksum_is_rejected() -> None:
     bad = b":00000001FE\n"
     with pytest.raises(MakeCodeHexValidationError) as exc:
         _ = extract_makecode_project_from_hex(bad)
+    assert exc.value.code == "invalid_hex_file"
+
+
+def test_extract_makecode_project_from_hex_skips_corrupt_marker_and_finds_next() -> None:
+    """
+    Defense-in-depth: a HEX may contain multiple embedded-source markers. If the
+    first marker is corrupted, we should continue scanning for a later, valid
+    embedding instead of failing immediately.
+    """
+    from backend.storage.makecode_hex_validation import extract_makecode_project_from_hex
+
+    magic = b"\x41\x14\x0E\x2F\xB8\x2F\xA2\xBB"
+    bad_header = b"{bad}"  # valid UTF-8 but invalid JSON
+    bad_text = b"x"
+    bad_blob = magic + struct.pack("<H", len(bad_header)) + struct.pack("<I", len(bad_text)) + b"\x00\x00"
+    bad_blob += bad_header + bad_text
+
+    good_blob = _make_makecode_embedding_blob(eurl="https://makecode.calliope.cc/#editor")
+    pad = (-len(bad_blob)) % 16  # keep the second marker 16-byte aligned
+    combined = bad_blob + (b"\x00" * pad) + good_blob
+
+    hex_bytes = _make_hex_from_blob(combined, record_type=0x0E)
+    project = extract_makecode_project_from_hex(hex_bytes)
+    assert "main.ts" in project.files
+
+
+def test_makecode_marker_present_but_corrupt_raises_invalid_hex_file() -> None:
+    from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
+
+    magic = b"\x41\x14\x0E\x2F\xB8\x2F\xA2\xBB"
+    bad_header = b"{bad}"  # valid UTF-8 but invalid JSON
+    bad_text = b"x"
+    bad_blob = magic + struct.pack("<H", len(bad_header)) + struct.pack("<I", len(bad_text)) + b"\x00\x00"
+    bad_blob += bad_header + bad_text
+
+    hex_bytes = _make_hex_from_blob(bad_blob, record_type=0x0E)
+    with pytest.raises(MakeCodeHexValidationError) as exc:
+        _ = extract_makecode_project_from_hex(hex_bytes)
     assert exc.value.code == "invalid_hex_file"

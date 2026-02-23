@@ -995,9 +995,11 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
             raise ValueError("invalid_image_payload") from None
         if size_int <= 0 or size_int > _max_upload_bytes():
             raise ValueError("invalid_image_payload")
-        mime_type = payload.get("mime_type")
-        if not isinstance(mime_type, str) or not mime_type:
+        mime_type_raw = payload.get("mime_type")
+        if not isinstance(mime_type_raw, str) or not mime_type_raw:
             raise ValueError("invalid_image_payload")
+        # Compare MIME types case-insensitively; normalize for downstream checks.
+        mime_type = mime_type_raw.strip().lower()
         if mime_type not in ALLOWED_IMAGE_MIME:
             raise ValueError("invalid_image_payload")
         storage_key = payload.get("storage_key")
@@ -1033,9 +1035,11 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
             raise ValueError("invalid_file_payload") from None
         if size_int <= 0 or size_int > _max_upload_bytes():
             raise ValueError("invalid_file_payload")
-        mime_type = payload.get("mime_type")
-        if not isinstance(mime_type, str) or not mime_type:
+        mime_type_raw = payload.get("mime_type")
+        if not isinstance(mime_type_raw, str) or not mime_type_raw:
             raise ValueError("invalid_file_payload")
+        # Compare MIME types case-insensitively; normalize for downstream checks.
+        mime_type = mime_type_raw.strip().lower()
         if mime_type not in ALLOWED_FILE_MIME:
             raise ValueError("invalid_file_payload")
         storage_key = payload.get("storage_key")
@@ -1429,7 +1433,8 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
     kind = payload.get("kind")
     filename = str(payload.get("filename") or "").strip()
-    mime_type = str(payload.get("mime_type") or "").strip()
+    # Compare MIME types case-insensitively; normalize for downstream policy checks.
+    mime_type = str(payload.get("mime_type") or "").strip().lower()
     size_bytes = payload.get("size_bytes")
     try:
         size_int = int(size_bytes)

@@ -78,3 +78,14 @@ def test_openapi_submission_503_mentions_hex_validation_detail_codes() -> None:
     desc_503 = str((responses.get("503") or {}).get("description") or "")
     assert "hex_validation_unavailable" in desc_503
 
+
+def test_openapi_upload_intent_mime_type_mentions_case_insensitive_normalization() -> None:
+    spec = load_spec()
+    schemas = spec.get("components", {}).get("schemas", {})
+
+    req = schemas.get("StudentUploadIntentRequest") or {}
+    props = req.get("properties") or {}
+    mime = props.get("mime_type") or {}
+    desc = str(mime.get("description") or "")
+
+    assert "case-insensitive" in desc.lower()

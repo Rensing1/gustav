@@ -185,7 +185,7 @@ def test_info_template_uses_gustav_layout_hooks():
 
 
 def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
-    """Error pages should be branded and keep locale switch subtle in footer links."""
+    """Error pages should be branded and use shared helper macros for footer actions."""
     for name in ["error.ftl", "login-page-expired.ftl"]:
         tpl = _resolve_login_template(name)
         text = tpl.read_text(encoding="utf-8")
@@ -194,28 +194,42 @@ def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
             'class="kc-card"',
             "app-gustav-base.css",
             "gustav.css",
-            'class="kc-links"',
-            'class="kc-locale-links"',
+            '<#import "_gustav_error_components.ftl" as gustav_error>',
+            "<@gustav_error.render_recovery_links",
+            "<@gustav_error.render_locale_links",
         ]:
             assert marker in text, f"{name} should include {marker}"
         assert 'id="kc-locale"' not in text, f"{name} should not render a dominant locale dropdown"
 
 
-def test_error_templates_expose_recovery_ctas_and_i18n_keys():
-    """Error pages should provide clear recovery actions and dedicated message keys."""
-    for name in ["error.ftl", "login-page-expired.ftl"]:
-        tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
-        for key in [
+def test_error_templates_expose_context_specific_guidance_and_i18n_keys():
+    """Error pages should use deterministic, context-specific guidance and CTA keys."""
+    helper_text = (THEME_ROOT / "_gustav_error_components.ftl").read_text(encoding="utf-8")
+    expected = {
+        "error.ftl": [
             "gustavBackToApp",
             "gustavTryLoginAgain",
             "gustavAuthErrorTitle",
+            "gustavAuthErrorGeneralHint",
+        ],
+        "login-page-expired.ftl": [
+            "gustavBackToApp",
+            "gustavTryLoginAgain",
             "gustavAuthExpiredTitle",
-            "gustavAuthErrorCookieHint",
             "gustavAuthErrorTokenHint",
-        ]:
-            assert key in text, f"{name} should reference i18n key {key}"
+        ],
+    }
+    for name, keys in expected.items():
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        combined = text + "\n" + helper_text
+        for key in keys:
+            assert key in combined, f"{name} should reference i18n key {key}"
         assert "pageRedirectUri" in text or "client.baseUrl" in text, f"{name} should include app-link fallback"
+        # Avoid text-parsing heuristics that are brittle across locale/version changes.
+        assert "raw_summary" not in text, f"{name} should not parse message summary text"
+        assert '?contains("cookie")' not in text, f"{name} should not infer state from text contains()"
+        assert '?contains("token")' not in text, f"{name} should not infer state from text contains()"
 
 
 def test_error_page_i18n_keys_exist_in_de_and_en_bundles():
@@ -225,13 +239,29 @@ def test_error_page_i18n_keys_exist_in_de_and_en_bundles():
     for key in [
         "gustavAuthErrorTitle=",
         "gustavAuthExpiredTitle=",
+        "gustavAuthErrorGeneralHint=",
         "gustavAuthErrorCookieHint=",
         "gustavAuthErrorTokenHint=",
         "gustavBackToApp=",
         "gustavTryLoginAgain=",
+        "gustavLanguageLabel=",
     ]:
         assert key in de, f"messages_de.properties missing {key}"
         assert key in en, f"messages_en.properties missing {key}"
+
+
+def test_error_template_helpers_render_footer_links_and_localized_language_label():
+    """Shared helper template should own footer link markup and localized language label."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    assert helper.exists(), "_gustav_error_components.ftl missing"
+    text = helper.read_text(encoding="utf-8")
+    for marker in [
+        'class="kc-links"',
+        'class="kc-locale-links"',
+        'msg("gustavLanguageLabel")',
+    ]:
+        assert marker in text, f"_gustav_error_components.ftl should include {marker}"
+    assert 'id="kc-locale"' not in text, "helper should not render a dominant locale dropdown"
 
 
 def test_messages_en_present_and_has_email_label():

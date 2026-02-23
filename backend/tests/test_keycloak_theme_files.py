@@ -34,6 +34,8 @@ def test_theme_templates_present():
         "login-update-password.ftl": (THEME_ROOT / "login-update-password.ftl").exists(),
         "login-verify-email.ftl": (THEME_ROOT / "login-verify-email.ftl").exists(),
         "info.ftl": (THEME_ROOT / "info.ftl").exists(),
+        "error.ftl": (THEME_ROOT / "error.ftl").exists(),
+        "login-page-expired.ftl": (THEME_ROOT / "login-page-expired.ftl").exists(),
     }
     tmpl_dir = THEME_ROOT / "templates"
     dir_files = {
@@ -44,6 +46,8 @@ def test_theme_templates_present():
         "login-update-password.ftl": (tmpl_dir / "login-update-password.ftl").exists(),
         "login-verify-email.ftl": (tmpl_dir / "login-verify-email.ftl").exists(),
         "info.ftl": (tmpl_dir / "info.ftl").exists(),
+        "error.ftl": (tmpl_dir / "error.ftl").exists(),
+        "login-page-expired.ftl": (tmpl_dir / "login-page-expired.ftl").exists(),
     }
     for name in [
         "login.ftl",
@@ -54,6 +58,8 @@ def test_theme_templates_present():
         "login-update-password.ftl",
         "login-verify-email.ftl",
         "info.ftl",
+        "error.ftl",
+        "login-page-expired.ftl",
     ]:
         assert root_files[name] or dir_files[name], f"{name} missing"
 
@@ -176,6 +182,56 @@ def test_info_template_uses_gustav_layout_hooks():
         "gustav.css",
     ]:
         assert marker in text, f"info.ftl should include {marker}"
+
+
+def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
+    """Error pages should be branded and keep locale switch subtle in footer links."""
+    for name in ["error.ftl", "login-page-expired.ftl"]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        for marker in [
+            'class="kc-gustav"',
+            'class="kc-card"',
+            "app-gustav-base.css",
+            "gustav.css",
+            'class="kc-links"',
+            'class="kc-locale-links"',
+        ]:
+            assert marker in text, f"{name} should include {marker}"
+        assert 'id="kc-locale"' not in text, f"{name} should not render a dominant locale dropdown"
+
+
+def test_error_templates_expose_recovery_ctas_and_i18n_keys():
+    """Error pages should provide clear recovery actions and dedicated message keys."""
+    for name in ["error.ftl", "login-page-expired.ftl"]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        for key in [
+            "gustavBackToApp",
+            "gustavTryLoginAgain",
+            "gustavAuthErrorTitle",
+            "gustavAuthExpiredTitle",
+            "gustavAuthErrorCookieHint",
+            "gustavAuthErrorTokenHint",
+        ]:
+            assert key in text, f"{name} should reference i18n key {key}"
+        assert "pageRedirectUri" in text or "client.baseUrl" in text, f"{name} should include app-link fallback"
+
+
+def test_error_page_i18n_keys_exist_in_de_and_en_bundles():
+    """Both language bundles should define error-page keys to avoid raw key output."""
+    de = (THEME_ROOT / "messages" / "messages_de.properties").read_text(encoding="utf-8")
+    en = (THEME_ROOT / "messages" / "messages_en.properties").read_text(encoding="utf-8")
+    for key in [
+        "gustavAuthErrorTitle=",
+        "gustavAuthExpiredTitle=",
+        "gustavAuthErrorCookieHint=",
+        "gustavAuthErrorTokenHint=",
+        "gustavBackToApp=",
+        "gustavTryLoginAgain=",
+    ]:
+        assert key in de, f"messages_de.properties missing {key}"
+        assert key in en, f"messages_en.properties missing {key}"
 
 
 def test_messages_en_present_and_has_email_label():

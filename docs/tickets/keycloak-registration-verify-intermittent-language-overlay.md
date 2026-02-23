@@ -1,10 +1,12 @@
 # Ticket: Registrierung/Verifizierung springt intermittierend auf Keycloak-Fehlerseite mit Sprachwahl (ohne GUSTAV-Theme)
 
-Status: Open  
+Status: abgeschlossen  
 Priorität: hoch  
 Betroffene Umgebung: Produktion (`app.gustav.example`, `id.gustav.example`)  
 Erstellt am: 17. Februar 2026  
 Bezug: `docs/tickets/keycloak-registration-verify-email-pages-fallback-with-language-overlay-2026-02-10.md` (Happy-Path-Templates ergänzt)
+
+Abschluss-Hinweis (2026-02-23): `error.ftl` und `login-page-expired.ftl` wurden im GUSTAV-Theme ergänzt, inklusive dezentem Locale-Footer, robusten CTA-Fallbacks und i18n-Keys (DE/EN). Die Theme-Tests wurden erweitert und laufen grün (`backend/tests/test_keycloak_theme_files.py`).
 
 ## Kontext
 

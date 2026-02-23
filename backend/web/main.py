@@ -657,7 +657,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     kind_norm = (task_kind or "native").strip().lower()
     from backend.storage.learning_policy import DEFAULT_POLICY
 
-    if kind_norm in {"visual", "scratch"}:
+    if kind_norm in {"visual", "scratch", "calliope"}:
         # Visual/Scratch tasks are upload-only: no mode switch and no textarea.
         max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
         max_mb_value = max_bytes / (1024 * 1024)
@@ -669,6 +669,10 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
             accept = ".sb3,application/x.scratch.sb3"
             hint = f".sb3 bis {max_mb} MB"
             allowed_mime = "application/x.scratch.sb3"
+        elif kind_norm == "calliope":
+            accept = ".hex,application/x.makecode.hex"
+            hint = f".hex bis {max_mb} MB"
+            allowed_mime = "application/x.makecode.hex"
         return (
             f'<form method="post" action="{form_action}" class="task-submit-form" '
             f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
@@ -757,6 +761,8 @@ async def _server_side_prepare_submission_upload(
     mime_type = declared_mime or (mimetypes.guess_type(filename)[0] or "application/octet-stream")
     if filename.lower().endswith(".sb3"):
         mime_type = "application/x.scratch.sb3"
+    if filename.lower().endswith(".hex"):
+        mime_type = "application/x.makecode.hex"
     try:
         file_bytes = await upload_file.read()  # type: ignore[attr-defined]
     except AttributeError:
@@ -7045,13 +7051,15 @@ def _render_task_create_page_html(unit_id: str, section_id: str, section_title: 
         '<option value="h5p">H5P (interaktiv)</option>'
         '<option value="visual">Visual (Upload‑Only)</option>'
         '<option value="scratch">Scratch (SB3 Upload‑Only)</option>'
+        '<option value="calliope">Calliope (HEX Upload‑Only)</option>'
         "</select>"
         "</label>"
         '<p id="task-kind-hint" class="text-muted">'
         "Normal: Markdown‑Aufgabe mit Kriterien. "
         "H5P: Interaktive Übung (Editor wird direkt eingeblendet). "
         "Visual: wie Normal, aber Abgabe nur als Bild/PDF. "
-        "Scratch: wie Normal, aber Abgabe nur als `.sb3`."
+        "Scratch: wie Normal, aber Abgabe nur als `.sb3`. "
+        "Calliope: wie Normal, aber Abgabe nur als `.hex` (MakeCode)."
         "</p>"
     )
 
@@ -7643,7 +7651,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
 
     Parameters form fields:
     - instruction_md: Required Markdown instruction
-    - task_kind: Optional task type selector (native|h5p|visual|scratch)
+    - task_kind: Optional task type selector (native|h5p|visual|scratch|calliope)
     - csrf_token: Required
 
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
@@ -7697,6 +7705,8 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
                 payload["visual"] = {}
             elif task_kind == "scratch":
                 payload["scratch"] = {}
+            elif task_kind == "calliope":
+                payload["calliope"] = {}
             resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)
             if resp.status_code >= 400:
                 error = _extract_api_error_detail(resp)

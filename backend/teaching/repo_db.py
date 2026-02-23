@@ -146,12 +146,15 @@ def _task_row_to_dict(row: Tuple) -> Dict[str, Any]:
     h5p = None
     visual = None
     scratch = None
+    calliope = None
     if kind == "h5p":
         h5p = {"content_id": h5p_content_id, "display_options": dict(h5p_display_options)}
     elif kind == "visual":
         visual = {}
     elif kind == "scratch":
         scratch = {}
+    elif kind == "calliope":
+        calliope = {}
     return {
         "id": row[0],
         "unit_id": row[1],
@@ -168,6 +171,7 @@ def _task_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "h5p": h5p,
         "visual": visual,
         "scratch": scratch,
+        "calliope": calliope,
     }
 
 

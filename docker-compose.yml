@@ -44,6 +44,8 @@ services:
       - ./backend/storage:/app/backend/storage:z
       # Scratch SB3 extraction helpers
       - ./backend/scratch:/app/backend/scratch:z
+      # MakeCode HEX evidence extraction helpers (Calliope)
+      - ./backend/makecode:/app/backend/makecode:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
       # Shared dev uploads directory for vision to access uploaded files
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
@@ -150,6 +152,7 @@ services:
       - ./backend/vision:/app/backend/vision:z
       - ./backend/storage:/app/backend/storage:z
       - ./backend/scratch:/app/backend/scratch:z
+      - ./backend/makecode:/app/backend/makecode:z
       - ./backend/__init__.py:/app/backend/__init__.py:z
       # Shared dev uploads directory (same path as in web)
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z

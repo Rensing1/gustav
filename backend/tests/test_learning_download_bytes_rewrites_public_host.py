@@ -128,3 +128,61 @@ async def test_download_bytes_rejects_http_in_production(monkeypatch: pytest.Mon
 
     assert out is None
     assert not created, "helper must fail closed for non-HTTPS validation downloads in production-like environments"
+
+
+@pytest.mark.anyio
+async def test_download_bytes_allows_internal_http_rewrite_in_production_for_private_hosts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Local stacks run with `GUSTAV_ENV=prod` (local=prod) while Supabase Kong is
+    typically reachable only over HTTP on a private network. Server-side
+    validation downloads must still succeed when rewriting to that private HTTP
+    origin.
+    """
+    monkeypatch.setenv("SUPABASE_URL", "http://127.0.0.1:8000")
+    monkeypatch.setenv("SUPABASE_PUBLIC_URL", "https://app.localhost")
+    monkeypatch.setattr(learning, "_current_environment", lambda: "production")
+
+    created: list[object] = []
+
+    class _FakeResp:
+        status_code = 200
+
+        async def aiter_bytes(self):  # noqa: ANN001 - httpx-like interface
+            yield b"ok"
+
+    class _FakeStream:
+        def __init__(self, client, url: str) -> None:  # noqa: ANN001 - minimal fake
+            self._client = client
+            self._url = url
+
+        async def __aenter__(self):  # noqa: ANN001 - context manager protocol
+            self._client.last_url = self._url
+            return _FakeResp()
+
+        async def __aexit__(self, exc_type, exc, tb):  # noqa: ANN001 - context manager protocol
+            return False
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003 - httpx compat
+            created.append(self)
+            self.last_url = ""
+
+        async def __aenter__(self):  # noqa: ANN001 - context manager protocol
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):  # noqa: ANN001 - context manager protocol
+            return False
+
+        def stream(self, method: str, url: str, headers=None):  # noqa: ANN001 - httpx compat
+            return _FakeStream(self, url)
+
+    monkeypatch.setattr(learning.httpx, "AsyncClient", _FakeAsyncClient)
+
+    public_url = "https://app.localhost/storage/v1/object/sign/submissions/x/y/z/file.hex?token=abc"
+    out = await learning._download_bytes_with_limit(url=public_url, max_bytes=1024, headers=None)
+
+    assert out == b"ok"
+    assert created, "expected the helper to create an httpx.AsyncClient"
+    assert created[0].last_url.startswith("http://127.0.0.1:8000/storage/v1/object/sign/")

@@ -61,6 +61,7 @@ from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 from backend.storage.keys import make_submission_key
 from backend.storage.sb3_validation import SCRATCH_SB3_MIME
+from backend.storage.makecode_hex_validation import MAKECODE_HEX_MIME
 import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
 
@@ -1169,6 +1170,51 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                     headers=_cache_headers_error(),
                 )
 
+    # MakeCode `.hex` validation for Calliope tasks (fail early with stable detail codes).
+    if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == MAKECODE_HEX_MIME:
+        task_kind = "native"
+        repo = _get_repo()
+        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
+        if callable(task_kind_reader):
+            try:
+                task_kind = str(
+                    task_kind_reader(
+                        student_sub=str(user.get("sub", "")),
+                        course_id=str(course_id),
+                        task_id=str(task_id),
+                    )
+                )
+            except PermissionError:
+                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+            except LookupError:
+                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+            except Exception:
+                return JSONResponse(
+                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
+                    status_code=503,
+                    headers=_cache_headers_error(),
+                )
+
+        if str(task_kind or "").strip().lower() == "calliope":
+            storage_key = str(clean_payload.get("storage_key") or "")
+            hex_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
+            if not hex_bytes:
+                return JSONResponse(
+                    {"error": "service_unavailable", "detail": "hex_validation_unavailable"},
+                    status_code=503,
+                    headers=_cache_headers_error(),
+                )
+            from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
+
+            try:
+                _ = extract_makecode_project_from_hex(hex_bytes)
+            except MakeCodeHexValidationError as exc:
+                return JSONResponse(
+                    {"error": "bad_request", "detail": str(exc.code)},
+                    status_code=400,
+                    headers=_cache_headers_error(),
+                )
+
     submission_input = CreateSubmissionInput(
         course_id=course_id,
         task_id=task_id,
@@ -1454,6 +1500,13 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         if mime_type != SCRATCH_SB3_MIME:
             return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
         accepted = [SCRATCH_SB3_MIME]
+    elif task_kind == "calliope":
+        # Calliope MakeCode tasks are HEX-only (upload-only). We do not accept images/PDF here.
+        if kind != "file":
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        if mime_type != MAKECODE_HEX_MIME:
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        accepted = [MAKECODE_HEX_MIME]
     else:
         if kind == "image":
             if mime_type not in ALLOWED_IMAGE_MIME:
@@ -1479,6 +1532,8 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         ext = ".jpg"
     elif mime_type == SCRATCH_SB3_MIME:
         ext = ".sb3"
+    elif mime_type == MAKECODE_HEX_MIME:
+        ext = ".hex"
     else:
         ext = ".pdf"
     storage_key = make_submission_key(
@@ -1665,6 +1720,50 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
         supabase_base = (os.getenv("SUPABASE_URL") or "").strip()
         public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
 
+        def _is_private_host(host: str) -> bool:
+            """Return True when host resolves to loopback/private IPs.
+
+            Why:
+                Local stacks run with production-like settings (local=prod) while
+                the internal Supabase gateway (Kong) is typically reachable only
+                via HTTP on a private Docker network. We still want to allow
+                server-side downloads in that scenario without allowing arbitrary
+                plaintext HTTP to the public internet.
+            """
+            h = (host or "").strip().lower()
+            if not h:
+                return False
+            if h in {"127.0.0.1", "localhost", "::1", "host.docker.internal"}:
+                return True
+            try:
+                import ipaddress
+
+                ip = ipaddress.ip_address(h)
+                return bool(ip.is_loopback or ip.is_private)
+            except ValueError:
+                pass
+            try:
+                import socket
+
+                infos = socket.getaddrinfo(h, None)
+            except OSError:
+                return False
+            if not infos:
+                return False
+            try:
+                import ipaddress
+            except Exception:
+                return False
+            for family, _socktype, _proto, _canon, sockaddr in infos:
+                ip_str = sockaddr[0] if isinstance(sockaddr, (tuple, list)) and sockaddr else ""
+                try:
+                    ip = ipaddress.ip_address(str(ip_str))
+                except ValueError:
+                    return False
+                if not (ip.is_loopback or ip.is_private):
+                    return False
+            return True
+
         def _origin(raw: str) -> tuple[str, str, int] | None:
             parsed = _urlparse(raw)
             scheme = (parsed.scheme or "").lower()
@@ -1704,12 +1803,22 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
             try:
                 internal = _urlparse(supabase_base)
                 if internal.scheme and internal.netloc:
-                    url = target._replace(scheme=internal.scheme, netloc=internal.netloc).geturl()
+                    internal_scheme = (internal.scheme or "").lower()
+                    internal_host = (internal.hostname or "").lower()
+                    allow_http_internal = (internal_scheme == "http") and _is_private_host(internal_host)
+                    if internal_scheme == "https" or allow_insecure_env or allow_http_internal:
+                        url = target._replace(scheme=internal.scheme, netloc=internal.netloc).geturl()
             except Exception:
                 pass
         effective = _urlparse(url)
-        if (not allow_insecure_env) and (effective.scheme or "").lower() != "https":
-            return None
+        eff_scheme = (effective.scheme or "").lower()
+        if (not allow_insecure_env) and eff_scheme != "https":
+            eff_host = (effective.hostname or "").lower()
+            eff_port = effective.port or (443 if eff_scheme == "https" else 80)
+            # Allow internal HTTP only for the configured SUPABASE_URL origin
+            # when it clearly stays on private/loopback networks (local=prod).
+            if not (sup_origin and (eff_scheme, eff_host, int(eff_port)) == sup_origin and _is_private_host(eff_host)):
+                return None
     except Exception:
         return None
     try:

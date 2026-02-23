@@ -105,6 +105,13 @@ Evidence-Strategie (MVP):
   - pro Datei: Name + Code-Fence mit gekapptem Inhalt
   - stabil sortiert, keine "smarten" Heuristiken (KISS, auditierbar)
 
+UI-Strategie (Lesbarkeit):
+- Schueleransicht (History): zeigt fuer Calliope **nicht** die komplette Evidence, sondern nur den relevanten Quelltext:
+  `main.py` (Fallback: `main.ts`). Alle anderen Dateien (z.B. `pxt.json`) werden ausgeblendet.
+- Lehrkraft-Ansicht (Live-Matrix Detail): nutzt die gleiche kompakte Darstellung fuer Calliope.
+- Scratch Evidence wird in beiden Views mit einer CSS-scope Wrapperklasse gerendert (`.scratch-evidence`), damit die Darstellung
+  konsistent bleibt.
+
 ## Security / Hardening
 - strikte Intel-HEX Parser/Checksum-Validierung (kein "best effort")
 - harte Groessenlimits (Input bytes, embedded source bytes, decompressed bytes, max file count, max per-file bytes)
@@ -120,5 +127,5 @@ Evidence-Strategie (MVP):
 - Learning API: `backend/web/routes/learning.py`
 - DB Guards: `backend/learning/repo_db.py`
 - Worker Adapter: `backend/learning/adapters/local_vision.py`
-- UI (SSR): `backend/web/main.py`
+- UI (SSR): `backend/web/main.py` (kompaktes Rendering fuer Calliope Evidence)
 - UI (JS Fallbacks): `backend/web/static/js/gustav.js`

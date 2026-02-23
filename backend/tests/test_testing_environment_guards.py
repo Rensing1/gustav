@@ -11,6 +11,7 @@ Goals:
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import types
 
@@ -181,6 +182,98 @@ def test_e2e_conftest_gate_respects_run_e2e_flag(reload_backend_e2e_conftest):
     assert calls_zero == 0, "E2E conftest must skip dotenv when RUN_E2E=0"
     calls_one = reload_backend_e2e_conftest(run_e2e_value="1")
     assert calls_one == 1, "E2E conftest must load dotenv once when RUN_E2E=1"
+
+
+def test_e2e_conftest_derives_email_domain_from_allowed_registration_domains(
+    monkeypatch: pytest.MonkeyPatch,
+    reload_backend_e2e_conftest,
+):
+    monkeypatch.delenv("E2E_EMAIL_DOMAIN", raising=False)
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example,@other.example")
+
+    calls = reload_backend_e2e_conftest(run_e2e_value="1")
+
+    assert calls == 1
+    assert os.getenv("E2E_EMAIL_DOMAIN") == "school.example"
+
+
+def test_e2e_conftest_keeps_explicit_email_domain_override(
+    monkeypatch: pytest.MonkeyPatch,
+    reload_backend_e2e_conftest,
+):
+    monkeypatch.setenv("E2E_EMAIL_DOMAIN", "custom.example")
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
+
+    calls = reload_backend_e2e_conftest(run_e2e_value="1")
+
+    assert calls == 1
+    assert os.getenv("E2E_EMAIL_DOMAIN") == "custom.example"
+
+
+def test_service_dsn_prefers_supabase_admin_when_available(monkeypatch: pytest.MonkeyPatch):
+    """Service DSN defaults should prefer supabase_admin over postgres."""
+    module_name = "backend.tests.conftest"
+    sys.modules.pop(module_name, None)
+    sys.modules.pop("backend.tests", None)
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def _connect(dsn: str, connect_timeout: int = 5):  # noqa: ARG001
+        if dsn.startswith("postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres"):
+            return _Conn()
+        if dsn.startswith("postgresql://postgres:postgres@127.0.0.1:54322/postgres"):
+            return _Conn()
+        if dsn.startswith("postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres"):
+            return _Conn()
+        raise RuntimeError("unreachable")
+
+    monkeypatch.setitem(sys.modules, "psycopg", types.SimpleNamespace(connect=_connect))
+    for key in ("SERVICE_ROLE_DSN", "RLS_TEST_SERVICE_DSN", "SESSION_TEST_DSN", "RLS_TEST_DSN", "DATABASE_URL"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("APP_DB_USER", "gustav_app")
+    monkeypatch.setenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+
+    importlib.import_module(module_name)
+    service_dsn = os.getenv("SERVICE_ROLE_DSN", "")
+    assert service_dsn.startswith("postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres")
+
+
+def test_service_dsn_falls_back_to_postgres_when_supabase_admin_unreachable(monkeypatch: pytest.MonkeyPatch):
+    """Keep compatibility with setups where postgres remains the service DSN."""
+    module_name = "backend.tests.conftest"
+    sys.modules.pop(module_name, None)
+    sys.modules.pop("backend.tests", None)
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def _connect(dsn: str, connect_timeout: int = 5):  # noqa: ARG001
+        if dsn.startswith("postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres"):
+            raise RuntimeError("supabase_admin unavailable")
+        if dsn.startswith("postgresql://postgres:postgres@127.0.0.1:54322/postgres"):
+            return _Conn()
+        if dsn.startswith("postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres"):
+            return _Conn()
+        raise RuntimeError("unreachable")
+
+    monkeypatch.setitem(sys.modules, "psycopg", types.SimpleNamespace(connect=_connect))
+    for key in ("SERVICE_ROLE_DSN", "RLS_TEST_SERVICE_DSN", "SESSION_TEST_DSN", "RLS_TEST_DSN", "DATABASE_URL"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("APP_DB_USER", "gustav_app")
+    monkeypatch.setenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+
+    importlib.import_module(module_name)
+    service_dsn = os.getenv("SERVICE_ROLE_DSN", "")
+    assert service_dsn.startswith("postgresql://postgres:postgres@127.0.0.1:54322/postgres")
 
 
 def test_state_store_reset_fixture_creates_session_state():

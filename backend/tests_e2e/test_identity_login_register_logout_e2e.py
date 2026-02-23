@@ -68,6 +68,7 @@ KC_BASE = _derive_kc_base()
 REALM = os.getenv("KC_REALM", "gustav")
 ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+EMAIL_DOMAIN = os.getenv("E2E_EMAIL_DOMAIN", "example.com")
 
 
 pytestmark = pytest.mark.e2e
@@ -196,7 +197,7 @@ def test_register_login_logout_flow():
 
     # 2) Create a fresh user via admin API
     token = _kc_admin_token()
-    email = f"e2e_{int(time.time())}@example.com"
+    email = f"e2e_{int(time.time())}@{EMAIL_DOMAIN}"
     password = "Passw0rd!e2e"
     _kc_create_user(token, email, password)
 

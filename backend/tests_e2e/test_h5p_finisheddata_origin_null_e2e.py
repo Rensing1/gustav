@@ -34,6 +34,7 @@ KC_BASE = os.getenv("KC_BASE", "https://id.localhost").rstrip("/")
 REALM = os.getenv("KC_REALM", "gustav")
 ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+EMAIL_DOMAIN = os.getenv("E2E_EMAIL_DOMAIN", "example.com")
 
 
 def _wait_for(url: str, *, expected=200, timeout_s: int | None = None) -> None:
@@ -188,12 +189,12 @@ def test_h5p_finisheddata_accepts_origin_null_and_persists_learning_submission()
 
     token = _kc_admin_token()
 
-    teacher_email = f"e2e_teacher_finisheddata_{int(time.time())}@example.com"
+    teacher_email = f"e2e_teacher_finisheddata_{int(time.time())}@{EMAIL_DOMAIN}"
     teacher_pw = "Passw0rd!e2e"
     teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
     _kc_add_realm_role(token, teacher_id, "teacher")
 
-    student_email = f"e2e_student_finisheddata_{int(time.time())}@example.com"
+    student_email = f"e2e_student_finisheddata_{int(time.time())}@{EMAIL_DOMAIN}"
     student_pw = "Passw0rd!e2e"
     student_id = _kc_create_user(token, student_email, student_pw)
     _kc_add_realm_role(token, student_id, "student")

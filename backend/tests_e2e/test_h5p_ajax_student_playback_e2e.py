@@ -30,6 +30,7 @@ KC_BASE = os.getenv("KC_BASE", "https://id.localhost").rstrip("/")
 REALM = os.getenv("KC_REALM", "gustav")
 ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+EMAIL_DOMAIN = os.getenv("E2E_EMAIL_DOMAIN", "example.com")
 
 
 def _wait_for(url: str, *, expected=200, timeout_s: int | None = None) -> None:
@@ -166,7 +167,7 @@ def test_h5p_ajax_translations_allows_student():
 
     token = _kc_admin_token()
 
-    student_email = f"e2e_student_ajax_{int(time.time())}@example.com"
+    student_email = f"e2e_student_ajax_{int(time.time())}@{EMAIL_DOMAIN}"
     student_pw = "Passw0rd!e2e"
     student_id = _kc_create_user(token, student_email, student_pw)
     _kc_add_realm_role(token, student_id, "student")

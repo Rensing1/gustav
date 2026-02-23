@@ -24,6 +24,8 @@ help:
 	@echo "  import-legacy-dry  - Dry-run legacy import (no writes)"
 	@echo "  import-snapshot    - Import snapshot backup (DB + storage) into local Supabase"
 	@echo "  import-snapshot-dry - Dry-run snapshot import (no writes)"
+	@echo "  keycloak-admin-sync - Sync Keycloak admin client secret + admin password to .env values"
+	@echo "  keycloak-admin-reset - Force reset/recreate local Keycloak admin user (requires --yes in tool)"
 	@echo "  docker-validate    - Validate docker compose config (catches syntax/vars)"
 
 .PHONY: up
@@ -104,6 +106,8 @@ test-e2e:
 	@if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
 	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
 	fi
+	# Keep local Keycloak admin credentials deterministic after snapshot restores.
+	@$(MAKE) keycloak-admin-sync
 	# Optional: fail fast when the app isn't reachable yet (ignore TLS verification).
 	@for i in {1..40}; do \
 	  curl -skf https://app.localhost/health >/dev/null 2>&1 && break; \
@@ -242,6 +246,33 @@ import-snapshot-dry:
 	  --workdir $(SNAPSHOT_WORKDIR) \
 	  --dry-run \
 	  --verbose
+
+# --- Keycloak admin credential sync/reset (local) ---------------------------
+.PHONY: keycloak-admin-sync keycloak-admin-reset
+ifeq ($(VERBOSE),)
+.SILENT: keycloak-admin-sync keycloak-admin-reset
+endif
+keycloak-admin-sync:
+	# Auto-load .env into the environment for this target (export all)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	mkdir -p .tmp; \
+	touch .tmp/caddy-root.crt; \
+	if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
+	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	fi; \
+	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
+	./.venv/bin/python -m backend.tools.keycloak_admin_sync --verbose
+
+keycloak-admin-reset:
+	# Auto-load .env into the environment for this target (export all)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	mkdir -p .tmp; \
+	touch .tmp/caddy-root.crt; \
+	if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
+	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	fi; \
+	KEYCLOAK_CA_BUNDLE=.tmp/caddy-root.crt \
+	./.venv/bin/python -m backend.tools.keycloak_admin_sync --reset-admin-user --yes --verbose
 
 .PHONY: docker-validate
 docker-validate:

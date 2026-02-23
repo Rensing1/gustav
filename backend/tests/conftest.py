@@ -109,7 +109,13 @@ def _ensure_db_env_defaults() -> None:
     # the host-exposed Supabase instance that Docker publishes on 127.0.0.1:54322.
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
-    service_dsn = f"postgresql://postgres:postgres@{host}:{port}/postgres"
+    # Service-role DB access in local Supabase should default to `supabase_admin`.
+    # Newer local setups keep `postgres` without CREATE on `public`, which breaks
+    # migration-style tests that need to create/drop helper tables.
+    svc_user = os.getenv("TEST_DB_SUPERUSER") or os.getenv("DB_SUPERUSER") or "supabase_admin"
+    svc_password = os.getenv("TEST_DB_SUPERPASSWORD") or os.getenv("DB_SUPERPASSWORD") or "postgres"
+    preferred_service_dsn = f"postgresql://{svc_user}:{svc_password}@{host}:{port}/postgres"
+    legacy_service_dsn = f"postgresql://postgres:postgres@{host}:{port}/postgres"
     app_user = os.getenv("APP_DB_USER", "gustav_app")
     app_password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
     if not app_user or app_user == "gustav_limited":
@@ -159,10 +165,16 @@ def _ensure_db_env_defaults() -> None:
         os.environ.pop("DATABASE_URL", None)
 
     # Still expose service DSNs for dedicated tests when the host DB is reachable.
-    if _probe(service_dsn):
-        _assign_or_override("SESSION_TEST_DSN", _with_connect_timeout(service_dsn))
-        _assign_or_override("RLS_TEST_SERVICE_DSN", _with_connect_timeout(service_dsn))
-        _assign_or_override("SERVICE_ROLE_DSN", _with_connect_timeout(service_dsn))
+    # Prefer a DSN with CREATE privileges on `public` (supabase_admin-first).
+    resolved_service_dsn = ""
+    for candidate in [preferred_service_dsn, legacy_service_dsn]:
+        if candidate and _probe(candidate):
+            resolved_service_dsn = candidate
+            break
+    if resolved_service_dsn:
+        _assign_or_override("RLS_TEST_SERVICE_DSN", _with_connect_timeout(resolved_service_dsn))
+        _assign_or_override("SERVICE_ROLE_DSN", _with_connect_timeout(resolved_service_dsn))
+        _assign_or_override("SESSION_TEST_DSN", _with_connect_timeout(resolved_service_dsn))
     else:
         os.environ.pop("SESSION_TEST_DSN", None)
         os.environ.pop("RLS_TEST_SERVICE_DSN", None)

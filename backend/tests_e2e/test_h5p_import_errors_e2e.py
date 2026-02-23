@@ -33,6 +33,7 @@ KC_BASE = os.getenv("KC_BASE", "https://id.localhost").rstrip("/")
 REALM = os.getenv("KC_REALM", "gustav")
 ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+EMAIL_DOMAIN = os.getenv("E2E_EMAIL_DOMAIN", "example.com")
 
 
 def _wait_for(url: str, *, expected=200, timeout_s: int | None = None) -> None:
@@ -223,7 +224,7 @@ def test_import_content_only_package_reports_missing_libraries():
 
     token = _kc_admin_token()
 
-    teacher_email = f"e2e_teacher_missing_libs_{int(time.time())}@example.com"
+    teacher_email = f"e2e_teacher_missing_libs_{int(time.time())}@{EMAIL_DOMAIN}"
     teacher_pw = "Passw0rd!e2e"
     teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
     _kc_add_realm_role(token, teacher_id, "teacher")
@@ -257,7 +258,7 @@ def test_install_library_then_content_only_import_succeeds():
 
     token = _kc_admin_token()
 
-    teacher_email = f"e2e_teacher_install_libs_{int(time.time())}@example.com"
+    teacher_email = f"e2e_teacher_install_libs_{int(time.time())}@{EMAIL_DOMAIN}"
     teacher_pw = "Passw0rd!e2e"
     teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
     _kc_add_realm_role(token, teacher_id, "teacher")

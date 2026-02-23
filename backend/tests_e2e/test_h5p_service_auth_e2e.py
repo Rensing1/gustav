@@ -32,6 +32,7 @@ KC_BASE = os.getenv("KC_BASE", "https://id.localhost")
 REALM = os.getenv("KC_REALM", "gustav")
 ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+EMAIL_DOMAIN = os.getenv("E2E_EMAIL_DOMAIN", "example.com")
 
 
 def _wait_for(url: str, *, expected=200, timeout_s: int | None = None) -> None:
@@ -166,7 +167,7 @@ def test_h5p_healthz_and_auth_me():
 
     # Authenticated: cookie must be forwarded to the web service /api/me
     token = _kc_admin_token()
-    email = f"e2e_h5p_{int(time.time())}@example.com"
+    email = f"e2e_h5p_{int(time.time())}@{EMAIL_DOMAIN}"
     password = "Passw0rd!e2e"
     _kc_create_user(token, email, password)
 

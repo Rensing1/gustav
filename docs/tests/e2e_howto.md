@@ -14,6 +14,10 @@ make test-e2e
 # RUN_E2E=1 .venv/bin/pytest -q -m e2e
 ```
 
+Hinweis: `make test-e2e` führt vor Pytest automatisch `make keycloak-admin-sync` aus.
+Damit werden driftende lokale Keycloak-Admin-Credentials (Snapshot/Import-Nachlauf)
+auf den `.env`-Zustand zurückgeführt.
+
 ## Typische Fehler
 - Health 502/Timeout → Web nicht erreichbar (Logs prüfen: `docker compose logs -n 200 web`).
 - 500 bei `/auth/callback` → Session-DB nicht erreichbar (`SESSION_DATABASE_URL` zeigt fälschlich auf `127.0.0.1:54322` im Container).

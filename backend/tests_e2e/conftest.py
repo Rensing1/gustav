@@ -10,6 +10,7 @@ Behavior:
 """
 import os
 import sys
+import re
 from pathlib import Path
 
 import pytest
@@ -96,6 +97,39 @@ def _derive_kc_base() -> str:
     if pub:
         return pub.rstrip("/")
     return "https://id.localhost"
+
+
+def _derive_e2e_email_domain() -> str:
+    """Resolve a deterministic test email domain for local E2E users.
+
+    Priority:
+    1) `E2E_EMAIL_DOMAIN` (explicit override)
+    2) first entry in `ALLOWED_REGISTRATION_DOMAINS` (e.g. "@school.example")
+    3) fallback `example.com`
+    """
+    explicit = str(os.getenv("E2E_EMAIL_DOMAIN", "") or "").strip()
+    if explicit:
+        if explicit.startswith("@"):
+            explicit = explicit[1:]
+        if re.match(r"^[A-Za-z0-9.-]+$", explicit):
+            return explicit.lower()
+
+    allowed = str(os.getenv("ALLOWED_REGISTRATION_DOMAINS", "") or "").strip()
+    if allowed:
+        for raw in allowed.split(","):
+            candidate = raw.strip()
+            if not candidate:
+                continue
+            if candidate.startswith("@"):
+                candidate = candidate[1:]
+            if re.match(r"^[A-Za-z0-9.-]+$", candidate):
+                return candidate.lower()
+
+    return "example.com"
+
+
+if os.getenv("RUN_E2E", "0") == "1":
+    os.environ.setdefault("E2E_EMAIL_DOMAIN", _derive_e2e_email_domain())
 
 
 def pytest_collection_modifyitems(config, items):

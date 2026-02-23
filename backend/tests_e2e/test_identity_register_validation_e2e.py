@@ -26,6 +26,7 @@ pytestmark = pytest.mark.e2e
 WEB_BASE = os.getenv("WEB_BASE", "https://app.localhost")
 KC_BASE = os.getenv("KC_BASE", "https://id.localhost")
 REALM = os.getenv("KC_REALM", "gustav")
+EMAIL_DOMAIN = os.getenv("E2E_EMAIL_DOMAIN", "example.com")
 
 
 def _wait_for(url: str, expected: int = 200, timeout_s: int = 5) -> None:
@@ -170,7 +171,7 @@ def test_register_invalid_email_and_weak_password_show_error():
     fields2.update({
         "firstName": "Alice",
         "lastName": "Test",
-        "email": f"alice_{int(os.environ.get('PYTEST_XDIST_WORKER', '0') or 0)}@example.com",
+        "email": f"alice_{int(os.environ.get('PYTEST_XDIST_WORKER', '0') or 0)}@{EMAIL_DOMAIN}",
         "password": "abc",
         "password-confirm": "abc",
     })
@@ -198,7 +199,7 @@ def test_register_password_mismatch_and_duplicate_email():
 
     # 1) Password confirmation mismatch
     action, fields = _parse_register_form(r.text, r.url)
-    email = f"mismatch_{int(time.time())}@example.com"
+    email = f"mismatch_{int(time.time())}@{EMAIL_DOMAIN}"
     fields.update({
         "firstName": "Bob",
         "lastName": "Mismatch",

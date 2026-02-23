@@ -35,6 +35,7 @@ KC_BASE = os.getenv("KC_BASE", "https://id.localhost").rstrip("/")
 REALM = os.getenv("KC_REALM", "gustav")
 ADMIN_USER = os.getenv("KEYCLOAK_ADMIN", "admin")
 ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+EMAIL_DOMAIN = os.getenv("E2E_EMAIL_DOMAIN", "example.com")
 
 
 def _wait_for(url: str, *, expected=200, timeout_s: int | None = None) -> None:
@@ -228,7 +229,7 @@ def test_h5p_player_serves_core_and_library_assets():
 
     token = _kc_admin_token()
 
-    teacher_email = f"e2e_teacher_assets_{int(time.time())}@example.com"
+    teacher_email = f"e2e_teacher_assets_{int(time.time())}@{EMAIL_DOMAIN}"
     teacher_pw = "Passw0rd!e2e"
     teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
     _kc_add_realm_role(token, teacher_id, "teacher")
@@ -282,7 +283,7 @@ def test_h5p_editor_model_serves_editor_core_assets():
 
     token = _kc_admin_token()
 
-    teacher_email = f"e2e_teacher_editor_assets_{int(time.time())}@example.com"
+    teacher_email = f"e2e_teacher_editor_assets_{int(time.time())}@{EMAIL_DOMAIN}"
     teacher_pw = "Passw0rd!e2e"
     teacher_id = _kc_create_user(token, teacher_email, teacher_pw)
     _kc_add_realm_role(token, teacher_id, "teacher")
@@ -329,7 +330,7 @@ def test_h5p_editor_webcomponents_modules_are_resolvable():
 
     token = _kc_admin_token()
 
-    admin_email = f"e2e_admin_webcomponents_{int(time.time())}@example.com"
+    admin_email = f"e2e_admin_webcomponents_{int(time.time())}@{EMAIL_DOMAIN}"
     admin_pw = "Passw0rd!e2e"
     admin_id = _kc_create_user(token, admin_email, admin_pw)
     _kc_add_realm_role(token, admin_id, "admin")

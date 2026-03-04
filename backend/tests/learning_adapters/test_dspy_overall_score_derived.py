@@ -1,12 +1,4 @@
-"""
-Derive overall score from per-criterion results (no model-provided overall_score).
-
-Why:
-    The UI derives aggregate scores from per-criterion results. To reduce model
-    load and avoid redundant reasoning, we do not require the model to output an
-    overall score. Instead, the backend derives `analysis_json.score` (0..5)
-    from the per-criterion scores.
-"""
+"""Derive overall score from lean criterion-indexed DSPy analysis output."""
 
 from __future__ import annotations
 
@@ -47,8 +39,8 @@ def test_run_structured_analysis_derives_score_from_criteria_results(monkeypatch
     _install_fake_dspy(
         monkeypatch,
         criteria_results=[
-            {"criterion": "A", "max_score": 10, "score": 10, "explanation_md": "OK"},
-            {"criterion": "B", "max_score": 10, "score": 0, "explanation_md": "OK"},
+            {"criterion_idx": 1, "score": 10, "explanation_md": "OK B"},
+            {"criterion_idx": 0, "score": 0, "explanation_md": "OK A"},
         ],
     )
     programs = _reload_programs()
@@ -61,6 +53,10 @@ def test_run_structured_analysis_derives_score_from_criteria_results(monkeypatch
     )
     payload = analysis.to_dict()
     assert payload["schema"] == "criteria.v2"
+    assert payload["criteria_results"] == [
+        {"criterion": "A", "max_score": 10, "score": 0, "explanation_md": "OK A"},
+        {"criterion": "B", "max_score": 10, "score": 10, "explanation_md": "OK B"},
+    ]
     # Average 10 and 0 -> 5/10 -> derived overall score 3/5 (rounded).
     assert payload["score"] == 3
 
@@ -69,8 +65,8 @@ def test_run_structured_visual_analysis_derives_score_from_criteria_results(monk
     _install_fake_dspy(
         monkeypatch,
         criteria_results=[
-            {"criterion": "A", "max_score": 5, "score": 5, "explanation_md": "OK"},  # 10/10 normalized
-            {"criterion": "B", "max_score": 10, "score": 8, "explanation_md": "OK"},  # 8/10 normalized
+            {"criterion_idx": 0, "score": 10, "explanation_md": "OK A"},
+            {"criterion_idx": 1, "score": 8, "explanation_md": "OK B"},
         ],
     )
     programs = _reload_programs()
@@ -83,6 +79,64 @@ def test_run_structured_visual_analysis_derives_score_from_criteria_results(monk
     )
     payload = analysis.to_dict()
     assert payload["schema"] == "criteria.v2"
+    assert payload["criteria_results"] == [
+        {"criterion": "A", "max_score": 10, "score": 10, "explanation_md": "OK A"},
+        {"criterion": "B", "max_score": 10, "score": 8, "explanation_md": "OK B"},
+    ]
     # Average normalized score: (10 + 8) / 2 = 9 -> 9/10 -> derived overall 5/5 (rounded).
     assert payload["score"] == 5
 
+
+def test_run_structured_analysis_raises_when_criterion_idx_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_dspy(
+        monkeypatch,
+        criteria_results=[
+            {"score": 6, "explanation_md": "OK"},
+        ],
+    )
+    programs = _reload_programs()
+
+    with pytest.raises(RuntimeError, match="invalid_criterion_idx"):
+        _ = programs.run_structured_analysis(  # type: ignore[attr-defined]
+            text_md="Text",
+            criteria=["A"],
+            teacher_instructions_md="Instr",
+            teacher_context_md="Ctx",
+        )
+
+
+def test_run_structured_analysis_raises_when_criterion_idx_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_dspy(
+        monkeypatch,
+        criteria_results=[
+            {"criterion_idx": 3, "score": 6, "explanation_md": "OK"},
+        ],
+    )
+    programs = _reload_programs()
+
+    with pytest.raises(RuntimeError, match="invalid_criterion_idx"):
+        _ = programs.run_structured_analysis(  # type: ignore[attr-defined]
+            text_md="Text",
+            criteria=["A", "B"],
+            teacher_instructions_md="Instr",
+            teacher_context_md="Ctx",
+        )
+
+
+def test_run_structured_analysis_raises_when_criterion_idx_duplicated(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_dspy(
+        monkeypatch,
+        criteria_results=[
+            {"criterion_idx": 0, "score": 4, "explanation_md": "OK A1"},
+            {"criterion_idx": 0, "score": 7, "explanation_md": "OK A2"},
+        ],
+    )
+    programs = _reload_programs()
+
+    with pytest.raises(RuntimeError, match="invalid_criterion_idx"):
+        _ = programs.run_structured_analysis(  # type: ignore[attr-defined]
+            text_md="Text",
+            criteria=["A", "B"],
+            teacher_instructions_md="Instr",
+            teacher_context_md="Ctx",
+        )

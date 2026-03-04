@@ -35,6 +35,39 @@ class CriterionResult:
 
 
 @dataclass
+class LeanCriterionResult:
+    """Lean structured criterion result emitted by the model."""
+
+    criterion_idx: int
+    score: int
+    explanation_md: str
+
+    @classmethod
+    def from_value(cls, value: Any) -> "LeanCriterionResult":
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, dict):
+            if "criterion_idx" not in value:
+                raise ValueError("invalid_criterion_idx")
+            try:
+                criterion_idx = int(value.get("criterion_idx"))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("invalid_criterion_idx") from exc
+            try:
+                score = int(value.get("score", 0))
+            except (TypeError, ValueError):
+                score = 0
+            explanation_md = str(value.get("explanation_md", value.get("explanation", ""))) or ""
+            return cls(criterion_idx=criterion_idx, score=score, explanation_md=explanation_md)
+        if hasattr(value, "__dict__"):
+            return cls.from_value(vars(value))
+        raise ValueError("invalid_criterion_idx")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class CriteriaAnalysis:
     """Flat mapping of a `criteria.v2` analysis payload."""
 
@@ -56,4 +89,3 @@ class CriteriaAnalysis:
             "score": self.score,
             "criteria_results": [item.to_dict() for item in self.criteria_results],
         }
-

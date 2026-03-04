@@ -12,15 +12,51 @@ from backend.learning.adapters.dspy.signatures import (
     VisualFeedbackNoCriteriaSignature,
     VisualFeedbackSynthesisSignature,
 )
-from backend.learning.adapters.dspy.types import CriteriaAnalysis, CriterionResult
+from backend.learning.adapters.dspy.types import CriteriaAnalysis, CriterionResult, LeanCriterionResult
 
 
-def _ensure_criteria_results(value: Any) -> list[CriterionResult]:
+def _ensure_lean_criteria_results(value: Any) -> list[LeanCriterionResult]:
     if value is None:
         return []
-    if isinstance(value, list):
-        return [CriterionResult.from_value(item) for item in value]
-    return [CriterionResult.from_value(value)]
+    try:
+        if isinstance(value, list):
+            return [LeanCriterionResult.from_value(item) for item in value]
+        return [LeanCriterionResult.from_value(value)]
+    except ValueError as exc:
+        raise RuntimeError("invalid_criterion_idx") from exc
+
+
+def _map_lean_results_to_criteria(
+    *,
+    criteria: Sequence[str],
+    lean_results: list[LeanCriterionResult],
+    default_explanation_md: str,
+) -> list[CriterionResult]:
+    """Map strict `criterion_idx` model output to canonical criteria.v2 items."""
+    normalized_criteria = [str(name).strip() for name in criteria]
+    if any(not name for name in normalized_criteria):
+        raise RuntimeError("invalid_criterion_idx")
+
+    mapped: dict[int, CriterionResult] = {}
+    for item in lean_results:
+        idx = item.criterion_idx
+        if idx < 0 or idx >= len(normalized_criteria):
+            raise RuntimeError("invalid_criterion_idx")
+        if idx in mapped:
+            raise RuntimeError("invalid_criterion_idx")
+        score = max(0, min(int(item.score), 10))
+        explanation = str(item.explanation_md or "").strip() or default_explanation_md
+        mapped[idx] = CriterionResult(
+            criterion=normalized_criteria[idx],
+            max_score=10,
+            score=score,
+            explanation_md=explanation,
+        )
+
+    if len(mapped) != len(normalized_criteria):
+        raise RuntimeError("invalid_criterion_idx")
+
+    return [mapped[idx] for idx in range(len(normalized_criteria))]
 
 
 def _derive_overall_score(*, criteria_results: list[CriterionResult]) -> int:
@@ -74,13 +110,19 @@ def run_structured_analysis(
         raise ImportError(f"dspy unavailable: {exc}")
 
     predict = dspy.Predict(FeedbackAnalysisSignature)  # type: ignore[attr-defined]
+    criteria_list = list(criteria)
     out = predict(
         student_text_md=text_md,
-        criteria=list(criteria),
+        criteria=criteria_list,
         teacher_instructions_md=teacher_instructions_md,
         teacher_context_md=teacher_context_md,
     )
-    results = _ensure_criteria_results(getattr(out, "criteria_results", []))
+    lean_results = _ensure_lean_criteria_results(getattr(out, "criteria_results", []))
+    results = _map_lean_results_to_criteria(
+        criteria=criteria_list,
+        lean_results=lean_results,
+        default_explanation_md="Kein Beleg im Schülertext gefunden.",
+    )
     score_int = _derive_overall_score(criteria_results=results)
     return CriteriaAnalysis(
         schema="criteria.v2",
@@ -156,13 +198,19 @@ def run_structured_visual_analysis(
 
     img = dspy.Image(url=str(image_data_uri))  # type: ignore[attr-defined]
     predict = dspy.Predict(VisualFeedbackAnalysisSignature)  # type: ignore[attr-defined]
+    criteria_list = list(criteria)
     out = predict(
         student_image=img,
-        criteria=list(criteria),
+        criteria=criteria_list,
         teacher_instructions_md=teacher_instructions_md,
         teacher_context_md=teacher_context_md,
     )
-    results = _ensure_criteria_results(getattr(out, "criteria_results", []))
+    lean_results = _ensure_lean_criteria_results(getattr(out, "criteria_results", []))
+    results = _map_lean_results_to_criteria(
+        criteria=criteria_list,
+        lean_results=lean_results,
+        default_explanation_md="Kein Beleg im visuellen Inhalt gefunden.",
+    )
     score_int = _derive_overall_score(criteria_results=results)
     return CriteriaAnalysis(
         schema="criteria.v2",

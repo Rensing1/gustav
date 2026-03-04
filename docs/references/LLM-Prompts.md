@@ -110,10 +110,12 @@ Skalen:
 
 Ausgabe:
     - `criteria_results`: Liste von Objekten mit
-      `criterion` (Kriteriumsname), `max_score` (Standard 10),
+      `criterion_idx` (0-basierter Index in der Eingabeliste `criteria`),
       `score` (0..10) und `explanation_md`.
     - `explanation_md` ist eine kurze, sachliche Erklärung in Markdown
       (1–3 Sätze, auf Deutsch, mit Bezug zum Kriterium und zur Textstelle).
+    - Der Server ergänzt anschließend `criterion` (aus `criteria[criterion_idx]`)
+      und `max_score=10` für den kanonischen `criteria.v2`-Payload.
 ```
 
 ### 6.2) FeedbackSynthesisSignature
@@ -194,7 +196,9 @@ Regeln (nur evidenzbasiert):
       nicht als „Beleg“ herangezogen oder zitiert werden.
 
 Ausgabe:
-    - `criteria_results`: Liste von {criterion, max_score=10, score 0..10, explanation_md}.
+    - `criteria_results`: Liste von {criterion_idx, score 0..10, explanation_md}.
+    - Der Server ergänzt anschließend `criterion` (aus `criteria[criterion_idx]`)
+      und `max_score=10` für den kanonischen `criteria.v2`-Payload.
 ```
 
 ### 6.5) VisualFeedbackSynthesisSignature

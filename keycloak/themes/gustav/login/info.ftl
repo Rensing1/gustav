@@ -32,7 +32,8 @@
         <div class="kc-message kc-${message.type}">${message.summary}</div>
       </#if>
 
-      <#if requiredActions?? && requiredActions?size gt 0>
+      <#assign has_required_actions = requiredActions?? && requiredActions?size gt 0>
+      <#if has_required_actions>
         <p class="kc-hint">
           <#list requiredActions as reqActionItem>
             ${msg("requiredAction.${reqActionItem}")}<#if reqActionItem_has_next>, </#if>
@@ -52,7 +53,9 @@
 
       <#if !(skipLink??)>
         <div class="kc-links">
-          <#if app_link?has_content>
+          <#if has_required_actions && actionUri?has_content>
+            <a href="${actionUri}">${msg("proceedWithAction")}</a>
+          <#elseif app_link?has_content>
             <a href="${app_link}">${msg("backToApplication")}</a>
           <#elseif actionUri?has_content>
             <a href="${actionUri}">${msg("proceedWithAction")}</a>

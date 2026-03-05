@@ -36,19 +36,27 @@ so I can safely return to the app login/start flow instead of an unhelpful IdP a
    when the page renders,
    then "Back to app" uses `pageRedirectUri`.
 
-3. Given `pageRedirectUri` is unsuitable and `client.baseUrl` is suitable,
+3. Given `pageRedirectUri` is an external absolute URL outside the app base URL,
+   when the page renders,
+   then the template must reject it as a primary app CTA.
+
+4. Given `pageRedirectUri` uses an unsafe scheme (`javascript:`, `data:`, `vbscript:`),
+   when the page renders,
+   then the template must reject it as a primary app CTA.
+
+5. Given `pageRedirectUri` is unsuitable and `client.baseUrl` is suitable,
    when the page renders,
    then "Back to app" uses `client.baseUrl`.
 
-4. Given app candidates are unavailable/unsuitable,
+6. Given app candidates are unavailable/unsuitable,
    when the page renders,
    then fallback links still include login/register recovery options.
 
-5. Given `info.ftl` has both `app_link` and `actionUri`,
+7. Given `info.ftl` has `requiredActions` and `actionUri`,
    when the page renders,
-   then it shows exactly one primary CTA and prioritizes `app_link`.
+   then it shows exactly one primary CTA and prioritizes `actionUri`.
 
-6. Given `info.ftl` has `actionUri` but no usable app backlink,
+8. Given `info.ftl` has `actionUri` but no required actions and no usable app backlink,
    when the page renders,
    then the page offers action fallback; otherwise login fallback.
 
@@ -56,7 +64,7 @@ so I can safely return to the app login/start flow instead of an unhelpful IdP a
 
 1. Red:
 - Add failing contract tests in `backend/tests/test_keycloak_theme_files.py`
-  for shared resolver usage and IdP account link exclusion.
+  for shared resolver usage, scheme/host allowlist checks and IdP account link exclusion.
 
 2. Green:
 - Add a shared Freemarker resolver helper in
@@ -76,4 +84,4 @@ so I can safely return to the app login/start flow instead of an unhelpful IdP a
 Acceptance:
 - New contract tests pass.
 - Existing keycloak theme tests remain green.
-- `info.ftl` keeps exclusive CTA priority (`app_link` -> `actionUri` -> `loginUrl`).
+- `info.ftl` keeps exclusive CTA priority (`requiredActions+actionUri` -> `app_link` -> `actionUri` -> `loginUrl`).

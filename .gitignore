@@ -64,3 +64,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 *.tgz
+
+# Frontend build/transpile artifacts (local)
+frontend/dist/
+frontend/tsconfig.app.tsbuildinfo
+frontend/tsconfig.node.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/tailwind.config.js
+frontend/tailwind.config.d.ts

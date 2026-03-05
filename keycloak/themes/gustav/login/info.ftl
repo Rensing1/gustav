@@ -52,17 +52,11 @@
 
       <#if !(skipLink??)>
         <div class="kc-links">
-          <#assign has_link = false>
           <#if app_link?has_content>
             <a href="${app_link}">${msg("backToApplication")}</a>
-            <#assign has_link = true>
-          </#if>
-          <#if actionUri?has_content>
-            <#if has_link><span> · </span></#if>
+          <#elseif actionUri?has_content>
             <a href="${actionUri}">${msg("proceedWithAction")}</a>
-            <#assign has_link = true>
-          </#if>
-          <#if !has_link && url.loginUrl?has_content>
+          <#elseif url.loginUrl?has_content>
             <a href="${url.loginUrl}">${msg("doLogIn")}</a>
           </#if>
         </div>

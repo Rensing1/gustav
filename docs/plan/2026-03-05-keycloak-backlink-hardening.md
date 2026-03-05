@@ -27,7 +27,8 @@ so I can safely return to the app login/start flow instead of an unhelpful IdP a
 
 ## BDD Scenarios
 
-1. Given `pageRedirectUri` points to `/realms/.../account/`,
+1. Given `pageRedirectUri` points to `/realms/.../account`, `/realms/.../account/`,
+   or query/fragment variants like `/realms/.../account?x=1`,
    when an error/info template renders the primary app CTA,
    then the template must not use that URL as "Back to app".
 
@@ -43,9 +44,13 @@ so I can safely return to the app login/start flow instead of an unhelpful IdP a
    when the page renders,
    then fallback links still include login/register recovery options.
 
-5. Given `info.ftl` has `actionUri`,
-   when app backlink is not available,
-   then the page still offers action/login fallback behavior.
+5. Given `info.ftl` has both `app_link` and `actionUri`,
+   when the page renders,
+   then it shows exactly one primary CTA and prioritizes `app_link`.
+
+6. Given `info.ftl` has `actionUri` but no usable app backlink,
+   when the page renders,
+   then the page offers action fallback; otherwise login fallback.
 
 ## TDD Plan (Red-Green-Refactor)
 
@@ -71,3 +76,4 @@ so I can safely return to the app login/start flow instead of an unhelpful IdP a
 Acceptance:
 - New contract tests pass.
 - Existing keycloak theme tests remain green.
+- `info.ftl` keeps exclusive CTA priority (`app_link` -> `actionUri` -> `loginUrl`).

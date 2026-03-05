@@ -277,6 +277,18 @@ def test_error_template_helpers_resolve_primary_app_link_and_guard_idp_account_t
         assert marker in text, f"_gustav_error_components.ftl should include {marker}"
 
 
+def test_error_template_helper_guards_idp_account_target_edge_shapes():
+    """IdP account guard should cover /account with slash, query and fragment variants."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    for marker in [
+        '?ends_with("/account")',
+        "/account?",
+        "/account#",
+    ]:
+        assert marker in text, f"_gustav_error_components.ftl should guard edge shape {marker}"
+
+
 def test_error_templates_use_shared_primary_app_link_resolver():
     """Error templates should use shared resolver instead of duplicated inline fallback chains."""
     for name in ["error.ftl", "login-page-expired.ftl"]:
@@ -293,6 +305,19 @@ def test_info_template_uses_shared_primary_app_link_resolver_and_keeps_action_fa
     assert '<#import "_gustav_error_components.ftl" as gustav_error>' in text
     assert "resolve_primary_app_link" in text, "info.ftl should use shared app-link resolver"
     assert "actionUri" in text, "info.ftl should keep actionUri fallback behavior"
+
+
+def test_info_template_enforces_exclusive_link_priority():
+    """Info template should render one primary CTA: app link, else action, else login."""
+    tpl = _resolve_login_template("info.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for marker in [
+        "<#if app_link?has_content>",
+        "<#elseif actionUri?has_content>",
+        "<#elseif url.loginUrl?has_content>",
+    ]:
+        assert marker in text, f"info.ftl should include exclusive priority marker {marker}"
+    assert "has_link" not in text, "info.ftl should not rely on multi-link accumulator state"
 
 
 def test_messages_en_present_and_has_email_label():

@@ -10,7 +10,9 @@
     <#return false>
   </#if>
   <#local normalized = link?lower_case>
-  <#return normalized?contains("/realms/") && normalized?contains("/account/")>
+  <#local has_realm_segment = normalized?contains("/realms/")>
+  <#local has_account_target = normalized?contains("/account/") || normalized?ends_with("/account") || normalized?contains("/account?") || normalized?contains("/account#")>
+  <#return has_realm_segment && has_account_target>
 </#function>
 
 <#function resolve_primary_app_link pageRedirectUri="" clientBaseUrl="">

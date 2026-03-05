@@ -32,7 +32,8 @@
         <div class="kc-message kc-${message.type}">${message.summary}</div>
       </#if>
 
-      <#if requiredActions?? && requiredActions?size gt 0>
+      <#assign has_required_actions = requiredActions?? && requiredActions?size gt 0>
+      <#if has_required_actions>
         <p class="kc-hint">
           <#list requiredActions as reqActionItem>
             ${msg("requiredAction.${reqActionItem}")}<#if reqActionItem_has_next>, </#if>
@@ -40,14 +41,24 @@
         </p>
       </#if>
 
+      <#import "_gustav_error_components.ftl" as gustav_error>
+      <#assign client_base_url = "">
+      <#if client?? && client.baseUrl?has_content>
+        <#assign client_base_url = client.baseUrl>
+      </#if>
+      <#assign app_link = gustav_error.resolve_primary_app_link(
+        pageRedirectUri=(pageRedirectUri!""),
+        clientBaseUrl=client_base_url
+      )>
+
       <#if !(skipLink??)>
         <div class="kc-links">
-          <#if pageRedirectUri?has_content>
-            <a href="${pageRedirectUri}">${msg("backToApplication")}</a>
+          <#if has_required_actions && actionUri?has_content>
+            <a href="${actionUri}">${msg("proceedWithAction")}</a>
+          <#elseif app_link?has_content>
+            <a href="${app_link}">${msg("backToApplication")}</a>
           <#elseif actionUri?has_content>
             <a href="${actionUri}">${msg("proceedWithAction")}</a>
-          <#elseif (client.baseUrl)?has_content>
-            <a href="${client.baseUrl}">${msg("backToApplication")}</a>
           <#elseif url.loginUrl?has_content>
             <a href="${url.loginUrl}">${msg("doLogIn")}</a>
           </#if>

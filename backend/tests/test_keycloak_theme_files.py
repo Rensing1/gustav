@@ -264,6 +264,122 @@ def test_error_template_helpers_render_footer_links_and_localized_language_label
     assert 'id="kc-locale"' not in text, "helper should not render a dominant locale dropdown"
 
 
+def test_error_template_helpers_resolve_primary_app_link_and_guard_idp_account_targets():
+    """Helper must centralize app-link selection and reject IdP account URLs as primary CTA."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    for marker in [
+        "<#function resolve_primary_app_link",
+        "<#function is_idp_account_link",
+        "/realms/",
+        "/account/",
+    ]:
+        assert marker in text, f"_gustav_error_components.ftl should include {marker}"
+
+
+def test_error_template_helper_enforces_scheme_and_host_allowlist_contract():
+    """Template resolver should reject unsafe schemes and external absolute hosts."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    for marker in [
+        "<#function is_allowed_app_link",
+        'normalized_link?starts_with("javascript:")',
+        'normalized_link?starts_with("data:")',
+        'normalized_link?starts_with("vbscript:")',
+        'normalized_link?starts_with("//")',
+        'normalized_link?starts_with("http://")',
+        'normalized_link?starts_with("https://")',
+        'normalized_link?starts_with("/")',
+        "normalized_link == trusted_base_url",
+        'trusted_base_url + "/"',
+        'trusted_base_url + "?"',
+        'trusted_base_url + "#"',
+    ]:
+        assert marker in text, f"_gustav_error_components.ftl should include {marker}"
+
+
+def test_error_template_helper_checks_protocol_relative_before_relative_paths():
+    """Protocol-relative URLs must be blocked before generic relative-path acceptance."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    protocol_relative = 'normalized_link?starts_with("//")'
+    relative = 'normalized_link?starts_with("/")'
+    assert protocol_relative in text, "helper should explicitly guard protocol-relative URLs"
+    assert relative in text, "helper should allow regular relative app paths"
+    assert text.index(protocol_relative) < text.index(relative), (
+        "protocol-relative guard must run before relative-path allow branch"
+    )
+
+
+def test_error_template_helper_resolver_prefers_page_redirect_then_client_base():
+    """Resolver must keep deterministic priority and guard both branches against IdP account targets."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    page_redirect_branch = (
+        "<#if pageRedirectUri?has_content && is_allowed_app_link(pageRedirectUri, clientBaseUrl)"
+        " && !is_idp_account_link(pageRedirectUri)>"
+    )
+    client_base_branch = (
+        "<#if clientBaseUrl?has_content && is_allowed_app_link(clientBaseUrl, clientBaseUrl)"
+        " && !is_idp_account_link(clientBaseUrl)>"
+    )
+    fallback_return = '<#return "">'
+    for marker in [page_redirect_branch, client_base_branch, fallback_return]:
+        assert marker in text, f"_gustav_error_components.ftl should include {marker}"
+    assert text.index(page_redirect_branch) < text.index(client_base_branch) < text.index(fallback_return), (
+        "resolver order must be pageRedirectUri, then clientBaseUrl, then empty fallback"
+    )
+
+
+def test_error_template_helper_guards_idp_account_target_edge_shapes():
+    """IdP account guard should cover /account with slash, query and fragment variants."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    for marker in [
+        '?ends_with("/account")',
+        "/account?",
+        "/account#",
+    ]:
+        assert marker in text, f"_gustav_error_components.ftl should guard edge shape {marker}"
+
+
+def test_error_templates_use_shared_primary_app_link_resolver():
+    """Error templates should use shared resolver instead of duplicated inline fallback chains."""
+    for name in ["error.ftl", "login-page-expired.ftl"]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        assert "resolve_primary_app_link" in text, f"{name} should use shared app-link resolver"
+        assert "<#if pageRedirectUri?has_content>" not in text, f"{name} should not duplicate inline app-link selection"
+
+
+def test_info_template_uses_shared_primary_app_link_resolver_and_keeps_action_fallback():
+    """Info template should use shared app-link resolver and keep actionUri recovery option."""
+    tpl = _resolve_login_template("info.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    assert '<#import "_gustav_error_components.ftl" as gustav_error>' in text
+    assert "resolve_primary_app_link" in text, "info.ftl should use shared app-link resolver"
+    assert "actionUri" in text, "info.ftl should keep actionUri fallback behavior"
+
+
+def test_info_template_enforces_exclusive_link_priority():
+    """Info template should render one primary CTA with required-action safety priority."""
+    tpl = _resolve_login_template("info.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for marker in [
+        "<#assign has_required_actions = requiredActions?? && requiredActions?size gt 0>",
+        "<#if has_required_actions && actionUri?has_content>",
+        "<#elseif app_link?has_content>",
+        "<#elseif actionUri?has_content>",
+        "<#elseif url.loginUrl?has_content>",
+    ]:
+        assert marker in text, f"info.ftl should include exclusive priority marker {marker}"
+    assert (
+        text.index("<#if has_required_actions && actionUri?has_content>")
+        < text.index("<#elseif app_link?has_content>")
+    ), "required-action branch must precede app-link branch"
+    assert "has_link" not in text, "info.ftl should not rely on multi-link accumulator state"
+
+
 def test_messages_en_present_and_has_email_label():
     """English message bundle should exist and use email-only label."""
     msgs = THEME_ROOT / "messages" / "messages_en.properties"

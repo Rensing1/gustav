@@ -44,19 +44,23 @@ so I can safely return to the app login/start flow instead of an unhelpful IdP a
    when the page renders,
    then the template must reject it as a primary app CTA.
 
-5. Given `pageRedirectUri` is unsuitable and `client.baseUrl` is suitable,
+5. Given `pageRedirectUri` is protocol-relative (for example `//evil.example/phish`),
+   when the page renders,
+   then the template must reject it as a primary app CTA.
+
+6. Given `pageRedirectUri` is unsuitable and `client.baseUrl` is suitable,
    when the page renders,
    then "Back to app" uses `client.baseUrl`.
 
-6. Given app candidates are unavailable/unsuitable,
+7. Given app candidates are unavailable/unsuitable,
    when the page renders,
    then fallback links still include login/register recovery options.
 
-7. Given `info.ftl` has `requiredActions` and `actionUri`,
+8. Given `info.ftl` has `requiredActions` and `actionUri`,
    when the page renders,
    then it shows exactly one primary CTA and prioritizes `actionUri`.
 
-8. Given `info.ftl` has `actionUri` but no required actions and no usable app backlink,
+9. Given `info.ftl` has `actionUri` but no required actions and no usable app backlink,
    when the page renders,
    then the page offers action fallback; otherwise login fallback.
 

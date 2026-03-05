@@ -14,8 +14,6 @@ Scope:
 
 from pathlib import Path
 
-import pytest
-
 
 THEME_ROOT = Path("keycloak/themes/gustav/login")
 EMAIL_THEME_ROOT = Path("keycloak/themes/gustav/email")
@@ -72,84 +70,6 @@ def _resolve_login_template(name: str) -> Path:
     tpl = root_tpl if root_tpl.exists() else dir_tpl
     assert tpl.exists(), f"{name} missing"
     return tpl
-
-
-def _normalize_link(link: str) -> str:
-    return (link or "").strip().lower()
-
-
-def _py_is_idp_account_link(link: str) -> bool:
-    """Mirror the template rule: reject IdP account URLs as app return targets."""
-    normalized = _normalize_link(link)
-    if not normalized:
-        return False
-    has_realm_segment = "/realms/" in normalized
-    has_account_target = (
-        "/account/" in normalized
-        or normalized.endswith("/account")
-        or "/account?" in normalized
-        or "/account#" in normalized
-    )
-    return has_realm_segment and has_account_target
-
-
-def _py_is_allowed_app_link(link: str, trusted_base_url: str) -> bool:
-    """Mirror the security contract for safe backlink targets."""
-    normalized_link = _normalize_link(link)
-    trusted_base = _normalize_link(trusted_base_url)
-    if not normalized_link:
-        return False
-    if normalized_link.startswith("javascript:"):
-        return False
-    if normalized_link.startswith("data:"):
-        return False
-    if normalized_link.startswith("vbscript:"):
-        return False
-    if normalized_link.startswith("/"):
-        return True
-    if not (
-        normalized_link.startswith("http://")
-        or normalized_link.startswith("https://")
-    ):
-        return False
-    if not trusted_base:
-        return False
-    return (
-        normalized_link == trusted_base
-        or normalized_link.startswith(trusted_base + "/")
-        or normalized_link.startswith(trusted_base + "?")
-        or normalized_link.startswith(trusted_base + "#")
-    )
-
-
-def _py_resolve_primary_app_link(page_redirect_uri: str, client_base_url: str) -> str:
-    """Python model of the template resolver to express behavior as tests."""
-    if _py_is_allowed_app_link(page_redirect_uri, client_base_url) and not _py_is_idp_account_link(page_redirect_uri):
-        return page_redirect_uri
-    if _py_is_allowed_app_link(client_base_url, client_base_url) and not _py_is_idp_account_link(client_base_url):
-        return client_base_url
-    return ""
-
-
-@pytest.mark.parametrize(
-    "page_redirect_uri,client_base_url,expected",
-    [
-        ("/learning", "https://app.example", "/learning"),
-        ("https://app.example/learning", "https://app.example", "https://app.example/learning"),
-        ("https://app.example?tab=1", "https://app.example", "https://app.example?tab=1"),
-        ("https://evil.example/phish", "https://app.example", "https://app.example"),
-        ("https://app.example.evil/phish", "https://app.example", "https://app.example"),
-        ("javascript:alert(1)", "https://app.example", "https://app.example"),
-        ("data:text/html;base64,QQ==", "https://app.example", "https://app.example"),
-        ("https://idp.example/realms/gustav/account", "https://app.example", "https://app.example"),
-        ("https://idp.example/realms/gustav/account?ref=1", "https://app.example", "https://app.example"),
-        ("https://app.example/learning", "", ""),
-        ("/learning", "", "/learning"),
-    ],
-)
-def test_primary_app_link_security_contract(page_redirect_uri: str, client_base_url: str, expected: str):
-    """Resolver should prefer safe app links and reject unsafe/external targets."""
-    assert _py_resolve_primary_app_link(page_redirect_uri, client_base_url) == expected
 
 
 def test_theme_messages_de_present_and_has_keys():
@@ -366,6 +286,7 @@ def test_error_template_helper_enforces_scheme_and_host_allowlist_contract():
         'normalized_link?starts_with("javascript:")',
         'normalized_link?starts_with("data:")',
         'normalized_link?starts_with("vbscript:")',
+        'normalized_link?starts_with("//")',
         'normalized_link?starts_with("http://")',
         'normalized_link?starts_with("https://")',
         'normalized_link?starts_with("/")',
@@ -375,6 +296,39 @@ def test_error_template_helper_enforces_scheme_and_host_allowlist_contract():
         'trusted_base_url + "#"',
     ]:
         assert marker in text, f"_gustav_error_components.ftl should include {marker}"
+
+
+def test_error_template_helper_checks_protocol_relative_before_relative_paths():
+    """Protocol-relative URLs must be blocked before generic relative-path acceptance."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    protocol_relative = 'normalized_link?starts_with("//")'
+    relative = 'normalized_link?starts_with("/")'
+    assert protocol_relative in text, "helper should explicitly guard protocol-relative URLs"
+    assert relative in text, "helper should allow regular relative app paths"
+    assert text.index(protocol_relative) < text.index(relative), (
+        "protocol-relative guard must run before relative-path allow branch"
+    )
+
+
+def test_error_template_helper_resolver_prefers_page_redirect_then_client_base():
+    """Resolver must keep deterministic priority and guard both branches against IdP account targets."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    page_redirect_branch = (
+        "<#if pageRedirectUri?has_content && is_allowed_app_link(pageRedirectUri, clientBaseUrl)"
+        " && !is_idp_account_link(pageRedirectUri)>"
+    )
+    client_base_branch = (
+        "<#if clientBaseUrl?has_content && is_allowed_app_link(clientBaseUrl, clientBaseUrl)"
+        " && !is_idp_account_link(clientBaseUrl)>"
+    )
+    fallback_return = '<#return "">'
+    for marker in [page_redirect_branch, client_base_branch, fallback_return]:
+        assert marker in text, f"_gustav_error_components.ftl should include {marker}"
+    assert text.index(page_redirect_branch) < text.index(client_base_branch) < text.index(fallback_return), (
+        "resolver order must be pageRedirectUri, then clientBaseUrl, then empty fallback"
+    )
 
 
 def test_error_template_helper_guards_idp_account_target_edge_shapes():

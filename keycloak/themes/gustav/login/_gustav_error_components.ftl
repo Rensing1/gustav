@@ -24,6 +24,10 @@
   <#if normalized_link?starts_with("javascript:") || normalized_link?starts_with("data:") || normalized_link?starts_with("vbscript:")>
     <#return false>
   </#if>
+  <#if normalized_link?starts_with("//")>
+    <#-- Prevent protocol-relative open redirects (e.g. //evil.example). -->
+    <#return false>
+  </#if>
   <#if normalized_link?starts_with("/")>
     <#return true>
   </#if>

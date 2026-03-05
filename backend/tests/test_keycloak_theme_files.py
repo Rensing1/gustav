@@ -264,6 +264,37 @@ def test_error_template_helpers_render_footer_links_and_localized_language_label
     assert 'id="kc-locale"' not in text, "helper should not render a dominant locale dropdown"
 
 
+def test_error_template_helpers_resolve_primary_app_link_and_guard_idp_account_targets():
+    """Helper must centralize app-link selection and reject IdP account URLs as primary CTA."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+    for marker in [
+        "<#function resolve_primary_app_link",
+        "<#function is_idp_account_link",
+        "/realms/",
+        "/account/",
+    ]:
+        assert marker in text, f"_gustav_error_components.ftl should include {marker}"
+
+
+def test_error_templates_use_shared_primary_app_link_resolver():
+    """Error templates should use shared resolver instead of duplicated inline fallback chains."""
+    for name in ["error.ftl", "login-page-expired.ftl"]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        assert "resolve_primary_app_link" in text, f"{name} should use shared app-link resolver"
+        assert "<#if pageRedirectUri?has_content>" not in text, f"{name} should not duplicate inline app-link selection"
+
+
+def test_info_template_uses_shared_primary_app_link_resolver_and_keeps_action_fallback():
+    """Info template should use shared app-link resolver and keep actionUri recovery option."""
+    tpl = _resolve_login_template("info.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    assert '<#import "_gustav_error_components.ftl" as gustav_error>' in text
+    assert "resolve_primary_app_link" in text, "info.ftl should use shared app-link resolver"
+    assert "actionUri" in text, "info.ftl should keep actionUri fallback behavior"
+
+
 def test_messages_en_present_and_has_email_label():
     """English message bundle should exist and use email-only label."""
     msgs = THEME_ROOT / "messages" / "messages_en.properties"

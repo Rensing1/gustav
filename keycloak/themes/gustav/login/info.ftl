@@ -40,15 +40,29 @@
         </p>
       </#if>
 
+      <#import "_gustav_error_components.ftl" as gustav_error>
+      <#assign client_base_url = "">
+      <#if client?? && client.baseUrl?has_content>
+        <#assign client_base_url = client.baseUrl>
+      </#if>
+      <#assign app_link = gustav_error.resolve_primary_app_link(
+        pageRedirectUri=(pageRedirectUri!""),
+        clientBaseUrl=client_base_url
+      )>
+
       <#if !(skipLink??)>
         <div class="kc-links">
-          <#if pageRedirectUri?has_content>
-            <a href="${pageRedirectUri}">${msg("backToApplication")}</a>
-          <#elseif actionUri?has_content>
+          <#assign has_link = false>
+          <#if app_link?has_content>
+            <a href="${app_link}">${msg("backToApplication")}</a>
+            <#assign has_link = true>
+          </#if>
+          <#if actionUri?has_content>
+            <#if has_link><span> · </span></#if>
             <a href="${actionUri}">${msg("proceedWithAction")}</a>
-          <#elseif (client.baseUrl)?has_content>
-            <a href="${client.baseUrl}">${msg("backToApplication")}</a>
-          <#elseif url.loginUrl?has_content>
+            <#assign has_link = true>
+          </#if>
+          <#if !has_link && url.loginUrl?has_content>
             <a href="${url.loginUrl}">${msg("doLogIn")}</a>
           </#if>
         </div>

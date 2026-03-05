@@ -5,6 +5,25 @@
   - Avoid duplicated separator logic and locale-link markup.
 -->
 
+<#function is_idp_account_link link="">
+  <#if !(link?has_content)>
+    <#return false>
+  </#if>
+  <#local normalized = link?lower_case>
+  <#return normalized?contains("/realms/") && normalized?contains("/account/")>
+</#function>
+
+<#function resolve_primary_app_link pageRedirectUri="" clientBaseUrl="">
+  <#-- Security/UX hardening: do not treat IdP account URLs as "back to app" target. -->
+  <#if pageRedirectUri?has_content && !is_idp_account_link(pageRedirectUri)>
+    <#return pageRedirectUri>
+  </#if>
+  <#if clientBaseUrl?has_content && !is_idp_account_link(clientBaseUrl)>
+    <#return clientBaseUrl>
+  </#if>
+  <#return "">
+</#function>
+
 <#macro render_recovery_links appLink="">
   <div class="kc-links">
     <#assign has_item = false>

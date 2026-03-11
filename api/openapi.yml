@@ -1429,7 +1429,7 @@ components:
     TeachingLatestSubmission:
       type: object
       additionalProperties: false
-      required: [id, task_id, student_sub, created_at, kind]
+      required: [id, task_id, student_sub, created_at, kind, instruction_md]
       properties:
         id:
           type: string
@@ -1449,6 +1449,9 @@ components:
         kind:
           type: string
           enum: [text, image, pdf, file, h5p]
+        instruction_md:
+          type: string
+          description: Task instruction rendered in teacher detail views above the submission content.
         score_raw:
           type: integer
           nullable: true
@@ -1797,6 +1800,58 @@ components:
           type: string
           format: date-time
           description: Timestamp (ISO8601 UTC) of the most recent submission status change.
+    TeachingStudentLiveOverviewTask:
+      type: object
+      required: [id, instruction_md, position, kind, has_submission]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        instruction_md:
+          type: string
+          description: Task instruction (Markdown).
+        position:
+          type: integer
+        kind:
+          type: string
+          enum: [native, h5p, visual, scratch, calliope]
+        has_submission:
+          type: boolean
+        h5p_completed:
+          type: boolean
+          nullable: true
+        average_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 10
+          nullable: true
+    TeachingStudentLiveOverviewUnit:
+      type: object
+      required: [id, title, tasks]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeachingStudentLiveOverviewTask'
+    TeachingStudentLiveOverview:
+      type: object
+      required: [student, units]
+      additionalProperties: false
+      properties:
+        student:
+          $ref: '#/components/schemas/TeachingStudentRef'
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeachingStudentLiveOverviewUnit'
 
     StudentUploadIntentRequest:
       type: object
@@ -8179,6 +8234,94 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not owner), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found (course or unit not found, or unit ist nicht Teil des Kurses), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview:
+    get:
+      tags: [Teaching]
+      summary: Live overview for one student across course units (owner)
+      description: Returns all selected course units with their tasks and the latest teacher-visible submission status for one student.
+      operationId: getTeachingStudentLiveOverview
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        ownerOnly: true
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: student_sub
+          required: true
+          schema: { type: string }
+        - in: query
+          name: unit_ids
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 50
+            items:
+              type: string
+              format: uuid
+          description: >
+            Optional list of unit ids. When omitted, all units attached to the
+            course are returned. Duplicate values are ignored by the server.
+      responses:
+        '200':
+          description: OK
+          headers:
+            Cache-Control:
+              description: Security — responses are private and must not be stored.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeachingStudentLiveOverview'
+        '400':
+          description: Invalid identifiers or too many unit ids
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (not owner)
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Student not enrolled in the course, or requested unit not attached to the course
+          headers:
+            Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
+            Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest:
     get:
       summary: Latest submission for a student and task (owner)

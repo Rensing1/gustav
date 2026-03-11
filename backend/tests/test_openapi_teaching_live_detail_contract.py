@@ -55,3 +55,6 @@ def test_teaching_latest_submission_schema_supports_h5p_review_fields():
     h5p_props = h5p.get("properties") or {}
     assert "content_id" in h5p_props
     assert "review_token" in h5p_props
+    assert "instruction_md" in props
+    required = sub.get("required") or []
+    assert "instruction_md" in required

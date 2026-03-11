@@ -156,6 +156,7 @@ async def test_latest_detail_happy_path_and_no_content_cases():
         assert body["task_id"] == task["id"]
         assert body["student_sub"] == learner.sub
         assert body["kind"] in ("text", "file", "image", "pdf")
+        assert body["instruction_md"] == task["instruction_md"]
         # For text submissions, expect a body
         if body["kind"] == "text":
             assert isinstance(body.get("text_body"), str) and len(body["text_body"]) > 0

@@ -132,6 +132,8 @@ async def test_detail_partial_empty_and_then_text_excerpt():
         )
         assert r_detail.status_code == 200
         assert "Einreichung" in r_detail.text
+        assert "Aufgabenstellung" in r_detail.text
+        assert "Aufgabe 1" in r_detail.text
         assert "Antwort" in r_detail.text
 
 

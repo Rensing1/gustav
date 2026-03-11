@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
 from teaching.services.materials import MaterialFileSettings, MaterialsService
+from teaching.services.live_student_overview import MAX_UNIT_IDS, StudentLiveOverviewService
 from teaching.services.tasks import TasksService
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 from backend.storage.config import get_submissions_bucket
@@ -827,6 +828,75 @@ class _Repo:
         modules.sort(key=lambda m: (m.position, m.id))
         return modules
 
+    def list_course_units_for_owner(self, course_id: str, owner_id: str) -> List[dict]:
+        """Return attached units with titles ordered by course module position."""
+        out: List[dict] = []
+        for module in self.list_course_modules_for_owner(course_id, owner_id):
+            unit = self.units.get(module.unit_id)
+            if not unit:
+                continue
+            out.append(
+                {
+                    "id": unit.id,
+                    "title": unit.title,
+                    "position": int(module.position),
+                }
+            )
+        out.sort(key=lambda item: (int(item.get("position") or 0), str(item.get("id") or "")))
+        return out
+
+    def course_has_member(self, course_id: str, owner_id: str, student_sub: str) -> bool:
+        course = self.courses.get(course_id)
+        if not course or course.teacher_id != owner_id:
+            return False
+        return str(student_sub) in (self.members.get(course_id) or {})
+
+    def list_tasks_for_course_unit_owner(self, course_id: str, unit_id: str, owner_id: str) -> List[dict]:
+        attached_unit_ids = {module.unit_id for module in self.list_course_modules_for_owner(course_id, owner_id)}
+        if unit_id not in attached_unit_ids:
+            return []
+        tasks: List[dict] = []
+        for section in self.list_sections_for_author(unit_id, owner_id):
+            sec_id = section["id"] if isinstance(section, dict) else section.id
+            for task in self.list_tasks_for_section_owned(unit_id, sec_id, owner_id):
+                if isinstance(task, dict):
+                    tasks.append(
+                        {
+                            "id": str(task.get("id") or ""),
+                            "instruction_md": str(task.get("instruction_md") or ""),
+                            "position": int(task.get("position") or 0),
+                            "kind": str(task.get("kind") or "native"),
+                        }
+                    )
+                else:
+                    tasks.append(
+                        {
+                            "id": str(task.id),
+                            "instruction_md": str(task.instruction_md or ""),
+                            "position": int(task.position),
+                            "kind": str(getattr(task, "kind", "native") or "native"),
+                        }
+                    )
+        tasks.sort(key=lambda item: (int(item.get("position") or 0), str(item.get("id") or "")))
+        for index, task in enumerate(tasks, start=1):
+            task["position"] = index
+        return tasks
+
+    def list_latest_submission_aggregates_for_owner(
+        self,
+        *,
+        course_id: str,
+        owner_sub: str,
+        student_sub: str,
+        unit_ids: Sequence[str],
+    ) -> List[dict]:
+        """Return minimal submission aggregates for the in-memory fallback repo.
+
+        The in-memory teaching repo does not model learning submissions. Returning
+        an empty list keeps the overview deterministic for offline tests.
+        """
+        return []
+
     def create_course_module_owned(self, course_id: str, owner_id: str, *, unit_id: str, context_notes: str | None) -> CourseModuleData:
         course = self.courses.get(course_id)
         if not course or course.teacher_id != owner_id:
@@ -1004,6 +1074,10 @@ def _get_materials_service() -> MaterialsService:
 
 def _get_tasks_service() -> TasksService:
     return TasksService(_get_repo())
+
+
+def _get_student_live_overview_service() -> StudentLiveOverviewService:
+    return StudentLiveOverviewService(_get_repo())
 
 
 def set_repo(repo) -> None:
@@ -5040,6 +5114,66 @@ async def get_unit_live_delta(
     return _json_private(payload, status_code=200, vary_origin=True)
 
 
+@teaching_router.get("/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview")
+async def get_student_live_overview(request: Request, course_id: str, student_sub: str):
+    """Return a teacher-facing live overview for one student across course units.
+
+    Why:
+        Teachers need the inverse perspective of the unit live matrix:
+        `course x student x selected units`. The endpoint exposes only task-level
+        status aggregates and keeps the richer submission detail on the existing
+        latest-submission endpoint.
+    """
+    user, forbidden = _require_teacher(request)
+    if forbidden:
+        forbidden.headers.setdefault("Cache-Control", "private, no-store")
+        forbidden.headers.setdefault("Vary", "Origin")
+        return forbidden
+    if not _is_uuid_like(course_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
+
+    raw_unit_ids = request.query_params.getlist("unit_ids") if "unit_ids" in request.query_params else None
+    if raw_unit_ids is not None:
+        seen: set[str] = set()
+        normalized_count = 0
+        for raw in raw_unit_ids:
+            trimmed = str(raw or "").strip()
+            if not trimmed:
+                continue
+            if not _is_uuid_like(trimmed):
+                return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
+            if trimmed not in seen:
+                seen.add(trimmed)
+                normalized_count += 1
+        if normalized_count > MAX_UNIT_IDS:
+            return _private_error({"error": "bad_request", "detail": "too_many_unit_ids"}, status_code=400, vary_origin=True)
+
+    sub = _current_sub(user)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+
+    try:
+        overview = _get_student_live_overview_service().build(
+            course_id=course_id,
+            owner_sub=sub,
+            student_sub=student_sub,
+            raw_unit_ids=raw_unit_ids,
+        )
+    except ValueError as exc:
+        return _private_error({"error": "bad_request", "detail": str(exc)}, status_code=400, vary_origin=True)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+
+    names = resolve_student_names([str(student_sub)])
+    display_name = names.get(str(student_sub), str(student_sub))
+    return _json_private(overview.to_dict(student_name=display_name), status_code=200, vary_origin=True)
+
+
 @teaching_router.get(
     "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
 )
@@ -5152,6 +5286,7 @@ async def get_latest_submission_detail(
         sid: Any,
         tid: Any,
         ssub: Any,
+        instruction_md: Any,
         created_at: Any,
         completed_at: Any,
         kind: Any,
@@ -5223,6 +5358,7 @@ async def get_latest_submission_detail(
             "id": str(sid),
             "task_id": str(tid),
             "student_sub": str(ssub),
+            "instruction_md": str(instruction_md or ""),
             "created_at": created_at.astimezone(timezone.utc).isoformat(),
             "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
             "kind": def_kind,
@@ -5385,6 +5521,7 @@ async def get_latest_submission_detail(
                         cur.execute(
                             """
                             select t.kind::text,
+                                   t.instruction_md,
                                    t.h5p_content_id::text
                               from public.unit_tasks t
                               join public.unit_sections s on s.id = t.section_id
@@ -5399,7 +5536,7 @@ async def get_latest_submission_detail(
                         task_row = cur.fetchone()
                         if task_row is None:
                             return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
-                        task_kind, task_h5p_content_id = task_row
+                        task_kind, task_instruction_md, task_h5p_content_id = task_row
                         helper_ok = True
                         try:
                             # SECURITY DEFINER helper encapsulates owner checks and RLS-aware access
@@ -5473,6 +5610,7 @@ async def get_latest_submission_detail(
                             sid=sid,
                             tid=tid,
                             ssub=ssub,
+                            instruction_md=task_instruction_md,
                             created_at=created_at,
                             completed_at=completed_at,
                             kind=kind,
@@ -5509,6 +5647,7 @@ async def get_latest_submission_detail(
                             cur.execute(
                                 """
                                 select t.kind::text,
+                                       t.instruction_md,
                                        t.h5p_content_id::text
                                   from public.unit_tasks t
                                   join public.unit_sections s on s.id = t.section_id
@@ -5525,7 +5664,7 @@ async def get_latest_submission_detail(
                                 return _private_error(
                                     {"error": "not_found"}, status_code=404, vary_origin=True
                                 )
-                            task_kind, task_h5p_content_id = task_row
+                            task_kind, task_instruction_md, task_h5p_content_id = task_row
                             cur.execute(
                                 """
                                 select id::text,
@@ -5586,6 +5725,7 @@ async def get_latest_submission_detail(
                             sid=sid,
                             tid=tid,
                             ssub=ssub,
+                            instruction_md=task_instruction_md,
                             created_at=created_at,
                             completed_at=completed_at,
                             kind=kind,

@@ -11,7 +11,7 @@ Design:
 """
 from __future__ import annotations
 
-from typing import Any, List, Tuple, Optional, Dict
+from typing import Any, List, Tuple, Optional, Dict, Sequence
 import json
 import os
 import re
@@ -173,6 +173,42 @@ def _task_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "scratch": scratch,
         "calliope": calliope,
     }
+
+
+def _compute_average_score_from_analysis(analysis: object) -> float | None:
+    """Compute a 0..10 criteria average from a submission analysis payload."""
+    if not isinstance(analysis, dict):
+        return None
+    criteria = analysis.get("criteria_results")
+    if not isinstance(criteria, list):
+        return None
+
+    normalized: list[float] = []
+    for item in criteria:
+        if not isinstance(item, dict):
+            continue
+        raw_score = item.get("score")
+        if raw_score is None:
+            continue
+        try:
+            score_val = float(raw_score)
+        except (TypeError, ValueError):
+            continue
+
+        raw_max = item.get("max_score")
+        try:
+            max_val = float(raw_max)
+        except (TypeError, ValueError):
+            max_val = 10.0
+        if max_val <= 0:
+            max_val = 10.0
+
+        scaled = score_val if max_val == 10.0 else (score_val / max_val * 10.0)
+        normalized.append(max(0.0, min(10.0, scaled)))
+
+    if not normalized:
+        return None
+    return sum(normalized) / len(normalized)
 
 
 class DBTeachingRepo:
@@ -3103,6 +3139,209 @@ class DBTeachingRepo:
             }
             for r in rows
         ]
+
+    def list_course_units_for_owner(self, course_id: str, owner_sub: str) -> List[dict]:
+        """Return attached units for a course owned by `owner_sub`.
+
+        Why:
+            The teacher student-overview needs a course-scoped unit list that is
+            independent from author-only repository methods. Ordering follows the
+            course-module order seen by teachers in the UI.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select u.id::text,
+                           u.title,
+                           m.position
+                      from public.course_modules m
+                      join public.courses c
+                        on c.id = m.course_id
+                      join public.units u
+                        on u.id = m.unit_id
+                     where m.course_id = %s
+                       and c.teacher_id = coalesce(current_setting('app.current_sub', true), '')
+                     order by m.position asc, m.id
+                    """,
+                    (course_id,),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "title": r[1],
+                "position": int(r[2]) if r[2] is not None else 0,
+            }
+            for r in rows
+        ]
+
+    def course_has_member(self, course_id: str, owner_sub: str, student_sub: str) -> bool:
+        """Check membership using the existing owner-scoped roster helper."""
+        page_size = 50
+        offset = 0
+        while True:
+            page = self.list_members_for_owner(course_id, owner_sub, limit=page_size, offset=offset)
+            if not page:
+                return False
+            if any(str(member_sub) == str(student_sub) for member_sub, _joined_at in page):
+                return True
+            if len(page) < page_size:
+                return False
+            offset += page_size
+
+    def list_tasks_for_course_unit_owner(self, course_id: str, unit_id: str, owner_sub: str) -> List[dict]:
+        """Return course-attached tasks for one unit in deterministic display order.
+
+        Why:
+            The student overview is course-scoped, not author-scoped. We therefore
+            validate the `course x unit` relation via `course_modules` and project
+            tasks in section/task order without relying on author-only methods.
+        """
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select t.id::text,
+                           t.instruction_md,
+                           row_number() over (order by s.position asc, t.position asc, t.id) as position,
+                           t.kind::text
+                      from public.course_modules m
+                      join public.courses c
+                        on c.id = m.course_id
+                      join public.unit_sections s
+                        on s.unit_id = m.unit_id
+                      join public.unit_tasks t
+                        on t.unit_id = s.unit_id
+                       and t.section_id = s.id
+                     where m.course_id = %s
+                       and m.unit_id = %s::uuid
+                       and c.teacher_id = coalesce(current_setting('app.current_sub', true), '')
+                     order by s.position asc, t.position asc, t.id
+                    """,
+                    (course_id, unit_id),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": r[0],
+                "instruction_md": r[1] or "",
+                "position": int(r[2]) if r[2] is not None else 0,
+                "kind": str(r[3] or "native"),
+            }
+            for r in rows
+        ]
+
+    def list_latest_submission_aggregates_for_owner(
+        self,
+        *,
+        course_id: str,
+        owner_sub: str,
+        student_sub: str,
+        unit_ids: Sequence[str],
+    ) -> List[dict]:
+        """Return latest submission aggregates for one student across selected units.
+
+        Why:
+            The teaching student overview needs only compact task-level status
+            information. We first derive the allowed task ids as the course owner
+            and then read the student's own submissions under their RLS context.
+        """
+        normalized_unit_ids = [str(unit_id) for unit_id in unit_ids if str(unit_id or "").strip()]
+        if not normalized_unit_ids:
+            return []
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select m.unit_id::text,
+                           t.id::text,
+                           t.kind::text
+                      from public.course_modules m
+                      join public.courses c
+                        on c.id = m.course_id
+                      join public.unit_sections s
+                        on s.unit_id = m.unit_id
+                      join public.unit_tasks t
+                        on t.unit_id = s.unit_id
+                       and t.section_id = s.id
+                     where m.course_id = %s
+                       and m.unit_id = any(%s::uuid[])
+                       and c.teacher_id = coalesce(current_setting('app.current_sub', true), '')
+                     order by m.position asc, s.position asc, t.position asc, t.id
+                    """,
+                    (course_id, normalized_unit_ids),
+                )
+                task_rows = cur.fetchall() or []
+                if not task_rows:
+                    return []
+
+                unit_ids_by_task: dict[str, str] = {}
+                h5p_task_ids: list[str] = []
+                for raw_unit_id, raw_task_id, raw_kind in task_rows:
+                    task_id = str(raw_task_id or "")
+                    unit_ids_by_task[task_id] = str(raw_unit_id or "")
+                    if str(raw_kind or "") == "h5p":
+                        h5p_task_ids.append(task_id)
+
+                task_ids = list(unit_ids_by_task.keys())
+                cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                cur.execute(
+                    """
+                    select distinct on (ls.task_id)
+                           ls.id::text,
+                           ls.task_id::text,
+                           ls.analysis_status::text,
+                           ls.analysis_json
+                      from public.learning_submissions ls
+                     where ls.course_id = %s
+                       and ls.student_sub = %s
+                       and ls.task_id = any(%s::uuid[])
+                     order by ls.task_id, ls.created_at desc, ls.id desc
+                    """,
+                    (course_id, student_sub, task_ids),
+                )
+                latest_rows = cur.fetchall() or []
+
+                h5p_completed_by_task: dict[str, bool] = {}
+                if h5p_task_ids:
+                    cur.execute(
+                        """
+                        select ls.task_id::text,
+                               bool_or(ls.score_raw = ls.score_max)
+                          from public.learning_submissions ls
+                         where ls.course_id = %s
+                           and ls.student_sub = %s
+                           and ls.task_id = any(%s::uuid[])
+                           and ls.kind = 'h5p'
+                         group by ls.task_id
+                        """,
+                        (course_id, student_sub, h5p_task_ids),
+                    )
+                    h5p_rows = cur.fetchall() or []
+                    h5p_completed_by_task = {str(task_id): bool(completed) for task_id, completed in h5p_rows}
+
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+
+        aggregates: list[dict] = []
+        for _submission_id, task_id, analysis_status, analysis_json in latest_rows:
+            avg_score = None
+            if str(analysis_status or "") == "completed":
+                avg_score = _compute_average_score_from_analysis(analysis_json)
+            aggregates.append(
+                {
+                    "unit_id": unit_ids_by_task.get(str(task_id), ""),
+                    "task_id": str(task_id),
+                    "has_submission": True,
+                    "average_score": avg_score,
+                    "h5p_completed": h5p_completed_by_task.get(str(task_id)),
+                }
+            )
+        return aggregates
 
     def create_course_module_owned(self, course_id: str, owner_sub: str, *, unit_id: str, context_notes: Optional[str]) -> dict:
         """

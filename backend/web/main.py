@@ -4599,7 +4599,12 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
         name = Component.escape(disp or "Unbekannt")
         # map tasks by id for deterministic lookup
         cells_by_task = {str(c.get("task_id")): c for c in (r.get("tasks") or []) if isinstance(c, dict)}
-        row_cells = [f"<th scope=\"row\" class=\"student-name\">{name}</th>"]
+        student_href = f"/teaching/courses/{course_id}/students/{Component.escape(sub)}/live"
+        row_cells = [
+            f"<th scope=\"row\" class=\"student-name\">"
+            f"<a href=\"{student_href}\">{name}</a>"
+            f"</th>"
+        ]
         for t in tasks:
             tid = str(t.get("id") or "")
             cell = cells_by_task.get(tid) or {}
@@ -5049,6 +5054,7 @@ async def teaching_unit_live_detail_partial(
     created = Component.escape(str(data.get("created_at") or ""))
     kind_raw = str(data.get("kind") or "")
     kind = Component.escape(kind_raw)
+    instruction_md = str(data.get("instruction_md") or "")
     body_raw = str(data.get("text_body") or "")
     feedback_md = str(data.get("feedback_md") or "")
     analysis_json = data.get("analysis_json")
@@ -5068,6 +5074,18 @@ async def teaching_unit_live_detail_partial(
         display_name = Component.escape(n or str(student_sub))
     except Exception:
         display_name = Component.escape(str(student_sub))
+
+    instruction_html = (
+        render_markdown_safe(instruction_md)
+        if instruction_md.strip()
+        else '<p class="text-muted">Keine Aufgabenstellung vorhanden.</p>'
+    )
+    instruction_section = (
+        '<section class="submission-task">'
+        '<h4>Aufgabenstellung</h4>'
+        f"{instruction_html}"
+        "</section>"
+    )
 
     if kind_raw == "h5p":
         h5p = data.get("h5p") if isinstance(data.get("h5p"), dict) else {}
@@ -5100,6 +5118,7 @@ async def teaching_unit_live_detail_partial(
             f"<div class=\"card\">"
             f"<h3>Einreichung von {display_name}</h3>"
             f"<p class=\"text-muted\">Typ: {kind} · erstellt: {created}{Component.escape(score_txt)}</p>"
+            f"{instruction_section}"
             f"{inner}"
             f"</div>"
         )
@@ -5204,10 +5223,198 @@ async def teaching_unit_live_detail_partial(
         f"<div class=\"card\">"
         f"<h3>Einreichung von {display_name}</h3>"
         f"<p class=\"text-muted\">Typ: {kind} · erstellt: {created}</p>"
+        f"{instruction_section}"
         f"{content}"
         f"</div>"
     )
     return HTMLResponse(detail_html, status_code=200, headers={"Cache-Control": "private, no-store"})
+
+
+def _normalize_student_live_filter(raw_unit_ids: list[str] | None) -> list[str]:
+    """Normalize unit_ids from the GET filter while preserving order."""
+    if raw_unit_ids is None:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_unit_ids:
+        value = str(raw or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+    return normalized
+
+
+def _render_student_live_task_card(course_id: str, student_sub: str, unit_id: str, task: dict) -> str:
+    """Render one clickable task row for the teacher student-overview page."""
+    task_id = str(task.get("id") or "")
+    status = _render_live_cell_content(
+        task_kind=task.get("kind"),
+        has_submission=bool(task.get("has_submission")),
+        average_score=task.get("average_score"),
+        h5p_completed=task.get("h5p_completed"),
+    )
+    detail_href = (
+        f"/teaching/courses/{course_id}/units/{unit_id}/live/detail"
+        f"?student_sub={Component.escape(student_sub)}&task_id={Component.escape(task_id)}"
+    )
+    state_label = "Abgabe vorhanden" if bool(task.get("has_submission")) else "Keine Abgabe"
+    return (
+        '<li class="student-live-task">'
+        f'<button type="button" class="btn btn-secondary" '
+        f'hx-get="{detail_href}" hx-target="#student-live-detail" hx-swap="innerHTML">'
+        f'<span class="badge">{status}</span> '
+        f'<span class="student-live-task__state">{Component.escape(state_label)}</span>'
+        "</button>"
+        f'<div class="student-live-task__instruction">{render_markdown_safe(str(task.get("instruction_md") or ""))}</div>'
+        "</li>"
+    )
+
+
+def _render_student_live_units(course_id: str, student_sub: str, units: list[dict], *, empty_message: str | None) -> str:
+    """Render grouped unit cards for the teacher-facing student overview."""
+    if empty_message:
+        return f'<div class="card"><p class="text-muted">{Component.escape(empty_message)}</p></div>'
+    if not units:
+        return '<div class="card"><p class="text-muted">Keine Lerneinheiten im Kurs.</p></div>'
+
+    cards: list[str] = []
+    for unit in units:
+        unit_id = str(unit.get("id") or "")
+        title = Component.escape(str(unit.get("title") or "Lerneinheit"))
+        tasks = [task for task in (unit.get("tasks") or []) if isinstance(task, dict)]
+        submitted_count = sum(1 for task in tasks if bool(task.get("has_submission")))
+        summary = f"{submitted_count}/{len(tasks)} Aufgaben mit Abgabe" if tasks else "Keine Aufgaben"
+        tasks_html = (
+            '<ul class="unstyled">'
+            + "".join(_render_student_live_task_card(course_id, student_sub, unit_id, task) for task in tasks)
+            + "</ul>"
+        ) if tasks else '<p class="text-muted">Keine Aufgaben in dieser Lerneinheit.</p>'
+        cards.append(
+            '<details class="card" open>'
+            f"<summary><strong>{title}</strong> · {Component.escape(summary)}</summary>"
+            f"{tasks_html}"
+            "</details>"
+        )
+    return "".join(cards)
+
+
+@app.get("/teaching/courses/{course_id}/students/{student_sub}/live", response_class=HTMLResponse)
+async def teaching_course_student_live_page(request: Request, course_id: str, student_sub: str):
+    """SSR page: teacher overview of one student's submissions across course units."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    if not _user_has_role(user, "teacher"):
+        return RedirectResponse(url="/", status_code=303)
+
+    raw_unit_ids = request.query_params.getlist("unit_ids") if "unit_ids" in request.query_params else None
+    selected_unit_ids = _normalize_student_live_filter(raw_unit_ids)
+
+    course_title = "Kurs"
+    available_units: list[dict] = []
+    overview_data: dict[str, Any] = {}
+    overview_units: list[dict] = []
+
+    try:
+        async with _internal_api_client() as client:
+            sid = request.cookies.get(SESSION_COOKIE_NAME)
+            if sid:
+                client.cookies.set(SESSION_COOKIE_NAME, sid)
+
+            course_resp = await client.get(f"/api/teaching/courses/{course_id}")
+            if course_resp.status_code == 200 and isinstance(course_resp.json(), dict):
+                course_title = str(course_resp.json().get("title") or course_title)
+
+            modules_resp = await client.get(f"/api/teaching/courses/{course_id}/modules")
+            modules = modules_resp.json() if (modules_resp.status_code == 200 and isinstance(modules_resp.json(), list)) else []
+            for module in modules:
+                if not isinstance(module, dict):
+                    continue
+                unit_id = str(module.get("unit_id") or "")
+                unit_title = "Lerneinheit"
+                unit_resp = await client.get(f"/api/teaching/units/{unit_id}")
+                if unit_resp.status_code == 200 and isinstance(unit_resp.json(), dict):
+                    unit_title = str(unit_resp.json().get("title") or unit_title)
+                available_units.append({"id": unit_id, "title": unit_title})
+
+            overview_params = [("unit_ids", raw) for raw in raw_unit_ids] if raw_unit_ids is not None else None
+            overview_resp = await client.get(
+                f"/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview",
+                params=overview_params,
+            )
+            if overview_resp.status_code == 200 and isinstance(overview_resp.json(), dict):
+                overview_data = overview_resp.json()
+                overview_units = [unit for unit in (overview_data.get("units") or []) if isinstance(unit, dict)]
+            elif overview_resp.status_code == 404:
+                return HTMLResponse(
+                    '<div class="card"><p class="text-muted">Schueler oder Kurs nicht gefunden.</p></div>',
+                    status_code=404,
+                    headers={"Cache-Control": "private, no-store"},
+                )
+    except Exception:
+        overview_data = {}
+        overview_units = []
+
+    if raw_unit_ids is None:
+        selected_set = {str(unit.get("id") or "") for unit in available_units}
+    else:
+        selected_set = set(selected_unit_ids)
+
+    student_name_raw = (
+        str(((overview_data.get("student") or {}).get("name")) or student_sub)
+        if isinstance(overview_data, dict)
+        else student_sub
+    )
+    if "@" in student_name_raw:
+        student_name_raw = student_name_raw.split("@", 1)[0]
+    student_name = Component.escape(student_name_raw)
+    empty_message = "Keine Lerneinheiten ausgewaehlt" if raw_unit_ids is not None and not selected_unit_ids else None
+
+    filter_items: list[str] = ['<input type="hidden" name="unit_ids" value="">']
+    for unit in available_units:
+        unit_id = str(unit.get("id") or "")
+        unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
+        checked = " checked" if unit_id in selected_set else ""
+        filter_items.append(
+            "<label>"
+            f'<input type="checkbox" name="unit_ids" value="{Component.escape(unit_id)}"{checked}> '
+            f"{unit_title}"
+            "</label>"
+        )
+    filter_html = (
+        '<section class="card">'
+        '<h2>Filter</h2>'
+        f'<form method="get" action="/teaching/courses/{course_id}/students/{Component.escape(student_sub)}/live">'
+        + "".join(filter_items)
+        + '<button type="submit" class="btn">Anzeigen</button>'
+        + "</form>"
+        + "</section>"
+    )
+
+    units_html = _render_student_live_units(course_id, student_sub, overview_units, empty_message=empty_message)
+    detail_placeholder = (
+        '<div id="student-live-detail">'
+        '<div class="card"><p class="text-muted">Bitte Aufgabe waehlen.</p></div>'
+        "</div>"
+    )
+
+    content = (
+        '<div class="container">'
+        '<h1>Unterricht – Live</h1>'
+        f'<p class="text-muted">{Component.escape(course_title)} · {student_name}</p>'
+        f"{filter_html}"
+        f"{units_html}"
+        f"{detail_placeholder}"
+        "</div>"
+    )
+    layout = Layout(
+        title="Unterricht – Live",
+        content=content,
+        user=user,
+        current_path=request.url.path,
+    )
+    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/teaching/courses/{course_id}/units/{unit_id}/live/matrix/delta", response_class=HTMLResponse)

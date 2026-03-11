@@ -34,6 +34,14 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
 
 OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTaskCell`, `TeachingUnitDeltaCell`, `TeachingLatestSubmission`).
 
+- GET `/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview`
+  - Liefert eine teacher-facing Read-Projection fuer genau einen Schueler ueber alle oder gefilterte Lerneinheiten des Kurses:
+    `{ student, units: [{ id, title, tasks: [{ id, instruction_md, position, kind, has_submission, average_score, h5p_completed }] }] }`.
+  - Query:
+    - `unit_ids` (0..50 Wiederholungen): optionaler Filter; ohne Query-Key werden alle Kurs-Lerneinheiten geladen.
+    - `unit_ids=` ohne Werte bedeutet explizit: keine Lerneinheiten ausgewaehlt.
+  - Sicherheit: Nur Owner (Lehrer) des Kurses; Schueler muss Kursmitglied sein; jede angefragte Unit muss zum Kurs gehoeren. `Cache-Control: private, no-store`, `Vary: Origin`.
+
 ## Zeit/Cursor‑Semantik (Clock‑Skew‑robust)
 
 - Server verarbeitet Cursor als exklusiven Zeitpunkt. Eine Änderung wird nur geliefert, wenn sie effektiv „nach“ dem Cursor liegt.
@@ -61,10 +69,12 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 - Antworten: `200` (Schema `TeachingLatestSubmission`), `204` (keine Abgabe), `404` (Relation ungültig), `403/401` (Auth).
 - Sicherheit: Kurs‑Ownership erforderlich; die Einheit muss am Kurs hängen; die Aufgabe muss zur Einheit gehören. `Cache-Control: private, no-store`, `Vary: Origin`.
 - UI (Detail-Tab unter der Matrix):
+  - Oberhalb der Einreichung wird immer die Aufgabenstellung (`instruction_md`) angezeigt.
   - Tabs für „Text“ (Auszug aus `text_body`) und bei Datei-Abgaben zusätzlich „Datei“ mit Inline-Vorschau.
   - Wenn Analyse/Feedback vorliegen, erscheinen zusätzliche Tabs „Auswertung“ (Kriterienkarten aus `analysis_json`) und „Rückmeldung“ (Markdown aus `feedback_md`), in dieser Reihenfolge.
 - Semantik:
   - `text_body`: Best‑Effort‑Textrepräsentation der Abgabe, unabhängig vom `kind` (Text/PDF/Bild/Datei). Die Lehrkraft sieht hier denselben Text wie der Schüler im Learning‑Bereich; die Länge ist nur durch das globale `text_body`‑Limit (aktuell 65.536 Zeichen ≙ 64k) begrenzt.
+  - `instruction_md`: Aufgabenstellung der Aufgabe; wird im API-Contract des Detailobjekts mitgeliefert und in SSR oberhalb der Einreichung gerendert.
   - `feedback_md`: Formatives Feedback („Rückmeldung“) in Markdown; wird angezeigt im Tab „Rückmeldung“.
   - `analysis_json`: Strukturierte Kriterien‑Auswertung („Auswertung“) im Schema `AnalysisJsonCriteriaV1|V2` (insb. `criteria.v2` mit `criteria_results`).
   - `files[]`: Enthält Original‑Upload(s) mit signierten URLs. Jedes Element besitzt eine ganzzahlige `size` in Bytes; wenn die Größe nicht zuverlässig ermittelt werden kann, wird die Datei nicht in `files[]` aufgenommen.
@@ -87,6 +97,8 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 - `backend/tests/test_teaching_live_unit_summary_api.py`: Vertrag/Fehlerfälle/`include_students`.
 - `backend/tests/test_teaching_live_unit_delta_api.py`: 401/403/404/400 sowie Happy‑Path „200 dann 204“ mit neuem Cursor.
 - `backend/tests/test_teaching_live_detail_api.py`: Detail‑Contract für `TeachingLatestSubmission` inkl. Feedback/Analysis/Fallback‑Verhalten.
+- `backend/tests/test_teaching_live_student_overview_api.py`: neuer Schueler-Ueberblick ueber Kurs-Lerneinheiten.
+- `backend/tests/test_teaching_live_student_overview_ssr.py`: SSR-Seite fuer die neue Schueleransicht.
 
 ## Weiterführende Pläne
 

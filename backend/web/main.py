@@ -5238,11 +5238,105 @@ def _normalize_student_live_filter(raw_unit_ids: list[str] | None) -> list[str]:
     seen: set[str] = set()
     for raw in raw_unit_ids:
         value = str(raw or "").strip()
+        try:
+            value = str(uuid.UUID(value)) if value else ""
+        except (ValueError, TypeError):
+            pass
         if not value or value in seen:
             continue
         seen.add(value)
         normalized.append(value)
     return normalized
+
+
+def _fetch_course_for_teacher(course_id: str, *, owner_sub: str) -> dict | None:
+    """Load a course title for SSR without extra internal HTTP hops.
+
+    Why:
+        The student live page is owner-only and already runs inside the server.
+        Reading the course once from the teaching repo avoids an additional API
+        round-trip on every page render.
+    """
+    if not owner_sub:
+        return None
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if repo is None or not hasattr(repo, "get_course"):
+            return None
+        course = repo.get_course(course_id)
+        if not course or str(teaching_routes._teacher_id_of(course) or "") != str(owner_sub):  # type: ignore[attr-defined]
+            return None
+        title = course.get("title") if isinstance(course, dict) else getattr(course, "title", "")
+        return {"id": course_id, "title": str(title or "")}
+    except Exception:
+        return None
+
+
+def _fetch_course_units_for_teacher(course_id: str, *, owner_sub: str) -> list[dict]:
+    """Return course-attached units for the SSR filter without N+1 API calls."""
+    if not owner_sub:
+        return []
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if repo is None or not hasattr(repo, "list_course_units_for_owner"):
+            return []
+        items = repo.list_course_units_for_owner(course_id, owner_sub) or []
+    except Exception:
+        return []
+
+    out: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        out.append({"id": str(item.get("id") or ""), "title": str(item.get("title") or "Lerneinheit")})
+    return out
+
+
+def _student_live_error_message(detail: str, *, status_code: int) -> str:
+    """Map internal API error details to teacher-facing SSR copy."""
+    normalized = str(detail or "").strip()
+    if normalized == "too_many_unit_ids":
+        return "Zu viele Lerneinheiten ausgewaehlt."
+    if normalized == "invalid_uuid":
+        return "Die Lerneinheitsauswahl ist ungueltig."
+    if status_code == 403 or normalized == "forbidden":
+        return "Kein Zugriff auf diese Schueleransicht."
+    if status_code == 404 or normalized == "not_found":
+        return "Schueler oder Kurs nicht gefunden."
+    return "Schueleransicht konnte nicht geladen werden."
+
+
+def _render_student_live_error_page(
+    request: Request,
+    *,
+    user: dict,
+    course_title: str,
+    student_sub: str,
+    message: str,
+    status_code: int,
+) -> HTMLResponse:
+    """Render a consistent error page for the teacher student-live view."""
+    student_name_raw = str(student_sub or "")
+    if "@" in student_name_raw:
+        student_name_raw = student_name_raw.split("@", 1)[0]
+    content = (
+        '<div class="container">'
+        '<h1>Unterricht – Live</h1>'
+        f'<p class="text-muted">{Component.escape(course_title)} · {Component.escape(student_name_raw)}</p>'
+        f'<div class="card"><p class="text-muted">{Component.escape(message)}</p></div>'
+        "</div>"
+    )
+    layout = Layout(title="Unterricht – Live", content=content, user=user, current_path=request.url.path)
+    return _layout_response(
+        request,
+        layout,
+        status_code=status_code,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 def _render_student_live_task_card(course_id: str, student_sub: str, unit_id: str, task: dict) -> str:
@@ -5308,11 +5402,15 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
     if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
 
+    owner_sub = str(user.get("sub") or "")
     raw_unit_ids = request.query_params.getlist("unit_ids") if "unit_ids" in request.query_params else None
     selected_unit_ids = _normalize_student_live_filter(raw_unit_ids)
 
     course_title = "Kurs"
-    available_units: list[dict] = []
+    course_vm = _fetch_course_for_teacher(course_id, owner_sub=owner_sub)
+    if course_vm:
+        course_title = str(course_vm.get("title") or course_title)
+    available_units: list[dict] = _fetch_course_units_for_teacher(course_id, owner_sub=owner_sub)
     overview_data: dict[str, Any] = {}
     overview_units: list[dict] = []
 
@@ -5322,22 +5420,6 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
 
-            course_resp = await client.get(f"/api/teaching/courses/{course_id}")
-            if course_resp.status_code == 200 and isinstance(course_resp.json(), dict):
-                course_title = str(course_resp.json().get("title") or course_title)
-
-            modules_resp = await client.get(f"/api/teaching/courses/{course_id}/modules")
-            modules = modules_resp.json() if (modules_resp.status_code == 200 and isinstance(modules_resp.json(), list)) else []
-            for module in modules:
-                if not isinstance(module, dict):
-                    continue
-                unit_id = str(module.get("unit_id") or "")
-                unit_title = "Lerneinheit"
-                unit_resp = await client.get(f"/api/teaching/units/{unit_id}")
-                if unit_resp.status_code == 200 and isinstance(unit_resp.json(), dict):
-                    unit_title = str(unit_resp.json().get("title") or unit_title)
-                available_units.append({"id": unit_id, "title": unit_title})
-
             overview_params = [("unit_ids", raw) for raw in raw_unit_ids] if raw_unit_ids is not None else None
             overview_resp = await client.get(
                 f"/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview",
@@ -5346,15 +5428,44 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
             if overview_resp.status_code == 200 and isinstance(overview_resp.json(), dict):
                 overview_data = overview_resp.json()
                 overview_units = [unit for unit in (overview_data.get("units") or []) if isinstance(unit, dict)]
-            elif overview_resp.status_code == 404:
-                return HTMLResponse(
-                    '<div class="card"><p class="text-muted">Schueler oder Kurs nicht gefunden.</p></div>',
-                    status_code=404,
-                    headers={"Cache-Control": "private, no-store"},
+                if not available_units:
+                    available_units = [
+                        {
+                            "id": str(unit.get("id") or ""),
+                            "title": str(unit.get("title") or "Lerneinheit"),
+                        }
+                        for unit in overview_units
+                    ]
+            elif overview_resp.status_code in {400, 403, 404}:
+                return _render_student_live_error_page(
+                    request,
+                    user=user,
+                    course_title=course_title,
+                    student_sub=student_sub,
+                    message=_student_live_error_message(
+                        _extract_api_error_detail(overview_resp),
+                        status_code=overview_resp.status_code,
+                    ),
+                    status_code=overview_resp.status_code,
+                )
+            else:
+                return _render_student_live_error_page(
+                    request,
+                    user=user,
+                    course_title=course_title,
+                    student_sub=student_sub,
+                    message="Schueleransicht konnte nicht geladen werden.",
+                    status_code=502,
                 )
     except Exception:
-        overview_data = {}
-        overview_units = []
+        return _render_student_live_error_page(
+            request,
+            user=user,
+            course_title=course_title,
+            student_sub=student_sub,
+            message="Schueleransicht konnte nicht geladen werden.",
+            status_code=502,
+        )
 
     if raw_unit_ids is None:
         selected_set = {str(unit.get("id") or "") for unit in available_units}

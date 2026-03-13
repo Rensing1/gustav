@@ -882,6 +882,33 @@ class _Repo:
             task["position"] = index
         return tasks
 
+    def list_tasks_for_course_units_owner(
+        self,
+        course_id: str,
+        unit_ids: Sequence[str],
+        owner_id: str,
+    ) -> List[dict]:
+        """Return tasks for multiple attached course units in one normalized list.
+
+        Why:
+            The student overview renders several course units at once. Returning a
+            single flattened list keeps the service free from per-unit repo calls
+            while preserving the existing in-memory fallback behavior.
+        """
+        out: List[dict] = []
+        for unit_id in unit_ids:
+            for task in self.list_tasks_for_course_unit_owner(course_id, str(unit_id), owner_id):
+                out.append(
+                    {
+                        "unit_id": str(unit_id),
+                        "id": str(task.get("id") or ""),
+                        "instruction_md": str(task.get("instruction_md") or ""),
+                        "position": int(task.get("position") or 0),
+                        "kind": str(task.get("kind") or "native"),
+                    }
+                )
+        return out
+
     def list_latest_submission_aggregates_for_owner(
         self,
         *,
@@ -5133,19 +5160,22 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
         return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
 
     raw_unit_ids = request.query_params.getlist("unit_ids") if "unit_ids" in request.query_params else None
+    normalized_unit_ids: list[str] | None = None
     if raw_unit_ids is not None:
+        normalized_unit_ids = []
         seen: set[str] = set()
-        normalized_count = 0
         for raw in raw_unit_ids:
             trimmed = str(raw or "").strip()
             if not trimmed:
                 continue
             if not _is_uuid_like(trimmed):
                 return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
-            if trimmed not in seen:
-                seen.add(trimmed)
-                normalized_count += 1
-        if normalized_count > MAX_UNIT_IDS:
+            canonical = _canonical_uuid(trimmed)
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            normalized_unit_ids.append(canonical)
+        if len(normalized_unit_ids) > MAX_UNIT_IDS:
             return _private_error({"error": "bad_request", "detail": "too_many_unit_ids"}, status_code=400, vary_origin=True)
 
     sub = _current_sub(user)
@@ -5162,7 +5192,7 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
             course_id=course_id,
             owner_sub=sub,
             student_sub=student_sub,
-            raw_unit_ids=raw_unit_ids,
+            raw_unit_ids=normalized_unit_ids,
         )
     except ValueError as exc:
         return _private_error({"error": "bad_request", "detail": str(exc)}, status_code=400, vary_origin=True)

@@ -97,3 +97,106 @@ async def test_student_live_overview_page_renders_grouped_units_and_empty_filter
         )
         assert empty.status_code == 200, empty.text
         assert "Keine Lerneinheiten ausgewaehlt" in empty.text
+
+
+def _stub_student_live_internal_api_client(
+    *,
+    course_id: str,
+    units: list[dict],
+    overview_status: int,
+    overview_body: dict,
+):
+    class _StubResponse:
+        def __init__(self, status_code: int, payload: dict | list) -> None:
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _StubClient:
+        def __init__(self) -> None:
+            class _Cookies:
+                def set(self, _name: str, _value: str) -> None:
+                    return None
+
+            self.cookies = _Cookies()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, params=None):
+            if url == f"/api/teaching/courses/{course_id}":
+                return _StubResponse(200, {"id": course_id, "title": "Kurs SSR Fehler"})
+            if url == f"/api/teaching/courses/{course_id}/modules":
+                return _StubResponse(200, [{"unit_id": unit["id"]} for unit in units])
+            if url.startswith("/api/teaching/units/"):
+                unit_id = url.rsplit("/", 1)[-1]
+                for unit in units:
+                    if unit["id"] == unit_id:
+                        return _StubResponse(200, unit)
+                return _StubResponse(404, {"error": "not_found"})
+            if url == f"/api/teaching/courses/{course_id}/students/student-1/submissions/overview":
+                return _StubResponse(overview_status, overview_body)
+            raise AssertionError(url)
+
+    return _StubClient()
+
+
+@pytest.mark.anyio
+async def test_student_live_overview_page_renders_too_many_units_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-too-many", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    unit_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_student_live_internal_api_client(
+            course_id=course_id,
+            units=[{"id": unit_id, "title": "Einheit A"}],
+            overview_status=400,
+            overview_body={"error": "bad_request", "detail": "too_many_unit_ids"},
+        ),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        page = await c.get(
+            f"/teaching/courses/{course_id}/students/student-1/live",
+            params=[("unit_ids", unit_id)],
+        )
+
+    assert page.status_code == 400, page.text
+    assert "Zu viele Lerneinheiten ausgewaehlt" in page.text
+    assert page.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_student_live_overview_page_renders_forbidden_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-forbidden", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_student_live_internal_api_client(
+            course_id=course_id,
+            units=[],
+            overview_status=403,
+            overview_body={"error": "forbidden"},
+        ),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        page = await c.get(f"/teaching/courses/{course_id}/students/student-1/live")
+
+    assert page.status_code == 403, page.text
+    assert "Kein Zugriff auf diese Schueleransicht" in page.text
+    assert page.headers.get("Cache-Control") == "private, no-store"

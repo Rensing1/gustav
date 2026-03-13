@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence
+from uuid import UUID
 
 
 MAX_UNIT_IDS = 50
@@ -21,6 +22,14 @@ class StudentLiveOverviewRepoProtocol(Protocol):
         ...
 
     def course_has_member(self, course_id: str, owner_sub: str, student_sub: str) -> bool:
+        ...
+
+    def list_tasks_for_course_units_owner(
+        self,
+        course_id: str,
+        unit_ids: Sequence[str],
+        owner_sub: str,
+    ) -> List[dict]:
         ...
 
     def list_tasks_for_course_unit_owner(self, course_id: str, unit_id: str, owner_sub: str) -> List[dict]:
@@ -48,7 +57,7 @@ def _normalize_unit_ids(raw_unit_ids: Sequence[str] | None) -> tuple[List[str], 
     normalized: List[str] = []
     seen: set[str] = set()
     for raw in raw_unit_ids:
-        value = str(raw or "").strip()
+        value = _canonicalize_uuid_like(str(raw or "").strip())
         if not value:
             continue
         if value in seen:
@@ -56,6 +65,22 @@ def _normalize_unit_ids(raw_unit_ids: Sequence[str] | None) -> tuple[List[str], 
         seen.add(value)
         normalized.append(value)
     return normalized, True
+
+
+def _canonicalize_uuid_like(value: str) -> str:
+    """Return a canonical UUID string when possible.
+
+    Why:
+        Query params arrive as strings and may differ only by casing. The
+        teacher overview treats these values as semantic UUIDs, so valid UUIDs
+        must be deduplicated case-insensitively before membership checks.
+    """
+    if not value:
+        return ""
+    try:
+        return str(UUID(value))
+    except (ValueError, TypeError):
+        return value
 
 
 @dataclass(frozen=True)
@@ -123,6 +148,11 @@ class StudentLiveOverviewService:
         if unit_ids_present and not selected_ids:
             return StudentLiveOverview(student_sub=student_sub, units=[])
 
+        tasks_by_unit = self._list_tasks_by_unit(
+            course_id=course_id,
+            owner_sub=owner_sub,
+            selected_ids=selected_ids,
+        )
         aggregates = self.repo.list_latest_submission_aggregates_for_owner(
             course_id=course_id,
             owner_sub=owner_sub,
@@ -141,9 +171,8 @@ class StudentLiveOverviewService:
             unit_id = str(unit.get("id") or "")
             if unit_id not in selected_ids:
                 continue
-            tasks_raw = self.repo.list_tasks_for_course_unit_owner(course_id, unit_id, owner_sub)
             tasks_out: List[StudentLiveOverviewTask] = []
-            for task in tasks_raw:
+            for task in tasks_by_unit.get(unit_id, []):
                 task_id = str(task.get("id") or "")
                 aggregate = by_task.get((unit_id, task_id), {})
                 tasks_out.append(
@@ -165,6 +194,35 @@ class StudentLiveOverviewService:
                 )
             )
         return StudentLiveOverview(student_sub=student_sub, units=units_out)
+
+    def _list_tasks_by_unit(
+        self,
+        *,
+        course_id: str,
+        owner_sub: str,
+        selected_ids: Sequence[str],
+    ) -> Dict[str, List[dict]]:
+        """Load selected tasks in one repo call when the adapter supports it."""
+        tasks_by_unit: Dict[str, List[dict]] = {str(unit_id): [] for unit_id in selected_ids}
+        batch_loader = getattr(self.repo, "list_tasks_for_course_units_owner", None)
+        if callable(batch_loader):
+            tasks_raw = batch_loader(course_id, selected_ids, owner_sub) or []
+            for item in tasks_raw:
+                if not isinstance(item, dict):
+                    continue
+                unit_id = str(item.get("unit_id") or "")
+                if unit_id not in tasks_by_unit:
+                    continue
+                tasks_by_unit[unit_id].append(item)
+        else:
+            for unit_id in selected_ids:
+                tasks_raw = self.repo.list_tasks_for_course_unit_owner(course_id, unit_id, owner_sub)
+                tasks_by_unit[str(unit_id)] = [task for task in tasks_raw if isinstance(task, dict)]
+
+        for unit_id, items in tasks_by_unit.items():
+            items.sort(key=lambda item: (int(item.get("position") or 0), str(item.get("id") or "")))
+            tasks_by_unit[unit_id] = items
+        return tasks_by_unit
 
 
 def _to_float_or_none(value: object) -> float | None:

@@ -3234,6 +3234,63 @@ class DBTeachingRepo:
             for r in rows
         ]
 
+    def list_tasks_for_course_units_owner(
+        self,
+        course_id: str,
+        unit_ids: Sequence[str],
+        owner_sub: str,
+    ) -> List[dict]:
+        """Return tasks for several attached units with one owner-scoped query.
+
+        Why:
+            The student overview renders a course-level snapshot across multiple
+            units. Batching the task lookup avoids one SQL round-trip per unit
+            while keeping ordering identical to the single-unit variant.
+        """
+        normalized_unit_ids = [str(unit_id) for unit_id in unit_ids if str(unit_id or "").strip()]
+        if not normalized_unit_ids:
+            return []
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select m.unit_id::text,
+                           t.id::text,
+                           t.instruction_md,
+                           row_number() over (
+                               partition by m.unit_id
+                               order by s.position asc, t.position asc, t.id
+                           ) as position,
+                           t.kind::text
+                      from public.course_modules m
+                      join public.courses c
+                        on c.id = m.course_id
+                      join public.unit_sections s
+                        on s.unit_id = m.unit_id
+                      join public.unit_tasks t
+                        on t.unit_id = s.unit_id
+                       and t.section_id = s.id
+                     where m.course_id = %s
+                       and m.unit_id = any(%s::uuid[])
+                       and c.teacher_id = coalesce(current_setting('app.current_sub', true), '')
+                     order by m.position asc, s.position asc, t.position asc, t.id
+                    """,
+                    (course_id, normalized_unit_ids),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "unit_id": r[0],
+                "id": r[1],
+                "instruction_md": r[2] or "",
+                "position": int(r[3]) if r[3] is not None else 0,
+                "kind": str(r[4] or "native"),
+            }
+            for r in rows
+        ]
+
     def list_latest_submission_aggregates_for_owner(
         self,
         *,

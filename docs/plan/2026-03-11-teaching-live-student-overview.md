@@ -18,6 +18,47 @@ Das Dokument haelt bewusst nicht nur den Zielzustand fest, sondern auch den rele
 - Skalierung der SSR-Seite: Lerneinheiten werden als einzeln kollabierbare Cards gerendert; in v1 sind sie initial aufgeklappt.
 - Logging/PII: Keine Klartext-Logs fuer `student_sub`, `instruction_md`, Submission-Inhalte oder komplette Filterlisten.
 
+## Stand 2026-03-13 nach Branch-Review
+
+### Bereits umgesetzt auf `feature/teaching-live-student-overview`
+
+- neuer API-Pfad `GET /api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview`
+- neue SSR-Seite `GET /teaching/courses/{course_id}/students/{student_sub}/live`
+- Verlinkung aus der bestehenden Unit-Live-Matrix auf die neue Schueleransicht
+- Erweiterung des bestehenden Detailpfads um die Aufgabenstellung (`instruction_md`)
+- schlanke Orchestrierung in `backend/teaching/services/live_student_overview.py`
+
+### Im Review identifizierte Nacharbeiten
+
+- Die SSR-Seite behandelt `400` und `403` der Overview-API nicht explizit.
+  - Folge: Die Seite kann einen irrefuehrenden Leerzustand mit `200` rendern, obwohl ein echter Fehler vorliegt.
+- Die `unit_ids`-Normalisierung ist nicht kanonisch.
+  - Folge: Gueltige UUIDs in anderer Schreibweise, z. B. in Grossbuchstaben, koennen faelschlich als `unit_not_in_course` enden.
+- Die SSR-Seite und der Service enthalten vermeidbare N+1-Query-Pfade.
+  - Folge: Die neue Mehrfach-Unit-Sicht skaliert schlechter als noetig.
+- Die Testabdeckung fehlt noch fuer genau diese Nacharbeiten.
+  - Es gibt noch keine roten Tests fuer SSR-Fehlerdarstellung, `too_many_unit_ids` im SSR-Fluss oder kanonische UUID-Normalisierung.
+
+### Naechste Schritte fuer die Branch-Pflege
+
+1. Plandokument auf den Ist-Stand bringen und die Nacharbeiten explizit festhalten.
+2. Rote Tests fuer die Review-Findings schreiben:
+   - Service/API: kanonische UUID-Normalisierung fuer `unit_ids`
+   - SSR: klare Darstellung fuer `400 too_many_unit_ids`
+   - SSR: klare Darstellung fuer `403/404`, statt still in einen Leerzustand zu kippen
+   - falls praktikabel: ein Refactor-Test fuer einen gebuendelten Query-Pfad ohne verhaltensaendernde Regression
+3. Minimal implementieren:
+   - UUIDs kanonisch normalisieren
+   - SSR-Fehlerzustaende explizit rendern
+   - API/SSR-Hilfsfunktionen so zuschneiden, dass keine vermeidbaren Mehrfach-Requests pro Unit mehr entstehen
+4. Tests gruen ziehen, Referenzdoku bei Bedarf knapp nachziehen, dann committen.
+
+### Leitplanke fuer die Nacharbeit
+
+- Die Pflege bleibt bewusst innerhalb des bestehenden Contracts.
+- Keine neuen Endpunkte und keine neue Migration, solange die Review-Findings sauber im vorhandenen API-/Repo-Schnitt behoben werden koennen.
+- TDD bleibt auch fuer die Branch-Pflege verbindlich: erst fehlende Regressionstests, dann minimale Implementierung, dann kleiner Refactor.
+
 ## Relevanter Ist-Stand im Repo
 
 ### Lehrer-Live-Architektur heute

@@ -184,3 +184,40 @@ async def test_student_live_overview_rejects_foreign_unit_and_non_member() -> No
         )
         assert r_foreign.status_code == 404, r_foreign.text
 
+
+@pytest.mark.anyio
+async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(monkeypatch: pytest.MonkeyPatch) -> None:
+    import routes.teaching as teaching  # noqa: E402
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-overview-casefold-owner", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = str(uuid.uuid4())
+    unit_id = str(uuid.uuid4())
+
+    class _FakeOverview:
+        def to_dict(self, *, student_name: str) -> dict:
+            return {"student": {"sub": "student-1", "name": student_name}, "units": []}
+
+    class _FakeService:
+        def __init__(self) -> None:
+            self.calls: list[list[str]] = []
+
+        def build(self, *, course_id: str, owner_sub: str, student_sub: str, raw_unit_ids):
+            self.calls.append(list(raw_unit_ids or []))
+            return _FakeOverview()
+
+    fake_service = _FakeService()
+    monkeypatch.setattr(teaching, "MAX_UNIT_IDS", 1, raising=False)
+    monkeypatch.setattr(teaching, "_guard_course_owner", lambda _course_id, _owner_sub: None, raising=False)
+    monkeypatch.setattr(teaching, "_get_student_live_overview_service", lambda: fake_service, raising=False)
+    monkeypatch.setattr(teaching, "resolve_student_names", lambda subs: {str(subs[0]): "Anna"}, raising=False)
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c.get(
+            f"/api/teaching/courses/{course_id}/students/student-1/submissions/overview",
+            params=[("unit_ids", unit_id), ("unit_ids", unit_id.upper())],
+        )
+
+    assert r.status_code == 200, r.text
+    assert fake_service.calls == [[unit_id]]

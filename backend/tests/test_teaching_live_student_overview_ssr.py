@@ -158,6 +158,40 @@ def _stub_student_live_internal_api_client(
     return _StubClient()
 
 
+def _stub_detail_internal_api_client(*, course_id: str, unit_id: str, task_id: str, student_sub: str, payload_status: int, payload: dict | None):
+    class _StubResponse:
+        def __init__(self, status_code: int, payload: dict | None) -> None:
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _StubClient:
+        def __init__(self) -> None:
+            class _Cookies:
+                def set(self, _name: str, _value: str) -> None:
+                    return None
+
+            self.cookies = _Cookies()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, params=None):
+            expected = (
+                f"/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
+            )
+            if url == expected:
+                return _StubResponse(payload_status, payload)
+            raise AssertionError(url)
+
+    return _StubClient()
+
+
 @pytest.mark.anyio
 async def test_student_live_overview_page_renders_too_many_units_error(monkeypatch: pytest.MonkeyPatch) -> None:
     main.SESSION_STORE = SessionStore()
@@ -268,3 +302,59 @@ async def test_student_live_overview_page_renders_inline_task_details(monkeypatc
     assert "Mit etwas Kontext." not in page.text
     assert f'id="student-live-task-detail-{task_id}"' in page.text
     assert "Bitte Aufgabe waehlen." not in page.text
+
+
+@pytest.mark.anyio
+async def test_student_live_detail_partial_marks_tab_groups_for_inline_js(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inline detail partials should expose a generic tab-group hook."""
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-tabs", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "12121212-1212-1212-1212-121212121212"
+    unit_id = "34343434-3434-3434-3434-343434343434"
+    task_id = "56565656-5656-5656-5656-565656565656"
+    student_sub = "student-tabs"
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_detail_internal_api_client(
+            course_id=course_id,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+            payload_status=200,
+            payload={
+                "id": "submission-1",
+                "created_at": "2026-03-14T12:00:00Z",
+                "kind": "text",
+                "instruction_md": "### Aufgabe",
+                "text_body": "Antwort",
+                "feedback_md": "### Rueckmeldung\nGut.",
+                "analysis_json": {
+                    "schema": "criteria.v2",
+                    "score": 7,
+                    "criteria_results": [
+                        {
+                            "criterion": "Kriterium 1",
+                            "score": 7,
+                            "max_score": 10,
+                            "explanation_md": "Sauber geloest.",
+                        }
+                    ],
+                },
+                "files": [],
+            },
+        ),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_detail = await c.get(
+            f"/teaching/courses/{course_id}/units/{unit_id}/live/detail",
+            params={"student_sub": student_sub, "task_id": task_id},
+        )
+
+    assert r_detail.status_code == 200
+    assert 'data-view-tabs="true"' in r_detail.text
+    assert "Auswertung" in r_detail.text
+    assert "Rückmeldung" in r_detail.text

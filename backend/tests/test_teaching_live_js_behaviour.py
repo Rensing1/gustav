@@ -192,6 +192,129 @@ console.log(JSON.stringify(result));
     assert data["panels"]["feedbackHidden"] is False
 
 
+def test_teaching_live_tabs_toggle_panels_in_generic_inline_group():
+    """Inline student-overview details should also activate teaching live tabs."""
+    script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const path = require('path');
+
+const src = fs.readFileSync(path.join('backend','web','static','js','gustav.js'), 'utf8');
+
+const sandbox = {
+  console,
+  setTimeout: (fn, ms) => 0,
+  clearTimeout: () => {},
+};
+
+sandbox.document = {
+  readyState: 'loading',
+  addEventListener: () => {},
+};
+sandbox.window = sandbox;
+
+vm.runInNewContext(src, sandbox);
+const gustav = sandbox.window.gustav;
+
+function makeClassList(initialActive) {
+  const classes = new Set(initialActive ? ['active'] : []);
+  return {
+    toggle(name, on) {
+      if (on) classes.add(name);
+      else classes.delete(name);
+    },
+    contains(name) {
+      return classes.has(name);
+    }
+  };
+}
+
+let tabsRoot = null;
+
+function makeButton(id, key, isActive) {
+  const attrs = { 'data-view-tab': key, 'aria-selected': isActive ? 'true' : 'false' };
+  return {
+    id,
+    _tabKey: key,
+    classList: makeClassList(isActive),
+    attributes: attrs,
+    getAttribute(name) {
+      if (name === 'data-view-tab') return this._tabKey;
+      return this.attributes[name];
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    },
+    closest(selector) {
+      if (selector === '[data-view-tab]') return this;
+      if (selector === '[data-view-tabs]') return tabsRoot;
+      if (selector === '.card') return null;
+      return null;
+    }
+  };
+}
+
+function makePanel(key, visible) {
+  return {
+    _panelKey: key,
+    hidden: !visible,
+    getAttribute(name) {
+      if (name === 'data-panel') return this._panelKey;
+      return null;
+    }
+  };
+}
+
+const btnAnalysis = makeButton('btn-inline-analysis', 'analysis', true);
+const btnFeedback = makeButton('btn-inline-feedback', 'feedback', false);
+const panelAnalysis = makePanel('analysis', true);
+const panelFeedback = makePanel('feedback', false);
+
+let clickHandler = null;
+tabsRoot = {
+  _tabsDelegationReady: false,
+  addEventListener(type, handler) {
+    if (type === 'click') clickHandler = handler;
+  },
+  contains(node) {
+    return node === btnAnalysis || node === btnFeedback;
+  },
+  querySelectorAll(selector) {
+    if (selector === '[data-view-tab]') return [btnAnalysis, btnFeedback];
+    if (selector === '[data-panel]') return [panelAnalysis, panelFeedback];
+    return [];
+  }
+};
+
+const scope = {
+  querySelector(selector) {
+    return null;
+  },
+  querySelectorAll(selector) {
+    if (selector === '[data-view-tabs]') return [tabsRoot];
+    return [];
+  }
+};
+
+gustav.initTeachingLiveTabs(scope);
+if (clickHandler) {
+  clickHandler({ target: btnFeedback });
+}
+
+console.log(JSON.stringify({
+  analysisActive: btnAnalysis.classList.contains('active'),
+  feedbackActive: btnFeedback.classList.contains('active'),
+  analysisHidden: panelAnalysis.hidden,
+  feedbackHidden: panelFeedback.hidden
+}));
+    """
+    data = _run_node(script)
+    assert data["analysisActive"] is False
+    assert data["feedbackActive"] is True
+    assert data["analysisHidden"] is True
+    assert data["feedbackHidden"] is False
+
+
 def test_teaching_live_polling_advances_cursor_and_hx_vals():
     """Polling should seed and advance the cursor in hx-vals + status bar."""
     script = r"""

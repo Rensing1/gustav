@@ -5441,7 +5441,7 @@ async def teaching_unit_live_detail_partial(
 
     active_key = "text"
     if len(tabs) > 1:
-        tabs_html = ['<div class="tab-header" role="tablist">']
+        tabs_html = ['<div class="teaching-live-tabs" data-view-tabs="true">', '<div class="tab-header" role="tablist">']
         for key, label in tabs:
             active = key == active_key
             tabs_html.append(
@@ -5459,7 +5459,7 @@ async def teaching_unit_live_detail_partial(
             elif key == "analysis":
                 panels_html.append(_render_analysis_panel(active=key == active_key))
         panels_html.append("</div>")
-        content = "".join(tabs_html + panels_html)
+        content = "".join(tabs_html + panels_html) + "</div>"
     else:
         content = _render_text_panel(active=True)
 

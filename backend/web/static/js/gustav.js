@@ -1160,40 +1160,46 @@ class Gustav {
    */
   initTeachingLiveTabs(root) {
     const scope = root && root.querySelector ? root : document;
-    const container = scope.querySelector('#live-detail');
-    if (!container) return;
-    if (container._tabsDelegationReady) return;
-    container._tabsDelegationReady = true;
+    const bindContainer = (container) => {
+      if (!container || container._tabsDelegationReady) return;
+      container._tabsDelegationReady = true;
 
-    container.addEventListener('click', (event) => {
-      const target = event.target;
-      if (!target || !target.closest) return;
+      container.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!target || !target.closest) return;
 
-      const btn = target.closest('[data-view-tab]');
-      if (!btn || !container.contains(btn)) return;
+        const btn = target.closest('[data-view-tab]');
+        if (!btn || !container.contains(btn)) return;
 
-      const card = btn.closest('.card');
-      if (!card) return;
+        const tabsRoot = btn.closest('[data-view-tabs]');
+        const queryRoot = tabsRoot || btn.closest('.card');
+        if (!queryRoot || !queryRoot.querySelectorAll) return;
 
-      const buttons = Array.from(card.querySelectorAll('[data-view-tab]'));
-      const panels = Array.from(card.querySelectorAll('[data-panel]'));
-      if (!buttons.length || !panels.length) return;
+        const buttons = Array.from(queryRoot.querySelectorAll('[data-view-tab]'));
+        const panels = Array.from(queryRoot.querySelectorAll('[data-panel]'));
+        if (!buttons.length || !panels.length) return;
 
-      const targetKey = btn.getAttribute('data-view-tab');
-      if (!targetKey) return;
+        const targetKey = btn.getAttribute('data-view-tab');
+        if (!targetKey) return;
 
-      buttons.forEach((b) => {
-        const isActive = b === btn;
-        b.classList.toggle('active', isActive);
-        b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        buttons.forEach((b) => {
+          const isActive = b === btn;
+          b.classList.toggle('active', isActive);
+          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        panels.forEach((panel) => {
+          const panelKey = panel.getAttribute('data-panel');
+          const show = panelKey === targetKey;
+          panel.hidden = !show;
+        });
       });
+    };
 
-      panels.forEach((panel) => {
-        const panelKey = panel.getAttribute('data-panel');
-        const show = panelKey === targetKey;
-        panel.hidden = !show;
-      });
-    });
+    bindContainer(scope.querySelector('#live-detail'));
+    if (scope.querySelectorAll) {
+      scope.querySelectorAll('[data-view-tabs]').forEach(bindContainer);
+    }
   }
 
   /**

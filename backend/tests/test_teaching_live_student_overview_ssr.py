@@ -80,16 +80,28 @@ async def test_student_live_overview_page_renders_grouped_units_and_empty_filter
         cid = await _create_course(c, "Kurs SSR Schueler")
         unit = await _create_unit(c, "Einheit SSR Schueler")
         sec = await _create_section(c, unit["id"], "S1")
-        await _create_task(c, unit["id"], sec["id"], "### Aufgabe SSR")
+        task = await _create_task(c, unit["id"], sec["id"], "### Aufgabe SSR mit **Markdown**")
         await _attach_unit(c, cid, unit["id"])
         await _add_member(c, cid, learner.sub)
 
         page = await c.get(f"/teaching/courses/{cid}/students/{learner.sub}/live")
         assert page.status_code == 200, page.text
         assert "Unterricht" in page.text
+        assert "Aufgaben gesamt" in page.text
+        assert "Mit Abgabe" in page.text
+        assert "Offen" in page.text
+        assert ">1</strong>" in page.text
         assert "Einheit SSR Schueler" in page.text
         assert "Aufgabe SSR" in page.text
+        assert "Aufgabe 1" in page.text
+        assert f'id="student-live-task-detail-{task["id"]}"' in page.text
+        assert (
+            f'hx-get="/teaching/courses/{cid}/units/{unit["id"]}/live/detail'
+            f'?student_sub={learner.sub}&amp;task_id={task["id"]}"'
+        ) in page.text
         assert f'name="unit_ids" value="{unit["id"]}"' in page.text
+        assert "Bitte Aufgabe waehlen." not in page.text
+        assert "Abgabe vorhanden" not in page.text
 
         empty = await c.get(
             f"/teaching/courses/{cid}/students/{learner.sub}/live",
@@ -200,3 +212,59 @@ async def test_student_live_overview_page_renders_forbidden_error(monkeypatch: p
     assert page.status_code == 403, page.text
     assert "Kein Zugriff auf diese Schueleransicht" in page.text
     assert page.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_student_live_overview_page_renders_inline_task_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-inline", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    unit_id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+    task_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_student_live_internal_api_client(
+            course_id=course_id,
+            units=[{"id": unit_id, "title": "Einheit Inline"}],
+            overview_status=200,
+            overview_body={
+                "student": {"sub": "student-1", "name": "Anna"},
+                "units": [
+                    {
+                        "id": unit_id,
+                        "title": "Einheit Inline",
+                        "tasks": [
+                            {
+                                "id": task_id,
+                                "instruction_md": "### Aufgabe Inline\n\nMit etwas Kontext.",
+                                "position": 1,
+                                "kind": "native",
+                                "has_submission": False,
+                                "average_score": None,
+                                "h5p_completed": None,
+                            }
+                        ],
+                    }
+                ],
+            },
+        ),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        page = await c.get(f"/teaching/courses/{course_id}/students/student-1/live")
+
+    assert page.status_code == 200, page.text
+    assert "student-live-summary" in page.text
+    assert "Aufgaben gesamt" in page.text
+    assert "Mit Abgabe" in page.text
+    assert "Offen" in page.text
+    assert "<details" in page.text
+    assert "student-live-task__summary" in page.text
+    assert "student-live-task__title" in page.text
+    assert "student-live-task__meta" in page.text
+    assert "Mit etwas Kontext." not in page.text
+    assert f'id="student-live-task-detail-{task_id}"' in page.text
+    assert "Bitte Aufgabe waehlen." not in page.text

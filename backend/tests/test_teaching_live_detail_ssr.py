@@ -78,6 +78,40 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
     assert r.status_code in (201, 204)
 
 
+def _stub_detail_internal_api_client(*, course_id: str, unit_id: str, task_id: str, student_sub: str, payload_status: int, payload: dict | None):
+    class _StubResponse:
+        def __init__(self, status_code: int, payload: dict | None) -> None:
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _StubClient:
+        def __init__(self) -> None:
+            class _Cookies:
+                def set(self, _name: str, _value: str) -> None:
+                    return None
+
+            self.cookies = _Cookies()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, params=None):
+            expected = (
+                f"/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
+            )
+            if url == expected:
+                return _StubResponse(payload_status, payload)
+            raise AssertionError(url)
+
+    return _StubClient()
+
+
 @pytest.mark.anyio
 async def test_detail_partial_empty_and_then_text_excerpt():
     _require_db_or_skip()
@@ -112,7 +146,9 @@ async def test_detail_partial_empty_and_then_text_excerpt():
             params={"student_sub": learner.sub, "task_id": task["id"]},
         )
         assert r_empty.status_code == 200
-        assert "Keine Einreichung" in r_empty.text
+        assert "Aufgabenstellung" in r_empty.text
+        assert "Aufgabe 1" in r_empty.text
+        assert "Noch keine Einreichung vorhanden." in r_empty.text
 
         # Release + submit
         r_vis = await c_owner.patch(
@@ -135,6 +171,47 @@ async def test_detail_partial_empty_and_then_text_excerpt():
         assert "Aufgabenstellung" in r_detail.text
         assert "Aufgabe 1" in r_detail.text
         assert "Antwort" in r_detail.text
+
+
+@pytest.mark.anyio
+async def test_detail_partial_empty_state_keeps_task_instruction(monkeypatch: pytest.MonkeyPatch) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-detail-empty-owner", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "11111111-1111-1111-1111-111111111111"
+    unit_id = "22222222-2222-2222-2222-222222222222"
+    task_id = "33333333-3333-3333-3333-333333333333"
+    student_sub = "student-1"
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_detail_internal_api_client(
+            course_id=course_id,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+            payload_status=204,
+            payload=None,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_fetch_task_instruction_for_teacher",
+        lambda _course_id, _unit_id, _task_id, owner_sub: "### Aufgabe 1",
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_empty = await c.get(
+            f"/teaching/courses/{course_id}/units/{unit_id}/live/detail",
+            params={"student_sub": student_sub, "task_id": task_id},
+        )
+
+    assert r_empty.status_code == 200
+    assert "Aufgabenstellung" in r_empty.text
+    assert "Aufgabe 1" in r_empty.text
+    assert "Noch keine Einreichung vorhanden." in r_empty.text
 
 
 @pytest.mark.anyio

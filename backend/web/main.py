@@ -5,6 +5,7 @@ from pathlib import Path
 import asyncio
 import hashlib
 import hmac
+import re
 import os
 import logging
 import uuid
@@ -4965,6 +4966,75 @@ async def teaching_unit_live_matrix_partial(request: Request, course_id: str, un
     return HTMLResponse(content=html, status_code=200, headers={"Cache-Control": "private, no-store"})
 
 
+def _resolve_teacher_student_display_name(student_sub: str) -> str:
+    """Resolve the teacher-facing student name with an email-prefix fallback."""
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+
+        names = teaching_routes.resolve_student_names([str(student_sub)])  # type: ignore
+        name = str(names.get(str(student_sub), ""))
+        if "@" in name:
+            name = name.split("@", 1)[0]
+        return Component.escape(name or str(student_sub))
+    except Exception:
+        return Component.escape(str(student_sub))
+
+
+def _render_teacher_task_instruction_section(instruction_md: str) -> str:
+    """Render the shared instruction block for teacher submission details."""
+    instruction_html = (
+        render_markdown_safe(instruction_md)
+        if instruction_md.strip()
+        else '<p class="text-muted">Keine Aufgabenstellung vorhanden.</p>'
+    )
+    return (
+        '<section class="submission-task">'
+        '<h4>Aufgabenstellung</h4>'
+        f"{instruction_html}"
+        "</section>"
+    )
+
+
+def _render_teacher_live_empty_detail_card(*, display_name: str, instruction_md: str, message: str) -> str:
+    """Render the inline detail card when no submission exists yet."""
+    return (
+        '<div class="card">'
+        f"<h3>Einreichung von {display_name}</h3>"
+        f"{_render_teacher_task_instruction_section(instruction_md)}"
+        f'<p class="text-muted">{Component.escape(message)}</p>'
+        "</div>"
+    )
+
+
+def _fetch_task_instruction_for_teacher(course_id: str, unit_id: str, task_id: str, *, owner_sub: str) -> str:
+    """Load one task instruction for SSR empty states without an extra HTTP hop.
+
+    Why:
+        The inline teacher detail should still show the task prompt when no
+        submission exists. Reusing the teaching repo keeps the fallback local
+        and avoids widening the public API.
+    """
+    if not owner_sub:
+        return ""
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+
+        repo = getattr(teaching_routes, "REPO", None)
+        if repo is None or not hasattr(repo, "list_tasks_for_course_unit_owner"):
+            return ""
+        tasks = repo.list_tasks_for_course_unit_owner(course_id, unit_id, owner_sub) or []
+    except Exception:
+        return ""
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        if str(task.get("id") or "") != str(task_id):
+            continue
+        return str(task.get("instruction_md") or "")
+    return ""
+
+
 @app.get("/teaching/courses/{course_id}/units/{unit_id}/live/detail", response_class=HTMLResponse)
 async def teaching_unit_live_detail_partial(
     request: Request, course_id: str, unit_id: str, student_sub: str | None = None, task_id: str | None = None
@@ -4985,6 +5055,7 @@ async def teaching_unit_live_detail_partial(
         return RedirectResponse(url="/", status_code=303)
     if not student_sub or not task_id:
         return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Bitte Zelle wählen…</p></div>", status_code=200)
+    owner_sub = str(user.get("sub") or "")
 
     try:
         import httpx
@@ -4997,50 +5068,16 @@ async def teaching_unit_live_detail_partial(
                 f"/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
             )
             if r.status_code == 204:
-                # Fallback: query SECURITY DEFINER helper to verify existence
-                try:
-                    from routes import teaching as teaching_routes  # type: ignore
-                    from teaching.repo_db import DBTeachingRepo  # type: ignore
-                    REPO = getattr(teaching_routes, "REPO", None)
-                    if isinstance(REPO, DBTeachingRepo):
-                        import psycopg  # type: ignore
-                        dsn = getattr(REPO, "_dsn", None)
-                        if dsn:
-                            with psycopg.connect(dsn) as conn:
-                                with conn.cursor() as cur:
-                                    cur.execute("select set_config('app.current_sub', %s, true)", (str(user.get("sub", "")),))
-                                    cur.execute(
-                                        """
-                                        select created_at_iso, completed_at_iso
-                                          from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
-                                         where student_sub = %s and task_id = %s::uuid
-                                         limit 1
-                                        """,
-                                        (str(user.get("sub", "")), course_id, unit_id, None, 1, 0, student_sub, task_id),
-                                    )
-                                    helper_row = cur.fetchone()
-                                    if helper_row:
-                                        created_iso = helper_row[0] or ""
-                                        # Resolve display name with email-prefix fallback
-                                        dn = ""
-                                        try:
-                                            names = teaching_routes.resolve_student_names([str(student_sub)])  # type: ignore
-                                            n = str(names.get(str(student_sub), ""))
-                                            if "@" in n:
-                                                n = n.split("@", 1)[0]
-                                            dn = Component.escape(n or str(student_sub))
-                                        except Exception:
-                                            dn = Component.escape(str(student_sub))
-                                        html = (
-                                            "<div class=\"card\">"
-                                            f"<h3>Einreichung von {dn}</h3>"
-                                            f"<p class=\"text-muted\">Vorhanden · erstellt: {Component.escape(created_iso)}</p>"
-                                            "</div>"
-                                        )
-                                        return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
-                except Exception:
-                    pass
-                html = "<div class=\"card\"><p class=\"text-muted\">Keine Einreichung vorhanden.</p></div>"
+                html = _render_teacher_live_empty_detail_card(
+                    display_name=_resolve_teacher_student_display_name(str(student_sub)),
+                    instruction_md=_fetch_task_instruction_for_teacher(
+                        course_id,
+                        unit_id,
+                        task_id,
+                        owner_sub=owner_sub,
+                    ),
+                    message="Noch keine Einreichung vorhanden.",
+                )
                 return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
             if r.status_code != 200:
                 return HTMLResponse("<div class=\"card alert alert-error\">Fehler beim Laden der Details.</div>", status_code=200)
@@ -5049,7 +5086,17 @@ async def teaching_unit_live_detail_partial(
         data = None
 
     if not isinstance(data, dict):
-        return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Keine Einreichung vorhanden.</p></div>", status_code=200)
+        html = _render_teacher_live_empty_detail_card(
+            display_name=_resolve_teacher_student_display_name(str(student_sub)),
+            instruction_md=_fetch_task_instruction_for_teacher(
+                course_id,
+                unit_id,
+                task_id,
+                owner_sub=owner_sub,
+            ),
+            message="Noch keine Einreichung vorhanden.",
+        )
+        return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
 
     created = Component.escape(str(data.get("created_at") or ""))
     kind_raw = str(data.get("kind") or "")
@@ -5064,28 +5111,8 @@ async def teaching_unit_live_detail_partial(
     file_mime = str(file.get("mime") or "")
     file_size = file.get("size")
 
-    # Resolve student display name (dir → name; fallback email prefix when username is email)
-    try:
-        from routes import teaching as teaching_routes  # type: ignore
-        names = teaching_routes.resolve_student_names([str(student_sub)])  # type: ignore
-        n = str(names.get(str(student_sub), ""))
-        if "@" in n:
-            n = n.split("@", 1)[0]
-        display_name = Component.escape(n or str(student_sub))
-    except Exception:
-        display_name = Component.escape(str(student_sub))
-
-    instruction_html = (
-        render_markdown_safe(instruction_md)
-        if instruction_md.strip()
-        else '<p class="text-muted">Keine Aufgabenstellung vorhanden.</p>'
-    )
-    instruction_section = (
-        '<section class="submission-task">'
-        '<h4>Aufgabenstellung</h4>'
-        f"{instruction_html}"
-        "</section>"
-    )
+    display_name = _resolve_teacher_student_display_name(str(student_sub))
+    instruction_section = _render_teacher_task_instruction_section(instruction_md)
 
     if kind_raw == "h5p":
         h5p = data.get("h5p") if isinstance(data.get("h5p"), dict) else {}
@@ -5339,29 +5366,154 @@ def _render_student_live_error_page(
     )
 
 
-def _render_student_live_task_card(course_id: str, student_sub: str, unit_id: str, task: dict) -> str:
-    """Render one clickable task row for the teacher student-overview page."""
-    task_id = str(task.get("id") or "")
-    status = _render_live_cell_content(
-        task_kind=task.get("kind"),
-        has_submission=bool(task.get("has_submission")),
-        average_score=task.get("average_score"),
-        h5p_completed=task.get("h5p_completed"),
+def _student_live_metrics(tasks: list[dict]) -> dict[str, float | int | None]:
+    """Summarize task completeness and score coverage for the teacher overview."""
+    total = len(tasks)
+    submitted = sum(1 for task in tasks if bool(task.get("has_submission")))
+    open_count = max(total - submitted, 0)
+    numeric_scores: list[float] = []
+    for task in tasks:
+        raw_score = task.get("average_score")
+        if raw_score is None:
+            continue
+        try:
+            numeric_scores.append(max(0.0, min(10.0, float(raw_score))))
+        except (TypeError, ValueError):
+            continue
+    average_score = (sum(numeric_scores) / len(numeric_scores)) if numeric_scores else None
+    return {
+        "total": total,
+        "submitted": submitted,
+        "open": open_count,
+        "average_score": average_score,
+    }
+
+
+def _render_student_live_average_score_badge(raw_score: object) -> str:
+    """Render a compact `x/10` badge for teacher overview lists."""
+    if raw_score is None:
+        return ""
+    try:
+        score_val = float(raw_score)
+    except (TypeError, ValueError):
+        return ""
+    score_val = max(0.0, min(10.0, score_val))
+    display = int(score_val + 0.5)
+    variant = _live_score_badge_variant(display)
+    return f'<span class="badge {variant}" aria-label="Durchschnitt {display} von 10">{display}/10</span>'
+
+
+def _student_live_status_text(task: dict) -> tuple[str, str]:
+    """Return a teacher-readable status label and tone for one task."""
+    has_submission = bool(task.get("has_submission"))
+    kind = str(task.get("kind") or "")
+    h5p_completed = task.get("h5p_completed")
+    average_score = task.get("average_score")
+
+    if kind == "h5p":
+        if not has_submission:
+            return "Offen", "open"
+        if h5p_completed is True:
+            return "Abgeschlossen", "done"
+        return "In Bearbeitung", "progress"
+
+    if not has_submission:
+        return "Offen", "open"
+    if average_score is not None:
+        return "Bewertet", "submitted"
+    return "Abgegeben", "submitted"
+
+
+def _plain_text_excerpt_from_markdown(markdown_src: str, *, limit: int = 96) -> str:
+    """Create a short plain-text title hint from markdown.
+
+    Why:
+        The overview should stay compact. A lightweight markdown-to-text hint is
+        enough here; the full markdown remains available inside the detail card.
+    """
+    if not markdown_src.strip():
+        return ""
+    for raw_line in markdown_src.splitlines():
+        text = raw_line.strip()
+        if not text:
+            continue
+        text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+        text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+        text = re.sub(r"^\s*(?:#{1,6}|[-*+]|[0-9]+[.)])\s*", "", text)
+        text = re.sub(r"[*_`~]", "", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text:
+            continue
+        if len(text) > limit:
+            return text[: limit - 1].rstrip() + "..."
+        return text
+    return ""
+
+
+def _render_student_live_summary(units: list[dict]) -> str:
+    """Render the compact KPI header for the teacher student overview."""
+    all_tasks = [
+        task
+        for unit in units
+        for task in (unit.get("tasks") or [])
+        if isinstance(task, dict)
+    ]
+    metrics = _student_live_metrics(all_tasks)
+    items = [
+        ("Aufgaben gesamt", str(int(metrics["total"]))),
+        ("Mit Abgabe", str(int(metrics["submitted"]))),
+        ("Offen", str(int(metrics["open"]))),
+    ]
+    if metrics["average_score"] is not None:
+        items.append(("Ø Bewertung", f"{int(float(metrics['average_score']) + 0.5)}/10"))
+    cards = [
+        (
+            '<article class="student-live-summary__item">'
+            f'<p class="student-live-summary__label">{Component.escape(label)}</p>'
+            f'<strong class="student-live-summary__value">{Component.escape(value)}</strong>'
+            "</article>"
+        )
+        for label, value in items
+    ]
+    return (
+        '<section class="card student-live-summary">'
+        '<h2>Überblick</h2>'
+        '<div class="student-live-summary__grid">'
+        + "".join(cards)
+        + "</div>"
+        "</section>"
     )
+
+
+def _render_student_live_task_card(course_id: str, student_sub: str, unit_id: str, task: dict) -> str:
+    """Render one compact inline-detail task row for the teacher overview."""
+    task_id = str(task.get("id") or "")
+    label = f"Aufgabe {int(task.get('position') or 0)}"
+    title = _plain_text_excerpt_from_markdown(str(task.get("instruction_md") or ""))
+    if not title:
+        title = label
+    status_text, status_tone = _student_live_status_text(task)
+    score_badge = _render_student_live_average_score_badge(task.get("average_score"))
+    detail_target = f"student-live-task-detail-{task_id}"
     detail_href = (
         f"/teaching/courses/{course_id}/units/{unit_id}/live/detail"
         f"?student_sub={Component.escape(student_sub)}&task_id={Component.escape(task_id)}"
     )
-    state_label = "Abgabe vorhanden" if bool(task.get("has_submission")) else "Keine Abgabe"
     return (
-        '<li class="student-live-task">'
-        f'<button type="button" class="btn btn-secondary" '
-        f'hx-get="{detail_href}" hx-target="#student-live-detail" hx-swap="innerHTML">'
-        f'<span class="badge">{status}</span> '
-        f'<span class="student-live-task__state">{Component.escape(state_label)}</span>'
-        "</button>"
-        f'<div class="student-live-task__instruction">{render_markdown_safe(str(task.get("instruction_md") or ""))}</div>'
-        "</li>"
+        '<details class="student-live-task">'
+        f'<summary class="student-live-task__summary" hx-get="{detail_href}" '
+        f'hx-target="#{Component.escape(detail_target)}" hx-swap="innerHTML">'
+        '<div class="student-live-task__main">'
+        f'<span class="student-live-task__label">{Component.escape(label)}</span>'
+        f'<span class="student-live-task__title">{Component.escape(title)}</span>'
+        "</div>"
+        '<div class="student-live-task__meta">'
+        f'<span class="status-chip student-live-task__status student-live-task__status--{Component.escape(status_tone)}">{Component.escape(status_text)}</span>'
+        f"{score_badge}"
+        "</div>"
+        "</summary>"
+        f'<div id="{Component.escape(detail_target)}" class="student-live-task__detail"></div>'
+        "</details>"
     )
 
 
@@ -5377,17 +5529,28 @@ def _render_student_live_units(course_id: str, student_sub: str, units: list[dic
         unit_id = str(unit.get("id") or "")
         title = Component.escape(str(unit.get("title") or "Lerneinheit"))
         tasks = [task for task in (unit.get("tasks") or []) if isinstance(task, dict)]
-        submitted_count = sum(1 for task in tasks if bool(task.get("has_submission")))
-        summary = f"{submitted_count}/{len(tasks)} Aufgaben mit Abgabe" if tasks else "Keine Aufgaben"
+        metrics = _student_live_metrics(tasks)
+        meta_bits = [
+            f'{int(metrics["submitted"])}/{int(metrics["total"])} mit Abgabe' if tasks else "Keine Aufgaben",
+        ]
+        if tasks:
+            meta_bits.append(f'{int(metrics["open"])} offen')
+        if metrics["average_score"] is not None:
+            meta_bits.append(f'Ø {int(float(metrics["average_score"]) + 0.5)}/10')
         tasks_html = (
-            '<ul class="unstyled">'
+            '<div class="student-live-task-list">'
             + "".join(_render_student_live_task_card(course_id, student_sub, unit_id, task) for task in tasks)
-            + "</ul>"
+            + "</div>"
         ) if tasks else '<p class="text-muted">Keine Aufgaben in dieser Lerneinheit.</p>'
         cards.append(
-            '<details class="card" open>'
-            f"<summary><strong>{title}</strong> · {Component.escape(summary)}</summary>"
-            f"{tasks_html}"
+            '<details class="card student-live-unit" open>'
+            '<summary class="student-live-unit__summary">'
+            f'<span class="student-live-unit__title"><strong>{title}</strong></span>'
+            '<span class="student-live-unit__meta">'
+            + "".join(f'<span class="badge student-live-chip">{Component.escape(bit)}</span>' for bit in meta_bits)
+            + "</span>"
+            "</summary>"
+            f'<div class="student-live-unit__body">{tasks_html}</div>'
             "</details>"
         )
     return "".join(cards)
@@ -5488,35 +5651,37 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
         unit_title = Component.escape(str(unit.get("title") or "Lerneinheit"))
         checked = " checked" if unit_id in selected_set else ""
         filter_items.append(
-            "<label>"
+            '<label class="student-live-filter__check">'
             f'<input type="checkbox" name="unit_ids" value="{Component.escape(unit_id)}"{checked}> '
             f"{unit_title}"
             "</label>"
         )
+    filter_base = f"/teaching/courses/{course_id}/students/{Component.escape(student_sub)}/live"
     filter_html = (
-        '<section class="card">'
+        '<section class="card student-live-filter">'
         '<h2>Filter</h2>'
-        f'<form method="get" action="/teaching/courses/{course_id}/students/{Component.escape(student_sub)}/live">'
+        f'<form class="student-live-filter__form" method="get" action="{filter_base}">'
+        '<div class="student-live-filter__grid">'
         + "".join(filter_items)
+        + '</div><div class="student-live-filter__actions">'
+        + f'<a class="btn btn-secondary" href="{filter_base}">Alle</a>'
+        + f'<a class="btn btn-secondary" href="{filter_base}?unit_ids=">Keine</a>'
         + '<button type="submit" class="btn">Anzeigen</button>'
+        + "</div>"
         + "</form>"
         + "</section>"
     )
 
+    summary_html = _render_student_live_summary(overview_units)
     units_html = _render_student_live_units(course_id, student_sub, overview_units, empty_message=empty_message)
-    detail_placeholder = (
-        '<div id="student-live-detail">'
-        '<div class="card"><p class="text-muted">Bitte Aufgabe waehlen.</p></div>'
-        "</div>"
-    )
 
     content = (
         '<div class="container">'
         '<h1>Unterricht – Live</h1>'
         f'<p class="text-muted">{Component.escape(course_title)} · {student_name}</p>'
+        f"{summary_html}"
         f"{filter_html}"
         f"{units_html}"
-        f"{detail_placeholder}"
         "</div>"
     )
     layout = Layout(

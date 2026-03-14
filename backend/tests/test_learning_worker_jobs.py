@@ -137,6 +137,18 @@ class _PermanentFeedbackAdapter:
         raise worker_module.FeedbackPermanentError(self.message)  # type: ignore[attr-defined]
 
 
+class _InvalidAnalysisFeedbackAdapter:
+    """Raise a deterministic invalid-analysis error that must not be retried."""
+
+    def __init__(self, message: str = "feedback_invalid_analysis") -> None:
+        self.calls = 0
+        self.message = message
+
+    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
+        self.calls += 1
+        raise worker_module.FeedbackInvalidAnalysisError(self.message)  # type: ignore[attr-defined]
+
+
 class _CountingVisionAdapter:
     """Vision adapter that records invocations for OCR-reuse tests."""
 
@@ -688,6 +700,64 @@ async def test_worker_marks_feedback_failure_records_job_error(monkeypatch: pyte
     assert submission_error == "feedback_failed"
     assert feedback_last_error is not None
     assert "permanent feedback failure" in feedback_last_error
+
+
+@pytest.mark.anyio
+async def test_worker_marks_invalid_analysis_without_retry(monkeypatch: pytest.MonkeyPatch):
+    """Deterministic invalid-analysis errors must fail once with a precise error code."""
+
+    _require_db_or_skip()
+    monkeypatch.setenv("SERVICE_ROLE_DSN", _dsn())
+    fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
+        idempotency_key="worker-feedback-invalid-analysis"
+    )
+
+    tick = datetime.now(tz=timezone.utc)
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=_StubVisionAdapter(text_md="## Answer\n\nContent."),
+        feedback_adapter=_InvalidAnalysisFeedbackAdapter(),
+        now=tick,
+    )
+
+    assert processed is True
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select status,
+                       retry_count,
+                       error_code
+                  from public.learning_submission_jobs
+                 where id = %s::uuid
+                """,
+                (job_id,),
+            )
+            status, retry_count, job_error_code = cur.fetchone()
+
+            cur.execute(
+                "select set_config('app.current_sub', %s, true)",
+                (fixture.student_sub,),
+            )
+            cur.execute(
+                """
+                select analysis_status,
+                       error_code,
+                       feedback_last_error
+                  from public.learning_submissions
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            submission_status, submission_error, feedback_last_error = cur.fetchone()
+
+    assert status == "failed"
+    assert retry_count == 0
+    assert job_error_code == "feedback_invalid_analysis"
+    assert submission_status == "failed"
+    assert submission_error == "feedback_invalid_analysis"
+    assert feedback_last_error == "feedback_invalid_analysis"
 
 
 @pytest.mark.anyio

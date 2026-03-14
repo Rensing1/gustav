@@ -161,6 +161,59 @@ class Gustav {
     } catch (_) {}
   }
 
+  generateTaskSubmitIdempotencyKey() {
+    let randomHex = '';
+    try {
+      if (window.crypto && window.crypto.getRandomValues) {
+        const bytes = new Uint8Array(8);
+        window.crypto.getRandomValues(bytes);
+        randomHex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+      }
+    } catch (_) {
+      randomHex = '';
+    }
+    if (!randomHex) {
+      const fallback = `${Date.now().toString(16)}${Math.floor(Math.random() * 0xffffffff).toString(16)}`;
+      randomHex = fallback.slice(0, 16).padEnd(16, '0');
+    }
+    return `ui-${randomHex.slice(0, 16)}`;
+  }
+
+  isValidTaskSubmitIdempotencyKey(value) {
+    const key = String(value || '');
+    return /^[A-Za-z0-9_-]{1,64}$/.test(key);
+  }
+
+  ensureTaskSubmitIdempotencyKey(form) {
+    if (!form || !form.querySelector) return '';
+    let field = form.querySelector('input[name="idempotency_key"]');
+    if (!field) {
+      field = document.createElement('input');
+      field.type = 'hidden';
+      field.name = 'idempotency_key';
+      form.appendChild(field);
+    }
+    if (!this.isValidTaskSubmitIdempotencyKey(field.value)) {
+      field.value = this.generateTaskSubmitIdempotencyKey();
+    }
+    return field.value;
+  }
+
+  rotateTaskSubmitIdempotencyKey(form) {
+    if (!form) return;
+    const field = form.querySelector ? form.querySelector('input[name="idempotency_key"]') : null;
+    if (field) {
+      field.value = this.generateTaskSubmitIdempotencyKey();
+    }
+    if (form.dataset) {
+      form.dataset.submitLocked = '0';
+    }
+    const submitBtn = form.querySelector ? form.querySelector('button[type="submit"]') : null;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+    }
+  }
+
   applyTaskFormMode(form, mode) {
     const textFields = form.querySelector('.fields-text');
     const uploadFields = form.querySelector('.fields-upload');
@@ -314,9 +367,11 @@ class Gustav {
     forms.forEach((form) => {
       if (form._gustavTaskFormReady) return;
       form._gustavTaskFormReady = true;
+      if (form.dataset) form.dataset.submitLocked = '0';
 
       // Restore drafts early so field toggles reflect the recovered state.
       this.restoreTaskDraftIntoForm(form);
+      this.ensureTaskSubmitIdempotencyKey(form);
 
       // Persist drafts while the student types.
       const textarea = form.querySelector('textarea[name="text_body"]');
@@ -333,7 +388,19 @@ class Gustav {
       });
 
       // Save once more on submit so last-second edits survive auth redirects.
-      form.addEventListener('submit', () => this.saveTaskDraftFromForm(form));
+      form.addEventListener('submit', (event) => {
+        this.saveTaskDraftFromForm(form);
+        this.ensureTaskSubmitIdempotencyKey(form);
+        if (form.dataset && form.dataset.submitLocked === '1') {
+          event.preventDefault();
+          return;
+        }
+        if (form.dataset) form.dataset.submitLocked = '1';
+        const submitBtn = form.querySelector ? form.querySelector('button[type="submit"]') : null;
+        if (submitBtn) {
+          submitBtn.disabled = true;
+        }
+      });
 
       // Handle file selection → request upload-intent → PUT bytes → fill hidden fields
       const fileInput = form.querySelector('input[type="file"][name="upload_file"]');
@@ -1064,7 +1131,6 @@ class Gustav {
     document.body.addEventListener('htmx:afterRequest', (evt) => {
       try {
         const detail = evt.detail || {};
-        if (!detail.successful) return;
         const pathInfo = detail.pathInfo || {};
         const requestPath = pathInfo.requestPath || '';
         if (typeof requestPath !== 'string' || requestPath.indexOf('/learning/courses/') !== 0) return;
@@ -1073,6 +1139,8 @@ class Gustav {
         if (!elt || !elt.closest) return;
         const form = elt.closest('form.task-submit-form');
         if (!form || !form.dataset) return;
+        this.rotateTaskSubmitIdempotencyKey(form);
+        if (!detail.successful) return;
         const courseId = form.dataset.courseId;
         const taskId = form.dataset.taskId;
         if (courseId && taskId) this.clearTaskDraft(courseId, taskId);

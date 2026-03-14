@@ -223,6 +223,27 @@ def test_guess_content_type_prefers_key_extension(tmp_path: Path) -> None:
     assert mod._guess_content_type(file_path, "bucket/1763317293475-e36ed3455e6249f5baa87127aa42991c.pdf/59682179-f7aa-48d4-bb51-a723705c3791") == "application/pdf"
 
 
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        (
+            "submissions/course/task/student/1771234567890-project.sb3/object-id",
+            "application/x.scratch.sb3",
+        ),
+        (
+            "submissions/course/task/student/1771234567890-robot.hex/object-id",
+            "application/x.makecode.hex",
+        ),
+    ],
+)
+def test_guess_content_type_handles_snapshot_submission_extensions(
+    tmp_path: Path, key: str, expected: str
+) -> None:
+    file_path = tmp_path / "bucket" / "opaque-object-id"
+
+    assert mod._guess_content_type(file_path, key) == expected
+
+
 def test_guess_content_type_falls_back_to_octet_stream(tmp_path: Path) -> None:
     file_path = tmp_path / "bucket" / "noext"
     assert mod._guess_content_type(file_path, "bucket/noext") == "application/octet-stream"

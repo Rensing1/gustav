@@ -851,6 +851,11 @@ def _guess_content_type(file_path: Path, key: str) -> str:
     # Some archive paths place the meaningful extension in an intermediate path
     # segment (for example, when uploads are keyed by digest directories).
     for candidate in [*Path(key).parts[::-1], file_path.name]:
+        suffix = Path(candidate).suffix.lower()
+        if suffix == ".sb3":
+            return "application/x.scratch.sb3"
+        if suffix == ".hex":
+            return "application/x.makecode.hex"
         mime, _ = mimetypes.guess_type(candidate)
         if mime:
             return mime

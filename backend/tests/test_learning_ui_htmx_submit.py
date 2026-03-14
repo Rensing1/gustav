@@ -62,7 +62,13 @@ class _FakeAsyncClient:
         handler = self._routes_post.get(url)
         if handler is None:
             return _FakeResponse(404, {})
-        payload = handler(json or {}) if callable(handler) else handler
+        if callable(handler):
+            try:
+                payload = handler(json or {}, headers or {})
+            except TypeError:
+                payload = handler(json or {})
+        else:
+            payload = handler
         status = 201
         body = payload
         if isinstance(payload, tuple) and len(payload) == 2:
@@ -104,6 +110,10 @@ async def test_unit_task_form_has_htmx_attributes(monkeypatch: pytest.MonkeyPatc
     assert f'hx-post="/learning/courses/{course_id}/tasks/{task_id}/submit"' in html
     assert f'hx-target="#task-history-{task_id}"' in html
     assert 'hx-swap="outerHTML"' in html
+    assert 'hx-sync="this:drop"' in html
+    assert "hx-disabled-elt=\"find button[type='submit']\"" in html
+    assert 'name="idempotency_key"' in html
+    assert re.search(r'name="idempotency_key" value="[A-Za-z0-9_-]{1,64}"', html)
 
 
 @pytest.mark.anyio
@@ -159,6 +169,45 @@ async def test_submit_requires_origin_or_referer_header():
             follow_redirects=False,
         )
     assert r.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_submit_uses_form_idempotency_key_when_forwarding_to_api(monkeypatch: pytest.MonkeyPatch):
+    """SSR submit must forward the form idempotency key to the learning API."""
+    student = _student_session()
+    course_id = str(uuid.uuid4())
+    unit_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+    created_id = str(uuid.uuid4())
+    expected_key = "ui-fixed-key"
+    captured_headers: dict[str, str] = {}
+
+    def _create_submission(_json, _headers):
+        captured_headers.update({str(k): str(v) for k, v in (_headers or {}).items()})
+        return {"id": created_id}
+
+    fake = _FakeAsyncClient({
+        f"POST /api/learning/courses/{course_id}/tasks/{task_id}/submissions": _create_submission,
+    })
+    import sys as _sys
+    _fake_httpx_mod = types.SimpleNamespace(AsyncClient=lambda **k: fake, ASGITransport=ASGITransport)
+    monkeypatch.setitem(_sys.modules, "httpx", _fake_httpx_mod)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
+        r = await client.post(
+            f"/learning/courses/{course_id}/tasks/{task_id}/submit",
+            data={
+                "mode": "text",
+                "unit_id": unit_id,
+                "text_body": "Hallo",
+                "idempotency_key": expected_key,
+            },
+            follow_redirects=False,
+            headers={"Origin": "http://test"},
+        )
+    assert r.status_code in (302, 303)
+    assert captured_headers.get("Idempotency-Key") == expected_key
 
 
 @pytest.mark.anyio

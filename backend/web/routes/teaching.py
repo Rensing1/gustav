@@ -1175,6 +1175,16 @@ def _canonical_uuid(value: str) -> str:
     return str(UUID(str(value)))
 
 
+def _safe_int(value: Any) -> Optional[int]:
+    """Parse an optional integer defensively."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _validate_uuid_id_list(
     raw_ids: object,
     *,
@@ -4797,6 +4807,7 @@ async def get_unit_live_summary(
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}
         h5p_map: dict[tuple[str, str], bool] = {}
+        score_map: dict[tuple[str, str], tuple[int | None, int | None]] = {}
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
@@ -4812,6 +4823,8 @@ async def get_unit_live_summary(
                                     select student_sub::text,
                                            task_id::text,
                                            submission_id::text,
+                                           score_raw,
+                                           score_max,
                                            h5p_completed
                                       from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
                                     """,
@@ -4820,16 +4833,17 @@ async def get_unit_live_summary(
                                 rows = cur.fetchall() or []
                                 has_map = {(r[0], r[1]) for r in rows}
                                 submission_ids_by_student: dict[str, list[str]] = {}
-                                for student_sub, _task_id, submission_id, _h5p_completed in rows:
+                                for student_sub, task_id, submission_id, score_raw, score_max, _h5p_completed in rows:
                                     if submission_id:
                                         submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
+                                    score_map[(student_sub, task_id)] = (_safe_int(score_raw), _safe_int(score_max))
                                 avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
                                 avg_map = {(r[0], r[1]): avg_by_id.get(r[2]) for r in rows}
                                 # Only present for Task.kind="h5p"; null for other tasks.
                                 h5p_map = {
-                                    (r[0], r[1]): bool(r[3])
+                                    (r[0], r[1]): bool(r[5])
                                     for r in rows
-                                    if (len(r) > 3 and r[3] is not None)
+                                    if (len(r) > 5 and r[5] is not None)
                                 }
                             except Exception as exc:
                                 logger.warning(
@@ -4887,6 +4901,9 @@ async def get_unit_live_summary(
                 # H5P tasks are auto-scorable; for the live matrix we only need
                 # a binary "completed" flag (full score at least once).
                 if (t.get("kind") == "h5p") and has:
+                    latest_scores = score_map.get((sid, tid), (None, None))
+                    cell["score_raw"] = latest_scores[0]
+                    cell["score_max"] = latest_scores[1]
                     cell["h5p_completed"] = h5p_map.get((sid, tid), False)
                 task_cells.append(cell)
             row = {
@@ -5003,6 +5020,8 @@ async def get_unit_live_delta(
                                 select student_sub::text,
                                        task_id::text,
                                        submission_id::text,
+                                       score_raw,
+                                       score_max,
                                        created_at_iso,
                                        completed_at_iso,
                                        h5p_completed
@@ -5012,7 +5031,7 @@ async def get_unit_live_delta(
                             )
                             rows = cur.fetchall() or []
                             submission_ids_by_student: dict[str, list[str]] = {}
-                            for student_sub, _task_id, submission_id, _created_iso, _completed_iso, _h5p_completed in rows:
+                            for student_sub, _task_id, submission_id, _score_raw, _score_max, _created_iso, _completed_iso, _h5p_completed in rows:
                                 if submission_id:
                                     submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
                             avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
@@ -5024,7 +5043,7 @@ async def get_unit_live_delta(
                             )
                             rows = []
                             helper_ok = False
-                        for student_sub, task_id, submission_id, created_iso, completed_iso, h5p_completed in rows:
+                        for student_sub, task_id, submission_id, score_raw, score_max, created_iso, completed_iso, h5p_completed in rows:
                             cur.execute(
                                 """
                                 select greatest(created_at, coalesce(completed_at, created_at))
@@ -5082,6 +5101,8 @@ async def get_unit_live_delta(
                             }
                             if h5p_completed is not None:
                                 cell["h5p_completed"] = bool(h5p_completed)
+                                cell["score_raw"] = _safe_int(score_raw)
+                                cell["score_max"] = _safe_int(score_max)
                             cells.append(cell)
 
                         if not helper_ok:

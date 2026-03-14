@@ -355,6 +355,95 @@ async def test_learning_modular_unit_module_fragment_renders_file_preview_when_m
 
 
 @pytest.mark.anyio
+async def test_learning_modular_unit_module_fragment_uses_modular_preview_fallback_without_section_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Modular file previews must still render when no linear section map is available."""
+
+    course_id = "00000000-0000-0000-0000-000000000011"
+    unit_id = "00000000-0000-0000-0000-000000000012"
+    module_id = "00000000-0000-0000-0000-000000000013"
+    material_id = "00000000-0000-0000-0000-000000000014"
+
+    class _DummyResponse:
+        def __init__(self, status_code: int, payload):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _DummyClient:
+        def __init__(self) -> None:
+            self.cookies = types.SimpleNamespace(set=lambda *a, **k: None)
+
+        async def get(self, url: str, *args, **kwargs):  # noqa: ANN002, ANN003 - test double
+            if url.endswith(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"):
+                return _DummyResponse(
+                    200,
+                    {
+                        "module": {"id": module_id, "title": "M"},
+                        "materials": [
+                            {
+                                "id": material_id,
+                                "title": "Arbeitsblatt",
+                                "kind": "file",
+                                "mime_type": "application/pdf",
+                                "filename_original": "blatt.pdf",
+                            }
+                        ],
+                        "tasks": [],
+                    },
+                )
+            if url.endswith(f"/api/learning/courses/{course_id}/units/{unit_id}/sections"):
+                return _DummyResponse(404, {"error": "not_found"})
+            return _DummyResponse(404, {"error": "not_found"})
+
+    class _DummyClientCtx:
+        async def __aenter__(self):
+            return _DummyClient()
+
+        async def __aexit__(self, exc_type, exc, tb):  # noqa: ANN001
+            return False
+
+    seen: dict[str, str] = {}
+
+    def _fake_linear_resolve(**kwargs):  # noqa: ANN003 - test helper
+        seen["linear_material_id"] = str(kwargs.get("material_id") or "")
+        return None
+
+    def _fake_modular_resolve(**kwargs):  # noqa: ANN003 - test helper
+        seen["module_id"] = str(kwargs.get("module_id") or "")
+        seen["material_id"] = str(kwargs.get("material_id") or "")
+        return "https://files.test/modular-material.pdf"
+
+    monkeypatch.setattr(main, "_internal_api_client", lambda: _DummyClientCtx(), raising=True)
+    monkeypatch.setattr(main, "_resolve_student_material_file_url", _fake_linear_resolve, raising=True)
+    monkeypatch.setattr(main, "_resolve_student_modular_material_file_url", _fake_modular_resolve, raising=True)
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": f"/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}/fragment",
+        "headers": [(b"cookie", b"gustav_session=session-file-frag-modular")],
+        "query_string": b"",
+        "state": {},
+        "client": ("test", 12345),
+        "server": ("test", 80),
+        "scheme": "http",
+    }
+    starlette_request = Request(scope)
+    starlette_request.state.user = {"sub": "s-file-frag-modular", "roles": ["student"]}
+
+    response = await main.learning_modular_unit_module_fragment(starlette_request, course_id, unit_id, module_id)
+    assert response.status_code == 200
+    body = response.body.decode("utf-8")
+    assert 'data-file-preview="true"' in body
+    assert "file-preview--pdf" in body
+    assert seen == {"material_id": material_id, "module_id": module_id}
+
+
+@pytest.mark.anyio
 async def test_student_modular_workspace_static_js_is_served() -> None:
     """Static mount must include the student modular workspace JS asset."""
     static_dir: Path | None = None

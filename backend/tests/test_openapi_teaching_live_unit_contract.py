@@ -54,8 +54,12 @@ def test_openapi_teaching_live_schemas_present():
     assert "TeachingUnitLiveRow" in schemas
     assert "TeachingUnitDeltaCell" in schemas
 
-    # H5P tasks use a binary completion flag in the matrix (bearbeitet vs abgeschlossen).
+    # H5P tasks keep `h5p_completed` but also expose the latest raw score.
     task_cell = schemas["TeachingUnitTaskCell"]
     assert "h5p_completed" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose h5p_completed"
+    assert "score_raw" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose score_raw"
+    assert "score_max" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose score_max"
     delta_cell = schemas["TeachingUnitDeltaCell"]
     assert "h5p_completed" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose h5p_completed"
+    assert "score_raw" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose score_raw"
+    assert "score_max" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose score_max"

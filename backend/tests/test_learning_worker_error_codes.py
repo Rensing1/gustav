@@ -94,9 +94,9 @@ def _seed_pending_submission() -> str:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("error_code", ["input_corrupt", "input_unsupported", "input_too_large"])
+@pytest.mark.parametrize("error_code", ["input_corrupt", "input_unsupported", "input_too_large", "feedback_invalid_analysis"])
 async def test_worker_update_failed_accepts_input_error_codes(error_code: str) -> None:
-    """Worker helper should accept preprocessing error codes and persist them verbatim."""
+    """Worker helper should accept preprocessing and deterministic feedback error codes."""
     submission_id = _seed_pending_submission()
     dsn = _service_dsn()
     if not dsn:
@@ -115,7 +115,7 @@ async def test_worker_update_failed_accepts_input_error_codes(error_code: str) -
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select analysis_status, error_code, vision_last_error, vision_attempts
+                select analysis_status, error_code, vision_last_error, vision_attempts, feedback_last_error
                   from public.learning_submissions
                  where id = %s::uuid
                 """,
@@ -124,8 +124,13 @@ async def test_worker_update_failed_accepts_input_error_codes(error_code: str) -
             row = cur.fetchone()
 
     assert row is not None, "expected submission row"
-    status, code, last_error, attempts = row
+    status, code, vision_last_error, attempts, feedback_last_error = row
     assert status == "failed"
     assert code == error_code
-    assert last_error == failure_msg[:1024]
+    if error_code == "feedback_invalid_analysis":
+        assert feedback_last_error == failure_msg[:1024]
+        assert vision_last_error in (None, "")
+    else:
+        assert vision_last_error == failure_msg[:1024]
+        assert feedback_last_error in (None, "")
     assert attempts in (None, 0)

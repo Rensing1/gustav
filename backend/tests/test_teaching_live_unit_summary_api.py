@@ -267,12 +267,12 @@ async def test_summary_includes_submissions_for_modular_units_without_section_re
 
 
 @pytest.mark.anyio
-async def test_summary_marks_h5p_tasks_as_attempted_or_completed():
-    """H5P cells in the live matrix distinguish bearbeitet vs abgeschlossen.
+async def test_summary_includes_latest_h5p_score_x_y_and_completion_flag():
+    """H5P summary cells expose latest x/y plus completion semantics.
 
     Semantics (MVP):
-        - bearbeitet: at least one H5P submission exists, but never full score
-        - abgeschlossen: at least one H5P submission exists with full score
+        - `score_raw/score_max` reflect the latest H5P attempt
+        - `h5p_completed` stays true once a full-score attempt existed
           (score_raw == score_max, including 0/0), even if later attempts are worse
     """
     _require_db_or_skip()
@@ -391,12 +391,18 @@ async def test_summary_marks_h5p_tasks_as_attempted_or_completed():
         rows = {row["student"]["sub"]: row for row in body["rows"]}
         cells = {c["task_id"]: c for c in rows[learner.sub]["tasks"]}
         assert cells[t_attempted["id"]]["has_submission"] is True
+        assert cells[t_attempted["id"]]["score_raw"] == 0
+        assert cells[t_attempted["id"]]["score_max"] == 1
         assert cells[t_attempted["id"]].get("h5p_completed") is False
 
         assert cells[t_completed["id"]]["has_submission"] is True
+        assert cells[t_completed["id"]]["score_raw"] == 0
+        assert cells[t_completed["id"]]["score_max"] == 1
         assert cells[t_completed["id"]].get("h5p_completed") is True
 
         assert cells[t_unscored["id"]]["has_submission"] is True
+        assert cells[t_unscored["id"]]["score_raw"] == 0
+        assert cells[t_unscored["id"]]["score_max"] == 0
         assert cells[t_unscored["id"]].get("h5p_completed") is True
 
 

@@ -296,8 +296,8 @@ async def test_delta_includes_average_score_for_completed_analysis():
 
 
 @pytest.mark.anyio
-async def test_delta_includes_h5p_completed_flag_for_h5p_tasks():
-    """Delta cells must include h5p_completed so the UI can render —/•/✓ for H5P tasks."""
+async def test_delta_includes_latest_h5p_score_x_y_and_completion_flag():
+    """Delta cells must expose latest x/y and keep the completion flag for H5P."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -370,4 +370,6 @@ async def test_delta_includes_h5p_completed_flag_for_h5p_tasks():
         body = r_delta.json()
         cell = next(c for c in body["cells"] if c["student_sub"] == learner.sub and c["task_id"] == task["id"])
         assert cell["has_submission"] is True
+        assert cell["score_raw"] == 0
+        assert cell["score_max"] == 1
         assert cell.get("h5p_completed") is True

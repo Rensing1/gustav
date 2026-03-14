@@ -96,6 +96,10 @@ class FeedbackPermanentError(FeedbackError):
     """Non-recoverable Feedback error; worker marks submission failed."""
 
 
+class FeedbackInvalidAnalysisError(FeedbackPermanentError):
+    """Deterministic structured-analysis error; retrying would not help."""
+
+
 __all__ = [
     # Results
     "VisionResult",
@@ -110,4 +114,5 @@ __all__ = [
     "FeedbackError",
     "FeedbackTransientError",
     "FeedbackPermanentError",
+    "FeedbackInvalidAnalysisError",
 ]

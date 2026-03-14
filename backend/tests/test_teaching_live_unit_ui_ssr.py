@@ -394,8 +394,8 @@ async def test_delta_fragment_returns_204_then_oob_cells_after_submission():
 
 
 @pytest.mark.anyio
-async def test_matrix_and_delta_fragments_render_h5p_status_symbols():
-    """H5P tasks use —/•/✓ (not score badges) in the live matrix."""
+async def test_matrix_and_delta_fragments_render_h5p_latest_score_x_y():
+    """H5P tasks use latest x/y in the live matrix and delta fragment."""
     _require_db_or_skip()
 
     main.SESSION_STORE = SessionStore()
@@ -422,7 +422,7 @@ async def test_matrix_and_delta_fragments_render_h5p_status_symbols():
 
         base_ts = datetime.now(timezone.utc).isoformat()
 
-        # 1) Partial attempt → •
+        # 1) Partial attempt → latest score 0/1
         r_sub1 = await c_student.post(
             f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
             json={"kind": "h5p", "score_raw": 0, "score_max": 1},
@@ -439,17 +439,17 @@ async def test_matrix_and_delta_fragments_render_h5p_status_symbols():
             re.DOTALL,
         )
         assert m1, "expected to find the H5P cell in the matrix HTML"
-        assert "•" in m1.group(1)
+        assert "0/1" in m1.group(1)
 
-        # Delta fragment should also render •
+        # Delta fragment should also render 0/1
         r_delta_1 = await c_owner.get(
             f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
             params={"updated_since": base_ts},
         )
         assert r_delta_1.status_code == 200
-        assert "•" in r_delta_1.text
+        assert "0/1" in r_delta_1.text
 
-        # 2) Full score at least once → ✓ (even if later attempts are worse)
+        # 2) Full score at least once, then later attempt worse → still latest 0/1
         r_sub2 = await c_student.post(
             f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
             json={"kind": "h5p", "score_raw": 1, "score_max": 1},
@@ -472,14 +472,14 @@ async def test_matrix_and_delta_fragments_render_h5p_status_symbols():
             re.DOTALL,
         )
         assert m2, "expected to find the H5P cell in the matrix HTML"
-        assert "✓" in m2.group(1)
+        assert "0/1" in m2.group(1)
 
         r_delta_2 = await c_owner.get(
             f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix/delta",
             params={"updated_since": base_ts},
         )
         assert r_delta_2.status_code == 200
-        assert "✓" in r_delta_2.text
+        assert "0/1" in r_delta_2.text
 
 
 @pytest.mark.anyio

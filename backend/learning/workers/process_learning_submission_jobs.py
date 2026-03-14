@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 from . import telemetry
 from backend.learning.adapters.ports import (
     FeedbackAdapterProtocol,
+    FeedbackInvalidAnalysisError,
     FeedbackPermanentError,
     FeedbackResult,
     FeedbackTransientError,
@@ -67,6 +68,7 @@ __all__ = [
     "VisionPermanentError",
     "FeedbackTransientError",
     "FeedbackPermanentError",
+    "FeedbackInvalidAnalysisError",
 ]
 
 
@@ -445,6 +447,11 @@ def _process_job(
                 submission_id=job.submission_id,
                 now=now,
                 message=str(exc),
+                error_code=(
+                    "feedback_invalid_analysis"
+                    if isinstance(exc, FeedbackInvalidAnalysisError)
+                    else "feedback_failed"
+                ),
                 transient=False,
             )
             conn.commit()
@@ -567,6 +574,11 @@ def _process_job(
             submission_id=job.submission_id,
             now=now,
             message=str(exc),
+            error_code=(
+                "feedback_invalid_analysis"
+                if isinstance(exc, FeedbackInvalidAnalysisError)
+                else "feedback_failed"
+            ),
             transient=False,
         )
         conn.commit()
@@ -803,6 +815,7 @@ def _handle_feedback_error(
     submission_id: str,
     now: datetime,
     message: str,
+    error_code: str = "feedback_failed",
     transient: bool,
 ) -> None:
     """Handle Feedback adapter failures with retries/backoff or failure marking."""
@@ -824,12 +837,12 @@ def _handle_feedback_error(
     _update_submission_failed(
         conn=conn,
         submission_id=submission_id,
-        error_code="feedback_failed",
+        error_code=error_code,
         message=truncated,
     )
     # Preserve the terminal failure on the queue row so operators can inspect past errors.
-    _mark_job_failed(conn=conn, job_id=job.id, error_code="feedback_failed")
-    telemetry.increment_counter("ai_worker_failed_total", error_code="feedback_failed")
+    _mark_job_failed(conn=conn, job_id=job.id, error_code=error_code)
+    telemetry.increment_counter("ai_worker_failed_total", error_code=error_code)
 
 
 def _mark_submission_retry(*, conn: Connection, submission_id: str, now: datetime, message: str) -> None:

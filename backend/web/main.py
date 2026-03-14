@@ -630,6 +630,25 @@ def _compute_local_sha256(storage_key: str, expected_size: int) -> str | None:
     return h.hexdigest()
 
 
+def _generate_task_submit_idempotency_key() -> str:
+    """Generate a short SSR idempotency token for one submit action."""
+    return f"ui-{uuid.uuid4().hex[:16]}"
+
+
+def _normalize_task_submit_idempotency_key(raw_value: object) -> str:
+    """Return a safe idempotency token or a fresh fallback token.
+
+    Why:
+        The learner submit form reuses the same token while one user action is
+        in flight. We still validate the hidden form field defensively because
+        it is client-controlled.
+    """
+    value = str(raw_value or "").strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value):
+        return value
+    return _generate_task_submit_idempotency_key()
+
+
 def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, task_kind: str = "native") -> str:
     """Build the task submission form HTML for learners.
 
@@ -657,6 +676,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     cid_escaped = Component.escape(course_id)
     uid_escaped = Component.escape(unit_id)
     kind_norm = (task_kind or "native").strip().lower()
+    idempotency_key = Component.escape(_generate_task_submit_idempotency_key())
     from backend.storage.learning_policy import DEFAULT_POLICY
 
     if kind_norm in {"visual", "scratch", "calliope"}:
@@ -678,10 +698,12 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         return (
             f'<form method="post" action="{form_action}" class="task-submit-form" '
             f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
+            f'hx-sync="this:drop" hx-disabled-elt="find button[type=\'submit\']" '
             f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="upload" '
             f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
             f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
             '<input type="hidden" name="mode" value="upload">'
+            f'<input type="hidden" name="idempotency_key" value="{idempotency_key}">'
             '<div class="task-form-fields fields-upload">'
             '<label>Datei auswählen '
             f'<input type="file" name="upload_file" accept="{accept}"></label>'
@@ -702,9 +724,11 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     return (
         f'<form method="post" action="{form_action}" class="task-submit-form" '
         f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
+        f'hx-sync="this:drop" hx-disabled-elt="find button[type=\'submit\']" '
         f'data-course-id="{cid_escaped}" data-task-id="{tid_escaped}" data-task-kind="{Component.escape(kind_norm)}" data-mode="text" '
         f'data-allowed-mime="{Component.escape(allowed_mime)}" data-max-bytes="{max_bytes}">'
         f'<input type="hidden" name="unit_id" value="{uid_escaped}">'
+        f'<input type="hidden" name="idempotency_key" value="{idempotency_key}">'
         '<fieldset class="choice-cards" aria-label="Abgabeart">'
         '<label class="choice-card choice-card--text">'
         '<input type="radio" name="mode" value="text" checked>'
@@ -1472,6 +1496,158 @@ def _resolve_student_material_file_url(
                      limit 1
                     """,
                     (student_sub, str(course_id), str(section_id), str(material_id)),
+                )
+                row = cur.fetchone()
+                if row and isinstance(row[0], str) and row[0].strip():
+                    storage_key = row[0].strip()
+        if not storage_key:
+            return None
+
+        settings = MaterialFileSettings()
+        presign = adapter.presign_download(  # type: ignore[call-arg]
+            bucket=settings.storage_bucket,
+            key=storage_key,
+            expires_in=settings.download_url_ttl_seconds,
+            disposition="inline",
+        )
+        url = presign.get("url") if isinstance(presign, dict) else None
+        if isinstance(url, str) and url.strip():
+            return url.strip()
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_student_modular_material_file_url(
+    *,
+    student_sub: str,
+    course_id: str,
+    unit_id: str,
+    module_id: str,
+    material_id: str,
+    storage_adapter: object | None = None,
+) -> str | None:
+    """Resolve a short-lived inline URL for a modular file material.
+
+    Why:
+        Modular module fragments do not always have a linear `section_id`
+        mapping available. SSR still needs a preview URL, so this helper
+        resolves the backing section via `unit_modules` and enforces modular
+        unlock rules before presigning the material.
+
+    Security:
+        The caller must be an enrolled student in the course/unit pair and the
+        module must currently be open or done according to
+        `modular_section_is_open_or_done_for_student(...)`. When any of these
+        checks fail, no URL is returned.
+    """
+    if not (
+        student_sub
+        and _is_uuid_like(course_id)
+        and _is_uuid_like(unit_id)
+        and _is_uuid_like(module_id)
+        and _is_uuid_like(material_id)
+    ):
+        return None
+    try:
+        from teaching.services.materials import MaterialFileSettings  # type: ignore
+        import routes.learning as learning_routes  # type: ignore
+
+        repo = getattr(learning_routes, "REPO", None)
+        dsn = str(getattr(repo, "_dsn", "") or "").strip()
+        if not dsn:
+            return None
+
+        adapter = storage_adapter
+        if adapter is None:
+            import routes.teaching as teaching_routes  # type: ignore
+
+            adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
+        if adapter is None or not hasattr(adapter, "presign_download"):
+            return None
+
+        import psycopg  # type: ignore
+
+        storage_key: str | None = None
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                try:
+                    set_current_sub = getattr(repo, "_set_current_sub", None)
+                    if callable(set_current_sub):
+                        set_current_sub(cur, student_sub)
+                    else:
+                        cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                except Exception:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                try:
+                    set_current_course_id = getattr(repo, "_set_current_course_id", None)
+                    if callable(set_current_course_id):
+                        set_current_course_id(cur, str(course_id))
+                    else:
+                        cur.execute("select set_config('app.current_course_id', %s, true)", (str(course_id),))
+                except Exception:
+                    cur.execute("select set_config('app.current_course_id', %s, true)", (str(course_id),))
+
+                cur.execute(
+                    """
+                    select exists(
+                             select 1
+                               from public.course_memberships
+                              where course_id = %s::uuid
+                                and student_id = %s
+                         )
+                    """,
+                    (str(course_id), student_sub),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return None
+
+                cur.execute(
+                    """
+                    select exists(
+                             select 1
+                               from public.course_modules
+                              where course_id = %s::uuid
+                                and unit_id = %s::uuid
+                         )
+                    """,
+                    (str(course_id), str(unit_id)),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return None
+
+                cur.execute(
+                    """
+                    select section_id::text
+                      from public.unit_modules
+                     where id = %s::uuid
+                       and unit_id = %s::uuid
+                     limit 1
+                    """,
+                    (str(module_id), str(unit_id)),
+                )
+                row = cur.fetchone()
+                section_id = row[0] if row and isinstance(row[0], str) and row[0].strip() else None
+                if not section_id:
+                    return None
+
+                cur.execute(
+                    "select public.modular_section_is_open_or_done_for_student(%s, %s::uuid, %s::uuid, %s::uuid)",
+                    (student_sub, str(course_id), str(unit_id), str(section_id)),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return None
+
+                cur.execute(
+                    """
+                    select storage_key
+                      from public.unit_materials
+                     where id = %s::uuid
+                       and section_id = %s::uuid
+                       and kind = 'file'
+                     limit 1
+                    """,
+                    (str(material_id), str(section_id)),
                 )
                 row = cur.fetchone()
                 if row and isinstance(row[0], str) and row[0].strip():
@@ -2333,6 +2509,7 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
     student_sub = str((user or {}).get("sub") or "")
     material_section_map: dict[str, str] | None = None
     file_url_cache: dict[tuple[str, str], str | None] = {}
+    modular_file_url_cache: dict[tuple[str, str], str | None] = {}
 
     # Render materials/tasks as the same cards used on the linear unit page.
     for m in (materials if isinstance(materials, list) else []):
@@ -2368,6 +2545,17 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
                             material_id=mid,
                         )
                     preview_url = str(file_url_cache.get(cache_key) or "").strip()
+                if not preview_url and _is_uuid_like(module_id):
+                    modular_cache_key = (str(module_id), mid)
+                    if modular_cache_key not in modular_file_url_cache:
+                        modular_file_url_cache[modular_cache_key] = _resolve_student_modular_material_file_url(
+                            student_sub=student_sub,
+                            course_id=str(course_id),
+                            unit_id=str(unit_id),
+                            module_id=str(module_id),
+                            material_id=mid,
+                        )
+                    preview_url = str(modular_file_url_cache.get(modular_cache_key) or "").strip()
             if mime and preview_url:
                 try:
                     preview_html = FilePreview(
@@ -2492,6 +2680,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
     form = await request.form()
+    form_idempotency_key = _normalize_task_submit_idempotency_key(form.get("idempotency_key"))
     mode = str(form.get("mode") or "text").strip()
     unit_id = str(form.get("unit_id") or "").strip()
     if not unit_id:
@@ -2567,7 +2756,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             headers = {
-                "Idempotency-Key": f"ui-{uuid.uuid4().hex[:16]}",
+                "Idempotency-Key": form_idempotency_key,
                 "Origin": internal_origin,
                 "Referer": str(request.url),
             }
@@ -4538,6 +4727,8 @@ def _render_live_cell_content(
     task_kind: object,
     has_submission: bool,
     average_score: object,
+    score_raw: object,
+    score_max: object,
     h5p_completed: object,
 ) -> str:
     """Render badge or status symbol for a live matrix cell.
@@ -4545,16 +4736,40 @@ def _render_live_cell_content(
     Why:
         The live matrix is a high-signal classroom view:
         - Native/visual tasks can show an average 0..10 badge once analysis exists.
-        - H5P tasks are auto-scorable and should be displayed as a simple 3-state
-          indicator (—/•/✓) instead of a numeric badge.
+        - H5P tasks are auto-scorable and should show the latest raw/max score
+          directly as `x/y`.
     """
     kind = str(task_kind or "")
 
-    # H5P tasks: show only bearbeitet/abgeschlossen.
-    is_h5p = (kind == "h5p") or (h5p_completed is True) or (h5p_completed is False)
+    # H5P tasks: prefer the latest raw/max score and only fall back to the
+    # legacy symbols when older payloads do not expose score_raw/score_max yet.
+    is_h5p = (
+        kind == "h5p"
+        or (h5p_completed is True)
+        or (h5p_completed is False)
+        or (score_raw is not None)
+        or (score_max is not None)
+    )
     if is_h5p:
         if not has_submission:
             return "—"
+        try:
+            raw_val = int(score_raw) if score_raw is not None else None
+            max_val = int(score_max) if score_max is not None else None
+        except (TypeError, ValueError):
+            raw_val = None
+            max_val = None
+        if raw_val is not None and max_val is not None:
+            if max_val > 0:
+                bounded_raw = max(0, min(raw_val, max_val))
+                scaled = int((bounded_raw / float(max_val)) * 10 + 0.5)
+                variant = _live_score_badge_variant(scaled)
+            else:
+                variant = "badge-warning"
+            return (
+                f'<span class="badge {variant}" '
+                f'aria-label="Punkte {raw_val} von {max_val}">{raw_val}/{max_val}</span>'
+            )
         if h5p_completed is True:
             return '<span aria-label="Abgeschlossen">✓</span>'
         return '<span aria-label="Bearbeitet">•</span>'
@@ -4614,6 +4829,8 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
                 task_kind=t.get("kind"),
                 has_submission=has,
                 average_score=cell.get("average_score"),
+                score_raw=cell.get("score_raw"),
+                score_max=cell.get("score_max"),
                 h5p_completed=cell.get("h5p_completed"),
             )
             cell_id = f"cell-{sub}-{tid}"
@@ -5782,6 +5999,8 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
             task_kind=None,
             has_submission=has,
             average_score=c.get("average_score"),
+            score_raw=c.get("score_raw"),
+            score_max=c.get("score_max"),
             h5p_completed=c.get("h5p_completed"),
         )
         cell_id = f"cell-{raw_sub}-{raw_task_id}"

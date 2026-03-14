@@ -188,7 +188,7 @@ async def test_learning_worker_update_failed_requires_valid_error_code():
 
             cur.execute(
                 "select public.learning_worker_update_failed(%s::uuid, %s, %s)",
-                (submission_id, "vision_failed", "permanent failure"),
+                (submission_id, "feedback_invalid_analysis", "deterministic parse failure"),
             )
             cur.fetchone()
 
@@ -196,7 +196,7 @@ async def test_learning_worker_update_failed_requires_valid_error_code():
                 """
                 select analysis_status,
                        error_code,
-                       vision_last_error
+                       feedback_last_error
                   from public.learning_submissions
                  where id = %s::uuid
                 """,
@@ -205,8 +205,8 @@ async def test_learning_worker_update_failed_requires_valid_error_code():
             status, error_code, last_error = cur.fetchone()
 
     assert status == "failed"
-    assert error_code == "vision_failed"
-    assert "permanent failure" in last_error
+    assert error_code == "feedback_invalid_analysis"
+    assert "deterministic parse failure" in last_error
 
 
 @pytest.mark.anyio

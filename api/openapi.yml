@@ -1405,6 +1405,7 @@ components:
                 - vision_failed
                 - feedback_retrying
                 - feedback_failed
+                - feedback_invalid_analysis
                 - input_corrupt
                 - input_unsupported
                 - input_too_large
@@ -1744,6 +1745,18 @@ components:
           description: >
             Only for H5P tasks. True when the student has at least one H5P submission
             with full score (score_raw == score_max, including 0/0). Null for non-H5P tasks.
+        score_raw:
+          type: integer
+          nullable: true
+          description: >
+            Only for H5P tasks. Raw score of the latest H5P submission. Null
+            when no H5P submission exists.
+        score_max:
+          type: integer
+          nullable: true
+          description: >
+            Only for H5P tasks. Maximum score of the latest H5P submission.
+            Null when no H5P submission exists.
         average_score:
           type: number
           format: float
@@ -1786,6 +1799,18 @@ components:
           description: >
             Only for H5P tasks. True when the student has at least one H5P submission
             with full score (score_raw == score_max, including 0/0). Null for non-H5P tasks.
+        score_raw:
+          type: integer
+          nullable: true
+          description: >
+            Only for H5P tasks. Raw score of the latest H5P submission at the
+            time of this change. Null when no H5P submission exists.
+        score_max:
+          type: integer
+          nullable: true
+          description: >
+            Only for H5P tasks. Maximum score of the latest H5P submission at
+            the time of this change. Null when no H5P submission exists.
         average_score:
           type: number
           format: float
@@ -4134,7 +4159,11 @@ paths:
             type: string
             maxLength: 64
             pattern: '^[A-Za-z0-9_-]{1,64}$'
-          description: "Optional idempotency token to de-duplicate retries (ASCII token: letters, digits, underscore, hyphen; case-sensitive)."
+          description: >-
+            Optional idempotency token to de-duplicate retries (ASCII token:
+            letters, digits, underscore, hyphen; case-sensitive). Retries of
+            the same user action should reuse the same token; a new deliberate
+            submission attempt should use a new token.
       requestBody:
         required: true
         content:

@@ -24,12 +24,21 @@ from typing import Sequence
 
 from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.learning.adapters.ports import (
+    FeedbackInvalidAnalysisError,
     FeedbackPermanentError,
     FeedbackResult,
     FeedbackTransientError,
 )
 
 LOG = logging.getLogger(__name__)
+
+
+def _raise_feedback_error_for_exception(exc: Exception, *, default_transient_code: str) -> None:
+    """Classify adapter exceptions into stable transient/permanent error codes."""
+    if str(exc) == "invalid_criterion_idx":
+        raise FeedbackInvalidAnalysisError("feedback_invalid_analysis") from exc
+    raise FeedbackTransientError(default_transient_code) from exc
+
 
 def _require_secure_openai_base_url(base_url: str) -> None:
     """
@@ -164,8 +173,7 @@ class _LocalFeedbackAdapter:
         except ImportError as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
         except Exception as exc:
-            # Fail-fast: surface as transient so the worker can retry.
-            raise FeedbackTransientError("feedback_failed") from exc
+            _raise_feedback_error_for_exception(exc, default_transient_code="feedback_failed")
 
     def analyze_visual(  # type: ignore[no-untyped-def]
         self,
@@ -252,7 +260,7 @@ class _LocalFeedbackAdapter:
         except ImportError as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
         except Exception as exc:
-            raise FeedbackTransientError("visual_feedback_failed") from exc
+            _raise_feedback_error_for_exception(exc, default_transient_code="visual_feedback_failed")
 
 
 def build() -> _LocalFeedbackAdapter:

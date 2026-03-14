@@ -17,6 +17,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 import httpx
@@ -527,12 +528,85 @@ async def test_delta_fragment_keeps_clickable_cell_attributes():
             f"/teaching/courses/{cid}/units/{unit['id']}/live/detail"
             f"?student_sub={learner.sub}&task_id={task['id']}"
         )
-        assert f'hx-get="{expected_href}"' in html
+        assert f'hx-get="{expected_href.replace("&", "&amp;")}"' in html
         assert 'hx-target="#live-detail"' in html
         assert 'hx-swap="innerHTML"' in html
         assert f'data-sub="{learner.sub}"' in html
         assert f'data-task="{task["id"]}"' in html
         assert 'hx-swap-oob="true"' in html
+
+
+@pytest.mark.anyio
+async def test_delta_fragment_encodes_reserved_student_sub_in_oob_markup(monkeypatch):
+    """Delta fragment must keep OOB HTML valid for reserved path/query characters."""
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-delta-escaped-owner", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    unit_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    task_id = "11111111-1111-1111-1111-111111111111"
+    student_sub = 'legacy/student&x=1"oops'
+
+    def _stub_internal_api_client():
+        class _StubResponse:
+            status_code = 200
+
+            def json(self) -> dict:
+                return {
+                    "cells": [
+                        {
+                            "student_sub": student_sub,
+                            "task_id": task_id,
+                            "has_submission": True,
+                            "average_score": None,
+                            "score_raw": None,
+                            "score_max": None,
+                            "h5p_completed": None,
+                            "changed_at": "2026-03-14T12:00:00Z",
+                        }
+                    ]
+                }
+
+        class _StubClient:
+            def __init__(self) -> None:
+                class _Cookies:
+                    def set(self, _name: str, _value: str) -> None:
+                        return None
+
+                self.cookies = _Cookies()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url: str, params: dict | None = None):
+                assert "/submissions/delta" in url
+                return _StubResponse()
+
+        return _StubClient()
+
+    monkeypatch.setattr(main, "_internal_api_client", _stub_internal_api_client)
+
+    encoded_student_sub = quote(student_sub, safe="")
+    expected_href = (
+        f"/teaching/courses/{course_id}/units/{unit_id}/live/detail"
+        f"?student_sub={encoded_student_sub}&task_id={task_id}"
+    )
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_delta = await c_owner.get(
+            f"/teaching/courses/{course_id}/units/{unit_id}/live/matrix/delta",
+            params={"updated_since": "2026-03-14T11:00:00Z"},
+        )
+
+    assert r_delta.status_code == 200
+    html = r_delta.text
+    assert f'hx-get="{expected_href.replace("&", "&amp;")}"' in html
+    assert 'data-sub="legacy/student&amp;x=1&quot;oops"' in html
+    assert f'id="cell-legacy/student&amp;x=1&quot;oops-{task_id}"' in html
+    assert 'hx-swap-oob="true"' in html
 
 
 @pytest.mark.anyio

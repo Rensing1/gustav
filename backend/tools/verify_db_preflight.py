@@ -86,7 +86,7 @@ def fetch_live_h5p_helper_result_signature(conn) -> str | None:  # noqa: ANN001
             join pg_namespace n on n.oid = p.pronamespace
             where n.nspname = 'public'
               and p.proname = 'get_unit_latest_submissions_for_owner'
-              and pg_get_function_identity_arguments(p.oid)
+              and oidvectortypes(p.proargtypes)
                     = 'text, uuid, uuid, timestamp with time zone, integer, integer'
             limit 1
             """

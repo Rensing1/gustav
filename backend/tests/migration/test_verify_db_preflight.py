@@ -90,6 +90,24 @@ def test_fetch_unit_tasks_kind_constraintdef_reads_pg_constraint() -> None:
     assert got and "calliope" in got
 
 
+def test_fetch_live_h5p_helper_result_signature_matches_types_without_argument_names() -> None:
+    class _RecordingConn(_FakeConn):
+        def __init__(self, row: tuple[str] | None) -> None:
+            super().__init__(row)
+            self.last_cursor: _FakeCursor | None = None
+
+        def cursor(self) -> _FakeCursor:
+            self.last_cursor = _FakeCursor(self._row)
+            return self.last_cursor
+
+    conn = _RecordingConn(("TABLE(student_sub text, task_id uuid, score_raw integer, score_max integer)",))
+    got = mod.fetch_live_h5p_helper_result_signature(conn)
+    assert got and "score_raw integer" in got
+    assert conn.last_cursor is not None
+    assert "oidvectortypes(p.proargtypes)" in conn.last_cursor.executed_sql
+    assert "pg_get_function_identity_arguments" not in conn.last_cursor.executed_sql
+
+
 def test_run_preflight_returns_error_when_db_unreachable(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     def _fail_connect(_dsn: str):
         raise RuntimeError("db_down")

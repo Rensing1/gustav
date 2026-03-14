@@ -4852,7 +4852,7 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
                 score_max=cell.get("score_max"),
                 h5p_completed=cell.get("h5p_completed"),
             )
-            cell_id = f"cell-{sub}-{tid}"
+            cell_id = Component.escape(f"cell-{sub}-{tid}")
             # Clicking a cell loads the detail pane below the matrix
             hx_href = _build_url_with_query(
                 f"/teaching/courses/{_quote_url_path_value(course_id)}/units/{_quote_url_path_value(unit_id)}/live/detail",
@@ -4860,7 +4860,7 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
             )
             row_cells.append(
                 f"<td id=\"{cell_id}\" data-sub=\"{Component.escape(sub)}\" data-task=\"{Component.escape(tid)}\" "
-                f"hx-get=\"{hx_href}\" hx-target=\"#live-detail\" hx-swap=\"innerHTML\">{content}</td>"
+                f"hx-get=\"{Component.escape(hx_href)}\" hx-target=\"#live-detail\" hx-swap=\"innerHTML\">{content}</td>"
             )
         body_rows.append(f"<tr>{''.join(row_cells)}</tr>")
     tbody = f"<tbody>{''.join(body_rows)}</tbody>"
@@ -5813,7 +5813,7 @@ def _render_student_live_task_card(course_id: str, student_sub: str, unit_id: st
     )
     return (
         '<details class="student-live-task">'
-        f'<summary class="student-live-task__summary" hx-get="{detail_href}" '
+        f'<summary class="student-live-task__summary" hx-get="{Component.escape(detail_href)}" '
         f'hx-target="#{Component.escape(detail_target)}" hx-swap="innerHTML">'
         '<div class="student-live-task__main">'
         f'<span class="student-live-task__label">{Component.escape(label)}</span>'
@@ -6109,13 +6109,14 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
             score_max=c.get("score_max"),
             h5p_completed=c.get("h5p_completed"),
         )
-        cell_id = f"cell-{raw_sub}-{raw_task_id}"
-        hx_href = (
-            f"/teaching/courses/{course_id}/units/{unit_id}/live/detail?student_sub={sub}&task_id={task_id}"
+        cell_id = Component.escape(f"cell-{raw_sub}-{raw_task_id}")
+        hx_href = _build_url_with_query(
+            f"/teaching/courses/{_quote_url_path_value(course_id)}/units/{_quote_url_path_value(unit_id)}/live/detail",
+            {"student_sub": raw_sub, "task_id": raw_task_id},
         )
         parts.append(
             f"<td id=\"{cell_id}\" data-sub=\"{sub}\" data-task=\"{task_id}\" "
-            f"hx-get=\"{hx_href}\" hx-target=\"#live-detail\" hx-swap=\"innerHTML\" "
+            f"hx-get=\"{Component.escape(hx_href)}\" hx-target=\"#live-detail\" hx-swap=\"innerHTML\" "
             f"hx-swap-oob=\"true\">{content}</td>"
         )
 

@@ -1,5 +1,22 @@
 # Plan: Keycloak Backlink Hardening on Error/Info Pages
 
+Status: umgesetzt (bestehende Repo-Implementierung verifiziert am 2026-03-13)
+
+## Umsetzungshinweis (2026-03-13)
+
+- Die gemeinsame Resolver-Logik ist bereits in
+  `keycloak/themes/gustav/login/_gustav_error_components.ftl` umgesetzt.
+- `error.ftl`, `login-page-expired.ftl` und `info.ftl` verwenden bereits den
+  gemeinsamen `resolve_primary_app_link(...)`-Pfad.
+- `backend/tests/test_keycloak_theme_files.py` deckt die Hardening-Regeln
+  bereits ab: Ausschluss von IdP-Account-Links, Scheme-/Host-Allowlist,
+  Blockade protokoll-relativer URLs und die exklusive CTA-Prioritaet in
+  `info.ftl`.
+- Verifiziert mit:
+  - `.venv/bin/pytest -q backend/tests/test_keycloak_theme_files.py`
+- Es waren keine API-/OpenAPI-, Migrations- oder Realm-Flow-Aenderungen
+  erforderlich.
+
 ## Context
 
 Ticket: `docs/tickets/keycloak-registration-error-backlink-hardening-2026-03-05.md`

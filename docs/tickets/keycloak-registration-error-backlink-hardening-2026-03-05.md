@@ -1,9 +1,19 @@
 # Ticket: Keycloak Registrierung/Verify - Ruecksprungziele auf Error/Info-Seiten haerten
 
-Status: offen  
+Status: abgeschlossen
 Prioritaet: hoch  
-Umgebung: Produktion (`app.gustav-lernplattform.de`, `id.gustav-lernplattform.de`)  
+Umgebung: Produktion (`app.school.example`, `id.school.example`)
 Erstellt am: 05. Maerz 2026
+
+Abschluss-Hinweis (2026-03-13): Die Hardening-Logik fuer Ruecksprungziele ist
+im bestehenden Repo-Stand bereits umgesetzt und verifiziert. Die gemeinsame
+Resolver-Logik liegt in
+`keycloak/themes/gustav/login/_gustav_error_components.ftl`; die betroffenen
+Templates `info.ftl`, `error.ftl` und `login-page-expired.ftl` verwenden diesen
+Pfad. Die Contract-Tests in `backend/tests/test_keycloak_theme_files.py`
+decken IdP-Account-Ausschluss, Scheme-/Host-Allowlist, protokoll-relative URLs
+und die CTA-Prioritaet auf `info.ftl` ab. Verifikation:
+`.venv/bin/pytest -q backend/tests/test_keycloak_theme_files.py`.
 
 ## Kontext
 
@@ -16,7 +26,7 @@ Auf Verify-/Error-Pfaden landen Nutzer teils auf Seiten mit unpassendem Rueckspr
 
 Beobachtetes Muster:
 - Wiederholte Events im Incident-Fenster mit `VERIFY_EMAIL_ERROR` und
-  `redirect_uri=https://id.gustav-lernplattform.de/realms/gustav/account/`.
+  `redirect_uri=https://id.school.example/realms/gustav/account/`.
 - Das Ziel `id.../account/` wird von Nutzern als fehlerhafter Backlink wahrgenommen, wenn sie eigentlich zur App zurueck muessen.
 
 ## Erwartetes Verhalten

@@ -16,6 +16,7 @@ help:
 	@echo "  reset-local        - Reset local Supabase DB + recreate app services"
 	@echo "  db-login-user      - Create/alter app DB login (IN ROLE gustav_limited, local only)"
 	@echo "  test               - Run test suite (unit/integration)"
+	@echo "  verify-preflight-db - Check DB schema prerequisites for make verify"
 	@echo "  test-e2e           - Run E2E tests (requires running services)"
 	@echo "  test-openai        - Run OpenAI endpoint smoke tests (requires local inference endpoint)"
 	@echo "  supabase-status    - Show local Supabase status"
@@ -81,6 +82,10 @@ db-login-user:
 .PHONY: test
 test:
 	. ./.venv/bin/activate && pytest -q
+
+.PHONY: verify-preflight-db
+verify-preflight-db:
+	. ./.venv/bin/activate && python -m backend.tools.verify_db_preflight
 
 .PHONY: test-h5p
 test-h5p:
@@ -148,6 +153,7 @@ test-openai:
 
 .PHONY: verify
 verify:
+	@$(MAKE) verify-preflight-db
 	@REQUIRE_DB_TESTS=1 $(MAKE) test
 	@$(MAKE) test-h5p
 	@$(MAKE) test-supabase

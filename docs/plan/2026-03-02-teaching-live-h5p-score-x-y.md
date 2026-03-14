@@ -1,7 +1,23 @@
 # Plan: Teaching Live Matrix - H5P Score x/y je Schueler (letzter Versuch)
 
-Status: geplant  
+Status: umgesetzt (2026-03-14)
 Datum: 2026-03-02
+
+## Umsetzungshinweis (2026-03-14)
+- `api/openapi.yml` erweitert `TeachingUnitTaskCell` und
+  `TeachingUnitDeltaCell` um `score_raw` und `score_max`.
+- Migration
+  `supabase/migrations/20260314113000_teaching_live_h5p_latest_score_xy.sql`
+  erweitert `public.get_unit_latest_submissions_for_owner(...)`.
+- SSR-/Delta-Rendering in `backend/web/main.py` und
+  `backend/web/routes/teaching.py` zeigt fuer H5P jetzt `x/y` statt nur
+  Statussymbolen.
+- Verifiziert mit:
+  - `backend/tests/test_teaching_live_h5p_matrix_cell_rendering.py`
+  - `backend/tests/test_teaching_live_unit_summary_api.py`
+  - `backend/tests/test_teaching_live_unit_delta_api.py`
+  - `backend/tests/test_teaching_live_unit_ui_ssr.py`
+  - `backend/tests/test_openapi_teaching_live_unit_contract.py`
 
 ## Ziel / Motivation
 In der Live-Unterrichts-Matrix ("Unterricht > Live") sollen Lehrkraefte bei H5P-Aufgaben pro Schueler direkt sehen, wie viele Punkte erreicht wurden.

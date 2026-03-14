@@ -3,6 +3,11 @@
 Datum: 2026-02-23  
 Status: Implemented (HEX-only Pipeline + `makecode.evidence.v1`)
 
+Re-Verification (2026-03-14):
+- `backend/tests/test_learning_calliope_hex_upload_only_api.py`
+- `backend/tests/test_learning_ui_calliope_hex_upload_only.py`
+- `backend/tests/test_openapi_calliope_hex_contract.py`
+
 ## Kontext / Problem
 Schueler laden aktuell vor allem:
 - Scratch: `.sb3` (upload-only) mit deterministischer Evidence-Extraktion.

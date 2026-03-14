@@ -1,5 +1,12 @@
 # Plan: Keycloak Error Pages in GUSTAV Theme
 
+Status: umgesetzt und verifiziert (2026-03-14)
+
+## Re-Verification 2026-03-14
+- Die gethemten Error-/Expired-Seiten sind im Repo-Stand vorhanden.
+- Verifiziert mit:
+  - `backend/tests/test_keycloak_theme_files.py` -> `27 passed`
+
 ## Why
 Users intermittently hit Keycloak error pages during registration and email verification
 (`cookie_not_found`, expired or invalid action tokens). Those pages currently fall back to

@@ -1,5 +1,15 @@
 # Ticket: Modular unit file materials show title but no preview (no <img>)
 
+**Status:** abgeschlossen
+
+**Abschluss-Hinweis (2026-03-14):**
+Das SSR-Modulfragment nutzt jetzt einen modularen Fallback-Resolver, wenn kein
+linearer Section-Release-Pfad verfuegbar ist. Dabei bleiben
+Kursmitgliedschaft, Unit-in-Course und
+`modular_section_is_open_or_done_for_student(...)` verpflichtend. Verifiziert
+mit den gezielten SSR-Tests in
+`backend/tests/test_learning_modular_unit_page_ui.py`.
+
 ## Summary
 In modular learning units, students can see file-material titles (e.g. an uploaded PNG/PDF), but the inline preview markup is missing entirely (no `<img>` / `<iframe>`). This blocks image-based materials in the modular workspace.
 
@@ -81,4 +91,3 @@ Medium-low. The change is localized to SSR fragment rendering but touches author
 
 ## Follow-ups
 - Signed URL TTL vs. `loading="lazy"`: very short TTLs can cause sporadic preview failures when students scroll later or keep the tab open for long periods. Consider longer TTL and/or a “reload preview” UX for materials similar to submission artifacts.
-

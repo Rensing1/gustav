@@ -1,9 +1,16 @@
 # Ticket: Learning Task Submit laesst Mehrfach-Abgaben trotz erwartetem Spamschutz zu
 
-**Status:** offen
+**Status:** abgeschlossen
 **Betroffene Umgebung:** Produktion
 **Datum der Beobachtung:** 2026-03-06
 **Komponenten:** Lernansicht, Task-Submit-Formulare, HTMX-Submit-Pfad, Learning-API
+
+**Abschluss-Hinweis (2026-03-14):**
+Die SSR-Task-Formulare besitzen jetzt Hidden-`idempotency_key`,
+HTMX-In-Flight-Schutz und clientseitige Submit-Sperre. Der SSR-Weiterleitungs-
+pfad verwendet denselben Key fuer denselben Nutzer-Submit statt pro Request
+einen neuen Zufallswert zu erzeugen. Verifiziert mit
+`backend/tests/test_learning_ui_htmx_submit.py`.
 
 ## Kurzbeschreibung
 

@@ -1,9 +1,15 @@
 # Ticket: Learning Feedback faellt bei ungueltiger strukturierter Analyse aus
 
-**Status:** offen
+**Status:** abgeschlossen
 **Betroffene Umgebung:** Produktion
 **Datum der Beobachtung:** 2026-03-06
 **Komponenten:** Learning-Worker, Feedback-Adapter, DSPy-Analysepfad, Lernverlauf-UI
+
+**Abschluss-Hinweis (2026-03-14):**
+Der Fehler wird jetzt als deterministischer, terminaler Analysefehler
+`feedback_invalid_analysis` behandelt. Adapter, Worker, OpenAPI-Contract und
+DB-Helper wurden darauf ausgerichtet; nutzlose Retries entfallen. Verifiziert
+mit den gezielten Adapter-/Worker-/DB-Regressionstests.
 
 ## Kurzbeschreibung
 

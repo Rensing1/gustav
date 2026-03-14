@@ -3,6 +3,11 @@
 Datum: 2026-02-18  
 Status: Implemented (SB3-only Pipeline + `scratch.evidence.v2`)
 
+Re-Verification (2026-03-14):
+- `backend/tests/test_learning_scratch_sb3_upload_only_api.py`
+- `backend/tests/test_learning_ui_scratch_upload_only.py`
+- `backend/tests/test_scratch_sb3_evidence_v2.py`
+
 ## Kontext / Problem
 Scratch-Abgaben werden in GUSTAV aktuell als **Visual Tasks** behandelt (Upload-only), typischerweise als **Screenshots** der Scratch-Blöcke.
 Das ist für eine kriterienorientierte, strukturierte Auswertung unzuverlässig (OCR/Visual Parsing, wenig deterministisch).

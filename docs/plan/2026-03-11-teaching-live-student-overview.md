@@ -1,5 +1,22 @@
 # 2026-03-11 - Teaching Live: Schueler-Gesamtansicht ueber mehrere Lerneinheiten
 
+Status: umgesetzt (2026-03-14, inklusive Review-Fixes)
+Datum: 2026-03-11
+
+## Abschluss 2026-03-14
+
+- Die Branch-Review-Nacharbeiten sind umgesetzt:
+  - kanonische `unit_ids`-Normalisierung
+  - explizite SSR-Fehlerzustaende fuer `400`, `403`, `404`
+  - Query-/Render-Hardening fuer die Multi-Unit-Uebersicht
+- Die UX-Nacharbeit aus
+  `docs/plan/2026-03-14-teaching-live-student-overview-ux.md` wurde im selben
+  Batch mit umgesetzt.
+- Verifiziert mit:
+  - `backend/tests/test_teaching_live_student_overview_api.py`
+  - `backend/tests/test_teaching_live_student_overview_ssr.py`
+  - `backend/tests/test_teaching_live_detail_ssr.py`
+
 Ziel: Die bestehende Lehrer-Live-Ansicht zeigt heute Abgaben fuer genau eine `Kurs x Lerneinheit`-Kombination. Es soll eine zweite Sicht entstehen, in der eine Lehrkraft aus der bestehenden Unit-Live-Seite heraus einen Schueler oeffnen und danach dessen Abgaben ueber alle oder eine ausgewaehlte Menge der Lerneinheiten dieses Kurses sehen kann.
 
 Das Dokument haelt bewusst nicht nur den Zielzustand fest, sondern auch den relevanten Repo-Kontext, damit spaetere Implementierungen nicht erneut die bestehende Live-Architektur recherchieren muessen.

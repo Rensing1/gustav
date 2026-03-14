@@ -1,7 +1,17 @@
 # Plan: Teaching Live Student Overview UX-Optimierung
 
-Status: geplant  
+Status: umgesetzt (2026-03-14)
 Datum: 2026-03-14
+
+## Ergebnis
+- Die Schueler-Live-Ansicht zeigt jetzt einen kompakten Kennzahlenblock,
+  reduzierte Aufgabenzeilen und Inline-Details pro Aufgabe.
+- Die globale Detailflaeche am Seitenende wurde entfernt.
+- Die Detail-Route rendert bei fehlender Einreichung weiterhin die
+  Aufgabenstellung plus Empty State.
+- Verifiziert mit:
+  - `backend/tests/test_teaching_live_student_overview_ssr.py`
+  - `backend/tests/test_teaching_live_detail_ssr.py`
 
 ## Ziel
 Die Lehreransicht fuer einen Schueler im Live-Unterricht soll von einer textlastigen Aufgabenliste zu einer kompakten Uebersicht werden. Lehrkraefte sollen auf einen Blick sehen:

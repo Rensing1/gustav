@@ -1,5 +1,11 @@
 # Ticket: Calliope HEX - Upload/Submit und Worker-Validierung inkonsistent
 
+**Status:** abgeschlossen
+
+**Abschluss-Hinweis (2026-03-14):**
+Die dokumentierten Hotfixes sind im aktuellen Repo-Stand vorhanden; die
+relevanten Calliope-Regressionen wurden erneut ausgefuehrt und bleiben gruen.
+
 ## Summary
 Bei mehreren Schuelerabgaben fuer `Task.kind=calliope` trat ein zweistufiges Problem auf:
 1. Upload funktionierte, aber Submit scheiterte teilweise an strikter HEX-Validierung.

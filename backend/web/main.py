@@ -5532,10 +5532,19 @@ def _fetch_course_for_teacher(course_id: str, *, owner_sub: str) -> dict | None:
         from routes import teaching as teaching_routes  # type: ignore
 
         repo = getattr(teaching_routes, "REPO", None)
-        if repo is None or not hasattr(repo, "get_course"):
+        if repo is None:
             return None
-        course = repo.get_course(course_id)
-        if not course or str(teaching_routes._teacher_id_of(course) or "") != str(owner_sub):  # type: ignore[attr-defined]
+        course = None
+        get_course_for_owner = getattr(repo, "get_course_for_owner", None)
+        if callable(get_course_for_owner):
+            course = get_course_for_owner(course_id, owner_sub)
+        elif hasattr(repo, "get_course"):
+            course = repo.get_course(course_id)
+            if not course or str(teaching_routes._teacher_id_of(course) or "") != str(owner_sub):  # type: ignore[attr-defined]
+                return None
+        else:
+            return None
+        if not course:
             return None
         title = course.get("title") if isinstance(course, dict) else getattr(course, "title", "")
         return {"id": course_id, "title": str(title or "")}

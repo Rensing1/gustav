@@ -195,6 +195,28 @@ def _stub_detail_internal_api_client(*, course_id: str, unit_id: str, task_id: s
     return _StubClient()
 
 
+def test_fetch_course_for_teacher_prefers_owner_scoped_repo_helper(monkeypatch: pytest.MonkeyPatch) -> None:
+    course_id = "11111111-1111-1111-1111-111111111111"
+    owner_sub = "teacher-fast-path"
+
+    class _Repo:
+        def get_course_for_owner(self, requested_course_id: str, requested_owner_sub: str) -> dict:
+            assert requested_course_id == course_id
+            assert requested_owner_sub == owner_sub
+            return {"id": requested_course_id, "title": "Kurs Fast Path"}
+
+        def get_course(self, _course_id: str) -> dict:
+            raise AssertionError("SSR fast-path must prefer the owner-scoped repo helper")
+
+    import routes.teaching as teaching  # noqa: E402
+
+    monkeypatch.setattr(teaching, "REPO", _Repo(), raising=False)
+
+    result = main._fetch_course_for_teacher(course_id, owner_sub=owner_sub)
+
+    assert result == {"id": course_id, "title": "Kurs Fast Path"}
+
+
 @pytest.mark.anyio
 async def test_student_live_overview_page_renders_too_many_units_error(monkeypatch: pytest.MonkeyPatch) -> None:
     main.SESSION_STORE = SessionStore()

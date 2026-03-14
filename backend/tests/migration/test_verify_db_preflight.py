@@ -61,6 +61,29 @@ def test_constraint_supports_calliope_rejects_missing_or_other_kinds() -> None:
     assert mod.constraint_supports_calliope("CHECK ((kind = ANY (ARRAY['native'::text, 'h5p'::text])))") is False
 
 
+def test_constraint_supports_feedback_invalid_analysis_detects_allowed_code() -> None:
+    definition = (
+        "CHECK ((error_code IS NULL) OR (error_code = ANY "
+        "(ARRAY['feedback_failed'::text, 'feedback_invalid_analysis'::text])))"
+    )
+    assert mod.constraint_supports_feedback_invalid_analysis(definition) is True
+
+
+def test_constraint_supports_feedback_invalid_analysis_rejects_missing_code() -> None:
+    definition = "CHECK ((error_code = ANY (ARRAY['vision_failed'::text, 'feedback_failed'::text])))"
+    assert mod.constraint_supports_feedback_invalid_analysis(definition) is False
+
+
+def test_result_signature_exposes_h5p_score_columns() -> None:
+    signature = "TABLE(student_sub text, task_id uuid, score_raw integer, score_max integer)"
+    assert mod.result_signature_supports_latest_h5p_scores(signature) is True
+
+
+def test_result_signature_rejects_missing_h5p_score_columns() -> None:
+    signature = "TABLE(student_sub text, task_id uuid, h5p_completed boolean)"
+    assert mod.result_signature_supports_latest_h5p_scores(signature) is False
+
+
 def test_fetch_unit_tasks_kind_constraintdef_reads_pg_constraint() -> None:
     conn = _FakeConn(("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",))
     got = mod.fetch_unit_tasks_kind_constraintdef(conn)
@@ -92,6 +115,12 @@ def test_run_preflight_returns_error_when_constraint_missing(monkeypatch) -> Non
 def test_run_preflight_returns_error_when_calliope_is_missing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'h5p'::text])))",)
     monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(mod, "fetch_learning_submissions_error_code_constraintdef", lambda _conn: "feedback_invalid_analysis")
+    monkeypatch.setattr(
+        mod,
+        "fetch_live_h5p_helper_result_signature",
+        lambda _conn: "TABLE(student_sub text, task_id uuid, score_raw integer, score_max integer)",
+    )
     out = io.StringIO()
     err = io.StringIO()
     rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)
@@ -99,9 +128,59 @@ def test_run_preflight_returns_error_when_calliope_is_missing(monkeypatch) -> No
     assert "does not allow kind='calliope'" in err.getvalue()
 
 
+def test_run_preflight_returns_error_when_feedback_invalid_analysis_is_missing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",)
+    monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(
+        mod,
+        "fetch_learning_submissions_error_code_constraintdef",
+        lambda _conn: "CHECK ((error_code = ANY (ARRAY['vision_failed'::text, 'feedback_failed'::text])))",
+    )
+    monkeypatch.setattr(
+        mod,
+        "fetch_live_h5p_helper_result_signature",
+        lambda _conn: "TABLE(student_sub text, task_id uuid, score_raw integer, score_max integer)",
+    )
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)
+    assert rc == 2
+    assert "feedback_invalid_analysis" in err.getvalue()
+
+
+def test_run_preflight_returns_error_when_h5p_helper_columns_are_missing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",)
+    monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(
+        mod,
+        "fetch_learning_submissions_error_code_constraintdef",
+        lambda _conn: "CHECK ((error_code = ANY (ARRAY['feedback_invalid_analysis'::text, 'feedback_failed'::text])))",
+    )
+    monkeypatch.setattr(
+        mod,
+        "fetch_live_h5p_helper_result_signature",
+        lambda _conn: "TABLE(student_sub text, task_id uuid, h5p_completed boolean)",
+    )
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)
+    assert rc == 2
+    assert "score_raw/score_max" in err.getvalue()
+
+
 def test_run_preflight_succeeds_when_calliope_is_allowed(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",)
     monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(
+        mod,
+        "fetch_learning_submissions_error_code_constraintdef",
+        lambda _conn: "CHECK ((error_code = ANY (ARRAY['feedback_invalid_analysis'::text, 'feedback_failed'::text])))",
+    )
+    monkeypatch.setattr(
+        mod,
+        "fetch_live_h5p_helper_result_signature",
+        lambda _conn: "TABLE(student_sub text, task_id uuid, score_raw integer, score_max integer)",
+    )
     out = io.StringIO()
     err = io.StringIO()
     rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)

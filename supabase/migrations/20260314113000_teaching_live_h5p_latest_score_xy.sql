@@ -71,7 +71,7 @@ as $$
      where ls.course_id = p_course_id
        and (p_updated_since is null
          or greatest(ls.created_at, coalesce(ls.completed_at, ls.created_at)) > p_updated_since)
-     order by ls.student_sub, ls.task_id, ls.created_at desc
+     order by ls.student_sub, ls.task_id, ls.created_at desc, ls.attempt_nr desc, ls.id desc
   )
   select l.student_sub,
          l.task_id,

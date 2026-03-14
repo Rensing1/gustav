@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -117,6 +118,7 @@ def _stub_student_live_internal_api_client(
     units: list[dict],
     overview_status: int,
     overview_body: dict,
+    student_sub: str = "student-1",
 ):
     class _StubResponse:
         def __init__(self, status_code: int, payload: dict | list) -> None:
@@ -151,7 +153,8 @@ def _stub_student_live_internal_api_client(
                     if unit["id"] == unit_id:
                         return _StubResponse(200, unit)
                 return _StubResponse(404, {"error": "not_found"})
-            if url == f"/api/teaching/courses/{course_id}/students/student-1/submissions/overview":
+            encoded_student_sub = quote(student_sub, safe="")
+            if url == f"/api/teaching/courses/{course_id}/students/{encoded_student_sub}/submissions/overview":
                 return _StubResponse(overview_status, overview_body)
             raise AssertionError(url)
 
@@ -302,6 +305,141 @@ async def test_student_live_overview_page_renders_inline_task_details(monkeypatc
     assert "Mit etwas Kontext." not in page.text
     assert f'id="student-live-task-detail-{task_id}"' in page.text
     assert "Bitte Aufgabe waehlen." not in page.text
+
+
+@pytest.mark.anyio
+async def test_student_live_overview_page_accepts_path_encoded_student_sub_with_slash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-path", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "abababab-abab-abab-abab-abababababab"
+    student_sub = "legacy/student"
+    encoded_student_sub = quote(student_sub, safe="")
+
+    monkeypatch.setattr(
+        main,
+        "_fetch_course_for_teacher",
+        lambda _course_id, *, owner_sub: {"id": _course_id, "title": "Kurs Pfadtest"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_fetch_course_units_for_teacher",
+        lambda _course_id, *, owner_sub: [],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_student_live_internal_api_client(
+            course_id=course_id,
+            units=[],
+            overview_status=200,
+            student_sub=student_sub,
+            overview_body={"student": {"sub": student_sub, "name": "Anna"}, "units": []},
+        ),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        page = await c.get(f"/teaching/courses/{course_id}/students/{encoded_student_sub}/live")
+
+    assert page.status_code == 200, page.text
+    assert "Kurs Pfadtest" in page.text
+    assert "Anna" in page.text
+
+
+@pytest.mark.anyio
+async def test_student_live_detail_partial_preserves_upstream_error_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-detail-error", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "99999999-9999-9999-9999-999999999999"
+    unit_id = "88888888-8888-8888-8888-888888888888"
+    task_id = "77777777-7777-7777-7777-777777777777"
+    student_sub = "student-error"
+
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_detail_internal_api_client(
+            course_id=course_id,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+            payload_status=403,
+            payload={"error": "forbidden"},
+        ),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_detail = await c.get(
+            f"/teaching/courses/{course_id}/units/{unit_id}/live/detail",
+            params={"student_sub": student_sub, "task_id": task_id},
+        )
+
+    assert r_detail.status_code == 403, r_detail.text
+    assert "Fehler beim Laden der Details." in r_detail.text
+
+
+@pytest.mark.anyio
+async def test_student_live_overview_page_falls_back_to_api_for_course_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SSR should keep API-consistent titles when the direct repo lookup is unavailable."""
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-api-fallback", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "abababab-abab-abab-abab-abababababab"
+    unit_id = "cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd"
+    task_id = "efefefef-efef-efef-efef-efefefefefef"
+
+    monkeypatch.setattr(main, "_fetch_course_for_teacher", lambda _course_id, owner_sub: None, raising=False)
+    monkeypatch.setattr(main, "_fetch_course_units_for_teacher", lambda _course_id, owner_sub: [], raising=False)
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_student_live_internal_api_client(
+            course_id=course_id,
+            units=[{"id": unit_id, "title": "Einheit API"}],
+            overview_status=200,
+            overview_body={
+                "student": {"sub": "student-1", "name": "Anna"},
+                "units": [
+                    {
+                        "id": unit_id,
+                        "title": "Einheit API",
+                        "tasks": [
+                            {
+                                "id": task_id,
+                                "instruction_md": "### Aufgabe API",
+                                "position": 1,
+                                "kind": "native",
+                                "has_submission": False,
+                                "average_score": None,
+                                "h5p_completed": None,
+                            }
+                        ],
+                    }
+                ],
+            },
+        ),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        page = await c.get(f"/teaching/courses/{course_id}/students/student-1/live")
+
+    assert page.status_code == 200, page.text
+    assert "Kurs SSR Fehler" in page.text
+    assert "Einheit API" in page.text
+    assert "Aufgabe API" in page.text
 
 
 @pytest.mark.anyio

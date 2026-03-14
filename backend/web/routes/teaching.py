@@ -858,6 +858,11 @@ class _Repo:
         tasks: List[dict] = []
         for section in self.list_sections_for_author(unit_id, owner_id):
             sec_id = section["id"] if isinstance(section, dict) else section.id
+            sec_position = (
+                int(section.get("position") or 0)
+                if isinstance(section, dict)
+                else int(getattr(section, "position", 0) or 0)
+            )
             for task in self.list_tasks_for_section_owned(unit_id, sec_id, owner_id):
                 if isinstance(task, dict):
                     tasks.append(
@@ -866,6 +871,7 @@ class _Repo:
                             "instruction_md": str(task.get("instruction_md") or ""),
                             "position": int(task.get("position") or 0),
                             "kind": str(task.get("kind") or "native"),
+                            "_section_position": sec_position,
                         }
                     )
                 else:
@@ -875,11 +881,21 @@ class _Repo:
                             "instruction_md": str(task.instruction_md or ""),
                             "position": int(task.position),
                             "kind": str(getattr(task, "kind", "native") or "native"),
+                            "_section_position": sec_position,
                         }
                     )
-        tasks.sort(key=lambda item: (int(item.get("position") or 0), str(item.get("id") or "")))
+        # Preserve section order first so the in-memory fallback matches the
+        # DB-backed course-scoped task projection across multiple sections.
+        tasks.sort(
+            key=lambda item: (
+                int(item.get("_section_position") or 0),
+                int(item.get("position") or 0),
+                str(item.get("id") or ""),
+            )
+        )
         for index, task in enumerate(tasks, start=1):
             task["position"] = index
+            task.pop("_section_position", None)
         return tasks
 
     def list_tasks_for_course_units_owner(
@@ -5047,11 +5063,11 @@ async def get_unit_live_delta(
                             cur.execute(
                                 """
                                 select greatest(created_at, coalesce(completed_at, created_at))
-                                  from public.learning_submissions
+                                 from public.learning_submissions
                                  where course_id = %s
                                    and task_id = %s::uuid
                                    and student_sub = %s
-                                 order by created_at desc
+                                 order by created_at desc, attempt_nr desc, id desc
                                  limit 1
                                 """,
                                 (course_id, task_id, student_sub),
@@ -5162,7 +5178,7 @@ async def get_unit_live_delta(
     return _json_private(payload, status_code=200, vary_origin=True)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview")
+@teaching_router.get("/api/teaching/courses/{course_id}/students/{student_sub:path}/submissions/overview")
 async def get_student_live_overview(request: Request, course_id: str, student_sub: str):
     """Return a teacher-facing live overview for one student across course units.
 
@@ -5226,7 +5242,7 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
 
 
 @teaching_router.get(
-    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
+    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub:path}/submissions/latest"
 )
 async def get_latest_submission_detail(
     request: Request,
@@ -5624,7 +5640,7 @@ async def get_latest_submission_detail(
                                  where course_id = %s
                                    and task_id = %s::uuid
                                    and student_sub = %s
-                                 order by created_at desc
+                                 order by created_at desc, attempt_nr desc, id desc
                                  limit 1
                                 """,
                                 (course_id, task_id, student_sub),
@@ -5736,7 +5752,7 @@ async def get_latest_submission_detail(
                                  where course_id = %s
                                    and task_id = %s::uuid
                                    and student_sub = %s
-                                 order by created_at desc
+                                 order by created_at desc, attempt_nr desc, id desc
                                  limit 1
                                 """,
                                 (course_id, task_id, student_sub),

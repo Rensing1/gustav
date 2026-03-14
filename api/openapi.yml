@@ -8283,6 +8283,9 @@ paths:
           name: student_sub
           required: true
           schema: { type: string }
+          description: >
+            Student subject identifier. Clients must URL-encode reserved path
+            characters; the server accepts encoded slash-containing values.
         - in: query
           name: unit_ids
           required: false
@@ -8375,6 +8378,9 @@ paths:
           name: student_sub
           required: true
           schema: { type: string }
+          description: >
+            Student subject identifier. Clients must URL-encode reserved path
+            characters; the server accepts encoded slash-containing values.
       responses:
         '200':
           headers:

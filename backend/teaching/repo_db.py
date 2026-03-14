@@ -3355,10 +3355,10 @@ class DBTeachingRepo:
                            ls.analysis_status::text,
                            ls.analysis_json
                       from public.learning_submissions ls
-                     where ls.course_id = %s
-                       and ls.student_sub = %s
-                       and ls.task_id = any(%s::uuid[])
-                     order by ls.task_id, ls.created_at desc, ls.id desc
+                    where ls.course_id = %s
+                      and ls.student_sub = %s
+                      and ls.task_id = any(%s::uuid[])
+                     order by ls.task_id, ls.created_at desc, ls.attempt_nr desc, ls.id desc
                     """,
                     (course_id, student_sub, task_ids),
                 )

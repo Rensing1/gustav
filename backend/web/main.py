@@ -15,6 +15,7 @@ import mimetypes
 import json
 from typing import Optional, Dict, Any, List, Mapping
 from datetime import datetime, timezone
+from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
@@ -55,6 +56,21 @@ if __name__ == "main":
     _sys.modules.setdefault("backend.web.main", _sys.modules[__name__])
 elif __name__ == "backend.web.main":
     _sys.modules["main"] = _sys.modules[__name__]
+
+
+def _quote_url_path_value(value: object) -> str:
+    """Quote one dynamic path segment defensively for SSR-generated URLs."""
+    return quote(str(value or ""), safe="")
+
+
+def _build_url_with_query(path: str, params: Mapping[str, object]) -> str:
+    """Build a URL with a safely encoded query string."""
+    filtered = {
+        str(key): str(value)
+        for key, value in params.items()
+        if value is not None
+    }
+    return f"{path}?{urlencode(filtered)}" if filtered else path
 
 
 def _normalize_changed_at_to_utc(changed_raw: str) -> datetime | None:
@@ -4815,7 +4831,10 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
         name = Component.escape(disp or "Unbekannt")
         # map tasks by id for deterministic lookup
         cells_by_task = {str(c.get("task_id")): c for c in (r.get("tasks") or []) if isinstance(c, dict)}
-        student_href = f"/teaching/courses/{course_id}/students/{Component.escape(sub)}/live"
+        student_href = (
+            f"/teaching/courses/{_quote_url_path_value(course_id)}"
+            f"/students/{_quote_url_path_value(sub)}/live"
+        )
         row_cells = [
             f"<th scope=\"row\" class=\"student-name\">"
             f"<a href=\"{student_href}\">{name}</a>"
@@ -4835,8 +4854,9 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
             )
             cell_id = f"cell-{sub}-{tid}"
             # Clicking a cell loads the detail pane below the matrix
-            hx_href = (
-                f"/teaching/courses/{course_id}/units/{unit_id}/live/detail?student_sub={Component.escape(sub)}&task_id={Component.escape(tid)}"
+            hx_href = _build_url_with_query(
+                f"/teaching/courses/{_quote_url_path_value(course_id)}/units/{_quote_url_path_value(unit_id)}/live/detail",
+                {"student_sub": sub, "task_id": tid},
             )
             row_cells.append(
                 f"<td id=\"{cell_id}\" data-sub=\"{Component.escape(sub)}\" data-task=\"{Component.escape(tid)}\" "
@@ -5282,7 +5302,10 @@ async def teaching_unit_live_detail_partial(
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
             r = await client.get(
-                f"/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest"
+                f"/api/teaching/courses/{_quote_url_path_value(course_id)}"
+                f"/units/{_quote_url_path_value(unit_id)}"
+                f"/tasks/{_quote_url_path_value(task_id)}"
+                f"/students/{_quote_url_path_value(student_sub)}/submissions/latest"
             )
             if r.status_code == 204:
                 html = _render_teacher_live_empty_detail_card(
@@ -5297,23 +5320,25 @@ async def teaching_unit_live_detail_partial(
                 )
                 return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
             if r.status_code != 200:
-                return HTMLResponse("<div class=\"card alert alert-error\">Fehler beim Laden der Details.</div>", status_code=200)
+                return HTMLResponse(
+                    "<div class=\"card alert alert-error\">Fehler beim Laden der Details.</div>",
+                    status_code=r.status_code,
+                    headers={"Cache-Control": "private, no-store"},
+                )
             data = r.json()
     except Exception:
-        data = None
+        return HTMLResponse(
+            "<div class=\"card alert alert-error\">Fehler beim Laden der Details.</div>",
+            status_code=502,
+            headers={"Cache-Control": "private, no-store"},
+        )
 
     if not isinstance(data, dict):
-        html = _render_teacher_live_empty_detail_card(
-            display_name=_resolve_teacher_student_display_name(str(student_sub)),
-            instruction_md=_fetch_task_instruction_for_teacher(
-                course_id,
-                unit_id,
-                task_id,
-                owner_sub=owner_sub,
-            ),
-            message="Noch keine Einreichung vorhanden.",
+        return HTMLResponse(
+            "<div class=\"card alert alert-error\">Fehler beim Laden der Details.</div>",
+            status_code=502,
+            headers={"Cache-Control": "private, no-store"},
         )
-        return HTMLResponse(html, status_code=200, headers={"Cache-Control": "private, no-store"})
 
     created = Component.escape(str(data.get("created_at") or ""))
     kind_raw = str(data.get("kind") or "")
@@ -5540,6 +5565,67 @@ def _fetch_course_units_for_teacher(course_id: str, *, owner_sub: str) -> list[d
     return out
 
 
+async def _fetch_course_for_teacher_via_api(client, course_id: str) -> dict | None:  # noqa: ANN001
+    """Fetch the course title via the owner-scoped Teaching API as SSR fallback."""
+    try:
+        response = await client.get(f"/api/teaching/courses/{course_id}")
+    except Exception:
+        return None
+    if response.status_code != 200:
+        return None
+    try:
+        payload = response.json()
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return {
+        "id": str(payload.get("id") or course_id),
+        "title": str(payload.get("title") or ""),
+    }
+
+
+async def _fetch_course_units_for_teacher_via_api(client, course_id: str) -> list[dict]:  # noqa: ANN001
+    """Fetch course-attached unit titles via the Teaching API as SSR fallback."""
+    try:
+        modules_response = await client.get(f"/api/teaching/courses/{course_id}/modules")
+    except Exception:
+        return []
+    if modules_response.status_code != 200:
+        return []
+    try:
+        modules_payload = modules_response.json()
+    except Exception:
+        return []
+    if not isinstance(modules_payload, list):
+        return []
+
+    out: list[dict] = []
+    seen: set[str] = set()
+    for module in modules_payload:
+        if not isinstance(module, dict):
+            continue
+        unit_id = str(module.get("unit_id") or "")
+        if not _is_uuid_like(unit_id) or unit_id in seen:
+            continue
+        seen.add(unit_id)
+
+        title = "Lerneinheit"
+        try:
+            unit_response = await client.get(f"/api/teaching/units/{unit_id}")
+        except Exception:
+            unit_response = None
+        if unit_response is not None and unit_response.status_code == 200:
+            try:
+                unit_payload = unit_response.json()
+            except Exception:
+                unit_payload = None
+            if isinstance(unit_payload, dict):
+                title = str(unit_payload.get("title") or title)
+        out.append({"id": unit_id, "title": title})
+    return out
+
+
 def _student_live_error_message(detail: str, *, status_code: int) -> str:
     """Map internal API error details to teacher-facing SSR copy."""
     normalized = str(detail or "").strip()
@@ -5712,9 +5798,9 @@ def _render_student_live_task_card(course_id: str, student_sub: str, unit_id: st
     status_text, status_tone = _student_live_status_text(task)
     score_badge = _render_student_live_average_score_badge(task.get("average_score"))
     detail_target = f"student-live-task-detail-{task_id}"
-    detail_href = (
-        f"/teaching/courses/{course_id}/units/{unit_id}/live/detail"
-        f"?student_sub={Component.escape(student_sub)}&task_id={Component.escape(task_id)}"
+    detail_href = _build_url_with_query(
+        f"/teaching/courses/{_quote_url_path_value(course_id)}/units/{_quote_url_path_value(unit_id)}/live/detail",
+        {"student_sub": student_sub, "task_id": task_id},
     )
     return (
         '<details class="student-live-task">'
@@ -5773,7 +5859,7 @@ def _render_student_live_units(course_id: str, student_sub: str, units: list[dic
     return "".join(cards)
 
 
-@app.get("/teaching/courses/{course_id}/students/{student_sub}/live", response_class=HTMLResponse)
+@app.get("/teaching/courses/{course_id}/students/{student_sub:path}/live", response_class=HTMLResponse)
 async def teaching_course_student_live_page(request: Request, course_id: str, student_sub: str):
     """SSR page: teacher overview of one student's submissions across course units."""
     user = getattr(request.state, "user", None)
@@ -5800,9 +5886,17 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
             if sid:
                 client.cookies.set(SESSION_COOKIE_NAME, sid)
 
+            if not course_vm:
+                api_course_vm = await _fetch_course_for_teacher_via_api(client, course_id)
+                if api_course_vm:
+                    course_title = str(api_course_vm.get("title") or course_title)
+            if not available_units:
+                available_units = await _fetch_course_units_for_teacher_via_api(client, course_id)
+
             overview_params = [("unit_ids", raw) for raw in raw_unit_ids] if raw_unit_ids is not None else None
             overview_resp = await client.get(
-                f"/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview",
+                f"/api/teaching/courses/{_quote_url_path_value(course_id)}"
+                f"/students/{_quote_url_path_value(student_sub)}/submissions/overview",
                 params=overview_params,
             )
             if overview_resp.status_code == 200 and isinstance(overview_resp.json(), dict):
@@ -5873,7 +5967,10 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
             f"{unit_title}"
             "</label>"
         )
-    filter_base = f"/teaching/courses/{course_id}/students/{Component.escape(student_sub)}/live"
+    filter_base = (
+        f"/teaching/courses/{_quote_url_path_value(course_id)}"
+        f"/students/{_quote_url_path_value(student_sub)}/live"
+    )
     filter_html = (
         '<section class="card student-live-filter">'
         '<h2>Filter</h2>'

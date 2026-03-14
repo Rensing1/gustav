@@ -407,6 +407,105 @@ async def test_summary_includes_latest_h5p_score_x_y_and_completion_flag():
 
 
 @pytest.mark.anyio
+async def test_summary_uses_latest_h5p_attempt_when_created_at_timestamps_tie():
+    """Latest H5P selection must stay deterministic when created_at ties.
+
+    Why:
+        Snapshot imports or bulk timestamp corrections can leave two attempts
+        with the same `created_at`. The live summary must still pick the latest
+        semantic attempt, not an arbitrary physical row.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for H5P summary tie test")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required for H5P summary tie test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-h5p-tie-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-live-h5p-tie-learner", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Live Kurs H5P Tie")
+        unit = await _create_unit(c_owner, "Live Einheit H5P Tie")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+
+        r_task = await c_owner.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
+            json={
+                "instruction_md": "H5P Tie Break",
+                "criteria": [],
+                "max_attempts": 3,
+                "h5p": {"content_id": "1999", "display_options": {}},
+            },
+        )
+        assert r_task.status_code == 201
+        task = r_task.json()
+
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r_first = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert r_first.status_code in (200, 201, 202), r_first.text
+        first_submission = r_first.json()
+
+        r_second = await c_student.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "h5p", "score_raw": 1, "score_max": 1},
+        )
+        assert r_second.status_code in (200, 201, 202), r_second.text
+        second_submission = r_second.json()
+
+        tied_ts = "2026-03-14T12:00:00+00:00"
+        with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update public.learning_submissions
+                       set created_at = %s::timestamptz,
+                           completed_at = %s::timestamptz
+                     where id in (%s::uuid, %s::uuid)
+                    """,
+                    (tied_ts, tied_ts, first_submission["id"], second_submission["id"]),
+                )
+            conn.commit()
+
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r = await c_owner.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary",
+            params={"limit": 100, "offset": 0},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        rows = {row["student"]["sub"]: row for row in body["rows"]}
+        cells = {c["task_id"]: c for c in rows[learner.sub]["tasks"]}
+
+        assert cells[task["id"]]["score_raw"] == 1
+        assert cells[task["id"]]["score_max"] == 1
+        assert cells[task["id"]].get("h5p_completed") is True
+
+
+@pytest.mark.anyio
 async def test_summary_includes_average_score_for_completed_analysis():
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402

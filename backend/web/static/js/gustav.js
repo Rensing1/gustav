@@ -205,6 +205,11 @@ class Gustav {
     if (field) {
       field.value = this.generateTaskSubmitIdempotencyKey();
     }
+    this.unlockTaskSubmitForm(form);
+  }
+
+  unlockTaskSubmitForm(form) {
+    if (!form) return;
     if (form.dataset) {
       form.dataset.submitLocked = '0';
     }
@@ -1139,8 +1144,9 @@ class Gustav {
         if (!elt || !elt.closest) return;
         const form = elt.closest('form.task-submit-form');
         if (!form || !form.dataset) return;
-        this.rotateTaskSubmitIdempotencyKey(form);
+        this.unlockTaskSubmitForm(form);
         if (!detail.successful) return;
+        this.rotateTaskSubmitIdempotencyKey(form);
         const courseId = form.dataset.courseId;
         const taskId = form.dataset.taskId;
         if (courseId && taskId) this.clearTaskDraft(courseId, taskId);

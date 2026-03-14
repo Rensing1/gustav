@@ -8289,6 +8289,7 @@ paths:
         - in: query
           name: unit_ids
           required: false
+          allowEmptyValue: true
           style: form
           explode: true
           schema:
@@ -8300,6 +8301,8 @@ paths:
           description: >
             Optional list of unit ids. When omitted, all units attached to the
             course are returned. Duplicate values are ignored by the server.
+            Sending only blank values such as `unit_ids=` expresses an explicit
+            empty selection and returns zero units.
       responses:
         '200':
           description: OK

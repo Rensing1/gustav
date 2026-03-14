@@ -36,7 +36,7 @@ LOG = logging.getLogger(__name__)
 def _raise_feedback_error_for_exception(exc: Exception, *, default_transient_code: str) -> None:
     """Classify adapter exceptions into stable transient/permanent error codes."""
     normalized = str(exc or "").strip().lower()
-    if "invalid_criterion_idx" in normalized:
+    if ("invalid_criterion_idx" in normalized) or ("invalid_analysis_json" in normalized):
         raise FeedbackInvalidAnalysisError("feedback_invalid_analysis") from exc
     raise FeedbackTransientError(default_transient_code) from exc
 

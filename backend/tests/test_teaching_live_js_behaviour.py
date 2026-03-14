@@ -524,3 +524,74 @@ console.log(JSON.stringify(result));
     data = _run_node(script)
     assert data["text"].startswith("Letzte Aktualisierung:")
     assert data["hasDanger"] is False
+
+
+def test_learning_submit_after_request_failure_keeps_idempotency_key_for_retry():
+    """Failed HTMX submits must unlock the form without rotating the retry token."""
+    script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const path = require('path');
+
+const src = fs.readFileSync(path.join('backend','web','static','js','gustav.js'), 'utf8');
+
+let afterRequestHandler = null;
+
+const submitBtn = { disabled: true };
+const idempotencyField = { value: 'ui-fixed-key' };
+const form = {
+  dataset: { submitLocked: '1', courseId: 'course-1', taskId: 'task-1' },
+  querySelector(selector) {
+    if (selector === 'input[name="idempotency_key"]') return idempotencyField;
+    if (selector === 'button[type="submit"]') return submitBtn;
+    return null;
+  }
+};
+
+const sandbox = {
+  console,
+  setTimeout: () => 0,
+  clearTimeout: () => {},
+  requestAnimationFrame: () => 0,
+};
+
+sandbox.document = {
+  readyState: 'loading',
+  addEventListener: () => {},
+  querySelectorAll: () => [],
+  getElementById: () => null,
+  body: {
+    addEventListener(name, handler) {
+      if (name === 'htmx:afterRequest') afterRequestHandler = handler;
+    }
+  }
+};
+sandbox.window = sandbox;
+sandbox.window.matchMedia = () => ({ matches: false, addEventListener: () => {} });
+sandbox.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+sandbox.sessionStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+
+vm.runInNewContext(src, sandbox);
+const gustav = sandbox.window.gustav;
+gustav.initHTMX();
+
+if (afterRequestHandler) {
+  afterRequestHandler({
+    detail: {
+      successful: false,
+      pathInfo: { requestPath: '/learning/courses/course-1/tasks/task-1/submit' },
+      elt: { closest(selector) { return selector === 'form.task-submit-form' ? form : null; } }
+    }
+  });
+}
+
+console.log(JSON.stringify({
+  idempotencyKey: idempotencyField.value,
+  submitLocked: form.dataset.submitLocked,
+  submitDisabled: submitBtn.disabled
+}));
+    """
+    data = _run_node(script)
+    assert data["idempotencyKey"] == "ui-fixed-key"
+    assert data["submitLocked"] == "0"
+    assert data["submitDisabled"] is False

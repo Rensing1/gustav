@@ -27,6 +27,11 @@ def test_openapi_has_student_live_overview_path() -> None:
     assert {"200", "400", "401", "403", "404"} <= set(responses.keys())
     ref = responses["200"]["content"]["application/json"]["schema"]["$ref"]
     assert ref.endswith("/TeachingStudentLiveOverview")
+    unit_ids = params["unit_ids"]
+    assert unit_ids.get("allowEmptyValue") is True
+    description = str(unit_ids.get("description") or "")
+    assert "unit_ids=" in description
+    assert "empty selection" in description.lower()
 
 
 def test_openapi_has_student_live_overview_schemas() -> None:

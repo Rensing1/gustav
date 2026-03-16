@@ -1497,6 +1497,139 @@ def _load_average_scores_by_submission_id(
     return out
 
 
+def _load_latest_submission_state_by_task(
+    cur,
+    owner_sub: str,
+    course_id: str,
+    task_ids_by_student: dict[str, list[str]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Load the latest submission state per `(student_sub, task_id)` under RLS."""
+    if not task_ids_by_student:
+        return {}
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    try:
+        for student_sub, task_ids in task_ids_by_student.items():
+            if not task_ids:
+                continue
+            cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+            try:
+                cur.execute(
+                    """
+                    select distinct on (task_id)
+                           task_id::text,
+                           id::text,
+                           score_raw,
+                           score_max,
+                           greatest(created_at, coalesce(completed_at, created_at))
+                      from public.learning_submissions
+                     where course_id = %s
+                       and task_id = any(%s)
+                     order by task_id, created_at desc, attempt_nr desc, id desc
+                    """,
+                    (course_id, task_ids),
+                )
+                rows = cur.fetchall() or []
+            except Exception as exc:
+                logger.warning("Unit live latest submission lookup failed — %s", exc)
+                rows = []
+            for task_id, submission_id, score_raw, score_max, changed_at in rows:
+                out[(student_sub, str(task_id))] = {
+                    "submission_id": str(submission_id) if submission_id else None,
+                    "score_raw": _safe_int(score_raw),
+                    "score_max": _safe_int(score_max),
+                    "changed_at": changed_at,
+                }
+    finally:
+        cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+    return out
+
+
+def _load_unit_live_helper_rows(
+    cur,
+    *,
+    owner_sub: str,
+    course_id: str,
+    unit_id: str,
+    updated_since_dt: datetime | None,
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    """Load live helper rows compatibly across the old and new DB helper shapes.
+
+    Why:
+        The live matrix and delta endpoints recently started reading
+        `score_raw/score_max` from `get_unit_latest_submissions_for_owner(...)`.
+        Snapshot imports or partially migrated environments can still expose the
+        older helper shape without these columns. We probe the new shape first
+        and roll back to a savepoint before retrying the legacy projection.
+
+    Returns:
+        A normalized list of rows with stable keys:
+        `student_sub`, `task_id`, `submission_id`, `score_raw`, `score_max`,
+        `created_at_iso`, `completed_at_iso`, `h5p_completed`.
+    """
+    params = (owner_sub, course_id, unit_id, updated_since_dt, int(limit), int(offset))
+    current_sql = """
+        select student_sub::text,
+               task_id::text,
+               submission_id::text,
+               score_raw,
+               score_max,
+               created_at_iso,
+               completed_at_iso,
+               h5p_completed
+          from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
+    """
+    legacy_sql = """
+        select student_sub::text,
+               task_id::text,
+               submission_id::text,
+               null::integer as score_raw,
+               null::integer as score_max,
+               created_at_iso,
+               completed_at_iso,
+               h5p_completed
+          from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
+    """
+
+    last_exc: Exception | None = None
+    cur.execute("savepoint live_helper_compat")
+    for idx, sql in enumerate((current_sql, legacy_sql)):
+        if idx > 0:
+            cur.execute("rollback to savepoint live_helper_compat")
+        try:
+            cur.execute(sql, params)
+            raw_rows = cur.fetchall() or []
+            cur.execute("release savepoint live_helper_compat")
+            return [
+                {
+                    "student_sub": str(row[0]),
+                    "task_id": str(row[1]),
+                    "submission_id": (str(row[2]) if row[2] else None),
+                    "score_raw": _safe_int(row[3]),
+                    "score_max": _safe_int(row[4]),
+                    "created_at_iso": (str(row[5]) if row[5] else None),
+                    "completed_at_iso": (str(row[6]) if row[6] else None),
+                    "h5p_completed": (bool(row[7]) if row[7] is not None else None),
+                }
+                for row in raw_rows
+            ]
+        except Exception as exc:
+            last_exc = exc
+
+    try:
+        cur.execute("rollback to savepoint live_helper_compat")
+    except Exception:
+        pass
+    try:
+        cur.execute("release savepoint live_helper_compat")
+    except Exception:
+        pass
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("live helper compatibility probe failed")
+
+
 # --- User directory adapter (mockable) ------------------------------------------
 
 def resolve_student_names(subs: list[str]) -> dict[str, str]:
@@ -4884,32 +5017,58 @@ async def get_unit_live_summary(
                         with conn.cursor() as cur:
                             cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
                             try:
-                                cur.execute(
-                                    """
-                                    select student_sub::text,
-                                           task_id::text,
-                                           submission_id::text,
-                                           score_raw,
-                                           score_max,
-                                           h5p_completed
-                                      from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
-                                    """,
-                                    (sub, course_id, unit_id, updated_since_dt, int(limit), int(offset)),
+                                helper_rows = _load_unit_live_helper_rows(
+                                    cur,
+                                    owner_sub=sub,
+                                    course_id=course_id,
+                                    unit_id=unit_id,
+                                    updated_since_dt=updated_since_dt,
+                                    limit=int(limit),
+                                    offset=int(offset),
                                 )
-                                rows = cur.fetchall() or []
-                                has_map = {(r[0], r[1]) for r in rows}
+                                has_map = {(row["student_sub"], row["task_id"]) for row in helper_rows}
+                                task_ids_by_student: dict[str, list[str]] = {}
+                                for row in helper_rows:
+                                    student_sub = str(row["student_sub"])
+                                    task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
+                                latest_state_by_task = (
+                                    _load_latest_submission_state_by_task(cur, sub, course_id, task_ids_by_student)
+                                    if any(
+                                        row.get("score_raw") is None or row.get("score_max") is None
+                                        for row in helper_rows
+                                    )
+                                    else {}
+                                )
                                 submission_ids_by_student: dict[str, list[str]] = {}
-                                for student_sub, task_id, submission_id, score_raw, score_max, _h5p_completed in rows:
+                                for row in helper_rows:
+                                    student_sub = str(row["student_sub"])
+                                    task_id = str(row["task_id"])
+                                    latest_state = latest_state_by_task.get((student_sub, task_id), {})
+                                    submission_id = latest_state.get("submission_id") or row.get("submission_id")
                                     if submission_id:
                                         submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
-                                    score_map[(student_sub, task_id)] = (_safe_int(score_raw), _safe_int(score_max))
+                                    score_raw = _safe_int(row.get("score_raw"))
+                                    score_max = _safe_int(row.get("score_max"))
+                                    if score_raw is None or score_max is None:
+                                        score_raw = latest_state.get("score_raw", score_raw)
+                                        score_max = latest_state.get("score_max", score_max)
+                                    score_map[(student_sub, task_id)] = (score_raw, score_max)
                                 avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
-                                avg_map = {(r[0], r[1]): avg_by_id.get(r[2]) for r in rows}
+                                avg_map = {
+                                    (
+                                        str(row["student_sub"]),
+                                        str(row["task_id"]),
+                                    ): avg_by_id.get(
+                                        latest_state_by_task.get((str(row["student_sub"]), str(row["task_id"])), {}).get("submission_id")
+                                        or row.get("submission_id")
+                                    )
+                                    for row in helper_rows
+                                }
                                 # Only present for Task.kind="h5p"; null for other tasks.
                                 h5p_map = {
-                                    (r[0], r[1]): bool(r[5])
-                                    for r in rows
-                                    if (len(r) > 5 and r[5] is not None)
+                                    (str(row["student_sub"]), str(row["task_id"])): bool(row["h5p_completed"])
+                                    for row in helper_rows
+                                    if row.get("h5p_completed") is not None
                                 }
                             except Exception as exc:
                                 logger.warning(
@@ -4917,10 +5076,10 @@ async def get_unit_live_summary(
                                     exc,
                                     extra={"course_id": course_id, "unit_id": unit_id},
                                 )
-                                rows = []
+                                helper_rows = []
                             if tasks and member_subs:
                                 task_ids = [t["id"] for t in tasks]
-                                if not rows:
+                                if not helper_rows:
                                     cur.execute(
                                         """
                                         select distinct student_sub::text, task_id::text
@@ -5081,23 +5240,35 @@ async def get_unit_live_delta(
                         helper_ok = True
                         avg_by_id: dict[str, float | None] = {}
                         try:
-                            cur.execute(
-                                """
-                                select student_sub::text,
-                                       task_id::text,
-                                       submission_id::text,
-                                       score_raw,
-                                       score_max,
-                                       created_at_iso,
-                                       completed_at_iso,
-                                       h5p_completed
-                                  from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
-                                """,
-                                (sub, course_id, unit_id, db_lower_bound, int(limit), int(offset)),
+                            helper_rows = _load_unit_live_helper_rows(
+                                cur,
+                                owner_sub=sub,
+                                course_id=course_id,
+                                unit_id=unit_id,
+                                updated_since_dt=db_lower_bound,
+                                limit=int(limit),
+                                offset=int(offset),
                             )
-                            rows = cur.fetchall() or []
+                            task_ids_by_student: dict[str, list[str]] = {}
+                            for row in helper_rows:
+                                student_sub = str(row["student_sub"])
+                                task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
+                            latest_state_by_task = (
+                                _load_latest_submission_state_by_task(cur, sub, course_id, task_ids_by_student)
+                                if any(
+                                    row.get("score_raw") is None or row.get("score_max") is None
+                                    for row in helper_rows
+                                )
+                                else {}
+                            )
                             submission_ids_by_student: dict[str, list[str]] = {}
-                            for student_sub, _task_id, submission_id, _score_raw, _score_max, _created_iso, _completed_iso, _h5p_completed in rows:
+                            for row in helper_rows:
+                                student_sub = str(row["student_sub"])
+                                task_id = str(row["task_id"])
+                                submission_id = (
+                                    latest_state_by_task.get((student_sub, task_id), {}).get("submission_id")
+                                    or row.get("submission_id")
+                                )
                                 if submission_id:
                                     submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
                             avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
@@ -5107,9 +5278,21 @@ async def get_unit_live_delta(
                                 exc,
                                 extra={"course_id": course_id, "unit_id": unit_id},
                             )
-                            rows = []
+                            helper_rows = []
                             helper_ok = False
-                        for student_sub, task_id, submission_id, score_raw, score_max, created_iso, completed_iso, h5p_completed in rows:
+                        for row in helper_rows:
+                            student_sub = str(row["student_sub"])
+                            task_id = str(row["task_id"])
+                            latest_state = latest_state_by_task.get((student_sub, task_id), {})
+                            submission_id = latest_state.get("submission_id") or row.get("submission_id")
+                            score_raw = _safe_int(row.get("score_raw"))
+                            score_max = _safe_int(row.get("score_max"))
+                            if score_raw is None or score_max is None:
+                                score_raw = latest_state.get("score_raw", score_raw)
+                                score_max = latest_state.get("score_max", score_max)
+                            created_iso = row.get("created_at_iso")
+                            completed_iso = row.get("completed_at_iso")
+                            h5p_completed = row.get("h5p_completed")
                             cur.execute(
                                 """
                                 select greatest(created_at, coalesce(completed_at, created_at))
@@ -5126,15 +5309,22 @@ async def get_unit_live_delta(
                             if ts_row and ts_row[0] is not None:
                                 changed_dt = ts_row[0].astimezone(timezone.utc)
                             else:
-                                # fall back to helper-provided timestamps or now
-                                fallback_iso = completed_iso or created_iso
-                                if fallback_iso:
+                                latest_changed_at = latest_state.get("changed_at")
+                                if latest_changed_at is not None:
                                     try:
-                                        changed_dt = datetime.fromisoformat(fallback_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+                                        changed_dt = latest_changed_at.astimezone(timezone.utc)
                                     except Exception:
                                         changed_dt = datetime.now(timezone.utc)
                                 else:
-                                    changed_dt = datetime.now(timezone.utc)
+                                    # fall back to helper-provided timestamps or now
+                                    fallback_iso = completed_iso or created_iso
+                                    if fallback_iso:
+                                        try:
+                                            changed_dt = datetime.fromisoformat(fallback_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+                                        except Exception:
+                                            changed_dt = datetime.now(timezone.utc)
+                                    else:
+                                        changed_dt = datetime.now(timezone.utc)
                             changed_iso = changed_dt.isoformat(timespec="microseconds")
                             if logger.isEnabledFor(logging.DEBUG) or debug:
                                 student_sub_hash = hashlib.sha256(student_sub.encode("utf-8")).hexdigest()[:12]

@@ -761,3 +761,107 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
         assert any(cell["has_submission"] for cell in student_row["tasks"])
         assert any("fallback" in msg for msg in caplog.messages)
         assert any("get_unit_latest_submissions_for_owner" in msg for msg in caplog.messages)
+
+
+@pytest.mark.anyio
+async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypatch, caplog):
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for helper compatibility test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-live-legacy", name="Legacy", roles=["student"])  # type: ignore
+
+    async with (await _client()) as owner_client, (await _client()) as student_client:
+        owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        student_client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+
+        cid = await _create_course(owner_client, "Live Kurs Legacy")
+        unit = await _create_unit(owner_client, "Live Einheit Legacy")
+        section = await _create_section(owner_client, unit["id"], "S Legacy")
+        task = await _create_task(owner_client, unit["id"], section["id"], "### Aufgabe")
+        module = await _attach_unit(owner_client, cid, unit["id"])
+        await _add_member(owner_client, cid, student.sub)
+
+        r_vis = await owner_client.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        r_sub = await student_client.post(
+            f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Legacy summary submission"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+
+        original_connect = psycopg.connect
+
+        class _CursorWrapper:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def __enter__(self):
+                self._cursor.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return self._cursor.__exit__(exc_type, exc, tb)
+
+            def execute(self, query, params=None):
+                if "get_unit_latest_submissions_for_owner" in query and "score_raw" in query:
+                    raise psy_errors.UndefinedColumn("column \"score_raw\" does not exist")
+                return self._cursor.execute(query, params)
+
+            def fetchall(self):
+                return self._cursor.fetchall()
+
+            def __getattr__(self, name):
+                return getattr(self._cursor, name)
+
+        class _ConnectionWrapper:
+            def __init__(self, connection):
+                self._connection = connection
+
+            def __enter__(self):
+                self._connection.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return self._connection.__exit__(exc_type, exc, tb)
+
+            def cursor(self, *args, **kwargs):
+                return _CursorWrapper(self._connection.cursor(*args, **kwargs))
+
+            def rollback(self):
+                return self._connection.rollback()
+
+            def close(self):
+                return self._connection.close()
+
+            def __getattr__(self, name):
+                return getattr(self._connection, name)
+
+        def _patched_connect(*args, **kwargs):
+            conn = original_connect(*args, **kwargs)
+            return _ConnectionWrapper(conn)
+
+        monkeypatch.setattr(psycopg, "connect", _patched_connect)
+
+        caplog.set_level("WARNING")
+        response = await owner_client.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary"
+        )
+        assert response.status_code == 200
+        body = response.json()
+        student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
+        assert any(cell["has_submission"] for cell in student_row["tasks"])
+        assert any("fallback" in msg for msg in caplog.messages)

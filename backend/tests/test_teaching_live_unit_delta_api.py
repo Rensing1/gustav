@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 
 import pytest
@@ -17,6 +17,8 @@ import httpx
 from httpx import ASGITransport
 from pathlib import Path
 import os
+import psycopg
+from psycopg import errors as psy_errors
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -162,7 +164,10 @@ async def test_delta_returns_cells_after_submission():
         )
         assert r_vis.status_code == 200
 
-        base_ts = datetime.now(timezone.utc).isoformat()
+        # Legacy helper timestamps are second-precision only. Keep the cursor a
+        # little earlier so this test isolates the compatibility path instead
+        # of failing on timestamp rounding.
+        base_ts = (datetime.now(timezone.utc) - timedelta(seconds=2)).isoformat()
 
         # Initial delta should be empty (204)
         r_empty = await owner_client.get(
@@ -200,6 +205,120 @@ async def test_delta_returns_cells_after_submission():
             params={"updated_since": next_ts},
         )
         assert r_again.status_code == 204
+
+
+@pytest.mark.anyio
+async def test_delta_falls_back_when_helper_score_columns_are_missing(monkeypatch, caplog):
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for delta compatibility test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-delta-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-delta-legacy-learner", name="Legacy", roles=["student"])  # type: ignore
+
+    async with (await _client()) as owner_client, (await _client()) as student_client:
+        owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        student_client.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        course_id = await _create_course(owner_client, "Delta Legacy")
+        unit = await _create_unit(owner_client, "Delta Legacy Einheit")
+        section = await _create_section(owner_client, unit["id"], "Abschnitt")
+        task = await _create_task(owner_client, unit["id"], section["id"], "### Aufgabe")
+        module = await _attach_unit(owner_client, course_id, unit["id"])
+        await _add_member(owner_client, course_id, learner.sub)
+
+        r_vis = await owner_client.patch(
+            f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+        base_ts = (datetime.now(timezone.utc) - timedelta(seconds=2)).isoformat()
+
+        r_sub = await student_client.post(
+            f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Legacy delta submission"},
+        )
+        assert r_sub.status_code in (200, 201, 202)
+
+        original_connect = psycopg.connect
+
+        class _CursorWrapper:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def __enter__(self):
+                self._cursor.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return self._cursor.__exit__(exc_type, exc, tb)
+
+            def execute(self, query, params=None):
+                if (
+                    "get_unit_latest_submissions_for_owner" in query
+                    and "score_raw" in query
+                    and "null::integer as score_raw" not in query
+                ):
+                    raise psy_errors.UndefinedColumn("column \"score_raw\" does not exist")
+                return self._cursor.execute(query, params)
+
+            def fetchall(self):
+                return self._cursor.fetchall()
+
+            def fetchone(self):
+                return self._cursor.fetchone()
+
+            def __getattr__(self, name):
+                return getattr(self._cursor, name)
+
+        class _ConnectionWrapper:
+            def __init__(self, connection):
+                self._connection = connection
+
+            def __enter__(self):
+                self._connection.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return self._connection.__exit__(exc_type, exc, tb)
+
+            def cursor(self, *args, **kwargs):
+                return _CursorWrapper(self._connection.cursor(*args, **kwargs))
+
+            def rollback(self):
+                return self._connection.rollback()
+
+            def close(self):
+                return self._connection.close()
+
+            def __getattr__(self, name):
+                return getattr(self._connection, name)
+
+        def _patched_connect(*args, **kwargs):
+            conn = original_connect(*args, **kwargs)
+            return _ConnectionWrapper(conn)
+
+        monkeypatch.setattr(psycopg, "connect", _patched_connect)
+
+        caplog.set_level("WARNING")
+        response = await owner_client.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/delta",
+            params={"updated_since": base_ts},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        cell = next(c for c in body["cells"] if c["student_sub"] == learner.sub and c["task_id"] == task["id"])
+        assert cell["has_submission"] is True
+        assert cell["changed_at"]
 
 
 @pytest.mark.anyio

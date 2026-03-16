@@ -420,6 +420,41 @@ def resolve_student_names(subs: List[str]) -> Dict[str, str]:
     return out
 
 
+def resolve_student_login_labels_by_sub(subs: List[str]) -> Dict[str, str]:
+    """Resolve student ids to login-style labels via direct `/users/{sub}` lookups.
+
+    Why:
+        Live teacher views already know the exact student subjects they need to
+        render. A direct lookup keeps latency proportional to the requested
+        students and avoids scanning role-member listings.
+
+    Behavior:
+        - Uses Keycloak Admin API `GET /users/{sub}` for each requested subject.
+        - Returns `_login_label(...)` when the user exists.
+        - Missing users or request failures map to `"Unbekannt"`.
+    """
+    kc = _KC()
+    token = kc.token()
+    out: Dict[str, str] = {}
+    ca = os.getenv("KEYCLOAK_CA_BUNDLE")
+    verify_opt = ca if ca else True
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    for sid in unique_subs:
+        try:
+            url = f"{kc.base_url}/admin/realms/{kc.realm}/users/{sid}"
+            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt, allow_redirects=False)
+            if r.status_code == 404:
+                out[sid] = "Unbekannt"
+                continue
+            r.raise_for_status()
+            u = r.json() or {}
+            label = _login_label(u)
+            out[sid] = label if label else "Unbekannt"
+        except Exception:
+            out[sid] = "Unbekannt"
+    return out
+
+
 def list_users_by_role(*, role: str, limit: int, offset: int) -> List[dict]:
     """List users for a given role using Keycloak Admin API.
 

@@ -215,6 +215,73 @@ async def test_detail_partial_empty_state_keeps_task_instruction(monkeypatch: py
 
 
 @pytest.mark.anyio
+async def test_detail_partial_prefers_login_localpart_over_api_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    import routes.teaching as teaching  # noqa: E402
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-detail-localpart-owner", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "12121212-1212-1212-1212-121212121212"
+    unit_id = "34343434-3434-3434-3434-343434343434"
+    task_id = "56565656-5656-5656-5656-565656565656"
+    student_sub = "student-1"
+
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_detail_internal_api_client(
+            course_id=course_id,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+            payload_status=204,
+            payload=None,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_fetch_task_instruction_for_teacher",
+        lambda _course_id, _unit_id, _task_id, owner_sub: "### Aufgabe 1",
+        raising=False,
+    )
+    async def _fake_load_login_labels(subs: list[str]) -> dict[str, str]:
+        return {"student-1": "alice.example"}
+
+    async def _forbidden_display_name_lookup(subs: list[str]) -> dict[str, str]:
+        raise AssertionError("fallback name lookup must not run when login label exists")
+
+    monkeypatch.setattr(
+        main,
+        "_load_teacher_live_login_labels",
+        _fake_load_login_labels,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_load_teacher_display_names",
+        _forbidden_display_name_lookup,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_resolve_member_login_labels",
+        lambda subs: (_ for _ in ()).throw(AssertionError("members scan resolver must not run in live detail")),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        r_empty = await c.get(
+            f"/teaching/courses/{course_id}/units/{unit_id}/live/detail",
+            params={"student_sub": student_sub, "task_id": task_id},
+        )
+
+    assert r_empty.status_code == 200
+    assert "alice.example" in r_empty.text
+    assert "Alice Example" not in r_empty.text
+
+
+@pytest.mark.anyio
 async def test_detail_partial_renders_markdown_for_teacher():
     """Teacher detail should render markdown as HTML, not raw text."""
     _require_db_or_skip()

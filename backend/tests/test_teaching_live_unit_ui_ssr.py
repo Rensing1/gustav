@@ -300,7 +300,6 @@ async def test_matrix_fragment_renders_initial_summary_and_cell_ids():
 async def test_matrix_shows_display_name_with_email_prefix(monkeypatch):
     _require_db_or_skip()
 
-    # Patch name resolver inside teaching routes to return an email as name
     import routes.teaching as teaching  # noqa: E402
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -309,9 +308,9 @@ async def test_matrix_shows_display_name_with_email_prefix(monkeypatch):
         pytest.skip("DB-backed TeachingRepo required for SSR name test")
 
     def _fake_resolve(subs: list[str]) -> dict[str, str]:
-        return {subs[0]: "alice@example.com"}
+        return {subs[0]: "alice"}
 
-    monkeypatch.setattr(teaching, "resolve_student_names", _fake_resolve)
+    monkeypatch.setattr(teaching, "resolve_student_login_labels_by_sub", _fake_resolve)
 
     main.SESSION_STORE = SessionStore()
     owner = main.SESSION_STORE.create(sub="t-ui-name-owner", name="Owner", roles=["teacher"])  # type: ignore
@@ -331,11 +330,52 @@ async def test_matrix_shows_display_name_with_email_prefix(monkeypatch):
         r = await c.get(f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix")
         assert r.status_code == 200
         html = r.text
-        # Expect only the prefix "alice", not the full email or raw sub
         assert "alice@example.com" not in html
         assert "alice" in html
-        # Note: `sub` may appear in non-visible attributes (cell ids / data-attrs)
-        # for deterministic OOB updates; we only care that the visible name is humanized.
+        # `sub` may appear in non-visible attributes (cell ids / data-attrs).
+
+
+@pytest.mark.anyio
+async def test_matrix_prefers_login_localpart_over_humanized_name(monkeypatch):
+    _require_db_or_skip()
+
+    import routes.teaching as teaching  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for SSR name test")
+
+    def _fake_resolve(subs: list[str]) -> dict[str, str]:
+        return {subs[0]: "alice.example"}
+
+    monkeypatch.setattr(teaching, "resolve_student_login_labels_by_sub", _fake_resolve)
+    monkeypatch.setattr(
+        main,
+        "_resolve_member_login_labels",
+        lambda subs: (_ for _ in ()).throw(AssertionError("members scan resolver must not run on live matrix")),
+        raising=False,
+    )
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ui-localpart-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-ui-localpart-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+
+        cid = await _create_course(c, "Kurs UI Localpart")
+        unit = await _create_unit(c, "Einheit Localpart")
+        section = await _create_section(c, unit["id"], "S1")
+        await _create_task(c, unit["id"], section["id"], "### NameCheck")
+        await _attach_unit(c, cid, unit["id"])
+        await _add_member(c, cid, learner.sub)
+
+        r = await c.get(f"/teaching/courses/{cid}/units/{unit['id']}/live/matrix")
+        assert r.status_code == 200
+        html = r.text
+        assert "alice.example" in html
+        assert "Alice Example" not in html
 
 
 @pytest.mark.anyio

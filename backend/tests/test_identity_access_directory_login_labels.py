@@ -1,5 +1,5 @@
 """
-Identity Directory — resolve_student_login_labels returns email localparts.
+Identity Directory — login-label resolvers expose email localparts.
 """
 from __future__ import annotations
 
@@ -81,3 +81,55 @@ def test_resolve_student_login_labels_retries_with_admin_fallback_token(monkeypa
 
     out = dir.resolve_student_login_labels(["sub-a", "sub-b"])
     assert out == {"sub-a": "eva.example", "sub-b": "Unbekannt"}
+
+
+def test_resolve_student_login_labels_by_sub_prefers_direct_user_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+    called_urls: list[str] = []
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        called_urls.append(str(url))
+        if str(url).endswith("/users/sub-a"):
+            return _Resp(
+                200,
+                {"id": "sub-a", "email": "alice.example@example.test", "username": "alice.example@example.test"},
+            )
+        if str(url).endswith("/users/sub-b"):
+            return _Resp(
+                200,
+                {"id": "sub-b", "email": "", "username": "legacy-email:bob.example@example.test"},
+            )
+        if str(url).endswith("/users/sub-c"):
+            return _Resp(404, {"error": "not_found"})
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+
+    out = dir.resolve_student_login_labels_by_sub(["sub-a", "sub-b", "sub-c"])
+
+    assert out == {
+        "sub-a": "alice.example",
+        "sub-b": "bob.example",
+        "sub-c": "Unbekannt",
+    }
+    assert any(url.endswith("/users/sub-a") for url in called_urls)
+    assert not any("/roles/" in url for url in called_urls)
+
+
+def test_resolve_student_login_labels_by_sub_falls_back_to_unknown_on_request_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        raise RuntimeError("directory offline")
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+
+    out = dir.resolve_student_login_labels_by_sub(["sub-a"])
+
+    assert out == {"sub-a": "Unbekannt"}

@@ -1534,6 +1534,56 @@ def resolve_student_names(subs: list[str]) -> dict[str, str]:
         return {s: "Unbekannt" for s in subs}
 
 
+def resolve_student_login_labels_by_sub(subs: list[str]) -> dict[str, str]:
+    """Resolve user ids to login-style labels via direct directory lookups.
+
+    Why:
+        Live teacher views should show stable login identifiers, but must avoid
+        the O(directory) role-member scan that the members page uses.
+    """
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    if not unique_subs:
+        return {}
+    out: dict[str, str] = {}
+
+    def _normalize_login_label(raw: str) -> str:
+        value = str(raw or "").strip()
+        if not value:
+            return ""
+        if value.startswith("legacy-email:"):
+            value = value.split(":", 1)[1].strip()
+        if "@" in value:
+            value = value.split("@", 1)[0].strip()
+        return value
+
+    try:
+        from identity_access import directory  # type: ignore
+
+        raw = directory.resolve_student_login_labels_by_sub(unique_subs)  # type: ignore[attr-defined]
+        for sid in unique_subs:
+            label = _normalize_login_label((raw or {}).get(sid, ""))
+            if label and label.lower() != "unbekannt":
+                out[sid] = label
+                continue
+            fallback = ""
+            try:
+                fallback = directory.localpart_identifier(sid)  # type: ignore[attr-defined]
+            except Exception:
+                fallback = ""
+            out[sid] = fallback or "Unbekannt"
+        return out
+    except Exception:
+        try:
+            from identity_access import directory  # type: ignore
+
+            return {
+                sid: (directory.localpart_identifier(sid) or "Unbekannt")  # type: ignore[attr-defined]
+                for sid in unique_subs
+            }
+        except Exception:
+            return {sid: "Unbekannt" for sid in unique_subs}
+
+
 # --- Routes ----------------------------------------------------------------------
 
 @teaching_router.get("/api/teaching/courses")
@@ -4818,7 +4868,7 @@ async def get_unit_live_summary(
         except Exception:
             roster = []
         member_subs = [sid for sid, _ in roster]
-        names = resolve_student_names(member_subs)
+        names = resolve_student_login_labels_by_sub(member_subs)
 
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}
@@ -4923,7 +4973,7 @@ async def get_unit_live_summary(
                     cell["h5p_completed"] = h5p_map.get((sid, tid), False)
                 task_cells.append(cell)
             row = {
-                "student": {"sub": sid, "name": names.get(sid, sid)},
+                "student": {"sub": sid, "name": names.get(sid, "Unbekannt")},
                 "tasks": task_cells,
             }
             rows_out.append(row)
@@ -5236,8 +5286,8 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
 
-    names = resolve_student_names([str(student_sub)])
-    display_name = names.get(str(student_sub), str(student_sub))
+    names = resolve_student_login_labels_by_sub([str(student_sub)])
+    display_name = names.get(str(student_sub), "Unbekannt")
     return _json_private(overview.to_dict(student_name=display_name), status_code=200, vary_origin=True)
 
 

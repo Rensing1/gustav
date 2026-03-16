@@ -1,12 +1,5 @@
 """
-Teaching API — Summary falls back to humanized legacy-email SUBs
-
-We simulate a directory resolver that returns the original SUB (no match) for
-all requested users. For members whose `student_sub` is a legacy-email:… value,
-the API should return a humanized display name derived from the email localpart
-("legacy-email:max.mustermann@schule.de" -> "Max Mustermann").
-
-For non-email-like SUBs, the API should keep returning "Unbekannt".
+Teaching API — Summary falls back to local-only login labels when direct lookup misses.
 """
 from __future__ import annotations
 
@@ -60,7 +53,7 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 
 @pytest.mark.anyio
-async def test_summary_humanizes_legacy_email_sub_and_hides_random_ids(monkeypatch):
+async def test_summary_falls_back_to_legacy_email_localpart_and_hides_random_ids(monkeypatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     try:
@@ -69,13 +62,11 @@ async def test_summary_humanizes_legacy_email_sub_and_hides_random_ids(monkeypat
     except Exception:
         pytest.skip("DB-backed TeachingRepo required")
 
-    # Directory returns identity mapping (simulates not found in KC)
     def _fake_dir_resolve(subs: list[str]) -> dict[str, str]:
-        return {sid: sid for sid in subs}
+        return {sid: "Unbekannt" for sid in subs}
 
-    # Monkeypatch the directory used by the API adapter
     import identity_access.directory as dir_mod  # type: ignore
-    monkeypatch.setattr(dir_mod, "resolve_student_names", _fake_dir_resolve)
+    monkeypatch.setattr(dir_mod, "resolve_student_login_labels_by_sub", _fake_dir_resolve)
 
     main.SESSION_STORE = SessionStore()
     owner = main.SESSION_STORE.create(sub="t-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
@@ -100,10 +91,10 @@ async def test_summary_humanizes_legacy_email_sub_and_hides_random_ids(monkeypat
         assert len(rows) >= 2
         names_by_sub = {row["student"]["sub"]: row["student"]["name"] for row in rows}
 
-        # Legacy email must be humanized: "Raphael Fournell" (no '@', no prefix)
+        # Legacy email must fall back to the stable localpart.
         legacy_name = names_by_sub.get(legacy_sub, "")
         assert legacy_name and "@" not in legacy_name and not legacy_name.startswith("legacy-email:")
-        assert legacy_name == "Raphael Fournell"
+        assert legacy_name == "raphael.fournell"
 
-        # Random SUB should remain Unbekannt (no false humanization)
+        # Random SUB should remain Unbekannt (no false localpart derivation)
         assert names_by_sub.get(random_sub, "") == "Unbekannt"

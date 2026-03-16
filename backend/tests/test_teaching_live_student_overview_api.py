@@ -211,7 +211,12 @@ async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(mo
     monkeypatch.setattr(teaching, "MAX_UNIT_IDS", 1, raising=False)
     monkeypatch.setattr(teaching, "_guard_course_owner", lambda _course_id, _owner_sub: None, raising=False)
     monkeypatch.setattr(teaching, "_get_student_live_overview_service", lambda: fake_service, raising=False)
-    monkeypatch.setattr(teaching, "resolve_student_names", lambda subs: {str(subs[0]): "Anna"}, raising=False)
+    monkeypatch.setattr(
+        teaching,
+        "resolve_student_login_labels_by_sub",
+        lambda subs: {str(subs[0]): "anna.login"},
+        raising=False,
+    )
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -222,6 +227,7 @@ async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(mo
 
     assert r.status_code == 200, r.text
     assert fake_service.calls == [[unit_id]]
+    assert (r.json().get("student") or {}).get("name") == "anna.login"
 
 
 @pytest.mark.anyio
@@ -248,7 +254,12 @@ async def test_student_live_overview_accepts_path_encoded_student_sub_with_slash
     fake_service = _FakeService()
     monkeypatch.setattr(teaching, "_guard_course_owner", lambda _course_id, _owner_sub: None, raising=False)
     monkeypatch.setattr(teaching, "_get_student_live_overview_service", lambda: fake_service, raising=False)
-    monkeypatch.setattr(teaching, "resolve_student_names", lambda subs: {str(subs[0]): "Anna"}, raising=False)
+    monkeypatch.setattr(
+        teaching,
+        "resolve_student_login_labels_by_sub",
+        lambda subs: {str(subs[0]): "anna.login"},
+        raising=False,
+    )
 
     encoded_student_sub = quote(student_sub, safe="")
 
@@ -260,3 +271,4 @@ async def test_student_live_overview_accepts_path_encoded_student_sub_with_slash
 
     assert r.status_code == 200, r.text
     assert fake_service.calls == [student_sub]
+    assert (r.json().get("student") or {}).get("name") == "anna.login"

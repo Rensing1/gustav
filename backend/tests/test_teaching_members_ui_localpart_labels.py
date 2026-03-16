@@ -104,11 +104,11 @@ async def test_apply_member_login_labels_deduplicates_subs_before_directory_look
     ]
     seen_subs: list[str] = []
 
-    def fake_resolver(subs: list[str]) -> dict[str, str]:
+    async def fake_loader(subs: list[str]) -> dict[str, str]:
         seen_subs.extend(subs)
         return {"stud-a": "anna.a", "stud-b": "berta.b"}
 
-    monkeypatch.setattr(main, "_resolve_member_login_labels", fake_resolver)
+    monkeypatch.setattr(main, "_load_teacher_login_labels", fake_loader)
 
     out = await main._apply_member_login_labels(rows)
 
@@ -122,13 +122,13 @@ async def test_apply_member_login_labels_deduplicates_subs_before_directory_look
 async def test_apply_member_login_labels_avoids_timeout_cancel_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [{"sub": "stud-a", "name": "Alpha"}]
 
-    def fake_resolver(subs: list[str]) -> dict[str, str]:
+    async def fake_loader(subs: list[str]) -> dict[str, str]:
         return {"stud-a": "anna.a"}
 
     async def _forbidden_wait_for(*args, **kwargs):
         raise AssertionError("asyncio.wait_for must not be used")
 
-    monkeypatch.setattr(main, "_resolve_member_login_labels", fake_resolver)
+    monkeypatch.setattr(main, "_load_teacher_login_labels", fake_loader)
     monkeypatch.setattr(main.asyncio, "wait_for", _forbidden_wait_for)
 
     out = await main._apply_member_login_labels(rows)

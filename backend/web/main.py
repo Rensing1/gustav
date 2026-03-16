@@ -20,6 +20,7 @@ from urllib.parse import quote, urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 # Component Imports
 from components import (
@@ -4200,12 +4201,12 @@ def _email_localpart_identifier(value: str) -> str:
 
 
 def _member_localpart_label(raw_name: str, fallback_sub: str) -> str:
-    """Build a members-page display label with localpart priority.
+    """Build a teacher-facing display label with localpart priority.
 
     Behavior:
         1) Use localpart from `raw_name` when it encodes an email-like value.
         2) Else use localpart from `fallback_sub` (legacy/email migration cases).
-        3) Else keep a non-empty non-unknown raw name.
+        3) Else keep a non-empty non-unknown raw name as pragmatic fallback.
         4) Final fallback is `Unbekannt`.
     """
     primary = _email_localpart_identifier(raw_name)
@@ -4245,6 +4246,82 @@ def _resolve_member_login_labels(subs: list[str]) -> dict[str, str]:
     except Exception:
         pass
     return {}
+
+
+def _teacher_visible_label(*, sub: str, raw_name: str, labels: dict[str, str] | None = None) -> str:
+    """Return the teacher-visible label for SSR pages.
+
+    Why:
+        Teacher HTML views should prefer stable login identifiers over mutable
+        profile names, while still staying usable when directory lookups fail.
+    """
+    label = str((labels or {}).get(str(sub or ""), "")).strip()
+    if label and label.lower() != "unbekannt":
+        return label
+    return _member_localpart_label(raw_name, sub)
+
+
+async def _load_teacher_login_labels(subs: list[str]) -> dict[str, str]:
+    """Resolve teacher-visible login labels without blocking the event loop."""
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    if not unique_subs:
+        return {}
+    try:
+        return await run_in_threadpool(_resolve_member_login_labels, unique_subs)
+    except Exception:
+        return {}
+
+
+async def _load_teacher_live_login_labels(subs: list[str]) -> dict[str, str]:
+    """Resolve live-view login labels via direct subject lookups.
+
+    Why:
+        Live teacher pages already know the concrete students they need to
+        render. Using the direct-by-sub resolver avoids expensive role scans on
+        every matrix/detail request.
+    """
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    if not unique_subs:
+        return {}
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+    except Exception:
+        return {}
+    try:
+        raw = await run_in_threadpool(teaching_routes.resolve_student_login_labels_by_sub, unique_subs)  # type: ignore[attr-defined]
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for sid in unique_subs:
+        val = str(raw.get(sid, "")).strip()
+        if val:
+            out[sid] = val
+    return out
+
+
+async def _load_teacher_display_names(subs: list[str]) -> dict[str, str]:
+    """Resolve teacher-visible fallback names without blocking the event loop."""
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    if not unique_subs:
+        return {}
+    try:
+        from routes import teaching as teaching_routes  # type: ignore
+    except Exception:
+        return {}
+    try:
+        raw = await run_in_threadpool(teaching_routes.resolve_student_names, unique_subs)  # type: ignore[attr-defined]
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for sid in unique_subs:
+        val = str(raw.get(sid, "")).strip()
+        if val:
+            out[sid] = val
+    return out
 
 
 _MEMBER_SUBS_CACHE: dict[str, tuple[float, tuple[str, ...]]] = {}
@@ -4384,13 +4461,7 @@ async def _apply_member_login_labels(rows: list[dict]) -> list[dict]:
     subs = [str(row.get("sub") or "") for row in rows if isinstance(row, dict) and row.get("sub")]
     if not subs:
         return rows
-    unique_subs = list(dict.fromkeys(subs))
-    try:
-        labels = await asyncio.to_thread(_resolve_member_login_labels, unique_subs)
-    except Exception:
-        return rows
-    if not labels:
-        return rows
+    labels = await _load_teacher_login_labels(list(dict.fromkeys(subs)))
     normalized: list[dict] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -4398,13 +4469,47 @@ async def _apply_member_login_labels(rows: list[dict]) -> list[dict]:
         sub = str(row.get("sub") or "")
         if not sub:
             continue
-        label = str(labels.get(sub) or "").strip()
-        if label and label.lower() != "unbekannt":
-            item = dict(row)
-            item["name"] = label
-            normalized.append(item)
-        else:
+        item = dict(row)
+        item["name"] = _teacher_visible_label(
+            sub=sub,
+            raw_name=str(row.get("name") or ""),
+            labels=labels,
+        )
+        normalized.append(item)
+    return normalized
+
+
+async def _apply_live_row_login_labels(rows: list[dict]) -> list[dict]:
+    """Normalize nested live row labels without extra directory I/O.
+
+    Why:
+        Live summary/overview APIs are expected to return the final teacher-
+        visible label already. SSR keeps a local fallback here so older payloads
+        remain readable without triggering another directory lookup.
+    """
+    if not rows:
+        return rows
+    normalized: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        student = row.get("student")
+        if not isinstance(student, dict):
             normalized.append(row)
+            continue
+        sub = str(student.get("sub") or "")
+        if not sub:
+            normalized.append(row)
+            continue
+        item = dict(row)
+        student_item = dict(student)
+        student_item["name"] = _teacher_visible_label(
+            sub=sub,
+            raw_name=str(student.get("name") or ""),
+            labels=None,
+        )
+        item["student"] = student_item
+        normalized.append(item)
     return normalized
 
 
@@ -4824,11 +4929,7 @@ def _render_live_matrix(course_id: str, unit_id: str, tasks: list[dict], rows: l
         student = r.get("student") or {}
         sub = str(student.get("sub") or "")
         raw_name = str(student.get("name") or "")
-        # Fallback: when no display name set, prefer email prefix over exposing full email
-        disp = raw_name
-        if "@" in disp:
-            disp = disp.split("@", 1)[0]
-        name = Component.escape(disp or "Unbekannt")
+        name = Component.escape(raw_name or "Unbekannt")
         # map tasks by id for deterministic lookup
         cells_by_task = {str(c.get("task_id")): c for c in (r.get("tasks") or []) if isinstance(c, dict)}
         student_href = (
@@ -4947,6 +5048,7 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
                 rows = [r for r in (payload.get("rows") or []) if isinstance(r, dict)]
     except Exception:
         tasks, rows = [], []
+    rows = await _apply_live_row_login_labels(rows)
 
     matrix_html = _render_live_matrix(course_id, unit_id, tasks, rows) if tasks else (
         '<div class="card"><p class="text-muted">Keine Aufgaben in dieser Lerneinheit.</p></div>'
@@ -5197,24 +5299,36 @@ async def teaching_unit_live_matrix_partial(request: Request, course_id: str, un
     except Exception:
         tasks, rows = [], []
 
+    rows = await _apply_live_row_login_labels(rows)
     html = _render_live_matrix(course_id, unit_id, tasks, rows) if tasks else (
         '<div class="card"><p class="text-muted">Keine Aufgaben in dieser Lerneinheit.</p></div>'
     )
     return HTMLResponse(content=html, status_code=200, headers={"Cache-Control": "private, no-store"})
 
 
-def _resolve_teacher_student_display_name(student_sub: str) -> str:
-    """Resolve the teacher-facing student name with an email-prefix fallback."""
-    try:
-        from routes import teaching as teaching_routes  # type: ignore
+async def _resolve_teacher_student_display_name(student_sub: str, *, raw_name: str = "") -> str:
+    """Resolve the teacher-facing student name with localpart priority.
 
-        names = teaching_routes.resolve_student_names([str(student_sub)])  # type: ignore
-        name = str(names.get(str(student_sub), ""))
-        if "@" in name:
-            name = name.split("@", 1)[0]
-        return Component.escape(name or str(student_sub))
-    except Exception:
-        return Component.escape(str(student_sub))
+    Why:
+        This helper is used on async SSR request paths and therefore must not
+        execute blocking directory I/O inline on the event loop.
+    """
+    sub = str(student_sub)
+    raw_name = str(raw_name or "").strip()
+    if raw_name and raw_name.lower() != "unbekannt":
+        return Component.escape(_teacher_visible_label(sub=sub, raw_name=raw_name, labels=None))
+    labels = await _load_teacher_live_login_labels([sub])
+    label = str(labels.get(sub, "")).strip()
+    if (not label or label.lower() == "unbekannt") and not raw_name:
+        names = await _load_teacher_display_names([sub])
+        raw_name = str(names.get(sub, ""))
+    return Component.escape(
+        _teacher_visible_label(
+            sub=sub,
+            raw_name=str(raw_name or ""),
+            labels=labels,
+        )
+    )
 
 
 def _render_teacher_task_instruction_section(instruction_md: str) -> str:
@@ -5309,7 +5423,7 @@ async def teaching_unit_live_detail_partial(
             )
             if r.status_code == 204:
                 html = _render_teacher_live_empty_detail_card(
-                    display_name=_resolve_teacher_student_display_name(str(student_sub)),
+                    display_name=await _resolve_teacher_student_display_name(str(student_sub)),
                     instruction_md=_fetch_task_instruction_for_teacher(
                         course_id,
                         unit_id,
@@ -5353,7 +5467,7 @@ async def teaching_unit_live_detail_partial(
     file_mime = str(file.get("mime") or "")
     file_size = file.get("size")
 
-    display_name = _resolve_teacher_student_display_name(str(student_sub))
+    display_name = await _resolve_teacher_student_display_name(str(student_sub))
     instruction_section = _render_teacher_task_instruction_section(instruction_md)
 
     if kind_raw == "h5p":
@@ -5649,6 +5763,23 @@ def _student_live_error_message(detail: str, *, status_code: int) -> str:
     return "Schueleransicht konnte nicht geladen werden."
 
 
+def _student_live_error_identifier(student_sub: str) -> str:
+    """Render a fail-closed student identifier for overview error pages.
+
+    Why:
+        After the protected overview API denied access, the SSR layer must not
+        perform broader directory lookups for `student_sub`. We only derive a
+        local label from the request itself.
+    """
+    raw = str(student_sub or "").strip()
+    localpart = _email_localpart_identifier(raw)
+    if localpart:
+        return Component.escape(localpart)
+    if raw:
+        return Component.escape(raw)
+    return "Unbekannt"
+
+
 def _render_student_live_error_page(
     request: Request,
     *,
@@ -5659,13 +5790,11 @@ def _render_student_live_error_page(
     status_code: int,
 ) -> HTMLResponse:
     """Render a consistent error page for the teacher student-live view."""
-    student_name_raw = str(student_sub or "")
-    if "@" in student_name_raw:
-        student_name_raw = student_name_raw.split("@", 1)[0]
+    student_name_raw = _student_live_error_identifier(str(student_sub or ""))
     content = (
         '<div class="container">'
         '<h1>Unterricht – Live</h1>'
-        f'<p class="text-muted">{Component.escape(course_title)} · {Component.escape(student_name_raw)}</p>'
+        f'<p class="text-muted">{Component.escape(course_title)} · {student_name_raw}</p>'
         f'<div class="card"><p class="text-muted">{Component.escape(message)}</p></div>'
         "</div>"
     )
@@ -5960,9 +6089,7 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
         if isinstance(overview_data, dict)
         else student_sub
     )
-    if "@" in student_name_raw:
-        student_name_raw = student_name_raw.split("@", 1)[0]
-    student_name = Component.escape(student_name_raw)
+    student_name = await _resolve_teacher_student_display_name(student_sub, raw_name=student_name_raw)
     empty_message = "Keine Lerneinheiten ausgewaehlt" if raw_unit_ids is not None and not selected_unit_ids else None
 
     filter_items: list[str] = ['<input type="hidden" name="unit_ids" value="">']

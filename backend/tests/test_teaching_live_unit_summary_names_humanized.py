@@ -1,8 +1,5 @@
 """
-Teaching API — Summary returns humanized student names (no SUBs/emails)
-
-We stub the directory resolver to return usernames/emails and assert that the
-summary endpoint returns humanized names only.
+Teaching API — Summary returns login-style localparts for live teacher views.
 """
 from __future__ import annotations
 
@@ -56,7 +53,7 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 
 @pytest.mark.anyio
-async def test_summary_humanizes_student_names(monkeypatch):
+async def test_summary_returns_login_localparts(monkeypatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     try:
@@ -65,8 +62,6 @@ async def test_summary_humanizes_student_names(monkeypatch):
     except Exception:
         pytest.skip("DB-backed TeachingRepo required")
 
-    # Force directory resolver to return email/legacy patterns (unhumanized)
-    # The API's adapter must humanize these names before returning the summary.
     def _fake_dir_resolve(subs: list[str]) -> dict[str, str]:
         m = {}
         for i, sid in enumerate(subs):
@@ -74,7 +69,7 @@ async def test_summary_humanizes_student_names(monkeypatch):
         return m
 
     import identity_access.directory as dir_mod  # type: ignore
-    monkeypatch.setattr(dir_mod, "resolve_student_names", _fake_dir_resolve)
+    monkeypatch.setattr(dir_mod, "resolve_student_login_labels_by_sub", _fake_dir_resolve)
 
     main.SESSION_STORE = SessionStore()
     owner = main.SESSION_STORE.create(sub="t-humanize-owner", name="Owner", roles=["teacher"])  # type: ignore
@@ -98,9 +93,8 @@ async def test_summary_humanizes_student_names(monkeypatch):
         rows = body.get("rows") or []
         assert rows, "expected rows with members"
         names = [row["student"]["name"] for row in rows]
-        # Must not include SUBs, raw emails, or legacy prefixes
+        # Must not include raw emails or legacy prefixes.
         assert not any(n.startswith("legacy-email:") for n in names)
         assert not any("@" in n for n in names)
-        # Expect humanized names
-        assert any(n == "Raphael Fournell" for n in names)
-        assert any(n.startswith("Alice") for n in names)
+        assert "raphael.fournell" in names
+        assert "alice" in names

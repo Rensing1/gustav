@@ -374,6 +374,137 @@ async def test_student_live_overview_page_accepts_path_encoded_student_sub_with_
 
 
 @pytest.mark.anyio
+async def test_student_live_overview_page_prefers_login_localpart_over_api_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-localpart", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "dadadada-dada-dada-dada-dadadadadada"
+    unit_id = "cbcbcbcb-cbcb-cbcb-cbcb-cbcbcbcbcbcb"
+    task_id = "edededed-eded-eded-eded-edededededed"
+    student_sub = "student-1"
+
+    monkeypatch.setattr(
+        main,
+        "_fetch_course_for_teacher",
+        lambda _course_id, *, owner_sub: {"id": _course_id, "title": "Kurs Localpart"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_fetch_course_units_for_teacher",
+        lambda _course_id, *, owner_sub: [{"id": unit_id, "title": "Einheit Localpart"}],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_student_live_internal_api_client(
+            course_id=course_id,
+            units=[{"id": unit_id, "title": "Einheit Localpart"}],
+            overview_status=200,
+            student_sub=student_sub,
+            overview_body={
+                "student": {"sub": student_sub, "name": "alice.example"},
+                "units": [
+                    {
+                        "id": unit_id,
+                        "title": "Einheit Localpart",
+                        "tasks": [
+                            {
+                                "id": task_id,
+                                "instruction_md": "### Aufgabe Localpart",
+                                "position": 1,
+                                "kind": "native",
+                                "has_submission": False,
+                                "average_score": None,
+                                "h5p_completed": None,
+                            }
+                        ],
+                    }
+                ],
+            },
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_load_teacher_live_login_labels",
+        lambda subs: (_ for _ in ()).throw(AssertionError("live login lookup must not run when API name is present")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_load_teacher_display_names",
+        lambda subs: (_ for _ in ()).throw(AssertionError("fallback name lookup must not run when raw_name is present")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_resolve_member_login_labels",
+        lambda subs: (_ for _ in ()).throw(AssertionError("members scan resolver must not run in live overview")),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        page = await c.get(f"/teaching/courses/{course_id}/students/{student_sub}/live")
+
+    assert page.status_code == 200, page.text
+    assert "alice.example" in page.text
+
+
+@pytest.mark.anyio
+async def test_student_live_overview_error_page_fails_closed_without_resolver_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-ssr-student-live-localpart-error", name="Owner", roles=["teacher"])  # type: ignore
+    course_id = "fefefefe-fefe-fefe-fefe-fefefefefefe"
+    student_sub = "student-error"
+
+    monkeypatch.setattr(
+        main,
+        "_fetch_course_for_teacher",
+        lambda _course_id, *, owner_sub: {"id": _course_id, "title": "Kurs Error Localpart"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_fetch_course_units_for_teacher",
+        lambda _course_id, *, owner_sub: [],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_internal_api_client",
+        lambda: _stub_student_live_internal_api_client(
+            course_id=course_id,
+            units=[],
+            overview_status=404,
+            student_sub=student_sub,
+            overview_body={"error": "not_found"},
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "_resolve_teacher_student_display_name",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not resolve on error page")),
+        raising=False,
+    )
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        page = await c.get(f"/teaching/courses/{course_id}/students/{student_sub}/live")
+
+    assert page.status_code == 404, page.text
+    assert "must not resolve on error page" not in page.text
+    assert "alice.example" not in page.text
+    assert "Kurs Error Localpart · student-error" in page.text
+
+
+@pytest.mark.anyio
 async def test_student_live_detail_partial_preserves_upstream_error_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

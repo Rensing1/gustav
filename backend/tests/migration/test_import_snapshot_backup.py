@@ -159,6 +159,52 @@ def test_collect_storage_objects_uses_db_bucket_ids(tmp_path: Path) -> None:
     assert any(p.endswith("README.txt") for p in skipped)
 
 
+def test_collect_storage_objects_strips_snapshot_version_suffix_from_key(tmp_path: Path) -> None:
+    root = tmp_path / "storage_extracted"
+    version = "da24679c-0bd2-472b-a4e7-d194e7659a60"
+    logical_key = (
+        "30e70a0e-b55c-4918-be90-82573329153c/"
+        "16f30ed6-4698-42c1-bb88-f6323b3e8171/"
+        "c02d4da4-471b-47bb-8444-0cca77682a9d/"
+        "1772546358062-b843ef87bcb8416f8605d08f2fb6ecab.jpg"
+    )
+    file_path = root / "stub" / "stub" / "submissions" / logical_key / version
+    file_path.parent.mkdir(parents=True)
+    file_path.write_bytes(b"jpeg-bytes")
+
+    objects, buckets, skipped = mod._collect_storage_objects(
+        storage_root=root,
+        bucket_ids={"submissions"},
+    )
+
+    assert buckets == {"submissions"}
+    assert skipped == []
+    assert [(bucket, key) for (bucket, key, _) in objects] == [("submissions", logical_key)]
+
+
+def test_collect_storage_objects_strips_snapshot_version_suffix_for_pdf_key(tmp_path: Path) -> None:
+    root = tmp_path / "storage_extracted"
+    version = "3cdef07f-4a4e-42f6-a1d6-c1bdbd7237e4"
+    logical_key = (
+        "30e70a0e-b55c-4918-be90-82573329153c/"
+        "193006fb-6ee0-459a-b0ab-7b4dd19d71a7/"
+        "c02d4da4-471b-47bb-8444-0cca77682a9d/"
+        "1769790779528-0ee5763906414d6da72ab1498a7d3874.pdf"
+    )
+    file_path = root / "backup" / "backup" / "submissions" / logical_key / version
+    file_path.parent.mkdir(parents=True)
+    file_path.write_bytes(b"%PDF")
+
+    objects, buckets, skipped = mod._collect_storage_objects(
+        storage_root=root,
+        bucket_ids={"submissions"},
+    )
+
+    assert buckets == {"submissions"}
+    assert skipped == []
+    assert [(bucket, key) for (bucket, key, _) in objects] == [("submissions", logical_key)]
+
+
 def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "storage_extracted"
     (root / "stub" / "stub" / "section_materials").mkdir(parents=True)

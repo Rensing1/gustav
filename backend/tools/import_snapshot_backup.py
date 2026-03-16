@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -750,6 +751,14 @@ def _collect_storage_objects(
     objects: list[tuple[str, str, Path]] = []
     buckets: set[str] = set()
     skipped: list[str] = []
+    stripped_version_suffixes = 0
+
+    def _looks_like_version_blob(part: str) -> bool:
+        try:
+            uuid.UUID(str(part))
+            return True
+        except (TypeError, ValueError, AttributeError):
+            return False
 
     for file_path in sorted(storage_root.rglob("*")):
         if not file_path.is_file():
@@ -776,9 +785,18 @@ def _collect_storage_objects(
         if not key_parts:
             skipped.append(str(file_path))
             continue
+        if len(key_parts) >= 2 and _looks_like_version_blob(key_parts[-1]):
+            key_parts = key_parts[:-1]
+            stripped_version_suffixes += 1
         key = Path(*key_parts).as_posix()
         objects.append((bucket, key, file_path))
         buckets.add(bucket)
+
+    if stripped_version_suffixes:
+        LOG.info(
+            "Detected %s versioned storage blobs in snapshot layout; stripped version suffix from import keys.",
+            stripped_version_suffixes,
+        )
 
     return objects, buckets, skipped
 

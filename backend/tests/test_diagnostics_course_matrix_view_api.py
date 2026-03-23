@@ -15,19 +15,37 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
 from routes import app as app_routes  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
+def _mock_bearer_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    sub: str,
+    roles: list[str],
+    name: str,
+) -> dict[str, str]:
+    monkeypatch.setattr(
+        main,
+        "verify_bearer_token",
+        lambda token, cfg: {
+            "sub": sub,
+            "name": name,
+            "gustav_display_name": name,
+            "realm_access": {"roles": roles},
+            "exp": 4102444800,
+        },
+    )
+    return {"Authorization": "Bearer test.jwt"}
+
+
 @pytest.mark.anyio
 async def test_diagnostics_course_matrix_returns_course_units_and_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
     monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
     monkeypatch.setattr(
         app_routes,
@@ -69,11 +87,10 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
             }
         ],
     )
-    rec = store.create(sub="teacher-diagnostics", roles=["teacher"], name="Ada", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-diagnostics", roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/diagnostics/views/courses/course-1/matrix")
+        response = await client.get("/api/diagnostics/views/courses/course-1/matrix", headers=headers)
 
     assert response.status_code == 200
     assert response.headers.get("Cache-Control") == "private, no-store"
@@ -131,13 +148,10 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
 
 @pytest.mark.anyio
 async def test_diagnostics_course_matrix_forbids_students(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
-    rec = store.create(sub="student-diagnostics", roles=["student"], name="Lena", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="student-diagnostics", roles=["student"], name="Lena")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/diagnostics/views/courses/course-1/matrix")
+        response = await client.get("/api/diagnostics/views/courses/course-1/matrix", headers=headers)
 
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}
@@ -147,15 +161,12 @@ async def test_diagnostics_course_matrix_forbids_students(monkeypatch: pytest.Mo
 async def test_diagnostics_course_matrix_returns_not_found_for_missing_course(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
     monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
     monkeypatch.setattr(app_routes, "_get_teacher_course", lambda course_id, owner_sub: None)
-    rec = store.create(sub="teacher-diagnostics", roles=["teacher"], name="Ada", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-diagnostics", roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/diagnostics/views/courses/course-404/matrix")
+        response = await client.get("/api/diagnostics/views/courses/course-404/matrix", headers=headers)
 
     assert response.status_code == 404
     assert response.json() == {"error": "not_found"}

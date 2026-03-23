@@ -4841,7 +4841,6 @@ paths:
         spaces for the new SvelteKit application shell.
       operationId: getSessionBootstrap
       security:
-        - cookieAuth: []
         - bearerAuth: []
       responses:
         '200':
@@ -4876,7 +4875,6 @@ paths:
         course list for the new SvelteKit home page.
       operationId: getLearnerHome
       security:
-        - cookieAuth: []
         - bearerAuth: []
       responses:
         '200':
@@ -4922,7 +4920,6 @@ paths:
         top-level navigation cards for the SvelteKit teacher home page.
       operationId: getTeacherHome
       security:
-        - cookieAuth: []
         - bearerAuth: []
       responses:
         '200':
@@ -4968,7 +4965,6 @@ paths:
         units, and member entries for the SvelteKit teaching room.
       operationId: getTeacherCourseContext
       security:
-        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -5031,7 +5027,6 @@ paths:
         attached units, and per-student submission counts for each unit.
       operationId: getDiagnosticsCourseMatrix
       security:
-        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path

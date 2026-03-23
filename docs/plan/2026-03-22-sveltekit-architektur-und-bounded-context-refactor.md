@@ -23,6 +23,7 @@ Bereits umgesetzt:
 - `frontend/` fuehrt jetzt eine opaque serverseitige Token-Session mit Access-/Refresh-/ID-Token statt einer reinen Backend-Session-Abbildung
 - `frontend/` erneuert expiring Access-Tokens jetzt serverseitig ueber `refresh_token` und wiederholt backend-nahe Read-Calls einmal kontrolliert nach einem `401`
 - der bisherige Uebergang `Authorization: Bearer session:<id>` ist fuer die neue BFF-Strecke wieder entfernt; FastAPI akzeptiert dort nur noch verifizierte JWT-Bearer oder als Altpfad die bestehende Browser-Cookie-Session
+- die neuen SvelteKit-Read-Models unter `/api/*/views/*` und `/api/app/session-bootstrap` sind jetzt backend-seitig explizit `bearerAuth`-only; die alte Browser-Cookie-Session bleibt dort kein gueltiger Zugang mehr
 - erste Raum-Read-Models `GET /api/learning/views/learner-home` und `GET /api/teaching/views/teacher-home` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - erster kursbezogener Lehrenden-Kontext `GET /api/teaching/views/courses/{course_id}/context` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - erstes `diagnostics`-Read-Model `GET /api/diagnostics/views/courses/{course_id}/matrix` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
@@ -33,7 +34,7 @@ Bereits umgesetzt:
 
 Noch offen fuer den naechsten Schritt:
 
-- verbleibende Backend-Cookie-Session-Fallbacks ausserhalb oeffentlicher Legacy-Pfade geordnet abbauen
+- verbleibende Backend-Cookie-Session-Fallbacks in Legacy-API/SSR-Pfaden geordnet abbauen
 - weitere Read-Models (`diagnostics-learner-profile`, `live-matrix`) schneiden
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen
 

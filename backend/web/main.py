@@ -407,12 +407,26 @@ def _session_auth_context_from_request(request: Request) -> dict[str, object] | 
     }
 
 
-def _auth_context_from_request(request: Request) -> tuple[dict[str, object] | None, bool]:
-    """Resolve auth context with verified bearer JWTs before session fallback."""
+def _requires_bff_bearer_auth(path: str) -> bool:
+    """Return whether a path belongs to the new BFF-owned read-model surface."""
+    return path == "/api/app/session-bootstrap" or path.startswith(
+        (
+            "/api/learning/views/",
+            "/api/teaching/views/",
+            "/api/diagnostics/views/",
+            "/api/live/views/",
+        )
+    )
+
+
+def _auth_context_from_request(request: Request) -> tuple[dict[str, object] | None, str]:
+    """Resolve auth context and expose whether it came from bearer or session."""
     bearer_attempted, bearer_context = _bearer_auth_context_from_request(request)
     if bearer_attempted:
-        return bearer_context, True
-    return _session_auth_context_from_request(request), False
+        return bearer_context, "bearer"
+    if _requires_bff_bearer_auth(request.url.path):
+        return None, "missing_bearer"
+    return _session_auth_context_from_request(request), "session"
 
 @app.middleware("http")
 async def auth_enforcement(request: Request, call_next):
@@ -420,7 +434,7 @@ async def auth_enforcement(request: Request, call_next):
     if _is_public_path(path):
         return await call_next(request)
 
-    auth_context, bearer_attempted = _auth_context_from_request(request)
+    auth_context, auth_source = _auth_context_from_request(request)
 
     if not auth_context:
         if path.startswith("/api/") or path.startswith("/internal/"):
@@ -457,6 +471,7 @@ async def auth_enforcement(request: Request, call_next):
 
     # Expose minimal, read-only user context for downstream handlers.
     request.state.user = auth_context["user"]
+    request.state.auth_source = auth_source
     request.state.auth_expires_at = auth_context.get("expires_at")
     # Also expose the raw id_token for logout flows to hint the IdP, but do not
     # leak it to templates or clients. This stays on the server-side request state.

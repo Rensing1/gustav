@@ -21,15 +21,33 @@ from identity_access.stores import SessionStore  # type: ignore
 pytestmark = pytest.mark.anyio("asyncio")
 
 
+def _mock_bearer_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    sub: str,
+    roles: list[str],
+    name: str,
+) -> dict[str, str]:
+    monkeypatch.setattr(
+        main,
+        "verify_bearer_token",
+        lambda token, cfg: {
+            "sub": sub,
+            "name": name,
+            "gustav_display_name": name,
+            "realm_access": {"roles": roles},
+            "exp": 4102444800,
+        },
+    )
+    return {"Authorization": "Bearer test.jwt"}
+
+
 @pytest.mark.anyio
 async def test_session_bootstrap_returns_student_start_target(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
-    rec = store.create(sub="student-1", roles=["student"], name="Lena", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="student-1", roles=["student"], name="Lena")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/app/session-bootstrap")
+        response = await client.get("/api/app/session-bootstrap", headers=headers)
 
     assert response.status_code == 200
     assert response.headers.get("Cache-Control") == "private, no-store"
@@ -47,13 +65,10 @@ async def test_session_bootstrap_returns_student_start_target(monkeypatch: pytes
 
 @pytest.mark.anyio
 async def test_session_bootstrap_returns_teacher_spaces(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
-    rec = store.create(sub="teacher-1", roles=["teacher"], name="Ada", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-1", roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/app/session-bootstrap")
+        response = await client.get("/api/app/session-bootstrap", headers=headers)
 
     assert response.status_code == 200
     assert response.json()["start_target"] == "/teaching"
@@ -61,11 +76,15 @@ async def test_session_bootstrap_returns_teacher_spaces(monkeypatch: pytest.Monk
 
 
 @pytest.mark.anyio
-async def test_session_bootstrap_requires_session() -> None:
+async def test_session_bootstrap_requires_bearer_even_with_cookie_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = SessionStore()
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+    rec = store.create(sub="student-cookie", roles=["student"], name="Lena", ttl_seconds=60)
+
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", rec.session_id)
         response = await client.get("/api/app/session-bootstrap")
 
     assert response.status_code == 401
     assert response.headers.get("Cache-Control") == "private, no-store"
     assert response.json() == {"error": "unauthenticated"}
-

@@ -22,6 +22,27 @@ from routes import app as app_routes  # type: ignore
 pytestmark = pytest.mark.anyio("asyncio")
 
 
+def _mock_bearer_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    sub: str,
+    roles: list[str],
+    name: str,
+) -> dict[str, str]:
+    monkeypatch.setattr(
+        main,
+        "verify_bearer_token",
+        lambda token, cfg: {
+            "sub": sub,
+            "name": name,
+            "gustav_display_name": name,
+            "realm_access": {"roles": roles},
+            "exp": 4102444800,
+        },
+    )
+    return {"Authorization": "Bearer test.jwt"}
+
+
 async def _seed_teacher_course_context(client: httpx.AsyncClient) -> tuple[str, str]:
     course_response = await client.post(
         "/api/teaching/courses",
@@ -55,6 +76,7 @@ async def test_teacher_course_context_returns_course_members_and_units(
     monkeypatch.setattr(app_routes.teaching_routes, "resolve_student_names", lambda subs: {"student-context": "Lena"})
     teacher = store.create(sub="teacher-context", roles=["teacher"], name="Ada", ttl_seconds=60)
     student = store.create(sub="student-context", roles=["student"], name="Lena", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-context", roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -65,7 +87,7 @@ async def test_teacher_course_context_returns_course_members_and_units(
             headers={"Origin": "http://test"},
         )
 
-        response = await client.get(f"/api/teaching/views/courses/{course_id}/context")
+        response = await client.get(f"/api/teaching/views/courses/{course_id}/context", headers=headers)
 
     assert response.status_code == 200
     assert response.headers.get("Cache-Control") == "private, no-store"
@@ -99,13 +121,13 @@ async def test_teacher_course_context_forbids_non_owner(monkeypatch: pytest.Monk
     monkeypatch.setattr(main, "SESSION_STORE", store)
     owner = store.create(sub="teacher-owner", roles=["teacher"], name="Ada", ttl_seconds=60)
     outsider = store.create(sub="teacher-outsider", roles=["teacher"], name="Linus", ttl_seconds=60)
+    outsider_headers = _mock_bearer_auth(monkeypatch, sub="teacher-outsider", roles=["teacher"], name="Linus")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", owner.session_id)
         course_id, _unit_id = await _seed_teacher_course_context(client)
 
-        client.cookies.set("gustav_session", outsider.session_id)
-        response = await client.get(f"/api/teaching/views/courses/{course_id}/context")
+        response = await client.get(f"/api/teaching/views/courses/{course_id}/context", headers=outsider_headers)
 
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}
@@ -113,13 +135,13 @@ async def test_teacher_course_context_forbids_non_owner(monkeypatch: pytest.Monk
 
 @pytest.mark.anyio
 async def test_teacher_course_context_forbids_student(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
-    student = store.create(sub="student-view", roles=["student"], name="Lena", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="student-view", roles=["student"], name="Lena")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", student.session_id)
-        response = await client.get("/api/teaching/views/courses/00000000-0000-0000-0000-000000000000/context")
+        response = await client.get(
+            "/api/teaching/views/courses/00000000-0000-0000-0000-000000000000/context",
+            headers=headers,
+        )
 
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}

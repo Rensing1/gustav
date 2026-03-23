@@ -15,19 +15,37 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
 from routes import app as app_routes  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
+def _mock_bearer_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    sub: str,
+    roles: list[str],
+    name: str,
+) -> dict[str, str]:
+    monkeypatch.setattr(
+        main,
+        "verify_bearer_token",
+        lambda token, cfg: {
+            "sub": sub,
+            "name": name,
+            "gustav_display_name": name,
+            "realm_access": {"roles": roles},
+            "exp": 4102444800,
+        },
+    )
+    return {"Authorization": "Bearer test.jwt"}
+
+
 @pytest.mark.anyio
 async def test_learner_home_returns_student_courses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
     monkeypatch.setattr(
         app_routes,
         "_list_learner_courses",
@@ -36,11 +54,10 @@ async def test_learner_home_returns_student_courses(
             {"id": "course-2", "title": "Informatik"},
         ],
     )
-    rec = store.create(sub="student-home", roles=["student"], name="Lena", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="student-home", roles=["student"], name="Lena")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/learning/views/learner-home")
+        response = await client.get("/api/learning/views/learner-home", headers=headers)
 
     assert response.status_code == 200
     assert response.headers.get("Cache-Control") == "private, no-store"
@@ -53,13 +70,10 @@ async def test_learner_home_returns_student_courses(
 
 @pytest.mark.anyio
 async def test_teacher_home_returns_navigation_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
-    rec = store.create(sub="teacher-home", roles=["teacher"], name="Ada", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-home", roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/teaching/views/teacher-home")
+        response = await client.get("/api/teaching/views/teacher-home", headers=headers)
 
     assert response.status_code == 200
     body = response.json()
@@ -94,14 +108,10 @@ async def test_teacher_home_returns_navigation_entries(monkeypatch: pytest.Monke
 
 @pytest.mark.anyio
 async def test_learner_home_forbids_teacher(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
-    rec = store.create(sub="teacher-home", roles=["teacher"], name="Ada", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-home", roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", rec.session_id)
-        response = await client.get("/api/learning/views/learner-home")
+        response = await client.get("/api/learning/views/learner-home", headers=headers)
 
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}
-

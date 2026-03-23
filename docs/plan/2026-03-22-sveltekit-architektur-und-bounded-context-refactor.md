@@ -1,6 +1,6 @@
 # Plan: Dev-Ready SvelteKit-Refactor fuer Architektur, UI und Bounded Contexts
 
-Status: in Umsetzung  
+Status: funktional umgeschaltet  
 Datum: 23. Maerz 2026
 
 ## Aktueller Umsetzungsstand
@@ -44,16 +44,21 @@ Bereits umgesetzt:
 - die alten tiefen FastAPI-Live-SSR-Pfade `/teaching/courses/{course_id}/units/{unit_id}/live*` sowie `/teaching/courses/{course_id}/students/{student_sub}/live` sind jetzt ebenfalls als Legacy-Pfade stillgelegt
 - der verbliebene Sidebar-/HTMX-Layout-Regressionstest haengt jetzt an der verbleibenden Home-Shell statt an retirten Produktpfaden
 - die weiterhin aktiven studentischen Unit-Seiten verlinken fuer den Ruecksprung jetzt direkt auf `/learning` statt auf den retirten Kursdetailpfad
+- neue SvelteKit-Lernendenpfade unter `/learning/courses/[courseId]` und `/learning/courses/[courseId]/units/[unitId]` ersetzen jetzt auch den verbliebenen studentischen SSR-Arbeitsraum
+- Lernenden-Abgaben laufen im neuen Frontend serverseitig ueber BFF-gebundene Upload-Intent- und Submission-Calls statt ueber HTMX-/Cookie-Altpfade
+- H5P nutzt jetzt die Browser-BFF-Cookie `gustav_bff_session` ueber eine interne Frontend-Bridge; der H5P-Service kann damit den neuen Auth-Schnitt lesen, Access-Checks ausfuehren und H5P-Abgaben weiterreichen
+- die verbliebenen tiefen studentischen FastAPI-Pfade unter `/learning/courses/*` liefern im Backend nur noch explizite Legacy-Hinweise statt produktiver HTML-/HTMX-Antworten
+- die verbliebenen teacherischen FastAPI-Pfadbaeume unter `/courses*` und `/units*` werden jetzt zentral als retirte Legacy-Produktpfade behandelt
+- der FastAPI-Webadapter dient damit fuer Produktpfade nur noch als minimierte Legacy-Schale fuer Home/Info/Auth, nicht mehr als zweite Weboberflaeche
+- alte SSR-/HTMX-Testbloecke fuer die retirten Produktbaeume sind entfernt und durch Retirement- bzw. SvelteKit-Vertraege ersetzt
 - Frontend-Abhaengigkeiten installiert und `npm run check` fuer das aktuelle SvelteKit-Grundgeruest gruen ausgefuehrt
 - Architektur-/Kontextdoku auf `SvelteKit` und `diagnostics` umgestellt
 - ADRs fuer `SvelteKit als Browser-BFF`, `Objekte schreiben / Raeume lesen` und `diagnostics als eigener Fachbereich` angelegt
 
 Noch offen fuer den naechsten Schritt:
 
-- verbleibende Backend-Cookie-Session-Fallbacks in Legacy-API/SSR-Pfaden geordnet abbauen
-- verbliebene Legacy-SSR-Routen mit produktivem Charakter strangweise stilllegen oder auf neue Raeume umhaengen
-  - naechste Kandidaten: verbliebene tiefe studentische Altpfade wie `/learning/courses/{course_id}/tasks/*`, danach die tieferen teacherischen Altpfade in `courses` und `units`
-- Altpfad-Inventar aus `backend/web/main.py` formal abbauen
+- kein funktionaler Architekturblock mehr; es bleibt nur das geplante UI-Finetuning auf Basis der jetzt umgeschalteten SvelteKit-Strecke
+- optional: breiter Docker-/E2E-Gesamtlauf gegen das Compose-Setup, nachdem die Oberflaechen gestalterisch weiter verfeinert wurden
 
 ## Zusammenfassung
 

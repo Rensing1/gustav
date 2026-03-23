@@ -128,6 +128,8 @@ services:
       context: ./h5p-service
     container_name: gustav-h5p
     # behind proxy; no direct host port mapping
+    depends_on:
+      - frontend
     volumes:
       # H5P content/libraries (single-host dev bind mount)
       - ./supabase/storage/h5p:/data/h5p:z
@@ -137,7 +139,9 @@ services:
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       # Internal URL to validate gustav_session via /api/me (cookie forwarded)
       - GUSTAV_WEB_INTERNAL_BASE=http://gustav-alpha2:8000
+      - GUSTAV_FRONTEND_INTERNAL_BASE=http://gustav-frontend:3000
       - SESSION_COOKIE_NAME=gustav_session
+      - FRONTEND_SESSION_COOKIE_NAME=${FRONTEND_SESSION_COOKIE_NAME:-gustav_bff_session}
       # Small cache to reduce load on /api/me during editor/player asset bursts
       - AUTH_CACHE_TTL_SECONDS=30
       # Filesystem-based storage root (mounted from repo under supabase/storage)

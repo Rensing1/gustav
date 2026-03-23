@@ -128,8 +128,8 @@ async def test_htmx_request_includes_sidebar_oob_update():
 
 
 @pytest.mark.anyio
-async def test_placeholder_pages_exist_about_and_units():
-    # These pages should be SSR pages returning HTML 200
+async def test_about_page_exists_and_units_page_is_retired():
+    # `/about` stays as a small SSR info page; `/units` is now a retired legacy entry.
     sess = main.SESSION_STORE.create(sub="t-2", name="Lehrer E", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
@@ -137,6 +137,6 @@ async def test_placeholder_pages_exist_about_and_units():
         r_units = await c.get("/units")
 
     assert r_about.status_code == 200
-    assert r_units.status_code == 200
+    assert r_units.status_code == 410
     assert "GUSTAV" in r_about.text
-    assert "GUSTAV" in r_units.text
+    assert "legacy route retired" in r_units.text.lower()

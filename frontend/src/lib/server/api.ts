@@ -12,6 +12,101 @@ export function buildApiUrl(path: string): string {
   return new URL(path, baseUrl).toString();
 }
 
+function internalOrigin(): string {
+  const apiBaseUrl = env.API_INTERNAL_BASE_URL || DEFAULT_API_INTERNAL_BASE_URL;
+  try {
+    return new URL(apiBaseUrl).origin;
+  } catch {
+    return DEFAULT_API_INTERNAL_BASE_URL;
+  }
+}
+
+async function createAuthHeaders(
+  fetchFn: typeof fetch,
+  cookies: Cookies,
+  options?: {
+    forceRefresh?: boolean;
+    includeSameOrigin?: boolean;
+    headers?: HeadersInit;
+  }
+): Promise<Headers> {
+  const headers = new Headers(options?.headers);
+  const tokenSession = await readFreshTokenSession(cookies, fetchFn, {
+    forceRefresh: options?.forceRefresh
+  });
+  const backendAuthorization = buildBackendAuthorizationHeader(tokenSession?.accessToken);
+  if (backendAuthorization) {
+    headers.set("authorization", backendAuthorization);
+  }
+  if (options?.includeSameOrigin) {
+    headers.set("origin", internalOrigin());
+    headers.set("referer", internalOrigin());
+  }
+  return headers;
+}
+
+export class BackendRequestError extends Error {
+  response: Response;
+
+  constructor(response: Response, message?: string) {
+    super(message || `Backend request failed with ${response.status}`);
+    this.response = response;
+  }
+}
+
+export async function backendRequest(
+  fetchFn: typeof fetch,
+  cookies: Cookies,
+  path: string,
+  options?: {
+    method?: string;
+    body?: BodyInit | null;
+    headers?: HeadersInit;
+    includeSameOrigin?: boolean;
+  }
+): Promise<Response> {
+  const requestInit = {
+    method: options?.method || "GET",
+    body: options?.body,
+    headers: await createAuthHeaders(fetchFn, cookies, {
+      headers: options?.headers,
+      includeSameOrigin: options?.includeSameOrigin
+    })
+  };
+
+  let response = await fetchFn(buildApiUrl(path), requestInit);
+  if (response.status !== 401) {
+    return response;
+  }
+
+  return await fetchFn(buildApiUrl(path), {
+    ...requestInit,
+    headers: await createAuthHeaders(fetchFn, cookies, {
+      forceRefresh: true,
+      headers: options?.headers,
+      includeSameOrigin: options?.includeSameOrigin
+    })
+  });
+}
+
+export async function requireBackendJson<T>(
+  fetchFn: typeof fetch,
+  cookies: Cookies,
+  path: string,
+  options?: {
+    method?: string;
+    body?: BodyInit | null;
+    headers?: HeadersInit;
+    includeSameOrigin?: boolean;
+  }
+): Promise<T> {
+  const response = await backendRequest(fetchFn, cookies, path, options);
+  if (!response.ok) {
+    throw new BackendRequestError(response);
+  }
+  return (await response.json()) as T;
+}
+
 export async function readJsonOrNull(
   // Generic helper so loaders can retain concrete response contracts.
   // This keeps SvelteKit-generated route types aligned with backend read-models.
@@ -20,27 +115,7 @@ export async function readJsonOrNull(
   cookies: Cookies,
   path: string
 ): Promise<unknown | null> {
-  const createHeaders = async (forceRefresh = false): Promise<Headers> => {
-    const headers = new Headers();
-    const tokenSession = await readFreshTokenSession(cookies, fetchFn, { forceRefresh });
-    const backendAuthorization = buildBackendAuthorizationHeader(tokenSession?.accessToken);
-    if (backendAuthorization) {
-      headers.set("authorization", backendAuthorization);
-    }
-    return headers;
-  };
-
-  let response = await fetchFn(buildApiUrl(path), {
-    method: "GET",
-    headers: await createHeaders()
-  });
-
-  if (response.status === 401) {
-    response = await fetchFn(buildApiUrl(path), {
-      method: "GET",
-      headers: await createHeaders(true)
-    });
-  }
+  const response = await backendRequest(fetchFn, cookies, path, { method: "GET" });
 
   if (response.status === 401 || response.status === 204) {
     return null;

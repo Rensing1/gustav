@@ -479,6 +479,10 @@ async def auth_enforcement(request: Request, call_next):
         request.state.id_token = auth_context.get("id_token")
     except Exception:
         request.state.id_token = None
+
+    legacy_response = _retired_legacy_product_response(request, auth_context["user"])
+    if legacy_response is not None:
+        return legacy_response
     return await call_next(request)
 
 # --- Security Headers Middleware ----------------------------------------------
@@ -2049,6 +2053,42 @@ def _render_retired_legacy_entry(
     return _layout_response(request, layout, status_code=410, headers={"Cache-Control": "private, no-store"})
 
 
+def _retired_legacy_product_response(request: Request, user: dict | None) -> Response | None:
+    """Return a retirement response for legacy FastAPI product paths.
+
+    Why:
+        After the SvelteKit cutover the Python web adapter should no longer
+        carry productive `/courses*`, `/units*` or deep `/learning/courses*`
+        journeys. Centralizing the check keeps the remaining legacy surface
+        small and explicit.
+    """
+    path = request.url.path
+    teacher_legacy = path == "/courses" or path.startswith("/courses/") or path == "/units" or path.startswith("/units/")
+    student_legacy = path.startswith("/learning/courses/")
+
+    if teacher_legacy:
+        if not _user_has_role(user, "teacher"):
+            return RedirectResponse(url="/", status_code=303, headers={"Cache-Control": "private, no-store"})
+        return _render_retired_legacy_entry(
+            request,
+            user=user,
+            legacy_path=path,
+            replacement_space="die Lehrenden-Welt",
+        )
+
+    if student_legacy:
+        if not _user_has_role(user, "student"):
+            return RedirectResponse(url="/", status_code=303, headers={"Cache-Control": "private, no-store"})
+        return _render_retired_legacy_entry(
+            request,
+            user=user,
+            legacy_path=path,
+            replacement_space="den Lernendenraum",
+        )
+
+    return None
+
+
 @app.get("/learning", response_class=HTMLResponse)
 async def learning_index(request: Request):
     """Retired legacy SSR entry for the student learning space.
@@ -2088,27 +2128,16 @@ async def learning_course_detail(request: Request, course_id: str):
 
 @app.get("/learning/courses/{course_id}/units/{unit_id}", response_class=HTMLResponse)
 async def learning_unit_sections(request: Request, course_id: str, unit_id: str):
-    """Render released content of a unit for students without section titles.
-
-    Why:
-        Students should see only released materials/tasks grouped by sections,
-        with sections separated visually (horizontal lines), but without
-        exposing the section titles.
-
-    Behavior:
-        - Requires role "student"; non-students are redirected to home.
-        - Loads units list for course to derive the unit title for the header.
-        - Fetches released sections via unit-scoped Learning API endpoint.
-        - Renders materials and tasks; places an <hr> between section groups.
-        - Each material and each task renders as its own card component
-          (`MaterialCard`/`TaskCard`). Markdown in materials (and task
-          instructions) is rendered to a safe HTML subset using
-          `render_markdown_safe`.
-        - Uses private, no-store cache headers.
-    """
+    """Retired legacy SSR entry for student unit workspaces."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/learning/courses/{course_id}/units/{unit_id}",
+        replacement_space="den Lernendenraum",
+    )
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
         return RedirectResponse(url="/learning", status_code=303)
     unit_title = "Lerneinheit"
@@ -2535,21 +2564,15 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     response_class=HTMLResponse,
 )
 async def learning_modular_unit_module_fragment(request: Request, course_id: str, unit_id: str, module_id: str):
-    """Render a module body (HTML fragment) for modular learning units.
-
-    Why:
-        The modular unit page loads module contents on demand (HTMX) after the
-        student unlocked the module. This keeps the initial page lightweight
-        and avoids leaking locked content.
-
-    Behavior:
-        - Requires role "student".
-        - Uses the Learning API (cookie-auth) to fetch module content.
-        - Locked / not accessible modules return 404 (fail-closed).
-    """
+    """Retired legacy HTMX fragment for modular learning units."""
     user = getattr(request.state, "user", None)
     if not _user_has_role(user, "student"):
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(
+        '<p class="text-muted">Legacy route retired. Bitte oeffne das Modul im neuen Lernendenraum.</p>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store"},
+    )
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(module_id)):
         return HTMLResponse("", status_code=400, headers={"Cache-Control": "private, no-store"})
 
@@ -2723,41 +2746,15 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
 
 @app.post("/learning/courses/{course_id}/tasks/{task_id}/submit", response_class=HTMLResponse)
 async def learning_submit_task(request: Request, course_id: str, task_id: str):
-    """Handle student form submission and PRG back to the unit page.
-
-    Why:
-        Students submit solutions directly from the unit page. This SSR route
-        collects minimal form fields and forwards them to the Learning API,
-        keeping the web layer thin and framework-agnostic at the domain level.
-
-    Behavior:
-        - Supports mode=text (textarea) and mode=image|file (uploaded asset
-          metadata: storage_key, mime_type, size_bytes, sha256). The SSR form
-          is progressively enhanced by JS which performs the upload first and
-          then fills hidden fields; tests may submit those fields directly.
-        - Sends a short Idempotency-Key to the API to guard against double
-          clicks.
-        - HTMX requests (presence of `HX-Request`) receive the updated
-          submission history fragment for this task (with polling enabled while
-          the latest attempt is pending) and an `HX-Trigger` header to show a
-          success message, avoiding a full page reload.
-        - Non-HTMX requests keep PRG (Post-Redirect-Get) back to the unit page
-          with a success banner and `open_attempt_id` query parameter so the
-          exact attempt opens deterministically in the history (fallback:
-          newest opens).
-
-    Permissions:
-        Caller must be a student and a course member; API enforces RLS and
-        visibility. Same-origin protection is applied at the API boundary.
-    """
-    # CSRF: enforce same-origin for browser form POSTs before touching inputs.
-    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
-    if not origin_present or (not _is_same_origin(request)):
-        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
-
+    """Retired legacy submit POST for student tasks."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse(
+        '<p class="text-muted">Legacy route retired. Bitte reiche die Aufgabe im neuen Lernendenraum ein.</p>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store", "Vary": "Origin"},
+    )
     form = await request.form()
     form_idempotency_key = _normalize_task_submit_idempotency_key(form.get("idempotency_key"))
     mode = str(form.get("mode") or "text").strip()
@@ -2974,35 +2971,15 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
 
 @app.get("/learning/courses/{course_id}/tasks/{task_id}/history", response_class=HTMLResponse)
 async def learning_task_history_fragment(request: Request, course_id: str, task_id: str):
-    """Render the student's submission history (HTML fragment) for a task.
-
-    Why:
-        This fragment renders a stable history wrapper. While the newest attempt
-        is still being processed (`pending`/`extracted`), it embeds a dedicated
-        poll element that updates only the dynamic zones of the latest attempt
-        (text + feedback) via out-of-band swaps. This avoids scroll jumps caused
-        by repeatedly re-rendering signed preview URLs.
-
-    Parameters:
-        course_id: Course UUID in path.
-        task_id: Task UUID in path.
-
-    Behavior:
-        - Returns a <section class="task-panel__history"> wrapper containing
-          <details> entries.
-        - While the newest attempt is in progress (analysis_status ∈ {pending, extracted}),
-          the wrapper includes a per-task poll element that triggers every 10 seconds.
-        - Includes data-pending="true|false" (true signals auto-refresh) for
-          progressive enhancement/tests.
-
-    Permissions:
-        Caller must be authenticated and have role "student" for this view.
-        Authorization (membership/visibility) is enforced by the API endpoint
-        used internally to fetch the history.
-    """
+    """Retired legacy history fragment for student tasks."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(
+        '<section class="task-panel__history"><p class="text-muted">Legacy route retired.</p></section>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store"},
+    )
     try:
         async with _internal_api_client() as client:
             sid = _get_session_id(request)
@@ -3030,20 +3007,15 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
 
 @app.get("/learning/courses/{course_id}/tasks/{task_id}/history/poll", response_class=HTMLResponse)
 async def learning_task_history_poll(request: Request, course_id: str, task_id: str):
-    """Return granular OOB updates for the newest submission of a task.
-
-    Returns:
-        - A replacement poll element (keeps polling while pending/extracted, stops otherwise)
-        - Out-of-band swaps for:
-            * #submission-text-{id}
-            * #submission-result-{id}
-
-    Security:
-        Student-only. Authorization/membership is delegated to the internal API.
-    """
+    """Retired legacy polling fragment for student task history."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(
+        '<div class="text-muted">Legacy route retired.</div>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
     try:
         async with _internal_api_client() as client:

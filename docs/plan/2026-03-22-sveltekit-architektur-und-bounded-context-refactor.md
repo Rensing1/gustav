@@ -17,6 +17,8 @@ Bereits umgesetzt:
 - Browserpfade `/auth/login`, `/auth/register`, `/auth/forgot`, `/auth/logout` und `/auth/callback` als SvelteKit-Bridge-Routen angelegt
 - oeffentliche Logout-Erfolgsseite in `frontend/` angelegt
 - SvelteKit fuehrt jetzt eine eigene HttpOnly-BFF-Session-Cookie und mappt sie serverseitig auf die bisherige Backend-Session
+- interne BFF-zu-Backend-Weitergabe auf kontrollierten `Authorization: Bearer session:<id>`-Transport umgestellt
+- erste Raum-Read-Models `GET /api/learning/views/learner-home` und `GET /api/teaching/views/teacher-home` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - Frontend-Abhaengigkeiten installiert und `npm run check` fuer das aktuelle SvelteKit-Grundgeruest gruen ausgefuehrt
 - Architektur-/Kontextdoku auf `SvelteKit` und `diagnostics` umgestellt
 - ADRs fuer `SvelteKit als Browser-BFF`, `Objekte schreiben / Raeume lesen` und `diagnostics als eigener Fachbereich` angelegt
@@ -24,8 +26,8 @@ Bereits umgesetzt:
 Noch offen fuer den naechsten Schritt:
 
 - Browser-Auth ueber die bisherige Backend-Session hinaus auf ein vollstaendig eigenstaendiges `SvelteKit`-Session-Modell weiterziehen
-- `FastAPI`-Authentifizierung fuer serverseitige BFF-Aufrufe von Cookie-Session auf Zielmodell weiterziehen
-- weitere Read-Models (`learner-home`, `teacher-home`, `course-context-view`) schneiden
+- `FastAPI`-Authentifizierung von Session-Transport auf echtes wiederverwendbares Bearer-/JWT-Zielmodell weiterziehen
+- weitere Read-Models (`course-context-view`, `diagnostics-course-matrix`, `live-matrix`) schneiden
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen
 
 ## Zusammenfassung

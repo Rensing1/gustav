@@ -110,6 +110,48 @@ components:
           roles: ["teacher"]
         start_target: "/teaching"
         spaces: ["teaching", "diagnostics", "live"]
+    LearnerHomeCourse:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    LearnerHome:
+      type: object
+      required: [user, courses]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearnerHomeCourse'
+    TeacherHomeEntry:
+      type: object
+      required: [id, title, href, description]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+        description:
+          type: string
+    TeacherHome:
+      type: object
+      required: [user, entries]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherHomeEntry'
     Error:
       type: object
       required: [error]
@@ -4688,6 +4730,96 @@ paths:
                 $ref: '#/components/schemas/SessionBootstrap'
         '401':
           description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/views/learner-home:
+    get:
+      tags: [App]
+      summary: Return the learner home read-model
+      description: >-
+        Returns the current learner identity together with the learner-facing
+        course list for the new SvelteKit home page.
+      operationId: getLearnerHome
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Learner home payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerHome'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a learner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/teacher-home:
+    get:
+      tags: [App]
+      summary: Return the teacher home read-model
+      description: >-
+        Returns the current teaching identity together with the first
+        top-level navigation cards for the SvelteKit teacher home page.
+      operationId: getTeacherHome
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Teacher home payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherHome'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

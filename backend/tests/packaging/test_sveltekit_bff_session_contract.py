@@ -34,3 +34,19 @@ def test_frontend_owns_server_side_token_session() -> None:
 
     assert "buildBackendAuthorizationHeader" in api_src
     assert "Bearer session:" not in api_src
+
+
+def test_frontend_refreshes_expiring_token_sessions_before_backend_calls() -> None:
+    session_helper_path = REPO_ROOT / "frontend" / "src" / "lib" / "server" / "session.ts"
+    api_helper_path = REPO_ROOT / "frontend" / "src" / "lib" / "server" / "api.ts"
+
+    session_src = session_helper_path.read_text(encoding="utf-8")
+    api_src = api_helper_path.read_text(encoding="utf-8")
+
+    assert "readFreshTokenSession" in session_src
+    assert "grant_type" in session_src
+    assert "refresh_token" in session_src
+    assert "TOKEN_SESSIONS.set" in session_src
+    assert "clearFrontendSessionCookie" in session_src
+
+    assert "readFreshTokenSession" in api_src

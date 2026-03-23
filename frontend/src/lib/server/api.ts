@@ -1,5 +1,8 @@
 import { env } from "$env/dynamic/private";
-import { buildBackendAuthorizationHeader, readTokenSession } from "$lib/server/session";
+import {
+  buildBackendAuthorizationHeader,
+  readFreshTokenSession
+} from "$lib/server/session";
 import type { Cookies } from "@sveltejs/kit";
 
 const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
@@ -17,16 +20,27 @@ export async function readJsonOrNull(
   cookies: Cookies,
   path: string
 ): Promise<unknown | null> {
-  const headers = new Headers();
-  const backendAuthorization = buildBackendAuthorizationHeader(readTokenSession(cookies)?.accessToken);
-  if (backendAuthorization) {
-    headers.set("authorization", backendAuthorization);
-  }
+  const createHeaders = async (forceRefresh = false): Promise<Headers> => {
+    const headers = new Headers();
+    const tokenSession = await readFreshTokenSession(cookies, fetchFn, { forceRefresh });
+    const backendAuthorization = buildBackendAuthorizationHeader(tokenSession?.accessToken);
+    if (backendAuthorization) {
+      headers.set("authorization", backendAuthorization);
+    }
+    return headers;
+  };
 
-  const response = await fetchFn(buildApiUrl(path), {
+  let response = await fetchFn(buildApiUrl(path), {
     method: "GET",
-    headers
+    headers: await createHeaders()
   });
+
+  if (response.status === 401) {
+    response = await fetchFn(buildApiUrl(path), {
+      method: "GET",
+      headers: await createHeaders(true)
+    });
+  }
 
   if (response.status === 401 || response.status === 204) {
     return null;

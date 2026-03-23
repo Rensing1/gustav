@@ -26,6 +26,10 @@ components:
       type: apiKey
       in: cookie
       name: gustav_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   responses:
     Unauthorized401:
       description: Authentication required
@@ -4768,6 +4772,7 @@ paths:
       operationId: getSessionBootstrap
       security:
         - cookieAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Bootstrap payload for the current authenticated session
@@ -4802,6 +4807,7 @@ paths:
       operationId: getLearnerHome
       security:
         - cookieAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Learner home payload
@@ -4847,6 +4853,7 @@ paths:
       operationId: getTeacherHome
       security:
         - cookieAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Teacher home payload
@@ -4892,6 +4899,7 @@ paths:
       operationId: getTeacherCourseContext
       security:
         - cookieAuth: []
+        - bearerAuth: []
       parameters:
         - in: path
           name: course_id
@@ -4952,6 +4960,7 @@ paths:
       operationId: getMe
       security:
         - cookieAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: User context

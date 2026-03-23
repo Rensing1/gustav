@@ -44,7 +44,7 @@ from evidence_rendering import render_submission_text_html
 from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
 from identity_access.domain import ALLOWED_ROLES
-from identity_access.tokens import IDTokenVerificationError, verify_id_token
+from identity_access.tokens import BearerTokenVerificationError, IDTokenVerificationError, verify_bearer_token, verify_id_token
 import sys as _sys
 
 try:
@@ -345,6 +345,18 @@ def _session_id_from_authorization_header(request: Request) -> str | None:
     return session_id or None
 
 
+def _bearer_token_from_authorization_header(request: Request) -> str | None:
+    """Extract a JWT bearer token from Authorization, excluding session transport."""
+    raw = request.headers.get("authorization") or ""
+    prefix = "Bearer "
+    if not raw.startswith(prefix):
+        return None
+    token = raw[len(prefix):].strip()
+    if not token or token.startswith("session:"):
+        return None
+    return token
+
+
 def _session_record_from_request(request: Request):
     """Resolve the authenticated session from internal bearer or cookie."""
     sid = _session_id_from_authorization_header(request)
@@ -365,15 +377,81 @@ def _session_record_from_request(request: Request):
             logger.warning("Session store get failed: %s", exc.__class__.__name__)
     return sid, rec
 
+
+def _roles_from_claims(claims: Mapping[str, object]) -> list[str]:
+    raw_roles: list[str] = []
+    realm_access = claims.get("realm_access") or {}
+    if isinstance(realm_access, dict):
+        roles = realm_access.get("roles")
+        if isinstance(roles, list):
+            raw_roles = [str(role) for role in roles]
+    filtered = [role for role in raw_roles if role in ALLOWED_ROLES]
+    return filtered or ["student"]
+
+
+def _display_name_from_claims(claims: Mapping[str, object]) -> str:
+    email = str(claims.get("email") or claims.get("preferred_username") or "")
+    return str(
+        claims.get("gustav_display_name")
+        or claims.get("name")
+        or (email.split("@")[0] if email else "Benutzer")
+    )
+
+
+def _user_context_from_claims(claims: Mapping[str, object]) -> dict[str, object]:
+    roles = _roles_from_claims(claims)
+    return {
+        "sub": str(claims.get("sub") or "unknown-sub"),
+        "name": _display_name_from_claims(claims),
+        "role": _primary_role(roles),
+        "roles": roles,
+    }
+
+
+def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str, object] | None]:
+    """Return (attempted, context) for JWT bearer authentication."""
+    token = _bearer_token_from_authorization_header(request)
+    if not token:
+        return False, None
+    try:
+        claims = verify_bearer_token(token=token, cfg=OIDC_CFG)
+    except BearerTokenVerificationError as exc:
+        logger.warning("Bearer token verification failed: %s", exc.code)
+        return True, None
+    exp = claims.get("exp")
+    expires_at = int(exp) if isinstance(exp, (int, float)) else None
+    return True, {"user": _user_context_from_claims(claims), "expires_at": expires_at, "id_token": None}
+
+
+def _session_auth_context_from_request(request: Request) -> dict[str, object] | None:
+    sid, rec = _session_record_from_request(request)
+    if not rec:
+        return None
+    return {
+        "session_id": sid,
+        "session_record": rec,
+        "user": {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles},
+        "expires_at": rec.expires_at,
+        "id_token": getattr(rec, "id_token", None),
+    }
+
+
+def _auth_context_from_request(request: Request) -> tuple[dict[str, object] | None, bool]:
+    """Resolve auth context with verified bearer JWTs before session fallback."""
+    bearer_attempted, bearer_context = _bearer_auth_context_from_request(request)
+    if bearer_attempted:
+        return bearer_context, True
+    return _session_auth_context_from_request(request), False
+
 @app.middleware("http")
 async def auth_enforcement(request: Request, call_next):
     path = request.url.path
     if _is_public_path(path):
         return await call_next(request)
 
-    sid, rec = _session_record_from_request(request)
+    auth_context, bearer_attempted = _auth_context_from_request(request)
 
-    if not rec:
+    if not auth_context:
         if path.startswith("/api/") or path.startswith("/internal/"):
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
@@ -407,11 +485,12 @@ async def auth_enforcement(request: Request, call_next):
         return RedirectResponse(url=login_url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
     # Expose minimal, read-only user context for downstream handlers.
-    request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles}
+    request.state.user = auth_context["user"]
+    request.state.auth_expires_at = auth_context.get("expires_at")
     # Also expose the raw id_token for logout flows to hint the IdP, but do not
     # leak it to templates or clients. This stays on the server-side request state.
     try:
-        request.state.id_token = getattr(rec, "id_token", None)
+        request.state.id_token = auth_context.get("id_token")
     except Exception:
         request.state.id_token = None
     return await call_next(request)
@@ -9272,15 +9351,28 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
 
 @app.get("/api/me")
 async def get_me(request: Request):
-    _sid, rec = _session_record_from_request(request)
-    if not rec:
+    user = getattr(request.state, "user", None)
+    if not isinstance(user, dict):
+        auth_context, _bearer_attempted = _auth_context_from_request(request)
+        if not auth_context:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
+        user = auth_context["user"]
+        expires_at_raw = auth_context.get("expires_at")
+    else:
+        expires_at_raw = getattr(request.state, "auth_expires_at", None)
+
+    if not isinstance(user, dict):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
-    
-    exp_iso = datetime.fromtimestamp(rec.expires_at, tz=timezone.utc).isoformat(timespec="seconds") if rec.expires_at else None
+
+    exp_iso = (
+        datetime.fromtimestamp(int(expires_at_raw), tz=timezone.utc).isoformat(timespec="seconds")
+        if isinstance(expires_at_raw, (int, float))
+        else None
+    )
     return JSONResponse({
-        "sub": rec.sub,
-        "roles": rec.roles,
-        "name": getattr(rec, "name", ""),
+        "sub": str(user.get("sub") or ""),
+        "roles": [str(role) for role in (user.get("roles") or []) if isinstance(role, str)],
+        "name": str(user.get("name") or ""),
         "expires_at": exp_iso,
     }, headers={"Cache-Control": "private, no-store"})
 def create_app_auth_only() -> FastAPI:

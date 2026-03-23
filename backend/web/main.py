@@ -2024,6 +2024,31 @@ async def courses_edit_form(request: Request, course_id: str):
     layout = Layout(title="Kurs bearbeiten", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
+
+def _render_retired_legacy_entry(
+    request: Request,
+    *,
+    user: dict | None,
+    legacy_path: str,
+    replacement_space: str,
+) -> HTMLResponse:
+    """Render a consistent retirement notice for legacy FastAPI product entries.
+
+    Why:
+        The SvelteKit cutover should remove product ambiguity instead of
+        leaving shadow entry points active in the legacy adapter.
+    """
+    content = (
+        '<div class="container">'
+        '<h1>Legacy route retired</h1>'
+        f'<p>Der alte FastAPI-Einstieg <code>{legacy_path}</code> wird nicht mehr als produktive Startseite betrieben.</p>'
+        f'<p>Die produktive Navigation liegt jetzt im neuen SvelteKit-Frontend für <strong>{Component.escape(replacement_space)}</strong>.</p>'
+        '</div>'
+    )
+    layout = Layout(title="Legacy route retired", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, status_code=410, headers={"Cache-Control": "private, no-store"})
+
+
 @app.get("/learning", response_class=HTMLResponse)
 async def learning_index(request: Request):
     """Retired legacy SSR entry for the student learning space.
@@ -2035,15 +2060,12 @@ async def learning_index(request: Request):
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
-    content = (
-        '<div class="container">'
-        '<h1>Legacy route retired</h1>'
-        '<p>Der alte FastAPI-Einstieg <code>/learning</code> wird nicht mehr als produktive Lernenden-Startseite betrieben.</p>'
-        '<p>Die Lernenden-Navigation liegt jetzt im neuen SvelteKit-Frontend.</p>'
-        '</div>'
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/learning",
+        replacement_space="den Lernendenraum",
     )
-    layout = Layout(title="Legacy route retired", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, status_code=410, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}", response_class=HTMLResponse)
 async def learning_course_detail(request: Request, course_id: str):
@@ -6355,50 +6377,21 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
 
 @app.get("/courses", response_class=HTMLResponse)
 async def courses_index(request: Request):
-    """SSR page that renders the teacher's courses by calling the JSON API.
+    """Retired legacy SSR entry for the teacher courses landing page.
 
     Why:
-        Keep UI strictly behind the public API contract. This ensures the page
-        shows the same data as API clients and avoids bypassing DB/authorization
-        checks. The session cookie is forwarded to the internal API call.
-
-    Behavior:
-        - Redirects non-teachers to "/" (UI policy).
-        - Calls GET /api/teaching/courses with clamped pagination.
-        - Renders the list and pager; sets private, no-store cache headers.
+        The product entry moved to SvelteKit. Keeping the old SSR landing page
+        active would preserve the mixed UI architecture we are removing.
     """
     user = getattr(request.state, "user", None)
     if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
-    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
-
-    # Call the in-process API to fetch real courses from the DB-backed repo.
-    items: list[dict] = []
-    try:
-        import httpx
-        from httpx import ASGITransport
-
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r = await client.get("/api/teaching/courses", params={"limit": limit, "offset": offset})
-            if r.status_code == 200:
-                data = r.json()
-                if isinstance(data, list):
-                    items = data
-            # Else: keep empty items to render an empty state gracefully
-    except Exception:
-        items = []
-
-    has_next = len(items) == limit
-    sid = _get_session_id(request) or ""
-    if not sid:
-        return RedirectResponse(url="/auth/login", status_code=302)
-    token = _get_or_create_csrf_token(sid)
-    content = _render_courses_page_html(request, items, csrf_token=token, limit=limit, offset=offset, has_next=has_next)
-    layout = Layout(title="Meine Kurse", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/courses",
+        replacement_space="den Lehrendenraum",
+    )
 
 @app.post("/courses", response_class=HTMLResponse)
 async def courses_create(request: Request):
@@ -6509,53 +6502,16 @@ async def delete_course_htmx(request: Request, course_id: str):
 
 @app.get("/units", response_class=HTMLResponse)
 async def units_index(request: Request):
+    """Retired legacy SSR entry for the teacher units landing page."""
     user = getattr(request.state, "user", None)
     if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
-    sid = _get_session_id(request) or ""
-    if not sid:
-        return RedirectResponse(url="/auth/login", status_code=302)
-    token = _get_or_create_csrf_token(sid)
-    # Fetch units from Teaching repo for this teacher
-    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
-    items: list[dict] | list = []
-    try:
-        from routes import teaching as teaching_routes  # type: ignore
-        items = teaching_routes._get_repo().list_units_for_author(
-            author_id=str((user or {}).get("sub") or ""), limit=limit, offset=offset
-        )
-        vm = [
-            {
-                "id": getattr(u, "id", None) if not isinstance(u, dict) else u.get("id"),
-                "unit_type": getattr(u, "unit_type", None) if not isinstance(u, dict) else u.get("unit_type"),
-                "title": getattr(u, "title", None) if not isinstance(u, dict) else u.get("title"),
-                "summary": getattr(u, "summary", None) if not isinstance(u, dict) else u.get("summary"),
-            }
-            for u in (items or [])
-        ]
-    except Exception:
-        vm = []
-        items = []
-
-    # Build page content and append a simple pager beneath the list
-    base_content = _render_units_page_html(vm, csrf_token=token)
-    has_next = isinstance(items, list) and len(items) == limit
-    pager = ""
-    if vm:
-        prev_disabled = offset <= 0
-        prev_href = f"/units?limit={limit}&offset={max(0, offset - limit)}"
-        next_href = f"/units?limit={limit}&offset={offset + limit}"
-        disabled_attr = 'aria-disabled="true"' if prev_disabled else ''
-        links = [
-            f'<a data-testid="pager-prev" href="{prev_href}" class="pager-link" {disabled_attr}>Zurück</a>'
-        ]
-        if has_next:
-            links.append(f'<a data-testid="pager-next" href="{next_href}" class="pager-link">Weiter</a>')
-        pager = f"<nav class=\"pager\">{' '.join(links)}</nav>"
-    # Append pager after the main units content
-    content = base_content + (pager if pager else "")
-    layout = Layout(title="Lerneinheiten", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/units",
+        replacement_space="den Lehrendenraum",
+    )
 
 @app.post("/units", response_class=HTMLResponse)
 async def units_create(request: Request):

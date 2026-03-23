@@ -152,6 +152,58 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TeacherHomeEntry'
+    TeacherCourseContextCourse:
+      type: object
+      required: [id, title, href, members_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+        members_href:
+          type: string
+    TeacherCourseContextUnit:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    TeacherCourseContextMember:
+      type: object
+      required: [sub, name, href, joined_at]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+        joined_at:
+          type: string
+    TeacherCourseContextView:
+      type: object
+      required: [user, course, units, members]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/TeacherCourseContextCourse'
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherCourseContextUnit'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherCourseContextMember'
     Error:
       type: object
       required: [error]
@@ -4820,6 +4872,68 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/courses/{course_id}/context:
+    get:
+      tags: [App]
+      summary: Return the first teacher course context read-model
+      description: >-
+        Returns one owner-scoped course context with course metadata, attached
+        units, and member entries for the SvelteKit teaching room.
+      operationId: getTeacherCourseContext
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher course context payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherCourseContextView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course not found
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

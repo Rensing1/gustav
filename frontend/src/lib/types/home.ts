@@ -125,3 +125,85 @@ export type DiagnosticsLearnerProfileView = {
   summary: DiagnosticsLearnerProfileSummary;
   courses: DiagnosticsLearnerProfileCourse[];
 };
+
+export type LiveCourseRef = {
+  id: string;
+  title: string;
+  href: string;
+};
+
+export type LiveUnitRef = {
+  id: string;
+  title: string;
+  position: number;
+  href: string;
+};
+
+export type LiveTask = {
+  id: string;
+  instruction_md: string;
+  position: number;
+  kind: string;
+};
+
+export type LiveMatrixStudent = {
+  sub: string;
+  name: string;
+  href: string;
+};
+
+export type LiveMatrixCell = {
+  task_id: string;
+  has_submission: boolean;
+  average_score: number | null;
+  score_raw?: number | null;
+  score_max?: number | null;
+  h5p_completed?: boolean | null;
+  href: string;
+};
+
+export type LiveMatrixRow = {
+  student: LiveMatrixStudent;
+  tasks: LiveMatrixCell[];
+};
+
+export type LiveUnitMatrixView = {
+  user: SessionBootstrapUser;
+  course: LiveCourseRef;
+  unit: LiveUnitRef;
+  tasks: LiveTask[];
+  rows: LiveMatrixRow[];
+};
+
+export type LiveDetailStudent = {
+  sub: string;
+  name: string;
+  href: string;
+};
+
+export type LiveDetailTask = {
+  id: string;
+  href: string;
+};
+
+export type LiveDetailSubmission = {
+  id: string;
+  task_id: string;
+  student_sub: string;
+  instruction_md: string;
+  created_at: string;
+  completed_at?: string | null;
+  kind: string;
+  text_body?: string | null;
+  feedback_md?: string | null;
+  files?: Array<{ mime?: string; size?: number; url?: string }>;
+};
+
+export type LiveDetailSheetView = {
+  user: SessionBootstrapUser;
+  course: LiveCourseRef;
+  unit: LiveUnitRef;
+  student: LiveDetailStudent;
+  task: LiveDetailTask;
+  submission: LiveDetailSubmission | null;
+};

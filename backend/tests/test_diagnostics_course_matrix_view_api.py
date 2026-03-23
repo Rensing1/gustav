@@ -75,13 +75,13 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
                         "unit_id": "unit-1",
                         "submitted_tasks": 1,
                         "total_tasks": 2,
-                        "href": f"/diagnostics/courses/{course_id}/units/unit-1/learners/student-1",
+                        "href": f"/live/courses/{course_id}/units/unit-1",
                     },
                     {
                         "unit_id": "unit-2",
                         "submitted_tasks": 0,
                         "total_tasks": 3,
-                        "href": f"/diagnostics/courses/{course_id}/units/unit-2/learners/student-1",
+                        "href": f"/live/courses/{course_id}/units/unit-2",
                     },
                 ],
             }
@@ -111,13 +111,13 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
                 "id": "unit-1",
                 "title": "Brueche",
                 "position": 1,
-                "href": "/diagnostics/courses/course-1/units/unit-1",
+                "href": "/live/courses/course-1/units/unit-1",
             },
             {
                 "id": "unit-2",
                 "title": "Terme",
                 "position": 2,
-                "href": "/diagnostics/courses/course-1/units/unit-2",
+                "href": "/live/courses/course-1/units/unit-2",
             },
         ],
         "rows": [
@@ -132,13 +132,13 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
                         "unit_id": "unit-1",
                         "submitted_tasks": 1,
                         "total_tasks": 2,
-                        "href": "/diagnostics/courses/course-1/units/unit-1/learners/student-1",
+                        "href": "/live/courses/course-1/units/unit-1",
                     },
                     {
                         "unit_id": "unit-2",
                         "submitted_tasks": 0,
                         "total_tasks": 3,
-                        "href": "/diagnostics/courses/course-1/units/unit-2/learners/student-1",
+                        "href": "/live/courses/course-1/units/unit-2",
                     },
                 ],
             }

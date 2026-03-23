@@ -102,7 +102,7 @@ async def test_teacher_course_context_returns_course_members_and_units(
             "id": unit_id,
             "title": "Bruchrechnen",
             "position": 1,
-            "href": f"/teaching/courses/{course_id}/units/{unit_id}",
+            "href": f"/live/courses/{course_id}/units/{unit_id}",
         }
     ]
     assert response.json()["members"] == [

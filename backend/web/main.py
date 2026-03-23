@@ -4921,10 +4921,14 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/courses/{course_id}/units/{unit_id}/live",
+        replacement_space="den Live-Raum",
+    )
 
     # Resolve titles (best effort)
     course_title = "Kurs"
@@ -5119,10 +5123,9 @@ async def teaching_live_sections_panel_partial(request: Request, course_id: str,
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
     # Derive module_id like in the main page
     module_id = None
     try:
@@ -5161,10 +5164,9 @@ async def teaching_live_toggle_section_visibility(
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     # Read form values
     form = await request.form()
@@ -5212,10 +5214,9 @@ async def teaching_unit_live_matrix_partial(request: Request, course_id: str, un
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     tasks: list[dict] = []
     rows: list[dict] = []
@@ -5338,13 +5339,9 @@ async def teaching_unit_live_detail_partial(
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
-    if not student_sub or not task_id:
-        return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Bitte Zelle wählen…</p></div>", status_code=200)
-    owner_sub = str(user.get("sub") or "")
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     try:
         import httpx
@@ -5943,6 +5940,12 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
         return RedirectResponse(url="/auth/login", status_code=302)
     if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/courses/{course_id}/students/{student_sub}/live",
+        replacement_space="den Live-Raum",
+    )
 
     owner_sub = str(user.get("sub") or "")
     raw_unit_ids = request.query_params.getlist("unit_ids") if "unit_ids" in request.query_params else None
@@ -6113,10 +6116,9 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     # Fast-path validation of timestamp; delegate canonical validation to API
     if not isinstance(updated_since, str) or not updated_since:

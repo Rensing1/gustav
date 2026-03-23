@@ -12,16 +12,16 @@
   <p class="kicker">Live</p>
   <h2>{data.course?.course?.title ?? "Kurs"}</h2>
   <p class="lead">
-    Waehle eine zugeordnete Lerneinheit. Die tiefe Live-Matrix bleibt fuer diesen
-    Zwischenschritt noch im Legacy-Adapter, der Einstieg aber nicht mehr.
+    Waehle eine zugeordnete Lerneinheit. Die Matrix selbst laeuft jetzt im
+    SvelteKit-Raum mit eigenem Read-Model.
   </p>
 
   {#if data.course?.units?.length}
     <div class="unit-list">
       {#each data.course.units as unit}
-        <a class="unit-card" href={`/teaching/courses/${data.course?.course?.id}/units/${unit.id}/live`}>
+        <a class="unit-card" href={`/live/courses/${data.course?.course?.id}/units/${unit.id}`}>
           <strong>{unit.position}. {unit.title}</strong>
-          <span>Legacy-Live-Detail oeffnen</span>
+          <span>Live-Matrix oeffnen</span>
         </a>
       {/each}
     </div>

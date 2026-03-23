@@ -8,6 +8,9 @@ Why:
 
 from __future__ import annotations
 
+import json
+import inspect
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -261,7 +264,7 @@ def _build_diagnostics_course_matrix_rows(
                     "unit_id": unit_id,
                     "submitted_tasks": submitted_tasks,
                     "total_tasks": len(unit_task_ids),
-                    "href": f"/diagnostics/courses/{course_id}/units/{unit_id}/learners/{student_sub}",
+                    "href": f"/live/courses/{course_id}/units/{unit_id}",
                 }
             )
         rows.append(
@@ -348,6 +351,28 @@ def _build_diagnostics_learner_profile_courses(
             }
         )
     return courses
+
+
+def _decode_json_response_body(response: object) -> object:
+    body = getattr(response, "body", b"")
+    if not body:
+        return None
+    if isinstance(body, bytes):
+        raw = body.decode("utf-8")
+    else:
+        raw = str(body)
+    if not raw:
+        return None
+    return json.loads(raw)
+
+
+def _find_course_unit(course_id: str, owner_sub: str, unit_id: str) -> dict[str, object] | None:
+    for item in _list_teacher_course_units(course_id, owner_sub):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "") == unit_id:
+            return item
+    return None
 
 
 @app_router.get("/api/app/session-bootstrap")
@@ -437,7 +462,7 @@ async def get_teacher_course_context(request: Request, course_id: str, limit: in
                 "id": str(item.get("id") or ""),
                 "title": str(item.get("title") or ""),
                 "position": int(item.get("position") or 0),
-                "href": f"/teaching/courses/{course_id}/units/{item.get('id')}",
+                "href": f"/live/courses/{course_id}/units/{item.get('id')}",
             }
             for item in _list_teacher_course_units(course_id, owner_sub)
             if isinstance(item, dict)
@@ -470,7 +495,7 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
             "id": str(item.get("id") or ""),
             "title": str(item.get("title") or ""),
             "position": int(item.get("position") or 0),
-            "href": f"/diagnostics/courses/{course_id}/units/{item.get('id')}",
+            "href": f"/live/courses/{course_id}/units/{item.get('id')}",
         }
         for item in _list_teacher_course_units(course_id, owner_sub)
         if isinstance(item, dict)
@@ -490,6 +515,167 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
             offset=int(offset or 0),
             units=units,
         ),
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/live/views/courses/{course_id}/units/{unit_id}/matrix")
+async def get_live_unit_matrix(request: Request, course_id: str, unit_id: str, limit: int = 100, offset: int = 0):
+    """Return the live room matrix read-model for one course-unit pair."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    owner_sub = str(user.get("sub") or "")
+    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    if guard:
+        return guard
+
+    course = _get_teacher_course(course_id, owner_sub)
+    if course is None:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    unit = _find_course_unit(course_id, owner_sub, unit_id)
+    if unit is None:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    summary_result = teaching_routes.get_unit_live_summary(
+        request,
+        course_id=course_id,
+        unit_id=unit_id,
+        limit=int(limit or 100),
+        offset=int(offset or 0),
+    )
+    summary_response = await summary_result if inspect.isawaitable(summary_result) else summary_result
+    if getattr(summary_response, "status_code", 500) != 200:
+        return summary_response
+
+    payload = _decode_json_response_body(summary_response)
+    data = payload if isinstance(payload, dict) else {}
+    tasks = data.get("tasks") if isinstance(data.get("tasks"), list) else []
+    rows_in = data.get("rows") if isinstance(data.get("rows"), list) else []
+
+    rows: list[dict[str, object]] = []
+    for row in rows_in:
+        if not isinstance(row, dict):
+            continue
+        student = row.get("student") if isinstance(row.get("student"), dict) else {}
+        student_sub = str(student.get("sub") or "")
+        student_name = str(student.get("name") or student_sub)
+        task_cells: list[dict[str, object]] = []
+        for cell in row.get("tasks") or []:
+            if not isinstance(cell, dict):
+                continue
+            task_id = str(cell.get("task_id") or "")
+            task_cell = {
+                "task_id": task_id,
+                "has_submission": bool(cell.get("has_submission")),
+                "average_score": cell.get("average_score"),
+                "href": (
+                    f"/live/courses/{course_id}/units/{unit_id}"
+                    f"?student_sub={student_sub}&task_id={task_id}"
+                ),
+            }
+            if cell.get("score_raw") is not None:
+                task_cell["score_raw"] = cell.get("score_raw")
+            if cell.get("score_max") is not None:
+                task_cell["score_max"] = cell.get("score_max")
+            if cell.get("h5p_completed") is not None:
+                task_cell["h5p_completed"] = cell.get("h5p_completed")
+            task_cells.append(task_cell)
+        rows.append(
+            {
+                "student": {
+                    "sub": student_sub,
+                    "name": student_name,
+                    "href": f"/live/courses/{course_id}/units/{unit_id}?student_sub={student_sub}",
+                },
+                "tasks": task_cells,
+            }
+        )
+
+    body = {
+        "user": _user_payload(user),
+        "course": {
+            "id": str(_field_value(course, "id") or ""),
+            "title": str(_field_value(course, "title") or ""),
+            "href": f"/live/courses/{course_id}",
+        },
+        "unit": {
+            "id": str(unit.get("id") or ""),
+            "title": str(unit.get("title") or ""),
+            "position": int(unit.get("position") or 0),
+            "href": f"/live/courses/{course_id}/units/{unit_id}",
+        },
+        "tasks": tasks,
+        "rows": rows,
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/live/views/courses/{course_id}/units/{unit_id}/detail-sheet")
+async def get_live_detail_sheet(request: Request, course_id: str, unit_id: str, student_sub: str, task_id: str):
+    """Return the live room detail sheet for one student-task selection."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    owner_sub = str(user.get("sub") or "")
+    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    if guard:
+        return guard
+
+    course = _get_teacher_course(course_id, owner_sub)
+    if course is None:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    unit = _find_course_unit(course_id, owner_sub, unit_id)
+    if unit is None:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    detail_result = teaching_routes.get_latest_submission_detail(
+        request,
+        course_id=course_id,
+        unit_id=unit_id,
+        task_id=task_id,
+        student_sub=student_sub,
+    )
+    detail_response = await detail_result if inspect.isawaitable(detail_result) else detail_result
+    status_code = getattr(detail_response, "status_code", 500)
+    if status_code not in (200, 204):
+        return detail_response
+
+    submission = _decode_json_response_body(detail_response) if status_code == 200 else None
+    learner_names = teaching_routes.resolve_student_login_labels_by_sub([student_sub])
+    learner_name = str(learner_names.get(student_sub, student_sub))
+
+    body = {
+        "user": _user_payload(user),
+        "course": {
+            "id": str(_field_value(course, "id") or ""),
+            "title": str(_field_value(course, "title") or ""),
+            "href": f"/live/courses/{course_id}",
+        },
+        "unit": {
+            "id": str(unit.get("id") or ""),
+            "title": str(unit.get("title") or ""),
+            "position": int(unit.get("position") or 0),
+            "href": f"/live/courses/{course_id}/units/{unit_id}",
+        },
+        "student": {
+            "sub": student_sub,
+            "name": learner_name,
+            "href": f"/live/courses/{course_id}/units/{unit_id}?student_sub={student_sub}",
+        },
+        "task": {
+            "id": task_id,
+            "href": f"/live/courses/{course_id}/units/{unit_id}?student_sub={student_sub}&task_id={task_id}",
+        },
+        "submission": submission,
     }
     return JSONResponse(body, headers=_private_headers())
 

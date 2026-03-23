@@ -346,6 +346,136 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DiagnosticsLearnerProfileCourse'
+    LiveCourseRef:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    LiveUnitRef:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    LiveTask:
+      type: object
+      required: [id, instruction_md, position, kind]
+      properties:
+        id:
+          type: string
+        instruction_md:
+          type: string
+        position:
+          type: integer
+        kind:
+          type: string
+    LiveMatrixStudent:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    LiveMatrixCell:
+      type: object
+      required: [task_id, has_submission, href]
+      properties:
+        task_id:
+          type: string
+        has_submission:
+          type: boolean
+        average_score:
+          type: number
+          nullable: true
+        score_raw:
+          type: integer
+          nullable: true
+        score_max:
+          type: integer
+          nullable: true
+        h5p_completed:
+          type: boolean
+          nullable: true
+        href:
+          type: string
+    LiveMatrixRow:
+      type: object
+      required: [student, tasks]
+      properties:
+        student:
+          $ref: '#/components/schemas/LiveMatrixStudent'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveMatrixCell'
+    LiveUnitMatrixView:
+      type: object
+      required: [user, course, unit, tasks, rows]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseRef'
+        unit:
+          $ref: '#/components/schemas/LiveUnitRef'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveTask'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveMatrixRow'
+    LiveDetailStudent:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    LiveDetailTask:
+      type: object
+      required: [id, href]
+      properties:
+        id:
+          type: string
+        href:
+          type: string
+    LiveDetailSheetView:
+      type: object
+      required: [user, course, unit, student, task, submission]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseRef'
+        unit:
+          $ref: '#/components/schemas/LiveUnitRef'
+        student:
+          $ref: '#/components/schemas/LiveDetailStudent'
+        task:
+          $ref: '#/components/schemas/LiveDetailTask'
+        submission:
+          allOf:
+            - $ref: '#/components/schemas/TeachingLatestSubmission'
+          nullable: true
     Error:
       type: object
       required: [error]
@@ -5200,6 +5330,151 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Learner not visible in the owner-scoped diagnostics space
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units/{unit_id}/matrix:
+    get:
+      tags: [App]
+      summary: Return the live unit matrix read-model
+      description: >-
+        Returns one owner-scoped live matrix with course/unit metadata, task
+        columns and per-learner task cells for the SvelteKit live room.
+      operationId: getLiveUnitMatrix
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live unit matrix payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveUnitMatrixView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or unit not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units/{unit_id}/detail-sheet:
+    get:
+      tags: [App]
+      summary: Return the live detail sheet read-model
+      description: >-
+        Returns one owner-scoped detail sheet for a selected student-task cell
+        in the live room. The submission payload may be null when the learner
+        has not submitted yet.
+      operationId: getLiveDetailSheet
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: student_sub
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: task_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live detail sheet payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveDetailSheetView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course, unit, task or learner selection not found
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

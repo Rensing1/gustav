@@ -325,56 +325,27 @@ def _is_public_path(path: str) -> bool:
     return path.startswith(("/auth/", "/static/")) or path in ("/health", "/favicon.ico")
 
 
-def _session_id_from_authorization_header(request: Request) -> str | None:
-    """Extract a backend session id from the internal BFF Authorization header.
-
-    Expected format:
-        Authorization: Bearer session:<opaque-session-id>
-
-    Why:
-        SvelteKit should call FastAPI as a server-side BFF without exposing the
-        backend session cookie to the browser. This transitional helper keeps
-        the existing session store usable while moving browser auth concerns out
-        of FastAPI.
-    """
-    raw = request.headers.get("authorization") or ""
-    prefix = "Bearer session:"
-    if not raw.startswith(prefix):
-        return None
-    session_id = raw[len(prefix):].strip()
-    return session_id or None
-
-
 def _bearer_token_from_authorization_header(request: Request) -> str | None:
-    """Extract a JWT bearer token from Authorization, excluding session transport."""
+    """Extract a bearer token from Authorization for JWT verification."""
     raw = request.headers.get("authorization") or ""
     prefix = "Bearer "
     if not raw.startswith(prefix):
         return None
     token = raw[len(prefix):].strip()
-    if not token or token.startswith("session:"):
-        return None
-    return token
+    return token or None
 
 
 def _session_record_from_request(request: Request):
-    """Resolve the authenticated session from internal bearer or cookie."""
-    sid = _session_id_from_authorization_header(request)
-    rec = None
-    if sid:
-        try:
-            rec = SESSION_STORE.get(sid)
-        except Exception as exc:
-            logger.warning("Session store get failed for authorization bearer: %s", exc.__class__.__name__)
-    if rec:
-        return sid, rec
-
+    """Resolve the authenticated legacy browser session from cookie only."""
     sid = request.cookies.get(SESSION_COOKIE_NAME)
     if sid:
         try:
             rec = SESSION_STORE.get(sid)
         except Exception as exc:
             logger.warning("Session store get failed: %s", exc.__class__.__name__)
+            rec = None
+    else:
+        rec = None
     return sid, rec
 
 

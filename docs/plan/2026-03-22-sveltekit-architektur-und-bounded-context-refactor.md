@@ -17,12 +17,12 @@ Bereits umgesetzt:
 - Browserpfade `/auth/login`, `/auth/register`, `/auth/forgot`, `/auth/logout` und `/auth/callback` als SvelteKit-Bridge-Routen angelegt
 - oeffentliche Logout-Erfolgsseite in `frontend/` angelegt
 - SvelteKit fuehrt jetzt eine eigene HttpOnly-BFF-Session-Cookie und mappt sie serverseitig auf die bisherige Backend-Session
-- interne BFF-zu-Backend-Weitergabe auf kontrollierten `Authorization: Bearer session:<id>`-Transport umgestellt
 - `identity_access` verifiziert fuer BFF-nahe API-Endpunkte jetzt auch echte JWT-Bearer-Tokens ueber JWKS statt nur Session-Ids
 - `FastAPI` priorisiert fuer die neuen App-/BFF-Endpunkte verifizierte Bearer-JWTs vor Session-Fallback
 - Browser-Auth-Flow (`login`, `register`, `forgot`, `callback`, `logout`) liegt jetzt funktional in `SvelteKit` und spricht Keycloak direkt
 - `frontend/` fuehrt jetzt eine opaque serverseitige Token-Session mit Access-/Refresh-/ID-Token statt einer reinen Backend-Session-Abbildung
 - `frontend/` erneuert expiring Access-Tokens jetzt serverseitig ueber `refresh_token` und wiederholt backend-nahe Read-Calls einmal kontrolliert nach einem `401`
+- der bisherige Uebergang `Authorization: Bearer session:<id>` ist fuer die neue BFF-Strecke wieder entfernt; FastAPI akzeptiert dort nur noch verifizierte JWT-Bearer oder als Altpfad die bestehende Browser-Cookie-Session
 - erste Raum-Read-Models `GET /api/learning/views/learner-home` und `GET /api/teaching/views/teacher-home` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - erster kursbezogener Lehrenden-Kontext `GET /api/teaching/views/courses/{course_id}/context` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - Frontend-Abhaengigkeiten installiert und `npm run check` fuer das aktuelle SvelteKit-Grundgeruest gruen ausgefuehrt
@@ -31,7 +31,7 @@ Bereits umgesetzt:
 
 Noch offen fuer den naechsten Schritt:
 
-- backend-seitigen Altpfad `Bearer session:<id>` ausserhalb der neuen BFF-Endpunkte geordnet abbauen
+- verbleibende Backend-Cookie-Session-Fallbacks ausserhalb oeffentlicher Legacy-Pfade geordnet abbauen
 - weitere Read-Models (`diagnostics-course-matrix`, `diagnostics-learner-profile`, `live-matrix`) schneiden
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen
 

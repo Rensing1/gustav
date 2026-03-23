@@ -171,7 +171,10 @@ def verify_bearer_token(
         is represented via `azp`, so this verifier accepts both patterns.
     """
     cache = cache or JWKS_CACHE
-    jwks = cache.get(cfg)
+    try:
+        jwks = cache.get(cfg)
+    except IDTokenVerificationError as exc:
+        raise BearerTokenVerificationError(exc.code) from exc
     try:
         header = jwt.get_unverified_header(token)
     except JOSEError as exc:

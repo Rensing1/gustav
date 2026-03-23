@@ -1,9 +1,8 @@
-"""Contract tests for the BFF-to-backend authorization bridge.
+"""Contract tests for removing the transitional BFF session transport.
 
 Why:
-    SvelteKit should call FastAPI as a server-side BFF without forwarding the
-    backend session cookie to the browser. The backend therefore needs a
-    controlled internal Authorization transport based on the mapped session id.
+    The SvelteKit BFF now sends real bearer JWTs to FastAPI. The temporary
+    `Bearer session:<id>` transport must no longer authenticate requests.
 """
 
 from __future__ import annotations
@@ -28,7 +27,9 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 @pytest.mark.anyio
-async def test_session_bootstrap_accepts_internal_authorization_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_session_bootstrap_rejects_transitional_session_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
     rec = store.create(sub="teacher-bff", roles=["teacher"], name="Ada", ttl_seconds=60)
@@ -39,13 +40,12 @@ async def test_session_bootstrap_accepts_internal_authorization_bearer(monkeypat
             headers={"Authorization": f"Bearer session:{rec.session_id}"},
         )
 
-    assert response.status_code == 200
-    assert response.json()["user"]["sub"] == "teacher-bff"
-    assert response.json()["start_target"] == "/teaching"
+    assert response.status_code == 401
+    assert response.json()["error"] == "unauthenticated"
 
 
 @pytest.mark.anyio
-async def test_api_me_accepts_internal_authorization_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_api_me_rejects_transitional_session_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
     rec = store.create(sub="student-bff", roles=["student"], name="Lena", ttl_seconds=60)
@@ -56,6 +56,5 @@ async def test_api_me_accepts_internal_authorization_bearer(monkeypatch: pytest.
             headers={"Authorization": f"Bearer session:{rec.session_id}"},
         )
 
-    assert response.status_code == 200
-    assert response.json()["sub"] == "student-bff"
-
+    assert response.status_code == 401
+    assert response.json()["error"] == "unauthenticated"

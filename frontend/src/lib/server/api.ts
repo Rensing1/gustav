@@ -1,4 +1,6 @@
 import { env } from "$env/dynamic/private";
+import { buildBackendSessionCookieHeader, readFrontendSessionCookie } from "$lib/server/session";
+import type { Cookies } from "@sveltejs/kit";
 
 const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
 
@@ -12,18 +14,13 @@ export async function readJsonOrNull(
   // This keeps SvelteKit-generated route types aligned with backend read-models.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
   fetchFn: typeof fetch,
-  request: Request,
+  cookies: Cookies,
   path: string
 ): Promise<unknown | null> {
   const headers = new Headers();
-  const authorization = request.headers.get("authorization");
-  const cookie = request.headers.get("cookie");
-
-  if (authorization) {
-    headers.set("authorization", authorization);
-  }
-  if (cookie) {
-    headers.set("cookie", cookie);
+  const backendCookie = buildBackendSessionCookieHeader(readFrontendSessionCookie(cookies));
+  if (backendCookie) {
+    headers.set("cookie", backendCookie);
   }
 
   const response = await fetchFn(buildApiUrl(path), {
@@ -42,8 +39,8 @@ export async function readJsonOrNull(
 
 export async function readTypedJsonOrNull<T>(
   fetchFn: typeof fetch,
-  request: Request,
+  cookies: Cookies,
   path: string
 ) : Promise<T | null> {
-  return (await readJsonOrNull(fetchFn, request, path)) as T | null;
+  return (await readJsonOrNull(fetchFn, cookies, path)) as T | null;
 }

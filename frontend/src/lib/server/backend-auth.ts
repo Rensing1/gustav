@@ -1,13 +1,19 @@
 import type { RequestEvent } from "@sveltejs/kit";
 
 import { env } from "$env/dynamic/private";
+import {
+  buildBackendSessionCookieHeader,
+  clearFrontendSessionCookie,
+  extractBackendSessionId,
+  readFrontendSessionCookie,
+  setFrontendSessionCookie
+} from "$lib/server/session";
 
 const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
 const FORWARDED_RESPONSE_HEADERS = [
   "cache-control",
   "content-type",
   "location",
-  "set-cookie",
   "vary"
 ];
 
@@ -20,10 +26,10 @@ function buildBackendUrl(path: string, requestUrl: URL): string {
 
 export async function proxyBackendAuthGet(event: RequestEvent, path: string): Promise<Response> {
   const requestHeaders = new Headers();
-  const cookie = event.request.headers.get("cookie");
+  const backendCookie = buildBackendSessionCookieHeader(readFrontendSessionCookie(event.cookies));
 
-  if (cookie) {
-    requestHeaders.set("cookie", cookie);
+  if (backendCookie) {
+    requestHeaders.set("cookie", backendCookie);
   }
 
   const upstream = await event.fetch(buildBackendUrl(path, event.url), {
@@ -40,6 +46,13 @@ export async function proxyBackendAuthGet(event: RequestEvent, path: string): Pr
     }
   }
 
+  const backendSessionId = extractBackendSessionId(upstream.headers.get("set-cookie"));
+  if (backendSessionId) {
+    setFrontendSessionCookie(event.cookies, backendSessionId);
+  } else if (path === "/auth/logout") {
+    clearFrontendSessionCookie(event.cookies);
+  }
+
   const body =
     upstream.status === 204 || (upstream.status >= 300 && upstream.status < 400)
       ? null
@@ -50,4 +63,3 @@ export async function proxyBackendAuthGet(event: RequestEvent, path: string): Pr
     headers: responseHeaders
   });
 }
-

@@ -13,6 +13,7 @@
 
   let root: HTMLDivElement | undefined;
   let status = $state("Lade H5P …");
+  const h5pWebcomponentsEntry = "/h5p/webcomponents/index.js";
 
   function extractScore(statement: unknown): { raw: number; max: number } | null {
     const record = statement as {
@@ -84,8 +85,8 @@
 
     async function install(): Promise<void> {
       status = "Lade H5P …";
-      // @ts-expect-error The H5P service provides this module at runtime.
-      const wcModule = (await import("/h5p/webcomponents/index.js")) as {
+      // Vite must not try to bundle this module because the H5P sidecar serves it at runtime.
+      const wcModule = (await import(/* @vite-ignore */ h5pWebcomponentsEntry)) as {
         defineElements?: (names: string[]) => void;
       };
       wcModule.defineElements?.(["h5p-player"]);

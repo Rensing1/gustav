@@ -21,12 +21,14 @@ def test_frontend_contains_sveltekit_basics() -> None:
     layout_server_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.server.ts"
     dockerfile_path = REPO_ROOT / "frontend" / "Dockerfile"
     dockerignore_path = REPO_ROOT / "frontend" / ".dockerignore"
+    vite_config_path = REPO_ROOT / "frontend" / "vite.config.ts"
 
     assert package_path.is_file(), f"Missing frontend package manifest: {package_path}"
     assert app_html_path.is_file(), f"Missing SvelteKit app shell: {app_html_path}"
     assert layout_server_path.is_file(), f"Missing root layout server loader: {layout_server_path}"
     assert dockerfile_path.is_file(), f"Missing frontend container image definition: {dockerfile_path}"
     assert dockerignore_path.is_file(), f"Missing frontend .dockerignore: {dockerignore_path}"
+    assert vite_config_path.is_file(), f"Missing frontend Vite config: {vite_config_path}"
 
     package_data = json.loads(package_path.read_text(encoding="utf-8"))
     deps = {
@@ -43,6 +45,7 @@ def test_frontend_contains_sveltekit_basics() -> None:
     assert "build" in scripts
     assert "check" in scripts
     assert "jose" in deps
+    assert "svelte-kit sync" in scripts["build"]
 
     app_html = app_html_path.read_text(encoding="utf-8")
     assert "%sveltekit.head%" in app_html
@@ -58,6 +61,10 @@ def test_frontend_contains_sveltekit_basics() -> None:
     dockerignore_src = dockerignore_path.read_text(encoding="utf-8")
     assert "node_modules" in dockerignore_src
     assert "build" in dockerignore_src
+
+    vite_config_src = vite_config_path.read_text(encoding="utf-8")
+    assert "rollupOptions" in vite_config_src
+    assert '/h5p/webcomponents/' in vite_config_src
 
 
 def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:

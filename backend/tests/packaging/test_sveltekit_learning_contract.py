@@ -29,6 +29,7 @@ def test_learning_sveltekit_routes_exist() -> None:
     assert "H5PTaskPlayer" in page_src
     assert "/h5p/player/model" in component_src
     assert "/bff/h5p/submissions" in component_src
+    assert "@vite-ignore" in component_src
 
 
 def test_h5p_service_knows_frontend_bff_cookie_bridge() -> None:

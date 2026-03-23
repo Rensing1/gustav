@@ -19,6 +19,13 @@ export function buildBackendSessionCookieHeader(sessionId: string | null | undef
   return `${BACKEND_SESSION_COOKIE_NAME}=${sessionId}`;
 }
 
+export function buildBackendAuthorizationHeader(sessionId: string | null | undefined): string | null {
+  if (!sessionId) {
+    return null;
+  }
+  return `Bearer session:${sessionId}`;
+}
+
 export function readFrontendSessionCookie(cookies: Cookies): string | null {
   return cookies.get(FRONTEND_SESSION_COOKIE_NAME) ?? null;
 }
@@ -55,4 +62,3 @@ export function extractBackendSessionId(setCookieHeader: string | null): string 
   const value = sessionPair.split("=", 2)[1] ?? "";
   return value || null;
 }
-

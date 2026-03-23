@@ -2,7 +2,7 @@ import type { RequestEvent } from "@sveltejs/kit";
 
 import { env } from "$env/dynamic/private";
 import {
-  buildBackendSessionCookieHeader,
+  buildBackendAuthorizationHeader,
   clearFrontendSessionCookie,
   extractBackendSessionId,
   readFrontendSessionCookie,
@@ -26,10 +26,10 @@ function buildBackendUrl(path: string, requestUrl: URL): string {
 
 export async function proxyBackendAuthGet(event: RequestEvent, path: string): Promise<Response> {
   const requestHeaders = new Headers();
-  const backendCookie = buildBackendSessionCookieHeader(readFrontendSessionCookie(event.cookies));
+  const backendAuthorization = buildBackendAuthorizationHeader(readFrontendSessionCookie(event.cookies));
 
-  if (backendCookie) {
-    requestHeaders.set("cookie", backendCookie);
+  if (backendAuthorization) {
+    requestHeaders.set("authorization", backendAuthorization);
   }
 
   const upstream = await event.fetch(buildBackendUrl(path, event.url), {

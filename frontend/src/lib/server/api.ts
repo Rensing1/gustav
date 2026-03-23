@@ -1,5 +1,5 @@
 import { env } from "$env/dynamic/private";
-import { buildBackendSessionCookieHeader, readFrontendSessionCookie } from "$lib/server/session";
+import { buildBackendAuthorizationHeader, readFrontendSessionCookie } from "$lib/server/session";
 import type { Cookies } from "@sveltejs/kit";
 
 const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
@@ -18,9 +18,9 @@ export async function readJsonOrNull(
   path: string
 ): Promise<unknown | null> {
   const headers = new Headers();
-  const backendCookie = buildBackendSessionCookieHeader(readFrontendSessionCookie(cookies));
-  if (backendCookie) {
-    headers.set("cookie", backendCookie);
+  const backendAuthorization = buildBackendAuthorizationHeader(readFrontendSessionCookie(cookies));
+  if (backendAuthorization) {
+    headers.set("authorization", backendAuthorization);
   }
 
   const response = await fetchFn(buildApiUrl(path), {

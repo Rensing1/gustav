@@ -21,12 +21,14 @@ def test_frontend_owns_backend_session_mapping() -> None:
 
     assert "gustav_bff_session" in session_src
     assert "gustav_session" in session_src
+    assert "Bearer session:" in session_src
     assert "cookies.set" in session_src
     assert "cookies.delete" in session_src
 
     assert "extractBackendSessionId" in auth_src
     assert "setFrontendSessionCookie" in auth_src
     assert "clearFrontendSessionCookie" in auth_src
+    assert "buildBackendAuthorizationHeader" in auth_src
     assert "\"set-cookie\"" not in auth_src.split("const FORWARDED_RESPONSE_HEADERS = [", 1)[1].split("];", 1)[0]
 
-    assert "buildBackendSessionCookieHeader" in api_src
+    assert "buildBackendAuthorizationHeader" in api_src

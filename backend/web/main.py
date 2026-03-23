@@ -324,19 +324,54 @@ def _set_session_cookie(response: Response, value: str, *, max_age: int | None =
 def _is_public_path(path: str) -> bool:
     return path.startswith(("/auth/", "/static/")) or path in ("/health", "/favicon.ico")
 
+
+def _session_id_from_authorization_header(request: Request) -> str | None:
+    """Extract a backend session id from the internal BFF Authorization header.
+
+    Expected format:
+        Authorization: Bearer session:<opaque-session-id>
+
+    Why:
+        SvelteKit should call FastAPI as a server-side BFF without exposing the
+        backend session cookie to the browser. This transitional helper keeps
+        the existing session store usable while moving browser auth concerns out
+        of FastAPI.
+    """
+    raw = request.headers.get("authorization") or ""
+    prefix = "Bearer session:"
+    if not raw.startswith(prefix):
+        return None
+    session_id = raw[len(prefix):].strip()
+    return session_id or None
+
+
+def _session_record_from_request(request: Request):
+    """Resolve the authenticated session from internal bearer or cookie."""
+    sid = _session_id_from_authorization_header(request)
+    rec = None
+    if sid:
+        try:
+            rec = SESSION_STORE.get(sid)
+        except Exception as exc:
+            logger.warning("Session store get failed for authorization bearer: %s", exc.__class__.__name__)
+    if rec:
+        return sid, rec
+
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
+    if sid:
+        try:
+            rec = SESSION_STORE.get(sid)
+        except Exception as exc:
+            logger.warning("Session store get failed: %s", exc.__class__.__name__)
+    return sid, rec
+
 @app.middleware("http")
 async def auth_enforcement(request: Request, call_next):
     path = request.url.path
     if _is_public_path(path):
         return await call_next(request)
 
-    sid = request.cookies.get(SESSION_COOKIE_NAME)
-    rec = None
-    if sid:
-        try:
-            rec = SESSION_STORE.get(sid)
-        except Exception as exc:
-            logger.warning("Session store get failed: %s", exc.__class__.__name__)
+    sid, rec = _session_record_from_request(request)
 
     if not rec:
         if path.startswith("/api/") or path.startswith("/internal/"):
@@ -9237,10 +9272,7 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
 
 @app.get("/api/me")
 async def get_me(request: Request):
-    if SESSION_COOKIE_NAME not in request.cookies:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
-    sid = request.cookies.get(SESSION_COOKIE_NAME)
-    rec = SESSION_STORE.get(sid or "")
+    _sid, rec = _session_record_from_request(request)
     if not rec:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
     

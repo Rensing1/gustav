@@ -39,14 +39,14 @@ async def _create_teacher_session() -> str:
 
 
 @pytest.mark.anyio
-async def test_htmx_live_response_returns_fragment_without_duplicate_sidebar():
+async def test_htmx_home_response_returns_fragment_without_duplicate_sidebar():
     # Arrange: authenticated teacher with sidebar access.
     session_id = await _create_teacher_session()
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, session_id)
 
-        response = await client.get("/teaching/live", headers={"HX-Request": "true"})
+        response = await client.get("/", headers={"HX-Request": "true"})
 
     assert response.status_code == 200
     html = response.text
@@ -54,7 +54,7 @@ async def test_htmx_live_response_returns_fragment_without_duplicate_sidebar():
     # Expect fragment response: no DOCTYPE/body wrapper.
     assert "<!DOCTYPE html>" not in html
     assert 'id="main-content"' not in html
-    assert 'class="breadcrumb"' in html
+    assert "Willkommen bei GUSTAV" in html
 
     # Sidebar must only appear once and be flagged for OOB swap.
     assert html.count('id="sidebar"') == 1
@@ -68,7 +68,7 @@ async def test_full_page_load_still_includes_layout_and_single_sidebar():
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, session_id)
 
-        response = await client.get("/teaching/live")
+        response = await client.get("/")
 
     assert response.status_code == 200
     html = response.text
@@ -79,29 +79,14 @@ async def test_full_page_load_still_includes_layout_and_single_sidebar():
 
 
 @pytest.mark.anyio
-async def test_htmx_live_request_without_session_redirects_to_login():
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        response = await client.get("/teaching/live", headers={"HX-Request": "true"})
-
-    assert response.status_code == 401
-    hx = response.headers.get("HX-Redirect", "")
-    p = urlparse(hx)
-    assert p.path == "/auth/login"
-    qs = parse_qs(p.query)
-    assert qs.get("redirect") == ["/teaching/live"]
-    # Security: HTMX unauthenticated responses must not be cached
-    assert response.headers.get("Cache-Control") == "private, no-store"
-
-
-@pytest.mark.anyio
-async def test_teaching_live_cache_control_private_no_store_by_default():
+async def test_home_cache_control_private_no_store_by_default():
     # Personalized SSR pages must not be cached by shared caches.
     session_id = await _create_teacher_session()
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, session_id)
-        r_full = await client.get("/teaching/live")
-        r_htmx = await client.get("/teaching/live", headers={"HX-Request": "true"})
+        r_full = await client.get("/")
+        r_htmx = await client.get("/", headers={"HX-Request": "true"})
 
     assert r_full.headers.get("Cache-Control") == "private, no-store"
     assert r_htmx.headers.get("Cache-Control") == "private, no-store"

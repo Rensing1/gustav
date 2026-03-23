@@ -4705,16 +4705,12 @@ async def home(request: Request):
 
 @app.get("/teaching/live", response_class=HTMLResponse)
 async def teaching_live_home(request: Request):
-    """Unterricht – Live (Startseite, Lehrer-only).
+    """Retired legacy SSR entry for the old Live picker.
 
-    Intent:
-        Provide a simple entry point reachable from the sidebar. The page
-        explains how to open the per-unit Live-Ansicht and will evolve to a
-        course+unit picker. For now, we avoid DB calls to keep the page fast
-        and reliable in dev.
-
-    Permissions:
-        Caller must be a teacher. Unauthenticated users are redirected to login.
+    Why:
+        The top-level Live entry now belongs to SvelteKit under `/live`. The
+        deep live detail flows still remain temporarily in the legacy adapter,
+        but the old picker page itself should no longer be a product entry.
     """
     user = getattr(request.state, "user", None)
     if not user:
@@ -4723,139 +4719,30 @@ async def teaching_live_home(request: Request):
     roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
     if not (role == "teacher" or "teacher" in roles):
         return RedirectResponse(url="/", status_code=303)
-
-    # Build a simple course -> unit picker using internal API calls.
-    # Courses: GET /api/teaching/courses (owned by teacher)
-    courses: list[dict] = []
-    try:
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            rc = await client.get("/api/teaching/courses", params={"limit": 100, "offset": 0})
-            if rc.status_code == 200 and isinstance(rc.json(), list):
-                courses = rc.json()
-    except Exception:
-        courses = []
-
-    # Render selects: course selector triggers HTMX load of units into container
-    def _render_course_select(options: list[dict]) -> str:
-        opts = []
-        opts.append('<option value="">— Kurs wählen —</option>')
-        for c in options:
-            cid = str(c.get("id") or "")
-            title = Component.escape(str(c.get("title") or "Unbenannter Kurs"))
-            opts.append(f'<option value="{cid}">{title}</option>')
-        options_html = "\n".join(opts)
-        return (
-            '<label class="form-label" for="course-select">Kurs</label>'
-            f'<select id="course-select" name="course_id" class="form-select" '
-            'hx-get="/teaching/live/units" hx-trigger="change" '
-            'hx-target="#unit-select-container" hx-include="#course-select">'
-            f'{options_html}'
-            '</select>'
-        )
-
-    course_select_html = _render_course_select(courses)
-    unit_placeholder_html = (
-        '<div id="unit-select-container">'
-        '<label class="form-label" for="unit-select">Lerneinheit</label>'
-        '<select id="unit-select" name="unit_id" class="form-select" disabled>'
-        '<option>— erst Kurs wählen —</option>'
-        '</select>'
-        '</div>'
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/live",
+        replacement_space="den Live-Raum",
     )
-
-    # Wrap selects in a GET form with an "Öffnen" button to continue.
-    form_open = (
-        '<form id="live-picker-form" method="get" action="/teaching/live/open" class="form-vertical">'
-        f'{course_select_html}{unit_placeholder_html}'
-        '<div class="form-actions"><button type="submit" class="btn btn-primary">Öffnen</button></div>'
-        '</form>'
-    )
-
-    content = (
-        '<div class="container">'
-        '<h1>Unterricht</h1>'
-        '<section class="card" aria-labelledby="teaching-live-intro">'
-        '<h2 id="teaching-live-intro">Live-Ansicht pro Lerneinheit</h2>'
-        '<p>Wähle einen Kurs und danach eine Lerneinheit, um die Live-Übersicht zu öffnen. '
-        'Die Übersicht zeigt pro Schüler × Aufgabe, wer bereits eingereicht hat.</p>'
-        f'{form_open}'
-        '</section>'
-        '</div>'
-    )
-    layout = Layout(title="Unterricht – Live", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/teaching/live/units", response_class=HTMLResponse)
 async def teaching_live_units_partial(request: Request, course_id: str):
-    """Return a unit select for the chosen course (teacher-only).
-
-    Security:
-        Same role checks as the page. Uses internal API calls so DB/RLS checks
-        stay consistent with the public contract.
-    """
+    """Retired HTMX helper for the old Live picker."""
     user = getattr(request.state, "user", None)
     if not user:
-        return HTMLResponse("", status_code=401)
+        return HTMLResponse("", status_code=401, headers={"Cache-Control": "private, no-store"})
     role = str(user.get("role", "")).lower()
     roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
     if not (role == "teacher" or "teacher" in roles):
-        return HTMLResponse("", status_code=403)
-
-    # Fetch modules for course, then render unit options by fetching unit titles
-    modules: list[dict] = []
-    try:
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
-            if rm.status_code == 200 and isinstance(rm.json(), list):
-                modules = rm.json()
-            # Build unit title map
-            unit_titles: dict[str, str] = {}
-            for m in modules:
-                uid = str(m.get("unit_id") or "")
-                if not uid or uid in unit_titles:
-                    continue
-                ru = await client.get(f"/api/teaching/units/{uid}")
-                if ru.status_code == 200:
-                    payload = ru.json()
-                    unit_titles[uid] = str(payload.get("title") or "Unbenannte Lerneinheit")
-            # Render select
-            opts = []
-            opts.append('<option value="">— Lerneinheit wählen —</option>')
-            for m in modules:
-                uid = str(m.get("unit_id") or "")
-                if not uid:
-                    continue
-                title = unit_titles.get(uid) or "Unbenannte Lerneinheit"
-                opts.append(f'<option value="{uid}">{Component.escape(title)}</option>')
-            options_html = "\n".join(opts)
-            select_html = (
-                '<label class="form-label" for="unit-select">Lerneinheit</label>'
-                '<select id="unit-select" name="unit_id" class="form-select">'
-                f'{options_html}'
-                '</select>'
-            )
-            return HTMLResponse(select_html, status_code=200)
-    except Exception:
-        pass
-    return HTMLResponse('<label class="form-label" for="unit-select">Lerneinheit</label><select id="unit-select" name="unit_id" class="form-select" disabled><option>— keine Einheiten —</option></select>', status_code=200)
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/teaching/live/open")
 async def teaching_live_open(request: Request, course_id: str | None = None, unit_id: str | None = None):
-    """Redirect to the unit Live page when both selectors are filled (teacher-only).
-
-    Behavior:
-        - Validates teacher role; requires both identifiers to be present.
-        - Verifies the unit belongs to the selected course for the owner.
-        - On success, PRG to `/teaching/courses/{course_id}/units/{unit_id}/live`.
-    """
+    """Retired redirect helper for the old Live picker."""
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
@@ -4863,23 +4750,12 @@ async def teaching_live_open(request: Request, course_id: str | None = None, uni
     roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
     if not (role == "teacher" or "teacher" in roles):
         return RedirectResponse(url="/", status_code=303)
-    if not course_id or not unit_id:
-        return RedirectResponse(url="/teaching/live", status_code=303)
-    # Verify relation via API
-    try:
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
-            if rm.status_code != 200:
-                return RedirectResponse(url="/teaching/live", status_code=303)
-            module_unit_ids = {str(m.get("unit_id") or "") for m in (rm.json() or []) if isinstance(m, dict)}
-            if str(unit_id) not in module_unit_ids:
-                return RedirectResponse(url="/teaching/live", status_code=303)
-    except Exception:
-        return RedirectResponse(url="/teaching/live", status_code=303)
-    return RedirectResponse(url=f"/teaching/courses/{course_id}/units/{unit_id}/live", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/live/open",
+        replacement_space="den Live-Raum",
+    )
 
 
 def _live_score_badge_variant(score: int) -> str:

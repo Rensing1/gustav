@@ -1,17 +1,11 @@
+import type { SessionBootstrap } from "$lib/types/session-bootstrap";
+
 declare global {
   namespace App {
     interface LayoutData {
-      bootstrap: {
-        user?: {
-          sub: string;
-          name: string;
-          role: string;
-        } | null;
-        start_target?: string | null;
-      } | null;
+      bootstrap: SessionBootstrap | null;
     }
   }
 }
 
 export {};
-

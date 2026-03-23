@@ -14,12 +14,15 @@ Bereits umgesetzt:
 - Compose/Caddy-Grundschnitt fuer separaten `frontend`-Service umgesetzt
 - erste App-Shell mit `session-bootstrap`-Loader angelegt
 - erster Read-Model-Vertrag `GET /api/app/session-bootstrap` in `api/openapi.yml` und FastAPI umgesetzt
+- Browserpfade `/auth/login`, `/auth/register`, `/auth/forgot`, `/auth/logout` und `/auth/callback` als SvelteKit-Bridge-Routen angelegt
+- oeffentliche Logout-Erfolgsseite in `frontend/` angelegt
+- Frontend-Abhaengigkeiten installiert und `npm run check` fuer das aktuelle SvelteKit-Grundgeruest gruen ausgefuehrt
 - Architektur-/Kontextdoku auf `SvelteKit` und `diagnostics` umgestellt
 - ADRs fuer `SvelteKit als Browser-BFF`, `Objekte schreiben / Raeume lesen` und `diagnostics als eigener Fachbereich` angelegt
 
 Noch offen fuer den naechsten Schritt:
 
-- Browser-Auth vollstaendig von FastAPI nach `SvelteKit` verlagern
+- Browser-Auth vollstaendig von Bridge-Modus auf echtes `SvelteKit`-Session-Modell umstellen
 - `FastAPI`-Authentifizierung fuer serverseitige BFF-Aufrufe von Cookie-Session auf Zielmodell weiterziehen
 - weitere Read-Models (`learner-home`, `teacher-home`, `course-context-view`) schneiden
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen

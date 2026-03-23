@@ -8,6 +8,9 @@ export function buildApiUrl(path: string): string {
 }
 
 export async function readJsonOrNull(
+  // Generic helper so loaders can retain concrete response contracts.
+  // This keeps SvelteKit-generated route types aligned with backend read-models.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
   fetchFn: typeof fetch,
   request: Request,
   path: string
@@ -37,3 +40,10 @@ export async function readJsonOrNull(
   return await response.json();
 }
 
+export async function readTypedJsonOrNull<T>(
+  fetchFn: typeof fetch,
+  request: Request,
+  path: string
+) : Promise<T | null> {
+  return (await readJsonOrNull(fetchFn, request, path)) as T | null;
+}

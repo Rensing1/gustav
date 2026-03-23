@@ -1,0 +1,53 @@
+import type { RequestEvent } from "@sveltejs/kit";
+
+import { env } from "$env/dynamic/private";
+
+const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
+const FORWARDED_RESPONSE_HEADERS = [
+  "cache-control",
+  "content-type",
+  "location",
+  "set-cookie",
+  "vary"
+];
+
+function buildBackendUrl(path: string, requestUrl: URL): string {
+  const baseUrl = env.API_INTERNAL_BASE_URL || DEFAULT_API_INTERNAL_BASE_URL;
+  const target = new URL(path, baseUrl);
+  target.search = requestUrl.search;
+  return target.toString();
+}
+
+export async function proxyBackendAuthGet(event: RequestEvent, path: string): Promise<Response> {
+  const requestHeaders = new Headers();
+  const cookie = event.request.headers.get("cookie");
+
+  if (cookie) {
+    requestHeaders.set("cookie", cookie);
+  }
+
+  const upstream = await event.fetch(buildBackendUrl(path, event.url), {
+    method: "GET",
+    headers: requestHeaders,
+    redirect: "manual"
+  });
+
+  const responseHeaders = new Headers();
+  for (const headerName of FORWARDED_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(headerName);
+    if (value) {
+      responseHeaders.set(headerName, value);
+    }
+  }
+
+  const body =
+    upstream.status === 204 || (upstream.status >= 300 && upstream.status < 400)
+      ? null
+      : await upstream.text();
+
+  return new Response(body, {
+    status: upstream.status,
+    headers: responseHeaders
+  });
+}
+

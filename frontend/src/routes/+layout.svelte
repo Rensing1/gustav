@@ -1,8 +1,8 @@
 <script lang="ts">
-  let { data, children } = $props();
+  import type { Snippet } from "svelte";
+  import type { LayoutData } from "./$types";
 
-  const bootstrap = data.bootstrap;
-  const user = bootstrap?.user ?? null;
+  let { data, children }: { data: LayoutData; children: Snippet } = $props();
 </script>
 
 <svelte:head>
@@ -32,12 +32,12 @@
     <header class="topbar">
       <div>
         <p class="eyebrow">Neue Web-Plattform</p>
-        <h1>{bootstrap?.start_target ?? "session-bootstrap"}</h1>
+        <h1>{data.bootstrap?.start_target ?? "session-bootstrap"}</h1>
       </div>
 
       <div class="user-card">
-        <span>{user?.name ?? "Nicht angemeldet"}</span>
-        <small>{user?.role ?? "guest"}</small>
+        <span>{data.bootstrap?.user?.name ?? "Nicht angemeldet"}</span>
+        <small>{data.bootstrap?.user?.role ?? "guest"}</small>
       </div>
     </header>
 
@@ -157,4 +157,3 @@
     }
   }
 </style>
-

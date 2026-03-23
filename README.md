@@ -6,7 +6,7 @@ Status: **alpha‑2** (breaking changes expected).
 
 ## What it does
 
-- Server‑side rendered web app (FastAPI) with HTMX for progressive interactions
+- Primary web app via SvelteKit (Browser-BFF); FastAPI is being reduced to an API-focused backend adapter
 - Keycloak login (OIDC Authorization Code Flow + PKCE) with server‑side sessions
 - Teaching workflows: courses, reusable units, sections, materials, tasks, and per‑course section releases
 - Learning workflows: student submissions (text + uploads) and asynchronous analysis/feedback via `learning-worker`
@@ -15,7 +15,7 @@ Status: **alpha‑2** (breaking changes expected).
 
 ## Tech stack (high level)
 
-- Web: FastAPI (SSR) + HTMX
+- Web: SvelteKit + FastAPI
 - Identity: Keycloak (theme included)
 - DB/Storage: Supabase (Postgres + Storage)
 - Reverse proxy / TLS: Caddy (`app.localhost`, `id.localhost`)
@@ -75,6 +75,10 @@ Start here:
 - Architecture: `docs/ARCHITECTURE.md`
 - Domain boundaries: `docs/bounded_contexts.md`
 - API contract: `api/openapi.yml`
+
+Platform direction:
+- `frontend/` hosts the new SvelteKit application shell.
+- `backend/web/` is being migrated away from product SSR/HTMX pages toward API-only responsibilities.
 
 References:
 - Teaching: `docs/references/teaching.md`

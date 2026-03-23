@@ -26,6 +26,10 @@ htmlcov/
 
 # Node artefacts (defense-in-depth; also handled in `h5p-service/.dockerignore`)
 **/node_modules/
+frontend/build/
+frontend/.svelte-kit/
+frontend/dist/
+frontend/*.tsbuildinfo
 **/*.tgz
 **/npm-debug.log*
 **/yarn-debug.log*

@@ -73,6 +73,43 @@ components:
         roles: ["student"]
         name: "Max Musterschüler"
         expires_at: "2025-10-20T12:34:56+00:00"
+    SessionBootstrapUser:
+      type: object
+      required: [sub, name, role, roles]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+    SessionBootstrap:
+      type: object
+      required: [user, start_target, spaces]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        start_target:
+          type: string
+          enum: ["/learning", "/teaching"]
+          description: Initial in-app destination derived from the current role.
+        spaces:
+          type: array
+          description: Top-level product spaces the shell should expose for the current role.
+          items:
+            type: string
+      example:
+        user:
+          sub: "teacher-123"
+          name: "Ada"
+          role: "teacher"
+          roles: ["teacher"]
+        start_target: "/teaching"
+        spaces: ["teaching", "diagnostics", "live"]
     Error:
       type: object
       required: [error]
@@ -4626,6 +4663,40 @@ paths:
                     error: invalid_email_domain
                     detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @school.example"
 
+
+  /api/app/session-bootstrap:
+    get:
+      tags: [App]
+      summary: Return shell bootstrap data for the current session
+      description: >-
+        Returns the authenticated user, the initial start target, and the shell
+        spaces for the new SvelteKit application shell.
+      operationId: getSessionBootstrap
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Bootstrap payload for the current authenticated session
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionBootstrap'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/me:
     get:

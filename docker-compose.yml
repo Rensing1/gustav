@@ -10,6 +10,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
+      - frontend
       - web
       - keycloak
       - h5p
@@ -102,6 +103,19 @@ services:
     networks:
       - gustav-alpha2-network
       - supabase_network_gustav-alpha2
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: gustav-frontend
+    environment:
+      - ORIGIN=${WEB_BASE:-https://app.localhost}
+      - API_INTERNAL_BASE_URL=http://gustav-alpha2:8000
+    depends_on:
+      - web
+    restart: unless-stopped
+    networks:
+      - gustav-alpha2-network
 
   h5p:
     build:

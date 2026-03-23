@@ -10,7 +10,9 @@ Dieses Dokument beschreibt die aktuelle Architektur von GUSTAV (Stand: alpha‑2
 - Clean Architecture: Fachlogik getrennt von Frameworks (FastAPI, Supabase, etc.).
 
 ## High‑Level Komponenten
-- Web‑Adapter (`backend/web/`): FastAPI mit serverseitigem Rendern (SSR) und HTMX für progressive Interaktivität. Enthält aktuell Routen, UI‑Komponenten und statische Assets.
+- Frontend (`frontend/`): SvelteKit ist die neue primäre Web-Plattform und fungiert als Browser-BFF. Dort liegen App-Shell, Navigation, Fehler-UX und der Session-Bootstrap für komplexe Räume.
+- API‑Adapter (`backend/web/`): FastAPI wird aus der bisherigen SSR/HTMX-Mischarchitektur in Richtung API-only überführt. Neue Produktpfade entstehen dort nicht mehr.
+- Legacy-Webbestand (`backend/web/`): FastAPI mit serverseitigem Rendern (SSR) und HTMX für progressive Interaktivität. Enthält aktuell Routen, UI‑Komponenten und statische Assets.
   - HTMX‑Kontrakt (Navigation): Bei HTMX‑Navigation liefern Routen ausschließlich das Haupt‑Fragment (Inhalt von `#main-content`) und genau eine Sidebar als Out‑of‑Band‑Swap (`<aside id="sidebar" hx-swap-oob="true">`). Dadurch bleibt der Toggle‑State stabil und es entstehen keine doppelten Container. Die Hilfsfunktion `_layout_response` kapselt dieses Verhalten.
   - Auth‑Redirects (HTMX): Für `/auth/login` und `/auth/register` antwortet der Server bei HTMX‑Requests mit `204 No Content` und setzt `HX-Redirect` auf die Ziel‑URL (statt 302). Header: `Cache-Control: private, no-store`, `Vary: HX-Request`.
   - Unauth‑HTMX (401): Bei fehlender Session antwortet die Middleware mit `401` und `HX-Redirect: /auth/login`. Sicherheit: `Cache-Control: private, no-store` und `Vary: HX-Request` werden gesetzt, um Caching‑Anomalien zu vermeiden.
@@ -40,7 +42,7 @@ Geplant (siehe `docs/bounded_contexts.md:1`):
 - `identity_access`: Nutzer, Rollen, AuthN/AuthZ (IServ/Supabase)
 - `teaching`: Kurse, Lerneinheiten, Abschnitte, Freischaltung, Live-Unterrichts-Ansicht
 - `learning`: Einreichungen, Aufgaben, Karteikarten (Spaced Repetition)
-- `analytics`: Berichte, Learning Analytics Dashboard
+- `diagnostics`: diagnostische Lehrkräfte-Sichten und Lernendenprofile
 - `core`: geteilte Basistypen (IDs, Zeit, Fehler, Policies)
 
 Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` wider. Startpunkt ist aktuell der Web-Adapter; die Extraktion der Use Cases folgt, sobald erste API-Funktionen entstehen.

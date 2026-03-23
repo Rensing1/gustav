@@ -234,6 +234,7 @@ static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 from routes.auth import auth_router
+from routes.app import app_router
 from routes.learning import learning_router
 from routes.teaching import teaching_router
 from routes.users import users_router
@@ -9161,6 +9162,7 @@ async def _handle_member_change_api(course_id: str, sid: str | None, *, error: s
 # --- Other Routes & App Includes -----------------------------------------------
 
 app.include_router(auth_router)
+app.include_router(app_router)
 app.include_router(learning_router)
 app.include_router(teaching_router)
 app.include_router(users_router)

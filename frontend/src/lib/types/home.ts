@@ -50,3 +50,41 @@ export type TeacherCourseContextView = {
   units: TeacherCourseContextUnit[];
   members: TeacherCourseContextMember[];
 };
+
+export type DiagnosticsCourseMatrixCourse = {
+  id: string;
+  title: string;
+  href: string;
+};
+
+export type DiagnosticsCourseMatrixUnit = {
+  id: string;
+  title: string;
+  position: number;
+  href: string;
+};
+
+export type DiagnosticsCourseMatrixStudent = {
+  sub: string;
+  name: string;
+  href: string;
+};
+
+export type DiagnosticsCourseMatrixCell = {
+  unit_id: string;
+  submitted_tasks: number;
+  total_tasks: number;
+  href: string;
+};
+
+export type DiagnosticsCourseMatrixRow = {
+  student: DiagnosticsCourseMatrixStudent;
+  cells: DiagnosticsCourseMatrixCell[];
+};
+
+export type DiagnosticsCourseMatrixView = {
+  user: SessionBootstrapUser;
+  course: DiagnosticsCourseMatrixCourse;
+  units: DiagnosticsCourseMatrixUnit[];
+  rows: DiagnosticsCourseMatrixRow[];
+};

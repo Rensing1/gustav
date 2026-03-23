@@ -11,6 +11,11 @@
 <section class="panel">
   <p class="kicker">Kurskontext</p>
   <h2>{data.home?.course?.title ?? "Kurs"}</h2>
+  {#if data.home?.course?.id}
+    <p class="actions">
+      <a href={`/diagnostics/courses/${data.home.course.id}`}>Diagnostik-Matrix öffnen</a>
+    </p>
+  {/if}
 
   <div class="summary-grid">
     <article class="card">
@@ -58,6 +63,14 @@
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
     gap: 1rem;
     margin-top: 1.5rem;
+  }
+
+  .actions {
+    margin: 0.75rem 0 0;
+  }
+
+  .actions a {
+    color: #286983;
   }
 
   .card {

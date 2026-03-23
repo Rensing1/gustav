@@ -148,6 +148,122 @@ def _field_value(item: object, key: str) -> object:
     return getattr(item, key, None)
 
 
+def _list_unit_task_ids(unit_id: str, owner_sub: str) -> list[str]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    task_ids: list[str] = []
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        if isinstance(repo, DBTeachingRepo):
+            sections = repo.list_sections_for_author(unit_id, owner_sub)
+            for section in sections:
+                section_tasks = repo.list_tasks_for_section_owned(unit_id, str(section.get("id") or ""), owner_sub)
+                for task in section_tasks:
+                    task_id = str(task.get("id") or "")
+                    if task_id:
+                        task_ids.append(task_id)
+            return task_ids
+    except Exception:
+        pass
+
+    try:
+        section_ids = [sid for sid, data in repo.sections.items() if str(getattr(data, "unit_id", "")) == unit_id]
+        section_ids.sort(key=lambda sid: int(getattr(repo.sections[sid], "position", 0)))
+        for section_id in section_ids:
+            for task_id in repo.task_ids_by_section.get(section_id, []):
+                if task_id:
+                    task_ids.append(str(task_id))
+    except Exception:
+        return []
+    return task_ids
+
+
+def _list_submission_pairs_for_students(
+    course_id: str,
+    owner_sub: str,
+    student_subs: list[str],
+    task_ids: list[str],
+) -> set[tuple[str, str]]:
+    if not student_subs or not task_ids:
+        return set()
+
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        import psycopg  # type: ignore
+
+        if isinstance(repo, DBTeachingRepo):
+            dsn = getattr(repo, "_dsn", None)
+            if not dsn:
+                return set()
+            with psycopg.connect(dsn) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                    cur.execute(
+                        """
+                        select distinct student_sub::text, task_id::text
+                        from public.learning_submissions
+                        where course_id = %s
+                          and student_sub = any(%s)
+                          and task_id::text = any(%s)
+                        """,
+                        (course_id, student_subs, task_ids),
+                    )
+                    rows = cur.fetchall() or []
+            return {(str(student_sub), str(task_id)) for student_sub, task_id in rows}
+    except Exception:
+        return set()
+    return set()
+
+
+def _build_diagnostics_course_matrix_rows(
+    course_id: str,
+    owner_sub: str,
+    limit: int,
+    offset: int,
+    units: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    members = _list_teacher_course_members(course_id, owner_sub, limit=limit, offset=offset)
+    task_ids_by_unit = {
+        str(unit.get("id") or ""): _list_unit_task_ids(str(unit.get("id") or ""), owner_sub)
+        for unit in units
+        if str(unit.get("id") or "")
+    }
+    all_task_ids = sorted({task_id for unit_task_ids in task_ids_by_unit.values() for task_id in unit_task_ids})
+    member_subs = [str(member.get("sub") or "") for member in members if str(member.get("sub") or "")]
+    submission_pairs = _list_submission_pairs_for_students(course_id, owner_sub, member_subs, all_task_ids)
+
+    rows: list[dict[str, object]] = []
+    for member in members:
+        student_sub = str(member.get("sub") or "")
+        if not student_sub:
+            continue
+        cells: list[dict[str, object]] = []
+        for unit in units:
+            unit_id = str(unit.get("id") or "")
+            unit_task_ids = task_ids_by_unit.get(unit_id, [])
+            submitted_tasks = sum(1 for task_id in unit_task_ids if (student_sub, task_id) in submission_pairs)
+            cells.append(
+                {
+                    "unit_id": unit_id,
+                    "submitted_tasks": submitted_tasks,
+                    "total_tasks": len(unit_task_ids),
+                    "href": f"/diagnostics/courses/{course_id}/units/{unit_id}/learners/{student_sub}",
+                }
+            )
+        rows.append(
+            {
+                "student": {
+                    "sub": student_sub,
+                    "name": str(member.get("name") or student_sub),
+                    "href": f"/diagnostics/courses/{course_id}/learners/{student_sub}",
+                },
+                "cells": cells,
+            }
+        )
+    return rows
+
+
 @app_router.get("/api/app/session-bootstrap")
 async def get_session_bootstrap(request: Request):
     """Return shell bootstrap data for the current authenticated session."""
@@ -241,5 +357,52 @@ async def get_teacher_course_context(request: Request, course_id: str, limit: in
             if isinstance(item, dict)
         ],
         "members": _list_teacher_course_members(course_id, owner_sub, limit=int(limit or 25), offset=int(offset or 0)),
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/diagnostics/views/courses/{course_id}/matrix")
+async def get_diagnostics_course_matrix(request: Request, course_id: str, limit: int = 25, offset: int = 0):
+    """Return the first course-scoped diagnostics matrix for SvelteKit."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    owner_sub = str(user.get("sub") or "")
+    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    if guard:
+        return guard
+
+    course = _get_teacher_course(course_id, owner_sub)
+    if course is None:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    units = [
+        {
+            "id": str(item.get("id") or ""),
+            "title": str(item.get("title") or ""),
+            "position": int(item.get("position") or 0),
+            "href": f"/diagnostics/courses/{course_id}/units/{item.get('id')}",
+        }
+        for item in _list_teacher_course_units(course_id, owner_sub)
+        if isinstance(item, dict)
+    ]
+    body = {
+        "user": _user_payload(user),
+        "course": {
+            "id": str(_field_value(course, "id") or ""),
+            "title": str(_field_value(course, "title") or ""),
+            "href": f"/diagnostics/courses/{course_id}",
+        },
+        "units": units,
+        "rows": _build_diagnostics_course_matrix_rows(
+            course_id,
+            owner_sub,
+            limit=int(limit or 25),
+            offset=int(offset or 0),
+            units=units,
+        ),
     }
     return JSONResponse(body, headers=_private_headers())

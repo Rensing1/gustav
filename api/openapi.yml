@@ -208,6 +208,76 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TeacherCourseContextMember'
+    DiagnosticsCourseMatrixCourse:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    DiagnosticsCourseMatrixUnit:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    DiagnosticsCourseMatrixStudent:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    DiagnosticsCourseMatrixCell:
+      type: object
+      required: [unit_id, submitted_tasks, total_tasks, href]
+      properties:
+        unit_id:
+          type: string
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+        href:
+          type: string
+    DiagnosticsCourseMatrixRow:
+      type: object
+      required: [student, cells]
+      properties:
+        student:
+          $ref: '#/components/schemas/DiagnosticsCourseMatrixStudent'
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsCourseMatrixCell'
+    DiagnosticsCourseMatrixView:
+      type: object
+      required: [user, course, units, rows]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/DiagnosticsCourseMatrixCourse'
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsCourseMatrixUnit'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsCourseMatrixRow'
     Error:
       type: object
       required: [error]
@@ -4918,6 +4988,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TeacherCourseContextView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/diagnostics/views/courses/{course_id}/matrix:
+    get:
+      tags: [App]
+      summary: Return the first diagnostics course matrix read-model
+      description: >-
+        Returns one owner-scoped diagnostics matrix with course metadata,
+        attached units, and per-student submission counts for each unit.
+      operationId: getDiagnosticsCourseMatrix
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Diagnostics course matrix payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticsCourseMatrixView'
         '401':
           description: Unauthenticated
           headers:

@@ -25,6 +25,8 @@ Bereits umgesetzt:
 - der bisherige Uebergang `Authorization: Bearer session:<id>` ist fuer die neue BFF-Strecke wieder entfernt; FastAPI akzeptiert dort nur noch verifizierte JWT-Bearer oder als Altpfad die bestehende Browser-Cookie-Session
 - erste Raum-Read-Models `GET /api/learning/views/learner-home` und `GET /api/teaching/views/teacher-home` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - erster kursbezogener Lehrenden-Kontext `GET /api/teaching/views/courses/{course_id}/context` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
+- erstes `diagnostics`-Read-Model `GET /api/diagnostics/views/courses/{course_id}/matrix` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
+- `diagnostics` ist im neuen Frontend jetzt als eigener Kursraum mit Matrixsicht und Einstiegslink aus dem Kurskontext sichtbar
 - Frontend-Abhaengigkeiten installiert und `npm run check` fuer das aktuelle SvelteKit-Grundgeruest gruen ausgefuehrt
 - Architektur-/Kontextdoku auf `SvelteKit` und `diagnostics` umgestellt
 - ADRs fuer `SvelteKit als Browser-BFF`, `Objekte schreiben / Raeume lesen` und `diagnostics als eigener Fachbereich` angelegt
@@ -32,7 +34,7 @@ Bereits umgesetzt:
 Noch offen fuer den naechsten Schritt:
 
 - verbleibende Backend-Cookie-Session-Fallbacks ausserhalb oeffentlicher Legacy-Pfade geordnet abbauen
-- weitere Read-Models (`diagnostics-course-matrix`, `diagnostics-learner-profile`, `live-matrix`) schneiden
+- weitere Read-Models (`diagnostics-learner-profile`, `live-matrix`) schneiden
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen
 
 ## Zusammenfassung

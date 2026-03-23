@@ -111,6 +111,12 @@ services:
     environment:
       - ORIGIN=${WEB_BASE:-https://app.localhost}
       - API_INTERNAL_BASE_URL=http://gustav-alpha2:8000
+      - KC_BASE_URL=http://keycloak:8080
+      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}
+      - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
+      - KC_REALM=${KC_REALM:-gustav}
+      - ALLOWED_REGISTRATION_DOMAINS=${ALLOWED_REGISTRATION_DOMAINS:-}
+      - FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET:-CHANGE_ME_DEV}
     depends_on:
       - web
     restart: unless-stopped

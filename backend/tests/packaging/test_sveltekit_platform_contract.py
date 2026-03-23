@@ -42,6 +42,7 @@ def test_frontend_contains_sveltekit_basics() -> None:
     assert "dev" in scripts
     assert "build" in scripts
     assert "check" in scripts
+    assert "jose" in deps
 
     app_html = app_html_path.read_text(encoding="utf-8")
     assert "%sveltekit.head%" in app_html
@@ -70,6 +71,11 @@ def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     assert "build:\n      context: ./frontend" in compose_src
     assert "container_name: gustav-frontend" in compose_src
     assert "- frontend" in compose_src, "Caddy should depend on the frontend service"
+    assert "KC_BASE_URL=http://keycloak:8080" in compose_src
+    assert "KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}" in compose_src
+    assert "KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}" in compose_src
+    assert "KC_REALM=${KC_REALM:-gustav}" in compose_src
+    assert "FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET:-CHANGE_ME_DEV}" in compose_src
 
     assert "@api_path path /api/* /internal/*" in caddy_src
     assert "handle @api_path" in caddy_src

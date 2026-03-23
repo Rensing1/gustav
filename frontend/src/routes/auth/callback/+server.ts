@@ -1,6 +1,5 @@
 import type { RequestHandler } from "./$types";
 
-import { proxyBackendAuthGet } from "$lib/server/backend-auth";
+import { handleAuthCallback } from "$lib/server/backend-auth";
 
-export const GET: RequestHandler = (event) => proxyBackendAuthGet(event, "/auth/callback");
-
+export const GET: RequestHandler = (event) => handleAuthCallback(event);

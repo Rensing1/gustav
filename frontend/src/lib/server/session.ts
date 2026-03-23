@@ -1,9 +1,20 @@
+import { randomUUID } from "node:crypto";
+
 import type { Cookies } from "@sveltejs/kit";
 
 import { env } from "$env/dynamic/private";
 
 export const FRONTEND_SESSION_COOKIE_NAME = "gustav_bff_session";
-export const BACKEND_SESSION_COOKIE_NAME = "gustav_session";
+
+export type FrontendTokenSession = {
+  sessionId: string;
+  accessToken: string;
+  refreshToken: string | null;
+  idToken: string;
+  expiresAt: number;
+};
+
+const TOKEN_SESSIONS = new Map<string, FrontendTokenSession>();
 
 function useSecureCookie(): boolean {
   if ((env.ORIGIN || "").startsWith("https://")) {
@@ -12,18 +23,11 @@ function useSecureCookie(): boolean {
   return (env.NODE_ENV || "").toLowerCase() === "production";
 }
 
-export function buildBackendSessionCookieHeader(sessionId: string | null | undefined): string | null {
-  if (!sessionId) {
+export function buildBackendAuthorizationHeader(accessToken: string | null | undefined): string | null {
+  if (!accessToken) {
     return null;
   }
-  return `${BACKEND_SESSION_COOKIE_NAME}=${sessionId}`;
-}
-
-export function buildBackendAuthorizationHeader(sessionId: string | null | undefined): string | null {
-  if (!sessionId) {
-    return null;
-  }
-  return `Bearer session:${sessionId}`;
+  return `Bearer ${accessToken}`;
 }
 
 export function readFrontendSessionCookie(cookies: Cookies): string | null {
@@ -48,17 +52,53 @@ export function clearFrontendSessionCookie(cookies: Cookies): void {
   });
 }
 
-export function extractBackendSessionId(setCookieHeader: string | null): string | null {
-  if (!setCookieHeader) {
+function isExpired(record: FrontendTokenSession): boolean {
+  return record.expiresAt <= Math.floor(Date.now() / 1000);
+}
+
+export function createTokenSession(
+  cookies: Cookies,
+  tokens: {
+    accessToken: string;
+    refreshToken?: string | null;
+    idToken: string;
+    expiresAt: number;
+  }
+): FrontendTokenSession {
+  const sessionId = randomUUID();
+  const record: FrontendTokenSession = {
+    sessionId,
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken ?? null,
+    idToken: tokens.idToken,
+    expiresAt: tokens.expiresAt
+  };
+  TOKEN_SESSIONS.set(sessionId, record);
+  setFrontendSessionCookie(cookies, sessionId);
+  return record;
+}
+
+export function readTokenSession(cookies: Cookies): FrontendTokenSession | null {
+  const sessionId = readFrontendSessionCookie(cookies);
+  if (!sessionId) {
     return null;
   }
-
-  const parts = setCookieHeader.split(/;\s*/);
-  const sessionPair = parts.find((part) => part.startsWith(`${BACKEND_SESSION_COOKIE_NAME}=`));
-  if (!sessionPair) {
+  const record = TOKEN_SESSIONS.get(sessionId) ?? null;
+  if (!record) {
     return null;
   }
+  if (isExpired(record)) {
+    TOKEN_SESSIONS.delete(sessionId);
+    clearFrontendSessionCookie(cookies);
+    return null;
+  }
+  return record;
+}
 
-  const value = sessionPair.split("=", 2)[1] ?? "";
-  return value || null;
+export function clearTokenSession(cookies: Cookies): void {
+  const sessionId = readFrontendSessionCookie(cookies);
+  if (sessionId) {
+    TOKEN_SESSIONS.delete(sessionId);
+  }
+  clearFrontendSessionCookie(cookies);
 }

@@ -1,6 +1,5 @@
 import type { RequestHandler } from "./$types";
 
-import { proxyBackendAuthGet } from "$lib/server/backend-auth";
+import { startLoginFlow } from "$lib/server/backend-auth";
 
-export const GET: RequestHandler = (event) => proxyBackendAuthGet(event, "/auth/login");
-
+export const GET: RequestHandler = (event) => startLoginFlow(event);

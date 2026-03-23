@@ -1,9 +1,9 @@
 """Contract tests for the SvelteKit auth bridge.
 
 Why:
-    The browser must enter the auth flow through the new SvelteKit app even
-    while FastAPI still owns the existing session implementation. These tests
-    lock the repo into that bridging step.
+    The browser must enter the auth flow through the new SvelteKit app. These
+    tests lock the repo into frontend-owned OIDC routes instead of the old
+    FastAPI session bridge.
 """
 
 from __future__ import annotations
@@ -35,15 +35,17 @@ def test_frontend_contains_auth_bridge_routes() -> None:
         assert path.is_file(), f"Missing SvelteKit auth bridge file: {path}"
 
     helper_src = helper_path.read_text(encoding="utf-8")
-    assert "API_INTERNAL_BASE_URL" in helper_src
-    assert "set-cookie" in helper_src
-    assert "location" in helper_src
+    assert "protocol/openid-connect/auth" in helper_src
+    assert "protocol/openid-connect/token" in helper_src
+    assert "reset-credentials" in helper_src
+    assert "kc_action" in helper_src
+    assert "jwtVerify" in helper_src
 
-    assert '"/auth/login"' in login_path.read_text(encoding="utf-8")
-    assert '"/auth/register"' in register_path.read_text(encoding="utf-8")
-    assert '"/auth/forgot"' in forgot_path.read_text(encoding="utf-8")
-    assert '"/auth/logout"' in logout_path.read_text(encoding="utf-8")
-    assert '"/auth/callback"' in callback_path.read_text(encoding="utf-8")
+    assert "startLoginFlow" in login_path.read_text(encoding="utf-8")
+    assert "startRegisterFlow" in register_path.read_text(encoding="utf-8")
+    assert "startForgotFlow" in forgot_path.read_text(encoding="utf-8")
+    assert "handleLogout" in logout_path.read_text(encoding="utf-8")
+    assert "handleAuthCallback" in callback_path.read_text(encoding="utf-8")
 
     success_page = success_page_path.read_text(encoding="utf-8")
     assert "/auth/login" in success_page

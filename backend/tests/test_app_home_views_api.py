@@ -82,13 +82,13 @@ async def test_teacher_home_returns_navigation_entries(monkeypatch: pytest.Monke
         {
             "id": "courses",
             "title": "Kurse",
-            "href": "/courses",
+            "href": "/teaching/courses",
             "description": "Kurse organisieren und betreuen.",
         },
         {
             "id": "units",
             "title": "Lerneinheiten",
-            "href": "/units",
+            "href": "/teaching/units",
             "description": "Lerneinheiten bearbeiten und strukturieren.",
         },
         {

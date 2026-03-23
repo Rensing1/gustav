@@ -80,13 +80,13 @@ def _teacher_home_entries() -> list[dict[str, str]]:
         {
             "id": "courses",
             "title": "Kurse",
-            "href": "/courses",
+            "href": "/teaching/courses",
             "description": "Kurse organisieren und betreuen.",
         },
         {
             "id": "units",
             "title": "Lerneinheiten",
-            "href": "/units",
+            "href": "/teaching/units",
             "description": "Lerneinheiten bearbeiten und strukturieren.",
         },
         {

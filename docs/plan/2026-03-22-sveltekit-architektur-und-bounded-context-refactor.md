@@ -34,6 +34,8 @@ Bereits umgesetzt:
 - die Read-Models `GET /api/live/views/courses/{course_id}/units/{unit_id}/matrix` und `GET /api/live/views/courses/{course_id}/units/{unit_id}/detail-sheet` sind in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - der neue SvelteKit-Live-Raum unter `/live/courses/[courseId]/units/[unitId]` ersetzt jetzt auch die tiefe Legacy-Live-Matrix samt Detailblatt
 - Kurskontext- und Diagnostik-Links zeigen fuer unitbezogene Live-Kontexte jetzt auf den neuen SvelteKit-Live-Raum statt auf tote oder gemischte Altpfade
+- die Lehrenden-Navigation verweist jetzt auf echte SvelteKit-Seiten unter `/teaching/courses`, `/teaching/units`, `/teaching/units/[unitId]` und `/teaching/courses/[courseId]/members`
+- die bisherigen Home-Read-Models fuer Lehrkraefte zeigen damit nicht mehr auf die retirten FastAPI-Einstiege `/courses` und `/units`
 - die alte SSR-Sidebar des FastAPI-Webadapters spielt keine Legacy-Produktpfade mehr aus; sie laeuft jetzt bewusst als minimierte Legacy-Navigation
 - der alte studentische SSR-Einstieg `/learning` ist im Backend als retirter Legacy-Pfad stillgelegt und dient nicht mehr als produktive Lernenden-Startseite
 - der alte studentische Kursdetail-Einstieg `/learning/courses/{course_id}` ist ebenfalls als retirter Legacy-Pfad stillgelegt und kein produktiver Zwischenschritt mehr
@@ -50,7 +52,7 @@ Noch offen fuer den naechsten Schritt:
 
 - verbleibende Backend-Cookie-Session-Fallbacks in Legacy-API/SSR-Pfaden geordnet abbauen
 - verbliebene Legacy-SSR-Routen mit produktivem Charakter strangweise stilllegen oder auf neue Raeume umhaengen
-  - naechste Kandidaten: verbliebene tiefe studentische Altpfade wie `/learning/courses/{course_id}/tasks/*`, danach die teacherischen Altpfade in `courses` und `units`
+  - naechste Kandidaten: verbliebene tiefe studentische Altpfade wie `/learning/courses/{course_id}/tasks/*`, danach die tieferen teacherischen Altpfade in `courses` und `units`
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen
 
 ## Zusammenfassung

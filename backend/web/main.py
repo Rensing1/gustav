@@ -4729,14 +4729,14 @@ def _render_members_page_html(request: Request, course: dict, members: list[dict
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    # Minimal, neutral start page without science copy
+    # Minimal, neutral start page for the shrinking legacy shell.
     user = getattr(request.state, "user", None)
     content = """
     <div class=\"container\">
         <h1>Willkommen bei GUSTAV</h1>
-        <p>GUSTAV (Akronym für: Gustav unterstützt Schüler tadellos als Vertretungslehrer) ist eine Lernplattform, die sich derzeit noch in Entwicklung befindet. Dass Fehler vorkommen, ist daher nichts Ungewöhnliches. Bitte melde Fehler direkt an deinen Lehrer. Außerdem sind Ideen zur Verbesserung der Plattform gern gesehen!</p>
-        <p>Klick links in der Navigationsleiste auf „Meine Kurse“ und wähle dort die aktuelle Lerneinheit aus. Dort kannst du zu den Aufgaben deine Lösungen eintippen oder hochladen. Ein KI-Modell wird dann deine Einreichung auswerten und dir eine Rückmeldung geben.</p>
-        <p>Die Plattform ist datenschutzkonform. Deine persönlichen Daten werden zu keinem Zeitpunkt an fremde Server übertragen.</p>
+        <p>Diese FastAPI-Weboberfläche wird schrittweise abgebaut. Die neue Produktoberfläche entsteht im separaten SvelteKit-Frontend mit klaren Räumen für Lernende, Lehrkräfte und Diagnostik.</p>
+        <p>Der Backend-Webadapter bleibt vorerst für verbleibende Legacy-Flows, interne Übergänge und Betriebsschnittstellen bestehen. Neue Produktnavigation wird hier bewusst nicht mehr ausgerollt.</p>
+        <p>GUSTAV bleibt dabei datenschutzkonform. Personenbezogene Daten werden weiterhin nur innerhalb der kontrollierten Systemgrenzen verarbeitet.</p>
     </div>
     """
     layout = Layout(title="Startseite", content=content, user=user, current_path=request.url.path)

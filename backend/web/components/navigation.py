@@ -228,38 +228,20 @@ class Navigation(Component):
             if isinstance(value, str)
         ]
 
-        nav_config: Dict[str, List[Tuple[str, str, str]]] = {
-            "student": [
-                ("/", "Startseite", "🏠"),
-                ("/learning", "Meine Kurse", "📚"),
-                ("/about", "Über GUSTAV", "ℹ️"),
-            ],
-            "teacher": [
-                ("/", "Startseite", "🏠"),
-                ("/courses", "Kurse", "📚"),
-                ("/units", "Lerneinheiten", "🧭"),
-                ("/teaching/live", "Unterricht", "🔴"),
-                ("/about", "Über GUSTAV", "ℹ️"),
-            ],
-            # Administrators currently share the minimal fallback menu. We can
-            # extend this once dedicated Admin-Oberflächen exist.
-            "admin": [
-                ("/", "Startseite", "🏠"),
-                ("/about", "Über GUSTAV", "ℹ️"),
-            ],
-        }
-
         default_menu = [
             ("/", "Startseite", "🏠"),
             ("/about", "Über GUSTAV", "ℹ️"),
         ]
 
+        # The legacy FastAPI shell is being retired. It should no longer
+        # advertise product navigation into old SSR spaces; the new SvelteKit
+        # app owns that. We therefore keep only a minimal backend menu here.
         if "teacher" in roles_list or (role == "teacher" and not roles_list):
-            return nav_config["teacher"]
+            return default_menu
         if "student" in roles_list or (role == "student" and not roles_list):
-            return nav_config["student"]
+            return default_menu
         if "admin" in roles_list or (role == "admin" and not roles_list):
-            return nav_config["admin"]
+            return default_menu
         return default_menu
 
     def _get_nav_tree(self) -> List[Tuple[str, str, str, Optional[List[Tuple[str, str, str]]]]]:

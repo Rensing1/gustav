@@ -1,9 +1,8 @@
 """
-SSR Navigation — Ensure teachers can access the Live view via sidebar
+SSR Navigation — legacy sidebar should not advertise old Live product paths.
 
-We test two things:
-1) The sidebar for a logged-in teacher contains a link to "/teaching/live".
-2) The Live-Startseite "/teaching/live" is teacher-only and renders successfully.
+We still keep the direct legacy route reachable for the transition, but the old
+backend sidebar must no longer expose it as a primary navigation target.
 """
 from __future__ import annotations
 
@@ -30,7 +29,7 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_sidebar_has_live_link_for_teacher():
+async def test_sidebar_hides_live_link_for_teacher():
     main.SESSION_STORE = SessionStore()
     teacher = main.SESSION_STORE.create(sub="t-nav-live", name="Teacher", roles=["teacher"])  # type: ignore
 
@@ -39,7 +38,7 @@ async def test_sidebar_has_live_link_for_teacher():
         r = await c.get("/")
         assert r.status_code == 200
         html = r.text
-        assert 'href="/teaching/live"' in html, "Sidebar should expose Live link for teachers"
+        assert 'href="/teaching/live"' not in html, "Legacy sidebar should not expose Live link anymore"
 
 
 @pytest.mark.anyio

@@ -49,15 +49,15 @@ async def test_sidebar_for_student_contains_expected_items_in_order():
     assert r.status_code == 200
     html = r.text
 
-    # Order: Startseite -> Meine Kurse -> Über GUSTAV
+    # Order: Startseite -> Über GUSTAV
     p_home = _pos(html, "Startseite")
-    p_courses = _pos(html, "Meine Kurse")
     p_about = _pos(html, "Über GUSTAV")
-    assert p_home != -1 and p_courses != -1 and p_about != -1
-    assert p_home < p_courses < p_about
+    assert p_home != -1 and p_about != -1
+    assert p_home < p_about
 
-    # Removed items should not appear
+    # Legacy product navigation should no longer appear in the backend sidebar.
     forbidden = [
+        "Meine Kurse", "Kurse", "Lerneinheiten", "Unterricht",
         "Dashboard", "Wissenschaft", "Karteikarten", "Fortschritt",
         "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
     ]
@@ -82,15 +82,14 @@ async def test_sidebar_for_teacher_contains_expected_items_in_order():
     assert r.status_code == 200
     html = r.text
 
-    # Order: Startseite -> Kurse -> Lerneinheiten -> Über GUSTAV
+    # Order: Startseite -> Über GUSTAV
     p_home = _pos(html, "Startseite")
-    p_courses = _pos(html, "Kurse")
-    p_units = _pos(html, "Lerneinheiten")
     p_about = _pos(html, "Über GUSTAV")
-    assert p_home != -1 and p_courses != -1 and p_units != -1 and p_about != -1
-    assert p_home < p_courses < p_units < p_about
+    assert p_home != -1 and p_about != -1
+    assert p_home < p_about
 
     forbidden = [
+        "Meine Kurse", "Kurse", "Lerneinheiten", "Unterricht",
         "Dashboard", "Wissenschaft", "Karteikarten", "Fortschritt",
         "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
     ]

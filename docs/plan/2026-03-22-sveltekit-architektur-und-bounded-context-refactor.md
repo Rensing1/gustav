@@ -28,6 +28,7 @@ Bereits umgesetzt:
 - erster kursbezogener Lehrenden-Kontext `GET /api/teaching/views/courses/{course_id}/context` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - erstes `diagnostics`-Read-Model `GET /api/diagnostics/views/courses/{course_id}/matrix` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - `diagnostics` ist im neuen Frontend jetzt als eigener Kursraum mit Matrixsicht und Einstiegslink aus dem Kurskontext sichtbar
+- die alte SSR-Sidebar des FastAPI-Webadapters spielt keine Legacy-Produktpfade mehr aus; sie laeuft jetzt bewusst als minimierte Legacy-Navigation
 - Frontend-Abhaengigkeiten installiert und `npm run check` fuer das aktuelle SvelteKit-Grundgeruest gruen ausgefuehrt
 - Architektur-/Kontextdoku auf `SvelteKit` und `diagnostics` umgestellt
 - ADRs fuer `SvelteKit als Browser-BFF`, `Objekte schreiben / Raeume lesen` und `diagnostics als eigener Fachbereich` angelegt
@@ -35,6 +36,7 @@ Bereits umgesetzt:
 Noch offen fuer den naechsten Schritt:
 
 - verbleibende Backend-Cookie-Session-Fallbacks in Legacy-API/SSR-Pfaden geordnet abbauen
+- verbliebene Legacy-SSR-Routen mit produktivem Charakter strangweise stilllegen oder auf neue Raeume umhaengen
 - weitere Read-Models (`diagnostics-learner-profile`, `live-matrix`) schneiden
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen
 

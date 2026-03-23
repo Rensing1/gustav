@@ -106,6 +106,19 @@ def _list_teacher_course_units(course_id: str, owner_sub: str) -> list[dict]:
     return repo.list_course_units_for_owner(course_id, owner_sub)
 
 
+def _list_teacher_courses(owner_sub: str, limit: int, offset: int) -> list[dict[str, str]]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    items = repo.list_courses_for_teacher(teacher_id=owner_sub, limit=limit, offset=offset)
+    return [
+        {
+            "id": str(_field_value(item, "id") or ""),
+            "title": str(_field_value(item, "title") or ""),
+        }
+        for item in (items or [])
+        if str(_field_value(item, "id") or "")
+    ]
+
+
 def _list_teacher_course_members(course_id: str, owner_sub: str, limit: int, offset: int) -> list[dict]:
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     try:
@@ -256,12 +269,85 @@ def _build_diagnostics_course_matrix_rows(
                 "student": {
                     "sub": student_sub,
                     "name": str(member.get("name") or student_sub),
-                    "href": f"/diagnostics/courses/{course_id}/learners/{student_sub}",
+                    "href": f"/diagnostics/learners/{student_sub}",
                 },
                 "cells": cells,
             }
         )
     return rows
+
+
+def _teacher_course_has_member(course_id: str, owner_sub: str, student_sub: str) -> bool:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    try:
+        return bool(repo.course_has_member(course_id, owner_sub, student_sub))
+    except Exception:
+        members = _list_teacher_course_members(course_id, owner_sub, limit=200, offset=0)
+        return any(str(member.get("sub") or "") == student_sub for member in members)
+
+
+def _build_diagnostics_learner_profile_courses(
+    student_sub: str,
+    owner_sub: str,
+    limit: int,
+    offset: int,
+) -> list[dict[str, object]]:
+    courses: list[dict[str, object]] = []
+    for course in _list_teacher_courses(owner_sub, limit=limit, offset=offset):
+        course_id = str(course.get("id") or "")
+        if not course_id or not _teacher_course_has_member(course_id, owner_sub, student_sub):
+            continue
+
+        units = [
+            {
+                "id": str(item.get("id") or ""),
+                "title": str(item.get("title") or ""),
+                "position": int(item.get("position") or 0),
+                "href": f"/diagnostics/courses/{course_id}/units/{item.get('id')}",
+            }
+            for item in _list_teacher_course_units(course_id, owner_sub)
+            if isinstance(item, dict)
+        ]
+        task_ids_by_unit = {
+            str(unit.get("id") or ""): _list_unit_task_ids(str(unit.get("id") or ""), owner_sub)
+            for unit in units
+            if str(unit.get("id") or "")
+        }
+        all_task_ids = sorted({task_id for unit_task_ids in task_ids_by_unit.values() for task_id in unit_task_ids})
+        submission_pairs = _list_submission_pairs_for_students(course_id, owner_sub, [student_sub], all_task_ids)
+
+        unit_summaries: list[dict[str, object]] = []
+        course_submitted_tasks = 0
+        course_total_tasks = 0
+        for unit in units:
+            unit_id = str(unit.get("id") or "")
+            unit_task_ids = task_ids_by_unit.get(unit_id, [])
+            submitted_tasks = sum(1 for task_id in unit_task_ids if (student_sub, task_id) in submission_pairs)
+            total_tasks = len(unit_task_ids)
+            course_submitted_tasks += submitted_tasks
+            course_total_tasks += total_tasks
+            unit_summaries.append(
+                {
+                    "id": unit_id,
+                    "title": str(unit.get("title") or ""),
+                    "position": int(unit.get("position") or 0),
+                    "href": str(unit.get("href") or ""),
+                    "submitted_tasks": submitted_tasks,
+                    "total_tasks": total_tasks,
+                }
+            )
+
+        courses.append(
+            {
+                "id": course_id,
+                "title": str(course.get("title") or ""),
+                "href": f"/diagnostics/courses/{course_id}",
+                "submitted_tasks": course_submitted_tasks,
+                "total_tasks": course_total_tasks,
+                "units": unit_summaries,
+            }
+        )
+    return courses
 
 
 @app_router.get("/api/app/session-bootstrap")
@@ -404,5 +490,43 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
             offset=int(offset or 0),
             units=units,
         ),
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/diagnostics/views/learners/{student_sub:path}/profile")
+async def get_diagnostics_learner_profile(request: Request, student_sub: str, limit: int = 50, offset: int = 0):
+    """Return the first learner-scoped diagnostics profile for SvelteKit."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    owner_sub = str(user.get("sub") or "")
+    courses = _build_diagnostics_learner_profile_courses(
+        student_sub,
+        owner_sub,
+        limit=int(limit or 50),
+        offset=int(offset or 0),
+    )
+    if not courses:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    learner_names = teaching_routes.resolve_student_names([student_sub])
+    learner_name = str(learner_names.get(student_sub, student_sub))
+    body = {
+        "user": _user_payload(user),
+        "learner": {
+            "sub": student_sub,
+            "name": learner_name,
+            "href": f"/diagnostics/learners/{student_sub}",
+        },
+        "summary": {
+            "courses_count": len(courses),
+            "submitted_tasks": sum(int(course.get("submitted_tasks") or 0) for course in courses),
+            "total_tasks": sum(int(course.get("total_tasks") or 0) for course in courses),
+        },
+        "courses": courses,
     }
     return JSONResponse(body, headers=_private_headers())

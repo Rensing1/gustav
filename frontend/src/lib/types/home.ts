@@ -88,3 +88,40 @@ export type DiagnosticsCourseMatrixView = {
   units: DiagnosticsCourseMatrixUnit[];
   rows: DiagnosticsCourseMatrixRow[];
 };
+
+export type DiagnosticsLearnerProfileLearner = {
+  sub: string;
+  name: string;
+  href: string;
+};
+
+export type DiagnosticsLearnerProfileSummary = {
+  courses_count: number;
+  submitted_tasks: number;
+  total_tasks: number;
+};
+
+export type DiagnosticsLearnerProfileUnit = {
+  id: string;
+  title: string;
+  position: number;
+  href: string;
+  submitted_tasks: number;
+  total_tasks: number;
+};
+
+export type DiagnosticsLearnerProfileCourse = {
+  id: string;
+  title: string;
+  href: string;
+  submitted_tasks: number;
+  total_tasks: number;
+  units: DiagnosticsLearnerProfileUnit[];
+};
+
+export type DiagnosticsLearnerProfileView = {
+  user: SessionBootstrapUser;
+  learner: DiagnosticsLearnerProfileLearner;
+  summary: DiagnosticsLearnerProfileSummary;
+  courses: DiagnosticsLearnerProfileCourse[];
+};

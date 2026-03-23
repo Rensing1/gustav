@@ -27,7 +27,9 @@ Bereits umgesetzt:
 - erste Raum-Read-Models `GET /api/learning/views/learner-home` und `GET /api/teaching/views/teacher-home` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - erster kursbezogener Lehrenden-Kontext `GET /api/teaching/views/courses/{course_id}/context` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - erstes `diagnostics`-Read-Model `GET /api/diagnostics/views/courses/{course_id}/matrix` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
+- zweites `diagnostics`-Read-Model `GET /api/diagnostics/views/learners/{student_sub}/profile` in `api/openapi.yml`, FastAPI und SvelteKit umgesetzt
 - `diagnostics` ist im neuen Frontend jetzt als eigener Kursraum mit Matrixsicht und Einstiegslink aus dem Kurskontext sichtbar
+- die Matrix-Namenslinks fuehren jetzt in ein echtes Lernendenprofil unter `/diagnostics/learners/[studentSub]`
 - die alte SSR-Sidebar des FastAPI-Webadapters spielt keine Legacy-Produktpfade mehr aus; sie laeuft jetzt bewusst als minimierte Legacy-Navigation
 - der alte studentische SSR-Einstieg `/learning` ist im Backend als retirter Legacy-Pfad stillgelegt und dient nicht mehr als produktive Lernenden-Startseite
 - der alte studentische Kursdetail-Einstieg `/learning/courses/{course_id}` ist ebenfalls als retirter Legacy-Pfad stillgelegt und kein produktiver Zwischenschritt mehr
@@ -43,7 +45,7 @@ Noch offen fuer den naechsten Schritt:
 - verbleibende Backend-Cookie-Session-Fallbacks in Legacy-API/SSR-Pfaden geordnet abbauen
 - verbliebene Legacy-SSR-Routen mit produktivem Charakter strangweise stilllegen oder auf neue Raeume umhaengen
   - naechste Kandidaten: verbliebene tiefe studentische Altpfade wie `/learning/courses/{course_id}/tasks/*`, danach teacherische Legacy-Shells wie `/teaching/live`
-- weitere Read-Models (`diagnostics-learner-profile`, `live-matrix`) schneiden
+- weitere Read-Models (`live-matrix`, `live-detail-sheet`) schneiden
 - Altpfad-Inventar aus `backend/web/main.py` formal abbauen
 
 ## Zusammenfassung

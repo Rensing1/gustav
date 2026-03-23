@@ -23,6 +23,7 @@ def test_openapi_documents_bearer_auth_for_bff_endpoints() -> None:
         ("/api/teaching/views/teacher-home", "get"),
         ("/api/teaching/views/courses/{course_id}/context", "get"),
         ("/api/diagnostics/views/courses/{course_id}/matrix", "get"),
+        ("/api/diagnostics/views/learners/{student_sub}/profile", "get"),
     ):
         security = spec["paths"][path][verb]["security"]
         assert security == [{"bearerAuth": []}]

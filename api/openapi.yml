@@ -278,6 +278,74 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DiagnosticsCourseMatrixRow'
+    DiagnosticsLearnerProfileLearner:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    DiagnosticsLearnerProfileSummary:
+      type: object
+      required: [courses_count, submitted_tasks, total_tasks]
+      properties:
+        courses_count:
+          type: integer
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+    DiagnosticsLearnerProfileUnit:
+      type: object
+      required: [id, title, position, href, submitted_tasks, total_tasks]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+    DiagnosticsLearnerProfileCourse:
+      type: object
+      required: [id, title, href, submitted_tasks, total_tasks, units]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsLearnerProfileUnit'
+    DiagnosticsLearnerProfileView:
+      type: object
+      required: [user, learner, summary, courses]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        learner:
+          $ref: '#/components/schemas/DiagnosticsLearnerProfileLearner'
+        summary:
+          $ref: '#/components/schemas/DiagnosticsLearnerProfileSummary'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsLearnerProfileCourse'
     Error:
       type: object
       required: [error]
@@ -5070,6 +5138,68 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Course not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/diagnostics/views/learners/{student_sub}/profile:
+    get:
+      tags: [App]
+      summary: Return the first diagnostics learner profile read-model
+      description: >-
+        Returns one owner-scoped learner profile with course summaries and
+        per-unit submission counts across the teacher-visible diagnostics scope.
+      operationId: getDiagnosticsLearnerProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: student_sub
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Diagnostics learner profile payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticsLearnerProfileView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Learner not visible in the owner-scoped diagnostics space
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

@@ -68,7 +68,7 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
                 "student": {
                     "sub": "student-1",
                     "name": "Anna",
-                    "href": f"/diagnostics/courses/{course_id}/learners/student-1",
+                    "href": "/diagnostics/learners/student-1",
                 },
                 "cells": [
                     {
@@ -125,7 +125,7 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
                 "student": {
                     "sub": "student-1",
                     "name": "Anna",
-                    "href": "/diagnostics/courses/course-1/learners/student-1",
+                    "href": "/diagnostics/learners/student-1",
                 },
                 "cells": [
                     {

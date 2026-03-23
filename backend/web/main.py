@@ -2026,41 +2026,24 @@ async def courses_edit_form(request: Request, course_id: str):
 
 @app.get("/learning", response_class=HTMLResponse)
 async def learning_index(request: Request):
-    """SSR page listing the student's courses via the Learning API.
+    """Retired legacy SSR entry for the student learning space.
 
     Permissions:
-        Caller must be a student; otherwise redirect to home.
+        Caller must be a student to see the retirement notice; non-students are
+        still redirected to home.
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
-    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
-    items: list[dict] = []
-    learning_base, learning_origin = _learning_internal_base()
-    try:
-        import httpx
-        from httpx import ASGITransport
-        # Use an internal ASGI client with an explicit Origin header for
-        # consistency with strict CSRF (even though this is a GET/read).
-        async with httpx.AsyncClient(
-            transport=ASGITransport(app=app), base_url=learning_base, headers={"Origin": learning_origin}
-        ) as client:
-            sid = _get_session_id(request)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r = await client.get("/api/learning/courses", params={"limit": limit, "offset": offset})
-            if r.status_code == 200 and isinstance(r.json(), list):
-                items = r.json()
-    except Exception:
-        items = []
     content = (
         '<div class="container">'
-        '<h1>Meine Kurse</h1>'
-        f'{_render_student_course_list(items, limit, offset, len(items) == limit)}'
+        '<h1>Legacy route retired</h1>'
+        '<p>Der alte FastAPI-Einstieg <code>/learning</code> wird nicht mehr als produktive Lernenden-Startseite betrieben.</p>'
+        '<p>Die Lernenden-Navigation liegt jetzt im neuen SvelteKit-Frontend.</p>'
         '</div>'
     )
-    layout = Layout(title="Meine Kurse", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+    layout = Layout(title="Legacy route retired", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, status_code=410, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}", response_class=HTMLResponse)
 async def learning_course_detail(request: Request, course_id: str):

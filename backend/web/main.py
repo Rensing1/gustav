@@ -2069,66 +2069,22 @@ async def learning_index(request: Request):
 
 @app.get("/learning/courses/{course_id}", response_class=HTMLResponse)
 async def learning_course_detail(request: Request, course_id: str):
-    """SSR page showing the units of a course for the current student.
+    """Retired legacy SSR entry for the student course-detail landing page.
 
-    Behavior: Fetches units via Learning API. Uses a best-effort course title
-    lookup via the courses list; falls back to a generic header when not found.
+    Why:
+        The product handoff now happens in the SvelteKit learning home and
+        unit-level pages. Keeping this intermediate SSR course page alive would
+        preserve an obsolete navigation step.
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
-    # Validate UUID-ish to avoid calling the API with garbage
-    if not _is_uuid_like(course_id):
-        return RedirectResponse(url="/learning", status_code=303)
-    title = "Kurs"
-    units: list[dict] = []
-    try:
-        import httpx
-        from httpx import ASGITransport
-        async with _internal_api_client() as client:
-            sid = _get_session_id(request)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            # Try lookup for title from course list (best-effort)
-            try:
-                r_courses = await client.get("/api/learning/courses", params={"limit": 50, "offset": 0})
-                if r_courses.status_code == 200 and isinstance(r_courses.json(), list):
-                    for it in r_courses.json():
-                        if isinstance(it, dict) and str(it.get("id")) == str(course_id):
-                            t = it.get("title")
-                            if isinstance(t, str) and t:
-                                title = t
-                            break
-            except Exception:
-                pass
-            r_units = await client.get(f"/api/learning/courses/{course_id}/units")
-            if r_units.status_code == 200 and isinstance(r_units.json(), list):
-                units = r_units.json()
-    except Exception:
-        units = []
-
-    # Render unit list with links to the unit detail page
-    # Intention: Students can click a unit to view released content.
-    unit_items = []
-    for row in units:
-        u = row.get("unit", {}) if isinstance(row, dict) else {}
-        uid = Component.escape(str(u.get("id", "")))
-        utitle = Component.escape(str(u.get("title", "")))
-        href = f"/learning/courses/{course_id}/units/{uid}"
-        unit_items.append(
-            f'<li><span class="badge">{row.get("position", "")}</span> '
-            f'<a href="{href}">{utitle}</a></li>'
-        )
-    units_html = '<ul class="unit-list">' + ("\n".join(unit_items) if unit_items else '<li class="text-muted">Keine Lerneinheiten.</li>') + '</ul>'
-    content = (
-        '<div class="container">'
-        f'<h1>{Component.escape(title)}</h1>'
-        f'<p><a href="/learning">Zurück zu „Meine Kurse“</a></p>'
-        f'<section class="card"><h2>Lerneinheiten</h2>{units_html}</section>'
-        '</div>'
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/learning/courses/{course_id}",
+        replacement_space="den Lernendenraum",
     )
-    layout = Layout(title=Component.escape(title), content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}/units/{unit_id}", response_class=HTMLResponse)
 async def learning_unit_sections(request: Request, course_id: str, unit_id: str):
@@ -2154,7 +2110,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
-        return RedirectResponse(url=f"/learning/courses/{course_id}", status_code=303)
+        return RedirectResponse(url="/learning", status_code=303)
     unit_title = "Lerneinheit"
     unit_type = "linear"
     sections: list[dict] = []
@@ -2201,7 +2157,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     f'<div class=\"unit-head__title\">'
                     f'<h1 class=\"unit-title\" id=\"unit-title\">{safe_title}</h1>'
                     f'<p class=\"text-muted\" id=\"unit-subtitle\"><small>'
-                    f'<a href=\"/learning/courses/{safe_course_id}\">Zurück zu „Lerneinheiten“</a>'
+                    f'<a href=\"/learning\">Zurück zum Lernraum</a>'
                     f'</small></p>'
                     f'</div>'
                     f'</header>'
@@ -2230,7 +2186,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     title=Component.escape(unit_title),
                     content=content,
                     user=user,
-                    current_path=request.url.path,
+                    current_path="/learning",
                 )
                 return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
             # Silence in production; errors handled gracefully below
@@ -2305,12 +2261,12 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         content=(
                             "<div class=\"container\">"
                             f"<h1>{Component.escape(unit_title)}</h1>"
-                            f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
+                            "<p><a href=\"/learning\">Zurück zum Lernraum</a></p>"
                             "<section class=\"card\"><p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p></section>"
                             "</div>"
                         ),
                         user=user,
-                        current_path=request.url.path,
+                        current_path="/learning",
                     ).render(),
                     headers={"Cache-Control": "private, no-store"},
                 )
@@ -2565,12 +2521,12 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     content = (
         "<div class=\"container\">"
         f"<h1>{Component.escape(unit_title)}</h1>"
-        f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
+        f"<p><a href=\"/learning\">Zurück zum Lernraum</a></p>"
         f"<section class=\"card\" id=\"student-unit-sections\">{inner}</section>"
         f"{h5p_script}"
         "</div>"
     )
-    layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
+    layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path="/learning")
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 

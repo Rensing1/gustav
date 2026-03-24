@@ -94,6 +94,7 @@ async def test_buckets_materials_and_submissions_exist_and_private():
             allowed = row[0]
             assert allowed, "submissions bucket must define allowed_mime_types"
             assert "application/x.scratch.sb3" in allowed, "submissions bucket must accept application/x.scratch.sb3"
+            assert "application/x.makecode.hex" in allowed, "submissions bucket must accept application/x.makecode.hex"
 
 
 def test_sb3_storage_migration_updates_allowlist_additively() -> None:
@@ -104,3 +105,13 @@ def test_sb3_storage_migration_updates_allowlist_additively() -> None:
     assert "coalesce(allowed_mime_types" in sql
     assert "unnest(" in sql
     assert "application/x.scratch.sb3" in sql
+
+
+def test_local_supabase_config_allows_makecode_hex_in_submissions_bucket() -> None:
+    """Local Supabase bucket bootstrap must allow MakeCode HEX uploads."""
+    config = Path("supabase/config.toml").read_text(encoding="utf-8")
+
+    submissions_section = config.split("[storage.buckets.submissions]", maxsplit=1)[1]
+    submissions_section = submissions_section.split("\n[", maxsplit=1)[0]
+
+    assert "application/x.makecode.hex" in submissions_section

@@ -86,7 +86,7 @@ def test_ensure_superuser_for_reset_blocks_non_superuser(monkeypatch: pytest.Mon
     mod.ensure_superuser_for_reset("postgresql://u:p@127.0.0.1:54322/postgres")
 
 
-def test_reset_db_for_restore_drops_extensions_before_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reset_db_for_restore_only_drops_app_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
 
     class FakeCompleted:
@@ -101,12 +101,98 @@ def test_reset_db_for_restore_drops_extensions_before_schemas(monkeypatch: pytes
 
     mod._reset_db_for_restore("postgresql://u:p@127.0.0.1:54322/postgres")
 
-    assert len(calls) == 4
-    assert "drop extension" in (calls[0][-1] or "").lower()
-    assert "drop publication" in (calls[1][-1] or "").lower()
-    assert "drop schema" in (calls[2][-1] or "").lower()
-    assert "create schema" in (calls[3][-1] or "").lower()
-    assert "public" in (calls[3][-1] or "").lower()
+    assert len(calls) == 2
+    assert "where nspname in ('legacy_raw', 'public')" in (calls[0][-1] or "").lower()
+    assert "drop schema if exists %i cascade" in (calls[0][-1] or "").lower()
+    assert "auth" not in (calls[0][-1] or "").lower()
+    assert "drop extension" not in (calls[0][-1] or "").lower()
+    assert "create schema" in (calls[1][-1] or "").lower()
+    assert "public" in (calls[1][-1] or "").lower()
+
+
+def test_filter_dump_lines_skips_managed_schema_objects_but_keeps_public_data() -> None:
+    dump_lines = [
+        b"SET row_security = off;\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: auth; Type: SCHEMA; Schema: -; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"CREATE SCHEMA auth;\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: users; Type: TABLE; Schema: auth; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"CREATE TABLE auth.users (\n",
+        b"    id uuid\n",
+        b");\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: users; Type: TABLE DATA; Schema: auth; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY auth.users (id) FROM stdin;\n",
+        b"00000000-0000-0000-0000-000000000001\n",
+        b"\\.\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: courses; Type: TABLE; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"CREATE TABLE public.courses (\n",
+        b"    id uuid\n",
+        b");\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: courses; Type: TABLE DATA; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY public.courses (id) FROM stdin;\n",
+        b"00000000-0000-0000-0000-000000000002\n",
+        b"\\.\n",
+    ]
+
+    filtered = b"".join(mod._iter_filtered_dump_lines(dump_lines))
+
+    assert b"SET row_security = off;" in filtered
+    assert b"CREATE SCHEMA auth;" not in filtered
+    assert b"CREATE TABLE auth.users" not in filtered
+    assert b"COPY auth.users" not in filtered
+    assert b"00000000-0000-0000-0000-000000000001" not in filtered
+    assert b"CREATE TABLE public.courses" in filtered
+    assert b"COPY public.courses" in filtered
+    assert b"00000000-0000-0000-0000-000000000002" in filtered
+
+
+def test_filter_dump_lines_skips_managed_copy_payload_and_terminator() -> None:
+    dump_lines = [
+        b"--\n",
+        b"-- Name: migrations; Type: TABLE DATA; Schema: storage; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY storage.migrations (id) FROM stdin;\n",
+        b"1\n",
+        b"2\n",
+        b"\\.\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: units; Type: TABLE DATA; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY public.units (id) FROM stdin;\n",
+        b"3\n",
+        b"\\.\n",
+    ]
+
+    filtered = b"".join(mod._iter_filtered_dump_lines(dump_lines))
+
+    assert b"COPY storage.migrations" not in filtered
+    assert b"\n1\n" not in filtered
+    assert b"\n2\n" not in filtered
+    assert filtered.count(b"\\.\n") == 1
+    assert b"COPY public.units" in filtered
+    assert b"\n3\n" in filtered
 
 
 def test_is_graphql_public_grant_line() -> None:
@@ -221,6 +307,13 @@ def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPa
         ensured["buckets"] = list(buckets)
 
     monkeypatch.setattr(mod, "_ensure_buckets", fake_ensure_buckets)
+    allowlist_sync: dict[str, object] = {}
+
+    def fake_sync_bucket_allowlists(_dsn: str, buckets) -> None:
+        allowlist_sync["dsn"] = _dsn
+        allowlist_sync["buckets"] = list(buckets)
+
+    monkeypatch.setattr(mod, "_sync_bucket_allowlists", fake_sync_bucket_allowlists)
 
     class FakeResponse:
         def __init__(self, status_code: int = 200, text: str = "") -> None:
@@ -252,6 +345,10 @@ def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPa
     assert result["skipped"] == 0
     assert result["skipped_files"] == 1
     assert ensured["buckets"] == ["section_materials", "submissions"]
+    assert allowlist_sync == {
+        "dsn": "postgresql://u:p@127.0.0.1:54322/postgres",
+        "buckets": ["section_materials", "submissions"],
+    }
 
     urls = {c["url"] for c in fake_session.calls}
     assert "http://127.0.0.1:54321/storage/v1/object/section_materials/a%20b.txt" in urls
@@ -262,6 +359,31 @@ def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPa
         assert headers["apikey"] == "srk"
         assert headers["Authorization"] == "Bearer srk"
         assert headers["x-upsert"] == "true"
+
+
+def test_sync_bucket_allowlists_adds_makecode_hex_for_submissions(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    class FakeCompleted:
+        def __init__(self) -> None:
+            self.stdout = ""
+
+    def fake_run(cmd: list[str], **_kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return FakeCompleted()
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    mod._sync_bucket_allowlists(
+        "postgresql://u:p@127.0.0.1:54322/postgres",
+        ["materials", "submissions"],
+    )
+
+    assert len(calls) == 1
+    sql = (calls[0][-1] or "").lower()
+    assert "update storage.buckets" in sql
+    assert "where id = 'submissions'" in sql
+    assert "application/x.makecode.hex" in sql
 
 
 def test_guess_content_type_prefers_key_extension(tmp_path: Path) -> None:

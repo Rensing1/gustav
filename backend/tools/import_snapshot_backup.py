@@ -6,10 +6,10 @@ Restore a snapshot produced by the backup cron (`supabase_db.sql.gz` +
 `storage_buckets.tar.gz`, optional `keycloak_db.sql.gz`) into a *local*
 development instance after tests wiped the DB.
 
-This tool restores a full Postgres dump that recreates Supabase-managed schemas
-(`auth`, `storage`, `pgbouncer`, ...). For that reason the DSN user must be able
-to drop and recreate those schemas. In Supabase local that typically means using
-the `supabase_admin` role (superuser).
+This tool imports snapshot data into a local Supabase stack while keeping
+Supabase-managed schemas (`auth`, `storage`, `pgbouncer`, ...) under local
+runtime control. The importer restores only app-relevant schemas from the dump
+and replays storage objects through the local Storage API.
 
 Security & Safety
 -----------------
@@ -26,6 +26,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,33 @@ LOCAL_DSN_HOSTS = {
     "127.0.0.1",
     "::1",
     "host.docker.internal",
+}
+
+# Keep local Supabase service-managed schemas intact. The local runtime owns the
+# technical bootstrap of `auth`, `storage`, `realtime`, etc. Snapshot imports
+# should only replace app-relevant schemas.
+RESTORE_TARGET_SCHEMAS = {
+    "public",
+    "legacy_raw",
+}
+
+_PG_DUMP_OBJECT_HEADER_RE = re.compile(
+    rb"^-- Name: (?P<name>.*); Type: (?P<type>.*); Schema: (?P<schema>.*); Owner: (?P<owner>.*)$"
+)
+
+LOCAL_BUCKET_ALLOWED_MIME_TYPES: dict[str, tuple[str, ...]] = {
+    "materials": (
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+    ),
+    "submissions": (
+        "application/pdf",
+        "application/x.makecode.hex",
+        "application/x.scratch.sb3",
+        "image/jpeg",
+        "image/png",
+    ),
 }
 
 
@@ -312,70 +340,27 @@ def _psql_check(dsn: str) -> None:
     )
 
 
-def _drop_non_plpgsql_extensions(dsn: str) -> None:
-    # You cannot drop a schema that is required by an extension (e.g. `net` for
-    # `pg_net`). Therefore we drop extensions first, then schemas.
-    sql = """
-do $$
-declare
-  e record;
-begin
-  for e in (
-    select extname
-    from pg_extension
-    where extname <> 'plpgsql'
-  ) loop
-    execute format('drop extension if exists %I cascade', e.extname);
-  end loop;
-end $$;
-"""
-    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
-
-
-def _drop_publications(dsn: str) -> None:
-    # Full snapshots may re-create publication `supabase_realtime` (or other logical
-    # replication publications). Those must not exist before replaying the SQL dump.
-    sql = """
-do $$
-declare
-  p record;
-begin
-  for p in (
-    select pubname
-    from pg_publication
-  ) loop
-    execute format('drop publication if exists %I cascade', p.pubname);
-  end loop;
-end $$;
-"""
-    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
-
-
 def _reset_db_for_restore(dsn: str) -> None:
-    _drop_non_plpgsql_extensions(dsn)
-    _drop_publications(dsn)
-    _drop_all_non_system_schemas(dsn)
-    # `pg_dump` typically assumes `public` exists and therefore might not emit
-    # a `CREATE SCHEMA public;`. Ensure it is present for the restore.
+    _drop_restore_target_schemas(dsn)
+    # The filtered dump replays app objects only. `public` may be omitted as a
+    # schema object in pg_dump output, so recreate it explicitly before replay.
     subprocess.run(
         ["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", "create schema if not exists public;"],
         check=True,
     )
 
 
-def _drop_all_non_system_schemas(dsn: str) -> None:
-    sql = """
-	do $$
-	declare
+def _drop_restore_target_schemas(dsn: str) -> None:
+    schema_literals = ", ".join(f"'{schema}'" for schema in sorted(RESTORE_TARGET_SCHEMAS))
+    sql = f"""
+do $$
+declare
   r record;
 begin
   for r in (
     select nspname
     from pg_namespace
-    where nspname not in ('pg_catalog', 'information_schema')
-      and nspname not like 'pg_toast%'
-      and nspname not like 'pg_temp_%'
-      and nspname not like 'pg_toast_temp_%'
+    where nspname in ({schema_literals})
   ) loop
     execute format('drop schema if exists %I cascade', r.nspname);
   end loop;
@@ -384,15 +369,68 @@ end $$;
     subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
 
 
+def _decode_dump_header_value(raw: bytes) -> str:
+    return raw.decode("utf-8", errors="replace").strip()
+
+
+def _should_keep_dump_object(header_line: bytes) -> bool:
+    match = _PG_DUMP_OBJECT_HEADER_RE.match(header_line.rstrip(b"\n"))
+    if match is None:
+        return True
+
+    object_type = _decode_dump_header_value(match.group("type"))
+    schema = _decode_dump_header_value(match.group("schema"))
+    name = _decode_dump_header_value(match.group("name"))
+
+    if schema in RESTORE_TARGET_SCHEMAS:
+        return True
+    if object_type == "SCHEMA" and name in RESTORE_TARGET_SCHEMAS:
+        return True
+    if schema == "-" and name.startswith("SCHEMA "):
+        return name.removeprefix("SCHEMA ").strip() in RESTORE_TARGET_SCHEMAS
+    return False
+
+
+def _iter_filtered_dump_lines(lines: Iterable[bytes]) -> Iterator[bytes]:
+    current_block: list[bytes] = []
+    keep_current_block = True
+    in_object_block = False
+
+    def flush_current_block() -> Iterator[bytes]:
+        nonlocal current_block
+        if keep_current_block:
+            yield from current_block
+        current_block = []
+
+    for line in lines:
+        if _PG_DUMP_OBJECT_HEADER_RE.match(line.rstrip(b"\n")):
+            if in_object_block:
+                yield from flush_current_block()
+            keep_current_block = _should_keep_dump_object(line)
+            current_block = [line]
+            in_object_block = True
+            continue
+
+        if in_object_block:
+            current_block.append(line)
+            continue
+
+        yield line
+
+    if in_object_block:
+        yield from flush_current_block()
+
+
 def _restore_db_sql_gz(db_sql_gz: Path, dsn: str) -> None:
     start = time.monotonic()
     LOG.info("Restoring DB from %s ...", db_sql_gz)
+    LOG.info("Filtering snapshot DB restore to app schemas: %s", ", ".join(sorted(RESTORE_TARGET_SCHEMAS)))
 
     proc = subprocess.Popen(["psql", dsn, "-v", "ON_ERROR_STOP=1"], stdin=subprocess.PIPE)
     assert proc.stdin is not None
     try:
         with gzip.open(db_sql_gz, "rb") as f:
-            for raw_line in f:
+            for raw_line in _iter_filtered_dump_lines(f):
                 if _is_graphql_public_grant_line(raw_line):
                     continue
                 if _is_unsupported_pg_setting_line(raw_line):
@@ -808,6 +846,53 @@ def _ensure_buckets(base_url: str, key: str, buckets: Iterable[str]) -> None:
     ensure_buckets(base_url, key, buckets)
 
 
+def _sql_text_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _sync_bucket_allowlists(dsn: str, buckets: Iterable[str]) -> None:
+    target_buckets = sorted({bucket for bucket in buckets if bucket in LOCAL_BUCKET_ALLOWED_MIME_TYPES})
+    if not target_buckets:
+        return
+
+    updates_sql = []
+    for bucket in target_buckets:
+        mime_literals = ", ".join(_sql_text_literal(mime) for mime in LOCAL_BUCKET_ALLOWED_MIME_TYPES[bucket])
+        updates_sql.append(
+            f"""
+    update storage.buckets
+       set allowed_mime_types = (
+         select array_agg(distinct mime order by mime)
+         from unnest(
+           coalesce(allowed_mime_types, array[]::text[]) ||
+           array[{mime_literals}]::text[]
+         ) as mime
+       )
+     where id = {_sql_text_literal(bucket)};
+"""
+        )
+
+    sql = """
+do $$
+begin
+  if exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'storage'
+       and table_name = 'buckets'
+       and column_name = 'allowed_mime_types'
+  ) then
+""" + "".join(updates_sql) + """
+  end if;
+end$$;
+"""
+    subprocess.run(
+        ["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql],
+        check=True,
+    )
+    LOG.info("Synced local storage bucket MIME allowlists for: %s", ", ".join(target_buckets))
+
+
 def _upload_storage_objects(
     *,
     base_url: str,
@@ -832,6 +917,7 @@ def _upload_storage_objects(
         LOG.warning("Skipping %s files that don't match bucket layout (see report).", len(skipped_files))
     if not dry_run:
         _ensure_buckets(base_url, service_role_key, buckets)
+        _sync_bucket_allowlists(dsn, buckets)
 
     uploaded = 0
     failed = 0

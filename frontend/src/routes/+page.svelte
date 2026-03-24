@@ -1,32 +1,10 @@
-<script lang="ts">
-  import type { PageData } from "./$types";
-
-  let { data }: { data: PageData } = $props();
-</script>
-
 <section class="hero">
   <p class="kicker">Milestone M0</p>
-  <h2>SvelteKit trägt jetzt das Plattformfundament für GUSTAV.</h2>
+  <h2>SvelteKit übernimmt jetzt den Einstieg in GUSTAV.</h2>
   <p>
-    Diese Seite ist die erste produktive App-Shell. Die Fachräume folgen in den
-    nächsten Schritten über dedizierte Read-Models und objektorientierte
-    Mutations-APIs.
+    Diese Seite dient nur noch als Fallback, falls der serverseitige Redirect
+    auf den passenden Raum nicht greift.
   </p>
-
-  <dl>
-    <div>
-      <dt>Startziel</dt>
-      <dd>{data.bootstrap?.start_target ?? "offen"}</dd>
-    </div>
-    <div>
-      <dt>Aktueller Nutzer</dt>
-      <dd>{data.bootstrap?.user?.name ?? "nicht vorhanden"}</dd>
-    </div>
-    <div>
-      <dt>Rolle</dt>
-      <dd>{data.bootstrap?.user?.role ?? "guest"}</dd>
-    </div>
-  </dl>
 </section>
 
 <style>
@@ -58,26 +36,4 @@
     line-height: 1.7;
   }
 
-  dl {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    gap: 0.9rem;
-    margin: 1.5rem 0 0;
-  }
-
-  dl div {
-    border-radius: 1rem;
-    background: #faf4ed;
-    padding: 0.9rem 1rem;
-  }
-
-  dt {
-    font-size: 0.9rem;
-    color: #9893a5;
-  }
-
-  dd {
-    margin: 0.35rem 0 0;
-    font-weight: 600;
-  }
 </style>

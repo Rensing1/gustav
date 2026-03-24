@@ -1,12 +1,12 @@
 services:
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: ./reverse-proxy
     container_name: gustav-caddy
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

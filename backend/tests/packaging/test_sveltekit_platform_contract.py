@@ -70,14 +70,18 @@ def test_frontend_contains_sveltekit_basics() -> None:
 def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     compose_path = REPO_ROOT / "docker-compose.yml"
     caddyfile_path = REPO_ROOT / "reverse-proxy" / "Caddyfile"
+    caddy_dockerfile_path = REPO_ROOT / "reverse-proxy" / "Dockerfile"
 
     compose_src = compose_path.read_text(encoding="utf-8")
     caddy_src = caddyfile_path.read_text(encoding="utf-8")
+    caddy_dockerfile_src = caddy_dockerfile_path.read_text(encoding="utf-8")
 
     assert "\n  frontend:\n" in compose_src
     assert "build:\n      context: ./frontend" in compose_src
     assert "container_name: gustav-frontend" in compose_src
     assert "- frontend" in compose_src, "Caddy should depend on the frontend service"
+    assert "\n  caddy:\n" in compose_src
+    assert "build:\n      context: ./reverse-proxy" in compose_src
     assert "KC_BASE_URL=http://keycloak:8080" in compose_src
     assert "KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}" in compose_src
     assert "KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}" in compose_src
@@ -88,3 +92,5 @@ def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     assert "handle @api_path" in caddy_src
     assert "reverse_proxy gustav-alpha2:8000" in caddy_src
     assert "reverse_proxy gustav-frontend:3000" in caddy_src
+    assert "FROM caddy:2-alpine" in caddy_dockerfile_src
+    assert "COPY Caddyfile /etc/caddy/Caddyfile" in caddy_dockerfile_src

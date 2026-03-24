@@ -1,19 +1,23 @@
 import type { PageServerLoad } from "./$types";
 
-import { readJsonOrNull } from "$lib/server/api";
+import { requireBackendJson } from "$lib/server/api";
+import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
 
 type LiveCourseListItem = {
   id: string;
   title: string;
 };
 
-export const load: PageServerLoad = async ({ fetch, cookies }) => {
-  const courses =
-    (await readJsonOrNull(fetch, cookies, "/api/teaching/courses?limit=25&offset=0")) as
-      | LiveCourseListItem[]
-      | null;
+export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
+  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "live");
+
+  const courses = await requireBackendJson<LiveCourseListItem[]>(
+    fetch,
+    cookies,
+    "/api/teaching/courses?limit=25&offset=0"
+  );
 
   return {
-    courses: courses ?? []
+    courses
   };
 };

@@ -1,6 +1,7 @@
 import type { PageServerLoad } from "./$types";
 
-import { readJsonOrNull } from "$lib/server/api";
+import { requireBackendJson } from "$lib/server/api";
+import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
 
 type TeachingUnitListItem = {
   id: string;
@@ -9,12 +10,16 @@ type TeachingUnitListItem = {
   unit_type?: string | null;
 };
 
-export const load: PageServerLoad = async ({ fetch, cookies }) => {
-  const units = (await readJsonOrNull(fetch, cookies, "/api/teaching/units?limit=25&offset=0")) as
-    | TeachingUnitListItem[]
-    | null;
+export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
+  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "teaching");
+
+  const units = await requireBackendJson<TeachingUnitListItem[]>(
+    fetch,
+    cookies,
+    "/api/teaching/units?limit=25&offset=0"
+  );
 
   return {
-    units: units ?? []
+    units
   };
 };

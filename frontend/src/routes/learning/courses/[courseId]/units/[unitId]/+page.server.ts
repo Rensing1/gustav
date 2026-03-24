@@ -4,6 +4,7 @@ import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
+import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
 import type {
   LearningCourseUnit,
   LearningCoursePageData,
@@ -14,7 +15,6 @@ import type {
   LearningUnitGraph,
   LearningUnitPageData
 } from "$lib/types/learning";
-import type { SessionBootstrap } from "$lib/types/session-bootstrap";
 
 function historyHref(url: URL, taskId: string, moduleId: string | null): string {
   const next = new URL(url);
@@ -60,7 +60,7 @@ async function loadPageData(
   url: URL
 ): Promise<LearningUnitPageData> {
   const [bootstrap, units] = await Promise.all([
-    requireBackendJson<SessionBootstrap>(fetchFn, cookies, "/api/app/session-bootstrap"),
+    requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning"),
     requireBackendJson<LearningCourseUnit[]>(
       fetchFn,
       cookies,

@@ -1,10 +1,13 @@
 import type { PageServerLoad } from "./$types";
 
-import { readTypedJsonOrNull } from "$lib/server/api";
+import { requireBackendJson } from "$lib/server/api";
+import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
 import type { DiagnosticsCourseMatrixView } from "$lib/types/home";
 
-export const load: PageServerLoad = async ({ fetch, cookies, params }) => {
-  const matrix = await readTypedJsonOrNull<DiagnosticsCourseMatrixView>(
+export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
+  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "diagnostics");
+
+  const matrix = await requireBackendJson<DiagnosticsCourseMatrixView>(
     fetch,
     cookies,
     `/api/diagnostics/views/courses/${params.courseId}/matrix`

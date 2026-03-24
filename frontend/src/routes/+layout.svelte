@@ -1,159 +1,132 @@
 <script lang="ts">
+  import { page } from "$app/state";
+  import "@fontsource/nunito/400.css";
+  import "@fontsource/nunito/600.css";
+  import "@fontsource/nunito/700.css";
+  import "$lib/styles/app.css";
   import type { Snippet } from "svelte";
   import type { LayoutData } from "./$types";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
+
+  const navItems = [
+    {
+      href: "/learning",
+      label: "Lernraum",
+      requiredSpace: "learning"
+    },
+    {
+      href: "/teaching",
+      label: "Lehrenden-Welt",
+      requiredSpace: "teaching"
+    },
+    {
+      href: "/diagnostics",
+      label: "Diagnostik",
+      requiredSpace: "diagnostics"
+    },
+    {
+      href: "/live",
+      label: "Live",
+      requiredSpace: "live"
+    }
+  ];
+
+  function isActive(href: string): boolean {
+    const pathname = page.url.pathname;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  function currentLabel(): string {
+    if (page.url.pathname === "/") {
+      return "Start";
+    }
+
+    return navItems.find((item) => isActive(item.href))?.label ?? "GUSTAV";
+  }
+
+  function currentCopy(): string {
+    if (page.url.pathname === "/") {
+      return "Die neue Oberfläche führt jede Rolle direkt in den passenden Arbeitsraum.";
+    }
+
+    if (isActive("/learning")) {
+      return "Ruhige Arbeitsflächen für Inhalte, Aufgaben und Rückmeldungen.";
+    }
+
+    if (isActive("/teaching")) {
+      return "Operative Sicht auf Kurse, Einheiten und nächste Schritte.";
+    }
+
+    if (isActive("/diagnostics")) {
+      return "Scanbare Analytik mit klaren Drilldowns in Kurs- und Lernendenansichten.";
+    }
+
+    if (isActive("/live")) {
+      return "Schnelle Orientierung für Unterrichtsmomente mit hohem Takt.";
+    }
+
+    return "Ein Produkt, klare Räume, wenig visuelle Ablenkung.";
+  }
 </script>
 
 <svelte:head>
   <title>GUSTAV</title>
+  <meta name="theme-color" content={data.theme === "dark" ? "#272E33" : "#FAF4ED"} />
 </svelte:head>
 
-<div class="app-shell">
-  <aside class="rail">
-    <div class="brand">
-      <span class="brand-mark">G</span>
-      <div>
+<div class="app-shell" data-theme={data.theme}>
+  <header class="app-topbar">
+    <div class="app-topbar-inner">
+      <a class="brand-mark" href="/" aria-label="Startseite">G</a>
+
+      <div class="brand-copy">
         <strong>GUSTAV</strong>
-        <p>Browser-BFF</p>
+      </div>
+
+      <nav class="space-nav" aria-label="Hauptnavigation">
+        {#each navItems as item}
+          {#if data.bootstrap?.spaces?.includes(item.requiredSpace)}
+            <a
+              href={item.href}
+              aria-current={isActive(item.href) ? "page" : undefined}
+              aria-label={item.label}
+            >
+              <span class="nav-label">{item.label}</span>
+            </a>
+          {/if}
+        {/each}
+      </nav>
+
+      {#if data.bootstrap}
+        <div class="topbar-actions">
+          <div class="identity-card">
+            <strong>{data.bootstrap.user.name}</strong>
+            <p class="identity-meta">{data.bootstrap.user.role}</p>
+          </div>
+
+          <a class="ghost-link" href="/auth/logout">Abmelden</a>
+        </div>
+      {/if}
+    </div>
+  </header>
+
+  <main class="workspace-shell">
+    <div class="workspace-inner">
+      <header class="workspace-header">
+        <div class="workspace-topbar">
+          <nav class="workspace-breadcrumbs" aria-label="Breadcrumb" hidden></nav>
+        </div>
+
+        <div class="workspace-heading">
+          <h1>{currentLabel()}</h1>
+          <p class="workspace-copy">{currentCopy()}</p>
+        </div>
+      </header>
+
+      <div class="workspace-body">
+        {@render children()}
       </div>
     </div>
-
-    <nav aria-label="Hauptnavigation">
-      <a href="/">Start</a>
-      <a href="/learning">Lernraum</a>
-      <a href="/teaching">Lehrenden-Welt</a>
-      <a href="/diagnostics">Diagnostik</a>
-      <a href="/live">Live</a>
-    </nav>
-  </aside>
-
-  <main class="content">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Neue Web-Plattform</p>
-        <h1>{data.bootstrap?.start_target ?? "session-bootstrap"}</h1>
-      </div>
-
-      <div class="user-card">
-        <span>{data.bootstrap?.user?.name ?? "Nicht angemeldet"}</span>
-        <small>{data.bootstrap?.user?.role ?? "guest"}</small>
-      </div>
-    </header>
-
-    {@render children()}
   </main>
 </div>
-
-<style>
-  :global(body) {
-    margin: 0;
-    font-family: "Lexend", "Segoe UI", sans-serif;
-    background:
-      radial-gradient(circle at top left, rgba(40, 105, 131, 0.12), transparent 28rem),
-      linear-gradient(180deg, #faf4ed 0%, #fffaf3 100%);
-    color: #575279;
-  }
-
-  .app-shell {
-    min-height: 100vh;
-    display: grid;
-    grid-template-columns: minmax(15rem, 18rem) 1fr;
-  }
-
-  .rail {
-    border-right: 1px solid #f2e9e1;
-    background: rgba(255, 250, 243, 0.88);
-    backdrop-filter: blur(1rem);
-    padding: 1.5rem;
-  }
-
-  .brand {
-    display: flex;
-    gap: 0.9rem;
-    align-items: center;
-    margin-bottom: 2rem;
-  }
-
-  .brand p,
-  .eyebrow,
-  .user-card small {
-    margin: 0;
-    color: #9893a5;
-  }
-
-  .brand-mark {
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: 0.9rem;
-    display: grid;
-    place-items: center;
-    background: #286983;
-    color: #fffaf3;
-    font-weight: 700;
-  }
-
-  nav {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  nav a {
-    color: inherit;
-    text-decoration: none;
-    border-radius: 0.9rem;
-    padding: 0.75rem 0.9rem;
-  }
-
-  nav a:hover,
-  nav a:focus-visible {
-    background: rgba(40, 105, 131, 0.08);
-    outline: none;
-  }
-
-  .content {
-    padding: 1.5rem;
-  }
-
-  .topbar {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: start;
-    margin-bottom: 1.5rem;
-  }
-
-  .topbar h1 {
-    margin: 0.25rem 0 0;
-    font-size: clamp(1.9rem, 3vw, 2.8rem);
-    line-height: 1.1;
-  }
-
-  .user-card {
-    background: rgba(255, 250, 243, 0.92);
-    border: 1px solid #f2e9e1;
-    border-radius: 1rem;
-    padding: 0.85rem 1rem;
-    display: grid;
-    gap: 0.15rem;
-  }
-
-  @media (max-width: 900px) {
-    .app-shell {
-      grid-template-columns: 1fr;
-    }
-
-    .rail {
-      border-right: 0;
-      border-bottom: 1px solid #f2e9e1;
-    }
-
-    nav {
-      grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-    }
-
-    .topbar {
-      flex-direction: column;
-    }
-  }
-</style>

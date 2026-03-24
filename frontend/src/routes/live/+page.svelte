@@ -8,72 +8,29 @@
   <title>Live | GUSTAV</title>
 </svelte:head>
 
-<section class="panel">
-  <p class="kicker">Live</p>
-  <h2>Kurs fuer Live-Ansicht waehlen</h2>
-  <p class="lead">
-    Der alte FastAPI-Live-Picker ist retirtiert. Die Einstiegsauswahl liegt jetzt
-    im SvelteKit-Frontend; die tiefere Live-Matrix bleibt vorerst noch im
-    Backend-Adapter.
-  </p>
+<div class="workspace-page">
+  <section class="workspace-panel workspace-panel--plain workspace-section workspace-intro">
+    <p class="workspace-kicker">Live</p>
+    <h2>Kurs für die aktuelle Unterrichtssituation wählen.</h2>
+    <p class="workspace-lead">
+      Der Live-Raum bleibt schnell erfassbar und startet ohne zusätzliche
+      Dashboard-Ebene direkt bei den relevanten Kursen.
+    </p>
+  </section>
 
-  {#if data.courses.length}
-    <div class="course-list">
-      {#each data.courses as course}
-        <a class="course-card" href={`/live/courses/${course.id}`}>
-          <strong>{course.title}</strong>
-          <span>Live-Einstieg oeffnen</span>
-        </a>
-      {/each}
-    </div>
-  {:else}
-    <p class="empty">Noch keine Kurse fuer den Live-Raum verfuegbar.</p>
-  {/if}
-</section>
-
-<style>
-  .panel {
-    max-width: 72rem;
-    background: rgba(255, 250, 243, 0.92);
-    border: 1px solid #f2e9e1;
-    border-radius: 1.5rem;
-    padding: clamp(1.25rem, 3vw, 2rem);
-    box-shadow: 0 1.5rem 3rem rgba(87, 82, 121, 0.08);
-  }
-
-  .kicker {
-    margin: 0 0 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #286983;
-    font-size: 0.85rem;
-  }
-
-  .lead,
-  .empty {
-    color: #5f5a79;
-  }
-
-  .course-list {
-    display: grid;
-    gap: 1rem;
-    margin-top: 1.5rem;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  }
-
-  .course-card {
-    display: grid;
-    gap: 0.4rem;
-    padding: 1rem 1.1rem;
-    border-radius: 1.1rem;
-    text-decoration: none;
-    color: inherit;
-    background: linear-gradient(160deg, #faf4ed 0%, #fef6eb 100%);
-    border: 1px solid #f2e9e1;
-  }
-
-  .course-card span {
-    color: #286983;
-    font-size: 0.92rem;
-  }
-</style>
+  <section class="workspace-panel workspace-section">
+    {#if data.courses.length}
+      <div class="workspace-list">
+        {#each data.courses as course}
+          <a href={`/live/courses/${course.id}`}>
+            <strong>{course.title}</strong>
+            <p class="workspace-note">Direkter Einstieg in die operative Kursübersicht.</p>
+            <span class="workspace-action">Live öffnen</span>
+          </a>
+        {/each}
+      </div>
+    {:else}
+      <p class="workspace-empty">Noch keine Kurse für den Live-Raum verfügbar.</p>
+    {/if}
+  </section>
+</div>

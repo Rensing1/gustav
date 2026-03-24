@@ -9,8 +9,11 @@ export const load: LayoutServerLoad = async ({ fetch, cookies }) => {
     cookies,
     "/api/app/session-bootstrap"
   );
+  const themeCookie = cookies.get("gustav_theme");
+  const theme = themeCookie === "dark" ? "dark" : "light";
 
   return {
-    bootstrap
+    bootstrap,
+    theme
   };
 };

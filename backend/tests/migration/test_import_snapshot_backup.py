@@ -195,6 +195,33 @@ def test_filter_dump_lines_skips_managed_copy_payload_and_terminator() -> None:
     assert b"\n3\n" in filtered
 
 
+def test_filter_dump_lines_keeps_real_pg_dump_data_headers_for_public_tables() -> None:
+    dump_lines = [
+        b"--\n",
+        b"-- Data for Name: users; Type: TABLE DATA; Schema: auth; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY auth.users (id) FROM stdin;\n",
+        b"1\n",
+        b"\\.\n",
+        b"\n",
+        b"--\n",
+        b"-- Data for Name: courses; Type: TABLE DATA; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY public.courses (id) FROM stdin;\n",
+        b"2\n",
+        b"\\.\n",
+    ]
+
+    filtered = b"".join(mod._iter_filtered_dump_lines(dump_lines))
+
+    assert b"COPY auth.users" not in filtered
+    assert b"\n1\n" not in filtered
+    assert b"COPY public.courses" in filtered
+    assert b"\n2\n" in filtered
+
+
 def test_is_graphql_public_grant_line() -> None:
     assert mod._is_graphql_public_grant_line(
         b'GRANT ALL ON FUNCTION graphql_public.graphql("operationName" text, query text, variables jsonb, extensions jsonb) TO anon;'

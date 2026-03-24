@@ -65,6 +65,8 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
         'aria-label="Hauptnavigation"',
         'aria-label="Breadcrumb"',
         "data.theme",
+        "page.data.breadcrumbs",
+        "page.data.pageTitle",
     ):
         assert needle in src, f"Expected Alpha-3 shell primitive {needle!r} in {layout_path}"
 
@@ -95,6 +97,23 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
         REPO_ROOT / "frontend" / "src" / "routes" / "diagnostics" / "+page.svelte",
         REPO_ROOT / "frontend" / "src" / "routes" / "live" / "+page.svelte",
         REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "courses" / "+page.svelte",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "teaching"
+        / "courses"
+        / "[courseId]"
+        / "+page.svelte",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "teaching"
+        / "courses"
+        / "[courseId]"
+        / "members"
+        / "+page.svelte",
     ]
 
     for path in page_paths:
@@ -107,3 +126,30 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
     ).read_text(encoding="utf-8")
     assert "workspace-list" in teaching_page_src
     assert "workspace-section--hero" not in teaching_page_src
+
+
+def test_teaching_course_routes_define_breadcrumb_data() -> None:
+    page_server_paths = [
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "teaching"
+        / "courses"
+        / "[courseId]"
+        / "+page.server.ts",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "teaching"
+        / "courses"
+        / "[courseId]"
+        / "members"
+        / "+page.server.ts",
+    ]
+
+    for path in page_server_paths:
+        src = path.read_text(encoding="utf-8")
+        assert "breadcrumbs" in src, f"Expected breadcrumb data contract in {path}"
+        assert "pageTitle" in src, f"Expected explicit page title in {path}"

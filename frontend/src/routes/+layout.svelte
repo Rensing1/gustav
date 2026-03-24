@@ -5,6 +5,7 @@
   import "@fontsource/nunito/700.css";
   import "$lib/styles/app.css";
   import type { Snippet } from "svelte";
+  import type { BreadcrumbItem } from "$lib/types/navigation";
   import type { LayoutData } from "./$types";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -68,6 +69,23 @@
 
     return "Ein Produkt, klare Räume, wenig visuelle Ablenkung.";
   }
+
+  function currentBreadcrumbs(): BreadcrumbItem[] {
+    const breadcrumbs = page.data.breadcrumbs;
+    return Array.isArray(breadcrumbs) ? (breadcrumbs as BreadcrumbItem[]) : [];
+  }
+
+  function pageTitle(): string {
+    return typeof page.data.pageTitle === "string" && page.data.pageTitle.length > 0
+      ? page.data.pageTitle
+      : currentLabel();
+  }
+
+  function pageCopy(): string {
+    return typeof page.data.pageCopy === "string" && page.data.pageCopy.length > 0
+      ? page.data.pageCopy
+      : currentCopy();
+  }
 </script>
 
 <svelte:head>
@@ -115,12 +133,26 @@
     <div class="workspace-inner">
       <header class="workspace-header">
         <div class="workspace-topbar">
-          <nav class="workspace-breadcrumbs" aria-label="Breadcrumb" hidden></nav>
+          {#if currentBreadcrumbs().length}
+            <nav class="workspace-breadcrumbs" aria-label="Breadcrumb">
+              {#each currentBreadcrumbs() as item, index}
+                {#if index > 0}
+                  <span class="breadcrumb-separator" aria-hidden="true">/</span>
+                {/if}
+
+                {#if item.href}
+                  <a href={item.href}>{item.label}</a>
+                {:else}
+                  <span class="breadcrumb-current">{item.label}</span>
+                {/if}
+              {/each}
+            </nav>
+          {/if}
         </div>
 
         <div class="workspace-heading">
-          <h1>{currentLabel()}</h1>
-          <p class="workspace-copy">{currentCopy()}</p>
+          <h1>{pageTitle()}</h1>
+          <p class="workspace-copy">{pageCopy()}</p>
         </div>
       </header>
 

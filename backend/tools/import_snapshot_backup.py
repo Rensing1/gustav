@@ -68,7 +68,7 @@ RESTORE_TARGET_SCHEMAS = {
 }
 
 _PG_DUMP_OBJECT_HEADER_RE = re.compile(
-    rb"^-- Name: (?P<name>.*); Type: (?P<type>.*); Schema: (?P<schema>.*); Owner: (?P<owner>.*)$"
+    rb"^-- (?:Data for )?Name: (?P<name>.*); Type: (?P<type>.*); Schema: (?P<schema>.*); Owner: (?P<owner>.*)$"
 )
 
 LOCAL_BUCKET_ALLOWED_MIME_TYPES: dict[str, tuple[str, ...]] = {

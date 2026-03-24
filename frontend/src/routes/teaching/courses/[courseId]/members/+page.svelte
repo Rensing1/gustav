@@ -8,72 +8,28 @@
   <title>Mitglieder | GUSTAV</title>
 </svelte:head>
 
-<section class="panel">
-  <p class="kicker">Teaching</p>
-  <h2>Mitglieder in {data.home?.course?.title ?? "diesem Kurs"}</h2>
-  <p class="lead">
-    Die Kursmitgliedschaft ist jetzt als SvelteKit-Seite erreichbar und nicht
-    mehr nur ueber die alte FastAPI-SSR-Strecke.
-  </p>
+<div class="workspace-page">
+  <section class="workspace-panel workspace-panel--plain workspace-section workspace-intro">
+    <p class="workspace-kicker">{data.home?.course?.title ?? "Kurs"}</p>
+    <p class="workspace-lead">
+      Die Kursmitgliedschaft ist als eigene SvelteKit-Detailfläche erreichbar und bleibt nah am Kurskontext.
+    </p>
+  </section>
 
-  <article class="card">
+  <section class="workspace-panel workspace-section">
+    <p class="workspace-label">Mitgliederliste</p>
     {#if data.home?.members?.length}
-      <ul class="member-list">
+      <div class="workspace-list">
         {#each data.home.members as member}
-          <li>
+          <a href={member.href}>
             <strong>{member.name}</strong>
-            <span>{member.sub}</span>
-          </li>
+            <p class="workspace-note">Diagnostik und Lernendenprofil bleiben direkt erreichbar.</p>
+            <span class="workspace-meta">{member.sub}</span>
+          </a>
         {/each}
-      </ul>
+      </div>
     {:else}
-      <p class="empty">Noch keine Mitglieder sichtbar.</p>
+      <p class="workspace-empty">Noch keine Mitglieder sichtbar.</p>
     {/if}
-  </article>
-</section>
-
-<style>
-  .panel {
-    max-width: 64rem;
-    background: rgba(255, 250, 243, 0.92);
-    border: 1px solid #f2e9e1;
-    border-radius: 1.5rem;
-    padding: clamp(1.25rem, 3vw, 2rem);
-    box-shadow: 0 1.5rem 3rem rgba(87, 82, 121, 0.08);
-  }
-
-  .kicker {
-    margin: 0 0 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #286983;
-    font-size: 0.85rem;
-  }
-
-  .lead,
-  .empty,
-  .member-list span {
-    color: #5f5a79;
-  }
-
-  .card {
-    margin-top: 1.5rem;
-    padding: 1rem;
-    border-radius: 1.1rem;
-    background: linear-gradient(160deg, #faf4ed 0%, #fef6eb 100%);
-    border: 1px solid #f2e9e1;
-  }
-
-  .member-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .member-list li {
-    display: grid;
-    gap: 0.15rem;
-  }
-</style>
+  </section>
+</div>

@@ -116,21 +116,6 @@ select {
   display: block;
 }
 
-.brand-mark {
-  width: 2.1rem;
-  height: 2.1rem;
-  border-radius: var(--radius-s);
-  display: grid;
-  place-items: center;
-  background: var(--color-accent);
-  color: #fffaf4;
-  text-decoration: none;
-  font-size: 0.88rem;
-  font-weight: 800;
-  letter-spacing: 0;
-  flex: 0 0 auto;
-}
-
 .app-topbar {
   position: sticky;
   top: 0;
@@ -143,12 +128,29 @@ select {
 .app-topbar-inner {
   width: min(100%, 80rem);
   margin: 0 auto;
-  min-height: 4.5rem;
+  min-height: 4.9rem;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-5);
   padding: 0 var(--space-5);
+}
+
+.brand-lockup {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.brand-logo {
+  width: 2.8rem;
+  height: 2.8rem;
+  display: block;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 
 .brand-copy {
@@ -157,37 +159,42 @@ select {
 
 .brand-copy strong {
   display: block;
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   font-weight: 700;
-  letter-spacing: 0.015em;
+  letter-spacing: 0.02em;
 }
 
 .space-nav {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.5rem;
   justify-content: center;
 }
 
 .space-nav a {
   display: inline-flex;
   align-items: center;
-  padding: 0.55rem 0.85rem;
+  padding: 0.62rem 0.98rem;
   border-radius: var(--radius-m);
   border: 1px solid transparent;
   text-decoration: none;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .space-nav a:hover,
 .space-nav a:focus-visible {
-  background: rgba(255, 250, 243, 0.48);
+  background: rgba(255, 250, 243, 0.54);
 }
 
 .space-nav a[aria-current="page"] {
-  background: var(--color-rail-active);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
   border-color: var(--color-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .nav-label {
@@ -197,19 +204,79 @@ select {
   color: var(--color-text);
 }
 
-.topbar-actions {
-  display: flex;
+.account-menu {
+  position: relative;
+}
+
+.account-menu summary {
+  list-style: none;
+}
+
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-trigger {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 0.65rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 
-.identity-card {
-  display: flex;
-  align-items: baseline;
-  gap: 0.55rem;
+.account-trigger:hover,
+.account-trigger:focus-visible,
+.account-menu[open] .account-trigger {
+  background: rgba(255, 250, 243, 0.54);
+  border-color: var(--color-border);
 }
 
-.identity-card strong,
+.account-name {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.account-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-accent-soft) 62%, white 38%);
+  color: var(--color-accent);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.account-popover {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  min-width: 12rem;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem;
+  background: color-mix(in srgb, var(--color-bg-elevated) 94%, white 6%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  box-shadow: 0 18px 38px rgba(35, 41, 45, 0.08);
+}
+
+.account-eyebrow {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.account-popover strong,
 .workspace-heading h1,
 .workspace-section h2,
 .workspace-link-card strong,
@@ -486,10 +553,6 @@ select {
     padding-inline: var(--space-4);
   }
 
-  .brand-copy {
-    display: none;
-  }
-
   .space-nav {
     justify-content: flex-start;
     overflow-x: auto;
@@ -510,9 +573,18 @@ select {
     grid-column: 1 / -1;
   }
 
-  .topbar-actions {
+  .account-menu {
     grid-column: 1 / -1;
-    justify-content: space-between;
+    justify-self: end;
+  }
+
+  .brand-logo {
+    width: 2.3rem;
+    height: 2.3rem;
+  }
+
+  .brand-copy strong {
+    font-size: 0.8rem;
   }
 
   .workspace-shell {

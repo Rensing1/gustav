@@ -68,6 +68,9 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
 - Die `Top-Bar` bleibt möglichst leise: keine starke Flächeninszenierung, keine
   dekorativen Badges, keine optische Konkurrenz zum Workspace.
 - Die `Top-Bar` trägt die primäre Navigation dauerhaft sichtbar.
+- Die `Top-Bar` darf in Alpha-3 etwas hochwertiger komponiert sein, solange
+  diese Aufwertung ruhig bleibt: kleines Brand-Signet, fein abgestimmter
+  Aktivzustand und reduzierte Account-Zone statt zusätzlicher Meta-Chrome.
 - Der `Workspace` trägt die Aufmerksamkeit.
 - `Sheets` sind präzise Zweitflächen und dürfen nicht wie gleichrangige
   Hauptseiten konkurrieren.
@@ -105,11 +108,15 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
 - Die aktive Position muss klar markiert sein.
 - Die Top-Bar darf keine zweite Startseite sein. Wenig Chrome, wenig Meta,
   keine dekorativen Status-Chips.
+- Links darf ein kleines Komplettlogo mit ruhiger Wortmarke stehen. Das Logo
+  bleibt klein genug, um nicht wie eine Illustration im Header zu dominieren.
 - Primärnavigation nutzt keine zusätzlichen Abkürzungs-Badges neben dem
   eigentlichen Linklabel.
 - Primärnavigation nutzt keine zusätzlichen Icons pro Raum.
 - Die Top-Bar ist textbasiert. Orientierung entsteht durch Reihenfolge,
   Typografie, Abstände und genau einen ruhigen Aktivzustand.
+- Für Alpha-3 ist ein feiner Pill-Aktivzustand für den aktuellen Raum
+  ausdrücklich erlaubt, solange die inaktiven Punkte textbasiert bleiben.
 - Die Top-Bar läuft über die volle Breite der App-Shell, ihr innerer Inhalt
   sitzt jedoch in einem ruhigen, zentrierten Container.
 - Die Top-Bar ist dauerhaft sichtbar; für Alpha-3 ist sie der bevorzugte
@@ -118,6 +125,10 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
   in Breadcrumbs, den Workspace oder in kontextuelle Sheets.
 - Bewegungen in der Hauptnavigation müssen minimal bleiben. Layoutsprünge durch
   Ein- und Ausklappen einer Seitennavigation sind zu vermeiden.
+- Die rechte Seite der Top-Bar zeigt standardmäßig keinen permanent sichtbaren
+  Rollen- oder Logout-Chrome. Stattdessen wird ein kleines Account-Menü mit
+  Name und Avatar-/Monogramm-Trigger bevorzugt; Rolle und `Abmelden` leben im
+  geöffneten Menü.
 
 ### Breadcrumbs
 

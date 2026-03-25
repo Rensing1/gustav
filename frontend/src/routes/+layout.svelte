@@ -9,6 +9,7 @@
   import type { LayoutData } from "./$types";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
+  let accountMenu = $state<HTMLDetailsElement | null>(null);
 
   const navItems = [
     {
@@ -86,6 +87,19 @@
       ? page.data.pageCopy
       : currentCopy();
   }
+
+  function closeAccountMenuOnWindowClick(event: MouseEvent): void {
+    if (!accountMenu?.open) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Node) || accountMenu.contains(target)) {
+      return;
+    }
+
+    accountMenu.open = false;
+  }
 </script>
 
 <svelte:head>
@@ -93,14 +107,17 @@
   <meta name="theme-color" content={data.theme === "dark" ? "#272E33" : "#FAF4ED"} />
 </svelte:head>
 
+<svelte:window onclick={closeAccountMenuOnWindowClick} />
+
 <div class="app-shell" data-theme={data.theme}>
   <header class="app-topbar">
     <div class="app-topbar-inner">
-      <a class="brand-mark" href="/" aria-label="Startseite">G</a>
-
-      <div class="brand-copy">
-        <strong>GUSTAV</strong>
-      </div>
+      <a class="brand-lockup" href="/" aria-label="Startseite">
+        <img class="brand-logo" src="/gustav-logo.png" alt="" />
+        <div class="brand-copy">
+          <strong>GUSTAV</strong>
+        </div>
+      </a>
 
       <nav class="space-nav" aria-label="Hauptnavigation">
         {#each navItems as item}
@@ -117,14 +134,21 @@
       </nav>
 
       {#if data.bootstrap}
-        <div class="topbar-actions">
-          <div class="identity-card">
+        <details class="account-menu" bind:this={accountMenu}>
+          <summary class="account-trigger" aria-label="Konto-Menü">
+            <span class="account-name">{data.bootstrap.user.name}</span>
+            <span class="account-avatar" aria-hidden="true">
+              {data.bootstrap.user.name.slice(0, 1).toUpperCase()}
+            </span>
+          </summary>
+
+          <div class="account-popover">
+            <p class="account-eyebrow">Angemeldet als</p>
             <strong>{data.bootstrap.user.name}</strong>
             <p class="identity-meta">{data.bootstrap.user.role}</p>
+            <a class="ghost-link" href="/auth/logout">Abmelden</a>
           </div>
-
-          <a class="ghost-link" href="/auth/logout">Abmelden</a>
-        </div>
+        </details>
       {/if}
     </div>
   </header>

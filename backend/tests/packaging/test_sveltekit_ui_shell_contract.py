@@ -35,7 +35,12 @@ def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
         ".app-shell",
         ".app-topbar",
         ".app-topbar-inner",
+        ".brand-lockup",
+        ".brand-logo",
         ".space-nav",
+        ".account-menu",
+        ".account-trigger",
+        ".account-avatar",
         ".workspace-shell",
         ".workspace-topbar",
         ".workspace-breadcrumbs",
@@ -57,6 +62,7 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
         'class="app-shell"',
         'class="app-topbar"',
         'class="app-topbar-inner"',
+        'class="brand-lockup"',
         'class="workspace-shell"',
         'class="workspace-header"',
         'class="workspace-topbar"',
@@ -64,6 +70,8 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
         'class="space-nav"',
         'aria-label="Hauptnavigation"',
         'aria-label="Breadcrumb"',
+        'src="/gustav-logo.png"',
+        'class="account-menu"',
         "data.theme",
         "page.data.breadcrumbs",
         "page.data.pageTitle",
@@ -74,6 +82,10 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
     assert "rail-note" not in src, "The rail should avoid decorative product meta"
     assert "nav-meta" not in src, "Primary navigation should be label-first and almost text-free"
     assert "nav-short" not in src, "Primary navigation should not render separate abbreviation labels"
+    assert "identity-card" not in src, "Account chrome should move into a compact menu"
+    assert 'href="/auth/logout"' in src, "Logout should remain available from the account menu"
+    assert "bind:this={accountMenu}" in src, "Account menu should expose its details element"
+    assert "closeAccountMenuOnWindowClick" in src, "Account menu should close on outside clicks"
 
 
 def test_app_html_loads_nunito_font() -> None:

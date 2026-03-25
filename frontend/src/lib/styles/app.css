@@ -128,7 +128,7 @@ select {
 .app-topbar-inner {
   width: min(100%, 80rem);
   margin: 0 auto;
-  min-height: 4.9rem;
+  min-height: 4.35rem;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -146,8 +146,8 @@ select {
 }
 
 .brand-logo {
-  width: 2.8rem;
-  height: 2.8rem;
+  width: 2.45rem;
+  height: 2.45rem;
   display: block;
   object-fit: contain;
   flex: 0 0 auto;
@@ -159,7 +159,7 @@ select {
 
 .brand-copy strong {
   display: block;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -175,7 +175,7 @@ select {
 .space-nav a {
   display: inline-flex;
   align-items: center;
-  padding: 0.62rem 0.98rem;
+  padding: 0.5rem 0.9rem;
   border-radius: var(--radius-m);
   border: 1px solid transparent;
   text-decoration: none;
@@ -199,7 +199,7 @@ select {
 
 .nav-label {
   display: block;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   font-weight: 650;
   color: var(--color-text);
 }
@@ -220,7 +220,7 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.35rem 0.4rem 0.35rem 0.75rem;
+  padding: 0.28rem 0.36rem 0.28rem 0.68rem;
   border-radius: 999px;
   border: 1px solid transparent;
   cursor: pointer;
@@ -236,20 +236,20 @@ select {
 }
 
 .account-name {
-  font-size: 0.94rem;
+  font-size: 0.91rem;
   font-weight: 700;
   color: var(--color-text);
 }
 
 .account-avatar {
-  width: 2rem;
-  height: 2rem;
+  width: 1.82rem;
+  height: 1.82rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--color-accent-soft) 62%, white 38%);
   color: var(--color-accent);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 800;
 }
 
@@ -579,12 +579,12 @@ select {
   }
 
   .brand-logo {
-    width: 2.3rem;
-    height: 2.3rem;
+    width: 2.1rem;
+    height: 2.1rem;
   }
 
   .brand-copy strong {
-    font-size: 0.8rem;
+    font-size: 0.76rem;
   }
 
   .workspace-shell {

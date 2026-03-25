@@ -150,6 +150,8 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
 - Breadcrumbs stehen oberhalb des Seitentitels und bleiben typografisch
   zurückhaltend.
 - Auf Ebene 1 bleibt die Breadcrumb-Zeile leer oder entfällt vollständig.
+- Eine knappe Ebene-1-Ausnahme ist erlaubt, wenn der erste Breadcrumb eine
+  Teacher-Arbeitsseite ruhiger verankert, etwa bei `Kurse`.
 - Für Lehrkräfte beginnen Breadcrumbs auf Arbeitsseiten bei `Kurse` oder
   `Lerneinheiten`, nicht bei der unsichtbaren Home-Seite `Lehrenden-Welt`.
 
@@ -188,6 +190,30 @@ Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
 - Priorität haben gute Listen, klare Zustände und direkte Handlungen.
 - Große Kachelwände sind zu vermeiden.
 - Der Raum darf dichter sein als der Lernraum, aber nicht unruhig.
+- Der globale Shell-Header ist die obere Orientierung. Inhaltsseiten
+  wiederholen Titel und Einleitung nicht noch einmal lokal.
+- Indexseiten der Lehrenden-Welt beginnen möglichst direkt mit der eigentlichen
+  Arbeit: Primäraktion und Objektübersicht.
+- Kleine Seitenaktionen wie `Kurs erstellen` sitzen im Kopfbereich der
+  Arbeitsfläche und nicht in einer eigenen Aktions-Lane.
+- Klare Teacher-Arbeitsseiten dürfen noch stärker reduziert werden: sichtbar
+  bleiben dann nur `Breadcrumb + Kopfaktion + Objektübersicht`.
+- Auf solchen Arbeitsseiten sind zusätzlicher Seitentitel und Introtext nicht
+  verpflichtend, wenn sie keine neue Information liefern.
+- Objektübersichten der Lehrenden-Welt liegen nicht noch einmal in einer
+  äußeren Rahmen- oder Kartenfläche. Die Objektkarten selbst sind die einzige
+  sichtbare Objektebene.
+- Für `Kurse` gilt standardmäßig ein ruhiges Raster statt einer technischen
+  Linkliste. Sichtbar sind nur nutzbare Kursinformationen, keine rohen IDs.
+- Für `Kurse` gilt auf iPad und Desktop standardmäßig ein kompaktes
+  Zweispaltenraster.
+- Kurskarten sind kompakte Arbeitsobjekte, keine großzügigen Dashboard-Kacheln.
+- Die Reihenfolge innerhalb einer Kurskarte ist:
+  - Titel
+  - Kennzahlen
+  - optionale Metazeile
+- Fehlende Metadaten werden weggelassen. Platzhaltertexte oder generische
+  Ersatzbeschreibungen sind zu vermeiden.
 
 ### Diagnostik
 
@@ -248,6 +274,9 @@ Struktur, aber sie trägt sie sichtbar.
 Regeln:
 
 - Überschriften sind knapp, klar und funktional.
+- Auf kompakten Arbeitsseiten hat typografische Hierarchie Vorrang vor
+  zusätzlicher Textmenge. Kennzahlen und Metazeilen bleiben sichtbar
+  zurückhaltender als der Objekttitel.
 - Typografische Hierarchie entsteht primär über Gewicht, Größe, Zeilenhöhe und
   Abstand, nicht über einen Font-Wechsel.
 - Utility Copy schlägt Marketing-Sprache.

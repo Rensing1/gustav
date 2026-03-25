@@ -100,14 +100,22 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
 
 ### Navigation
 
-- Die Top-Bar enthält nur die primären Räume:
+- Die Top-Bar ist rollenabhängig und zeigt nur die für den aktuellen Nutzer
+  sinnvollen Primärziele.
+- Für Lernende bleibt die Top-Bar reduziert:
   - `Lernraum`
-  - `Lehrenden-Welt`
+- Für Lehrkräfte ist die Top-Bar arbeitsorientiert:
+  - `Kurse`
+  - `Lerneinheiten`
   - `Diagnostik`
   - `Live`
 - Die aktive Position muss klar markiert sein.
 - Die Top-Bar darf keine zweite Startseite sein. Wenig Chrome, wenig Meta,
   keine dekorativen Status-Chips.
+- Die Lehrkraft-Home-Seite `Lehrenden-Welt` bleibt als Start- und
+  Übersichtsseite unter `/teaching` erhalten, ist aber kein eigener Primärtab.
+- Das Brand-Element `[LOGO] GUSTAV` darf für Lehrkräfte explizit auf diese
+  Home-Seite zurückführen.
 - Links darf ein kleines Komplettlogo mit ruhiger Wortmarke stehen. Das Logo
   bleibt klein genug, um nicht wie eine Illustration im Header zu dominieren.
 - Primärnavigation nutzt keine zusätzlichen Abkürzungs-Badges neben dem
@@ -142,6 +150,8 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
 - Breadcrumbs stehen oberhalb des Seitentitels und bleiben typografisch
   zurückhaltend.
 - Auf Ebene 1 bleibt die Breadcrumb-Zeile leer oder entfällt vollständig.
+- Für Lehrkräfte beginnen Breadcrumbs auf Arbeitsseiten bei `Kurse` oder
+  `Lerneinheiten`, nicht bei der unsichtbaren Home-Seite `Lehrenden-Welt`.
 
 ### Weitere Sekundärnavigation
 

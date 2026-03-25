@@ -86,6 +86,10 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
     assert 'href="/auth/logout"' in src, "Logout should remain available from the account menu"
     assert "bind:this={accountMenu}" in src, "Account menu should expose its details element"
     assert "closeAccountMenuOnWindowClick" in src, "Account menu should close on outside clicks"
+    assert "teacherNavItems" in src, "Teacher navigation should be derived separately from learner navigation"
+    assert 'label: "Kurse"' in src, "Teacher navigation should expose courses directly"
+    assert 'label: "Lerneinheiten"' in src, "Teacher navigation should expose units directly"
+    assert 'label: "Lehrenden-Welt"' not in src, "Teacher home should no longer be a primary teacher tab"
 
 
 def test_app_html_loads_nunito_font() -> None:

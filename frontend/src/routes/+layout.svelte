@@ -11,15 +11,23 @@
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
   let accountMenu = $state<HTMLDetailsElement | null>(null);
 
-  const navItems = [
+  const learnerNavItems = [
     {
       href: "/learning",
       label: "Lernraum",
       requiredSpace: "learning"
+    }
+  ];
+
+  const teacherNavItems = [
+    {
+      href: "/teaching/courses",
+      label: "Kurse",
+      requiredSpace: "teaching"
     },
     {
-      href: "/teaching",
-      label: "Lehrenden-Welt",
+      href: "/teaching/units",
+      label: "Lerneinheiten",
       requiredSpace: "teaching"
     },
     {
@@ -34,9 +42,25 @@
     }
   ];
 
+  function primaryNavItems() {
+    return data.bootstrap?.user.role === "student" ? learnerNavItems : teacherNavItems;
+  }
+
   function isActive(href: string): boolean {
     const pathname = page.url.pathname;
     return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  function isPrimaryActive(href: string): boolean {
+    if (href === "/teaching/courses") {
+      return isActive("/teaching/courses");
+    }
+
+    if (href === "/teaching/units") {
+      return isActive("/teaching/units");
+    }
+
+    return isActive(href);
   }
 
   function currentLabel(): string {
@@ -44,7 +68,7 @@
       return "Start";
     }
 
-    return navItems.find((item) => isActive(item.href))?.label ?? "GUSTAV";
+    return primaryNavItems().find((item) => isPrimaryActive(item.href))?.label ?? "GUSTAV";
   }
 
   function currentCopy(): string {
@@ -120,11 +144,11 @@
       </a>
 
       <nav class="space-nav" aria-label="Hauptnavigation">
-        {#each navItems as item}
+        {#each primaryNavItems() as item}
           {#if data.bootstrap?.spaces?.includes(item.requiredSpace)}
             <a
               href={item.href}
-              aria-current={isActive(item.href) ? "page" : undefined}
+              aria-current={isPrimaryActive(item.href) ? "page" : undefined}
               aria-label={item.label}
             >
               <span class="nav-label">{item.label}</span>

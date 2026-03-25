@@ -136,6 +136,13 @@ def test_teaching_course_routes_define_breadcrumb_data() -> None:
         / "routes"
         / "teaching"
         / "courses"
+        / "+page.server.ts",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "teaching"
+        / "courses"
         / "[courseId]"
         / "+page.server.ts",
         REPO_ROOT
@@ -146,6 +153,39 @@ def test_teaching_course_routes_define_breadcrumb_data() -> None:
         / "courses"
         / "[courseId]"
         / "members"
+        / "+page.server.ts",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "teaching"
+        / "units"
+        / "+page.server.ts",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "teaching"
+        / "units"
+        / "[unitId]"
+        / "+page.server.ts",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "live"
+        / "courses"
+        / "[courseId]"
+        / "+page.server.ts",
+        REPO_ROOT
+        / "frontend"
+        / "src"
+        / "routes"
+        / "live"
+        / "courses"
+        / "[courseId]"
+        / "units"
+        / "[unitId]"
         / "+page.server.ts",
     ]
 

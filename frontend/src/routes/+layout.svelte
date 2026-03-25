@@ -100,6 +100,24 @@
     return Array.isArray(breadcrumbs) ? (breadcrumbs as BreadcrumbItem[]) : [];
   }
 
+  function currentHeaderAction(): { href: string; label: string } | null {
+    const action = page.data.headerAction;
+    if (!action || typeof action !== "object") {
+      return null;
+    }
+
+    const href = "href" in action ? String(action.href || "") : "";
+    const label = "label" in action ? String(action.label || "") : "";
+    if (!href || !label) {
+      return null;
+    }
+    return { href, label };
+  }
+
+  function hidePageHeading(): boolean {
+    return page.data.hidePageHeading === true;
+  }
+
   function pageTitle(): string {
     return typeof page.data.pageTitle === "string" && page.data.pageTitle.length > 0
       ? page.data.pageTitle
@@ -196,12 +214,20 @@
               {/each}
             </nav>
           {/if}
+
+          {#if currentHeaderAction()}
+            <a class="workspace-topbar-action" href={currentHeaderAction()?.href}>
+              {currentHeaderAction()?.label}
+            </a>
+          {/if}
         </div>
 
-        <div class="workspace-heading">
-          <h1>{pageTitle()}</h1>
-          <p class="workspace-copy">{pageCopy()}</p>
-        </div>
+        {#if !hidePageHeading()}
+          <div class="workspace-heading">
+            <h1>{pageTitle()}</h1>
+            <p class="workspace-copy">{pageCopy()}</p>
+          </div>
+        {/if}
       </header>
 
       <div class="workspace-body">

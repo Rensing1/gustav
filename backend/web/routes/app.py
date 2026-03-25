@@ -122,6 +122,51 @@ def _list_teacher_courses(owner_sub: str, limit: int, offset: int) -> list[dict[
     ]
 
 
+def _count_teacher_course_members(course_id: str, owner_sub: str) -> int:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    page_size = 100
+    offset = 0
+    total = 0
+
+    while True:
+        try:
+            page = repo.list_members_for_owner(course_id, owner_sub, limit=page_size, offset=offset)
+        except Exception:
+            page = repo.list_members(course_id, limit=page_size, offset=offset)
+        if not page:
+            return total
+        total += len(page)
+        if len(page) < page_size:
+            return total
+        offset += page_size
+
+
+def _list_teacher_course_cards(owner_sub: str, limit: int, offset: int) -> list[dict[str, object]]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    courses = repo.list_courses_for_teacher(teacher_id=owner_sub, limit=limit, offset=offset)
+
+    items: list[dict[str, object]] = []
+    for course in courses or []:
+        course_id = str(_field_value(course, "id") or "")
+        if not course_id:
+            continue
+
+        units = _list_teacher_course_units(course_id, owner_sub)
+        items.append(
+            {
+                "id": course_id,
+                "title": str(_field_value(course, "title") or ""),
+                "href": f"/teaching/courses/{course_id}",
+                "members_count": _count_teacher_course_members(course_id, owner_sub),
+                "units_count": len(units),
+                "subject": _field_value(course, "subject"),
+                "grade_level": _field_value(course, "grade_level"),
+                "term": _field_value(course, "term"),
+            }
+        )
+    return items
+
+
 def _list_teacher_course_members(course_id: str, owner_sub: str, limit: int, offset: int) -> list[dict]:
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     try:
@@ -429,6 +474,26 @@ async def get_teacher_home(request: Request):
         {"user": _user_payload(user), "entries": _teacher_home_entries()},
         headers=_private_headers(),
     )
+
+
+@app_router.get("/api/teaching/views/courses")
+async def get_teacher_course_list(request: Request, limit: int = 25, offset: int = 0):
+    """Return the owner-scoped course overview for the teacher workspace."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    body = {
+        "user": _user_payload(user),
+        "courses": _list_teacher_course_cards(
+            str(user.get("sub") or ""),
+            limit=int(limit or 25),
+            offset=int(offset or 0),
+        ),
+    }
+    return JSONResponse(body, headers=_private_headers())
 
 
 @app_router.get("/api/teaching/views/courses/{course_id}/context")

@@ -23,6 +23,22 @@ export type TeacherHome = {
   entries: TeacherHomeEntry[];
 };
 
+export type TeacherCourseListItem = {
+  id: string;
+  title: string;
+  href: string;
+  members_count: number;
+  units_count: number;
+  subject: string | null;
+  grade_level: string | null;
+  term: string | null;
+};
+
+export type TeacherCourseListView = {
+  user: SessionBootstrapUser;
+  courses: TeacherCourseListItem[];
+};
+
 export type TeacherCourseContextCourse = {
   id: string;
   title: string;

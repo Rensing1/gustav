@@ -107,11 +107,89 @@ async def test_teacher_home_returns_navigation_entries(monkeypatch: pytest.Monke
 
 
 @pytest.mark.anyio
+async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        app_routes,
+        "_list_teacher_course_cards",
+        lambda owner_sub, limit, offset: [
+            {
+                "id": "course-1",
+                "title": "Mathe 9b",
+                "href": "/teaching/courses/course-1",
+                "members_count": 28,
+                "units_count": 6,
+                "subject": "Mathematik",
+                "grade_level": "9b",
+                "term": "Q1",
+            },
+            {
+                "id": "course-2",
+                "title": "Informatik AG",
+                "href": "/teaching/courses/course-2",
+                "members_count": 12,
+                "units_count": 2,
+                "subject": None,
+                "grade_level": None,
+                "term": None,
+            },
+        ],
+    )
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-courses", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get("/api/teaching/views/courses", headers=headers)
+
+    assert response.status_code == 200
+    assert response.headers.get("Cache-Control") == "private, no-store"
+    assert response.json() == {
+        "user": {
+            "sub": "teacher-courses",
+            "name": "Ada",
+            "role": "teacher",
+            "roles": ["teacher"],
+        },
+        "courses": [
+            {
+                "id": "course-1",
+                "title": "Mathe 9b",
+                "href": "/teaching/courses/course-1",
+                "members_count": 28,
+                "units_count": 6,
+                "subject": "Mathematik",
+                "grade_level": "9b",
+                "term": "Q1",
+            },
+            {
+                "id": "course-2",
+                "title": "Informatik AG",
+                "href": "/teaching/courses/course-2",
+                "members_count": 12,
+                "units_count": 2,
+                "subject": None,
+                "grade_level": None,
+                "term": None,
+            },
+        ],
+    }
+
+
+@pytest.mark.anyio
 async def test_learner_home_forbids_teacher(monkeypatch: pytest.MonkeyPatch) -> None:
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-home", roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         response = await client.get("/api/learning/views/learner-home", headers=headers)
+
+    assert response.status_code == 403
+    assert response.json() == {"error": "forbidden"}
+
+
+@pytest.mark.anyio
+async def test_teacher_courses_view_forbids_student(monkeypatch: pytest.MonkeyPatch) -> None:
+    headers = _mock_bearer_auth(monkeypatch, sub="student-home", roles=["student"], name="Lena")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get("/api/teaching/views/courses", headers=headers)
 
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}

@@ -75,6 +75,9 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
         "data.theme",
         "page.data.breadcrumbs",
         "page.data.pageTitle",
+        "page.data.headerAction",
+        "page.data.hidePageHeading",
+        'class="workspace-topbar-action"',
     ):
         assert needle in src, f"Expected Alpha-3 shell primitive {needle!r} in {layout_path}"
 
@@ -134,7 +137,10 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
 
     for path in page_paths:
         src = path.read_text(encoding="utf-8")
-        assert "workspace-section" in src, f"Expected shared workspace section in {path}"
+        if path.parts[-3:] == ("teaching", "courses", "+page.svelte"):
+            assert "workspace-section" not in src, f"Course index should now avoid an outer workspace section in {path}"
+        else:
+            assert "workspace-section" in src, f"Expected shared workspace section in {path}"
         assert 'class="panel"' not in src, f"Legacy panel styling should be removed in {path}"
 
     teaching_page_src = (
@@ -143,16 +149,30 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
     assert "workspace-list" in teaching_page_src
     assert "workspace-section--hero" not in teaching_page_src
 
+    teaching_courses_src = (
+        REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "courses" / "+page.svelte"
+    ).read_text(encoding="utf-8")
+    assert "workspace-grid" in teaching_courses_src
+    assert "workspace-metrics" in teaching_courses_src
+    assert "workspace-list" not in teaching_courses_src
+    assert "workspace-toolbar" not in teaching_courses_src
+    assert "Kurskontext mit Einheiten" not in teaching_courses_src
+    assert 'class="workspace-section"' not in teaching_courses_src
+    assert "courseMeta(course)" in teaching_courses_src
+    assert "workspace-link-card--course" in teaching_courses_src
+
+    style_src = (REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    assert ".workspace-grid--courses" in style_src
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in style_src
+    assert ".workspace-link-card--course" in style_src
+    assert "min-height: 5.8rem;" in style_src
+    assert "gap: 0.28rem;" in style_src
+
 
 def test_teaching_course_routes_define_breadcrumb_data() -> None:
     page_server_paths = [
-        REPO_ROOT
-        / "frontend"
-        / "src"
-        / "routes"
-        / "teaching"
-        / "courses"
-        / "+page.server.ts",
         REPO_ROOT
         / "frontend"
         / "src"
@@ -209,3 +229,24 @@ def test_teaching_course_routes_define_breadcrumb_data() -> None:
         src = path.read_text(encoding="utf-8")
         assert "breadcrumbs" in src, f"Expected breadcrumb data contract in {path}"
         assert "pageTitle" in src, f"Expected explicit page title in {path}"
+
+    teaching_courses_loader = (
+        REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "courses" / "+page.server.ts"
+    ).read_text(encoding="utf-8")
+    assert "pageTitle" in teaching_courses_loader
+    assert "breadcrumbs" in teaching_courses_loader
+    assert "headerAction" in teaching_courses_loader
+    assert "hidePageHeading" in teaching_courses_loader
+
+
+def test_teaching_courses_page_supports_create_action() -> None:
+    page_server_path = (
+        REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "courses" / "+page.server.ts"
+    )
+    src = page_server_path.read_text(encoding="utf-8")
+
+    assert "export const actions" in src
+    assert '"/api/teaching/views/courses?limit=25&offset=0"' in src
+    assert '"/api/teaching/courses"' in src
+    assert 'method: "POST"' in src
+    assert "includeSameOrigin: true" in src

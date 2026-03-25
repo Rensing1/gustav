@@ -10,6 +10,7 @@ def test_openapi_documents_home_view_models() -> None:
 
     assert "/api/learning/views/learner-home" in spec["paths"]
     assert "/api/teaching/views/teacher-home" in spec["paths"]
+    assert "/api/teaching/views/courses" in spec["paths"]
 
     learner_schema = spec["components"]["schemas"]["LearnerHome"]
     assert learner_schema["required"] == ["user", "courses"]
@@ -17,3 +18,8 @@ def test_openapi_documents_home_view_models() -> None:
     teacher_schema = spec["components"]["schemas"]["TeacherHome"]
     assert teacher_schema["required"] == ["user", "entries"]
 
+    teacher_courses_schema = spec["components"]["schemas"]["TeacherCourseListView"]
+    assert teacher_courses_schema["required"] == ["user", "courses"]
+
+    teacher_course_item = spec["components"]["schemas"]["TeacherCourseListItem"]
+    assert teacher_course_item["required"] == ["id", "title", "href", "members_count", "units_count"]

@@ -70,6 +70,45 @@ export type TeacherCourseContextView = {
   members: TeacherCourseContextMember[];
 };
 
+export type TeacherUnitsCatalogOption = {
+  id: string;
+  label: string;
+  active: boolean;
+  href?: string | null;
+};
+
+export type TeacherUnitsCatalogItem = {
+  id: string;
+  title: string;
+  topic?: string | null;
+  meta: string;
+  updated_at: string;
+  href: string;
+};
+
+export type TeacherUnitsCatalogView = {
+  user: SessionBootstrapUser;
+  views: TeacherUnitsCatalogOption[];
+  active_view: string;
+  query: string;
+  filters: {
+    status: TeacherUnitsCatalogOption[];
+    subjects: TeacherUnitsCatalogOption[];
+    grade_levels: TeacherUnitsCatalogOption[];
+    courses: TeacherUnitsCatalogOption[];
+  };
+  active_filters: {
+    status: string;
+    subject: string;
+    grade_level: string;
+    course_id: string;
+  };
+  sort: string;
+  result_count: number;
+  items: TeacherUnitsCatalogItem[];
+  create_href: string;
+};
+
 export type DiagnosticsCourseMatrixCourse = {
   id: string;
   title: string;

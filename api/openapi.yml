@@ -249,6 +249,97 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TeacherCourseContextMember'
+    TeacherUnitsCatalogViewOption:
+      type: object
+      required: [id, label, active]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        active:
+          type: boolean
+        href:
+          type: string
+          nullable: true
+    TeacherUnitsCatalogItem:
+      type: object
+      required: [id, title, meta, updated_at, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        topic:
+          type: string
+          nullable: true
+        meta:
+          type: string
+        updated_at:
+          type: string
+        href:
+          type: string
+    TeacherUnitsCatalogFilters:
+      type: object
+      required: [status, subjects, grade_levels, courses]
+      properties:
+        status:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogViewOption'
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogViewOption'
+        grade_levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogViewOption'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogViewOption'
+    TeacherUnitsCatalogActiveFilters:
+      type: object
+      required: [status, subject, grade_level, course_id]
+      properties:
+        status:
+          type: string
+        subject:
+          type: string
+        grade_level:
+          type: string
+        course_id:
+          type: string
+    TeacherUnitsCatalogView:
+      type: object
+      required: [user, views, active_view, query, filters, active_filters, sort, result_count, items, create_href]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        views:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogViewOption'
+        active_view:
+          type: string
+        query:
+          type: string
+        filters:
+          $ref: '#/components/schemas/TeacherUnitsCatalogFilters'
+        active_filters:
+          $ref: '#/components/schemas/TeacherUnitsCatalogActiveFilters'
+        sort:
+          type: string
+        result_count:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogItem'
+        create_href:
+          type: string
     DiagnosticsCourseMatrixCourse:
       type: object
       required: [id, title, href]
@@ -5307,6 +5398,85 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Course not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/units/catalog:
+    get:
+      tags: [App]
+      summary: Return the teacher units catalog read-model
+      description: >-
+        Returns the teacher-facing units catalog with stable views, search,
+        lightweight filters, a compact result list and one selected preview item
+        for the SvelteKit workspace.
+      operationId: getTeacherUnitsCatalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: view
+          schema:
+            type: string
+        - in: query
+          name: query
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: course_id
+          schema:
+            type: string
+        - in: query
+          name: subject
+          schema:
+            type: string
+        - in: query
+          name: grade_level
+          schema:
+            type: string
+        - in: query
+          name: selected
+          schema:
+            type: string
+        - in: query
+          name: sort
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher units catalog payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherUnitsCatalogView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

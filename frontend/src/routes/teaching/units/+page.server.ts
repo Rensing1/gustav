@@ -1,36 +1,78 @@
-import type { PageServerLoad } from "./$types";
+import { fail, redirect } from "@sveltejs/kit";
+import type { Actions, PageServerLoad } from "./$types";
 
-import { requireBackendJson } from "$lib/server/api";
+import { backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import type { TeacherUnitsCatalogView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
-type TeachingUnitListItem = {
-  id: string;
-  title: string;
-  summary?: string | null;
-  unit_type?: string | null;
-};
+function pageHref(url: URL): string {
+  const query = url.searchParams.toString();
+  return query ? `/api/teaching/views/units/catalog?${query}` : "/api/teaching/views/units/catalog";
+}
 
 export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
   await requireSpaceBootstrap(fetch, cookies, currentPath(url), "teaching");
 
-  const units = await requireBackendJson<TeachingUnitListItem[]>(
+  const catalog = await requireBackendJson<TeacherUnitsCatalogView>(
     fetch,
     cookies,
-    "/api/teaching/units?limit=25&offset=0"
+    pageHref(url)
   );
 
-  const breadcrumbs: BreadcrumbItem[] = [
-    {
-      label: "Lerneinheiten"
-    }
-  ];
+  const breadcrumbs: BreadcrumbItem[] = [{ label: "Lerneinheiten" }];
 
   return {
     breadcrumbs,
-    pageCopy:
-      "Die Objektliste für Lerneinheiten bleibt scanbar und führt in ruhige Detailansichten statt in die alte SSR-Strecke.",
+    catalog,
+    headerAction: {
+      href: catalog.create_href,
+      label: "Neue Lerneinheit"
+    },
+    hidePageHeading: true,
     pageTitle: "Lerneinheiten",
-    units
+    pageCopy: "Finde und öffne deine Lerneinheiten in einer ruhigen, scanbaren Bestandsliste.",
+    showCreateDialog: url.searchParams.get("create") == "1"
   };
+};
+
+export const actions: Actions = {
+  default: async ({ fetch, cookies, request }) => {
+    const form = await request.formData();
+    const title = String(form.get("title") || "").trim();
+    const summary = String(form.get("summary") || "").trim();
+
+    if (!title) {
+      return fail(400, {
+        createUnit: {
+          error: "Bitte gib einen Titel für die Lerneinheit ein.",
+          values: { title, summary }
+        }
+      });
+    }
+
+    const response = await backendRequest(fetch, cookies, "/api/teaching/units", {
+      method: "POST",
+      includeSameOrigin: true,
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        title,
+        summary: summary || null
+      })
+    });
+
+    if (!response.ok) {
+      return fail(response.status, {
+        createUnit: {
+          error: "Die Lerneinheit konnte gerade nicht erstellt werden.",
+          values: { title, summary }
+        }
+      });
+    }
+
+    const created = (await response.json()) as { id: string };
+    throw redirect(303, `/teaching/units/${created.id}`);
+  }
 };

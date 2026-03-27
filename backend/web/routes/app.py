@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import inspect
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -109,6 +110,14 @@ def _list_teacher_course_units(course_id: str, owner_sub: str) -> list[dict]:
     return repo.list_course_units_for_owner(course_id, owner_sub)
 
 
+def _list_teacher_units(owner_sub: str, limit: int, offset: int) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        teaching_routes._serialize_unit(item)  # type: ignore[attr-defined]
+        for item in (repo.list_units_for_author(author_id=owner_sub, limit=limit, offset=offset) or [])
+    ]
+
+
 def _list_teacher_courses(owner_sub: str, limit: int, offset: int) -> list[dict[str, str]]:
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     items = repo.list_courses_for_teacher(teacher_id=owner_sub, limit=limit, offset=offset)
@@ -119,6 +128,14 @@ def _list_teacher_courses(owner_sub: str, limit: int, offset: int) -> list[dict[
         }
         for item in (items or [])
         if str(_field_value(item, "id") or "")
+    ]
+
+
+def _list_teacher_unit_sections(unit_id: str, owner_sub: str) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        teaching_routes._serialize_section(item)  # type: ignore[attr-defined]
+        for item in (repo.list_sections_for_author(unit_id, owner_sub) or [])
     ]
 
 
@@ -207,6 +224,50 @@ def _field_value(item: object, key: str) -> object:
     if isinstance(item, dict):
         return item.get(key)
     return getattr(item, key, None)
+
+
+def _build_teacher_unit_course_refs(owner_sub: str) -> tuple[dict[str, list[dict[str, str]]], list[dict[str, str | None]]]:
+    course_refs_by_unit: dict[str, list[dict[str, str]]] = {}
+    courses = _list_teacher_courses(owner_sub, limit=200, offset=0)
+
+    for course in courses:
+        course_id = str(course.get("id") or "")
+        if not course_id:
+            continue
+
+        for unit in _list_teacher_course_units(course_id, owner_sub):
+            unit_id = str(_field_value(unit, "id") or "")
+            if not unit_id:
+                continue
+            course_refs_by_unit.setdefault(unit_id, []).append(
+                {
+                    "id": course_id,
+                    "title": str(course.get("title") or ""),
+                    "href": f"/teaching/courses/{course_id}",
+                }
+            )
+
+    return course_refs_by_unit, courses
+
+
+def _teacher_units_view_label(view_id: str) -> str:
+    return {
+        "recent": "Zuletzt bearbeitet",
+        "all": "Alle",
+        "active": "Im Unterricht aktiv",
+        "draft": "Entwürfe",
+        "unassigned": "Ohne Kurs",
+        "archived": "Archiv",
+    }.get(view_id, view_id)
+
+
+def _teacher_units_status_label(status_id: str) -> str:
+    return {
+        "all": "Alle",
+        "active": "Im Unterricht aktiv",
+        "draft": "Entwürfe",
+        "unassigned": "Ohne Kurs",
+    }.get(status_id, status_id)
 
 
 def _list_unit_task_ids(unit_id: str, owner_sub: str) -> list[str]:
@@ -492,6 +553,189 @@ async def get_teacher_course_list(request: Request, limit: int = 25, offset: int
             limit=int(limit or 25),
             offset=int(offset or 0),
         ),
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/teaching/views/units/catalog")
+async def get_teacher_units_catalog(
+    request: Request,
+    view: str = "recent",
+    query: str = "",
+    status: str = "all",
+    course_id: str | None = None,
+    subject: str | None = None,
+    grade_level: str | None = None,
+    sort: str | None = None,
+):
+    """Return the teacher units catalog with stable views and a compact bestandsliste."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    owner_sub = str(user.get("sub") or "")
+    course_refs_by_unit, courses = _build_teacher_unit_course_refs(owner_sub)
+    units = _list_teacher_units(owner_sub, limit=200, offset=0)
+
+    items: list[dict[str, object]] = []
+    subject_options: dict[str, str] = {}
+    grade_options: dict[str, str] = {}
+
+    for course in courses:
+        course_subject = str(course.get("subject") or "").strip()
+        if course_subject:
+            subject_options[course_subject] = course_subject
+        course_grade = str(course.get("grade_level") or "").strip()
+        if course_grade:
+            grade_options[course_grade] = course_grade
+
+    for unit in units:
+        unit_id = str(unit.get("id") or "")
+        refs = course_refs_by_unit.get(unit_id, [])
+        sections = _list_teacher_unit_sections(unit_id, owner_sub)
+        sections_count = len(sections)
+        courses_count = len(refs)
+        last_activity = max(
+            [str(unit.get("updated_at") or "")]
+            + [str(section.get("updated_at") or "") for section in sections]
+        )
+        haystack = " ".join(
+            part.strip().lower()
+            for part in (
+                str(unit.get("title") or ""),
+                str(unit.get("summary") or ""),
+            )
+            if part
+        )
+        item = {
+            "id": unit_id,
+            "title": str(unit.get("title") or ""),
+            "topic": str(unit.get("summary") or unit.get("unit_type") or "").strip() or None,
+            "updated_at": last_activity,
+            "href": f"/teaching/units/{unit_id}",
+            "sections_count": sections_count,
+            "courses_count": courses_count,
+            "course_ids": [str(ref.get("id") or "") for ref in refs],
+            "subjects": sorted(
+                {
+                    str(course.get("subject") or "").strip()
+                    for course in courses
+                    if str(course.get("id") or "") in {str(ref.get("id") or "") for ref in refs}
+                    and str(course.get("subject") or "").strip()
+                }
+            ),
+            "grade_levels": sorted(
+                {
+                    str(course.get("grade_level") or "").strip()
+                    for course in courses
+                    if str(course.get("id") or "") in {str(ref.get("id") or "") for ref in refs}
+                    and str(course.get("grade_level") or "").strip()
+                }
+            ),
+            "is_active": courses_count > 0,
+            "is_draft": sections_count == 0,
+            "searchable": haystack,
+            "meta": f"{sections_count} Abschnitt{'e' if sections_count != 1 else ''} · {courses_count} Kurs{'e' if courses_count != 1 else ''}",
+        }
+        items.append(item)
+
+    query_value = query.strip()
+    if query_value:
+        needle = query_value.lower()
+        items = [item for item in items if needle in str(item["searchable"])]
+
+    if status == "active":
+        items = [item for item in items if bool(item["is_active"])]
+    elif status == "draft":
+        items = [item for item in items if bool(item["is_draft"])]
+    elif status == "unassigned":
+        items = [item for item in items if not bool(item["is_active"])]
+
+    if course_id:
+        items = [item for item in items if course_id in item["course_ids"]]
+    if subject:
+        items = [item for item in items if subject in item["subjects"]]
+    if grade_level:
+        items = [item for item in items if grade_level in item["grade_levels"]]
+
+    active_view = view if view in {"recent", "all", "active", "draft", "unassigned"} else "recent"
+    if active_view == "active":
+        items = [item for item in items if bool(item["is_active"])]
+    elif active_view == "draft":
+        items = [item for item in items if bool(item["is_draft"])]
+    elif active_view == "unassigned":
+        items = [item for item in items if not bool(item["is_active"])]
+
+    active_sort = sort or ("updated_desc" if active_view != "all" else "title_asc")
+    if active_sort == "title_asc":
+        items.sort(key=lambda item: str(item["title"]).lower())
+    else:
+        items.sort(key=lambda item: str(item["updated_at"]), reverse=True)
+
+    list_items = [
+        {
+            "id": str(item["id"]),
+            "title": str(item["title"]),
+            "topic": item["topic"],
+            "meta": str(item["meta"]),
+            "updated_at": str(item["updated_at"]),
+            "href": str(item["href"]),
+        }
+        for item in items
+    ]
+
+    body = {
+        "user": _user_payload(user),
+        "views": [
+            {
+                "id": view_id,
+                "label": _teacher_units_view_label(view_id),
+                "active": view_id == active_view,
+                "href": f"/teaching/units?{urlencode({'view': view_id})}",
+            }
+            for view_id in ("recent", "all", "active", "draft", "unassigned")
+        ],
+        "active_view": active_view,
+        "query": query_value,
+        "filters": {
+            "status": [
+                {
+                    "id": status_id,
+                    "label": _teacher_units_status_label(status_id),
+                    "active": status_id == status,
+                }
+                for status_id in ("all", "active", "draft", "unassigned")
+            ],
+            "subjects": [
+                {"id": value, "label": value, "active": value == (subject or "")}
+                for value in sorted(subject_options)
+            ],
+            "grade_levels": [
+                {"id": value, "label": value, "active": value == (grade_level or "")}
+                for value in sorted(grade_options)
+            ],
+            "courses": [
+                {
+                    "id": str(course.get("id") or ""),
+                    "label": str(course.get("title") or ""),
+                    "active": str(course.get("id") or "") == (course_id or ""),
+                }
+                for course in courses
+                if str(course.get("id") or "")
+            ],
+        },
+        "active_filters": {
+            "status": status,
+            "subject": subject or "",
+            "grade_level": grade_level or "",
+            "course_id": course_id or "",
+        },
+        "sort": active_sort,
+        "result_count": len(list_items),
+        "items": list_items,
+        "create_href": "/teaching/units?create=1",
     }
     return JSONResponse(body, headers=_private_headers())
 

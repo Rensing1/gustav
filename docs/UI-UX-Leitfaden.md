@@ -214,6 +214,32 @@ Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
   - optionale Metazeile
 - Fehlende Metadaten werden weggelassen. Platzhaltertexte oder generische
   Ersatzbeschreibungen sind zu vermeiden.
+- Kurs-Detailseiten bleiben derselben Sprache treu: kein lokaler Intro-Block,
+  sondern direkte Arbeitsbereiche unterhalb des globalen Headers.
+- Kurs-Detailseiten für Lehrkräfte dürfen als ruhiges Listen-Werkzeug
+  organisiert sein, wenn Kursdetails, Mitglieder und Lerneinheiten direkt auf
+  derselben Seite bearbeitbar bleiben sollen.
+- Für `Kurse` ist dabei das bevorzugte Modell:
+  - schmale Kopfzeile mit Rücksprung, Kurstitel, Metazeile und kleinem
+    Overflow-Menü
+  - dominante Hauptspalte `Lerneinheiten`
+  - ruhige Sidecar-Spalte für `Mitglieder` und `Kurs`
+- `Lerneinheiten` ist der Standardfokus der Seite und bildet den
+  `primary workspace`:
+  - geordnete Liste
+  - Reihenfolge ändern
+  - Einheiten ergänzen oder entfernen
+- `Mitglieder` und `Kursdetails` leben im `secondary context`:
+  - als kompakte Sidecar-Blöcke auf breiten Ansichten
+  - als Drawer auf iPad hochkant und schmaleren Breiten
+- Zeilenaktionen bleiben textnah oder liegen in kleinen Zeilenmenüs statt in
+  dauerpräsenten Buttonleisten.
+- `Kurs bearbeiten` liegt im Kurskontext als Drawer/Dialog; `Kurs löschen`
+  bleibt dort in der Danger Zone und ist nie Teil der Hauptfläche.
+- Diagnostik ist aus dem Kurskontext direkt erreichbar, jedoch als Kopf- oder
+  Sekundäraktion statt als eigener Hauptblock.
+- Das Hinzufügen von Lerneinheiten darf direkt auf der Kursseite stattfinden,
+  wenn es einen ruhigen, klar begrenzten Dialog oder ein Sheet nutzt.
 
 ### Diagnostik
 

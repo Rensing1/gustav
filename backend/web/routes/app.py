@@ -514,6 +514,18 @@ async def get_teacher_course_context(request: Request, course_id: str, limit: in
     if course is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
+    units = [
+        {
+            "id": str(item.get("id") or ""),
+            "title": str(item.get("title") or ""),
+            "position": int(item.get("position") or 0),
+            "href": f"/teaching/units/{item.get('id')}",
+        }
+        for item in _list_teacher_course_units(course_id, owner_sub)
+        if isinstance(item, dict)
+    ]
+    members = _list_teacher_course_members(course_id, owner_sub, limit=int(limit or 25), offset=int(offset or 0))
+
     body = {
         "user": _user_payload(user),
         "course": {
@@ -521,18 +533,12 @@ async def get_teacher_course_context(request: Request, course_id: str, limit: in
             "title": str(_field_value(course, "title") or ""),
             "href": f"/teaching/courses/{course_id}",
             "members_href": f"/teaching/courses/{course_id}/members",
+            "diagnostics_href": f"/diagnostics/courses/{course_id}",
+            "members_count": len(members),
+            "units_count": len(units),
         },
-        "units": [
-            {
-                "id": str(item.get("id") or ""),
-                "title": str(item.get("title") or ""),
-                "position": int(item.get("position") or 0),
-                "href": f"/live/courses/{course_id}/units/{item.get('id')}",
-            }
-            for item in _list_teacher_course_units(course_id, owner_sub)
-            if isinstance(item, dict)
-        ],
-        "members": _list_teacher_course_members(course_id, owner_sub, limit=int(limit or 25), offset=int(offset or 0)),
+        "units": units,
+        "members": members,
     }
     return JSONResponse(body, headers=_private_headers())
 

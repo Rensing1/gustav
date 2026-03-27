@@ -193,7 +193,7 @@ components:
             $ref: '#/components/schemas/TeacherCourseListItem'
     TeacherCourseContextCourse:
       type: object
-      required: [id, title, href, members_href]
+      required: [id, title, href, members_href, diagnostics_href, members_count, units_count]
       properties:
         id:
           type: string
@@ -203,6 +203,12 @@ components:
           type: string
         members_href:
           type: string
+        diagnostics_href:
+          type: string
+        members_count:
+          type: integer
+        units_count:
+          type: integer
     TeacherCourseContextUnit:
       type: object
       required: [id, title, position, href]

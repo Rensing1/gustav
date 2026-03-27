@@ -44,6 +44,9 @@ export type TeacherCourseContextCourse = {
   title: string;
   href: string;
   members_href: string;
+  diagnostics_href: string;
+  members_count: number;
+  units_count: number;
 };
 
 export type TeacherCourseContextUnit = {

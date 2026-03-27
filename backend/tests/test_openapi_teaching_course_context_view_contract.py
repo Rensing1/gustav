@@ -12,3 +12,14 @@ def test_openapi_documents_teacher_course_context_view() -> None:
 
     schema = spec["components"]["schemas"]["TeacherCourseContextView"]
     assert schema["required"] == ["user", "course", "units", "members"]
+
+    course = spec["components"]["schemas"]["TeacherCourseContextCourse"]
+    assert course["required"] == [
+        "id",
+        "title",
+        "href",
+        "members_href",
+        "diagnostics_href",
+        "members_count",
+        "units_count",
+    ]

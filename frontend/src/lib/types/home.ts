@@ -109,6 +109,148 @@ export type TeacherUnitsCatalogView = {
   create_href: string;
 };
 
+export type TeacherUnitWorkspaceUnit = {
+  id: string;
+  title: string;
+  summary?: string | null;
+  unit_type: "linear" | "modular";
+  edit_href: string;
+};
+
+export type TeacherUnitWorkspaceCounts = {
+  sections_count: number;
+  phases_count: number;
+  modules_count: number;
+  courses_count: number;
+};
+
+export type TeacherUnitWorkspaceSectionItem = {
+  id: string;
+  title: string;
+  position: number;
+  materials_count: number;
+  tasks_count: number;
+  editor_href: string;
+};
+
+export type TeacherUnitWorkspacePhaseItem = {
+  id: string;
+  title: string;
+  position: number;
+};
+
+export type TeacherUnitWorkspaceModuleItem = {
+  id: string;
+  title: string;
+  phase_id: string;
+  position_in_phase: number;
+  required_prereq_count: number;
+  materials_count: number;
+  tasks_count: number;
+  editor_href: string;
+  section_id?: string | null;
+};
+
+export type TeacherUnitWorkspaceEdge = {
+  from: string;
+  to: string;
+};
+
+export type TeacherUnitNodeEditorMaterial = {
+  id: string;
+  title: string;
+};
+
+export type TeacherUnitNodeEditorTask = {
+  id: string;
+  instruction: string;
+};
+
+export type TeacherUnitWorkspaceSelectionSection = {
+  id: string;
+  title: string;
+  position: number;
+  editor_href: string;
+};
+
+export type TeacherUnitWorkspaceGraphPhase = {
+  id: string;
+  title: string;
+  position: number;
+  modules: TeacherUnitWorkspaceModuleItem[];
+};
+
+export type TeacherUnitWorkspaceEdgeSelection = {
+  from_id: string;
+  to_id: string;
+  from_title: string;
+  to_title: string;
+  exists: boolean;
+};
+
+export type TeacherUnitWorkspaceSelectionPhase = {
+  id: string;
+  title: string;
+  position: number;
+};
+
+export type TeacherUnitWorkspaceSelectionModule = {
+  id: string;
+  title: string;
+  phase_id: string;
+  position_in_phase: number;
+  required_prereq_count: number;
+  materials_count: number;
+  tasks_count: number;
+  editor_href: string;
+};
+
+export type TeacherUnitWorkspaceSelection =
+  | { kind: "none" }
+  | { kind: "section"; section: TeacherUnitWorkspaceSelectionSection }
+  | { kind: "phase"; phase: TeacherUnitWorkspaceSelectionPhase }
+  | { kind: "module"; module: TeacherUnitWorkspaceSelectionModule }
+  | { kind: "edge"; edge: TeacherUnitWorkspaceEdgeSelection };
+
+export type TeacherUnitWorkspaceGraph = {
+  kind: "linear" | "modular";
+  create_section_href?: string | null;
+  create_phase_href?: string | null;
+  create_module_href?: string | null;
+  nodes?: TeacherUnitWorkspaceSectionItem[];
+  phases?: TeacherUnitWorkspaceGraphPhase[];
+  edges?: TeacherUnitWorkspaceEdge[];
+};
+
+export type TeacherUnitWorkspaceView = {
+  user: SessionBootstrapUser;
+  unit: TeacherUnitWorkspaceUnit;
+  counts: TeacherUnitWorkspaceCounts;
+  graph: TeacherUnitWorkspaceGraph;
+  selection: TeacherUnitWorkspaceSelection;
+};
+
+export type TeacherUnitNodeEditorNode = {
+  id: string;
+  kind: "section" | "module";
+  title: string;
+  editor_title: string;
+  backing_section_id?: string | null;
+};
+
+export type TeacherUnitNodeEditorSettings =
+  | { kind: "section" }
+  | { kind: "module"; required_prereq_count: number };
+
+export type TeacherUnitNodeEditorView = {
+  user: SessionBootstrapUser;
+  unit: TeacherUnitWorkspaceUnit;
+  node: TeacherUnitNodeEditorNode;
+  materials: TeacherUnitNodeEditorMaterial[];
+  tasks: TeacherUnitNodeEditorTask[];
+  settings: TeacherUnitNodeEditorSettings;
+};
+
 export type DiagnosticsCourseMatrixCourse = {
   id: string;
   title: string;

@@ -130,6 +130,10 @@
       : currentCopy();
   }
 
+  function isTeacherUnitWorkspaceRoute(): boolean {
+    return /^\/teaching\/units\/[^/]+$/.test(page.url.pathname);
+  }
+
   function closeAccountMenuOnWindowClick(event: MouseEvent): void {
     if (!accountMenu?.open) {
       return;
@@ -196,7 +200,7 @@
   </header>
 
   <main class="workspace-shell">
-    <div class="workspace-inner">
+    <div class="workspace-inner" class:workspace-inner--wide={isTeacherUnitWorkspaceRoute()}>
       <header class="workspace-header">
         <div class="workspace-topbar">
           {#if currentBreadcrumbs().length}
@@ -230,7 +234,7 @@
         {/if}
       </header>
 
-      <div class="workspace-body">
+      <div class="workspace-body" class:workspace-body--wide={isTeacherUnitWorkspaceRoute()}>
         {@render children()}
       </div>
     </div>

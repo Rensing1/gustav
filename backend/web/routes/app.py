@@ -139,6 +139,46 @@ def _list_teacher_unit_sections(unit_id: str, owner_sub: str) -> list[dict]:
     ]
 
 
+def _list_teacher_section_materials(unit_id: str, section_id: str, owner_sub: str) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        teaching_routes._serialize_material(item)  # type: ignore[attr-defined]
+        for item in (repo.list_materials_for_section_owned(unit_id, section_id, owner_sub) or [])
+    ]
+
+
+def _list_teacher_section_tasks(unit_id: str, section_id: str, owner_sub: str) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        teaching_routes._serialize_task(item)  # type: ignore[attr-defined]
+        for item in (repo.list_tasks_for_section_owned(unit_id, section_id, owner_sub) or [])
+    ]
+
+
+def _list_teacher_unit_phases(unit_id: str, owner_sub: str) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        teaching_routes._serialize_unit_phase_public(item)  # type: ignore[attr-defined]
+        for item in (repo.list_unit_phases_for_author(unit_id, owner_sub) or [])
+    ]
+
+
+def _list_teacher_unit_modules(unit_id: str, owner_sub: str) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        dict(item) if isinstance(item, dict) else teaching_routes._serialize_unit_module(item)  # type: ignore[attr-defined]
+        for item in (repo.list_unit_modules_for_author(unit_id=unit_id, author_id=owner_sub) or [])
+    ]
+
+
+def _list_teacher_unit_edges(unit_id: str, owner_sub: str) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        teaching_routes._serialize_unit_graph_edge(item)  # type: ignore[attr-defined]
+        for item in (repo.list_unit_module_edges_for_author(unit_id=unit_id, author_id=owner_sub) or [])
+    ]
+
+
 def _count_teacher_course_members(course_id: str, owner_sub: str) -> int:
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     page_size = 100
@@ -737,6 +777,331 @@ async def get_teacher_units_catalog(
         "items": list_items,
         "create_href": "/teaching/units?create=1",
     }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/teaching/views/units/{unit_id}/workspace")
+async def get_teacher_unit_workspace(
+    request: Request,
+    unit_id: str,
+    section_id: str | None = None,
+    phase_id: str | None = None,
+    module_id: str | None = None,
+    edge_from_module_id: str | None = None,
+    edge_to_module_id: str | None = None,
+):
+    """Return the graph-first teacher unit workspace read-model."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    if not teaching_routes._is_uuid_like(unit_id):  # type: ignore[attr-defined]
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_unit_id"},
+            status_code=400,
+            headers=_private_headers(),
+        )
+
+    owner_sub = str(user.get("sub") or "")
+    guard = teaching_routes._guard_unit_author(unit_id, owner_sub)  # type: ignore[attr-defined]
+    if guard:
+        return guard
+
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    unit = repo.get_unit_for_author(unit_id, owner_sub)
+    if not unit:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    serialized_unit = teaching_routes._serialize_unit(unit)  # type: ignore[attr-defined]
+    unit_type = str(serialized_unit.get("unit_type") or "linear").strip().lower() or "linear"
+    course_refs_by_unit, _courses = _build_teacher_unit_course_refs(owner_sub)
+    courses_count = len(course_refs_by_unit.get(unit_id, []))
+
+    counts = {"sections_count": 0, "phases_count": 0, "modules_count": 0, "courses_count": courses_count}
+    graph: dict[str, object] = {"kind": unit_type}
+    selection: dict[str, object] = {"kind": "none"}
+
+    def _validate_optional_uuid(raw_value: str | None, detail: str) -> str:
+        value = str(raw_value or "").strip()
+        if value and not teaching_routes._is_uuid_like(value):  # type: ignore[attr-defined]
+            raise ValueError(detail)
+        return value
+
+    if unit_type == "modular":
+        required_methods = (
+            "list_unit_phases_for_author",
+            "list_unit_modules_for_author",
+            "list_unit_module_edges_for_author",
+        )
+        repo_error = teaching_routes._require_modular_repo_methods(repo, *required_methods)  # type: ignore[attr-defined]
+        if repo_error:
+            return repo_error
+
+        try:
+            selected_phase_id = _validate_optional_uuid(phase_id, "invalid_phase_id")
+            selected_module_id = _validate_optional_uuid(module_id, "invalid_module_id")
+            edge_source_id = _validate_optional_uuid(edge_from_module_id, "invalid_edge_from_module_id")
+            edge_target_id = _validate_optional_uuid(edge_to_module_id, "invalid_edge_to_module_id")
+        except ValueError as exc:
+            return JSONResponse(
+                {"error": "bad_request", "detail": str(exc)},
+                status_code=400,
+                headers=_private_headers(),
+            )
+
+        phases = _list_teacher_unit_phases(unit_id, owner_sub)
+        modules = _list_teacher_unit_modules(unit_id, owner_sub)
+        edges = _list_teacher_unit_edges(unit_id, owner_sub)
+
+        module_items: list[dict[str, object]] = []
+        modules_by_id: dict[str, dict[str, object]] = {}
+        phase_items: list[dict[str, object]] = []
+        for module in modules:
+            section_id = str(module.get("section_id") or "")
+            materials_count = 0
+            tasks_count = 0
+            if section_id:
+                materials_count = len(_list_teacher_section_materials(unit_id, section_id, owner_sub))
+                tasks_count = len(_list_teacher_section_tasks(unit_id, section_id, owner_sub))
+            item = {
+                "id": str(module.get("id") or ""),
+                "title": str(module.get("title") or ""),
+                "phase_id": str(module.get("phase_id") or ""),
+                "position_in_phase": int(module.get("position_in_phase") or 0),
+                "required_prereq_count": int(module.get("required_prereq_count") or 0),
+                "materials_count": materials_count,
+                "tasks_count": tasks_count,
+                "editor_href": f"/teaching/units/{unit_id}/nodes/{str(module.get('id') or '')}",
+                "section_id": section_id or None,
+            }
+            module_items.append(item)
+            if item["id"]:
+                modules_by_id[str(item["id"])] = item
+
+        for phase in phases:
+            phase_items.append(
+                {
+                    "id": str(phase.get("id") or ""),
+                    "title": str(phase.get("title") or ""),
+                    "position": int(phase.get("position") or 0),
+                    "modules": [
+                        item
+                        for item in module_items
+                        if str(item.get("phase_id") or "") == str(phase.get("id") or "")
+                    ],
+                }
+            )
+
+        counts = {
+            "sections_count": 0,
+            "phases_count": len(phases),
+            "modules_count": len(module_items),
+            "courses_count": courses_count,
+        }
+
+        if not selected_module_id and module_items:
+            selected_module_id = str(module_items[0].get("id") or "")
+        selected_module = modules_by_id.get(selected_module_id or "")
+        selected_phase = next(
+            (phase for phase in phases if str(phase.get("id") or "") == (selected_phase_id or "")),
+            None,
+        )
+        selected_edge = None
+        if edge_source_id and edge_target_id:
+            source_title = str((modules_by_id.get(edge_source_id or "") or {}).get("title") or "")
+            target_title = str((modules_by_id.get(edge_target_id or "") or {}).get("title") or "")
+            selected_edge = {
+                "from_id": edge_source_id,
+                "to_id": edge_target_id,
+                "from_title": source_title,
+                "to_title": target_title,
+                "exists": any(
+                    str(edge.get("from") or "") == edge_source_id and str(edge.get("to") or "") == edge_target_id
+                    for edge in edges
+                ),
+            }
+
+        graph = {
+            "kind": "modular",
+            "create_phase_href": f"/teaching/units/{unit_id}?create-phase=1",
+            "create_module_href": f"/teaching/units/{unit_id}?create-module=1",
+            "phases": phase_items,
+            "edges": edges,
+        }
+        if selected_edge:
+            selection = {"kind": "edge", "edge": selected_edge}
+        elif selected_module:
+            selection = {"kind": "module", "module": selected_module}
+        elif selected_phase:
+            selection = {
+                "kind": "phase",
+                "phase": {
+                    "id": str((selected_phase or {}).get("id") or ""),
+                    "title": str((selected_phase or {}).get("title") or ""),
+                    "position": int((selected_phase or {}).get("position") or 0),
+                },
+            }
+    else:
+        try:
+            selected_section_id = _validate_optional_uuid(section_id, "invalid_section_id")
+        except ValueError as exc:
+            return JSONResponse(
+                {"error": "bad_request", "detail": str(exc)},
+                status_code=400,
+                headers=_private_headers(),
+            )
+
+        sections = _list_teacher_unit_sections(unit_id, owner_sub)
+        section_items: list[dict[str, object]] = []
+        for section in sections:
+            current_section_id = str(section.get("id") or "")
+            section_items.append(
+                {
+                    "id": current_section_id,
+                    "title": str(section.get("title") or ""),
+                    "position": int(section.get("position") or 0),
+                    "materials_count": len(_list_teacher_section_materials(unit_id, current_section_id, owner_sub)),
+                    "tasks_count": len(_list_teacher_section_tasks(unit_id, current_section_id, owner_sub)),
+                    "editor_href": f"/teaching/units/{unit_id}/nodes/{current_section_id}",
+                }
+            )
+
+        counts = {
+            "sections_count": len(section_items),
+            "phases_count": 0,
+            "modules_count": 0,
+            "courses_count": courses_count,
+        }
+
+        if not selected_section_id and section_items:
+            selected_section_id = str(section_items[0].get("id") or "")
+
+        selected_structure_section = next(
+            (section for section in section_items if str(section.get("id") or "") == (selected_section_id or "")),
+            None,
+        )
+        graph = {
+            "kind": "linear",
+            "create_section_href": f"/teaching/units/{unit_id}?create-section=1",
+            "nodes": section_items,
+        }
+        if selected_structure_section:
+            selection = {
+                "kind": "section",
+                "section": {
+                    "id": str(selected_structure_section.get("id") or ""),
+                    "title": str(selected_structure_section.get("title") or ""),
+                    "position": int(selected_structure_section.get("position") or 0),
+                    "editor_href": str(selected_structure_section.get("editor_href") or ""),
+                },
+            }
+
+    body = {
+        "user": _user_payload(user),
+        "unit": {
+            "id": str(serialized_unit.get("id") or ""),
+            "title": str(serialized_unit.get("title") or ""),
+            "summary": serialized_unit.get("summary"),
+            "unit_type": unit_type,
+            "edit_href": f"/teaching/units/{unit_id}?edit=1",
+        },
+        "counts": counts,
+        "graph": graph,
+        "selection": selection,
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/teaching/views/units/{unit_id}/nodes/{node_id}/editor")
+async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: str):
+    """Return the shared teacher content editor read-model for a unit node."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    if not teaching_routes._is_uuid_like(unit_id):  # type: ignore[attr-defined]
+        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400, headers=_private_headers())
+    if not teaching_routes._is_uuid_like(node_id):  # type: ignore[attr-defined]
+        return JSONResponse({"error": "bad_request", "detail": "invalid_node_id"}, status_code=400, headers=_private_headers())
+
+    owner_sub = str(user.get("sub") or "")
+    guard = teaching_routes._guard_unit_author(unit_id, owner_sub)  # type: ignore[attr-defined]
+    if guard:
+        return guard
+
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    unit = repo.get_unit_for_author(unit_id, owner_sub)
+    if not unit:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    serialized_unit = teaching_routes._serialize_unit(unit)  # type: ignore[attr-defined]
+    unit_type = str(serialized_unit.get("unit_type") or "linear").strip().lower() or "linear"
+
+    node_kind = "section"
+    node_title = ""
+    backing_section_id = node_id
+    settings: dict[str, object] = {"kind": "section"}
+
+    if unit_type == "modular":
+        repo_error = teaching_routes._require_modular_repo_methods(repo, "get_unit_module_for_author")  # type: ignore[attr-defined]
+        if repo_error:
+            return repo_error
+        module = repo.get_unit_module_for_author(unit_id=unit_id, module_id=node_id, author_id=owner_sub)
+        if not module:
+            return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+        node_kind = "module"
+        node_title = str(module.get("title") or "")
+        backing_section_id = str(module.get("section_id") or "")
+        settings = {
+            "kind": "module",
+            "required_prereq_count": int(module.get("required_prereq_count") or 0),
+        }
+    else:
+        section = next(
+            (item for item in _list_teacher_unit_sections(unit_id, owner_sub) if str(item.get("id") or "") == node_id),
+            None,
+        )
+        if not section:
+            return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+        node_title = str(section.get("title") or "")
+
+    materials = _list_teacher_section_materials(unit_id, backing_section_id, owner_sub)
+    tasks = _list_teacher_section_tasks(unit_id, backing_section_id, owner_sub)
+
+    body = {
+        "user": _user_payload(user),
+        "unit": {
+            "id": str(serialized_unit.get("id") or ""),
+            "title": str(serialized_unit.get("title") or ""),
+            "summary": serialized_unit.get("summary"),
+            "unit_type": unit_type,
+            "edit_href": f"/teaching/units/{unit_id}?edit=1",
+        },
+        "node": {
+            "id": node_id,
+            "kind": node_kind,
+            "title": node_title,
+            "editor_title": node_title,
+        },
+        "materials": [
+            {"id": str(item.get("id") or ""), "title": str(item.get("title") or "")}
+            for item in materials
+            if str(item.get("id") or "")
+        ],
+        "tasks": [
+            {
+                "id": str(item.get("id") or ""),
+                "instruction": str(item.get("instruction_md") or "").strip()[:160],
+            }
+            for item in tasks
+            if str(item.get("id") or "")
+        ],
+        "settings": settings,
+    }
+    if node_kind == "module":
+        body["node"]["backing_section_id"] = backing_section_id
     return JSONResponse(body, headers=_private_headers())
 
 

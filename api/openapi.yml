@@ -340,6 +340,308 @@ components:
             $ref: '#/components/schemas/TeacherUnitsCatalogItem'
         create_href:
           type: string
+    TeacherUnitWorkspaceUnit:
+      type: object
+      required: [id, title, unit_type, edit_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        unit_type:
+          type: string
+          enum: [linear, modular]
+        edit_href:
+          type: string
+    TeacherUnitWorkspaceCounts:
+      type: object
+      required: [sections_count, phases_count, modules_count, courses_count]
+      properties:
+        sections_count:
+          type: integer
+          minimum: 0
+        phases_count:
+          type: integer
+          minimum: 0
+        modules_count:
+          type: integer
+          minimum: 0
+        courses_count:
+          type: integer
+          minimum: 0
+    TeacherUnitWorkspaceSectionItem:
+      type: object
+      required: [id, title, position, materials_count, tasks_count, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        materials_count:
+          type: integer
+          minimum: 0
+        tasks_count:
+          type: integer
+          minimum: 0
+        editor_href:
+          type: string
+    TeacherUnitWorkspacePhaseItem:
+      type: object
+      required: [id, title, position]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+    TeacherUnitWorkspaceModuleItem:
+      type: object
+      required: [id, title, phase_id, position_in_phase, required_prereq_count, materials_count, tasks_count, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        phase_id:
+          type: string
+        position_in_phase:
+          type: integer
+          minimum: 1
+        required_prereq_count:
+          type: integer
+          minimum: 0
+        materials_count:
+          type: integer
+          minimum: 0
+        tasks_count:
+          type: integer
+          minimum: 0
+        editor_href:
+          type: string
+        section_id:
+          type: string
+          nullable: true
+    TeacherUnitWorkspaceEdge:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+    TeacherUnitNodeEditorMaterial:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+    TeacherUnitNodeEditorTask:
+      type: object
+      required: [id, instruction]
+      properties:
+        id:
+          type: string
+        instruction:
+          type: string
+    TeacherUnitWorkspaceSelectionSection:
+      type: object
+      required: [id, title, position, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        editor_href:
+          type: string
+    TeacherUnitWorkspaceSelectionPhase:
+      type: object
+      required: [id, title, position]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 0
+    TeacherUnitWorkspaceSelectionModule:
+      type: object
+      required: [id, title, phase_id, position_in_phase, required_prereq_count, materials_count, tasks_count, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        phase_id:
+          type: string
+        position_in_phase:
+          type: integer
+          minimum: 1
+        required_prereq_count:
+          type: integer
+          minimum: 0
+        materials_count:
+          type: integer
+          minimum: 0
+        tasks_count:
+          type: integer
+          minimum: 0
+        editor_href:
+          type: string
+    TeacherUnitWorkspaceGraphPhase:
+      type: object
+      required: [id, title, position, modules]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceModuleItem'
+    TeacherUnitWorkspaceEdgeSelection:
+      type: object
+      required: [from_id, to_id, from_title, to_title, exists]
+      properties:
+        from_id:
+          type: string
+        to_id:
+          type: string
+        from_title:
+          type: string
+        to_title:
+          type: string
+        exists:
+          type: boolean
+    TeacherUnitWorkspaceSelection:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [none, section, phase, module, edge]
+        section:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceSelectionSection'
+          nullable: true
+        phase:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceSelectionPhase'
+          nullable: true
+        module:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceSelectionModule'
+          nullable: true
+        edge:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceEdgeSelection'
+          nullable: true
+    TeacherUnitWorkspaceGraph:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [linear, modular]
+        create_section_href:
+          type: string
+          nullable: true
+        create_phase_href:
+          type: string
+          nullable: true
+        create_module_href:
+          type: string
+          nullable: true
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceSectionItem'
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceGraphPhase'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceEdge'
+    TeacherUnitWorkspaceView:
+      type: object
+      required: [user, unit, counts, graph, selection]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        unit:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceUnit'
+        counts:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceCounts'
+        graph:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceGraph'
+        selection:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceSelection'
+    TeacherUnitNodeEditorNode:
+      type: object
+      required: [id, kind, title, editor_title]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [section, module]
+        title:
+          type: string
+        editor_title:
+          type: string
+        backing_section_id:
+          type: string
+          nullable: true
+    TeacherUnitNodeEditorSettings:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [section, module]
+        required_prereq_count:
+          type: integer
+          minimum: 0
+          nullable: true
+    TeacherUnitNodeEditorView:
+      type: object
+      required: [user, unit, node, materials, tasks, settings]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        unit:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceUnit'
+        node:
+          $ref: '#/components/schemas/TeacherUnitNodeEditorNode'
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitNodeEditorMaterial'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitNodeEditorTask'
+        settings:
+          $ref: '#/components/schemas/TeacherUnitNodeEditorSettings'
     DiagnosticsCourseMatrixCourse:
       type: object
       required: [id, title, href]
@@ -5477,6 +5779,192 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/units/{unit_id}/workspace:
+    get:
+      tags: [App]
+      summary: Return the teacher unit workspace read-model
+      description: >-
+        Returns the teacher-facing graph workspace for a single unit. Linear
+        units render sections as a vertical graph; modular units render
+        phases, modules and edges.
+      operationId: getTeacherUnitWorkspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: section_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: phase_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: module_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: edge_from_module_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: edge_to_module_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Teacher unit workspace payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherUnitWorkspaceView'
+        '400':
+          description: Invalid unit id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not the authoring teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unit not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/units/{unit_id}/nodes/{node_id}/editor:
+    get:
+      tags: [App]
+      summary: Return the teacher node editor read-model
+      description: >-
+        Returns the shared teacher content editor payload for a unit node.
+        For linear units the node is a section. For modular units the node is
+        a module with a 1:1 backing section.
+      operationId: getTeacherUnitNodeEditor
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: node_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Teacher node editor payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherUnitNodeEditorView'
+        '400':
+          description: Invalid unit or node id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not the authoring teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unit or node not found
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

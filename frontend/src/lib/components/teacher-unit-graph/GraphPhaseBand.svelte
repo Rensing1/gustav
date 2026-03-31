@@ -5,23 +5,31 @@
 
   let { data, selected = false }: NodeProps & { data: TeacherFlowNodeData; selected?: boolean } = $props();
 
-  function compactPhaseKicker(kicker: string): string {
+  function editorialPhaseKicker(kicker: string): string {
     const match = kicker.match(/(\d+)/);
     if (!match) {
-      return kicker;
+      return kicker.toUpperCase();
     }
 
-    return `Phase ${String(Number.parseInt(match[1] ?? "0", 10))}`;
+    const phaseNumber = Number.parseInt(match[1] ?? "0", 10);
+    return `PHASE ${String(phaseNumber).padStart(2, "0")}`;
   }
 
-  function phaseLabel(): string {
-    return `${compactPhaseKicker(data.kicker)}: ${data.title}`;
+  function phaseHref(): string | null {
+    return data.quickHref ?? data.selectHref ?? null;
   }
 </script>
 
 <div class:teacher-flow-phase-band--selected={selected} class="teacher-flow-phase-band">
-  <div class="teacher-flow-phase-band__rule" aria-hidden="true"></div>
-  <div class="teacher-flow-phase-band__label">
-    <strong>{phaseLabel()}</strong>
-  </div>
+  {#if phaseHref()}
+    <a class="teacher-flow-phase-band__label nodrag nopan" href={phaseHref() ?? undefined}>
+      <span class="teacher-flow-phase-band__kicker">{editorialPhaseKicker(data.kicker)}</span>
+      <strong class="teacher-flow-phase-band__title">{data.title}</strong>
+    </a>
+  {:else}
+    <div class="teacher-flow-phase-band__label">
+      <span class="teacher-flow-phase-band__kicker">{editorialPhaseKicker(data.kicker)}</span>
+      <strong class="teacher-flow-phase-band__title">{data.title}</strong>
+    </div>
+  {/if}
 </div>

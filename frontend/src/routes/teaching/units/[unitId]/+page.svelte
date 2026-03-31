@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invalidateAll } from "$app/navigation";
+  import { enhance } from "$app/forms";
   import { page } from "$app/state";
   import {
     Controls,
@@ -10,6 +10,7 @@
   import "@xyflow/svelte/dist/style.css";
 
   import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
+  import TeacherGraphEdge from "$lib/components/teacher-unit-graph/TeacherGraphEdge.svelte";
   import GraphUnitNode from "$lib/components/teacher-unit-graph/GraphUnitNode.svelte";
   import {
     buildTeacherUnitFlow,
@@ -19,6 +20,7 @@
     type TeacherFlowNodeData
   } from "$lib/graph/teacher-unit-flow";
   import type {
+    TeacherUnitWorkspaceView,
     TeacherUnitWorkspaceEdgeSelection,
     TeacherUnitWorkspaceGraphPhase,
     TeacherUnitWorkspaceModuleItem,
@@ -29,19 +31,83 @@
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
+  function plainWorkspace(workspace: TeacherUnitWorkspaceView): TeacherUnitWorkspaceView {
+    return JSON.parse(JSON.stringify(workspace)) as TeacherUnitWorkspaceView;
+  }
+
   let flowNodes = $state.raw<TeacherFlowNode[]>([]);
   let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
   let flowBusy = $state(false);
   let graphMessage = $state<{ tone: "info" | "success" | "error"; text: string } | null>(null);
+  let workspaceState = $state<TeacherUnitWorkspaceView>(plainWorkspace(data.workspace));
   let localSelection = $state<TeacherUnitWorkspaceSelection>({ kind: "none" });
+  let openModulePropertiesId = $state<string | null>(null);
+  let handledForm = $state<ActionData | undefined>(undefined);
 
   const nodeTypes = {
     unitNode: GraphUnitNode,
     phaseBand: GraphPhaseBand
   };
 
+  const edgeTypes = {
+    teacherEdge: TeacherGraphEdge
+  };
+
+  const enhanceGraphForm = () => {
+    return async ({ update }: { update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void> }) => {
+      await update({ reset: false, invalidateAll: false });
+    };
+  };
+
+  type GraphActionSuccess = {
+    ok: true;
+    message: string;
+    next?: Record<string, string | null>;
+    workspace: TeacherUnitWorkspaceView;
+  };
+
+  function asGraphActionSuccess(value: unknown): GraphActionSuccess | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const candidate = value as Partial<GraphActionSuccess>;
+    return candidate.ok && candidate.workspace ? (candidate as GraphActionSuccess) : null;
+  }
+
+  function actionError(value: unknown): string | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const candidate = value as { error?: string };
+    return candidate.error ?? null;
+  }
+
+  function actionValues<T extends Record<string, string>>(value: unknown): Partial<T> {
+    if (!value || typeof value !== "object") {
+      return {};
+    }
+    const candidate = value as { values?: Partial<T> };
+    return candidate.values ?? {};
+  }
+
+  function createPhaseValues() {
+    return actionValues<{ title: string }>(form?.createPhase);
+  }
+
+  function createModuleValues() {
+    return actionValues<{ title: string; phase_id: string }>(form?.createModule);
+  }
+
+  function createSectionValues() {
+    return actionValues<{ title: string }>(form?.createSection);
+  }
+
+  function currentUrl(): URL {
+    return typeof window === "undefined" ? new URL(page.url) : new URL(window.location.href);
+  }
+
   function pageHref(next: Record<string, string | null>): string {
-    const baseUrl = typeof window === "undefined" ? new URL(page.url) : new URL(window.location.href);
+    const baseUrl = currentUrl();
     const params = new URLSearchParams(baseUrl.searchParams);
     for (const [key, value] of Object.entries(next)) {
       if (!value) {
@@ -55,7 +121,19 @@
   }
 
   function quickEditOpen(): boolean {
-    return page.url.searchParams.get("quick") === "1";
+    return currentUrl().searchParams.get("quick") === "1";
+  }
+
+  function showCreatePhaseDialog(): boolean {
+    return currentUrl().searchParams.get("create-phase") === "1";
+  }
+
+  function showCreateModuleDialog(): boolean {
+    return currentUrl().searchParams.get("create-module") === "1";
+  }
+
+  function showCreateSectionDialog(): boolean {
+    return currentUrl().searchParams.get("create-section") === "1";
   }
 
   function selectedPhaseId(): string | null {
@@ -65,7 +143,7 @@
     if (localSelection.kind === "module") {
       return localSelection.module.phase_id;
     }
-    return page.url.searchParams.get("phase");
+    return currentUrl().searchParams.get("phase");
   }
 
   function flowNodeData(node: TeacherFlowNode): TeacherFlowNodeData {
@@ -76,16 +154,24 @@
     return (edge.data as TeacherFlowEdgeData | undefined) ?? { from: edge.source, to: edge.target };
   }
 
+  function openModuleProperties(moduleId: string) {
+    openModulePropertiesId = moduleId;
+  }
+
+  function closeModuleProperties() {
+    openModulePropertiesId = null;
+  }
+
   function isInteractiveTarget(target: EventTarget | null): boolean {
     return target instanceof Element && Boolean(target.closest("a,button,summary,input,textarea,select,label,form"));
   }
 
   function modularPhases() {
-    return data.workspace.graph.kind === "modular" ? (data.workspace.graph.phases ?? []) : [];
+    return workspaceState.graph.kind === "modular" ? (workspaceState.graph.phases ?? []) : [];
   }
 
   function graphSections(): TeacherUnitWorkspaceSectionItem[] {
-    return data.workspace.graph.kind === "linear" ? (data.workspace.graph.nodes ?? []) : [];
+    return workspaceState.graph.kind === "linear" ? (workspaceState.graph.nodes ?? []) : [];
   }
 
   function allModules(): TeacherUnitWorkspaceModuleItem[] {
@@ -105,7 +191,7 @@
   }
 
   function edgeExists(fromId: string, toId: string): boolean {
-    return (data.workspace.graph.edges ?? []).some((edge) => edge.from === fromId && edge.to === toId);
+    return (workspaceState.graph.edges ?? []).some((edge) => edge.from === fromId && edge.to === toId);
   }
 
   function deriveSectionSelection(sectionId: string): TeacherUnitWorkspaceSelection {
@@ -198,10 +284,30 @@
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
+  function syncUrlPatch(next: Record<string, string | null>) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.history.replaceState(window.history.state, "", pageHref(next));
+  }
+
   async function applyLocalSelection(selection: TeacherUnitWorkspaceSelection) {
     localSelection = selection;
     syncSelectionUrl(selection);
-    await rebuildFlow(selection);
+  }
+
+  async function applyWorkspaceUpdate(
+    workspace: TeacherUnitWorkspaceView,
+    selection: TeacherUnitWorkspaceSelection = workspace.selection,
+    next: Record<string, string | null> | null = null
+  ) {
+    workspaceState = workspace;
+    localSelection = selection;
+    if (next) {
+      syncUrlPatch(next);
+    }
+    syncSelectionUrl(selection);
   }
 
   function setGraphMessage(text: string, tone: "info" | "success" | "error" = "info") {
@@ -217,13 +323,13 @@
     });
 
     if (!response.ok) {
-      let errorPayload: { detail?: string } = {};
+      let errorPayload: { detail?: string; error?: string } = {};
       try {
         errorPayload = await response.json();
       } catch {
         errorPayload = {};
       }
-      throw new Error(errorPayload.detail || "request_failed");
+      throw new Error(errorPayload.detail || errorPayload.error || "request_failed");
     }
 
     if (response.status === 204) {
@@ -232,15 +338,75 @@
     return response.json();
   }
 
-  async function refreshWorkspace() {
-    await invalidateAll();
+  async function refreshWorkspaceView(next: Record<string, string | null> = {}): Promise<TeacherUnitWorkspaceView> {
+    const url = currentUrl();
+    const params = new URLSearchParams(url.searchParams);
+    for (const [key, value] of Object.entries(next)) {
+      if (!value) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    }
+    const query = params.toString();
+    const href = query
+      ? `/teaching/units/${workspaceState.unit.id}/graph/workspace?${query}`
+      : `/teaching/units/${workspaceState.unit.id}/graph/workspace`;
+    const response = await fetch(href, {
+      method: "GET",
+      credentials: "same-origin"
+    });
+
+    if (!response.ok) {
+      throw new Error("workspace_refresh_failed");
+    }
+
+    return response.json() as Promise<TeacherUnitWorkspaceView>;
   }
 
   async function rebuildFlow(selection: TeacherUnitWorkspaceSelection = localSelection) {
     flowBusy = true;
     try {
-      const layout = await buildTeacherUnitFlow(data.workspace, selection);
-      flowNodes = layout.nodes;
+      const saveModuleValues = actionValues<{ title: string; phase_id: string; required_prereq_count: string }>(form?.saveModule);
+      const saveModuleFormError = actionError(form?.saveModule);
+      const layout = await buildTeacherUnitFlow(workspaceState, selection);
+      flowNodes = layout.nodes.map((node) => {
+        const nodeData = flowNodeData(node);
+        if (nodeData.kind !== "module") {
+          return node;
+        }
+
+        const showsQuickEdit = openModulePropertiesId === node.id && selection.kind === "module" && selection.module.id === node.id;
+
+        if (!showsQuickEdit) {
+          return {
+            ...node,
+            data: {
+              ...nodeData,
+              onOpenProperties: () => openModuleProperties(node.id),
+              onCloseProperties: null,
+              quickEdit: null
+            }
+          };
+        }
+
+        return {
+          ...node,
+          data: {
+            ...nodeData,
+            onOpenProperties: null,
+            onCloseProperties: () => closeModuleProperties(),
+            quickEdit: {
+              title: saveModuleValues.title ?? selection.module.title,
+              phaseId: saveModuleValues.phase_id ?? selection.module.phase_id,
+              phaseOptions: modularPhases().map((phase) => ({ id: phase.id, title: phase.title })),
+              requiredPrereqCount:
+                saveModuleValues.required_prereq_count ?? String(selection.module.required_prereq_count),
+              error: saveModuleFormError
+            }
+          }
+        };
+      });
       flowEdges = layout.edges;
     } finally {
       flowBusy = false;
@@ -249,8 +415,63 @@
 
   $effect(() => {
     data.workspace;
+    workspaceState = plainWorkspace(data.workspace);
     localSelection = data.workspace.selection;
-    void rebuildFlow(data.workspace.selection);
+    openModulePropertiesId = null;
+  });
+
+  $effect(() => {
+    workspaceState;
+    localSelection;
+    openModulePropertiesId;
+    form?.saveModule;
+    void rebuildFlow(localSelection);
+  });
+
+  $effect(() => {
+    if (!form || form === handledForm) {
+      return;
+    }
+
+    handledForm = form;
+
+    const saveSectionSuccess = asGraphActionSuccess(form.saveSection);
+    const createSectionSuccess = asGraphActionSuccess(form.createSection);
+    const deleteSectionSuccess = asGraphActionSuccess(form.deleteSection);
+    const savePhaseSuccess = asGraphActionSuccess(form.savePhase);
+    const createPhaseSuccess = asGraphActionSuccess(form.createPhase);
+    const deletePhaseSuccess = asGraphActionSuccess(form.deletePhase);
+    const saveModuleSuccess = asGraphActionSuccess(form.saveModule);
+    const createModuleSuccess = asGraphActionSuccess(form.createModule);
+    const deleteModuleSuccess = asGraphActionSuccess(form.deleteModule);
+    const createEdgeSuccess = asGraphActionSuccess(form.createEdge);
+    const deleteEdgeSuccess = asGraphActionSuccess(form.deleteEdge);
+
+    const success =
+      saveSectionSuccess
+      ?? createSectionSuccess
+      ?? deleteSectionSuccess
+      ?? savePhaseSuccess
+      ?? createPhaseSuccess
+      ?? deletePhaseSuccess
+      ?? saveModuleSuccess
+      ?? createModuleSuccess
+      ?? deleteModuleSuccess
+      ?? createEdgeSuccess
+      ?? deleteEdgeSuccess;
+
+    if (success) {
+      if (success.message) {
+        setGraphMessage(success.message, "success");
+      }
+      if (saveModuleSuccess) {
+        openModulePropertiesId =
+          typeof saveModuleSuccess.next?.module === "string" ? saveModuleSuccess.next.module : openModulePropertiesId;
+      } else if (deleteModuleSuccess || createModuleSuccess || createEdgeSuccess || deleteEdgeSuccess) {
+        openModulePropertiesId = null;
+      }
+      void applyWorkspaceUpdate(success.workspace, success.workspace.selection, success.next ?? null);
+    }
   });
 
   function orderedSectionIds(): string[] {
@@ -261,11 +482,11 @@
   }
 
   async function persistSectionReorder() {
-    if (data.workspace.graph.kind !== "linear") {
+    if (workspaceState.graph.kind !== "linear") {
       return;
     }
 
-    const current = (data.workspace.graph.nodes ?? []).map((node) => node.id);
+    const current = (workspaceState.graph.nodes ?? []).map((node) => node.id);
     const next = orderedSectionIds();
 
     if (JSON.stringify(current) === JSON.stringify(next)) {
@@ -273,58 +494,76 @@
     }
 
     try {
-      await apiJson("POST", `/api/teaching/units/${data.workspace.unit.id}/sections/reorder`, { section_ids: next });
+      await apiJson("POST", `/teaching/units/${workspaceState.unit.id}/graph/sections`, { section_ids: next });
       setGraphMessage("Abschnitte gespeichert.", "success");
-      await refreshWorkspace();
+      const workspace = await refreshWorkspaceView({ section: localSelection.kind === "section" ? localSelection.section.id : null });
+      await applyWorkspaceUpdate(workspace);
     } catch (error) {
       setGraphMessage("Abschnitte konnten nicht neu geordnet werden.", "error");
       await rebuildFlow(localSelection);
     }
   }
 
-  function phaseBandNodes(): TeacherFlowNode[] {
-    return flowNodes
-      .filter((node) => flowNodeData(node).kind === "phase")
-      .sort((left, right) => left.position.y - right.position.y);
-  }
-
   function moduleNodes(): TeacherFlowNode[] {
     return flowNodes.filter((node) => flowNodeData(node).kind === "module");
   }
 
-  function targetPhaseIdForNode(node: TeacherFlowNode): string | null {
-    const nodeCenter = node.position.y + (node.height ?? 0) / 2;
-    const lanes = phaseBandNodes();
-    if (!lanes.length) {
-      return null;
+  function compareNodeTopLeft(left: TeacherFlowNode, right: TeacherFlowNode): number {
+    const byY = left.position.y - right.position.y;
+    if (Math.abs(byY) > 12) {
+      return byY;
     }
+    return left.position.x - right.position.x;
+  }
 
-    let bestPhase = flowNodeData(lanes[0]).phaseId ?? null;
-    let bestDistance = Number.POSITIVE_INFINITY;
+  function sameIds(left: string[], right: string[]): boolean {
+    return left.length === right.length && left.every((value, index) => value === right[index]);
+  }
 
-    for (const lane of lanes) {
-      const laneData = flowNodeData(lane);
-      const laneHeight = laneData.bandHeight ?? lane.height ?? 0;
-      const laneTop = lane.position.y;
-      const laneBottom = laneTop + laneHeight;
-
-      if (nodeCenter >= laneTop && nodeCenter <= laneBottom) {
-        return laneData.phaseId ?? null;
-      }
-
-      const laneCenter = laneTop + laneHeight / 2;
-      const distance = Math.abs(nodeCenter - laneCenter);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestPhase = laneData.phaseId ?? null;
-      }
+  function phaseReorderMessage(detail: string): string {
+    switch (detail) {
+      case "edge_constraint_violation":
+        return "Phasen können wegen bestehender Abhängigkeiten nicht so verschoben werden.";
+      case "phase_mismatch":
+        return "Die Phasenreihenfolge ist unvollständig. Bitte erneut versuchen.";
+      case "phase_not_in_unit":
+        return "Mindestens eine Phase gehört nicht zu dieser Lerneinheit.";
+      case "invalid_phase_ids":
+        return "Die Phasenreihenfolge enthält ungültige Einträge.";
+      case "duplicate_phase_ids":
+        return "Eine Phase wurde doppelt übermittelt.";
+      case "empty_phase_ids":
+        return "Es wurde keine Phasenreihenfolge übermittelt.";
+      case "invalid_unit_type":
+        return "Phasen können nur in modularen Lerneinheiten sortiert werden.";
+      default:
+        return detail ? `Phasen konnten nicht neu geordnet werden (${detail}).` : "Phasen konnten nicht neu geordnet werden.";
     }
+  }
 
-    return bestPhase;
+  function moduleReorderMessage(detail: string): string {
+    switch (detail) {
+      case "edge_constraint_violation":
+        return "Verschieben blockiert: Abhängigkeiten zuerst entfernen.";
+      case "invalid_module_ids":
+        return "Die Modulreihenfolge enthält ungültige Einträge.";
+      case "duplicate_module_ids":
+        return "Ein Modul wurde doppelt übermittelt.";
+      case "empty_module_ids":
+        return "Es wurde keine Modulreihenfolge übermittelt.";
+      case "phase_not_found":
+        return "Die Zielphase wurde nicht gefunden.";
+      case "module_not_in_unit":
+        return "Mindestens ein Modul gehört nicht zu dieser Lerneinheit.";
+      case "invalid_unit_type":
+        return "Module können nur in modularen Lerneinheiten sortiert werden.";
+      default:
+        return detail ? `Module konnten nicht neu geordnet werden (${detail}).` : "Module konnten nicht neu geordnet werden.";
+    }
   }
 
   async function persistModuleReorder(nodeId: string) {
-    if (data.workspace.graph.kind !== "modular") {
+    if (workspaceState.graph.kind !== "modular") {
       return;
     }
 
@@ -333,7 +572,7 @@
       return;
     }
 
-    const targetPhaseId = targetPhaseIdForNode(movedNode);
+    const targetPhaseId = flowNodeData(movedNode).phaseId ?? null;
     if (!targetPhaseId) {
       await rebuildFlow(localSelection);
       return;
@@ -342,10 +581,9 @@
     const nextIds = moduleNodes()
       .filter((node) => {
         const nodeData = flowNodeData(node);
-        const phaseId = node.id === nodeId ? targetPhaseId : nodeData.phaseId;
-        return phaseId === targetPhaseId;
+        return nodeData.phaseId === targetPhaseId;
       })
-      .sort((left, right) => left.position.x - right.position.x)
+      .sort(compareNodeTopLeft)
       .map((node) => node.id);
 
     const currentIds =
@@ -353,7 +591,13 @@
         .find((phase) => phase.id === targetPhaseId)
         ?.modules.map((module) => module.id) ?? [];
 
-    if (JSON.stringify(currentIds) === JSON.stringify(nextIds)) {
+    if (!nextIds.length) {
+      console.warn("Module reorder aborted: empty target payload", { nodeId, targetPhaseId });
+      await rebuildFlow(localSelection);
+      return;
+    }
+
+    if (sameIds(currentIds, nextIds)) {
       await rebuildFlow(localSelection);
       return;
     }
@@ -361,24 +605,28 @@
     try {
       await apiJson(
         "POST",
-        `/api/teaching/units/${data.workspace.unit.id}/phases/${targetPhaseId}/modules/reorder`,
-        { module_ids: nextIds }
+        `/teaching/units/${workspaceState.unit.id}/graph/modules`,
+        { phase_id: targetPhaseId, module_ids: nextIds }
       );
       setGraphMessage("Module gespeichert.", "success");
-      await refreshWorkspace();
+      const workspace = await refreshWorkspaceView({ module: nodeId, phase: targetPhaseId });
+      await applyWorkspaceUpdate(workspace);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
-      const message =
-        detail === "edge_constraint_violation"
-          ? "Verschieben blockiert: Abhängigkeiten zuerst entfernen."
-          : "Module konnten nicht neu geordnet werden.";
-      setGraphMessage(message, "error");
+      console.warn("Module reorder failed", {
+        detail,
+        nodeId,
+        targetPhaseId,
+        currentIds,
+        nextIds
+      });
+      setGraphMessage(moduleReorderMessage(detail), "error");
       await rebuildFlow(localSelection);
     }
   }
 
   async function moveSelectedPhase(direction: -1 | 1) {
-    if (data.workspace.graph.kind !== "modular" || localSelection.kind !== "phase") {
+    if (workspaceState.graph.kind !== "modular" || localSelection.kind !== "phase") {
       return;
     }
 
@@ -395,18 +643,15 @@
     reordered.splice(nextIndex, 0, selected);
 
     try {
-      await apiJson("POST", `/api/teaching/units/${data.workspace.unit.id}/phases/reorder`, {
+      await apiJson("POST", `/teaching/units/${workspaceState.unit.id}/graph/phases`, {
         phase_ids: reordered
       });
       setGraphMessage("Phasen gespeichert.", "success");
-      await refreshWorkspace();
+      const workspace = await refreshWorkspaceView({ phase: localSelection.phase.id });
+      await applyWorkspaceUpdate(workspace);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
-      const message =
-        detail === "edge_constraint_violation"
-          ? "Phasen können wegen bestehender Abhängigkeiten nicht so verschoben werden."
-          : "Phasen konnten nicht neu geordnet werden.";
-      setGraphMessage(message, "error");
+      setGraphMessage(phaseReorderMessage(detail), "error");
       await rebuildFlow(localSelection);
     }
   }
@@ -418,15 +663,20 @@
 
     const nodeData = flowNodeData(node);
     if (nodeData.kind === "section") {
+      closeModuleProperties();
       await applyLocalSelection(deriveSectionSelection(node.id));
       return;
     }
     if (nodeData.kind === "phase") {
       const phaseId = nodeData.phaseId ?? node.id.replace(/^phase:/, "");
+      closeModuleProperties();
       await applyLocalSelection(derivePhaseSelection(phaseId));
       return;
     }
     if (nodeData.kind === "module") {
+      if (openModulePropertiesId && openModulePropertiesId !== node.id) {
+        closeModuleProperties();
+      }
       await applyLocalSelection(deriveModuleSelection(node.id));
     }
   }
@@ -437,26 +687,36 @@
     }
 
     const edgeData = flowEdgeData(edge);
+    closeModuleProperties();
     await applyLocalSelection(deriveEdgeSelection(edgeData.from, edgeData.to));
   }
 
   async function handlePaneClick() {
+    closeModuleProperties();
     await applyLocalSelection({ kind: "none" });
   }
 
   async function handleConnect(connection: Connection) {
-    if (data.workspace.graph.kind !== "modular" || !connection.source || !connection.target || connection.source === connection.target) {
+    if (workspaceState.graph.kind !== "modular" || !connection.source || !connection.target || connection.source === connection.target) {
       return;
     }
 
     try {
-      await apiJson("POST", `/api/teaching/units/${data.workspace.unit.id}/modules/edges`, {
+      await apiJson("POST", `/teaching/units/${workspaceState.unit.id}/graph/edges`, {
         from_module_id: connection.source,
         to_module_id: connection.target
       });
       setGraphMessage("Kante angelegt.", "success");
-      await refreshWorkspace();
-      await applyLocalSelection(deriveEdgeSelection(connection.source, connection.target));
+      const workspace = await refreshWorkspaceView({
+        module: connection.target,
+        edgeFrom: connection.source,
+        edgeTo: connection.target
+      });
+      await applyWorkspaceUpdate(
+        workspace,
+        deriveEdgeSelection(connection.source, connection.target),
+        { module: connection.target, edgeFrom: connection.source, edgeTo: connection.target }
+      );
     } catch (error) {
       setGraphMessage("Die Kante konnte nicht angelegt werden.", "error");
       await rebuildFlow(localSelection);
@@ -488,41 +748,122 @@
 </script>
 
 <svelte:head>
-  <title>{data.workspace.unit.title} | GUSTAV</title>
+  <title>{workspaceState.unit.title} | GUSTAV</title>
 </svelte:head>
 
 <section class="workspace-composer-header workspace-unit-header">
-  <div class="workspace-composer-copy">
-    <a class="workspace-back-link" href="/teaching/units">Zurück zu Lerneinheiten</a>
-    <h1>{data.workspace.unit.title}</h1>
-    <p class="workspace-composer-copyline">
-      {#if data.workspace.unit.unit_type === "linear"}
-        {data.workspace.counts.sections_count} Abschnitte · gleiche Graphlogik wie für Lernende
-      {:else}
-        {data.workspace.counts.phases_count} Phasen · {data.workspace.counts.modules_count} Module · gleiche Graphlogik wie für Lernende
-      {/if}
-    </p>
+  <div class="workspace-unit-header-main">
+    <div class="workspace-composer-copy">
+      <a class="workspace-back-link" href="/teaching/units">Zurück zu Lerneinheiten</a>
+      <h1>{workspaceState.unit.title}</h1>
+      <p class="workspace-composer-copyline">
+        {#if workspaceState.unit.unit_type === "linear"}
+          {workspaceState.counts.sections_count} Abschnitte · dieselbe Graphansicht wie für Lernende
+        {:else}
+          {workspaceState.counts.phases_count} Phasen · {workspaceState.counts.modules_count} Module · dieselbe Graphansicht wie für Lernende
+        {/if}
+      </p>
+    </div>
+
+    <div class="workspace-unit-header-actions">
+      <details class="workspace-row-menu">
+        <summary aria-label="Einheitsaktionen">···</summary>
+        <div class="workspace-row-menu-popover">
+          <a class="workspace-link-action workspace-link-action--subtle" href={workspaceState.unit.edit_href}>Bearbeiten</a>
+        </div>
+      </details>
+    </div>
   </div>
 
-  <div class="workspace-unit-header-actions">
-    <details class="workspace-row-menu">
-      <summary aria-label="Einheitsaktionen">···</summary>
-      <div class="workspace-row-menu-popover">
-        <a class="workspace-link-action workspace-link-action--subtle" href={data.workspace.unit.edit_href}>Bearbeiten</a>
+  <div class="workspace-unit-commandbar-stack">
+    <div class="workspace-unit-commandbar" role="toolbar" aria-label="Graphwerkzeuge">
+      {#if workspaceState.graph.kind === "linear"}
+        <a class="workspace-top-action workspace-top-action--quiet" href={workspaceState.graph.create_section_href}>
+          Abschnitt hinzufügen
+        </a>
+      {:else}
+        <a
+          class={`workspace-top-action workspace-top-action--quiet ${showCreatePhaseDialog() ? "workspace-top-action--active" : ""}`}
+          href={workspaceState.graph.create_phase_href}
+        >
+          Phase hinzufügen
+        </a>
+        <a
+          class={`workspace-top-action workspace-top-action--quiet ${showCreateModuleDialog() ? "workspace-top-action--active" : ""}`}
+          href={workspaceState.graph.create_module_href}
+        >
+          Modul hinzufügen
+        </a>
+      {/if}
+    </div>
+
+    {#if showCreatePhaseDialog()}
+      <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Phase hinzufügen">
+        <div class="workspace-unit-commandbar-popover__header">
+          <div>
+            <p class="workspace-label">Canvas</p>
+            <h2>Phase hinzufügen</h2>
+          </div>
+          <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-phase": null })}>
+            Schließen
+          </a>
+        </div>
+        <form method="POST" action="?/createPhase" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
+          <label class="workspace-field">
+            <span>Titel</span>
+            <input name="title" type="text" value={createPhaseValues().title ?? ""} />
+          </label>
+          {#if actionError(form?.createPhase)}
+            <p class="workspace-note workspace-note--error">{actionError(form?.createPhase)}</p>
+          {/if}
+          <div class="workspace-unit-commandbar-popover__actions">
+            <button class="workspace-link-action" type="submit">Anlegen</button>
+          </div>
+        </form>
       </div>
-    </details>
+    {/if}
+
+    {#if showCreateModuleDialog()}
+      <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Modul hinzufügen">
+        <div class="workspace-unit-commandbar-popover__header">
+          <div>
+            <p class="workspace-label">Canvas</p>
+            <h2>Modul hinzufügen</h2>
+          </div>
+          <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": null })}>
+            Schließen
+          </a>
+        </div>
+        <form method="POST" action="?/createModule" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
+          <label class="workspace-field">
+            <span>Titel</span>
+            <input name="title" type="text" value={createModuleValues().title ?? ""} />
+          </label>
+          <label class="workspace-field">
+            <span>Phase</span>
+            <select name="phase_id">
+              <option value="">Bitte wählen</option>
+              {#each modularPhases() as phase}
+                <option
+                  value={phase.id}
+                  selected={(createModuleValues().phase_id ?? selectedPhaseId()) === phase.id}
+                >
+                  {phase.title}
+                </option>
+              {/each}
+            </select>
+          </label>
+          {#if actionError(form?.createModule)}
+            <p class="workspace-note workspace-note--error">{actionError(form?.createModule)}</p>
+          {/if}
+          <div class="workspace-unit-commandbar-popover__actions">
+            <button class="workspace-link-action" type="submit">Anlegen</button>
+          </div>
+        </form>
+      </div>
+    {/if}
   </div>
 </section>
-
-<div class="teacher-flow-page-tools" role="toolbar" aria-label="Graphwerkzeuge">
-  <span class="workspace-label">Canvas</span>
-  {#if data.workspace.graph.kind === "linear"}
-    <a class="workspace-link-action" href={data.workspace.graph.create_section_href}>Abschnitt hinzufügen</a>
-  {:else}
-    <a class="workspace-link-action" href={data.workspace.graph.create_phase_href}>Phase hinzufügen</a>
-    <a class="workspace-link-action workspace-link-action--subtle" href={data.workspace.graph.create_module_href}>Modul hinzufügen</a>
-  {/if}
-</div>
 
 <section class="teacher-flow-workspace teacher-flow-shell">
     <SvelteFlow
@@ -530,10 +871,12 @@
       bind:edges={flowEdges}
       class="teacher-flow-canvas"
       {nodeTypes}
+      {edgeTypes}
       fitView
       fitViewOptions={{ padding: 0.24, minZoom: 0.68, maxZoom: 1.02 }}
       minZoom={0.52}
       maxZoom={1.26}
+      elementsSelectable={false}
       nodesFocusable={false}
       panOnDrag={true}
       selectNodesOnDrag={false}
@@ -552,35 +895,10 @@
         </Panel>
       {/if}
 
-      {#if localSelection.kind !== "none"}
-        {#if localSelection.kind === "edge"}
-          <Panel position="bottom-center">
-            <aside class="teacher-flow-edge-selection">
-              <div class="teacher-flow-edge-selection__copy">
-                <p class="workspace-label">Kante</p>
-                <strong>{localSelection.edge.from_title} → {localSelection.edge.to_title}</strong>
-              </div>
-              {#if localSelection.edge.exists}
-                <form method="POST" action="?/deleteEdge" class="teacher-flow-edge-selection__form">
-                  <input type="hidden" name="from_module_id" value={localSelection.edge.from_id} />
-                  <input type="hidden" name="to_module_id" value={localSelection.edge.to_id} />
-                  <button class="workspace-link-action workspace-link-action--danger" type="submit">Löschen</button>
-                </form>
-              {:else}
-                <form method="POST" action="?/createEdge" class="teacher-flow-edge-selection__form">
-                  <input type="hidden" name="from_module_id" value={localSelection.edge.from_id} />
-                  <input type="hidden" name="to_module_id" value={localSelection.edge.to_id} />
-                  <button class="workspace-link-action" type="submit">Anlegen</button>
-                </form>
-              {/if}
-            </aside>
-          </Panel>
-        {/if}
-      {/if}
     </SvelteFlow>
 </section>
 
-{#if quickEditOpen() && localSelection.kind !== "none" && localSelection.kind !== "edge"}
+{#if quickEditOpen() && localSelection.kind !== "none" && localSelection.kind !== "edge" && localSelection.kind !== "module"}
   <div class="dialog-backdrop dialog-backdrop--light">
     <div class="dialog-card teacher-flow-quickedit">
       <div class="dialog-card__header">
@@ -600,14 +918,14 @@
       </div>
 
       {#if localSelection.kind === "section"}
-        <form method="POST" action="?/saveSection" class="workspace-form">
+        <form method="POST" action="?/saveSection" class="workspace-form" use:enhance={enhanceGraphForm}>
           <input type="hidden" name="section_id" value={localSelection.section.id} />
           <label class="workspace-field">
             <span>Name</span>
             <input name="title" type="text" value={localSelection.section.title} />
           </label>
-          {#if form?.saveSection?.error}
-            <p class="workspace-note workspace-note--error">{form.saveSection.error}</p>
+          {#if actionError(form?.saveSection)}
+            <p class="workspace-note workspace-note--error">{actionError(form?.saveSection)}</p>
           {/if}
           <div class="dialog-card__actions">
             <button class="workspace-link-action" type="submit">Speichern</button>
@@ -617,20 +935,20 @@
           </div>
         </form>
         <div class="dialog-card__danger">
-          <form method="POST" action="?/deleteSection" class="workspace-form">
+          <form method="POST" action="?/deleteSection" class="workspace-form" use:enhance={enhanceGraphForm}>
             <input type="hidden" name="section_id" value={localSelection.section.id} />
             <button class="workspace-link-action workspace-link-action--danger" type="submit">Abschnitt löschen</button>
           </form>
         </div>
       {:else if localSelection.kind === "phase"}
-        <form method="POST" action="?/savePhase" class="workspace-form">
+        <form method="POST" action="?/savePhase" class="workspace-form" use:enhance={enhanceGraphForm}>
           <input type="hidden" name="phase_id" value={localSelection.phase.id} />
           <label class="workspace-field">
             <span>Name</span>
             <input name="title" type="text" value={localSelection.phase.title} />
           </label>
-          {#if form?.savePhase?.error}
-            <p class="workspace-note workspace-note--error">{form.savePhase.error}</p>
+          {#if actionError(form?.savePhase)}
+            <p class="workspace-note workspace-note--error">{actionError(form?.savePhase)}</p>
           {/if}
           <div class="dialog-card__actions">
             <button class="workspace-link-action" type="submit">Speichern</button>
@@ -646,41 +964,9 @@
           </div>
         </form>
         <div class="dialog-card__danger">
-          <form method="POST" action="?/deletePhase" class="workspace-form">
+          <form method="POST" action="?/deletePhase" class="workspace-form" use:enhance={enhanceGraphForm}>
             <input type="hidden" name="phase_id" value={localSelection.phase.id} />
             <button class="workspace-link-action workspace-link-action--danger" type="submit">Phase löschen</button>
-          </form>
-        </div>
-      {:else if localSelection.kind === "module"}
-        <form method="POST" action="?/saveModule" class="workspace-form">
-          <input type="hidden" name="module_id" value={localSelection.module.id} />
-          <label class="workspace-field">
-            <span>Name</span>
-            <input name="title" type="text" value={localSelection.module.title} />
-          </label>
-          <label class="workspace-field">
-            <span>Freischaltung</span>
-            <input
-              name="required_prereq_count"
-              type="number"
-              min="0"
-              value={localSelection.module.required_prereq_count}
-            />
-          </label>
-          {#if form?.saveModule?.error}
-            <p class="workspace-note workspace-note--error">{form.saveModule.error}</p>
-          {/if}
-          <div class="dialog-card__actions">
-            <button class="workspace-link-action" type="submit">Speichern</button>
-            <a class="workspace-link-action workspace-link-action--subtle" href={localSelection.module.editor_href}>
-              Inhalt bearbeiten
-            </a>
-          </div>
-        </form>
-        <div class="dialog-card__danger">
-          <form method="POST" action="?/deleteModule" class="workspace-form">
-            <input type="hidden" name="module_id" value={localSelection.module.id} />
-            <button class="workspace-link-action workspace-link-action--danger" type="submit">Modul löschen</button>
           </form>
         </div>
       {/if}
@@ -701,11 +987,11 @@
       <form method="POST" action="?/saveUnit" class="workspace-form">
         <label class="workspace-field">
           <span>Titel</span>
-          <input name="title" type="text" value={form?.saveUnit?.values?.title ?? data.workspace.unit.title} />
+          <input name="title" type="text" value={form?.saveUnit?.values?.title ?? workspaceState.unit.title} />
         </label>
         <label class="workspace-field">
           <span>Zusammenfassung</span>
-          <textarea name="summary" rows="4">{form?.saveUnit?.values?.summary ?? data.workspace.unit.summary ?? ""}</textarea>
+          <textarea name="summary" rows="4">{form?.saveUnit?.values?.summary ?? workspaceState.unit.summary ?? ""}</textarea>
         </label>
         {#if form?.saveUnit?.error}
           <p class="workspace-note workspace-note--error">{form.saveUnit.error}</p>
@@ -718,7 +1004,7 @@
       <div class="dialog-card__danger">
         <p class="workspace-label">Danger Zone</p>
         <form method="POST" action="?/deleteUnit" class="workspace-form">
-          <input type="hidden" name="expected_title" value={data.workspace.unit.title} />
+          <input type="hidden" name="expected_title" value={workspaceState.unit.title} />
           <label class="workspace-field">
             <span>Titel zur Bestätigung</span>
             <input name="confirmation" type="text" />
@@ -733,77 +1019,20 @@
   </div>
 {/if}
 
-{#if data.showCreateSectionDialog}
+{#if showCreateSectionDialog()}
   <div class="dialog-backdrop">
     <div class="dialog-card">
       <div class="dialog-card__header">
         <div><p class="workspace-label">Canvas</p><h2>Abschnitt hinzufügen</h2></div>
         <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-section": null })}>Schließen</a>
       </div>
-      <form method="POST" action="?/createSection" class="workspace-form">
+      <form method="POST" action="?/createSection" class="workspace-form" use:enhance={enhanceGraphForm}>
         <label class="workspace-field">
           <span>Titel</span>
-          <input name="title" type="text" value="" />
+          <input name="title" type="text" value={createSectionValues().title ?? ""} />
         </label>
-        {#if form?.createSection?.error}
-          <p class="workspace-note workspace-note--error">{form.createSection.error}</p>
-        {/if}
-        <div class="dialog-card__actions">
-          <button class="workspace-link-action" type="submit">Anlegen</button>
-        </div>
-      </form>
-    </div>
-  </div>
-{/if}
-
-{#if data.showCreatePhaseDialog}
-  <div class="dialog-backdrop">
-    <div class="dialog-card">
-      <div class="dialog-card__header">
-        <div><p class="workspace-label">Canvas</p><h2>Phase hinzufügen</h2></div>
-        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-phase": null })}>Schließen</a>
-      </div>
-      <form method="POST" action="?/createPhase" class="workspace-form">
-        <label class="workspace-field">
-          <span>Titel</span>
-          <input name="title" type="text" value="" />
-        </label>
-        {#if form?.createPhase?.error}
-          <p class="workspace-note workspace-note--error">{form.createPhase.error}</p>
-        {/if}
-        <div class="dialog-card__actions">
-          <button class="workspace-link-action" type="submit">Anlegen</button>
-        </div>
-      </form>
-    </div>
-  </div>
-{/if}
-
-{#if data.showCreateModuleDialog}
-  <div class="dialog-backdrop">
-    <div class="dialog-card">
-      <div class="dialog-card__header">
-        <div><p class="workspace-label">Canvas</p><h2>Modul hinzufügen</h2></div>
-        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": null })}>Schließen</a>
-      </div>
-      <form method="POST" action="?/createModule" class="workspace-form">
-        <label class="workspace-field">
-          <span>Titel</span>
-          <input name="title" type="text" value="" />
-        </label>
-        <label class="workspace-field">
-          <span>Phase</span>
-          <select name="phase_id">
-            <option value="">Bitte wählen</option>
-            {#each modularPhases() as phase}
-              <option value={phase.id} selected={selectedPhaseId() === phase.id}>
-                {phase.title}
-              </option>
-            {/each}
-          </select>
-        </label>
-        {#if form?.createModule?.error}
-          <p class="workspace-note workspace-note--error">{form.createModule.error}</p>
+        {#if actionError(form?.createSection)}
+          <p class="workspace-note workspace-note--error">{actionError(form?.createSection)}</p>
         {/if}
         <div class="dialog-card__actions">
           <button class="workspace-link-action" type="submit">Anlegen</button>

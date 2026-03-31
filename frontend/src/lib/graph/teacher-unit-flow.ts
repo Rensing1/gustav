@@ -54,6 +54,15 @@ export type TeacherFlowNodeData = {
   position?: number | null;
   connectable?: boolean;
   compact?: boolean;
+  onOpenProperties?: (() => void) | null;
+  onCloseProperties?: (() => void) | null;
+  quickEdit?: {
+    title: string;
+    requiredPrereqCount: string;
+    phaseId: string;
+    phaseOptions: Array<{ id: string; title: string }>;
+    error?: string | null;
+  } | null;
 };
 
 export type TeacherFlowNode = Node<TeacherFlowNodeData, "unitNode" | "phaseBand">;
@@ -421,7 +430,8 @@ function sectionNode(
     sourcePosition: Position.Bottom,
     targetPosition: Position.Top,
     draggable: true,
-    selectable: true,
+    selectable: false,
+    dragHandle: ".teacher-flow-unit-node__drag-handle",
     data: {
       kind: "section",
       title: item.title,
@@ -453,7 +463,7 @@ function phaseNode(
     width,
     height,
     draggable: false,
-    selectable: true,
+    selectable: false,
     data: {
       kind: "phase",
       title: phase.title,
@@ -491,7 +501,10 @@ function moduleNode(
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
     draggable: true,
-    selectable: true,
+    selectable: false,
+    dragHandle: ".teacher-flow-unit-node__drag-handle",
+    parentId: `phase:${phaseId}`,
+    extent: "parent",
     data: {
       kind: "module",
       title: module.title,
@@ -506,7 +519,8 @@ function moduleNode(
       compact: true
     },
     selected: selectedModuleId(selection) === module.id,
-    class: `teacher-flow-node teacher-flow-node--module teacher-flow-node--${focusState}`
+    class: `teacher-flow-node teacher-flow-node--module teacher-flow-node--${focusState}`,
+    zIndex: 2
   };
 }
 
@@ -598,8 +612,8 @@ function buildModularEdges(
       target: edge.to,
       sourceHandle: route.sourceHandle,
       targetHandle: route.targetHandle,
-      type: "smoothstep",
-      selectable: true,
+      type: "teacherEdge",
+      selectable: false,
       focusable: true,
       animated: false,
       markerEnd: {
@@ -739,19 +753,21 @@ export async function buildTeacherUnitFlow(
         rowIndex: 0
       };
       const phaseInnerOffset = Math.max(0, (phaseHeaderWidth - lane.width) / 2);
-      const x = MODULAR_STAGE_PADDING_X + phaseInnerOffset + PHASE_SIDE_GUTTER + position.x;
-      const y = currentY + PHASE_HEADER_HEIGHT + PHASE_HEADER_TO_MODULES_GAP_Y + PHASE_RAIL_GUTTER + position.y;
+      const relativeX = phaseInnerOffset + PHASE_SIDE_GUTTER + position.x;
+      const relativeY = PHASE_HEADER_HEIGHT + PHASE_HEADER_TO_MODULES_GAP_Y + PHASE_RAIL_GUTTER + position.y;
+      const absoluteX = MODULAR_STAGE_PADDING_X + relativeX;
+      const absoluteY = currentY + relativeY;
       nodes.push(
         moduleNode(
           module,
-          x,
-          y,
+          relativeX,
+          relativeY,
           selection,
           edgeIndexes,
           phase.id
         )
       );
-      modulePositions.set(module.id, { ...position, x, y });
+      modulePositions.set(module.id, { ...position, x: absoluteX, y: absoluteY });
     });
 
     currentY += phaseHeight + PHASE_GAP_Y;

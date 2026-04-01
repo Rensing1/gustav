@@ -291,6 +291,7 @@ async def test_learning_modular_module_content_happy_path_via_graph():
         assert r_graph.status_code == 200
         graph = r_graph.json()
         assert isinstance(graph.get("modules"), list) and graph["modules"], "expected at least one module"
+        assert graph["modules"][0]["materials_count"] == 1
         module_id = graph["modules"][0]["id"]
         UUID(module_id)
 

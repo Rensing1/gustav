@@ -134,6 +134,14 @@
     return /^\/teaching\/units\/[^/]+$/.test(page.url.pathname);
   }
 
+  function isLearnerUnitWorkspaceRoute(): boolean {
+    return /^\/learning\/courses\/[^/]+\/units\/[^/]+$/.test(page.url.pathname);
+  }
+
+  function hasWideWorkspaceShell(): boolean {
+    return isTeacherUnitWorkspaceRoute() || isLearnerUnitWorkspaceRoute();
+  }
+
   function closeAccountMenuOnWindowClick(event: MouseEvent): void {
     if (!accountMenu?.open) {
       return;
@@ -200,8 +208,8 @@
   </header>
 
   <main class="workspace-shell">
-    <div class="workspace-inner" class:workspace-inner--wide={isTeacherUnitWorkspaceRoute()}>
-      <header class="workspace-header">
+    <div class="workspace-inner" class:workspace-inner--wide={hasWideWorkspaceShell()}>
+      <header class="workspace-header" class:workspace-header--measure={isLearnerUnitWorkspaceRoute()}>
         <div class="workspace-topbar">
           {#if currentBreadcrumbs().length}
             <nav class="workspace-breadcrumbs" aria-label="Breadcrumb">
@@ -234,7 +242,7 @@
         {/if}
       </header>
 
-      <div class="workspace-body" class:workspace-body--wide={isTeacherUnitWorkspaceRoute()}>
+      <div class="workspace-body" class:workspace-body--wide={hasWideWorkspaceShell()}>
         {@render children()}
       </div>
     </div>

@@ -370,6 +370,11 @@ select {
   padding: 1rem 0 0.4rem;
 }
 
+.workspace-header--measure {
+  width: min(100%, 42rem);
+  justify-self: start;
+}
+
 .workspace-topbar {
   min-height: 1.4rem;
   margin-bottom: 0.45rem;
@@ -1252,12 +1257,6 @@ select {
   gap: 0.85rem;
 }
 
-.learning-unit-sections,
-.learning-unit-stack {
-  display: grid;
-  gap: 0.95rem;
-}
-
 .learning-unit-empty-state {
   min-height: 10rem;
   align-content: center;
@@ -1269,62 +1268,258 @@ select {
   color: var(--color-text-muted);
 }
 
-.learning-unit-module-panel,
-.learning-unit-section {
+.learning-unit-content-toolbar {
   display: grid;
-  gap: 0.95rem;
+  gap: 0.85rem;
 }
 
-.learning-unit-module-panel__header,
-.learning-unit-section__header {
+.learning-unit-content-toolbar__copy,
+.learning-unit-pane__copy,
+.learning-unit-toc__copy,
+.learning-work-item__copy {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.learning-unit-content-toolbar__copy h3,
+.learning-unit-pane__copy h3,
+.learning-unit-toc__copy h3,
+.learning-work-item__copy h4 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.18;
+}
+
+.learning-unit-content-toolbar__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.learning-unit-content-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.learning-unit-content-shell {
+  display: grid;
+  grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.learning-unit-content-shell--toc-closed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.learning-unit-toc {
+  display: grid;
+  gap: 0.95rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.learning-unit-toc__header {
   display: flex;
   justify-content: space-between;
   gap: 0.8rem;
   align-items: baseline;
 }
 
-.learning-unit-module-panel__copy,
-.learning-unit-section__copy,
-.learning-unit-task-card__copy {
+.learning-unit-toc__body {
   display: grid;
-  gap: 0.18rem;
+  gap: 1rem;
 }
 
-.learning-unit-module-panel__header h3,
-.learning-unit-section__header h3,
-.learning-unit-task-card__header h4 {
-  margin: 0;
-  font-size: 1.06rem;
-  line-height: 1.18;
+.learning-unit-toc__group {
+  display: grid;
+  gap: 0.45rem;
 }
 
-.learning-unit-module-panel__meta {
+.learning-unit-toc__group-title {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.82rem;
-  font-weight: 650;
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.learning-unit-card,
-.learning-unit-task-card,
+.learning-unit-toc__items {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.learning-unit-toc__item {
+  display: block;
+  width: 100%;
+  padding: 0.52rem 0.62rem;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 560;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.learning-unit-toc__item:hover,
+.learning-unit-toc__item:focus-visible {
+  background: color-mix(in srgb, var(--color-bg-elevated) 78%, white 22%);
+  color: var(--color-text);
+}
+
+.learning-unit-toc__item--open {
+  color: var(--color-text);
+}
+
+.learning-unit-toc__item--active {
+  background: color-mix(in srgb, var(--color-bg-elevated) 90%, white 10%);
+  color: var(--color-text);
+}
+
+.learning-unit-pane-grid {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  width: 100%;
+  align-content: start;
+}
+
+.learning-unit-pane-grid:not(.learning-unit-pane-grid--split) {
+  width: min(100%, 58rem);
+}
+
+.learning-unit-pane-grid--split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.learning-unit-pane {
+  display: grid;
+  gap: 1rem;
+  min-height: 20rem;
+  align-content: start;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+}
+
+.learning-unit-pane--active {
+  border-color: color-mix(in srgb, var(--color-link) 22%, var(--color-border) 78%);
+}
+
+.learning-unit-pane__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+.learning-unit-pane__selector {
+  border: 1px solid color-mix(in srgb, var(--color-border) 74%, white 26%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg-elevated) 90%, white 10%);
+  color: var(--color-text-muted);
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.learning-unit-pane__selector--active {
+  border-color: color-mix(in srgb, var(--color-link) 24%, var(--color-border) 76%);
+  color: var(--color-text);
+}
+
+.learning-unit-pane__stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.learning-unit-pane__empty {
+  min-height: 12rem;
+  display: grid;
+  align-content: center;
+}
+
+.learning-work-item,
 .history-entry {
   display: grid;
-  gap: 0.72rem;
-  padding: 1rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
+  gap: 0.85rem;
+  padding: 1rem 1rem 1.05rem;
+  background: color-mix(in srgb, var(--color-bg-elevated) 94%, white 6%);
   border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
   border-radius: 1rem;
 }
 
-.learning-unit-card strong,
-.learning-unit-task-card strong {
-  font-size: 0.98rem;
-  line-height: 1.25;
+.learning-work-item__header,
+.learning-work-item__actions,
+.learning-work-item__kicker-row,
+.learning-work-item__support-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.learning-work-item__actions {
+  align-items: center;
+}
+
+.learning-work-item__context,
+.learning-work-item__kicker {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 780;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.learning-work-item__link {
+  color: var(--color-link);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.learning-work-item__link:hover,
+.learning-work-item__link:focus-visible {
+  text-decoration: underline;
+}
+
+.learning-work-item__close {
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.learning-work-item__close:hover,
+.learning-work-item__close:focus-visible {
+  background: color-mix(in srgb, var(--color-bg-elevated) 72%, white 28%);
   color: var(--color-text);
 }
 
-.learning-unit-card pre,
-.learning-unit-task-card pre,
+.learning-work-item__body {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.learning-work-item pre,
 .history-entry pre {
   margin: 0;
   white-space: pre-wrap;
@@ -1332,23 +1527,22 @@ select {
   color: var(--color-text);
 }
 
-.learning-unit-task-card__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: baseline;
+.learning-work-item__support {
+  margin: 0;
+  padding: 0.85rem 0.9rem;
+  background: color-mix(in srgb, var(--color-bg) 88%, white 12%);
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  border-radius: 0.9rem;
 }
 
-.learning-unit-task-card__history-link {
-  color: var(--color-link);
-  font-size: 0.82rem;
+.learning-work-item__support summary {
+  cursor: pointer;
+  color: var(--color-text);
   font-weight: 700;
-  text-decoration: none;
 }
 
-.learning-unit-task-card__history-link:hover,
-.learning-unit-task-card__history-link:focus-visible {
-  text-decoration: underline;
+.learning-work-item__support--open summary {
+  margin-bottom: 0.75rem;
 }
 
 .learning-unit-criteria {
@@ -1357,6 +1551,11 @@ select {
   margin: 0;
   padding-left: 1.1rem;
   color: var(--color-text);
+}
+
+.learning-work-item__file-meta {
+  margin: 0;
+  color: var(--color-text-muted);
 }
 
 .submit-form {
@@ -1509,9 +1708,18 @@ select {
     height: 70vh;
   }
 
-  .learning-unit-module-panel__header,
-  .learning-unit-section__header,
-  .learning-unit-task-card__header {
+  .learning-unit-content-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .learning-unit-pane-grid--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .learning-unit-content-toolbar__actions,
+  .learning-work-item__header,
+  .learning-work-item__actions,
+  .learning-work-item__kicker-row {
     flex-direction: column;
     align-items: start;
   }

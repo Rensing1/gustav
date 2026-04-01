@@ -389,10 +389,33 @@ class DBLearningRepo:
                     course_uuid=course_uuid,
                     unit_uuid=unit_uuid,
                 )
+                visible_material_counts: dict[str, int] = {}
+                for module in modules_raw:
+                    state = module_state.get(module["id"], {})
+                    status = str(state.get("status") or "locked")
+                    if status not in {"open", "done"}:
+                        continue
+                    if int(module["materials_count"] or 0) > 0:
+                        continue
+                    section_id = str(module["section_id"] or "")
+                    if not section_id or section_id in visible_material_counts:
+                        continue
+                    cur.execute(
+                        """
+                        select count(*)::int
+                          from public.get_released_materials_for_student(%s, %s::uuid, %s::uuid)
+                        """,
+                        (student_sub, course_uuid, section_id),
+                    )
+                    visible_material_counts[section_id] = int((cur.fetchone() or [0])[0] or 0)
 
                 modules: list[dict] = []
                 for m in modules_raw:
                     s = module_state.get(m["id"], {})
+                    section_id = str(m["section_id"] or "")
+                    materials_count = int(m["materials_count"] or 0)
+                    if str(s.get("status") or "locked") in {"open", "done"}:
+                        materials_count = visible_material_counts.get(section_id, materials_count)
                     modules.append(
                         {
                             "id": m["id"],
@@ -404,7 +427,7 @@ class DBLearningRepo:
                             "prereq_required": int(s.get("prereq_required") or 0),
                             "tasks_done": int(s.get("tasks_done") or 0),
                             "tasks_total": int(s.get("tasks_total", m["tasks_total"]) or 0),
-                            "materials_count": int(m["materials_count"]),
+                            "materials_count": materials_count,
                             "status": str(s.get("status") or "locked"),
                         }
                     )

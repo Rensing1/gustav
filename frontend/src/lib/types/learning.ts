@@ -26,6 +26,7 @@ export type LearningTask = {
   id: string;
   instruction_md: string;
   criteria: string[];
+  position?: number | null;
   kind: "native" | "h5p" | "visual" | "scratch" | "calliope";
   h5p?: {
     content_id?: string | null;

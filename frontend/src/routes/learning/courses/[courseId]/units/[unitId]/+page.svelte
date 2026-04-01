@@ -1,24 +1,30 @@
 <script lang="ts">
   import { browser } from "$app/environment";
-  import { Controls, SvelteFlow } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
 
-  import LearningGraphNode from "$lib/components/learning-unit/LearningGraphNode.svelte";
-  import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
-  import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
-  import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
-  import TeacherGraphEdge from "$lib/components/teacher-unit-graph/TeacherGraphEdge.svelte";
+  import LearningUnitContentWorkspace from "$lib/components/learning-unit/LearningUnitContentWorkspace.svelte";
+  import LearningUnitOverview from "$lib/components/learning-unit/LearningUnitOverview.svelte";
   import {
     buildLearningUnitFlow,
     type LearningFlowNode
   } from "$lib/graph/learning-unit-flow";
+  import {
+    contentGroupsForModule,
+    contentGroupsForSections,
+    defaultPaneStacks,
+    filterPaneStacks,
+    flattenContentGroups,
+    normalizePaneStacks,
+    type ContentGroup,
+    type LearningContentItem,
+    type PaneId,
+    type PaneStacks
+  } from "$lib/learning-unit/workspace";
+  import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
     LearningModuleContent,
-    LearningSection,
     LearningUnitGraphModule
   } from "$lib/types/learning";
-  import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type { ActionData, PageData } from "./$types";
 
   type WorkspaceViewMode = "overview" | "content";
@@ -26,31 +32,35 @@
     view: WorkspaceViewMode;
     openTabs: string[];
     activeTab: string | null;
+    splitView: boolean;
+    tocOpen: boolean;
+    activePane: PaneId;
+    moduleStacks: Record<string, PaneStacks | null>;
+  };
+  type LinearWorkspaceState = {
+    splitView: boolean;
+    tocOpen: boolean;
+    activePane: PaneId;
+    paneStacks: PaneStacks | null;
+  };
+  type StoredWorkspaceState = {
+    version: 2;
+    modular?: Partial<ModularWorkspaceState>;
+    linear?: Partial<LinearWorkspaceState>;
   };
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
-  const nodeTypes = {
-    unitNode: LearningGraphNode,
-    phaseBand: GraphPhaseBand
-  };
-
-  const edgeTypes = {
-    teacherEdge: TeacherGraphEdge
-  };
-
   let flowNodes = $state.raw<LearningFlowNode[]>([]);
   let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
   let graphBusy = $state(false);
-  let modularWorkspace = $state<ModularWorkspaceState>({
-    view: "overview",
-    openTabs: [],
-    activeTab: null
-  });
+  let modularWorkspace = $state<ModularWorkspaceState>(defaultModularWorkspaceState());
+  let linearWorkspace = $state<LinearWorkspaceState>(defaultLinearWorkspaceState());
   let moduleCache = $state.raw<Record<string, LearningModuleContent>>({});
   let moduleLoading = $state.raw<Record<string, boolean>>({});
   let moduleErrors = $state.raw<Record<string, string | null>>({});
-  let modularWorkspaceReady = $state(false);
+  let workspaceReady = $state(false);
+  let historyRestored = $state(false);
 
   let rebuildToken = 0;
 
@@ -70,7 +80,20 @@
     return {
       view: "overview",
       openTabs: [],
-      activeTab: null
+      activeTab: null,
+      splitView: false,
+      tocOpen: true,
+      activePane: "left",
+      moduleStacks: {}
+    };
+  }
+
+  function defaultLinearWorkspaceState(): LinearWorkspaceState {
+    return {
+      splitView: false,
+      tocOpen: true,
+      activePane: "left",
+      paneStacks: null
     };
   }
 
@@ -91,34 +114,78 @@
 
   function normalizeModularWorkspaceState(raw: unknown): ModularWorkspaceState {
     const allowed = openableModuleIds();
-    if (!raw || typeof raw !== "object") {
-      return defaultModularWorkspaceState();
-    }
-
-    const candidate = raw as Partial<ModularWorkspaceState>;
+    const candidate = raw && typeof raw === "object" ? (raw as Partial<ModularWorkspaceState>) : {};
     const openTabs = Array.isArray(candidate.openTabs)
       ? candidate.openTabs.map(String).filter((moduleId) => allowed.has(moduleId))
       : [];
-    const activeTab = candidate.activeTab && openTabs.includes(String(candidate.activeTab))
-      ? String(candidate.activeTab)
-      : openTabs[0] ?? null;
+    const activeTab =
+      candidate.activeTab && openTabs.includes(String(candidate.activeTab))
+        ? String(candidate.activeTab)
+        : openTabs[0] ?? null;
+
+    const moduleStacks: Record<string, PaneStacks | null> = {};
+    for (const [moduleId, stacks] of Object.entries(candidate.moduleStacks ?? {})) {
+      if (!allowed.has(moduleId)) {
+        continue;
+      }
+      moduleStacks[moduleId] = normalizePaneStacks(stacks);
+    }
 
     return {
       view: candidate.view === "content" ? "content" : "overview",
       openTabs,
-      activeTab
+      activeTab,
+      splitView: Boolean(candidate.splitView),
+      tocOpen: candidate.tocOpen !== false,
+      activePane: candidate.activePane === "right" ? "right" : "left",
+      moduleStacks
     };
   }
 
-  function readModularWorkspaceState(): ModularWorkspaceState {
+  function normalizeLinearWorkspaceState(raw: unknown): LinearWorkspaceState {
+    const candidate = raw && typeof raw === "object" ? (raw as Partial<LinearWorkspaceState>) : {};
+    return {
+      splitView: Boolean(candidate.splitView),
+      tocOpen: candidate.tocOpen !== false,
+      activePane: candidate.activePane === "right" ? "right" : "left",
+      paneStacks: normalizePaneStacks(candidate.paneStacks)
+    };
+  }
+
+  function readStoredWorkspaceState(): { modular: ModularWorkspaceState; linear: LinearWorkspaceState } {
     if (!browser) {
-      return defaultModularWorkspaceState();
+      return {
+        modular: defaultModularWorkspaceState(),
+        linear: defaultLinearWorkspaceState()
+      };
     }
+
     try {
       const raw = window.localStorage.getItem(storageKey());
-      return normalizeModularWorkspaceState(raw ? JSON.parse(raw) : null);
+      if (!raw) {
+        return {
+          modular: defaultModularWorkspaceState(),
+          linear: defaultLinearWorkspaceState()
+        };
+      }
+
+      const parsed = JSON.parse(raw) as StoredWorkspaceState | Partial<ModularWorkspaceState>;
+      if (parsed && typeof parsed === "object" && ("modular" in parsed || "linear" in parsed)) {
+        return {
+          modular: normalizeModularWorkspaceState(parsed.modular ?? null),
+          linear: normalizeLinearWorkspaceState(parsed.linear ?? null)
+        };
+      }
+
+      return {
+        modular: normalizeModularWorkspaceState(parsed),
+        linear: defaultLinearWorkspaceState()
+      };
     } catch {
-      return defaultModularWorkspaceState();
+      return {
+        modular: defaultModularWorkspaceState(),
+        linear: defaultLinearWorkspaceState()
+      };
     }
   }
 
@@ -134,6 +201,7 @@
       : [...seeded.openTabs, activeModuleId];
 
     return {
+      ...seeded,
       view: "content",
       openTabs,
       activeTab: activeModuleId
@@ -155,8 +223,63 @@
       .filter((module): module is LearningUnitGraphModule => Boolean(module));
   }
 
-  function isHistoryOpen(taskId: string): boolean {
-    return data.historyTaskId === taskId;
+  function contentGroups(): ContentGroup[] {
+    if (isModularUnit()) {
+      return contentGroupsForModule(modularWorkspace.activeTab, currentActiveModule());
+    }
+
+    return contentGroupsForSections(data.sections);
+  }
+
+  function currentContentItems(): LearningContentItem[] {
+    return flattenContentGroups(contentGroups());
+  }
+
+  function currentPaneStacks(): PaneStacks {
+    const items = currentContentItems();
+    const allowed = new Set(items.map((item) => item.key));
+    const source = isModularUnit()
+      ? modularWorkspace.activeTab
+        ? modularWorkspace.moduleStacks[modularWorkspace.activeTab] ?? null
+        : null
+      : linearWorkspace.paneStacks;
+
+    if (!source) {
+      return defaultPaneStacks(items.map((item) => item.key), workspaceSplitView());
+    }
+
+    return filterPaneStacks(source, allowed);
+  }
+
+  function paneItems(paneId: PaneId): LearningContentItem[] {
+    const byKey = new Map(currentContentItems().map((item) => [item.key, item]));
+    return currentPaneStacks()[paneId]
+      .map((key) => byKey.get(key))
+      .filter((item): item is LearningContentItem => Boolean(item));
+  }
+
+  function workspaceSplitView(): boolean {
+    return isModularUnit() ? modularWorkspace.splitView : linearWorkspace.splitView;
+  }
+
+  function workspaceTocOpen(): boolean {
+    return isModularUnit() ? modularWorkspace.tocOpen : linearWorkspace.tocOpen;
+  }
+
+  function workspaceActivePane(): PaneId {
+    return workspaceSplitView()
+      ? isModularUnit()
+        ? modularWorkspace.activePane
+        : linearWorkspace.activePane
+      : "left";
+  }
+
+  function visiblePaneIds(): PaneId[] {
+    return workspaceSplitView() ? ["left", "right"] : ["left"];
+  }
+
+  function taskItemKey(taskId: string): string {
+    return `task:${taskId}`;
   }
 
   function historyHref(taskId: string, moduleId: string | null): string {
@@ -165,7 +288,28 @@
     if (moduleId) {
       params.set("module", moduleId);
     }
-    return `?${params.toString()}#task-${taskId}`;
+    return `?${params.toString()}`;
+  }
+
+  function isHistoryOpen(taskId: string): boolean {
+    return data.historyTaskId === taskId;
+  }
+
+  function sanitizeDomToken(raw: string): string {
+    return raw.replace(/[^a-zA-Z0-9_-]+/g, "-");
+  }
+
+  function itemDomId(paneId: PaneId, itemKey: string): string {
+    return `learning-item-${paneId}-${sanitizeDomToken(itemKey)}`;
+  }
+
+  function itemIsOpenAnywhere(itemKey: string): boolean {
+    const panes = currentPaneStacks();
+    return panes.left.includes(itemKey) || panes.right.includes(itemKey);
+  }
+
+  function itemIsOpenInPane(itemKey: string, paneId: PaneId): boolean {
+    return currentPaneStacks()[paneId].includes(itemKey);
   }
 
   function syncModuleUrl(moduleId: string | null) {
@@ -226,8 +370,181 @@
     }
   }
 
-  function setWorkspaceState(next: ModularWorkspaceState) {
+  function setModularWorkspaceState(next: ModularWorkspaceState) {
     modularWorkspace = next;
+  }
+
+  function setLinearWorkspaceState(next: LinearWorkspaceState) {
+    linearWorkspace = next;
+  }
+
+  function setActivePane(paneId: PaneId) {
+    if (!workspaceSplitView() || workspaceActivePane() === paneId) {
+      return;
+    }
+
+    if (isModularUnit()) {
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        activePane: paneId
+      });
+      return;
+    }
+
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      activePane: paneId
+    });
+  }
+
+  function setSplitView(nextValue: boolean) {
+    const currentStacks = currentPaneStacks();
+    const nextStacks =
+      nextValue && !workspaceSplitView()
+        ? {
+            left: [...currentStacks.left],
+            right: currentStacks.right.length ? [...currentStacks.right] : [...currentStacks.left]
+          }
+        : currentStacks;
+
+    if (isModularUnit()) {
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        splitView: nextValue,
+        activePane: nextValue ? modularWorkspace.activePane : "left",
+        moduleStacks: modularWorkspace.activeTab
+          ? {
+              ...modularWorkspace.moduleStacks,
+              [modularWorkspace.activeTab]: nextStacks
+            }
+          : modularWorkspace.moduleStacks
+      });
+      return;
+    }
+
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      splitView: nextValue,
+      activePane: nextValue ? linearWorkspace.activePane : "left",
+      paneStacks: nextStacks
+    });
+  }
+
+  function toggleToc() {
+    if (isModularUnit()) {
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        tocOpen: !modularWorkspace.tocOpen
+      });
+      return;
+    }
+
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      tocOpen: !linearWorkspace.tocOpen
+    });
+  }
+
+  function updateCurrentPaneStacks(mutator: (stacks: PaneStacks) => PaneStacks) {
+    if (isModularUnit()) {
+      const moduleId = modularWorkspace.activeTab;
+      if (!moduleId) {
+        return;
+      }
+
+      const nextStacks = mutator(currentPaneStacks());
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        moduleStacks: {
+          ...modularWorkspace.moduleStacks,
+          [moduleId]: nextStacks
+        }
+      });
+      return;
+    }
+
+    const nextStacks = mutator(currentPaneStacks());
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      paneStacks: nextStacks
+    });
+  }
+
+  async function scrollToItem(paneId: PaneId, itemKey: string) {
+    if (!browser) {
+      return;
+    }
+    await tick();
+    document.getElementById(itemDomId(paneId, itemKey))?.scrollIntoView({
+      block: "start",
+      behavior: "smooth"
+    });
+  }
+
+  function openItemInPane(
+    itemKey: string,
+    paneId: PaneId,
+    options: { activatePane?: boolean; scroll?: boolean } = {}
+  ) {
+    const targetPane = workspaceSplitView() ? paneId : "left";
+    updateCurrentPaneStacks((stacks) => {
+      const existing = stacks[targetPane];
+      if (existing.includes(itemKey)) {
+        return stacks;
+      }
+      return {
+        ...stacks,
+        [targetPane]: [...existing, itemKey]
+      };
+    });
+
+    if (options.activatePane !== false) {
+      setActivePane(targetPane);
+    }
+    if (options.scroll !== false) {
+      void scrollToItem(targetPane, itemKey);
+    }
+  }
+
+  function openItemFromToc(itemKey: string) {
+    if (!itemIsOpenInPane(itemKey, workspaceActivePane())) {
+      openItemInPane(itemKey, workspaceActivePane(), {
+        activatePane: true,
+        scroll: true
+      });
+      return;
+    }
+    void scrollToItem(workspaceActivePane(), itemKey);
+  }
+
+  function closePaneItem(paneId: PaneId, itemKey: string) {
+    updateCurrentPaneStacks((stacks) => ({
+      ...stacks,
+      [paneId]: stacks[paneId].filter((key) => key !== itemKey)
+    }));
+  }
+
+  function paneItemsById(): Record<PaneId, LearningContentItem[]> {
+    return {
+      left: paneItems("left"),
+      right: paneItems("right")
+    };
+  }
+
+  function currentMaterialCount(): number {
+    const module = currentActiveModule();
+    if (module) {
+      return module.materials.length;
+    }
+    return currentActiveModuleSummary()?.materials_count ?? 0;
+  }
+
+  function currentModuleMeta(): string | null {
+    const summary = currentActiveModuleSummary();
+    if (!summary) {
+      return null;
+    }
+    return `${summary.tasks_done}/${summary.tasks_total} Aufgaben · ${currentMaterialCount()} Materialien`;
   }
 
   function openModule(moduleId: string) {
@@ -240,7 +557,8 @@
       ? modularWorkspace.openTabs
       : [...modularWorkspace.openTabs, moduleId];
 
-    setWorkspaceState({
+    setModularWorkspaceState({
+      ...modularWorkspace,
       view: "content",
       openTabs,
       activeTab: moduleId
@@ -255,7 +573,7 @@
       return;
     }
 
-    setWorkspaceState({
+    setModularWorkspaceState({
       ...modularWorkspace,
       view: "content",
       activeTab: moduleId
@@ -275,7 +593,7 @@
         ? remaining[Math.max(0, currentIndex - 1)] ?? remaining[0] ?? null
         : modularWorkspace.activeTab;
 
-    setWorkspaceState({
+    setModularWorkspaceState({
       ...modularWorkspace,
       openTabs: remaining,
       activeTab: nextActive
@@ -284,7 +602,7 @@
   }
 
   function switchView(view: WorkspaceViewMode) {
-    setWorkspaceState({
+    setModularWorkspaceState({
       ...modularWorkspace,
       view
     });
@@ -321,10 +639,22 @@
     }
   }
 
-  onMount(() => {
-    if (!isModularUnit()) {
+  function restoreHistoryContext() {
+    if (historyRestored || !data.historyTaskId) {
       return;
     }
+
+    const itemKey = taskItemKey(data.historyTaskId);
+    if (!currentContentItems().some((item) => item.key === itemKey)) {
+      return;
+    }
+
+    historyRestored = true;
+    void scrollToItem("left", itemKey);
+  }
+
+  onMount(() => {
+    const stored = readStoredWorkspaceState();
 
     if (data.activeModule) {
       moduleCache = {
@@ -332,24 +662,35 @@
       };
     }
 
-    setWorkspaceState(seedModularWorkspaceState(readModularWorkspaceState()));
-    modularWorkspaceReady = true;
-
-    if (modularWorkspace.activeTab) {
-      void ensureModuleLoaded(modularWorkspace.activeTab);
+    if (isModularUnit()) {
+      const seeded = seedModularWorkspaceState(stored.modular);
+      setModularWorkspaceState(seeded);
+      if (seeded.activeTab) {
+        void ensureModuleLoaded(seeded.activeTab);
+      }
+    } else {
+      setLinearWorkspaceState(stored.linear);
     }
+
+    workspaceReady = true;
+    restoreHistoryContext();
   });
 
   $effect(() => {
-    if (!browser || !isModularUnit() || !modularWorkspaceReady) {
+    if (!browser || !workspaceReady) {
       return;
     }
 
-    window.localStorage.setItem(storageKey(), JSON.stringify(modularWorkspace));
+    const payload: StoredWorkspaceState = {
+      version: 2,
+      modular: modularWorkspace,
+      linear: linearWorkspace
+    };
+    window.localStorage.setItem(storageKey(), JSON.stringify(payload));
   });
 
   $effect(() => {
-    if (!isModularUnit() || !modularWorkspaceReady) {
+    if (!isModularUnit() || !workspaceReady) {
       return;
     }
 
@@ -357,11 +698,19 @@
   });
 
   $effect(() => {
-    if (!isModularUnit() || !modularWorkspaceReady || !modularWorkspace.activeTab) {
+    if (!isModularUnit() || !workspaceReady || !modularWorkspace.activeTab) {
       return;
     }
 
     void ensureModuleLoaded(modularWorkspace.activeTab);
+  });
+
+  $effect(() => {
+    if (!workspaceReady) {
+      return;
+    }
+
+    restoreHistoryContext();
   });
 </script>
 
@@ -426,64 +775,35 @@
     </section>
 
     {#if modularWorkspace.view === "overview"}
-      <section class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
-        {#if data.graph}
-          <SvelteFlow
-            bind:nodes={flowNodes}
-            bind:edges={flowEdges}
-            class="teacher-flow-canvas"
-            {nodeTypes}
-            {edgeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.24, minZoom: 0.68, maxZoom: 1.02 }}
-            minZoom={0.52}
-            maxZoom={1.26}
-            elementsSelectable={false}
-            nodesFocusable={false}
-            panOnDrag={true}
-            selectNodesOnDrag={false}
-            nodesDraggable={false}
-          >
-            <Controls position="bottom-right" />
-          </SvelteFlow>
-        {:else}
-          <p class="learning-unit-empty-copy">Der Graph konnte nicht geladen werden.</p>
-        {/if}
-      </section>
+      <LearningUnitOverview graph={data.graph} nodes={flowNodes} edges={flowEdges} />
     {:else}
       <section class="learning-unit-stage learning-unit-stage--content">
         {#if currentActiveModule()}
-          <section class="workspace-panel learning-unit-module-panel">
-            <header class="learning-unit-module-panel__header">
-              <div class="learning-unit-module-panel__copy">
-                <p class="workspace-label">Modul</p>
-                <h3>{currentActiveModule()?.module.title}</h3>
-              </div>
-              {#if currentActiveModuleSummary()}
-                <p class="learning-unit-module-panel__meta">
-                  {currentActiveModuleSummary()?.tasks_done}/{currentActiveModuleSummary()?.tasks_total} Aufgaben · {currentActiveModuleSummary()?.materials_count} Materialien
-                </p>
-              {/if}
-            </header>
-
-            <div class="learning-unit-stack">
-              {#each currentActiveModule()?.materials ?? [] as material}
-                <LearningMaterialCard {material} />
-              {/each}
-
-              {#each currentActiveModule()?.tasks ?? [] as task}
-                <LearningTaskCard
-                  courseId={data.courseId}
-                  {task}
-                  unitType="modular"
-                  moduleId={currentActiveModule()?.module.id ?? null}
-                  historyHref={historyHref(task.id, currentActiveModule()?.module.id ?? null)}
-                  historyOpen={isHistoryOpen(task.id)}
-                  history={data.history}
-                />
-              {/each}
-            </div>
-          </section>
+          <LearningUnitContentWorkspace
+            titleLabel="Modul"
+            title={currentActiveModule()?.module.title ?? "Modul"}
+            meta={currentModuleMeta()}
+            courseId={data.courseId}
+            unitType="modular"
+            moduleId={currentActiveModule()?.module.id ?? null}
+            tocOpen={workspaceTocOpen()}
+            splitView={workspaceSplitView()}
+            activePane={workspaceActivePane()}
+            visiblePaneIds={visiblePaneIds()}
+            contentGroups={contentGroups()}
+            paneItems={paneItemsById()}
+            historyTaskId={data.historyTaskId}
+            history={data.history}
+            {itemDomId}
+            itemIsVisible={itemIsOpenAnywhere}
+            itemIsVisibleInPane={itemIsOpenInPane}
+            {historyHref}
+            onToggleToc={toggleToc}
+            onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+            onSetActivePane={setActivePane}
+            onOpenItem={openItemFromToc}
+            onCloseItem={closePaneItem}
+          />
         {:else if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
           <section class="workspace-panel learning-unit-empty-state">
             <p class="learning-unit-empty-copy">Modul wird geladen …</p>
@@ -512,39 +832,31 @@
     {/if}
   {:else}
     <section class="learning-unit-stage learning-unit-stage--content">
-      <div class="learning-unit-sections">
-        {#each data.sections as section}
-          <section class="workspace-panel learning-unit-section">
-            <header class="learning-unit-section__header">
-              <div class="learning-unit-section__copy">
-                <p class="workspace-label">Abschnitt {section.section.position}</p>
-                <h3>{section.section.title}</h3>
-              </div>
-            </header>
-
-            {#if !section.materials.length && !section.tasks.length}
-              <p class="learning-unit-empty-copy">Noch keine Inhalte freigeschaltet.</p>
-            {/if}
-
-            <div class="learning-unit-stack">
-              {#each section.materials as material}
-                <LearningMaterialCard {material} />
-              {/each}
-
-              {#each section.tasks as task}
-                <LearningTaskCard
-                  courseId={data.courseId}
-                  {task}
-                  unitType="linear"
-                  historyHref={historyHref(task.id, null)}
-                  historyOpen={isHistoryOpen(task.id)}
-                  history={data.history}
-                />
-              {/each}
-            </div>
-          </section>
-        {/each}
-      </div>
+      <LearningUnitContentWorkspace
+        titleLabel="Lerneinheit"
+        title={data.selectedUnit?.unit.title ?? "Lerneinheit"}
+        meta={null}
+        courseId={data.courseId}
+        unitType="linear"
+        moduleId={null}
+        tocOpen={workspaceTocOpen()}
+        splitView={workspaceSplitView()}
+        activePane={workspaceActivePane()}
+        visiblePaneIds={visiblePaneIds()}
+        contentGroups={contentGroups()}
+        paneItems={paneItemsById()}
+        historyTaskId={data.historyTaskId}
+        history={data.history}
+        {itemDomId}
+        itemIsVisible={itemIsOpenAnywhere}
+        itemIsVisibleInPane={itemIsOpenInPane}
+        {historyHref}
+        onToggleToc={toggleToc}
+        onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+        onSetActivePane={setActivePane}
+        onOpenItem={openItemFromToc}
+        onCloseItem={closePaneItem}
+      />
     </section>
   {/if}
 </div>

@@ -114,6 +114,7 @@ export type LearningModuleContent = {
 export type LearningCoursePageData = {
   user: SessionBootstrapUser | null;
   courseId: string;
+  courseTitle: string;
   units: LearningCourseUnit[];
 };
 

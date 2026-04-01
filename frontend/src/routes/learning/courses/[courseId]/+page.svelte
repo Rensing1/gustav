@@ -5,76 +5,28 @@
 </script>
 
 <svelte:head>
-  <title>Kursraum | GUSTAV</title>
+  <title>{data.courseTitle} | GUSTAV</title>
 </svelte:head>
 
-<section class="panel">
-  <p class="kicker">Kursraum</p>
-  <h2>Lerneinheiten</h2>
-  <p class="lead">
-    Der alte Zwischenstopp ist entfernt. Diese Seite fuehrt direkt in die sichtbaren
-    Lerneinheiten des Kurses.
-  </p>
+<div class="workspace-page learning-home learning-course-home">
+  <section class="learning-home-header">
+    <h2>{data.courseTitle}</h2>
+  </section>
 
   {#if data.units.length}
-    <div class="unit-grid">
+    <ul class="learning-home-list">
       {#each data.units as row}
-        <a class="unit-card" href={`/learning/courses/${data.courseId}/units/${row.unit.id}`}>
-          <span class="meta">#{row.position} · {row.unit.unit_type}</span>
-          <strong>{row.unit.title}</strong>
-          {#if row.unit.summary}
-            <span>{row.unit.summary}</span>
-          {/if}
-        </a>
+        <li>
+          <a class="learning-home-card" href={`/learning/courses/${data.courseId}/units/${row.unit.id}`}>
+            <strong>{row.unit.title}</strong>
+            <span class="learning-home-open">Öffnen</span>
+          </a>
+        </li>
       {/each}
-    </div>
+    </ul>
   {:else}
-    <p class="empty">Noch keine Lerneinheiten freigeschaltet.</p>
+    <section class="workspace-panel learning-home-empty">
+      <p class="workspace-empty">Noch keine Lerneinheiten sichtbar.</p>
+    </section>
   {/if}
-</section>
-
-<style>
-  .panel {
-    max-width: 70rem;
-    background: rgba(255, 250, 243, 0.92);
-    border: 1px solid #f2e9e1;
-    border-radius: 1.5rem;
-    padding: clamp(1.25rem, 3vw, 2rem);
-  }
-
-  .kicker,
-  .meta,
-  .empty,
-  .lead {
-    color: #6f6b86;
-  }
-
-  .kicker {
-    margin: 0 0 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.85rem;
-  }
-
-  h2,
-  .lead {
-    margin-top: 0;
-  }
-
-  .unit-grid {
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  }
-
-  .unit-card {
-    display: grid;
-    gap: 0.45rem;
-    text-decoration: none;
-    color: inherit;
-    border-radius: 1.1rem;
-    background: #fffdf9;
-    border: 1px solid #e9dfd2;
-    padding: 1rem;
-  }
-</style>
+</div>

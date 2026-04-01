@@ -159,11 +159,31 @@ export type TeacherUnitWorkspaceEdge = {
 export type TeacherUnitNodeEditorMaterial = {
   id: string;
   title: string;
+  kind: "markdown" | "file";
+  position: number;
+  body_md?: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  filename_original?: string | null;
+  alt_text?: string | null;
 };
 
 export type TeacherUnitNodeEditorTask = {
   id: string;
-  instruction: string;
+  instruction_md: string;
+  criteria: string[];
+  teacher_context_md?: string | null;
+  due_at?: string | null;
+  max_attempts?: number | null;
+  position: number;
+  kind: "native" | "h5p" | "visual" | "scratch" | "calliope";
+  h5p?: {
+    content_id?: string | null;
+    display_options?: Record<string, unknown> | null;
+  } | null;
+  visual?: Record<string, never> | null;
+  scratch?: Record<string, never> | null;
+  calliope?: Record<string, never> | null;
 };
 
 export type TeacherUnitWorkspaceSelectionSection = {

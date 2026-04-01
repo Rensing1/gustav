@@ -439,20 +439,74 @@ components:
           type: string
     TeacherUnitNodeEditorMaterial:
       type: object
-      required: [id, title]
+      required: [id, title, kind, position]
       properties:
         id:
           type: string
         title:
           type: string
+        kind:
+          type: string
+          enum: [markdown, file]
+        body_md:
+          type: string
+          nullable: true
+        position:
+          type: integer
+          minimum: 1
+        mime_type:
+          type: string
+          nullable: true
+        size_bytes:
+          type: integer
+          nullable: true
+        filename_original:
+          type: string
+          nullable: true
+        alt_text:
+          type: string
+          nullable: true
     TeacherUnitNodeEditorTask:
       type: object
-      required: [id, instruction]
+      required: [id, instruction_md, criteria, kind, position]
       properties:
         id:
           type: string
-        instruction:
+        instruction_md:
           type: string
+        criteria:
+          type: array
+          items:
+            type: string
+        teacher_context_md:
+          type: string
+          nullable: true
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        max_attempts:
+          type: integer
+          minimum: 1
+          nullable: true
+        position:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum: [native, h5p, visual, scratch, calliope]
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+        scratch:
+          $ref: '#/components/schemas/ScratchTaskConfig'
+          nullable: true
+        calliope:
+          $ref: '#/components/schemas/CalliopeTaskConfig'
+          nullable: true
     TeacherUnitWorkspaceSelectionSection:
       type: object
       required: [id, title, position, editor_href]

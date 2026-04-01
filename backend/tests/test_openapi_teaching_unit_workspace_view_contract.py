@@ -63,3 +63,27 @@ def test_teacher_unit_node_editor_contract_exists() -> None:
 
     node_editor = spec["components"]["schemas"]["TeacherUnitNodeEditorView"]
     assert node_editor["required"] == ["user", "unit", "node", "materials", "tasks", "settings"]
+
+    material = spec["components"]["schemas"]["TeacherUnitNodeEditorMaterial"]
+    assert material["required"] == ["id", "title", "kind", "position"]
+    assert material["properties"]["kind"]["enum"] == ["markdown", "file"]
+    assert material["properties"]["body_md"]["nullable"] is True
+    assert material["properties"]["position"]["type"] == "integer"
+    assert material["properties"]["mime_type"]["nullable"] is True
+    assert material["properties"]["size_bytes"]["nullable"] is True
+    assert material["properties"]["filename_original"]["nullable"] is True
+    assert material["properties"]["alt_text"]["nullable"] is True
+
+    task = spec["components"]["schemas"]["TeacherUnitNodeEditorTask"]
+    assert task["required"] == ["id", "instruction_md", "criteria", "kind", "position"]
+    assert task["properties"]["instruction_md"]["type"] == "string"
+    assert task["properties"]["criteria"]["type"] == "array"
+    assert task["properties"]["kind"]["enum"] == ["native", "h5p", "visual", "scratch", "calliope"]
+    assert task["properties"]["position"]["type"] == "integer"
+    assert task["properties"]["teacher_context_md"]["nullable"] is True
+    assert task["properties"]["due_at"]["nullable"] is True
+    assert task["properties"]["max_attempts"]["nullable"] is True
+    assert task["properties"]["h5p"]["nullable"] is True
+    assert task["properties"]["visual"]["nullable"] is True
+    assert task["properties"]["scratch"]["nullable"] is True
+    assert task["properties"]["calliope"]["nullable"] is True

@@ -270,7 +270,9 @@
 
     const patchTaskContentId = async (contentId) => {
       if (!unitId || !sectionId || !taskId) return;
-      const url = `/api/teaching/units/${encodeURIComponent(unitId)}/sections/${encodeURIComponent(sectionId)}/tasks/${encodeURIComponent(taskId)}`;
+      const url =
+        root.dataset.taskPatchUrl ||
+        `/api/teaching/units/${encodeURIComponent(unitId)}/sections/${encodeURIComponent(sectionId)}/tasks/${encodeURIComponent(taskId)}`;
       const r = await fetch(url, {
         method: 'PATCH',
         credentials: 'include',

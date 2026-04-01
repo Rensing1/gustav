@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 
@@ -203,7 +204,8 @@ async def test_teacher_unit_node_editor_returns_linear_section_content(
 ) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
-    teaching_routes.set_repo(teaching_routes._Repo())
+    repo = teaching_routes._Repo()
+    teaching_routes.set_repo(repo)
     session = store.create(sub="teacher-unit-node", roles=["teacher"], name="Ada", ttl_seconds=60)
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-unit-node", roles=["teacher"], name="Ada")
 
@@ -225,9 +227,41 @@ async def test_teacher_unit_node_editor_returns_linear_section_content(
         )
         assert material.status_code == 201
 
+        intent = repo.create_file_upload_intent(
+            unit_id,
+            node_id,
+            "teacher-unit-node",
+            intent_id="11111111-1111-1111-1111-111111111111",
+            material_id="22222222-2222-2222-2222-222222222222",
+            storage_key="materials/test/source.pdf",
+            filename="quelle.pdf",
+            mime_type="application/pdf",
+            size_bytes=1024,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        )
+        assert intent["intent_id"] == "11111111-1111-1111-1111-111111111111"
+        file_material, created = repo.finalize_upload_intent_create_material(
+            "11111111-1111-1111-1111-111111111111",
+            unit_id,
+            node_id,
+            "teacher-unit-node",
+            title="Originalquelle",
+            alt_text="PDF Quelle",
+            sha256="a" * 64,
+        )
+        assert created is True
+        assert file_material["id"] == "22222222-2222-2222-2222-222222222222"
+
         task = await client.post(
             f"/api/teaching/units/{unit_id}/sections/{node_id}/tasks",
-            json={"instruction_md": "Fasse die Quelle zusammen."},
+            json={
+                "instruction_md": "Fasse die Quelle zusammen.",
+                "criteria": ["Inhalt", "Struktur"],
+                "teacher_context_md": "Nutze nur den Quellentext.",
+                "due_at": "2026-05-01T08:00:00+00:00",
+                "max_attempts": 2,
+                "scratch": {},
+            },
             headers={"Origin": "http://test"},
         )
         assert task.status_code == 201
@@ -245,8 +279,46 @@ async def test_teacher_unit_node_editor_returns_linear_section_content(
         "title": "Krisenjahre",
         "editor_title": "Krisenjahre",
     }
-    assert payload["materials"] == [{"id": material.json()["id"], "title": "Quellentext"}]
-    assert payload["tasks"] == [{"id": task.json()["id"], "instruction": "Fasse die Quelle zusammen."}]
+    assert payload["materials"] == [
+        {
+            "id": material.json()["id"],
+            "title": "Quellentext",
+            "kind": "markdown",
+            "body_md": "Material",
+            "position": 1,
+            "mime_type": None,
+            "size_bytes": None,
+            "filename_original": None,
+            "alt_text": None,
+        },
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "title": "Originalquelle",
+            "kind": "file",
+            "body_md": "",
+            "position": 2,
+            "mime_type": "application/pdf",
+            "size_bytes": 1024,
+            "filename_original": "quelle.pdf",
+            "alt_text": "PDF Quelle",
+        },
+    ]
+    assert payload["tasks"] == [
+        {
+            "id": task.json()["id"],
+            "instruction_md": "Fasse die Quelle zusammen.",
+            "criteria": ["Inhalt", "Struktur"],
+            "teacher_context_md": "Nutze nur den Quellentext.",
+            "due_at": "2026-05-01T08:00:00+00:00",
+            "max_attempts": 2,
+            "position": 1,
+            "kind": "scratch",
+            "h5p": None,
+            "visual": None,
+            "scratch": {},
+            "calliope": None,
+        }
+    ]
     assert payload["settings"]["kind"] == "section"
 
 
@@ -297,7 +369,11 @@ async def test_teacher_unit_node_editor_returns_modular_module_content(
         assert material.status_code == 201
         task = await client.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
-            json={"instruction_md": "Baue das Spiel nach."},
+            json={
+                "instruction_md": "Baue das Spiel nach.",
+                "criteria": [],
+                "h5p": {"content_id": "content-42", "display_options": {}},
+            },
             headers={"Origin": "http://test"},
         )
         assert task.status_code == 201
@@ -315,8 +391,35 @@ async def test_teacher_unit_node_editor_returns_modular_module_content(
         "title": "Figuren bewegen",
         "editor_title": "Figuren bewegen",
     }
-    assert payload["materials"] == [{"id": material.json()["id"], "title": "Scratch Karte"}]
-    assert payload["tasks"] == [{"id": task.json()["id"], "instruction": "Baue das Spiel nach."}]
+    assert payload["materials"] == [
+        {
+            "id": material.json()["id"],
+            "title": "Scratch Karte",
+            "kind": "markdown",
+            "body_md": "Material",
+            "position": 1,
+            "mime_type": None,
+            "size_bytes": None,
+            "filename_original": None,
+            "alt_text": None,
+        }
+    ]
+    assert payload["tasks"] == [
+        {
+            "id": task.json()["id"],
+            "instruction_md": "Baue das Spiel nach.",
+            "criteria": [],
+            "teacher_context_md": None,
+            "due_at": None,
+            "max_attempts": None,
+            "position": 1,
+            "kind": "h5p",
+            "h5p": {"content_id": "content-42", "display_options": {}},
+            "visual": None,
+            "scratch": None,
+            "calliope": None,
+        }
+    ]
     assert payload["settings"] == {
         "kind": "module",
         "required_prereq_count": 0,

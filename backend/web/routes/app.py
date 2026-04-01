@@ -1086,14 +1086,34 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
             "editor_title": node_title,
         },
         "materials": [
-            {"id": str(item.get("id") or ""), "title": str(item.get("title") or "")}
+            {
+                "id": str(item.get("id") or ""),
+                "title": str(item.get("title") or ""),
+                "kind": str(item.get("kind") or "markdown"),
+                "body_md": item.get("body_md"),
+                "position": int(item.get("position") or 0),
+                "mime_type": item.get("mime_type"),
+                "size_bytes": item.get("size_bytes"),
+                "filename_original": item.get("filename_original"),
+                "alt_text": item.get("alt_text"),
+            }
             for item in materials
             if str(item.get("id") or "")
         ],
         "tasks": [
             {
                 "id": str(item.get("id") or ""),
-                "instruction": str(item.get("instruction_md") or "").strip()[:160],
+                "instruction_md": str(item.get("instruction_md") or ""),
+                "criteria": list(item.get("criteria") or []),
+                "teacher_context_md": item.get("teacher_context_md"),
+                "due_at": item.get("due_at"),
+                "max_attempts": item.get("max_attempts"),
+                "position": int(item.get("position") or 0),
+                "kind": str(item.get("kind") or "native"),
+                "h5p": item.get("h5p"),
+                "visual": item.get("visual"),
+                "scratch": item.get("scratch"),
+                "calliope": item.get("calliope"),
             }
             for item in tasks
             if str(item.get("id") or "")

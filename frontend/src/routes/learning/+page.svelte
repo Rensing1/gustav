@@ -8,30 +8,25 @@
   <title>Lernraum | GUSTAV</title>
 </svelte:head>
 
-<div class="workspace-page">
-  <section class="workspace-panel workspace-panel--plain workspace-section workspace-intro">
-    <p class="workspace-kicker">Lernraum</p>
-    <h2>Deine freigegebenen Kurse stehen direkt bereit.</h2>
-    <p class="workspace-lead">
-      Der Einstieg bleibt ruhig und nah am eigentlichen Lernen, damit Inhalte
-      und nächste Schritte sofort klar sind.
-    </p>
+<div class="workspace-page learning-home">
+  <section class="learning-home-header">
+    <h2>Meine Klassen</h2>
   </section>
 
-  <section class="workspace-panel workspace-section">
-    {#if data.home?.courses?.length}
-      <div class="workspace-list">
-        {#each data.home.courses as course}
-          <a href={course.href}>
+  {#if data.home?.courses?.length}
+    <ul class="learning-home-list">
+      {#each data.home.courses as course}
+        <li>
+          <a class="learning-home-card" href={course.href}>
             <strong>{course.title}</strong>
-            <p class="workspace-note">Freigegebener Kurs mit Material, Aufgaben und Rückmeldungen.</p>
-            <span class="workspace-meta">{course.id}</span>
-            <span class="workspace-action">Kurs öffnen</span>
+            <span class="learning-home-open">Öffnen</span>
           </a>
-        {/each}
-      </div>
-    {:else}
-      <p class="workspace-empty">Noch keine Kurse sichtbar.</p>
-    {/if}
-  </section>
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <section class="workspace-panel learning-home-empty">
+      <p class="workspace-empty">Noch keine Klassen sichtbar.</p>
+    </section>
+  {/if}
 </div>

@@ -5,9 +5,9 @@ import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import type { LearnerHome } from "$lib/types/home";
 import type {
   LearningCourseUnit,
-  LearningCoursePageData,
   LearningModuleContent,
   LearningSection,
   LearningSubmission,
@@ -15,6 +15,7 @@ import type {
   LearningUnitGraph,
   LearningUnitPageData
 } from "$lib/types/learning";
+import type { BreadcrumbItem } from "$lib/types/navigation";
 
 function historyHref(url: URL, taskId: string, moduleId: string | null): string {
   const next = new URL(url);
@@ -59,18 +60,25 @@ async function loadPageData(
   unitId: string,
   url: URL
 ): Promise<LearningUnitPageData> {
-  const [bootstrap, units] = await Promise.all([
+  const [bootstrap, units, home] = await Promise.all([
     requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning"),
     requireBackendJson<LearningCourseUnit[]>(
       fetchFn,
       cookies,
       `/api/learning/courses/${encodeURIComponent(courseId)}/units`
+    ),
+    requireBackendJson<LearnerHome>(
+      fetchFn,
+      cookies,
+      "/api/learning/views/learner-home"
     )
   ]);
   const selectedUnit = units.find((row) => row.unit.id === unitId) || null;
   if (!selectedUnit) {
     throw error(404, "Lerneinheit nicht gefunden.");
   }
+  const courseTitle =
+    home.courses.find((course) => course.id === courseId)?.title ?? "Kursraum";
 
   const historyTaskId = url.searchParams.get("history");
   const moduleId = url.searchParams.get("module");
@@ -124,6 +132,7 @@ async function loadPageData(
   return {
     user: bootstrap.user,
     courseId,
+    courseTitle,
     unitId,
     units,
     selectedUnit,
@@ -139,7 +148,19 @@ async function loadPageData(
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
   try {
-    return await loadPageData(fetch, cookies, params.courseId, params.unitId, url);
+    const pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url);
+    const breadcrumbs: BreadcrumbItem[] = [
+      { label: "Lernraum", href: "/learning" },
+      { label: pageData.courseTitle, href: `/learning/courses/${encodeURIComponent(params.courseId)}` },
+      { label: pageData.selectedUnit?.unit.title ?? "Lerneinheit" }
+    ];
+
+    return {
+      ...pageData,
+      breadcrumbs,
+      hidePageHeading: true,
+      pageTitle: pageData.selectedUnit?.unit.title ?? "Lerneinheit"
+    };
   } catch (caught) {
     if (caught instanceof BackendRequestError) {
       throw error(caught.response.status, "Lernraum konnte nicht geladen werden.");

@@ -1,453 +1,550 @@
 <script lang="ts">
-  import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
-  import type { LearningSection, LearningSubmission, LearningTask } from "$lib/types/learning";
+  import { browser } from "$app/environment";
+  import { Controls, SvelteFlow } from "@xyflow/svelte";
+  import "@xyflow/svelte/dist/style.css";
+  import { onMount } from "svelte";
+
+  import LearningGraphNode from "$lib/components/learning-unit/LearningGraphNode.svelte";
+  import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
+  import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
+  import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
+  import TeacherGraphEdge from "$lib/components/teacher-unit-graph/TeacherGraphEdge.svelte";
+  import {
+    buildLearningUnitFlow,
+    type LearningFlowNode
+  } from "$lib/graph/learning-unit-flow";
+  import type {
+    LearningModuleContent,
+    LearningSection,
+    LearningUnitGraphModule
+  } from "$lib/types/learning";
+  import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type { ActionData, PageData } from "./$types";
 
+  type WorkspaceViewMode = "overview" | "content";
+  type ModularWorkspaceState = {
+    view: WorkspaceViewMode;
+    openTabs: string[];
+    activeTab: string | null;
+  };
+
   let { data, form }: { data: PageData; form: ActionData } = $props();
+
+  const nodeTypes = {
+    unitNode: LearningGraphNode,
+    phaseBand: GraphPhaseBand
+  };
+
+  const edgeTypes = {
+    teacherEdge: TeacherGraphEdge
+  };
+
+  let flowNodes = $state.raw<LearningFlowNode[]>([]);
+  let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
+  let graphBusy = $state(false);
+  let modularWorkspace = $state<ModularWorkspaceState>({
+    view: "overview",
+    openTabs: [],
+    activeTab: null
+  });
+  let moduleCache = $state.raw<Record<string, LearningModuleContent>>({});
+  let moduleLoading = $state.raw<Record<string, boolean>>({});
+  let moduleErrors = $state.raw<Record<string, string | null>>({});
+  let modularWorkspaceReady = $state(false);
+
+  let rebuildToken = 0;
+
+  function isModularUnit(): boolean {
+    return data.selectedUnit?.unit.unit_type === "modular";
+  }
+
+  function storageKey(): string {
+    return `gustav.learning.unit-workspace:${data.courseId}:${data.unitId}`;
+  }
+
+  function plainModule(module: LearningModuleContent): LearningModuleContent {
+    return JSON.parse(JSON.stringify(module)) as LearningModuleContent;
+  }
+
+  function defaultModularWorkspaceState(): ModularWorkspaceState {
+    return {
+      view: "overview",
+      openTabs: [],
+      activeTab: null
+    };
+  }
+
+  function graphModuleById(moduleId: string | null): LearningUnitGraphModule | null {
+    if (!moduleId) {
+      return null;
+    }
+    return data.graph?.modules.find((module) => module.id === moduleId) ?? null;
+  }
+
+  function openableModuleIds(): Set<string> {
+    return new Set(
+      (data.graph?.modules ?? [])
+        .filter((module) => module.status === "open" || module.status === "done")
+        .map((module) => module.id)
+    );
+  }
+
+  function normalizeModularWorkspaceState(raw: unknown): ModularWorkspaceState {
+    const allowed = openableModuleIds();
+    if (!raw || typeof raw !== "object") {
+      return defaultModularWorkspaceState();
+    }
+
+    const candidate = raw as Partial<ModularWorkspaceState>;
+    const openTabs = Array.isArray(candidate.openTabs)
+      ? candidate.openTabs.map(String).filter((moduleId) => allowed.has(moduleId))
+      : [];
+    const activeTab = candidate.activeTab && openTabs.includes(String(candidate.activeTab))
+      ? String(candidate.activeTab)
+      : openTabs[0] ?? null;
+
+    return {
+      view: candidate.view === "content" ? "content" : "overview",
+      openTabs,
+      activeTab
+    };
+  }
+
+  function readModularWorkspaceState(): ModularWorkspaceState {
+    if (!browser) {
+      return defaultModularWorkspaceState();
+    }
+    try {
+      const raw = window.localStorage.getItem(storageKey());
+      return normalizeModularWorkspaceState(raw ? JSON.parse(raw) : null);
+    } catch {
+      return defaultModularWorkspaceState();
+    }
+  }
+
+  function seedModularWorkspaceState(base: ModularWorkspaceState): ModularWorkspaceState {
+    const seeded = normalizeModularWorkspaceState(base);
+    if (!data.activeModule) {
+      return seeded;
+    }
+
+    const activeModuleId = data.activeModule.module.id;
+    const openTabs = seeded.openTabs.includes(activeModuleId)
+      ? seeded.openTabs
+      : [...seeded.openTabs, activeModuleId];
+
+    return {
+      view: "content",
+      openTabs,
+      activeTab: activeModuleId
+    };
+  }
+
+  function currentActiveModule(): LearningModuleContent | null {
+    const moduleId = modularWorkspace.activeTab;
+    return moduleId ? moduleCache[moduleId] ?? null : null;
+  }
+
+  function currentActiveModuleSummary(): LearningUnitGraphModule | null {
+    return graphModuleById(modularWorkspace.activeTab);
+  }
+
+  function openTabModules(): LearningUnitGraphModule[] {
+    return modularWorkspace.openTabs
+      .map((moduleId) => graphModuleById(moduleId))
+      .filter((module): module is LearningUnitGraphModule => Boolean(module));
+  }
 
   function isHistoryOpen(taskId: string): boolean {
     return data.historyTaskId === taskId;
   }
 
-  function historyHref(taskId: string): string {
+  function historyHref(taskId: string, moduleId: string | null): string {
     const params = new URLSearchParams();
     params.set("history", taskId);
-    if (data.activeModule?.module.id) {
-      params.set("module", data.activeModule.module.id);
+    if (moduleId) {
+      params.set("module", moduleId);
     }
     return `?${params.toString()}#task-${taskId}`;
   }
 
-  function moduleHref(moduleId: string): string {
-    const params = new URLSearchParams();
-    params.set("module", moduleId);
-    return `?${params.toString()}`;
-  }
-
-  function uploadOnly(task: LearningTask): boolean {
-    return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope";
-  }
-
-  function humanStatus(submission: LearningSubmission): string {
-    if (submission.kind === "h5p" && submission.score_raw !== null && submission.score_raw !== undefined) {
-      return `${submission.analysis_status} · ${submission.score_raw}/${submission.score_max ?? 0}`;
+  function syncModuleUrl(moduleId: string | null) {
+    if (!browser) {
+      return;
     }
-    return submission.analysis_status;
+
+    const next = new URL(window.location.href);
+    if (moduleId) {
+      next.searchParams.set("module", moduleId);
+    } else {
+      next.searchParams.delete("module");
+    }
+    next.searchParams.delete("history");
+    next.searchParams.delete("submitted");
+    next.searchParams.delete("message");
+    const query = next.searchParams.toString();
+    const href = query ? `${next.pathname}?${query}` : next.pathname;
+    window.history.replaceState(window.history.state, "", href);
   }
+
+  async function ensureModuleLoaded(moduleId: string) {
+    if (!browser || moduleCache[moduleId] || moduleLoading[moduleId]) {
+      return;
+    }
+
+    moduleLoading = { ...moduleLoading, [moduleId]: true };
+    moduleErrors = { ...moduleErrors, [moduleId]: null };
+
+    try {
+      const response = await fetch(
+        `/learning/courses/${encodeURIComponent(data.courseId)}/units/${encodeURIComponent(data.unitId)}/modules/${encodeURIComponent(moduleId)}?include=materials,tasks`,
+        {
+          credentials: "include",
+          cache: "no-store"
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`module_fetch_failed_${response.status}`);
+      }
+
+      const payload = (await response.json()) as LearningModuleContent;
+      moduleCache = {
+        ...moduleCache,
+        [moduleId]: plainModule(payload)
+      };
+    } catch {
+      moduleErrors = {
+        ...moduleErrors,
+        [moduleId]: "Das Modul konnte nicht geladen werden."
+      };
+    } finally {
+      moduleLoading = {
+        ...moduleLoading,
+        [moduleId]: false
+      };
+    }
+  }
+
+  function setWorkspaceState(next: ModularWorkspaceState) {
+    modularWorkspace = next;
+  }
+
+  function openModule(moduleId: string) {
+    const module = graphModuleById(moduleId);
+    if (!module || (module.status !== "open" && module.status !== "done")) {
+      return;
+    }
+
+    const openTabs = modularWorkspace.openTabs.includes(moduleId)
+      ? modularWorkspace.openTabs
+      : [...modularWorkspace.openTabs, moduleId];
+
+    setWorkspaceState({
+      view: "content",
+      openTabs,
+      activeTab: moduleId
+    });
+    syncModuleUrl(moduleId);
+    void ensureModuleLoaded(moduleId);
+  }
+
+  function activateTab(moduleId: string) {
+    if (!modularWorkspace.openTabs.includes(moduleId)) {
+      openModule(moduleId);
+      return;
+    }
+
+    setWorkspaceState({
+      ...modularWorkspace,
+      view: "content",
+      activeTab: moduleId
+    });
+    syncModuleUrl(moduleId);
+    void ensureModuleLoaded(moduleId);
+  }
+
+  function closeTab(event: MouseEvent, moduleId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const currentIndex = modularWorkspace.openTabs.indexOf(moduleId);
+    const remaining = modularWorkspace.openTabs.filter((tabId) => tabId !== moduleId);
+    const nextActive =
+      modularWorkspace.activeTab === moduleId
+        ? remaining[Math.max(0, currentIndex - 1)] ?? remaining[0] ?? null
+        : modularWorkspace.activeTab;
+
+    setWorkspaceState({
+      ...modularWorkspace,
+      openTabs: remaining,
+      activeTab: nextActive
+    });
+    syncModuleUrl(nextActive);
+  }
+
+  function switchView(view: WorkspaceViewMode) {
+    setWorkspaceState({
+      ...modularWorkspace,
+      view
+    });
+  }
+
+  async function rebuildGraph() {
+    if (!isModularUnit() || !data.graph || !data.user) {
+      flowNodes = [];
+      flowEdges = [];
+      return;
+    }
+
+    const token = ++rebuildToken;
+    graphBusy = true;
+
+    try {
+      const flow = await buildLearningUnitFlow(
+        data.graph,
+        data.user,
+        modularWorkspace.view === "overview" ? null : modularWorkspace.activeTab,
+        openModule
+      );
+
+      if (token !== rebuildToken) {
+        return;
+      }
+
+      flowNodes = flow.nodes;
+      flowEdges = flow.edges;
+    } finally {
+      if (token === rebuildToken) {
+        graphBusy = false;
+      }
+    }
+  }
+
+  onMount(() => {
+    if (!isModularUnit()) {
+      return;
+    }
+
+    if (data.activeModule) {
+      moduleCache = {
+        [data.activeModule.module.id]: plainModule(data.activeModule)
+      };
+    }
+
+    setWorkspaceState(seedModularWorkspaceState(readModularWorkspaceState()));
+    modularWorkspaceReady = true;
+
+    if (modularWorkspace.activeTab) {
+      void ensureModuleLoaded(modularWorkspace.activeTab);
+    }
+  });
+
+  $effect(() => {
+    if (!browser || !isModularUnit() || !modularWorkspaceReady) {
+      return;
+    }
+
+    window.localStorage.setItem(storageKey(), JSON.stringify(modularWorkspace));
+  });
+
+  $effect(() => {
+    if (!isModularUnit() || !modularWorkspaceReady) {
+      return;
+    }
+
+    void rebuildGraph();
+  });
+
+  $effect(() => {
+    if (!isModularUnit() || !modularWorkspaceReady || !modularWorkspace.activeTab) {
+      return;
+    }
+
+    void ensureModuleLoaded(modularWorkspace.activeTab);
+  });
 </script>
 
 <svelte:head>
   <title>{data.selectedUnit?.unit.title ?? "Lernraum"} | GUSTAV</title>
 </svelte:head>
 
-<section class="workspace">
-  <header class="hero">
-    <div>
-      <p class="kicker">Lernraum</p>
-      <h2>{data.selectedUnit?.unit.title}</h2>
-      <p class="lead">
-        {#if data.selectedUnit?.unit.unit_type === "modular"}
-          Modulare Einheit mit Graph, offenen Modulen und serverseitigen Abgaben.
-        {:else}
-          Lineare Einheit mit direkt sichtbaren Abschnitten und Aufgaben.
-        {/if}
-      </p>
-    </div>
-
-    <a class="back-link" href={`/learning/courses/${data.courseId}`}>Zurueck zum Kurs</a>
-  </header>
-
-  <nav class="unit-switcher" aria-label="Lerneinheiten">
-    {#each data.units as row}
-      <a
-        class:active={row.unit.id === data.unitId}
-        href={`/learning/courses/${data.courseId}/units/${row.unit.id}`}
-      >
-        <span>#{row.position}</span>
-        <strong>{row.unit.title}</strong>
-      </a>
-    {/each}
-  </nav>
+<div class="workspace-page learning-unit-space">
+  <section class="learning-home-header learning-unit-header">
+    <h2>{data.selectedUnit?.unit.title}</h2>
+  </section>
 
   {#if data.message === "submitted"}
-    <p class="flash flash-success">Abgabe gespeichert.</p>
+    <p class="flash flash-success learning-unit-flash">Abgabe gespeichert.</p>
   {/if}
 
   {#if form?.message}
-    <p class="flash flash-error">{form.message}</p>
+    <p class="flash flash-error learning-unit-flash">{form.message}</p>
   {/if}
 
-  {#if data.selectedUnit?.unit.unit_type === "modular"}
-    <section class="panel">
-      <h3>Graph</h3>
-      {#if data.graph}
-        {#each data.graph.phases as phase}
-          <div class="phase">
-            <h4>{phase.position}. {phase.title}</h4>
-            <div class="module-grid">
-              {#each data.graph.modules.filter((module) => module.phase_id === phase.id) as module}
-                <a
-                  class={`module-card status-${module.status}`}
-                  href={moduleHref(module.id)}
-                >
-                  <strong>{module.title}</strong>
-                  <span>{module.tasks_done}/{module.tasks_total} Aufgaben</span>
-                  <span>{module.materials_count} Materialien</span>
-                </a>
+  {#if isModularUnit()}
+    <section class="workspace-panel learning-unit-toolbar">
+      <div class="workspace-tabs">
+        <div class="workspace-tab-group">
+          <button
+            class:workspace-tab--active={modularWorkspace.view === "overview"}
+            class="workspace-tab learning-unit-mode-tab"
+            type="button"
+            onclick={() => switchView("overview")}
+          >
+            Übersicht
+          </button>
+          <button
+            class:workspace-tab--active={modularWorkspace.view === "content"}
+            class="workspace-tab learning-unit-mode-tab"
+            type="button"
+            onclick={() => switchView("content")}
+          >
+            Inhalte
+          </button>
+        </div>
+      </div>
+
+      {#if openTabModules().length}
+        <nav class="learning-unit-open-tabs" aria-label="Offene Module">
+          {#each openTabModules() as module}
+            <div
+              class:learning-unit-open-tab--active={modularWorkspace.activeTab === module.id}
+              class="learning-unit-open-tab"
+            >
+              <button class="learning-unit-open-tab__trigger" type="button" onclick={() => activateTab(module.id)}>
+                <span class={`learning-unit-open-tab__dot learning-unit-open-tab__dot--${module.status}`}></span>
+                <span class="learning-unit-open-tab__title">{module.title}</span>
+              </button>
+              <button class="learning-unit-open-tab__close" type="button" aria-label={`Modul ${module.title} schließen`} onclick={(event) => closeTab(event, module.id)}>
+                ×
+              </button>
+            </div>
+          {/each}
+        </nav>
+      {/if}
+    </section>
+
+    {#if modularWorkspace.view === "overview"}
+      <section class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
+        {#if data.graph}
+          <SvelteFlow
+            bind:nodes={flowNodes}
+            bind:edges={flowEdges}
+            class="teacher-flow-canvas"
+            {nodeTypes}
+            {edgeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.24, minZoom: 0.68, maxZoom: 1.02 }}
+            minZoom={0.52}
+            maxZoom={1.26}
+            elementsSelectable={false}
+            nodesFocusable={false}
+            panOnDrag={true}
+            selectNodesOnDrag={false}
+            nodesDraggable={false}
+          >
+            <Controls position="bottom-right" />
+          </SvelteFlow>
+        {:else}
+          <p class="learning-unit-empty-copy">Der Graph konnte nicht geladen werden.</p>
+        {/if}
+      </section>
+    {:else}
+      <section class="learning-unit-stage learning-unit-stage--content">
+        {#if currentActiveModule()}
+          <section class="workspace-panel learning-unit-module-panel">
+            <header class="learning-unit-module-panel__header">
+              <div class="learning-unit-module-panel__copy">
+                <p class="workspace-label">Modul</p>
+                <h3>{currentActiveModule()?.module.title}</h3>
+              </div>
+              {#if currentActiveModuleSummary()}
+                <p class="learning-unit-module-panel__meta">
+                  {currentActiveModuleSummary()?.tasks_done}/{currentActiveModuleSummary()?.tasks_total} Aufgaben · {currentActiveModuleSummary()?.materials_count} Materialien
+                </p>
+              {/if}
+            </header>
+
+            <div class="learning-unit-stack">
+              {#each currentActiveModule()?.materials ?? [] as material}
+                <LearningMaterialCard {material} />
+              {/each}
+
+              {#each currentActiveModule()?.tasks ?? [] as task}
+                <LearningTaskCard
+                  courseId={data.courseId}
+                  {task}
+                  unitType="modular"
+                  moduleId={currentActiveModule()?.module.id ?? null}
+                  historyHref={historyHref(task.id, currentActiveModule()?.module.id ?? null)}
+                  historyOpen={isHistoryOpen(task.id)}
+                  history={data.history}
+                />
               {/each}
             </div>
-          </div>
-        {/each}
-      {:else}
-        <p class="empty">Der Graph konnte nicht geladen werden.</p>
-      {/if}
-    </section>
-
-    <section class="panel">
-      <h3>Aktives Modul</h3>
-      {#if data.activeModule}
-        <h4>{data.activeModule.module.title}</h4>
-        <div class="stack">
-          {#each data.activeModule.materials as material}
-            <article class="card">
-              <strong>{material.title}</strong>
-              {#if material.kind === "markdown"}
-                <pre>{material.body_md}</pre>
-              {:else}
-                <p class="empty">
-                  Datei-Material · {material.filename_original || material.mime_type || "Download im Umbau"}
-                </p>
-              {/if}
-            </article>
-          {/each}
-
-          {#each data.activeModule.tasks as task}
-            <article class="task-card" id={`task-${task.id}`}>
-              <header>
-                <h4>Aufgabe</h4>
-                <a href={historyHref(task.id)}>Verlauf</a>
-              </header>
-
-              <pre>{task.instruction_md}</pre>
-
-              {#if task.kind === "h5p" && task.h5p?.content_id}
-                <H5PTaskPlayer
-                  courseId={data.courseId}
-                  taskId={task.id}
-                  contentId={task.h5p.content_id}
-                />
-              {:else}
-                <form method="POST" enctype="multipart/form-data" class="submit-form">
-                  <input type="hidden" name="task_id" value={task.id} />
-                  <input type="hidden" name="task_kind" value={task.kind} />
-                  <input type="hidden" name="unit_type" value="modular" />
-                  <input type="hidden" name="module_id" value={data.activeModule.module.id} />
-
-                  {#if !uploadOnly(task)}
-                    <label>
-                      Textantwort
-                      <textarea name="text_body" rows="6"></textarea>
-                    </label>
-                  {/if}
-
-                  <label>
-                    {uploadOnly(task) ? "Datei hochladen" : "Optional Datei hochladen"}
-                    <input name="upload_file" type="file" />
-                  </label>
-
-                  <button type="submit">Abgeben</button>
-                </form>
-              {/if}
-
-              {#if isHistoryOpen(task.id)}
-                <div class="history">
-                  {#if data.history.length}
-                    {#each data.history as submission}
-                      <article class="history-entry">
-                        <strong>Versuch {submission.attempt_nr}</strong>
-                        <span>{humanStatus(submission)}</span>
-                        {#if submission.text_body}
-                          <pre>{submission.text_body}</pre>
-                        {/if}
-                        {#if submission.feedback_md}
-                          <pre>{submission.feedback_md}</pre>
-                        {/if}
-                      </article>
-                    {/each}
-                  {:else}
-                    <p class="empty">Noch keine Abgaben fuer diese Aufgabe.</p>
-                  {/if}
-                </div>
-              {/if}
-            </article>
-          {/each}
-        </div>
-      {:else}
-        <p class="empty">Waehle im Graphen ein offenes Modul aus.</p>
-      {/if}
-    </section>
+          </section>
+        {:else if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
+          <section class="workspace-panel learning-unit-empty-state">
+            <p class="learning-unit-empty-copy">Modul wird geladen …</p>
+          </section>
+        {:else if modularWorkspace.activeTab && moduleErrors[modularWorkspace.activeTab]}
+          <section class="workspace-panel learning-unit-empty-state">
+            <p class="workspace-note workspace-note--error">{moduleErrors[modularWorkspace.activeTab]}</p>
+            <button
+              class="workspace-top-action workspace-top-action--quiet"
+              type="button"
+              onclick={() => {
+                if (modularWorkspace.activeTab) {
+                  void ensureModuleLoaded(modularWorkspace.activeTab);
+                }
+              }}
+            >
+              Erneut versuchen
+            </button>
+          </section>
+        {:else}
+          <section class="workspace-panel learning-unit-empty-state">
+            <p class="learning-unit-empty-copy">Öffne im Graphen ein verfügbares Modul, um mit den Inhalten zu arbeiten.</p>
+          </section>
+        {/if}
+      </section>
+    {/if}
   {:else}
-    <div class="stack">
-      {#each data.sections as section}
-        <section class="panel">
-          <h3>{section.section.position}. {section.section.title}</h3>
+    <section class="learning-unit-stage learning-unit-stage--content">
+      <div class="learning-unit-sections">
+        {#each data.sections as section}
+          <section class="workspace-panel learning-unit-section">
+            <header class="learning-unit-section__header">
+              <div class="learning-unit-section__copy">
+                <p class="workspace-label">Abschnitt {section.section.position}</p>
+                <h3>{section.section.title}</h3>
+              </div>
+            </header>
 
-          {#if !section.materials.length && !section.tasks.length}
-            <p class="empty">Noch keine Inhalte freigeschaltet.</p>
-          {/if}
+            {#if !section.materials.length && !section.tasks.length}
+              <p class="learning-unit-empty-copy">Noch keine Inhalte freigeschaltet.</p>
+            {/if}
 
-          {#each section.materials as material}
-            <article class="card">
-              <strong>{material.title}</strong>
-              {#if material.kind === "markdown"}
-                <pre>{material.body_md}</pre>
-              {:else}
-                <p class="empty">
-                  Datei-Material · {material.filename_original || material.mime_type || "Download im Umbau"}
-                </p>
-              {/if}
-            </article>
-          {/each}
+            <div class="learning-unit-stack">
+              {#each section.materials as material}
+                <LearningMaterialCard {material} />
+              {/each}
 
-          {#each section.tasks as task}
-            <article class="task-card" id={`task-${task.id}`}>
-              <header>
-                <h4>Aufgabe</h4>
-                <a href={historyHref(task.id)}>Verlauf</a>
-              </header>
-
-              <pre>{task.instruction_md}</pre>
-
-              {#if task.criteria.length}
-                <ul>
-                  {#each task.criteria as criterion}
-                    <li>{criterion}</li>
-                  {/each}
-                </ul>
-              {/if}
-
-              {#if task.kind === "h5p" && task.h5p?.content_id}
-                <H5PTaskPlayer
+              {#each section.tasks as task}
+                <LearningTaskCard
                   courseId={data.courseId}
-                  taskId={task.id}
-                  contentId={task.h5p.content_id}
+                  {task}
+                  unitType="linear"
+                  historyHref={historyHref(task.id, null)}
+                  historyOpen={isHistoryOpen(task.id)}
+                  history={data.history}
                 />
-              {:else}
-                <form method="POST" enctype="multipart/form-data" class="submit-form">
-                  <input type="hidden" name="task_id" value={task.id} />
-                  <input type="hidden" name="task_kind" value={task.kind} />
-                  <input type="hidden" name="unit_type" value="linear" />
-
-                  {#if !uploadOnly(task)}
-                    <label>
-                      Textantwort
-                      <textarea name="text_body" rows="6"></textarea>
-                    </label>
-                  {/if}
-
-                  <label>
-                    {uploadOnly(task) ? "Datei hochladen" : "Optional Datei hochladen"}
-                    <input name="upload_file" type="file" />
-                  </label>
-
-                  <button type="submit">Abgeben</button>
-                </form>
-              {/if}
-
-              {#if isHistoryOpen(task.id)}
-                <div class="history">
-                  {#if data.history.length}
-                    {#each data.history as submission}
-                      <article class="history-entry">
-                        <strong>Versuch {submission.attempt_nr}</strong>
-                        <span>{humanStatus(submission)}</span>
-                        {#if submission.text_body}
-                          <pre>{submission.text_body}</pre>
-                        {/if}
-                        {#if submission.feedback_md}
-                          <pre>{submission.feedback_md}</pre>
-                        {/if}
-                      </article>
-                    {/each}
-                  {:else}
-                    <p class="empty">Noch keine Abgaben fuer diese Aufgabe.</p>
-                  {/if}
-                </div>
-              {/if}
-            </article>
-          {/each}
-        </section>
-      {/each}
-    </div>
+              {/each}
+            </div>
+          </section>
+        {/each}
+      </div>
+    </section>
   {/if}
-</section>
-
-<style>
-  .workspace {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .hero,
-  .panel,
-  .task-card,
-  .card {
-    background: rgba(255, 250, 243, 0.92);
-    border: 1px solid #eadfd2;
-    border-radius: 1.25rem;
-  }
-
-  .hero,
-  .panel {
-    padding: 1.25rem;
-  }
-
-  .hero {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: start;
-  }
-
-  .kicker,
-  .lead,
-  .empty,
-  .back-link,
-  .history-entry span,
-  .module-card span {
-    color: #6f6b86;
-  }
-
-  .kicker {
-    margin: 0 0 0.35rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.85rem;
-  }
-
-  h2,
-  h3,
-  h4,
-  pre {
-    margin-top: 0;
-  }
-
-  .unit-switcher {
-    display: flex;
-    gap: 0.75rem;
-    overflow-x: auto;
-  }
-
-  .unit-switcher a,
-  .module-card {
-    display: grid;
-    gap: 0.2rem;
-    padding: 0.85rem 1rem;
-    border-radius: 1rem;
-    border: 1px solid #eadfd2;
-    background: #fffdf9;
-    color: inherit;
-    text-decoration: none;
-  }
-
-  .unit-switcher a.active {
-    border-color: #286983;
-    box-shadow: inset 0 0 0 1px #286983;
-  }
-
-  .stack,
-  .history {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .task-card,
-  .card,
-  .history-entry {
-    padding: 1rem;
-  }
-
-  .task-card header {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: baseline;
-  }
-
-  .submit-form {
-    display: grid;
-    gap: 0.9rem;
-  }
-
-  .submit-form label {
-    display: grid;
-    gap: 0.35rem;
-    color: #393552;
-  }
-
-  textarea,
-  input[type="file"] {
-    font: inherit;
-  }
-
-  textarea {
-    min-height: 8rem;
-    padding: 0.75rem;
-    border-radius: 0.9rem;
-    border: 1px solid #d7c7b7;
-    background: #fffdf9;
-  }
-
-  button {
-    width: fit-content;
-    border: 0;
-    border-radius: 999px;
-    padding: 0.75rem 1.1rem;
-    background: #286983;
-    color: #fffaf3;
-    font: inherit;
-    cursor: pointer;
-  }
-
-  pre {
-    white-space: pre-wrap;
-    font: inherit;
-    color: #393552;
-  }
-
-  .flash {
-    margin: 0;
-    padding: 0.85rem 1rem;
-    border-radius: 1rem;
-  }
-
-  .flash-success {
-    background: rgba(86, 148, 111, 0.14);
-    color: #33673b;
-  }
-
-  .flash-error {
-    background: rgba(180, 99, 122, 0.14);
-    color: #8c4351;
-  }
-
-  .module-grid {
-    display: grid;
-    gap: 0.75rem;
-    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  }
-
-  .status-locked {
-    opacity: 0.55;
-  }
-
-  .status-done {
-    border-color: #56946f;
-  }
-
-  @media (max-width: 900px) {
-    .hero {
-      flex-direction: column;
-    }
-  }
-</style>
+</div>

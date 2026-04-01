@@ -121,6 +121,7 @@ export type LearningCoursePageData = {
 export type LearningUnitPageData = {
   user: SessionBootstrapUser | null;
   courseId: string;
+  courseTitle: string;
   unitId: string;
   units: LearningCourseUnit[];
   selectedUnit: LearningCourseUnit | null;

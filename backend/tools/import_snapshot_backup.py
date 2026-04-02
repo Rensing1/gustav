@@ -95,6 +95,14 @@ class SnapshotFiles:
     keycloak_db_sql_gz: Optional[Path] = None
 
 
+@dataclass(frozen=True)
+class SnapshotMigration:
+    version: str
+    statements: str
+    name: str
+    copy_line: str
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Restore a Supabase snapshot (DB + storage buckets) into local dev.")
     parser.add_argument("--snapshot", required=True, help="Path to snapshot dir or .tar.gz (contains supabase_db.sql.gz)")
@@ -369,8 +377,142 @@ end $$;
     subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
 
 
+def expected_local_migration_owner() -> str:
+    """Return the local role expected to run `supabase migration up`."""
+    return str(os.getenv("DB_SUPERUSER", "postgres")).strip() or "postgres"
+
+
+def _normalize_restore_target_ownership(dsn: str, target_owner: str) -> None:
+    """Reassign restored app objects to the local migration runner.
+
+    Snapshot imports run with a superuser DSN (`supabase_admin`) so they can
+    reset app schemas. Without an explicit owner handoff afterwards, restored
+    tables/functions stay owned by that restore role and later
+    `supabase migration up` runs as `postgres` can fail on `ALTER TABLE`.
+    """
+
+    owner_literal = target_owner.replace("'", "''")
+    schema_literals = ", ".join(f"'{schema}'" for schema in sorted(RESTORE_TARGET_SCHEMAS))
+    sql = f"""
+do $$
+declare
+  target_owner text := '{owner_literal}';
+  r record;
+begin
+  for r in (
+    select nspname
+      from pg_namespace
+     where nspname in ({schema_literals})
+  ) loop
+    execute format('alter schema %I owner to %I', r.nspname, target_owner);
+  end loop;
+
+  for r in (
+    select n.nspname, c.relname, c.relkind
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname in ({schema_literals})
+       and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
+  ) loop
+    case r.relkind
+      when 'S' then
+        execute format('alter sequence %I.%I owner to %I', r.nspname, r.relname, target_owner);
+      when 'v' then
+        execute format('alter view %I.%I owner to %I', r.nspname, r.relname, target_owner);
+      when 'm' then
+        execute format('alter materialized view %I.%I owner to %I', r.nspname, r.relname, target_owner);
+      else
+        execute format('alter table %I.%I owner to %I', r.nspname, r.relname, target_owner);
+    end case;
+  end loop;
+
+  for r in (
+    select n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) as args, p.prokind
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname in ({schema_literals})
+       and p.prokind in ('f', 'p')
+  ) loop
+    if r.prokind = 'p' then
+      execute format('alter procedure %I.%I(%s) owner to %I', r.nspname, r.proname, r.args, target_owner);
+    else
+      execute format('alter function %I.%I(%s) owner to %I', r.nspname, r.proname, r.args, target_owner);
+    end if;
+  end loop;
+
+  for r in (
+    select n.nspname, t.typname
+      from pg_type t
+      join pg_namespace n on n.oid = t.typnamespace
+     where n.nspname in ({schema_literals})
+       and t.typtype in ('d', 'e')
+  ) loop
+    execute format('alter type %I.%I owner to %I', r.nspname, r.typname, target_owner);
+  end loop;
+end $$;
+"""
+    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
+
+
 def _decode_dump_header_value(raw: bytes) -> str:
     return raw.decode("utf-8", errors="replace").strip()
+
+
+def extract_snapshot_migration_history(db_sql_gz: Path) -> list[SnapshotMigration]:
+    """Read `supabase_migrations.schema_migrations` rows embedded in the dump."""
+
+    rows: list[SnapshotMigration] = []
+    inside_copy = False
+    with gzip.open(db_sql_gz, "rt", encoding="utf-8", errors="replace") as dump:
+        for line in dump:
+            if line.startswith("COPY supabase_migrations.schema_migrations "):
+                inside_copy = True
+                continue
+            if not inside_copy:
+                continue
+            if line.strip() == r"\.":
+                break
+            parts = line.rstrip("\n").split("\t", 2)
+            if len(parts) != 3:
+                raise RuntimeError(
+                    "Malformed supabase_migrations.schema_migrations row in snapshot dump."
+                )
+            rows.append(
+                SnapshotMigration(
+                    version=parts[0],
+                    statements=parts[1],
+                    name=parts[2],
+                    copy_line=line.rstrip("\n"),
+                )
+            )
+    if not rows:
+        raise RuntimeError("Snapshot dump does not contain supabase_migrations.schema_migrations rows.")
+    return rows
+
+
+def sync_snapshot_migration_history(dsn: str, rows: list[SnapshotMigration]) -> None:
+    """Replace local Supabase migration history with the snapshot's history."""
+
+    proc = subprocess.Popen(
+        ["psql", dsn, "-v", "ON_ERROR_STOP=1"],
+        stdin=subprocess.PIPE,
+        text=True,
+    )
+    assert proc.stdin is not None
+    try:
+        proc.stdin.write("truncate table supabase_migrations.schema_migrations;\n")
+        proc.stdin.write("copy supabase_migrations.schema_migrations(version, statements, name) from stdin;\n")
+        for row in rows:
+            proc.stdin.write(f"{row.copy_line}\n")
+        proc.stdin.write("\\.\n")
+    finally:
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+    rc = proc.wait()
+    if rc != 0:
+        raise RuntimeError(f"psql migration history sync failed with exit code {rc}")
 
 
 def _should_keep_dump_object(header_line: bytes) -> bool:
@@ -997,6 +1139,9 @@ def main() -> int:
         report["supabase_db_sql_gz"] = str(files.supabase_db_sql_gz)
         report["storage_buckets_tar_gz"] = str(files.storage_buckets_tar_gz)
         report["keycloak_db_sql_gz"] = str(files.keycloak_db_sql_gz) if files.keycloak_db_sql_gz else None
+        snapshot_migrations = extract_snapshot_migration_history(files.supabase_db_sql_gz)
+        report["snapshot_migration_count"] = len(snapshot_migrations)
+        report["snapshot_latest_migration"] = snapshot_migrations[-1].version
 
         LOG.info("Preflight: checking DB connectivity ...")
         _psql_check(dsn)
@@ -1029,6 +1174,10 @@ def main() -> int:
 
         _restore_db_sql_gz(files.supabase_db_sql_gz, dsn)
         _ensure_graphql_public_function(dsn)
+        restore_target_owner = expected_local_migration_owner()
+        _normalize_restore_target_ownership(dsn, restore_target_owner)
+        sync_snapshot_migration_history(dsn, snapshot_migrations)
+        report["restore_target_owner"] = restore_target_owner
 
         if files.keycloak_db_sql_gz and not args.skip_keycloak:
             _restore_keycloak_db_sql_gz(

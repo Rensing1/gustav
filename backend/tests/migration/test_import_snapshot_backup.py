@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import io
 import gzip
 import tarfile
@@ -108,6 +109,183 @@ def test_reset_db_for_restore_only_drops_app_schemas(monkeypatch: pytest.MonkeyP
     assert "drop extension" not in (calls[0][-1] or "").lower()
     assert "create schema" in (calls[1][-1] or "").lower()
     assert "public" in (calls[1][-1] or "").lower()
+
+
+def test_normalize_restore_target_ownership_updates_app_objects(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    class FakeCompleted:
+        def __init__(self) -> None:
+            self.stdout = ""
+
+    def fake_run(cmd: list[str], **_kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return FakeCompleted()
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    mod._normalize_restore_target_ownership("postgresql://u:p@127.0.0.1:54322/postgres", "postgres")
+
+    assert len(calls) == 1
+    sql = calls[0][-1].lower()
+    assert "alter schema %i owner to %i" in sql
+    assert "alter table %i.%i owner to %i" in sql
+    assert "alter sequence %i.%i owner to %i" in sql
+    assert "alter function %i.%i(%s) owner to %i" in sql
+    assert "'legacy_raw', 'public'" in sql
+    assert "target_owner text := 'postgres'" in sql
+
+
+def test_main_normalizes_restore_target_ownership_after_restore(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(tmp_path / "workdir"),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=True,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        verbose=False,
+    )
+
+    owner_calls: list[tuple[str, str]] = []
+    sync_calls: list[tuple[str, list[mod.SnapshotMigration]]] = []
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(mod, "resolve_snapshot_files", lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar))
+    monkeypatch.setattr(
+        mod,
+        "extract_snapshot_migration_history",
+        lambda _dump: [
+            mod.SnapshotMigration(
+                "20260223122000",
+                "{\"select 1\"}",
+                "storage_submissions_bucket_allow_makecode_hex",
+                "20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex",
+            )
+        ],
+    )
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(
+        mod,
+        "_normalize_restore_target_ownership",
+        lambda dsn, owner: owner_calls.append((dsn, owner)),
+    )
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda dsn, rows: sync_calls.append((dsn, rows)))
+
+    assert mod.main() == 0
+    assert owner_calls == [(args.dsn, "postgres")]
+    assert sync_calls == [
+        (
+            args.dsn,
+            [
+                mod.SnapshotMigration(
+                    "20260223122000",
+                    "{\"select 1\"}",
+                    "storage_submissions_bucket_allow_makecode_hex",
+                    "20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex",
+                )
+            ],
+        )
+    ]
+
+
+def test_extract_snapshot_migration_history_reads_supabase_copy_block(tmp_path: Path) -> None:
+    dump_path = tmp_path / "supabase_db.sql.gz"
+    with gzip.open(dump_path, "wt", encoding="utf-8") as f:
+        f.write("SET statement_timeout = 0;\n")
+        f.write("COPY supabase_migrations.schema_migrations (version, statements, name) FROM stdin;\n")
+        f.write("20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex\n")
+        f.write("20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis\n")
+        f.write("\\.\n")
+
+    rows = mod.extract_snapshot_migration_history(dump_path)
+
+    assert [row.version for row in rows] == ["20260223122000", "20260314124500"]
+    assert rows[-1].name == "learning_worker_feedback_invalid_analysis"
+    assert rows[-1].statements == "{\"select 2\"}"
+    assert rows[-1].copy_line == (
+        "20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis"
+    )
+
+
+def test_sync_snapshot_migration_history_replaces_local_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    stdin_payload: list[str] = []
+
+    class FakeStdin:
+        def write(self, chunk: str) -> None:
+            stdin_payload.append(chunk)
+
+        def close(self) -> None:
+            return None
+
+    class FakeProc:
+        def __init__(self) -> None:
+            self.stdin = FakeStdin()
+
+        def wait(self) -> int:
+            return 0
+
+    def fake_popen(cmd: list[str], **_kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return FakeProc()
+
+    monkeypatch.setattr(mod.subprocess, "Popen", fake_popen)
+
+    mod.sync_snapshot_migration_history(
+        "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        [
+            mod.SnapshotMigration(
+                version="20260223122000",
+                statements="{\"select 1\"}",
+                name="storage_submissions_bucket_allow_makecode_hex",
+                copy_line="20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex",
+            ),
+            mod.SnapshotMigration(
+                version="20260314124500",
+                statements="{\"select 2\"}",
+                name="learning_worker_feedback_invalid_analysis",
+                copy_line="20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis",
+            ),
+        ],
+    )
+
+    assert calls == [["psql", "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres", "-v", "ON_ERROR_STOP=1"]]
+    payload = "".join(stdin_payload)
+    assert "truncate table supabase_migrations.schema_migrations;\n" in payload.lower()
+    assert "copy supabase_migrations.schema_migrations(version, statements, name) from stdin;\n" in payload.lower()
+    assert "20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex\n" in payload
+    assert "20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis\n" in payload
+    assert payload.endswith("\\.\n")
 
 
 def test_filter_dump_lines_skips_managed_schema_objects_but_keeps_public_data() -> None:

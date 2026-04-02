@@ -235,12 +235,14 @@ ifeq ($(VERBOSE),)
 endif
 import-snapshot:
 	# Auto-load .env into the environment for this target (export all)
-	@set -a; [ -f .env ] && . ./.env; set +a; \
+	@set -ea; [ -f .env ] && . ./.env; set +a; \
 	./.venv/bin/python -m backend.tools.import_snapshot_backup \
 	  --snapshot $(SNAPSHOT) \
 	  --dsn $(DSN) \
 	  --workdir $(SNAPSHOT_WORKDIR) \
-	  --verbose
+	  --verbose && \
+	supabase migration up && \
+	$(MAKE) db-login-user
 
 .PHONY: import-snapshot-dry
 import-snapshot-dry:

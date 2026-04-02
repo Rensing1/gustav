@@ -9,12 +9,12 @@
     type LearningFlowNode
   } from "$lib/graph/learning-unit-flow";
   import {
-    contentGroupsForModule,
+    contentGroupsForModules,
     contentGroupsForSections,
-    defaultPaneStacks,
-    filterPaneStacks,
     flattenContentGroups,
     normalizePaneStacks,
+    orderedOpenModules,
+    reconcilePaneStacks,
     type ContentGroup,
     type LearningContentItem,
     type PaneId,
@@ -35,7 +35,7 @@
     splitView: boolean;
     tocOpen: boolean;
     activePane: PaneId;
-    moduleStacks: Record<string, PaneStacks | null>;
+    paneStacks: PaneStacks | null;
   };
   type LinearWorkspaceState = {
     splitView: boolean;
@@ -44,7 +44,7 @@
     paneStacks: PaneStacks | null;
   };
   type StoredWorkspaceState = {
-    version: 2;
+    version: 3;
     modular?: Partial<ModularWorkspaceState>;
     linear?: Partial<LinearWorkspaceState>;
   };
@@ -84,7 +84,7 @@
       splitView: false,
       tocOpen: true,
       activePane: "left",
-      moduleStacks: {}
+      paneStacks: null
     };
   }
 
@@ -123,14 +123,6 @@
         ? String(candidate.activeTab)
         : openTabs[0] ?? null;
 
-    const moduleStacks: Record<string, PaneStacks | null> = {};
-    for (const [moduleId, stacks] of Object.entries(candidate.moduleStacks ?? {})) {
-      if (!allowed.has(moduleId)) {
-        continue;
-      }
-      moduleStacks[moduleId] = normalizePaneStacks(stacks);
-    }
-
     return {
       view: candidate.view === "content" ? "content" : "overview",
       openTabs,
@@ -138,7 +130,7 @@
       splitView: Boolean(candidate.splitView),
       tocOpen: candidate.tocOpen !== false,
       activePane: candidate.activePane === "right" ? "right" : "left",
-      moduleStacks
+      paneStacks: normalizePaneStacks(candidate.paneStacks)
     };
   }
 
@@ -170,7 +162,13 @@
       }
 
       const parsed = JSON.parse(raw) as StoredWorkspaceState | Partial<ModularWorkspaceState>;
-      if (parsed && typeof parsed === "object" && ("modular" in parsed || "linear" in parsed)) {
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "version" in parsed &&
+        parsed.version === 3 &&
+        ("modular" in parsed || "linear" in parsed)
+      ) {
         return {
           modular: normalizeModularWorkspaceState(parsed.modular ?? null),
           linear: normalizeLinearWorkspaceState(parsed.linear ?? null)
@@ -217,15 +215,17 @@
     return graphModuleById(modularWorkspace.activeTab);
   }
 
+  function orderedOpenModulesForContent(): LearningUnitGraphModule[] {
+    return orderedOpenModules(data.graph, modularWorkspace.openTabs);
+  }
+
   function openTabModules(): LearningUnitGraphModule[] {
-    return modularWorkspace.openTabs
-      .map((moduleId) => graphModuleById(moduleId))
-      .filter((module): module is LearningUnitGraphModule => Boolean(module));
+    return orderedOpenModulesForContent();
   }
 
   function contentGroups(): ContentGroup[] {
     if (isModularUnit()) {
-      return contentGroupsForModule(modularWorkspace.activeTab, currentActiveModule());
+      return contentGroupsForModules(data.graph, modularWorkspace.openTabs, moduleCache);
     }
 
     return contentGroupsForSections(data.sections);
@@ -237,18 +237,10 @@
 
   function currentPaneStacks(): PaneStacks {
     const items = currentContentItems();
-    const allowed = new Set(items.map((item) => item.key));
-    const source = isModularUnit()
-      ? modularWorkspace.activeTab
-        ? modularWorkspace.moduleStacks[modularWorkspace.activeTab] ?? null
-        : null
-      : linearWorkspace.paneStacks;
+    const itemKeys = items.map((item) => item.key);
+    const source = isModularUnit() ? modularWorkspace.paneStacks : linearWorkspace.paneStacks;
 
-    if (!source) {
-      return defaultPaneStacks(items.map((item) => item.key), workspaceSplitView());
-    }
-
-    return filterPaneStacks(source, allowed);
+    return reconcilePaneStacks(source, itemKeys, workspaceSplitView());
   }
 
   function paneItems(paneId: PaneId): LearningContentItem[] {
@@ -412,12 +404,7 @@
         ...modularWorkspace,
         splitView: nextValue,
         activePane: nextValue ? modularWorkspace.activePane : "left",
-        moduleStacks: modularWorkspace.activeTab
-          ? {
-              ...modularWorkspace.moduleStacks,
-              [modularWorkspace.activeTab]: nextStacks
-            }
-          : modularWorkspace.moduleStacks
+        paneStacks: nextStacks
       });
       return;
     }
@@ -447,18 +434,10 @@
 
   function updateCurrentPaneStacks(mutator: (stacks: PaneStacks) => PaneStacks) {
     if (isModularUnit()) {
-      const moduleId = modularWorkspace.activeTab;
-      if (!moduleId) {
-        return;
-      }
-
       const nextStacks = mutator(currentPaneStacks());
       setModularWorkspaceState({
         ...modularWorkspace,
-        moduleStacks: {
-          ...modularWorkspace.moduleStacks,
-          [moduleId]: nextStacks
-        }
+        paneStacks: nextStacks
       });
       return;
     }
@@ -665,8 +644,8 @@
     if (isModularUnit()) {
       const seeded = seedModularWorkspaceState(stored.modular);
       setModularWorkspaceState(seeded);
-      if (seeded.activeTab) {
-        void ensureModuleLoaded(seeded.activeTab);
+      for (const moduleId of seeded.openTabs) {
+        void ensureModuleLoaded(moduleId);
       }
     } else {
       setLinearWorkspaceState(stored.linear);
@@ -682,7 +661,7 @@
     }
 
     const payload: StoredWorkspaceState = {
-      version: 2,
+      version: 3,
       modular: modularWorkspace,
       linear: linearWorkspace
     };
@@ -698,11 +677,13 @@
   });
 
   $effect(() => {
-    if (!isModularUnit() || !workspaceReady || !modularWorkspace.activeTab) {
+    if (!isModularUnit() || !workspaceReady || !modularWorkspace.openTabs.length) {
       return;
     }
 
-    void ensureModuleLoaded(modularWorkspace.activeTab);
+    for (const moduleId of modularWorkspace.openTabs) {
+      void ensureModuleLoaded(moduleId);
+    }
   });
 
   $effect(() => {
@@ -777,8 +758,8 @@
         {#if currentActiveModule()}
           <LearningUnitContentWorkspace
             titleLabel="Modul"
-            title={currentActiveModule()?.module.title ?? "Modul"}
-            meta={currentModuleMeta()}
+            title={openTabModules().length > 1 ? "Geöffnete Module" : currentActiveModule()?.module.title ?? "Modul"}
+            meta={openTabModules().length > 1 ? `${openTabModules().length} Module geöffnet` : currentModuleMeta()}
             courseId={data.courseId}
             unitType="modular"
             moduleId={currentActiveModule()?.module.id ?? null}

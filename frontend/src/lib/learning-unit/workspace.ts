@@ -1,6 +1,8 @@
 import type {
   LearningMaterial,
   LearningModuleContent,
+  LearningUnitGraph,
+  LearningUnitGraphModule,
   LearningSection,
   LearningTask
 } from "$lib/types/learning";
@@ -127,6 +129,60 @@ export function contentGroupsForModule(
   ];
 }
 
+function graphModuleOrder(
+  graph: LearningUnitGraph,
+  left: LearningUnitGraphModule,
+  right: LearningUnitGraphModule
+): number {
+  const phasePositions = new Map(graph.phases.map((phase) => [phase.id, phase.position]));
+  const leftPhase = phasePositions.get(left.phase_id) ?? Number.MAX_SAFE_INTEGER;
+  const rightPhase = phasePositions.get(right.phase_id) ?? Number.MAX_SAFE_INTEGER;
+
+  if (leftPhase !== rightPhase) {
+    return leftPhase - rightPhase;
+  }
+  if (left.position_in_phase !== right.position_in_phase) {
+    return left.position_in_phase - right.position_in_phase;
+  }
+  return left.title.localeCompare(right.title, "de");
+}
+
+export function orderedOpenModules(
+  graph: LearningUnitGraph | null,
+  openModuleIds: string[]
+): LearningUnitGraphModule[] {
+  if (!graph) {
+    return [];
+  }
+
+  const openIdSet = new Set(openModuleIds);
+  return [...graph.modules]
+    .filter((module) => openIdSet.has(module.id))
+    .sort((left, right) => graphModuleOrder(graph, left, right));
+}
+
+export function contentGroupsForModules(
+  graph: LearningUnitGraph | null,
+  openModuleIds: string[],
+  moduleCache: Record<string, LearningModuleContent>
+): ContentGroup[] {
+  return orderedOpenModules(graph, openModuleIds)
+    .map((moduleSummary) => {
+      const module = moduleCache[moduleSummary.id] ?? null;
+      const items = moduleContentItems(module).map((item) => ({
+        ...item,
+        contextLabel: moduleSummary.title
+      }));
+
+      return {
+        id: moduleSummary.id,
+        title: moduleSummary.title,
+        items
+      };
+    })
+    .filter((group) => group.items.length > 0);
+}
+
 export function contentGroupsForSections(sections: LearningSection[]): ContentGroup[] {
   return sections
     .map((section) => ({
@@ -145,5 +201,28 @@ export function filterPaneStacks(stacks: PaneStacks, allowedKeys: Set<string>): 
   return {
     left: stacks.left.filter((key) => allowedKeys.has(key)),
     right: stacks.right.filter((key) => allowedKeys.has(key))
+  };
+}
+
+export function reconcilePaneStacks(
+  stacks: PaneStacks | null,
+  itemKeys: string[],
+  splitView: boolean
+): PaneStacks {
+  if (!stacks) {
+    return defaultPaneStacks(itemKeys, splitView);
+  }
+
+  const allowed = new Set(itemKeys);
+  const filtered = filterPaneStacks(stacks, allowed);
+
+  function mergedKeys(existing: string[]): string[] {
+    const existingSet = new Set(existing);
+    return [...existing, ...itemKeys.filter((key) => !existingSet.has(key))];
+  }
+
+  return {
+    left: mergedKeys(filtered.left),
+    right: splitView ? mergedKeys(filtered.right) : filtered.right
   };
 }

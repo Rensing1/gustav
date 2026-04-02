@@ -719,10 +719,6 @@
 </svelte:head>
 
 <div class="workspace-page learning-unit-space">
-  <section class="learning-home-header learning-unit-header">
-    <h2>{data.selectedUnit?.unit.title}</h2>
-  </section>
-
   {#if data.message === "submitted"}
     <p class="flash flash-success learning-unit-flash">Abgabe gespeichert.</p>
   {/if}

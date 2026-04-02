@@ -94,7 +94,11 @@
   </div>
 </section>
 
-<section class:learning-unit-content-shell--toc-closed={!tocOpen} class="learning-unit-content-shell">
+<section
+  class:learning-unit-content-shell--single={!splitView}
+  class:learning-unit-content-shell--toc-closed={!tocOpen}
+  class="learning-unit-content-shell"
+>
   {#if tocOpen}
     <aside class="workspace-panel learning-unit-toc" aria-label="Inhaltsverzeichnis">
       <header class="learning-unit-toc__header">
@@ -129,7 +133,11 @@
     </aside>
   {/if}
 
-  <div class:learning-unit-pane-grid--split={splitView} class="learning-unit-pane-grid">
+  <div
+    class:learning-unit-pane-grid--single={!splitView}
+    class:learning-unit-pane-grid--split={splitView}
+    class="learning-unit-pane-grid"
+  >
     {#each visiblePaneIds as paneId}
       <section
         class:learning-unit-pane--active={activePane === paneId}

@@ -209,10 +209,18 @@
 
   <main class="workspace-shell">
     <div class="workspace-inner" class:workspace-inner--wide={hasWideWorkspaceShell()}>
-      <header class="workspace-header" class:workspace-header--measure={isLearnerUnitWorkspaceRoute()}>
+      <header
+        class="workspace-header"
+        class:workspace-header--measure={isLearnerUnitWorkspaceRoute()}
+        class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
+      >
         <div class="workspace-topbar">
           {#if currentBreadcrumbs().length}
-            <nav class="workspace-breadcrumbs" aria-label="Breadcrumb">
+            <nav
+              class="workspace-breadcrumbs"
+              class:workspace-breadcrumbs--single-line={isLearnerUnitWorkspaceRoute()}
+              aria-label="Breadcrumb"
+            >
               {#each currentBreadcrumbs() as item, index}
                 {#if index > 0}
                   <span class="breadcrumb-separator" aria-hidden="true">/</span>

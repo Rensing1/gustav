@@ -375,6 +375,10 @@ select {
   justify-self: start;
 }
 
+.workspace-header--breadcrumbs-wide {
+  width: 100%;
+}
+
 .workspace-topbar {
   min-height: 1.4rem;
   margin-bottom: 0.45rem;
@@ -393,6 +397,17 @@ select {
   color: var(--color-text-muted);
   font-size: 0.9rem;
   font-weight: 650;
+}
+
+.workspace-breadcrumbs--single-line {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+.workspace-breadcrumbs--single-line::-webkit-scrollbar {
+  display: none;
 }
 
 .workspace-breadcrumbs a {
@@ -1316,6 +1331,15 @@ select {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.learning-unit-content-shell--single {
+  grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr);
+}
+
+.learning-unit-content-shell--single.learning-unit-content-shell--toc-closed {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 52rem;
+}
+
 .learning-unit-toc {
   display: grid;
   gap: 0.95rem;
@@ -1393,8 +1417,9 @@ select {
   align-content: start;
 }
 
-.learning-unit-pane-grid:not(.learning-unit-pane-grid--split) {
-  width: min(100%, 58rem);
+.learning-unit-pane-grid--single {
+  width: min(100%, 52rem);
+  justify-self: start;
 }
 
 .learning-unit-pane-grid--split {
@@ -1702,7 +1727,7 @@ select {
   opacity: 0.72;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 760px) {
   .learning-unit-stage--graph {
     min-height: 32rem;
     height: 70vh;

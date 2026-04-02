@@ -45,7 +45,7 @@
     paneStacks: PaneStacks | null;
   };
   type StoredWorkspaceState = {
-    version: 3;
+    version: 4;
     modular?: Partial<ModularWorkspaceState>;
     linear?: Partial<LinearWorkspaceState>;
   };
@@ -167,7 +167,7 @@
         parsed &&
         typeof parsed === "object" &&
         "version" in parsed &&
-        parsed.version === 3 &&
+        parsed.version === 4 &&
         ("modular" in parsed || "linear" in parsed)
       ) {
         return {
@@ -668,7 +668,7 @@
     }
 
     const payload: StoredWorkspaceState = {
-      version: 3,
+      version: 4,
       modular: modularWorkspace,
       linear: linearWorkspace
     };

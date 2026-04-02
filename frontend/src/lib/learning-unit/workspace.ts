@@ -243,18 +243,16 @@ export function reconcilePaneStacks(
   const allowed = new Set(itemKeys);
   const filtered = filterPaneStacks(stacks, allowed);
 
-  function mergedEntries(existing: PaneStackEntry[]): PaneStackEntry[] {
-    const existingKeys = new Set(existing.map((entry) => entry.key));
-    return [
-      ...existing,
-      ...itemKeys
-        .filter((key) => !existingKeys.has(key))
-        .map((key) => ({ key, expanded: true }))
-    ];
+  function canonicalEntries(existing: PaneStackEntry[]): PaneStackEntry[] {
+    const stateByKey = new Map(existing.map((entry) => [entry.key, entry.expanded]));
+    return itemKeys.map((key) => ({
+      key,
+      expanded: stateByKey.get(key) ?? true
+    }));
   }
 
   return {
-    left: mergedEntries(filtered.left),
-    right: splitView ? mergedEntries(filtered.right) : filtered.right
+    left: canonicalEntries(filtered.left),
+    right: splitView ? canonicalEntries(filtered.right) : []
   };
 }

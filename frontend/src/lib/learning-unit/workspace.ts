@@ -24,6 +24,7 @@ export type LearningContentItem = {
   title: string;
   position: number;
   contextLabel: string | null;
+  moduleId?: string | null;
   material?: LearningMaterial;
   task?: LearningTask;
 };
@@ -103,6 +104,7 @@ export function moduleContentItems(module: LearningModuleContent | null): Learni
     title: material.title,
     position: Number(material.position ?? index + 1),
     contextLabel: null,
+    moduleId: module.module.id,
     material
   }));
   const tasks = (module.tasks ?? []).map((task, index) => ({
@@ -111,6 +113,7 @@ export function moduleContentItems(module: LearningModuleContent | null): Learni
     title: `Aufgabe ${task.position ?? index + 1}`,
     position: Number(task.position ?? index + 1),
     contextLabel: null,
+    moduleId: module.module.id,
     task
   }));
 
@@ -124,6 +127,7 @@ export function sectionContentItems(section: LearningSection): LearningContentIt
     title: material.title,
     position: Number(material.position ?? index + 1),
     contextLabel: section.section.title,
+    moduleId: null,
     material
   }));
   const tasks = section.tasks.map((task, index) => ({
@@ -132,6 +136,7 @@ export function sectionContentItems(section: LearningSection): LearningContentIt
     title: `Aufgabe ${task.position ?? index + 1}`,
     position: Number(task.position ?? index + 1),
     contextLabel: section.section.title,
+    moduleId: null,
     task
   }));
 

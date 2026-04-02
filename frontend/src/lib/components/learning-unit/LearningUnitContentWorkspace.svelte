@@ -22,13 +22,18 @@
     paneItems,
     historyTaskId,
     history,
+    submittedTaskId = null,
+    submissionErrorTaskId = null,
+    submissionErrorMessage = null,
+    submissionFocusByPane,
     itemDomId,
-    historyHref,
     onToggleToc,
     onToggleSplitView,
     onSetActivePane,
     onOpenItem,
-    onToggleItem
+    onToggleItem,
+    onEnterSubmissionWorkspace,
+    onExitSubmissionWorkspace
   }: {
     titleLabel: string;
     title: string;
@@ -44,13 +49,18 @@
     paneItems: Record<PaneId, Array<{ item: ContentGroup["items"][number]; expanded: boolean }>>;
     historyTaskId: string | null;
     history: LearningSubmission[];
+    submittedTaskId?: string | null;
+    submissionErrorTaskId?: string | null;
+    submissionErrorMessage?: string | null;
+    submissionFocusByPane: Record<PaneId, string | null>;
     itemDomId: (paneId: PaneId, itemKey: string) => string;
-    historyHref: (taskId: string, moduleId: string | null) => string;
     onToggleToc: () => void;
     onToggleSplitView: () => void;
     onSetActivePane: (paneId: PaneId) => void;
     onOpenItem: (itemKey: string) => void;
     onToggleItem: (paneId: PaneId, itemKey: string) => void;
+    onEnterSubmissionWorkspace: (paneId: PaneId, itemKey: string) => void;
+    onExitSubmissionWorkspace: (paneId: PaneId) => void;
   } = $props();
 
   function paneTitle(paneId: PaneId): string {
@@ -176,13 +186,17 @@
                   taskTitle={entry.item.title}
                   contextLabel={entry.item.contextLabel}
                   {unitType}
-                  {moduleId}
-                  historyHref={historyHref(entry.item.task.id, moduleId)}
+                  moduleId={entry.item.moduleId ?? moduleId}
                   historyOpen={historyTaskId === entry.item.task.id}
                   {history}
                   domId={itemDomId(paneId, entry.item.key)}
                   expanded={entry.expanded}
+                  submitted={submittedTaskId === entry.item.task.id}
+                  errorMessage={submissionErrorTaskId === entry.item.task.id ? submissionErrorMessage : null}
+                  submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
                   onToggle={() => onToggleItem(paneId, entry.item.key)}
+                  onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key)}
+                  onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
                 />
               {/if}
             {/each}

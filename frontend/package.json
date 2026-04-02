@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@fontsource/nunito": "^5.2.7",
+    "@toast-ui/editor": "^3.2.2",
     "@xyflow/svelte": "^1.5.1",
     "elkjs": "^0.11.0",
     "jose": "^6.2.2"

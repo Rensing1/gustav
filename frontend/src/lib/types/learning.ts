@@ -46,6 +46,11 @@ export type LearningSection = {
 };
 
 export type LearningSubmission = {
+  files?: Array<{
+    mime: string;
+    size: number;
+    url: string;
+  }>;
   id: string;
   attempt_nr: number;
   kind: "text" | "image" | "file" | "h5p";

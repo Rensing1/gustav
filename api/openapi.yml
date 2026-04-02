@@ -2282,6 +2282,24 @@ components:
               type: string
               nullable: true
               pattern: '^[0-9a-f]{64}$'
+            files:
+              type: array
+              description: |-
+                Optional learner-visible artifacts for file/image submissions.
+                Uses short-lived signed URLs so earlier upload attempts can be
+                opened again in the history workspace without exposing storage
+                keys directly.
+              items:
+                type: object
+                required: [mime, size, url]
+                properties:
+                  mime:
+                    type: string
+                  size:
+                    type: integer
+                  url:
+                    type: string
+                    format: uri
             analysis_status:
               type: string
               enum: [pending, extracted, completed, failed]

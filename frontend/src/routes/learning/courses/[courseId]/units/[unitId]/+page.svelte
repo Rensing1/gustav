@@ -37,15 +37,17 @@
     tocOpen: boolean;
     activePane: PaneId;
     paneStacks: PaneStacks | null;
+    submissionFocus: Record<PaneId, string | null>;
   };
   type LinearWorkspaceState = {
     splitView: boolean;
     tocOpen: boolean;
     activePane: PaneId;
     paneStacks: PaneStacks | null;
+    submissionFocus: Record<PaneId, string | null>;
   };
   type StoredWorkspaceState = {
-    version: 4;
+    version: 5;
     modular?: Partial<ModularWorkspaceState>;
     linear?: Partial<LinearWorkspaceState>;
   };
@@ -85,7 +87,8 @@
       splitView: false,
       tocOpen: true,
       activePane: "left",
-      paneStacks: null
+      paneStacks: null,
+      submissionFocus: { left: null, right: null }
     };
   }
 
@@ -94,7 +97,8 @@
       splitView: false,
       tocOpen: true,
       activePane: "left",
-      paneStacks: null
+      paneStacks: null,
+      submissionFocus: { left: null, right: null }
     };
   }
 
@@ -131,7 +135,17 @@
       splitView: Boolean(candidate.splitView),
       tocOpen: candidate.tocOpen !== false,
       activePane: candidate.activePane === "right" ? "right" : "left",
-      paneStacks: normalizePaneStacks(candidate.paneStacks)
+      paneStacks: normalizePaneStacks(candidate.paneStacks),
+      submissionFocus: {
+        left:
+          candidate.submissionFocus && typeof candidate.submissionFocus.left === "string"
+            ? candidate.submissionFocus.left
+            : null,
+        right:
+          candidate.submissionFocus && typeof candidate.submissionFocus.right === "string"
+            ? candidate.submissionFocus.right
+            : null
+      }
     };
   }
 
@@ -141,7 +155,17 @@
       splitView: Boolean(candidate.splitView),
       tocOpen: candidate.tocOpen !== false,
       activePane: candidate.activePane === "right" ? "right" : "left",
-      paneStacks: normalizePaneStacks(candidate.paneStacks)
+      paneStacks: normalizePaneStacks(candidate.paneStacks),
+      submissionFocus: {
+        left:
+          candidate.submissionFocus && typeof candidate.submissionFocus.left === "string"
+            ? candidate.submissionFocus.left
+            : null,
+        right:
+          candidate.submissionFocus && typeof candidate.submissionFocus.right === "string"
+            ? candidate.submissionFocus.right
+            : null
+      }
     };
   }
 
@@ -167,7 +191,7 @@
         parsed &&
         typeof parsed === "object" &&
         "version" in parsed &&
-        parsed.version === 4 &&
+        parsed.version === 5 &&
         ("modular" in parsed || "linear" in parsed)
       ) {
         return {
@@ -260,25 +284,16 @@
       : "left";
   }
 
+  function workspaceSubmissionFocus(): Record<PaneId, string | null> {
+    return isModularUnit() ? modularWorkspace.submissionFocus : linearWorkspace.submissionFocus;
+  }
+
   function visiblePaneIds(): PaneId[] {
     return workspaceSplitView() ? ["left", "right"] : ["left"];
   }
 
   function taskItemKey(taskId: string): string {
     return `task:${taskId}`;
-  }
-
-  function historyHref(taskId: string, moduleId: string | null): string {
-    const params = new URLSearchParams();
-    params.set("history", taskId);
-    if (moduleId) {
-      params.set("module", moduleId);
-    }
-    return `?${params.toString()}`;
-  }
-
-  function isHistoryOpen(taskId: string): boolean {
-    return data.historyTaskId === taskId;
   }
 
   function sanitizeDomToken(raw: string): string {
@@ -393,7 +408,10 @@
         ...modularWorkspace,
         splitView: nextValue,
         activePane: nextValue ? modularWorkspace.activePane : "left",
-        paneStacks: nextStacks
+        paneStacks: nextStacks,
+        submissionFocus: nextValue
+          ? modularWorkspace.submissionFocus
+          : { left: modularWorkspace.submissionFocus.left, right: null }
       });
       return;
     }
@@ -402,7 +420,10 @@
       ...linearWorkspace,
       splitView: nextValue,
       activePane: nextValue ? linearWorkspace.activePane : "left",
-      paneStacks: nextStacks
+      paneStacks: nextStacks,
+      submissionFocus: nextValue
+        ? linearWorkspace.submissionFocus
+        : { left: linearWorkspace.submissionFocus.left, right: null }
     });
   }
 
@@ -475,6 +496,7 @@
     if (options.activatePane !== false) {
       setActivePane(targetPane);
     }
+    setSubmissionWorkspace(targetPane, null);
     if (options.scroll !== false) {
       void scrollToItem(targetPane, itemKey);
     }
@@ -500,6 +522,27 @@
     }));
   }
 
+  function setSubmissionWorkspace(paneId: PaneId, itemKey: string | null) {
+    if (isModularUnit()) {
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        submissionFocus: {
+          ...modularWorkspace.submissionFocus,
+          [paneId]: itemKey
+        }
+      });
+      return;
+    }
+
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      submissionFocus: {
+        ...linearWorkspace.submissionFocus,
+        [paneId]: itemKey
+      }
+    });
+  }
+
   function paneItemsById(): Record<PaneId, Array<{ item: LearningContentItem; expanded: boolean }>> {
     const byKey = new Map(currentContentItems().map((item) => [item.key, item]));
     function buildEntries(entries: PaneStackEntry[]): Array<{ item: LearningContentItem; expanded: boolean }> {
@@ -511,9 +554,13 @@
         .filter((entry): entry is { item: LearningContentItem; expanded: boolean } => Boolean(entry));
     }
 
+    const leftEntries = buildEntries(currentPaneStacks().left);
+    const rightEntries = buildEntries(currentPaneStacks().right);
+    const focus = workspaceSubmissionFocus();
+
     return {
-      left: buildEntries(currentPaneStacks().left),
-      right: buildEntries(currentPaneStacks().right)
+      left: focus.left ? leftEntries.filter((entry) => entry.item.key === focus.left) : leftEntries,
+      right: focus.right ? rightEntries.filter((entry) => entry.item.key === focus.right) : rightEntries
     };
   }
 
@@ -523,6 +570,13 @@
       return module.materials.length;
     }
     return currentActiveModuleSummary()?.materials_count ?? 0;
+  }
+
+  function actionTaskId(): string | null {
+    if (form && typeof form === "object" && "taskId" in form && typeof form.taskId === "string") {
+      return form.taskId;
+    }
+    return null;
   }
 
   function currentModuleMeta(): string | null {
@@ -636,6 +690,7 @@
     }
 
     historyRestored = true;
+    setSubmissionWorkspace("left", itemKey);
     void scrollToItem("left", itemKey);
   }
 
@@ -668,7 +723,7 @@
     }
 
     const payload: StoredWorkspaceState = {
-      version: 4,
+      version: 5,
       modular: modularWorkspace,
       linear: linearWorkspace
     };
@@ -699,6 +754,36 @@
     }
 
     restoreHistoryContext();
+  });
+
+  $effect(() => {
+    if (!workspaceReady || !actionTaskId()) {
+      return;
+    }
+
+    const itemKey = taskItemKey(actionTaskId() as string);
+    if (!currentContentItems().some((item) => item.key === itemKey)) {
+      return;
+    }
+
+    setSubmissionWorkspace("left", itemKey);
+  });
+
+  $effect(() => {
+    if (!workspaceReady) {
+      return;
+    }
+
+    const available = new Set(currentContentItems().map((item) => item.key));
+    const focus = workspaceSubmissionFocus();
+    const leftInvalid = focus.left && !available.has(focus.left);
+    const rightInvalid = focus.right && !available.has(focus.right);
+    if (leftInvalid) {
+      setSubmissionWorkspace("left", null);
+    }
+    if (rightInvalid) {
+      setSubmissionWorkspace("right", null);
+    }
   });
 </script>
 
@@ -778,13 +863,18 @@
             paneItems={paneItemsById()}
             historyTaskId={data.historyTaskId}
             history={data.history}
+            submittedTaskId={data.submittedTaskId}
+            submissionErrorTaskId={actionTaskId()}
+            submissionErrorMessage={form?.message ?? null}
+            submissionFocusByPane={workspaceSubmissionFocus()}
             {itemDomId}
-            {historyHref}
             onToggleToc={toggleToc}
             onToggleSplitView={() => setSplitView(!workspaceSplitView())}
             onSetActivePane={setActivePane}
             onOpenItem={openItemFromToc}
             onToggleItem={togglePaneItem}
+            onEnterSubmissionWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey)}
+            onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
           />
         {:else if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
           <section class="workspace-panel learning-unit-empty-state">
@@ -829,13 +919,18 @@
         paneItems={paneItemsById()}
         historyTaskId={data.historyTaskId}
         history={data.history}
+        submittedTaskId={data.submittedTaskId}
+        submissionErrorTaskId={actionTaskId()}
+        submissionErrorMessage={form?.message ?? null}
+        submissionFocusByPane={workspaceSubmissionFocus()}
         {itemDomId}
-        {historyHref}
         onToggleToc={toggleToc}
         onToggleSplitView={() => setSplitView(!workspaceSplitView())}
         onSetActivePane={setActivePane}
         onOpenItem={openItemFromToc}
         onToggleItem={togglePaneItem}
+        onEnterSubmissionWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey)}
+        onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
       />
     </section>
   {/if}

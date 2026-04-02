@@ -823,6 +823,8 @@ async def test_list_submissions_history_happy_path():
         "feedback_last_error",
     )
     for attempt in payload:
+        assert "files" in attempt, "files missing from submission payload"
+        assert isinstance(attempt["files"], list)
         for field in telemetry_fields:
             assert field in attempt, f"{field} missing from submission payload"
         assert attempt["vision_attempts"] >= 0

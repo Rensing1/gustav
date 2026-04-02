@@ -87,6 +87,66 @@ def _max_upload_bytes() -> int:
     return get_learning_max_upload_bytes()
 
 
+def _attach_submission_files(submission: dict[str, Any]) -> dict[str, Any]:
+    """Attach short-lived artifact URLs for learner-visible submission history.
+
+    Why:
+        The learner history workspace should be able to preview or reopen
+        earlier upload submissions without exposing raw storage keys in the UI.
+        We therefore decorate API payloads with a tiny `files[]` view model.
+
+    Security:
+        URLs are short-lived signed download URLs from the configured storage
+        adapter. When no adapter is available, we fail closed and expose an
+        empty list.
+    """
+
+    payload = dict(submission or {})
+    payload["files"] = []
+
+    kind = str(payload.get("kind") or "").strip().lower()
+    storage_key = str(payload.get("storage_key") or "").strip()
+    mime_type = str(payload.get("mime_type") or "").strip().lower()
+    size_bytes = payload.get("size_bytes")
+    if kind not in {"image", "file"} or not storage_key or not mime_type:
+        return payload
+
+    try:
+        size_int = int(size_bytes)
+    except (TypeError, ValueError):
+        return payload
+    if size_int <= 0:
+        return payload
+
+    bucket = _storage_bucket()
+    adapter = STORAGE_ADAPTER
+    if not bucket or isinstance(adapter, NullStorageAdapter):
+        return payload
+
+    try:
+        presigned = adapter.presign_download(
+            bucket=bucket,
+            key=storage_key,
+            expires_in=60,
+            disposition="inline",
+        )
+    except Exception:
+        return payload
+
+    url = str((presigned or {}).get("url") or "").strip()
+    if not url:
+        return payload
+
+    payload["files"] = [
+        {
+            "mime": mime_type,
+            "size": size_int,
+            "url": url,
+        }
+    ]
+    return payload
+
+
 def _upload_intent_ttl_seconds() -> int:
     raw = (os.getenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS") or "").strip()
     try:
@@ -2111,4 +2171,5 @@ async def list_submissions(
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
-    return JSONResponse(submissions, status_code=200, headers=_cache_headers_success())
+    decorated = [_attach_submission_files(submission) for submission in submissions]
+    return JSONResponse(decorated, status_code=200, headers=_cache_headers_success())

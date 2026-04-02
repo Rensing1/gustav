@@ -18,6 +18,7 @@
     type ContentGroup,
     type LearningContentItem,
     type PaneId,
+    type PaneStackEntry,
     type PaneStacks
   } from "$lib/learning-unit/workspace";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
@@ -243,13 +244,6 @@
     return reconcilePaneStacks(source, itemKeys, workspaceSplitView());
   }
 
-  function paneItems(paneId: PaneId): LearningContentItem[] {
-    const byKey = new Map(currentContentItems().map((item) => [item.key, item]));
-    return currentPaneStacks()[paneId]
-      .map((key) => byKey.get(key))
-      .filter((item): item is LearningContentItem => Boolean(item));
-  }
-
   function workspaceSplitView(): boolean {
     return isModularUnit() ? modularWorkspace.splitView : linearWorkspace.splitView;
   }
@@ -295,13 +289,8 @@
     return `learning-item-${paneId}-${sanitizeDomToken(itemKey)}`;
   }
 
-  function itemIsOpenAnywhere(itemKey: string): boolean {
-    const panes = currentPaneStacks();
-    return panes.left.includes(itemKey) || panes.right.includes(itemKey);
-  }
-
   function itemIsOpenInPane(itemKey: string, paneId: PaneId): boolean {
-    return currentPaneStacks()[paneId].includes(itemKey);
+    return currentPaneStacks()[paneId].some((entry) => entry.key === itemKey);
   }
 
   function syncModuleUrl(moduleId: string | null) {
@@ -468,12 +457,18 @@
     const targetPane = workspaceSplitView() ? paneId : "left";
     updateCurrentPaneStacks((stacks) => {
       const existing = stacks[targetPane];
-      if (existing.includes(itemKey)) {
-        return stacks;
+      const index = existing.findIndex((entry) => entry.key === itemKey);
+      if (index >= 0) {
+        const nextEntries = [...existing];
+        nextEntries[index] = { ...nextEntries[index], expanded: true };
+        return {
+          ...stacks,
+          [targetPane]: nextEntries
+        };
       }
       return {
         ...stacks,
-        [targetPane]: [...existing, itemKey]
+        [targetPane]: [...existing, { key: itemKey, expanded: true }]
       };
     });
 
@@ -496,17 +491,29 @@
     void scrollToItem(workspaceActivePane(), itemKey);
   }
 
-  function closePaneItem(paneId: PaneId, itemKey: string) {
+  function togglePaneItem(paneId: PaneId, itemKey: string) {
     updateCurrentPaneStacks((stacks) => ({
       ...stacks,
-      [paneId]: stacks[paneId].filter((key) => key !== itemKey)
+      [paneId]: stacks[paneId].map((entry) =>
+        entry.key === itemKey ? { ...entry, expanded: !entry.expanded } : entry
+      )
     }));
   }
 
-  function paneItemsById(): Record<PaneId, LearningContentItem[]> {
+  function paneItemsById(): Record<PaneId, Array<{ item: LearningContentItem; expanded: boolean }>> {
+    const byKey = new Map(currentContentItems().map((item) => [item.key, item]));
+    function buildEntries(entries: PaneStackEntry[]): Array<{ item: LearningContentItem; expanded: boolean }> {
+      return entries
+        .map((entry) => {
+          const item = byKey.get(entry.key);
+          return item ? { item, expanded: entry.expanded } : null;
+        })
+        .filter((entry): entry is { item: LearningContentItem; expanded: boolean } => Boolean(entry));
+    }
+
     return {
-      left: paneItems("left"),
-      right: paneItems("right")
+      left: buildEntries(currentPaneStacks().left),
+      right: buildEntries(currentPaneStacks().right)
     };
   }
 
@@ -772,14 +779,12 @@
             historyTaskId={data.historyTaskId}
             history={data.history}
             {itemDomId}
-            itemIsVisible={itemIsOpenAnywhere}
-            itemIsVisibleInPane={itemIsOpenInPane}
             {historyHref}
             onToggleToc={toggleToc}
             onToggleSplitView={() => setSplitView(!workspaceSplitView())}
             onSetActivePane={setActivePane}
             onOpenItem={openItemFromToc}
-            onCloseItem={closePaneItem}
+            onToggleItem={togglePaneItem}
           />
         {:else if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
           <section class="workspace-panel learning-unit-empty-state">
@@ -825,14 +830,12 @@
         historyTaskId={data.historyTaskId}
         history={data.history}
         {itemDomId}
-        itemIsVisible={itemIsOpenAnywhere}
-        itemIsVisibleInPane={itemIsOpenInPane}
         {historyHref}
         onToggleToc={toggleToc}
         onToggleSplitView={() => setSplitView(!workspaceSplitView())}
         onSetActivePane={setActivePane}
         onOpenItem={openItemFromToc}
-        onCloseItem={closePaneItem}
+        onToggleItem={togglePaneItem}
       />
     </section>
   {/if}

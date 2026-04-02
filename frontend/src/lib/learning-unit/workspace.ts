@@ -9,7 +9,12 @@ import type {
 
 export type PaneId = "left" | "right";
 
-export type PaneStacks = Record<PaneId, string[]>;
+export type PaneStackEntry = {
+  key: string;
+  expanded: boolean;
+};
+
+export type PaneStacks = Record<PaneId, PaneStackEntry[]>;
 
 export type LearningContentKind = "material" | "task";
 
@@ -42,16 +47,38 @@ export function normalizePaneStacks(raw: unknown): PaneStacks | null {
   }
 
   const candidate = raw as Partial<PaneStacks>;
+  function normalizeEntries(value: unknown): PaneStackEntry[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((entry) => {
+        if (typeof entry === "string") {
+          return { key: entry, expanded: true };
+        }
+        if (entry && typeof entry === "object" && "key" in entry) {
+          return {
+            key: String((entry as { key: unknown }).key),
+            expanded: (entry as { expanded?: unknown }).expanded !== false
+          };
+        }
+        return null;
+      })
+      .filter((entry): entry is PaneStackEntry => Boolean(entry?.key));
+  }
+
   return {
-    left: Array.isArray(candidate.left) ? candidate.left.map(String).filter(Boolean) : [],
-    right: Array.isArray(candidate.right) ? candidate.right.map(String).filter(Boolean) : []
+    left: normalizeEntries(candidate.left),
+    right: normalizeEntries(candidate.right)
   };
 }
 
 export function defaultPaneStacks(itemKeys: string[], splitView: boolean): PaneStacks {
+  const entries = itemKeys.map((key) => ({ key, expanded: true }));
   return {
-    left: [...itemKeys],
-    right: splitView ? [...itemKeys] : []
+    left: [...entries],
+    right: splitView ? [...entries] : []
   };
 }
 
@@ -199,8 +226,8 @@ export function flattenContentGroups(groups: ContentGroup[]): LearningContentIte
 
 export function filterPaneStacks(stacks: PaneStacks, allowedKeys: Set<string>): PaneStacks {
   return {
-    left: stacks.left.filter((key) => allowedKeys.has(key)),
-    right: stacks.right.filter((key) => allowedKeys.has(key))
+    left: stacks.left.filter((entry) => allowedKeys.has(entry.key)),
+    right: stacks.right.filter((entry) => allowedKeys.has(entry.key))
   };
 }
 
@@ -216,13 +243,18 @@ export function reconcilePaneStacks(
   const allowed = new Set(itemKeys);
   const filtered = filterPaneStacks(stacks, allowed);
 
-  function mergedKeys(existing: string[]): string[] {
-    const existingSet = new Set(existing);
-    return [...existing, ...itemKeys.filter((key) => !existingSet.has(key))];
+  function mergedEntries(existing: PaneStackEntry[]): PaneStackEntry[] {
+    const existingKeys = new Set(existing.map((entry) => entry.key));
+    return [
+      ...existing,
+      ...itemKeys
+        .filter((key) => !existingKeys.has(key))
+        .map((key) => ({ key, expanded: true }))
+    ];
   }
 
   return {
-    left: mergedKeys(filtered.left),
-    right: splitView ? mergedKeys(filtered.right) : filtered.right
+    left: mergedEntries(filtered.left),
+    right: splitView ? mergedEntries(filtered.right) : filtered.right
   };
 }

@@ -3,7 +3,6 @@
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
   import type {
     ContentGroup,
-    LearningContentItem,
     PaneId
   } from "$lib/learning-unit/workspace";
   import type { LearningSubmission } from "$lib/types/learning";
@@ -24,14 +23,12 @@
     historyTaskId,
     history,
     itemDomId,
-    itemIsVisible,
-    itemIsVisibleInPane,
     historyHref,
     onToggleToc,
     onToggleSplitView,
     onSetActivePane,
     onOpenItem,
-    onCloseItem
+    onToggleItem
   }: {
     titleLabel: string;
     title: string;
@@ -44,18 +41,16 @@
     activePane: PaneId;
     visiblePaneIds: PaneId[];
     contentGroups: ContentGroup[];
-    paneItems: Record<PaneId, LearningContentItem[]>;
+    paneItems: Record<PaneId, Array<{ item: ContentGroup["items"][number]; expanded: boolean }>>;
     historyTaskId: string | null;
     history: LearningSubmission[];
     itemDomId: (paneId: PaneId, itemKey: string) => string;
-    itemIsVisible: (itemKey: string) => boolean;
-    itemIsVisibleInPane: (itemKey: string, paneId: PaneId) => boolean;
     historyHref: (taskId: string, moduleId: string | null) => string;
     onToggleToc: () => void;
     onToggleSplitView: () => void;
     onSetActivePane: (paneId: PaneId) => void;
     onOpenItem: (itemKey: string) => void;
-    onCloseItem: (paneId: PaneId, itemKey: string) => void;
+    onToggleItem: (paneId: PaneId, itemKey: string) => void;
   } = $props();
 
   function paneTitle(paneId: PaneId): string {
@@ -67,6 +62,20 @@
 
   function paneHeading(): string {
     return splitView ? "Geöffnete Inhalte" : "Arbeitsbereich";
+  }
+
+  function activateOnPointer(node: HTMLElement, paneId: PaneId) {
+    function handlePointerDown() {
+      onSetActivePane(paneId);
+    }
+
+    node.addEventListener("pointerdown", handlePointerDown);
+
+    return {
+      destroy() {
+        node.removeEventListener("pointerdown", handlePointerDown);
+      }
+    };
   }
 </script>
 
@@ -100,10 +109,9 @@
   class="learning-unit-content-shell"
 >
   {#if tocOpen}
-    <aside class="workspace-panel learning-unit-toc" aria-label="Inhaltsverzeichnis">
+    <aside class="learning-unit-toc" aria-label="Inhaltsverzeichnis">
       <header class="learning-unit-toc__header">
         <div class="learning-unit-toc__copy">
-          <p class="workspace-label">Navigation</p>
           <h3>Inhaltsverzeichnis</h3>
         </div>
       </header>
@@ -117,8 +125,6 @@
             <div class="learning-unit-toc__items">
               {#each group.items as item}
                 <button
-                  class:learning-unit-toc__item--open={itemIsVisible(item.key)}
-                  class:learning-unit-toc__item--active={itemIsVisibleInPane(item.key, activePane)}
                   class="learning-unit-toc__item"
                   type="button"
                   onclick={() => onOpenItem(item.key)}
@@ -143,47 +149,40 @@
         class:learning-unit-pane--active={activePane === paneId}
         class="workspace-panel learning-unit-pane"
         aria-label={paneTitle(paneId)}
+        use:activateOnPointer={paneId}
       >
         <header class="learning-unit-pane__header">
           <div class="learning-unit-pane__copy">
             <p class="workspace-label">{paneTitle(paneId)}</p>
             <h3>{paneHeading()}</h3>
           </div>
-          {#if splitView}
-            <button
-              class:learning-unit-pane__selector--active={activePane === paneId}
-              class="learning-unit-pane__selector"
-              type="button"
-              onclick={() => onSetActivePane(paneId)}
-            >
-              {activePane === paneId ? "Aktiv" : "Aktivieren"}
-            </button>
-          {/if}
         </header>
 
         {#if paneItems[paneId]?.length}
           <div class="learning-unit-pane__stack">
-            {#each paneItems[paneId] as item}
-              {#if item.kind === "material" && item.material}
+            {#each paneItems[paneId] as entry}
+              {#if entry.item.kind === "material" && entry.item.material}
                 <LearningMaterialCard
-                  material={item.material}
-                  domId={itemDomId(paneId, item.key)}
-                  contextLabel={item.contextLabel}
-                  onClose={() => onCloseItem(paneId, item.key)}
+                  material={entry.item.material}
+                  domId={itemDomId(paneId, entry.item.key)}
+                  contextLabel={entry.item.contextLabel}
+                  expanded={entry.expanded}
+                  onToggle={() => onToggleItem(paneId, entry.item.key)}
                 />
-              {:else if item.kind === "task" && item.task}
+              {:else if entry.item.kind === "task" && entry.item.task}
                 <LearningTaskCard
                   {courseId}
-                  task={item.task}
-                  taskTitle={item.title}
-                  contextLabel={item.contextLabel}
+                  task={entry.item.task}
+                  taskTitle={entry.item.title}
+                  contextLabel={entry.item.contextLabel}
                   {unitType}
                   {moduleId}
-                  historyHref={historyHref(item.task.id, moduleId)}
-                  historyOpen={historyTaskId === item.task.id}
+                  historyHref={historyHref(entry.item.task.id, moduleId)}
+                  historyOpen={historyTaskId === entry.item.task.id}
                   {history}
-                  domId={itemDomId(paneId, item.key)}
-                  onClose={() => onCloseItem(paneId, item.key)}
+                  domId={itemDomId(paneId, entry.item.key)}
+                  expanded={entry.expanded}
+                  onToggle={() => onToggleItem(paneId, entry.item.key)}
                 />
               {/if}
             {/each}

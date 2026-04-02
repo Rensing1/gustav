@@ -1342,9 +1342,12 @@ select {
 
 .learning-unit-toc {
   display: grid;
-  gap: 0.95rem;
+  gap: 1.1rem;
   position: sticky;
   top: 1rem;
+  align-content: start;
+  width: min(100%, 16.25rem);
+  min-width: 0;
 }
 
 .learning-unit-content-shell:not(.learning-unit-content-shell--single) .learning-unit-toc {
@@ -1353,65 +1356,65 @@ select {
 }
 
 .learning-unit-toc__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.8rem;
-  align-items: baseline;
+  display: block;
+}
+
+.learning-unit-toc__copy {
+  gap: 0.24rem;
+}
+
+.learning-unit-toc__copy h3 {
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text-muted) 88%, var(--color-text) 12%);
 }
 
 .learning-unit-toc__body {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .learning-unit-toc__group {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.7rem;
 }
 
 .learning-unit-toc__group-title {
   margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.73rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  font-size: 0.82rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .learning-unit-toc__items {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.48rem;
 }
 
 .learning-unit-toc__item {
   display: block;
   width: 100%;
-  padding: 0.52rem 0.62rem;
+  padding: 0.08rem 0;
   border: 0;
-  border-radius: 0.8rem;
+  border-radius: 0;
   background: transparent;
-  color: var(--color-text-muted);
+  color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
   font: inherit;
-  font-size: 0.92rem;
-  font-weight: 560;
-  line-height: 1.3;
+  font-size: 0.99rem;
+  font-weight: 500;
+  line-height: 1.45;
   text-align: left;
   cursor: pointer;
+  transition: color 120ms ease;
 }
 
 .learning-unit-toc__item:hover,
 .learning-unit-toc__item:focus-visible {
-  background: color-mix(in srgb, var(--color-bg-elevated) 78%, white 22%);
-  color: var(--color-text);
-}
-
-.learning-unit-toc__item--open {
-  color: var(--color-text);
-}
-
-.learning-unit-toc__item--active {
-  background: color-mix(in srgb, var(--color-bg-elevated) 90%, white 10%);
-  color: var(--color-text);
+  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
 }
 
 .learning-unit-pane-grid {
@@ -1457,23 +1460,6 @@ select {
   align-items: baseline;
 }
 
-.learning-unit-pane__selector {
-  border: 1px solid color-mix(in srgb, var(--color-border) 74%, white 26%);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-bg-elevated) 90%, white 10%);
-  color: var(--color-text-muted);
-  padding: 0.45rem 0.7rem;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.learning-unit-pane__selector--active {
-  border-color: color-mix(in srgb, var(--color-link) 24%, var(--color-border) 76%);
-  color: var(--color-text);
-}
-
 .learning-unit-pane__stack {
   display: grid;
   gap: 0.9rem;
@@ -1517,6 +1503,28 @@ select {
   align-items: center;
 }
 
+.learning-work-item__toggle {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.learning-work-item__toggle-icon {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.learning-work-item__toggle-icon--expanded {
+  transform: rotate(180deg);
+}
+
 .learning-work-item__context,
 .learning-work-item__kicker {
   color: var(--color-text-muted);
@@ -1538,30 +1546,18 @@ select {
   text-decoration: underline;
 }
 
-.learning-work-item__close {
-  display: inline-grid;
-  place-items: center;
-  width: 1.45rem;
-  height: 1.45rem;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.learning-work-item__close:hover,
-.learning-work-item__close:focus-visible {
-  background: color-mix(in srgb, var(--color-bg-elevated) 72%, white 28%);
-  color: var(--color-text);
-}
-
 .learning-work-item__body {
   display: grid;
   gap: 0.9rem;
+}
+
+.learning-work-item--collapsed {
+  gap: 0;
+  padding-block: 0.8rem;
+}
+
+.learning-work-item--collapsed .learning-work-item__header {
+  align-items: center;
 }
 
 .learning-work-item pre,

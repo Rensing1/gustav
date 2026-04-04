@@ -166,20 +166,3 @@
   <div bind:this={root}></div>
   <p class="h5p-status">{status}</p>
 </div>
-
-<style>
-  .h5p-task-player {
-    display: grid;
-    gap: 0.75rem;
-    padding: 1rem;
-    border-radius: 1rem;
-    background: rgba(255, 255, 255, 0.68);
-    border: 1px solid #e6dccf;
-  }
-
-  .h5p-status {
-    margin: 0;
-    color: #6f6b86;
-    font-size: 0.95rem;
-  }
-</style>

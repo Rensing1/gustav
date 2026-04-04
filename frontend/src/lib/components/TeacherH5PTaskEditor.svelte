@@ -25,7 +25,7 @@
     let disposed = false;
 
     async function install(): Promise<void> {
-      const entry = "/static/js/h5p_task_editor.js";
+      const entry = "/js/h5p_task_editor.js";
       await import(/* @vite-ignore */ entry);
       if (disposed || !root) {
         return;

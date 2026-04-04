@@ -14,19 +14,22 @@ def test_learning_sveltekit_routes_exist() -> None:
     unit_loader = REPO_ROOT / "frontend" / "src" / "routes" / "learning" / "courses" / "[courseId]" / "units" / "[unitId]" / "+page.server.ts"
     unit_page = REPO_ROOT / "frontend" / "src" / "routes" / "learning" / "courses" / "[courseId]" / "units" / "[unitId]" / "+page.svelte"
     h5p_component = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "H5PTaskPlayer.svelte"
+    task_card = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "learning-unit" / "LearningTaskCard.svelte"
     h5p_bridge = REPO_ROOT / "frontend" / "src" / "routes" / "bff" / "h5p" / "submissions" / "+server.ts"
 
-    for path in (course_loader, course_page, unit_loader, unit_page, h5p_component, h5p_bridge):
+    for path in (course_loader, course_page, unit_loader, unit_page, h5p_component, task_card, h5p_bridge):
         assert path.is_file(), f"Missing learner-space artifact: {path}"
 
     loader_src = unit_loader.read_text(encoding="utf-8")
     page_src = unit_page.read_text(encoding="utf-8")
     component_src = h5p_component.read_text(encoding="utf-8")
+    task_card_src = task_card.read_text(encoding="utf-8")
 
     assert "/api/learning/courses/" in loader_src
     assert "/upload-intents" in loader_src
     assert "/submissions" in loader_src
-    assert "H5PTaskPlayer" in page_src
+    assert "LearningUnitContentWorkspace" in page_src
+    assert "H5PTaskPlayer" in task_card_src
     assert "/h5p/player/model" in component_src
     assert "/bff/h5p/submissions" in component_src
     assert "@vite-ignore" in component_src
@@ -47,3 +50,17 @@ def test_h5p_service_knows_frontend_bff_cookie_bridge() -> None:
     assert "gustavFrontendInternalBase" in server_src
     assert "frontendSessionCookieName" in server_src
     assert "/internal/h5p/me" in server_src
+
+
+def test_teacher_h5p_editor_static_entry_is_shipped_with_frontend() -> None:
+    component_path = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "TeacherH5PTaskEditor.svelte"
+    frontend_static_path = REPO_ROOT / "frontend" / "static" / "js" / "h5p_task_editor.js"
+    backend_source_path = REPO_ROOT / "backend" / "web" / "static" / "js" / "h5p_task_editor.js"
+
+    component_src = component_path.read_text(encoding="utf-8")
+    frontend_static_src = frontend_static_path.read_text(encoding="utf-8")
+    backend_source_src = backend_source_path.read_text(encoding="utf-8")
+
+    assert '/js/h5p_task_editor.js' in component_src
+    assert '/static/js/h5p_task_editor.js' not in component_src
+    assert frontend_static_src == backend_source_src

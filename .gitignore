@@ -4,6 +4,7 @@ backups/
 
 # Git worktrees (local only)
 .worktrees/
+.codex
 
 # Agents
 AGENTS.md

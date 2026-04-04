@@ -23,16 +23,21 @@
     historyTaskId,
     history,
     submittedTaskId = null,
+    submissionMessage = null,
     submissionErrorTaskId = null,
     submissionErrorMessage = null,
     submissionFocusByPane,
+    submissionModeByPane,
+    showSplitToggle = true,
     itemDomId,
     onToggleToc,
     onToggleSplitView,
     onSetActivePane,
     onOpenItem,
+    onRemoveGroup = undefined,
     onToggleItem,
     onEnterSubmissionWorkspace,
+    onEnterUploadWorkspace,
     onExitSubmissionWorkspace
   }: {
     titleLabel: string;
@@ -50,28 +55,32 @@
     historyTaskId: string | null;
     history: LearningSubmission[];
     submittedTaskId?: string | null;
+    submissionMessage?: string | null;
     submissionErrorTaskId?: string | null;
     submissionErrorMessage?: string | null;
     submissionFocusByPane: Record<PaneId, string | null>;
+    submissionModeByPane: Record<PaneId, "text" | "upload" | null>;
+    showSplitToggle?: boolean;
     itemDomId: (paneId: PaneId, itemKey: string) => string;
     onToggleToc: () => void;
     onToggleSplitView: () => void;
     onSetActivePane: (paneId: PaneId) => void;
     onOpenItem: (itemKey: string) => void;
+    onRemoveGroup?: ((groupId: string) => void) | undefined;
     onToggleItem: (paneId: PaneId, itemKey: string) => void;
-    onEnterSubmissionWorkspace: (paneId: PaneId, itemKey: string) => void;
+    onEnterSubmissionWorkspace: (paneId: PaneId, itemKey: string, mode?: "text" | "upload") => void;
+    onEnterUploadWorkspace: (paneId: PaneId, itemKey: string) => void;
     onExitSubmissionWorkspace: (paneId: PaneId) => void;
   } = $props();
 
-  function paneTitle(paneId: PaneId): string {
-    if (!splitView) {
-      return "Arbeitsbereich";
-    }
-    return paneId === "left" ? "Ansicht A" : "Ansicht B";
+  function paneHasSubmissionFocus(paneId: PaneId): boolean {
+    return submissionFocusByPane[paneId] !== null;
   }
 
-  function paneHeading(): string {
-    return splitView ? "Geöffnete Inhalte" : "Arbeitsbereich";
+  function tocItemActive(itemKey: string): boolean {
+    return visiblePaneIds.some((paneId) =>
+      (paneItems[paneId] ?? []).some((entry) => entry.item.key === itemKey && entry.expanded)
+    );
   }
 
   function activateOnPointer(node: HTMLElement, paneId: PaneId) {
@@ -89,27 +98,58 @@
   }
 </script>
 
-<section class="workspace-panel learning-unit-content-toolbar">
-  <div class="learning-unit-content-toolbar__copy">
-    <p class="workspace-label">{titleLabel}</p>
-    <h3>{title}</h3>
-    {#if meta}
-      <p class="learning-unit-content-toolbar__meta">{meta}</p>
-    {/if}
-  </div>
+<section class="learning-unit-content-toolbar">
+  {#if titleLabel || title || meta}
+    <div class="learning-unit-content-toolbar__copy">
+      {#if titleLabel}
+        <p class="workspace-label">{titleLabel}</p>
+      {/if}
+      {#if title}
+        <h3>{title}</h3>
+      {/if}
+      {#if meta}
+        <p class="learning-unit-content-toolbar__meta">{meta}</p>
+      {/if}
+    </div>
+  {/if}
 
   <div class="learning-unit-content-toolbar__actions">
-    <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={onToggleToc}>
-      {tocOpen ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis"}
-    </button>
-    <button
-      class:workspace-top-action--active={splitView}
-      class="workspace-top-action workspace-top-action--quiet"
-      type="button"
-      onclick={onToggleSplitView}
-    >
-      {splitView ? "Eine Ansicht" : "Zwei Ansichten"}
-    </button>
+    {#if unitType === "linear"}
+      <button
+        aria-label={tocOpen ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
+        class:workspace-top-action--active={tocOpen}
+        class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
+        title={tocOpen ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
+        type="button"
+        onclick={onToggleToc}
+      >
+        <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
+          <rect x="3" y="4" width="4" height="12" rx="0.9"></rect>
+          <path d="M10 6.5h7"></path>
+          <path d="M10 10h7"></path>
+          <path d="M10 13.5h7"></path>
+        </svg>
+      </button>
+    {/if}
+    {#if showSplitToggle}
+      <button
+        aria-label={splitView ? "Eine Ansicht" : "Zwei Ansichten"}
+        class:workspace-top-action--active={splitView}
+        class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
+        title={splitView ? "Eine Ansicht" : "Zwei Ansichten"}
+        type="button"
+        onclick={onToggleSplitView}
+      >
+        <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
+          {#if splitView}
+            <rect x="2.5" y="4" width="5.5" height="12" rx="1.2"></rect>
+            <rect x="12" y="4" width="5.5" height="12" rx="1.2"></rect>
+          {:else}
+            <rect x="3" y="4" width="14" height="12" rx="1.4"></rect>
+          {/if}
+        </svg>
+      </button>
+    {/if}
   </div>
 </section>
 
@@ -130,16 +170,30 @@
         {#each contentGroups as group}
           <section class="learning-unit-toc__group">
             {#if group.title}
-              <p class="learning-unit-toc__group-title">{group.title}</p>
+              <div class="learning-unit-toc__group-head">
+                <p class="learning-unit-toc__group-title">{group.title}</p>
+                {#if unitType === "modular" && onRemoveGroup}
+                  <button
+                    aria-label={`Modul ${group.title} ausblenden`}
+                    class="learning-unit-toc__group-remove"
+                    title={`Modul ${group.title} ausblenden`}
+                    type="button"
+                    onclick={() => onRemoveGroup(group.id)}
+                  >
+                    ×
+                  </button>
+                {/if}
+              </div>
             {/if}
             <div class="learning-unit-toc__items">
               {#each group.items as item}
                 <button
+                  class:learning-unit-toc__item--active={tocItemActive(item.key)}
                   class="learning-unit-toc__item"
                   type="button"
                   onclick={() => onOpenItem(item.key)}
                 >
-                  <span>{item.title}</span>
+                  <span class="learning-unit-toc__item-label">{item.title}</span>
                 </button>
               {/each}
             </div>
@@ -156,56 +210,58 @@
   >
     {#each visiblePaneIds as paneId}
       <section
+        class:learning-unit-pane--workspace-mode={paneHasSubmissionFocus(paneId)}
         class:learning-unit-pane--active={activePane === paneId}
-        class="workspace-panel learning-unit-pane"
-        aria-label={paneTitle(paneId)}
+        class="learning-unit-pane"
+        aria-label={splitView ? (paneId === "left" ? "Linkes Arbeitsfeld" : "Rechtes Arbeitsfeld") : "Arbeitsfeld"}
         use:activateOnPointer={paneId}
       >
-        <header class="learning-unit-pane__header">
-          <div class="learning-unit-pane__copy">
-            <p class="workspace-label">{paneTitle(paneId)}</p>
-            <h3>{paneHeading()}</h3>
-          </div>
-        </header>
-
-        {#if paneItems[paneId]?.length}
-          <div class="learning-unit-pane__stack">
-            {#each paneItems[paneId] as entry}
-              {#if entry.item.kind === "material" && entry.item.material}
-                <LearningMaterialCard
-                  material={entry.item.material}
-                  domId={itemDomId(paneId, entry.item.key)}
-                  contextLabel={entry.item.contextLabel}
-                  expanded={entry.expanded}
-                  onToggle={() => onToggleItem(paneId, entry.item.key)}
-                />
-              {:else if entry.item.kind === "task" && entry.item.task}
-                <LearningTaskCard
-                  {courseId}
-                  task={entry.item.task}
-                  taskTitle={entry.item.title}
-                  contextLabel={entry.item.contextLabel}
-                  {unitType}
-                  moduleId={entry.item.moduleId ?? moduleId}
-                  historyOpen={historyTaskId === entry.item.task.id}
-                  {history}
-                  domId={itemDomId(paneId, entry.item.key)}
-                  expanded={entry.expanded}
-                  submitted={submittedTaskId === entry.item.task.id}
-                  errorMessage={submissionErrorTaskId === entry.item.task.id ? submissionErrorMessage : null}
-                  submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
-                  onToggle={() => onToggleItem(paneId, entry.item.key)}
-                  onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key)}
-                  onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
-                />
-              {/if}
-            {/each}
-          </div>
-        {:else}
-          <div class="learning-unit-pane__empty">
-            <p class="learning-unit-empty-copy">In diesem Bereich sind aktuell keine Inhalte geöffnet.</p>
-          </div>
-        {/if}
+        <div
+          class:learning-unit-workspace-surface--focused={paneHasSubmissionFocus(paneId)}
+          class="learning-unit-workspace-surface"
+        >
+          {#if paneItems[paneId]?.length}
+            <div class:learning-unit-pane__stack--workspace-mode={paneHasSubmissionFocus(paneId)} class="learning-unit-pane__stack">
+              {#each paneItems[paneId] as entry}
+                {#if entry.item.kind === "material" && entry.item.material}
+                  <LearningMaterialCard
+                    material={entry.item.material}
+                    domId={itemDomId(paneId, entry.item.key)}
+                    contextLabel={entry.item.contextLabel}
+                    expanded={entry.expanded}
+                    onToggle={() => onToggleItem(paneId, entry.item.key)}
+                  />
+                {:else if entry.item.kind === "task" && entry.item.task}
+                  <LearningTaskCard
+                    {courseId}
+                    task={entry.item.task}
+                    taskTitle={entry.item.title}
+                    contextLabel={entry.item.contextLabel}
+                    {unitType}
+                    moduleId={entry.item.moduleId ?? moduleId}
+                    historyOpen={historyTaskId === entry.item.task.id}
+                    {history}
+                    domId={itemDomId(paneId, entry.item.key)}
+                    expanded={entry.expanded}
+                    submitted={submittedTaskId === entry.item.task.id}
+                    message={submissionMessage}
+                    errorMessage={submissionErrorTaskId === entry.item.task.id ? submissionErrorMessage : null}
+                    submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
+                    initialSubmissionMode={submissionModeByPane[paneId]}
+                    onToggle={() => onToggleItem(paneId, entry.item.key)}
+                    onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
+                    onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
+                    onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
+                  />
+                {/if}
+              {/each}
+            </div>
+          {:else}
+            <div class="learning-unit-pane__empty">
+              <p class="learning-unit-empty-copy">In diesem Bereich sind aktuell keine Inhalte geöffnet.</p>
+            </div>
+          {/if}
+        </div>
       </section>
     {/each}
   </div>

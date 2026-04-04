@@ -29,6 +29,10 @@
   import type { ActionData, PageData } from "./$types";
 
   type WorkspaceViewMode = "overview" | "content";
+  type SubmissionFocusState = {
+    itemKey: string | null;
+    mode: "text" | "upload" | null;
+  };
   type ModularWorkspaceState = {
     view: WorkspaceViewMode;
     openTabs: string[];
@@ -37,17 +41,17 @@
     tocOpen: boolean;
     activePane: PaneId;
     paneStacks: PaneStacks | null;
-    submissionFocus: Record<PaneId, string | null>;
+    submissionFocus: Record<PaneId, SubmissionFocusState>;
   };
   type LinearWorkspaceState = {
     splitView: boolean;
     tocOpen: boolean;
     activePane: PaneId;
     paneStacks: PaneStacks | null;
-    submissionFocus: Record<PaneId, string | null>;
+    submissionFocus: Record<PaneId, SubmissionFocusState>;
   };
   type StoredWorkspaceState = {
-    version: 5;
+    version: 7;
     modular?: Partial<ModularWorkspaceState>;
     linear?: Partial<LinearWorkspaceState>;
   };
@@ -66,6 +70,13 @@
   let historyRestored = $state(false);
 
   let rebuildToken = 0;
+
+  function defaultSubmissionFocus(): Record<PaneId, SubmissionFocusState> {
+    return {
+      left: { itemKey: null, mode: null },
+      right: { itemKey: null, mode: null }
+    };
+  }
 
   function isModularUnit(): boolean {
     return data.selectedUnit?.unit.unit_type === "modular";
@@ -88,7 +99,7 @@
       tocOpen: true,
       activePane: "left",
       paneStacks: null,
-      submissionFocus: { left: null, right: null }
+      submissionFocus: defaultSubmissionFocus()
     };
   }
 
@@ -98,7 +109,30 @@
       tocOpen: true,
       activePane: "left",
       paneStacks: null,
-      submissionFocus: { left: null, right: null }
+      submissionFocus: defaultSubmissionFocus()
+  };
+  }
+
+  function normalizeSubmissionFocus(raw: unknown): Record<PaneId, SubmissionFocusState> {
+    const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+    function paneState(value: unknown): SubmissionFocusState {
+      if (value && typeof value === "object") {
+        const pane = value as { itemKey?: unknown; mode?: unknown };
+        return {
+          itemKey: typeof pane.itemKey === "string" ? pane.itemKey : null,
+          mode: pane.mode === "text" || pane.mode === "upload" ? pane.mode : null
+        };
+      }
+      if (typeof value === "string") {
+        return { itemKey: value, mode: null };
+      }
+      return { itemKey: null, mode: null };
+    }
+
+    return {
+      left: paneState(candidate.left),
+      right: paneState(candidate.right)
     };
   }
 
@@ -133,19 +167,15 @@
       openTabs,
       activeTab,
       splitView: Boolean(candidate.splitView),
-      tocOpen: candidate.tocOpen !== false,
+      tocOpen:
+        typeof candidate.tocOpen === "boolean"
+          ? candidate.tocOpen
+          : candidate.splitView === true
+            ? false
+            : true,
       activePane: candidate.activePane === "right" ? "right" : "left",
       paneStacks: normalizePaneStacks(candidate.paneStacks),
-      submissionFocus: {
-        left:
-          candidate.submissionFocus && typeof candidate.submissionFocus.left === "string"
-            ? candidate.submissionFocus.left
-            : null,
-        right:
-          candidate.submissionFocus && typeof candidate.submissionFocus.right === "string"
-            ? candidate.submissionFocus.right
-            : null
-      }
+      submissionFocus: normalizeSubmissionFocus(candidate.submissionFocus)
     };
   }
 
@@ -153,19 +183,15 @@
     const candidate = raw && typeof raw === "object" ? (raw as Partial<LinearWorkspaceState>) : {};
     return {
       splitView: Boolean(candidate.splitView),
-      tocOpen: candidate.tocOpen !== false,
+      tocOpen:
+        typeof candidate.tocOpen === "boolean"
+          ? candidate.tocOpen
+          : candidate.splitView === true
+            ? false
+            : true,
       activePane: candidate.activePane === "right" ? "right" : "left",
       paneStacks: normalizePaneStacks(candidate.paneStacks),
-      submissionFocus: {
-        left:
-          candidate.submissionFocus && typeof candidate.submissionFocus.left === "string"
-            ? candidate.submissionFocus.left
-            : null,
-        right:
-          candidate.submissionFocus && typeof candidate.submissionFocus.right === "string"
-            ? candidate.submissionFocus.right
-            : null
-      }
+      submissionFocus: normalizeSubmissionFocus(candidate.submissionFocus)
     };
   }
 
@@ -191,7 +217,7 @@
         parsed &&
         typeof parsed === "object" &&
         "version" in parsed &&
-        parsed.version === 5 &&
+        parsed.version === 7 &&
         ("modular" in parsed || "linear" in parsed)
       ) {
         return {
@@ -231,21 +257,8 @@
     };
   }
 
-  function currentActiveModule(): LearningModuleContent | null {
-    const moduleId = modularWorkspace.activeTab;
-    return moduleId ? moduleCache[moduleId] ?? null : null;
-  }
-
-  function currentActiveModuleSummary(): LearningUnitGraphModule | null {
-    return graphModuleById(modularWorkspace.activeTab);
-  }
-
   function orderedOpenModulesForContent(): LearningUnitGraphModule[] {
     return orderedOpenModules(data.graph, modularWorkspace.openTabs);
-  }
-
-  function openTabModules(): LearningUnitGraphModule[] {
-    return orderedOpenModulesForContent();
   }
 
   function contentGroups(): ContentGroup[] {
@@ -285,7 +298,23 @@
   }
 
   function workspaceSubmissionFocus(): Record<PaneId, string | null> {
+    const focus = isModularUnit() ? modularWorkspace.submissionFocus : linearWorkspace.submissionFocus;
+    return {
+      left: focus.left.itemKey,
+      right: focus.right.itemKey
+    };
+  }
+
+  function submissionFocusState(): Record<PaneId, SubmissionFocusState> {
     return isModularUnit() ? modularWorkspace.submissionFocus : linearWorkspace.submissionFocus;
+  }
+
+  function workspaceSubmissionModes(): Record<PaneId, "text" | "upload" | null> {
+    const focus = submissionFocusState();
+    return {
+      left: focus.left.mode,
+      right: focus.right.mode
+    };
   }
 
   function visiblePaneIds(): PaneId[] {
@@ -411,7 +440,7 @@
         paneStacks: nextStacks,
         submissionFocus: nextValue
           ? modularWorkspace.submissionFocus
-          : { left: modularWorkspace.submissionFocus.left, right: null }
+          : { left: modularWorkspace.submissionFocus.left, right: { itemKey: null, mode: null } }
       });
       return;
     }
@@ -423,7 +452,7 @@
       paneStacks: nextStacks,
       submissionFocus: nextValue
         ? linearWorkspace.submissionFocus
-        : { left: linearWorkspace.submissionFocus.left, right: null }
+        : { left: linearWorkspace.submissionFocus.left, right: { itemKey: null, mode: null } }
     });
   }
 
@@ -496,7 +525,7 @@
     if (options.activatePane !== false) {
       setActivePane(targetPane);
     }
-    setSubmissionWorkspace(targetPane, null);
+    setSubmissionWorkspace(targetPane, null, null);
     if (options.scroll !== false) {
       void scrollToItem(targetPane, itemKey);
     }
@@ -522,13 +551,13 @@
     }));
   }
 
-  function setSubmissionWorkspace(paneId: PaneId, itemKey: string | null) {
+  function setSubmissionWorkspace(paneId: PaneId, itemKey: string | null, mode: "text" | "upload" | null = null) {
     if (isModularUnit()) {
       setModularWorkspaceState({
         ...modularWorkspace,
         submissionFocus: {
           ...modularWorkspace.submissionFocus,
-          [paneId]: itemKey
+          [paneId]: { itemKey, mode }
         }
       });
       return;
@@ -538,7 +567,7 @@
       ...linearWorkspace,
       submissionFocus: {
         ...linearWorkspace.submissionFocus,
-        [paneId]: itemKey
+        [paneId]: { itemKey, mode }
       }
     });
   }
@@ -556,20 +585,12 @@
 
     const leftEntries = buildEntries(currentPaneStacks().left);
     const rightEntries = buildEntries(currentPaneStacks().right);
-    const focus = workspaceSubmissionFocus();
+    const focus = submissionFocusState();
 
     return {
-      left: focus.left ? leftEntries.filter((entry) => entry.item.key === focus.left) : leftEntries,
-      right: focus.right ? rightEntries.filter((entry) => entry.item.key === focus.right) : rightEntries
+      left: focus.left.itemKey ? leftEntries.filter((entry) => entry.item.key === focus.left.itemKey) : leftEntries,
+      right: focus.right.itemKey ? rightEntries.filter((entry) => entry.item.key === focus.right.itemKey) : rightEntries
     };
-  }
-
-  function currentMaterialCount(): number {
-    const module = currentActiveModule();
-    if (module) {
-      return module.materials.length;
-    }
-    return currentActiveModuleSummary()?.materials_count ?? 0;
   }
 
   function actionTaskId(): string | null {
@@ -577,14 +598,6 @@
       return form.taskId;
     }
     return null;
-  }
-
-  function currentModuleMeta(): string | null {
-    const summary = currentActiveModuleSummary();
-    if (!summary) {
-      return null;
-    }
-    return `${summary.tasks_done}/${summary.tasks_total} Aufgaben · ${currentMaterialCount()} Materialien`;
   }
 
   function openModule(moduleId: string) {
@@ -607,26 +620,12 @@
     void ensureModuleLoaded(moduleId);
   }
 
-  function activateTab(moduleId: string) {
-    if (!modularWorkspace.openTabs.includes(moduleId)) {
-      openModule(moduleId);
+  function removeOpenModule(moduleId: string) {
+    const currentIndex = modularWorkspace.openTabs.indexOf(moduleId);
+    if (currentIndex < 0) {
       return;
     }
 
-    setModularWorkspaceState({
-      ...modularWorkspace,
-      view: "content",
-      activeTab: moduleId
-    });
-    syncModuleUrl(moduleId);
-    void ensureModuleLoaded(moduleId);
-  }
-
-  function closeTab(event: MouseEvent, moduleId: string) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const currentIndex = modularWorkspace.openTabs.indexOf(moduleId);
     const remaining = modularWorkspace.openTabs.filter((tabId) => tabId !== moduleId);
     const nextActive =
       modularWorkspace.activeTab === moduleId
@@ -690,7 +689,7 @@
     }
 
     historyRestored = true;
-    setSubmissionWorkspace("left", itemKey);
+    setSubmissionWorkspace("left", itemKey, data.submissionMode);
     void scrollToItem("left", itemKey);
   }
 
@@ -723,7 +722,7 @@
     }
 
     const payload: StoredWorkspaceState = {
-      version: 5,
+      version: 7,
       modular: modularWorkspace,
       linear: linearWorkspace
     };
@@ -766,7 +765,7 @@
       return;
     }
 
-    setSubmissionWorkspace("left", itemKey);
+    setSubmissionWorkspace("left", itemKey, null);
   });
 
   $effect(() => {
@@ -775,9 +774,9 @@
     }
 
     const available = new Set(currentContentItems().map((item) => item.key));
-    const focus = workspaceSubmissionFocus();
-    const leftInvalid = focus.left && !available.has(focus.left);
-    const rightInvalid = focus.right && !available.has(focus.right);
+    const focus = submissionFocusState();
+    const leftInvalid = focus.left.itemKey && !available.has(focus.left.itemKey);
+    const rightInvalid = focus.right.itemKey && !available.has(focus.right.itemKey);
     if (leftInvalid) {
       setSubmissionWorkspace("left", null);
     }
@@ -801,82 +800,75 @@
   {/if}
 
   {#if isModularUnit()}
-    <section class="workspace-panel learning-unit-toolbar">
-      <div class="workspace-tabs">
-        <div class="workspace-tab-group">
-          <button
-            class:workspace-tab--active={modularWorkspace.view === "overview"}
-            class="workspace-tab learning-unit-mode-tab"
-            type="button"
-            onclick={() => switchView("overview")}
-          >
-            Übersicht
-          </button>
-          <button
-            class:workspace-tab--active={modularWorkspace.view === "content"}
-            class="workspace-tab learning-unit-mode-tab"
-            type="button"
-            onclick={() => switchView("content")}
-          >
-            Inhalte
-          </button>
-        </div>
-      </div>
-
-      {#if openTabModules().length}
-        <nav class="learning-unit-open-tabs" aria-label="Offene Module">
-          {#each openTabModules() as module}
-            <div
-              class:learning-unit-open-tab--active={modularWorkspace.activeTab === module.id}
-              class="learning-unit-open-tab"
-            >
-              <button class="learning-unit-open-tab__trigger" type="button" onclick={() => activateTab(module.id)}>
-                <span class={`learning-unit-open-tab__dot learning-unit-open-tab__dot--${module.status}`}></span>
-                <span class="learning-unit-open-tab__title">{module.title}</span>
+    <section class="learning-unit-toolbar">
+      <div class="learning-unit-toolbar__main">
+        <div class="learning-unit-toolbar__leading">
+          <div class="workspace-tabs">
+            <div class="workspace-tab-group">
+              <button
+                class:workspace-tab--active={modularWorkspace.view === "overview"}
+                class="workspace-tab learning-unit-mode-tab"
+                type="button"
+                onclick={() => switchView("overview")}
+              >
+                Übersicht
               </button>
-              <button class="learning-unit-open-tab__close" type="button" aria-label={`Modul ${module.title} schließen`} onclick={(event) => closeTab(event, module.id)}>
-                ×
+              <button
+                class:workspace-tab--active={modularWorkspace.view === "content"}
+                class="workspace-tab learning-unit-mode-tab"
+                type="button"
+                onclick={() => switchView("content")}
+              >
+                Inhalte
               </button>
             </div>
-          {/each}
-        </nav>
-      {/if}
+          </div>
+        </div>
+
+        {#if modularWorkspace.view === "content"}
+          <div class="learning-unit-toolbar__utility">
+            <button
+              aria-label={workspaceTocOpen() ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
+              class:workspace-top-action--active={workspaceTocOpen()}
+              class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
+              title={workspaceTocOpen() ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
+              type="button"
+              onclick={toggleToc}
+            >
+              <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
+                <rect x="3" y="4" width="4" height="12" rx="0.9"></rect>
+                <path d="M10 6.5h7"></path>
+                <path d="M10 10h7"></path>
+                <path d="M10 13.5h7"></path>
+              </svg>
+            </button>
+            <button
+              aria-label={workspaceSplitView() ? "Eine Ansicht" : "Zwei Ansichten"}
+              class:workspace-top-action--active={workspaceSplitView()}
+              class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
+              title={workspaceSplitView() ? "Eine Ansicht" : "Zwei Ansichten"}
+              type="button"
+              onclick={() => setSplitView(!workspaceSplitView())}
+            >
+              <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
+                {#if workspaceSplitView()}
+                  <rect x="2.5" y="4" width="5.5" height="12" rx="1.2"></rect>
+                  <rect x="12" y="4" width="5.5" height="12" rx="1.2"></rect>
+                {:else}
+                  <rect x="3" y="4" width="14" height="12" rx="1.4"></rect>
+                {/if}
+              </svg>
+            </button>
+          </div>
+        {/if}
+      </div>
     </section>
 
     {#if modularWorkspace.view === "overview"}
       <LearningUnitOverview graph={data.graph} nodes={flowNodes} edges={flowEdges} />
     {:else}
       <section class="learning-unit-stage learning-unit-stage--content">
-        {#if currentActiveModule()}
-          <LearningUnitContentWorkspace
-            titleLabel="Modul"
-            title={openTabModules().length > 1 ? "Geöffnete Module" : currentActiveModule()?.module.title ?? "Modul"}
-            meta={openTabModules().length > 1 ? `${openTabModules().length} Module geöffnet` : currentModuleMeta()}
-            courseId={data.courseId}
-            unitType="modular"
-            moduleId={currentActiveModule()?.module.id ?? null}
-            tocOpen={workspaceTocOpen()}
-            splitView={workspaceSplitView()}
-            activePane={workspaceActivePane()}
-            visiblePaneIds={visiblePaneIds()}
-            contentGroups={contentGroups()}
-            paneItems={paneItemsById()}
-            historyTaskId={data.historyTaskId}
-            history={data.history}
-            submittedTaskId={data.submittedTaskId}
-            submissionErrorTaskId={actionTaskId()}
-            submissionErrorMessage={form?.message ?? null}
-            submissionFocusByPane={workspaceSubmissionFocus()}
-            {itemDomId}
-            onToggleToc={toggleToc}
-            onToggleSplitView={() => setSplitView(!workspaceSplitView())}
-            onSetActivePane={setActivePane}
-            onOpenItem={openItemFromToc}
-            onToggleItem={togglePaneItem}
-            onEnterSubmissionWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey)}
-            onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
-          />
-        {:else if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
+        {#if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
           <section class="workspace-panel learning-unit-empty-state">
             <p class="learning-unit-empty-copy">Modul wird geladen …</p>
           </section>
@@ -896,9 +888,39 @@
             </button>
           </section>
         {:else}
-          <section class="workspace-panel learning-unit-empty-state">
-            <p class="learning-unit-empty-copy">Öffne im Graphen ein verfügbares Modul, um mit den Inhalten zu arbeiten.</p>
-          </section>
+          <LearningUnitContentWorkspace
+            titleLabel=""
+            title=""
+            meta={null}
+            courseId={data.courseId}
+            unitType="modular"
+            moduleId={modularWorkspace.activeTab}
+            tocOpen={workspaceTocOpen()}
+            splitView={workspaceSplitView()}
+            activePane={workspaceActivePane()}
+            visiblePaneIds={visiblePaneIds()}
+            contentGroups={contentGroups()}
+            paneItems={paneItemsById()}
+            historyTaskId={data.historyTaskId}
+            history={data.history}
+            submittedTaskId={data.submittedTaskId}
+            submissionMessage={data.message}
+            submissionErrorTaskId={actionTaskId()}
+            submissionErrorMessage={form?.message ?? null}
+            submissionFocusByPane={workspaceSubmissionFocus()}
+            submissionModeByPane={workspaceSubmissionModes()}
+            showSplitToggle={false}
+            {itemDomId}
+            onToggleToc={toggleToc}
+            onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+            onSetActivePane={setActivePane}
+            onOpenItem={openItemFromToc}
+            onRemoveGroup={removeOpenModule}
+            onToggleItem={togglePaneItem}
+            onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
+            onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
+            onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
+          />
         {/if}
       </section>
     {/if}
@@ -920,16 +942,20 @@
         historyTaskId={data.historyTaskId}
         history={data.history}
         submittedTaskId={data.submittedTaskId}
+        submissionMessage={data.message}
         submissionErrorTaskId={actionTaskId()}
         submissionErrorMessage={form?.message ?? null}
         submissionFocusByPane={workspaceSubmissionFocus()}
+        submissionModeByPane={workspaceSubmissionModes()}
+        showSplitToggle={true}
         {itemDomId}
         onToggleToc={toggleToc}
         onToggleSplitView={() => setSplitView(!workspaceSplitView())}
         onSetActivePane={setActivePane}
         onOpenItem={openItemFromToc}
         onToggleItem={togglePaneItem}
-        onEnterSubmissionWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey)}
+        onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
+        onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
         onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
       />
     </section>

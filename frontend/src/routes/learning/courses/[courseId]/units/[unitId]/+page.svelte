@@ -52,11 +52,14 @@
   };
   type LayoutPreferences = {
     tocWidth: number;
-    singlePaneWidth: number;
+    workspaceWidth: number;
     splitRatio: number;
+    tocGap: number;
+    paneGap: number;
+    fontScale: number;
   };
   type StoredWorkspaceState = {
-    version: 8;
+    version: 11 | 12 | 13 | 14 | 15;
     modular?: Partial<ModularWorkspaceState>;
     linear?: Partial<LinearWorkspaceState>;
     layout?: Partial<LayoutPreferences>;
@@ -76,6 +79,7 @@
   let historyRestored = $state(false);
   let modularLayoutMenuOpen = $state(false);
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
+  let workspaceRoot = $state<HTMLDivElement | null>(null);
 
   let rebuildToken = 0;
 
@@ -98,34 +102,103 @@
     return JSON.parse(JSON.stringify(module)) as LearningModuleContent;
   }
 
-  function defaultModularWorkspaceState(): ModularWorkspaceState {
+  function currentViewportWidth(): number {
+    return browser ? window.innerWidth : 1280;
+  }
+
+  function viewportLayoutBucket(viewportWidth: number): "compact" | "medium" | "wide" | "xwide" {
+    if (viewportWidth < 760) {
+      return "compact";
+    }
+    if (viewportWidth < 1180) {
+      return "medium";
+    }
+    if (viewportWidth < 1500) {
+      return "wide";
+    }
+    return "xwide";
+  }
+
+  function viewportWorkspaceWidth(viewportWidth: number, preferredRem: number): number {
+    const viewportBasedRem = (viewportWidth - 48) / 16;
+    return clamp(Math.floor(Math.min(preferredRem, viewportBasedRem) * 2) / 2, 16, 320);
+  }
+
+  function defaultWorkspaceChrome(viewportWidth = currentViewportWidth()): Pick<ModularWorkspaceState, "splitView" | "tocOpen" | "activePane"> {
+    const bucket = viewportLayoutBucket(viewportWidth);
+    if (bucket === "compact") {
+      return { splitView: false, tocOpen: false, activePane: "left" };
+    }
+    if (bucket === "medium") {
+      return { splitView: false, tocOpen: false, activePane: "left" };
+    }
+    return { splitView: false, tocOpen: true, activePane: "left" };
+  }
+
+  function defaultModularWorkspaceState(viewportWidth = currentViewportWidth()): ModularWorkspaceState {
+    const chromeDefaults = defaultWorkspaceChrome(viewportWidth);
     return {
       view: "overview",
       openTabs: [],
       activeTab: null,
-      splitView: false,
-      tocOpen: true,
-      activePane: "left",
+      splitView: chromeDefaults.splitView,
+      tocOpen: chromeDefaults.tocOpen,
+      activePane: chromeDefaults.activePane,
       paneStacks: null,
       submissionFocus: defaultSubmissionFocus()
     };
   }
 
-  function defaultLinearWorkspaceState(): LinearWorkspaceState {
+  function defaultLinearWorkspaceState(viewportWidth = currentViewportWidth()): LinearWorkspaceState {
+    const chromeDefaults = defaultWorkspaceChrome(viewportWidth);
     return {
-      splitView: false,
-      tocOpen: true,
-      activePane: "left",
+      splitView: chromeDefaults.splitView,
+      tocOpen: chromeDefaults.tocOpen,
+      activePane: chromeDefaults.activePane,
       paneStacks: null,
       submissionFocus: defaultSubmissionFocus()
   };
   }
 
-  function defaultLayoutPreferences(): LayoutPreferences {
+  function defaultLayoutPreferences(viewportWidth = currentViewportWidth()): LayoutPreferences {
+    const bucket = viewportLayoutBucket(viewportWidth);
+    if (bucket === "compact") {
+      return {
+        tocWidth: 14.5,
+        workspaceWidth: viewportWorkspaceWidth(viewportWidth, 42),
+        splitRatio: 50,
+        tocGap: 0.75,
+        paneGap: 0.75,
+        fontScale: 1
+      };
+    }
+    if (bucket === "medium") {
+      return {
+        tocWidth: 15,
+        workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
+        splitRatio: 50,
+        tocGap: 0.9,
+        paneGap: 0.9,
+        fontScale: 1
+      };
+    }
+    if (bucket === "wide") {
+      return {
+        tocWidth: 16.25,
+        workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
+        splitRatio: 50,
+        tocGap: 1.1,
+        paneGap: 1.1,
+        fontScale: 1
+      };
+    }
     return {
-      tocWidth: 16.25,
-      singlePaneWidth: 52,
-      splitRatio: 50
+      tocWidth: 17,
+      workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
+      splitRatio: 50,
+      tocGap: 1.25,
+      paneGap: 1.25,
+      fontScale: 1
     };
   }
 
@@ -133,19 +206,25 @@
     return Math.min(max, Math.max(min, value));
   }
 
-  function normalizeLayoutPreferences(raw: unknown): LayoutPreferences {
+  function normalizeLayoutPreferences(raw: unknown, viewportWidth = currentViewportWidth()): LayoutPreferences {
     const candidate = raw && typeof raw === "object" ? (raw as Partial<LayoutPreferences>) : {};
+    const defaults = defaultLayoutPreferences(viewportWidth);
     return {
-      tocWidth:
-        typeof candidate.tocWidth === "number" ? clamp(candidate.tocWidth, 13, 24) : defaultLayoutPreferences().tocWidth,
-      singlePaneWidth:
-        typeof candidate.singlePaneWidth === "number"
-          ? clamp(candidate.singlePaneWidth, 42, 72)
-          : defaultLayoutPreferences().singlePaneWidth,
+      tocWidth: typeof candidate.tocWidth === "number" ? clamp(candidate.tocWidth, 0, 120) : defaults.tocWidth,
+      workspaceWidth:
+        typeof candidate.workspaceWidth === "number"
+          ? clamp(candidate.workspaceWidth, 16, 320)
+          : typeof (candidate as { singlePaneWidth?: unknown }).singlePaneWidth === "number"
+            ? clamp(Number((candidate as { singlePaneWidth?: unknown }).singlePaneWidth) + 18, 16, 320)
+            : defaults.workspaceWidth,
       splitRatio:
-        typeof candidate.splitRatio === "number"
-          ? clamp(candidate.splitRatio, 30, 70)
-          : defaultLayoutPreferences().splitRatio
+        typeof candidate.splitRatio === "number" ? clamp(candidate.splitRatio, 0, 100) : defaults.splitRatio,
+      tocGap:
+        typeof candidate.tocGap === "number" ? clamp(candidate.tocGap, 0, 40) : defaults.tocGap,
+      paneGap:
+        typeof candidate.paneGap === "number" ? clamp(candidate.paneGap, 0, 40) : defaults.paneGap,
+      fontScale:
+        typeof candidate.fontScale === "number" ? clamp(candidate.fontScale, 0.1, 4) : defaults.fontScale
     };
   }
 
@@ -231,16 +310,16 @@
     };
   }
 
-  function readStoredWorkspaceState(): {
+  function readStoredWorkspaceState(viewportWidth = currentViewportWidth()): {
     modular: ModularWorkspaceState;
     linear: LinearWorkspaceState;
     layout: LayoutPreferences;
   } {
     if (!browser) {
       return {
-        modular: defaultModularWorkspaceState(),
-        linear: defaultLinearWorkspaceState(),
-        layout: defaultLayoutPreferences()
+        modular: defaultModularWorkspaceState(viewportWidth),
+        linear: defaultLinearWorkspaceState(viewportWidth),
+        layout: defaultLayoutPreferences(viewportWidth)
       };
     }
 
@@ -248,9 +327,9 @@
       const raw = window.localStorage.getItem(storageKey());
       if (!raw) {
         return {
-          modular: defaultModularWorkspaceState(),
-          linear: defaultLinearWorkspaceState(),
-          layout: defaultLayoutPreferences()
+          modular: defaultModularWorkspaceState(viewportWidth),
+          linear: defaultLinearWorkspaceState(viewportWidth),
+          layout: defaultLayoutPreferences(viewportWidth)
         };
       }
 
@@ -259,26 +338,26 @@
         parsed &&
         typeof parsed === "object" &&
         "version" in parsed &&
-        parsed.version === 8 &&
+        (parsed.version === 11 || parsed.version === 12 || parsed.version === 13 || parsed.version === 14 || parsed.version === 15) &&
         ("modular" in parsed || "linear" in parsed)
       ) {
         return {
           modular: normalizeModularWorkspaceState(parsed.modular ?? null),
           linear: normalizeLinearWorkspaceState(parsed.linear ?? null),
-          layout: normalizeLayoutPreferences(parsed.layout ?? null)
+          layout: normalizeLayoutPreferences(parsed.layout ?? null, viewportWidth)
         };
       }
 
       return {
         modular: normalizeModularWorkspaceState(parsed),
-        linear: defaultLinearWorkspaceState(),
-        layout: defaultLayoutPreferences()
+        linear: defaultLinearWorkspaceState(viewportWidth),
+        layout: defaultLayoutPreferences(viewportWidth)
       };
     } catch {
       return {
-        modular: defaultModularWorkspaceState(),
-        linear: defaultLinearWorkspaceState(),
-        layout: defaultLayoutPreferences()
+        modular: defaultModularWorkspaceState(viewportWidth),
+        linear: defaultLinearWorkspaceState(viewportWidth),
+        layout: defaultLayoutPreferences(viewportWidth)
       };
     }
   }
@@ -699,8 +778,64 @@
     };
   }
 
+  function numericValue(event: Event): number {
+    const next = Number((event.currentTarget as HTMLInputElement).value);
+    return Number.isFinite(next) ? next : 0;
+  }
+
+  function applyWorkspaceWidth(value: number) {
+    workspaceRoot?.style.setProperty("--learning-unit-workspace-width", `${value}rem`);
+  }
+
+  function applyFontScale(value: number) {
+    workspaceRoot?.style.setProperty("--learning-unit-font-scale", String(value));
+  }
+
+  function previewWorkspaceWidth(value: number) {
+    applyWorkspaceWidth(clamp(value, 16, 320));
+  }
+
+  function commitWorkspaceWidth(value: number) {
+    const nextWidth = clamp(value, 16, 320);
+    applyWorkspaceWidth(nextWidth);
+    updateLayoutPreferences({ workspaceWidth: nextWidth });
+  }
+
+  function previewFontScale(value: number) {
+    applyFontScale(clamp(value, 0.1, 4));
+  }
+
+  function commitFontScale(value: number) {
+    const nextScale = clamp(value, 0.1, 4);
+    applyFontScale(nextScale);
+    updateLayoutPreferences({ fontScale: nextScale });
+  }
+
   function resetLayoutPreferences() {
-    layoutPreferences = defaultLayoutPreferences();
+    const viewportWidth = currentViewportWidth();
+    const layoutDefaults = defaultLayoutPreferences(viewportWidth);
+    const chromeDefaults = defaultWorkspaceChrome(viewportWidth);
+
+    layoutPreferences = layoutDefaults;
+    applyWorkspaceWidth(layoutDefaults.workspaceWidth);
+    applyFontScale(layoutDefaults.fontScale);
+
+    if (isModularUnit()) {
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        splitView: chromeDefaults.splitView,
+        tocOpen: chromeDefaults.tocOpen,
+        activePane: chromeDefaults.activePane
+      });
+      return;
+    }
+
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      splitView: chromeDefaults.splitView,
+      tocOpen: chromeDefaults.tocOpen,
+      activePane: chromeDefaults.activePane
+    });
   }
 
   async function rebuildGraph() {
@@ -750,7 +885,8 @@
   }
 
   onMount(() => {
-    const stored = readStoredWorkspaceState();
+    const viewportWidth = currentViewportWidth();
+    const stored = readStoredWorkspaceState(viewportWidth);
 
     if (data.activeModule) {
       moduleCache = {
@@ -770,6 +906,8 @@
       layoutPreferences = stored.layout;
     }
 
+    applyWorkspaceWidth(stored.layout.workspaceWidth);
+    applyFontScale(stored.layout.fontScale);
     workspaceReady = true;
     restoreHistoryContext();
   });
@@ -780,7 +918,7 @@
     }
 
     const payload: StoredWorkspaceState = {
-      version: 8,
+      version: 15,
       modular: modularWorkspace,
       linear: linearWorkspace,
       layout: layoutPreferences
@@ -863,7 +1001,7 @@
   <title>{data.selectedUnit?.unit.title ?? "Lernraum"} | GUSTAV</title>
 </svelte:head>
 
-<div class="workspace-page learning-unit-space">
+<div bind:this={workspaceRoot} class="workspace-page learning-unit-space">
   {#if data.message === "submitted"}
     <p class="flash flash-success learning-unit-flash">Abgabe gespeichert.</p>
   {/if}
@@ -933,47 +1071,170 @@
                   </label>
 
                   <label class="learning-unit-layout-menu__field">
-                    <span>Breite Inhaltsverzeichnis</span>
-                    <input
-                      type="range"
-                      min="13"
-                      max="24"
-                      step="0.25"
-                      value={layoutPreferences.tocWidth}
-                      oninput={(event) =>
-                        updateLayoutPreferences({ tocWidth: Number((event.currentTarget as HTMLInputElement).value) })}
-                    />
+                    <span class="learning-unit-layout-menu__field-head">
+                      <span>Breite Inhaltsverzeichnis</span>
+                      <span class="learning-unit-layout-menu__value">{layoutPreferences.tocWidth.toFixed(2)} rem</span>
+                    </span>
+                    <div class="learning-unit-layout-menu__field-controls">
+                      <input
+                        type="range"
+                        min="0"
+                        max="120"
+                        step="0.25"
+                        value={layoutPreferences.tocWidth}
+                        oninput={(event) => updateLayoutPreferences({ tocWidth: numericValue(event) })}
+                      />
+                      <input
+                        class="learning-unit-layout-menu__number"
+                        type="number"
+                        min="0"
+                        max="120"
+                        step="0.25"
+                        value={layoutPreferences.tocWidth}
+                        oninput={(event) => updateLayoutPreferences({ tocWidth: numericValue(event) })}
+                      />
+                    </div>
                   </label>
 
                   <label class="learning-unit-layout-menu__field">
-                    <span>Breite Arbeitsfläche</span>
-                    <input
-                      disabled={workspaceSplitView()}
-                      type="range"
-                      min="42"
-                      max="72"
-                      step="0.5"
-                      value={layoutPreferences.singlePaneWidth}
-                      oninput={(event) =>
-                        updateLayoutPreferences({
-                          singlePaneWidth: Number((event.currentTarget as HTMLInputElement).value)
-                        })}
-                    />
+                    <span class="learning-unit-layout-menu__field-head">
+                      <span>Breite Arbeitsrahmen</span>
+                      <span class="learning-unit-layout-menu__value">{layoutPreferences.workspaceWidth.toFixed(1)} rem</span>
+                    </span>
+                    <div class="learning-unit-layout-menu__field-controls">
+                      <input
+                        type="range"
+                        min="16"
+                        max="320"
+                        step="0.5"
+                        value={layoutPreferences.workspaceWidth}
+                        oninput={(event) => previewWorkspaceWidth(numericValue(event))}
+                        onchange={(event) => commitWorkspaceWidth(numericValue(event))}
+                      />
+                      <input
+                        class="learning-unit-layout-menu__number"
+                        type="number"
+                        min="16"
+                        max="320"
+                        step="0.5"
+                        value={layoutPreferences.workspaceWidth}
+                        oninput={(event) => previewWorkspaceWidth(numericValue(event))}
+                        onchange={(event) => commitWorkspaceWidth(numericValue(event))}
+                      />
+                    </div>
                   </label>
 
                   <label class="learning-unit-layout-menu__field">
-                    <span>Aufteilung links / rechts</span>
-                    <input
-                      disabled={!workspaceSplitView()}
-                      type="range"
-                      min="30"
-                      max="70"
-                      step="1"
-                      value={layoutPreferences.splitRatio}
-                      oninput={(event) =>
-                        updateLayoutPreferences({ splitRatio: Number((event.currentTarget as HTMLInputElement).value) })}
-                    />
+                    <span class="learning-unit-layout-menu__field-head">
+                      <span>Schriftgröße</span>
+                      <span class="learning-unit-layout-menu__value">{layoutPreferences.fontScale.toFixed(2)}x</span>
+                    </span>
+                    <div class="learning-unit-layout-menu__field-controls">
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="4"
+                        step="0.05"
+                        value={layoutPreferences.fontScale}
+                        oninput={(event) => previewFontScale(numericValue(event))}
+                        onchange={(event) => commitFontScale(numericValue(event))}
+                      />
+                      <input
+                        class="learning-unit-layout-menu__number"
+                        type="number"
+                        min="0.1"
+                        max="4"
+                        step="0.05"
+                        value={layoutPreferences.fontScale}
+                        oninput={(event) => previewFontScale(numericValue(event))}
+                        onchange={(event) => commitFontScale(numericValue(event))}
+                      />
+                    </div>
                   </label>
+
+                  <label class="learning-unit-layout-menu__field">
+                    <span class="learning-unit-layout-menu__field-head">
+                      <span>Aufteilung links / rechts</span>
+                      <span class="learning-unit-layout-menu__value">{layoutPreferences.splitRatio.toFixed(0)} / {(100 - layoutPreferences.splitRatio).toFixed(0)}</span>
+                    </span>
+                    <div class="learning-unit-layout-menu__field-controls">
+                      <input
+                        disabled={!workspaceSplitView()}
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={layoutPreferences.splitRatio}
+                        oninput={(event) => updateLayoutPreferences({ splitRatio: numericValue(event) })}
+                      />
+                      <input
+                        class="learning-unit-layout-menu__number"
+                        disabled={!workspaceSplitView()}
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={layoutPreferences.splitRatio}
+                        oninput={(event) => updateLayoutPreferences({ splitRatio: numericValue(event) })}
+                      />
+                    </div>
+                  </label>
+
+                  <div class="learning-unit-layout-menu__section">
+                    <p class="learning-unit-layout-menu__section-title">Abstände</p>
+
+                    <label class="learning-unit-layout-menu__field">
+                      <span class="learning-unit-layout-menu__field-head">
+                        <span>Abstand Inhaltsverzeichnis</span>
+                        <span class="learning-unit-layout-menu__value">{layoutPreferences.tocGap.toFixed(1)} rem</span>
+                      </span>
+                      <div class="learning-unit-layout-menu__field-controls">
+                        <input
+                          type="range"
+                          min="0"
+                          max="40"
+                          step="0.1"
+                          value={layoutPreferences.tocGap}
+                          oninput={(event) => updateLayoutPreferences({ tocGap: numericValue(event) })}
+                        />
+                        <input
+                          class="learning-unit-layout-menu__number"
+                          type="number"
+                          min="0"
+                          max="40"
+                          step="0.1"
+                          value={layoutPreferences.tocGap}
+                          oninput={(event) => updateLayoutPreferences({ tocGap: numericValue(event) })}
+                        />
+                      </div>
+                    </label>
+
+                    <label class="learning-unit-layout-menu__field">
+                      <span class="learning-unit-layout-menu__field-head">
+                        <span>Abstand Arbeitsflächen</span>
+                        <span class="learning-unit-layout-menu__value">{layoutPreferences.paneGap.toFixed(1)} rem</span>
+                      </span>
+                      <div class="learning-unit-layout-menu__field-controls">
+                        <input
+                          type="range"
+                          min="0"
+                          max="40"
+                          step="0.1"
+                          value={layoutPreferences.paneGap}
+                          oninput={(event) => updateLayoutPreferences({ paneGap: numericValue(event) })}
+                        />
+                        <input
+                          class="learning-unit-layout-menu__number"
+                          type="number"
+                          min="0"
+                          max="40"
+                          step="0.1"
+                          value={layoutPreferences.paneGap}
+                          oninput={(event) => updateLayoutPreferences({ paneGap: numericValue(event) })}
+                        />
+                      </div>
+                    </label>
+                  </div>
 
                   <button class="learning-unit-layout-menu__reset" type="button" onclick={resetLayoutPreferences}>
                     Standardlayout wiederherstellen
@@ -989,70 +1250,82 @@
     {#if modularWorkspace.view === "overview"}
       <LearningUnitOverview graph={data.graph} nodes={flowNodes} edges={flowEdges} />
     {:else}
-      <section class="learning-unit-stage learning-unit-stage--content">
-        {#if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
-          <section class="workspace-panel learning-unit-empty-state">
-            <p class="learning-unit-empty-copy">Modul wird geladen …</p>
+      <div class="learning-unit-layout-rail">
+        <div class="learning-unit-layout-frame">
+          <section class="learning-unit-stage learning-unit-stage--content">
+            {#if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
+              <section class="workspace-panel learning-unit-empty-state">
+                <p class="learning-unit-empty-copy">Modul wird geladen …</p>
+              </section>
+            {:else if modularWorkspace.activeTab && moduleErrors[modularWorkspace.activeTab]}
+              <section class="workspace-panel learning-unit-empty-state">
+                <p class="workspace-note workspace-note--error">{moduleErrors[modularWorkspace.activeTab]}</p>
+                <button
+                  class="workspace-top-action workspace-top-action--quiet"
+                  type="button"
+                  onclick={() => {
+                    if (modularWorkspace.activeTab) {
+                      void ensureModuleLoaded(modularWorkspace.activeTab);
+                    }
+                  }}
+                >
+                  Erneut versuchen
+                </button>
+              </section>
+            {:else}
+              <LearningUnitContentWorkspace
+                titleLabel=""
+                title=""
+                meta={null}
+                courseId={data.courseId}
+                unitType="modular"
+                moduleId={modularWorkspace.activeTab}
+                tocOpen={workspaceTocOpen()}
+                splitView={workspaceSplitView()}
+                activePane={workspaceActivePane()}
+                visiblePaneIds={visiblePaneIds()}
+                contentGroups={contentGroups()}
+                paneItems={paneItemsById()}
+                historyTaskId={data.historyTaskId}
+                history={data.history}
+                submittedTaskId={data.submittedTaskId}
+                submissionMessage={data.message}
+                submissionErrorTaskId={actionTaskId()}
+                submissionErrorMessage={form?.message ?? null}
+                submissionFocusByPane={workspaceSubmissionFocus()}
+                submissionModeByPane={workspaceSubmissionModes()}
+                showSplitToggle={false}
+                layoutMenuEnabled={false}
+                tocWidth={layoutPreferences.tocWidth}
+                workspaceWidth={layoutPreferences.workspaceWidth}
+                splitRatio={layoutPreferences.splitRatio}
+                tocGap={layoutPreferences.tocGap}
+                paneGap={layoutPreferences.paneGap}
+                fontScale={layoutPreferences.fontScale}
+                {itemDomId}
+                onToggleToc={toggleToc}
+                onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+                onResetLayout={resetLayoutPreferences}
+                onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
+                onPreviewWorkspaceWidth={previewWorkspaceWidth}
+                onCommitWorkspaceWidth={commitWorkspaceWidth}
+                onPreviewFontScale={previewFontScale}
+                onCommitFontScale={commitFontScale}
+                onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
+                onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
+                onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
+                onSetActivePane={setActivePane}
+                onOpenItem={openItemFromToc}
+                onRemoveGroup={removeOpenModule}
+                onToggleItem={togglePaneItem}
+                onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
+                onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
+                onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
+              />
+            {/if}
           </section>
-        {:else if modularWorkspace.activeTab && moduleErrors[modularWorkspace.activeTab]}
-          <section class="workspace-panel learning-unit-empty-state">
-            <p class="workspace-note workspace-note--error">{moduleErrors[modularWorkspace.activeTab]}</p>
-            <button
-              class="workspace-top-action workspace-top-action--quiet"
-              type="button"
-              onclick={() => {
-                if (modularWorkspace.activeTab) {
-                  void ensureModuleLoaded(modularWorkspace.activeTab);
-                }
-              }}
-            >
-              Erneut versuchen
-            </button>
-          </section>
-        {:else}
-          <LearningUnitContentWorkspace
-            titleLabel=""
-            title=""
-            meta={null}
-            courseId={data.courseId}
-            unitType="modular"
-            moduleId={modularWorkspace.activeTab}
-            tocOpen={workspaceTocOpen()}
-            splitView={workspaceSplitView()}
-            activePane={workspaceActivePane()}
-            visiblePaneIds={visiblePaneIds()}
-            contentGroups={contentGroups()}
-            paneItems={paneItemsById()}
-            historyTaskId={data.historyTaskId}
-            history={data.history}
-            submittedTaskId={data.submittedTaskId}
-            submissionMessage={data.message}
-            submissionErrorTaskId={actionTaskId()}
-            submissionErrorMessage={form?.message ?? null}
-            submissionFocusByPane={workspaceSubmissionFocus()}
-            submissionModeByPane={workspaceSubmissionModes()}
-            showSplitToggle={false}
-            layoutMenuEnabled={false}
-            tocWidth={layoutPreferences.tocWidth}
-            singlePaneWidth={layoutPreferences.singlePaneWidth}
-            splitRatio={layoutPreferences.splitRatio}
-            {itemDomId}
-            onToggleToc={toggleToc}
-            onToggleSplitView={() => setSplitView(!workspaceSplitView())}
-            onResetLayout={resetLayoutPreferences}
-            onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
-            onUpdateSinglePaneWidth={(value) => updateLayoutPreferences({ singlePaneWidth: value })}
-            onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
-            onSetActivePane={setActivePane}
-            onOpenItem={openItemFromToc}
-            onRemoveGroup={removeOpenModule}
-            onToggleItem={togglePaneItem}
-            onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
-            onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
-            onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
-          />
-        {/if}
-      </section>
+        </div>
+      </div>
     {/if}
   {:else}
     <section class="learning-unit-stage learning-unit-stage--content">
@@ -1080,15 +1353,23 @@
         showSplitToggle={true}
         layoutMenuEnabled={true}
         tocWidth={layoutPreferences.tocWidth}
-        singlePaneWidth={layoutPreferences.singlePaneWidth}
+        workspaceWidth={layoutPreferences.workspaceWidth}
         splitRatio={layoutPreferences.splitRatio}
+        tocGap={layoutPreferences.tocGap}
+        paneGap={layoutPreferences.paneGap}
+        fontScale={layoutPreferences.fontScale}
         {itemDomId}
         onToggleToc={toggleToc}
         onToggleSplitView={() => setSplitView(!workspaceSplitView())}
         onResetLayout={resetLayoutPreferences}
         onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
-        onUpdateSinglePaneWidth={(value) => updateLayoutPreferences({ singlePaneWidth: value })}
+        onPreviewWorkspaceWidth={previewWorkspaceWidth}
+        onCommitWorkspaceWidth={commitWorkspaceWidth}
+        onPreviewFontScale={previewFontScale}
+        onCommitFontScale={commitFontScale}
         onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
+        onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
+        onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
         onSetActivePane={setActivePane}
         onOpenItem={openItemFromToc}
         onToggleItem={togglePaneItem}

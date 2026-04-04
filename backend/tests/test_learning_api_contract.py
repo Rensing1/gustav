@@ -430,6 +430,40 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
 
 
 @pytest.mark.anyio
+async def test_create_submission_requires_explicit_intent() -> None:
+    """The public contract requires the learner to declare feedback vs. final submission."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "Intent fehlt"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_input"}
+
+
+@pytest.mark.anyio
+async def test_create_submission_rejects_unknown_intent() -> None:
+    """Only the documented submission intents are accepted by the runtime API."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "draft", "kind": "text", "text_body": "Ungültiger Intent"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_input"}
+
+
+@pytest.mark.anyio
 async def test_create_submission_respects_attempt_limit_and_idempotency():
     """Creating submissions enforces attempt limit and honours Idempotency-Key."""
 
@@ -441,7 +475,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         resp1 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key"},
-            json={"kind": "text", "text_body": "Versuch 1"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 1"},
         )
         assert resp1.status_code == 202
         first_payload = resp1.json()
@@ -456,7 +490,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         resp_retry = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key"},
-            json={"kind": "text", "text_body": "Versuch 1"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 1"},
         )
         assert resp_retry.status_code == 202
         retry_payload = resp_retry.json()
@@ -468,7 +502,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         resp2 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key-2"},
-            json={"kind": "text", "text_body": "Versuch 2"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 2"},
         )
         assert resp2.status_code == 202
         second_payload = resp2.json()
@@ -478,7 +512,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         # Third attempt exceeds max_attempts → 400
         resp3 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Versuch 3"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 3"},
         )
         assert resp3.status_code == 400
         assert resp3.json().get("detail") == "max_attempts_exceeded"
@@ -494,7 +528,7 @@ async def test_create_submission_uses_teacher_defined_criteria_names():
         client.cookies.set("gustav_session", fixture.student_session_id)
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Lineare Funktionen analysiert"},
+            json={"intent": "submit", "kind": "text", "text_body": "Lineare Funktionen analysiert"},
         )
 
     # Async model: immediate response is pending; analysis with scores happens later.
@@ -514,7 +548,7 @@ async def test_create_submission_requires_membership():
         client.cookies.set("gustav_session", fixture.student_session_id)
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Hallo"},
+            json={"intent": "submit", "kind": "text", "text_body": "Hallo"},
         )
 
     assert response.status_code == 403
@@ -530,7 +564,7 @@ async def test_create_submission_requires_released_section():
         client.cookies.set("gustav_session", fixture.student_session_id)
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Noch gesperrt"},
+            json={"intent": "submit", "kind": "text", "text_body": "Noch gesperrt"},
         )
 
     assert response.status_code == 404
@@ -547,6 +581,7 @@ async def test_create_submission_image_requires_valid_sha256():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "materials/abc.png",
                 "mime_type": "image/png",
@@ -572,7 +607,7 @@ async def test_create_submission_csrf_origin():
         res = await client.post(
             f"/api/learning/courses/{uuid4()}/tasks/{uuid4()}/submissions",
             headers={"Origin": "http://evil.example"},
-            json={"kind": "text", "text_body": "hi"},
+            json={"intent": "submit", "kind": "text", "text_body": "hi"},
         )
 
     assert res.status_code == 403
@@ -591,7 +626,7 @@ async def test_create_submission_idempotency_key_length():
         res = await client.post(
             f"/api/learning/courses/{uuid4()}/tasks/{uuid4()}/submissions",
             headers={"Idempotency-Key": "a" * 65},
-            json={"kind": "text", "text_body": "hi"},
+            json={"intent": "submit", "kind": "text", "text_body": "hi"},
         )
 
     assert res.status_code == 400
@@ -638,6 +673,7 @@ async def test_create_submission_image_mime_type_whitelist():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "materials/abc.png",
                 "mime_type": "image/gif",  # not allowed
@@ -661,6 +697,7 @@ async def test_create_submission_file_pdf_happy_path():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "file",
                 "storage_key": "submissions/arbeit1.pdf",
                 "mime_type": "application/pdf",
@@ -689,6 +726,7 @@ async def test_create_submission_file_mime_type_whitelist():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "file",
                 "storage_key": "submissions/abc.docx",
                 "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -712,6 +750,7 @@ async def test_create_submission_file_size_limit_10mb():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "file",
                 "storage_key": "submissions/zu_gross.pdf",
                 "mime_type": "application/pdf",
@@ -734,7 +773,7 @@ async def test_create_submission_text_body_blank_returns_invalid_input():
         client.cookies.set("gustav_session", fixture.student_session_id)
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "   "},
+            json={"intent": "submit", "kind": "text", "text_body": "   "},
         )
 
     assert res.status_code == 400
@@ -754,7 +793,7 @@ async def test_create_submission_text_body_too_long_returns_invalid_input():
         long_text = "x" * 65537
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": long_text},
+            json={"intent": "submit", "kind": "text", "text_body": long_text},
         )
 
     assert res.status_code == 400
@@ -774,7 +813,7 @@ async def test_create_submission_text_body_at_limit_accepted():
         long_text = "x" * 65536
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": long_text},
+            json={"intent": "submit", "kind": "text", "text_body": long_text},
         )
 
     assert res.status_code in (200, 201, 202)
@@ -907,7 +946,7 @@ async def test_submission_telemetry_is_sanitized_and_capped():
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "telemetry-check"},
-            json={"kind": "text", "text_body": "Antwort"},
+            json={"intent": "submit", "kind": "text", "text_body": "Antwort"},
         )
         assert resp.status_code == 202
         submission_id = resp.json()["id"]
@@ -1003,7 +1042,7 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
             resp = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
                 headers={"Idempotency-Key": f"stable-{idx}"},
-                json={"kind": "text", "text_body": f"Gleichzeit {idx}"},
+                json={"intent": "submit", "kind": "text", "text_body": f"Gleichzeit {idx}"},
             )
             assert resp.status_code == 202
 
@@ -1057,7 +1096,7 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Referer": "http://evil.local/some/path"},
-            json={"kind": "text", "text_body": "x"},
+            json={"intent": "submit", "kind": "text", "text_body": "x"},
         )
 
     assert resp.status_code == 403
@@ -1083,7 +1122,7 @@ async def test_create_submission_allows_same_origin_via_forwarded_when_trust_pro
                     "X-Forwarded-Proto": "https",
                     "X-Forwarded-Host": "app.example",
                 },
-                json={"kind": "text", "text_body": "x"},
+                json={"intent": "submit", "kind": "text", "text_body": "x"},
             )
     finally:
         if prev is None:
@@ -1105,7 +1144,7 @@ async def test_analysis_json_shape_has_expected_keys_only():
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "analysis-shape"},
-            json={"kind": "text", "text_body": "Antwort"},
+            json={"intent": "submit", "kind": "text", "text_body": "Antwort"},
         )
 
     assert resp.status_code == 202
@@ -1125,6 +1164,7 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "uploads/student123/solution.png",
                 "mime_type": "image/png",
@@ -1152,7 +1192,7 @@ async def test_extracted_submission_response_hides_analysis_json_payload():
         client.cookies.set("gustav_session", fixture.student_session_id)
         create = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "PDF pending"},
+            json={"intent": "submit", "kind": "text", "text_body": "PDF pending"},
         )
     assert create.status_code == 202
     submission = create.json()
@@ -1212,6 +1252,7 @@ async def test_create_submission_image_storage_key_sane_pattern():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "../secrets/evil.png",
                 "mime_type": "image/png",
@@ -1255,7 +1296,7 @@ async def test_create_submission_rejects_cross_origin_when_origin_header_present
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "http://evil.local"},
-            json={"kind": "text", "text_body": "x"},
+            json={"intent": "submit", "kind": "text", "text_body": "x"},
         )
 
     assert resp.status_code == 403
@@ -1274,7 +1315,7 @@ async def test_create_submission_rejects_mismatched_scheme():
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "https://test"},
-            json={"kind": "text", "text_body": "a"},
+            json={"intent": "submit", "kind": "text", "text_body": "a"},
         )
 
     assert res.status_code == 403
@@ -1292,7 +1333,7 @@ async def test_create_submission_rejects_mismatched_port():
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "http://test:81"},
-            json={"kind": "text", "text_body": "a"},
+            json={"intent": "submit", "kind": "text", "text_body": "a"},
         )
 
     assert res.status_code == 403
@@ -1310,7 +1351,7 @@ async def test_create_submission_allows_same_origin_header():
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "http://test"},
-            json={"kind": "text", "text_body": "ok"},
+            json={"intent": "submit", "kind": "text", "text_body": "ok"},
         )
 
     assert res.status_code == 202
@@ -1326,7 +1367,7 @@ async def test_create_submission_allows_missing_origin():
         client.cookies.set("gustav_session", fixture.student_session_id)
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "ok"},
+            json={"intent": "submit", "kind": "text", "text_body": "ok"},
         )
 
     assert res.status_code == 202
@@ -1363,7 +1404,7 @@ async def test_create_submission_idempotency_key_too_long_returns_400_invalid_in
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": too_long_key},
-            json={"kind": "text", "text_body": "ok"},
+            json={"intent": "submit", "kind": "text", "text_body": "ok"},
         )
 
     assert res.status_code == 400
@@ -1418,7 +1459,7 @@ async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
             resp = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
                 headers={"Idempotency-Key": f"clamp-{idx}"},
-                json={"kind": "text", "text_body": f"Seite {idx}"},
+                json={"intent": "submit", "kind": "text", "text_body": f"Seite {idx}"},
             )
             assert resp.status_code == 202
 
@@ -1455,7 +1496,7 @@ async def test_submission_created_at_is_rfc3339_and_present():
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "created-at-check"},
-            json={"kind": "text", "text_body": "Zeitstempel"},
+            json={"intent": "submit", "kind": "text", "text_body": "Zeitstempel"},
         )
         assert resp.status_code == 202
 
@@ -1484,7 +1525,7 @@ async def test_create_submission_202_has_private_no_store_cache_header():
         client.cookies.set("gustav_session", fixture.student_session_id)
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Header-Test"},
+            json={"intent": "submit", "kind": "text", "text_body": "Header-Test"},
         )
 
     assert resp.status_code == 202

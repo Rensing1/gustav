@@ -1018,7 +1018,10 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
     """
     if not isinstance(payload, dict):
         raise ValueError("invalid_input")
-    intent = str(payload.get("intent") or "submit").strip().lower()
+    intent_raw = payload.get("intent")
+    if not isinstance(intent_raw, str):
+        raise ValueError("invalid_input")
+    intent = intent_raw.strip().lower()
     if intent not in {"feedback", "submit"}:
         raise ValueError("invalid_input")
     kind = payload.get("kind")

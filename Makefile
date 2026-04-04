@@ -23,7 +23,7 @@ help:
 	@echo "  verify             - Run all test suites (unit + integrations + e2e)"
 	@echo "  import-legacy      - Import legacy Supabase dump into local DB"
 	@echo "  import-legacy-dry  - Dry-run legacy import (no writes)"
-	@echo "  import-snapshot    - Import snapshot backup (DB + storage) into local Supabase"
+	@echo "  import-snapshot    - Import snapshot backup (DB + storage + optional H5P storage) into local Supabase"
 	@echo "  import-snapshot-dry - Dry-run snapshot import (no writes)"
 	@echo "  keycloak-admin-sync - Sync Keycloak admin client secret + admin password to .env values"
 	@echo "  keycloak-admin-reset - Force reset/recreate local Keycloak admin user (requires --yes in tool)"

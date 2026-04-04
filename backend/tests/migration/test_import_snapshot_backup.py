@@ -51,6 +51,7 @@ def test_resolve_snapshot_files_from_directory(tmp_path: Path) -> None:
     assert files.root == snapshot
     assert files.supabase_db_sql_gz.name == "supabase_db.sql.gz"
     assert files.storage_buckets_tar_gz.name == "storage_buckets.tar.gz"
+    assert files.h5p_storage_tar_gz is None
 
 
 def test_resolve_snapshot_files_from_tarball(tmp_path: Path) -> None:
@@ -68,6 +69,20 @@ def test_resolve_snapshot_files_from_tarball(tmp_path: Path) -> None:
     assert files.root == extract_root
     assert files.supabase_db_sql_gz.exists()
     assert files.storage_buckets_tar_gz.exists()
+    assert files.h5p_storage_tar_gz is None
+
+
+def test_resolve_snapshot_files_reads_optional_h5p_storage_archive(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "supabase_db.sql.gz").write_bytes(b"db")
+    (snapshot / "storage_buckets.tar.gz").write_bytes(b"storage")
+    (snapshot / "h5p_storage.tar.gz").write_bytes(b"h5p")
+
+    files = mod.resolve_snapshot_files(snapshot, tmp_path / "extract")
+
+    assert files.h5p_storage_tar_gz is not None
+    assert files.h5p_storage_tar_gz.name == "h5p_storage.tar.gz"
 
 
 def test_ensure_local_dsn_blocks_remote_hosts() -> None:
@@ -200,6 +215,11 @@ def test_main_normalizes_restore_target_ownership_after_restore(
         lambda dsn, owner: owner_calls.append((dsn, owner)),
     )
     monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda dsn, rows: sync_calls.append((dsn, rows)))
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda _dsn, _root: {"expected_ids": [], "missing_ids": []},
+    )
 
     assert mod.main() == 0
     assert owner_calls == [(args.dsn, "postgres")]
@@ -216,6 +236,136 @@ def test_main_normalizes_restore_target_ownership_after_restore(
             ],
         )
     ]
+
+
+def test_main_restores_optional_h5p_storage_archive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    h5p_tar = snapshot_dir / "h5p_storage.tar.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+    h5p_tar.write_bytes(b"dummy")
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(tmp_path / "workdir"),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=True,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        verbose=False,
+    )
+
+    restore_calls: list[tuple[Path, Path]] = []
+    consistency_calls: list[tuple[str, Path]] = []
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, h5p_tar, None),
+    )
+    monkeypatch.setattr(mod, "extract_snapshot_migration_history", lambda _dump: [])
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_normalize_restore_target_ownership", lambda _dsn, _owner: None)
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda _dsn, _rows: None)
+    monkeypatch.setattr(
+        mod,
+        "_restore_h5p_storage_tar",
+        lambda archive, target_root: restore_calls.append((archive, target_root)) or target_root,
+    )
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda dsn, h5p_root: consistency_calls.append((dsn, h5p_root)) or {"expected_ids": ["2689406715"], "missing_ids": []},
+    )
+
+    assert mod.main() == 0
+    assert restore_calls == [(h5p_tar, Path("/home/felix/gustav-alpha2/supabase/storage/h5p"))]
+    assert consistency_calls == [(args.dsn, Path("/home/felix/gustav-alpha2/supabase/storage/h5p"))]
+
+
+def test_main_fails_fast_when_snapshot_has_h5p_refs_but_no_h5p_archive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(tmp_path / "workdir"),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=True,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        verbose=False,
+    )
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, None, None),
+    )
+    monkeypatch.setattr(mod, "extract_snapshot_migration_history", lambda _dump: [])
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_normalize_restore_target_ownership", lambda _dsn, _owner: None)
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda _dsn, _rows: None)
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda _dsn, _root: (_ for _ in ()).throw(RuntimeError("Snapshot references missing H5P content_id 2689406715")),
+    )
+
+    assert mod.main() == 1
 
 
 def test_extract_snapshot_migration_history_reads_supabase_copy_block(tmp_path: Path) -> None:
@@ -644,6 +794,90 @@ def test_resolve_snapshot_files_keeps_keycloak_dump_optional(tmp_path: Path) -> 
     files = mod.resolve_snapshot_files(snapshot, tmp_path / "extract")
 
     assert files.keycloak_db_sql_gz is None
+
+
+def test_restore_h5p_storage_tar_extracts_into_target_root(tmp_path: Path) -> None:
+    archive = tmp_path / "h5p_storage.tar.gz"
+    _write_tar_gz(
+        archive,
+        members={
+            "content/2689406715/content.json": b"{}",
+            "content/2689406715/h5p.json": b"{}",
+        },
+    )
+
+    target_root = tmp_path / "restored_h5p"
+    restored = mod._restore_h5p_storage_tar(archive, target_root)
+
+    assert restored == target_root
+    assert (target_root / "content" / "2689406715" / "content.json").read_text(encoding="utf-8") == "{}"
+    assert (target_root / "content" / "2689406715" / "h5p.json").read_text(encoding="utf-8") == "{}"
+
+
+def test_assert_snapshot_h5p_storage_complete_skips_when_no_h5p_tasks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(mod, "_list_snapshot_h5p_task_refs", lambda _dsn: [])
+
+    result = mod._assert_snapshot_h5p_storage_complete(
+        "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        tmp_path / "h5p",
+    )
+
+    assert result == {"expected_ids": [], "missing_ids": []}
+
+
+def test_assert_snapshot_h5p_storage_complete_raises_for_missing_content(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    h5p_root = tmp_path / "h5p"
+    (h5p_root / "content" / "1001").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        mod,
+        "_list_snapshot_h5p_task_refs",
+        lambda _dsn: [
+            {
+                "content_id": "1001",
+                "task_id": "task-ok",
+                "unit_id": "unit-ok",
+                "course_ids": ["course-ok"],
+            },
+            {
+                "content_id": "2689406715",
+                "task_id": "c97472fa-a12f-4588-b02e-3464d92e177c",
+                "unit_id": "a9e926df-2946-45f0-9e3f-85b5ca1359c4",
+                "course_ids": ["30e70a0e-b55c-4918-be90-82573329153c"],
+            },
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="2689406715"):
+        mod._assert_snapshot_h5p_storage_complete(
+            "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+            h5p_root,
+        )
+
+
+def test_assert_snapshot_h5p_storage_complete_accepts_present_content(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    h5p_root = tmp_path / "h5p"
+    (h5p_root / "content" / "2689406715").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        mod,
+        "_list_snapshot_h5p_task_refs",
+        lambda _dsn: [
+            {
+                "content_id": "2689406715",
+                "task_id": "c97472fa-a12f-4588-b02e-3464d92e177c",
+                "unit_id": "a9e926df-2946-45f0-9e3f-85b5ca1359c4",
+                "course_ids": ["30e70a0e-b55c-4918-be90-82573329153c"],
+            },
+        ],
+    )
+
+    result = mod._assert_snapshot_h5p_storage_complete(
+        "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        h5p_root,
+    )
+
+    assert result == {"expected_ids": ["2689406715"], "missing_ids": []}
 
 
 def test_is_unsupported_pg_setting_line() -> None:

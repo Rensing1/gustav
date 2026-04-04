@@ -3,7 +3,8 @@
 Purpose
 -------
 Restore a snapshot produced by the backup cron (`supabase_db.sql.gz` +
-`storage_buckets.tar.gz`, optional `keycloak_db.sql.gz`) into a *local*
+`storage_buckets.tar.gz`, optional `h5p_storage.tar.gz`, optional
+`keycloak_db.sql.gz`) into a *local*
 development instance after tests wiped the DB.
 
 This tool imports snapshot data into a local Supabase stack while keeping
@@ -86,12 +87,15 @@ LOCAL_BUCKET_ALLOWED_MIME_TYPES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+LOCAL_H5P_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "supabase" / "storage" / "h5p"
+
 
 @dataclass(frozen=True)
 class SnapshotFiles:
     root: Path
     supabase_db_sql_gz: Path
     storage_buckets_tar_gz: Path
+    h5p_storage_tar_gz: Optional[Path] = None
     keycloak_db_sql_gz: Optional[Path] = None
 
 
@@ -329,11 +333,13 @@ def resolve_snapshot_files(snapshot: Path, extract_root: Path) -> SnapshotFiles:
 
     db_sql = _find_unique(root, "supabase_db.sql.gz")
     storage_tar = _find_unique(root, "storage_buckets.tar.gz")
+    h5p_storage_tar = _find_optional(root, "h5p_storage.tar.gz")
     keycloak_sql = _find_optional(root, "keycloak_db.sql.gz")
     return SnapshotFiles(
         root=root,
         supabase_db_sql_gz=db_sql,
         storage_buckets_tar_gz=storage_tar,
+        h5p_storage_tar_gz=h5p_storage_tar,
         keycloak_db_sql_gz=keycloak_sql,
     )
 
@@ -901,6 +907,83 @@ def _extract_storage_tar(storage_tar_gz: Path, dest: Path) -> Path:
     return dest
 
 
+def _restore_h5p_storage_tar(h5p_storage_tar_gz: Path, dest: Path) -> Path:
+    """Restore the raw H5P filesystem snapshot into the local storage root."""
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(h5p_storage_tar_gz, "r:gz") as tar:
+        _safe_extract_tar(tar, dest)
+    return dest
+
+
+def _list_snapshot_h5p_task_refs(dsn: str) -> list[dict[str, object]]:
+    """Return all distinct H5P task references restored from the snapshot DB."""
+    if psycopg is None:
+        raise RuntimeError("psycopg is required to inspect restored H5P task references.")
+
+    query = """
+        select t.h5p_content_id::text as content_id,
+               t.id::text as task_id,
+               t.unit_id::text as unit_id,
+               coalesce(
+                 array_agg(distinct cm.course_id::text) filter (where cm.course_id is not null),
+                 array[]::text[]
+               ) as course_ids
+          from public.unit_tasks t
+          left join public.course_modules cm on cm.unit_id = t.unit_id
+         where t.kind = 'h5p'
+           and t.h5p_content_id is not null
+         group by t.h5p_content_id, t.id, t.unit_id
+         order by t.h5p_content_id, t.id
+    """
+    items: list[dict[str, object]] = []
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            for content_id, task_id, unit_id, course_ids in cur.fetchall() or []:
+                items.append(
+                    {
+                        "content_id": str(content_id),
+                        "task_id": str(task_id),
+                        "unit_id": str(unit_id),
+                        "course_ids": [str(course_id) for course_id in (course_ids or [])],
+                    }
+                )
+    return items
+
+
+def _assert_snapshot_h5p_storage_complete(dsn: str, h5p_root: Path) -> dict[str, list[str]]:
+    """Fail fast when restored snapshot DB rows reference missing H5P content."""
+    refs = _list_snapshot_h5p_task_refs(dsn)
+    expected_ids = sorted({str(item["content_id"]) for item in refs if str(item.get("content_id") or "").strip()})
+    if not expected_ids:
+        return {"expected_ids": [], "missing_ids": []}
+
+    missing_ids = [content_id for content_id in expected_ids if not (h5p_root / "content" / content_id).is_dir()]
+    if not missing_ids:
+        return {"expected_ids": expected_ids, "missing_ids": []}
+
+    examples: list[str] = []
+    for item in refs:
+        content_id = str(item.get("content_id") or "")
+        if content_id not in missing_ids:
+            continue
+        course_ids = ",".join(str(course_id) for course_id in (item.get("course_ids") or [])) or "-"
+        examples.append(
+            f"content_id={content_id} task_id={item.get('task_id')} unit_id={item.get('unit_id')} course_ids={course_ids}"
+        )
+        if len(examples) >= 5:
+            break
+
+    raise RuntimeError(
+        "Snapshot references H5P content that is missing from local H5P storage. "
+        f"Missing content_ids: {', '.join(missing_ids)}. "
+        "Provide h5p_storage.tar.gz or re-import the missing H5P packages. "
+        f"Examples: {'; '.join(examples)}"
+    )
+
+
 def _build_object_url(base_url: str, bucket: str, key: str) -> str:
     encoded_key = quote(key, safe="/")
     encoded_bucket = quote(bucket, safe="")
@@ -1138,10 +1221,12 @@ def main() -> int:
         report["resolved_root"] = str(files.root)
         report["supabase_db_sql_gz"] = str(files.supabase_db_sql_gz)
         report["storage_buckets_tar_gz"] = str(files.storage_buckets_tar_gz)
+        report["h5p_storage_tar_gz"] = str(files.h5p_storage_tar_gz) if files.h5p_storage_tar_gz else None
+        report["h5p_storage_archive_present"] = bool(files.h5p_storage_tar_gz)
         report["keycloak_db_sql_gz"] = str(files.keycloak_db_sql_gz) if files.keycloak_db_sql_gz else None
         snapshot_migrations = extract_snapshot_migration_history(files.supabase_db_sql_gz)
         report["snapshot_migration_count"] = len(snapshot_migrations)
-        report["snapshot_latest_migration"] = snapshot_migrations[-1].version
+        report["snapshot_latest_migration"] = snapshot_migrations[-1].version if snapshot_migrations else None
 
         LOG.info("Preflight: checking DB connectivity ...")
         _psql_check(dsn)
@@ -1178,6 +1263,12 @@ def main() -> int:
         _normalize_restore_target_ownership(dsn, restore_target_owner)
         sync_snapshot_migration_history(dsn, snapshot_migrations)
         report["restore_target_owner"] = restore_target_owner
+
+        if files.h5p_storage_tar_gz is not None:
+            restored_h5p_root = _restore_h5p_storage_tar(files.h5p_storage_tar_gz, LOCAL_H5P_STORAGE_ROOT)
+            report["h5p_storage_restored_to"] = str(restored_h5p_root)
+        h5p_consistency = _assert_snapshot_h5p_storage_complete(dsn, LOCAL_H5P_STORAGE_ROOT)
+        report["h5p_storage_result"] = h5p_consistency
 
         if files.keycloak_db_sql_gz and not args.skip_keycloak:
             _restore_keycloak_db_sql_gz(

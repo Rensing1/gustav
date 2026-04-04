@@ -50,10 +50,16 @@
     paneStacks: PaneStacks | null;
     submissionFocus: Record<PaneId, SubmissionFocusState>;
   };
+  type LayoutPreferences = {
+    tocWidth: number;
+    singlePaneWidth: number;
+    splitRatio: number;
+  };
   type StoredWorkspaceState = {
-    version: 7;
+    version: 8;
     modular?: Partial<ModularWorkspaceState>;
     linear?: Partial<LinearWorkspaceState>;
+    layout?: Partial<LayoutPreferences>;
   };
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -68,6 +74,8 @@
   let moduleErrors = $state.raw<Record<string, string | null>>({});
   let workspaceReady = $state(false);
   let historyRestored = $state(false);
+  let modularLayoutMenuOpen = $state(false);
+  let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
 
   let rebuildToken = 0;
 
@@ -111,6 +119,34 @@
       paneStacks: null,
       submissionFocus: defaultSubmissionFocus()
   };
+  }
+
+  function defaultLayoutPreferences(): LayoutPreferences {
+    return {
+      tocWidth: 16.25,
+      singlePaneWidth: 52,
+      splitRatio: 50
+    };
+  }
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function normalizeLayoutPreferences(raw: unknown): LayoutPreferences {
+    const candidate = raw && typeof raw === "object" ? (raw as Partial<LayoutPreferences>) : {};
+    return {
+      tocWidth:
+        typeof candidate.tocWidth === "number" ? clamp(candidate.tocWidth, 13, 24) : defaultLayoutPreferences().tocWidth,
+      singlePaneWidth:
+        typeof candidate.singlePaneWidth === "number"
+          ? clamp(candidate.singlePaneWidth, 42, 72)
+          : defaultLayoutPreferences().singlePaneWidth,
+      splitRatio:
+        typeof candidate.splitRatio === "number"
+          ? clamp(candidate.splitRatio, 30, 70)
+          : defaultLayoutPreferences().splitRatio
+    };
   }
 
   function normalizeSubmissionFocus(raw: unknown): Record<PaneId, SubmissionFocusState> {
@@ -195,11 +231,16 @@
     };
   }
 
-  function readStoredWorkspaceState(): { modular: ModularWorkspaceState; linear: LinearWorkspaceState } {
+  function readStoredWorkspaceState(): {
+    modular: ModularWorkspaceState;
+    linear: LinearWorkspaceState;
+    layout: LayoutPreferences;
+  } {
     if (!browser) {
       return {
         modular: defaultModularWorkspaceState(),
-        linear: defaultLinearWorkspaceState()
+        linear: defaultLinearWorkspaceState(),
+        layout: defaultLayoutPreferences()
       };
     }
 
@@ -208,7 +249,8 @@
       if (!raw) {
         return {
           modular: defaultModularWorkspaceState(),
-          linear: defaultLinearWorkspaceState()
+          linear: defaultLinearWorkspaceState(),
+          layout: defaultLayoutPreferences()
         };
       }
 
@@ -217,23 +259,26 @@
         parsed &&
         typeof parsed === "object" &&
         "version" in parsed &&
-        parsed.version === 7 &&
+        parsed.version === 8 &&
         ("modular" in parsed || "linear" in parsed)
       ) {
         return {
           modular: normalizeModularWorkspaceState(parsed.modular ?? null),
-          linear: normalizeLinearWorkspaceState(parsed.linear ?? null)
+          linear: normalizeLinearWorkspaceState(parsed.linear ?? null),
+          layout: normalizeLayoutPreferences(parsed.layout ?? null)
         };
       }
 
       return {
         modular: normalizeModularWorkspaceState(parsed),
-        linear: defaultLinearWorkspaceState()
+        linear: defaultLinearWorkspaceState(),
+        layout: defaultLayoutPreferences()
       };
     } catch {
       return {
         modular: defaultModularWorkspaceState(),
-        linear: defaultLinearWorkspaceState()
+        linear: defaultLinearWorkspaceState(),
+        layout: defaultLayoutPreferences()
       };
     }
   }
@@ -647,6 +692,17 @@
     });
   }
 
+  function updateLayoutPreferences(next: Partial<LayoutPreferences>) {
+    layoutPreferences = {
+      ...layoutPreferences,
+      ...next
+    };
+  }
+
+  function resetLayoutPreferences() {
+    layoutPreferences = defaultLayoutPreferences();
+  }
+
   async function rebuildGraph() {
     if (!isModularUnit() || !data.graph || !data.user) {
       flowNodes = [];
@@ -705,11 +761,13 @@
     if (isModularUnit()) {
       const seeded = seedModularWorkspaceState(stored.modular);
       setModularWorkspaceState(seeded);
+      layoutPreferences = stored.layout;
       for (const moduleId of seeded.openTabs) {
         void ensureModuleLoaded(moduleId);
       }
     } else {
       setLinearWorkspaceState(stored.linear);
+      layoutPreferences = stored.layout;
     }
 
     workspaceReady = true;
@@ -722,9 +780,10 @@
     }
 
     const payload: StoredWorkspaceState = {
-      version: 7,
+      version: 8,
       modular: modularWorkspace,
-      linear: linearWorkspace
+      linear: linearWorkspace,
+      layout: layoutPreferences
     };
     window.localStorage.setItem(storageKey(), JSON.stringify(payload));
   });
@@ -786,6 +845,20 @@
   });
 </script>
 
+<svelte:document
+  onclick={(event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest("[data-layout-menu-root]")) {
+      modularLayoutMenuOpen = false;
+    }
+  }}
+  onkeydown={(event) => {
+    if (event.key === "Escape") {
+      modularLayoutMenuOpen = false;
+    }
+  }}
+/>
+
 <svelte:head>
   <title>{data.selectedUnit?.unit.title ?? "Lernraum"} | GUSTAV</title>
 </svelte:head>
@@ -827,38 +900,87 @@
 
         {#if modularWorkspace.view === "content"}
           <div class="learning-unit-toolbar__utility">
-            <button
-              aria-label={workspaceTocOpen() ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
-              class:workspace-top-action--active={workspaceTocOpen()}
-              class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
-              title={workspaceTocOpen() ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
-              type="button"
-              onclick={toggleToc}
-            >
-              <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
-                <rect x="3" y="4" width="4" height="12" rx="0.9"></rect>
-                <path d="M10 6.5h7"></path>
-                <path d="M10 10h7"></path>
-                <path d="M10 13.5h7"></path>
-              </svg>
-            </button>
-            <button
-              aria-label={workspaceSplitView() ? "Eine Ansicht" : "Zwei Ansichten"}
-              class:workspace-top-action--active={workspaceSplitView()}
-              class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
-              title={workspaceSplitView() ? "Eine Ansicht" : "Zwei Ansichten"}
-              type="button"
-              onclick={() => setSplitView(!workspaceSplitView())}
-            >
-              <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
-                {#if workspaceSplitView()}
-                  <rect x="2.5" y="4" width="5.5" height="12" rx="1.2"></rect>
-                  <rect x="12" y="4" width="5.5" height="12" rx="1.2"></rect>
-                {:else}
-                  <rect x="3" y="4" width="14" height="12" rx="1.4"></rect>
-                {/if}
-              </svg>
-            </button>
+            <div class="learning-unit-layout-menu" data-layout-menu-root>
+              <button
+                aria-expanded={modularLayoutMenuOpen}
+                aria-haspopup="dialog"
+                aria-label="Layout-Einstellungen"
+                class:workspace-top-action--active={modularLayoutMenuOpen}
+                class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
+                title="Layout-Einstellungen"
+                type="button"
+                onclick={() => {
+                  modularLayoutMenuOpen = !modularLayoutMenuOpen;
+                }}
+              >
+                <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
+                  <path d="M10 4.25a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 4.25Z"></path>
+                  <path d="M10 8.55a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 8.55Z"></path>
+                  <path d="M10 12.85a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 12.85Z"></path>
+                </svg>
+              </button>
+
+              {#if modularLayoutMenuOpen}
+                <div class="learning-unit-layout-menu__panel" role="dialog" aria-label="Layout-Einstellungen">
+                  <label class="learning-unit-layout-menu__toggle">
+                    <span>Inhaltsverzeichnis</span>
+                    <input checked={workspaceTocOpen()} type="checkbox" onchange={toggleToc} />
+                  </label>
+
+                  <label class="learning-unit-layout-menu__toggle">
+                    <span>Zwei Ansichten</span>
+                    <input checked={workspaceSplitView()} type="checkbox" onchange={() => setSplitView(!workspaceSplitView())} />
+                  </label>
+
+                  <label class="learning-unit-layout-menu__field">
+                    <span>Breite Inhaltsverzeichnis</span>
+                    <input
+                      type="range"
+                      min="13"
+                      max="24"
+                      step="0.25"
+                      value={layoutPreferences.tocWidth}
+                      oninput={(event) =>
+                        updateLayoutPreferences({ tocWidth: Number((event.currentTarget as HTMLInputElement).value) })}
+                    />
+                  </label>
+
+                  <label class="learning-unit-layout-menu__field">
+                    <span>Breite Arbeitsfläche</span>
+                    <input
+                      disabled={workspaceSplitView()}
+                      type="range"
+                      min="42"
+                      max="72"
+                      step="0.5"
+                      value={layoutPreferences.singlePaneWidth}
+                      oninput={(event) =>
+                        updateLayoutPreferences({
+                          singlePaneWidth: Number((event.currentTarget as HTMLInputElement).value)
+                        })}
+                    />
+                  </label>
+
+                  <label class="learning-unit-layout-menu__field">
+                    <span>Aufteilung links / rechts</span>
+                    <input
+                      disabled={!workspaceSplitView()}
+                      type="range"
+                      min="30"
+                      max="70"
+                      step="1"
+                      value={layoutPreferences.splitRatio}
+                      oninput={(event) =>
+                        updateLayoutPreferences({ splitRatio: Number((event.currentTarget as HTMLInputElement).value) })}
+                    />
+                  </label>
+
+                  <button class="learning-unit-layout-menu__reset" type="button" onclick={resetLayoutPreferences}>
+                    Standardlayout wiederherstellen
+                  </button>
+                </div>
+              {/if}
+            </div>
           </div>
         {/if}
       </div>
@@ -910,9 +1032,17 @@
             submissionFocusByPane={workspaceSubmissionFocus()}
             submissionModeByPane={workspaceSubmissionModes()}
             showSplitToggle={false}
+            layoutMenuEnabled={false}
+            tocWidth={layoutPreferences.tocWidth}
+            singlePaneWidth={layoutPreferences.singlePaneWidth}
+            splitRatio={layoutPreferences.splitRatio}
             {itemDomId}
             onToggleToc={toggleToc}
             onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+            onResetLayout={resetLayoutPreferences}
+            onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
+            onUpdateSinglePaneWidth={(value) => updateLayoutPreferences({ singlePaneWidth: value })}
+            onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
             onSetActivePane={setActivePane}
             onOpenItem={openItemFromToc}
             onRemoveGroup={removeOpenModule}
@@ -948,9 +1078,17 @@
         submissionFocusByPane={workspaceSubmissionFocus()}
         submissionModeByPane={workspaceSubmissionModes()}
         showSplitToggle={true}
+        layoutMenuEnabled={true}
+        tocWidth={layoutPreferences.tocWidth}
+        singlePaneWidth={layoutPreferences.singlePaneWidth}
+        splitRatio={layoutPreferences.splitRatio}
         {itemDomId}
         onToggleToc={toggleToc}
         onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+        onResetLayout={resetLayoutPreferences}
+        onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
+        onUpdateSinglePaneWidth={(value) => updateLayoutPreferences({ singlePaneWidth: value })}
+        onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
         onSetActivePane={setActivePane}
         onOpenItem={openItemFromToc}
         onToggleItem={togglePaneItem}

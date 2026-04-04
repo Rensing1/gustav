@@ -29,9 +29,17 @@
     submissionFocusByPane,
     submissionModeByPane,
     showSplitToggle = true,
+    layoutMenuEnabled = false,
+    tocWidth = 16.25,
+    singlePaneWidth = 52,
+    splitRatio = 50,
     itemDomId,
     onToggleToc,
     onToggleSplitView,
+    onResetLayout,
+    onUpdateTocWidth,
+    onUpdateSinglePaneWidth,
+    onUpdateSplitRatio,
     onSetActivePane,
     onOpenItem,
     onRemoveGroup = undefined,
@@ -61,9 +69,17 @@
     submissionFocusByPane: Record<PaneId, string | null>;
     submissionModeByPane: Record<PaneId, "text" | "upload" | null>;
     showSplitToggle?: boolean;
+    layoutMenuEnabled?: boolean;
+    tocWidth?: number;
+    singlePaneWidth?: number;
+    splitRatio?: number;
     itemDomId: (paneId: PaneId, itemKey: string) => string;
     onToggleToc: () => void;
     onToggleSplitView: () => void;
+    onResetLayout: () => void;
+    onUpdateTocWidth: (value: number) => void;
+    onUpdateSinglePaneWidth: (value: number) => void;
+    onUpdateSplitRatio: (value: number) => void;
     onSetActivePane: (paneId: PaneId) => void;
     onOpenItem: (itemKey: string) => void;
     onRemoveGroup?: ((groupId: string) => void) | undefined;
@@ -96,7 +112,33 @@
       }
     };
   }
+
+  let layoutMenuOpen = $state(false);
+
+  const shellStyle = $derived.by(
+    () =>
+      [
+        `--learning-unit-toc-width: ${tocWidth}rem`,
+        `--learning-unit-single-width: ${singlePaneWidth}rem`,
+        `--learning-unit-split-left: minmax(0, ${splitRatio}fr)`,
+        `--learning-unit-split-right: minmax(0, ${100 - splitRatio}fr)`
+      ].join("; ")
+  );
 </script>
+
+<svelte:document
+  onclick={(event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest("[data-layout-menu-root]")) {
+      layoutMenuOpen = false;
+    }
+  }}
+  onkeydown={(event) => {
+    if (event.key === "Escape") {
+      layoutMenuOpen = false;
+    }
+  }}
+/>
 
 <section class="learning-unit-content-toolbar">
   {#if titleLabel || title || meta}
@@ -114,41 +156,86 @@
   {/if}
 
   <div class="learning-unit-content-toolbar__actions">
-    {#if unitType === "linear"}
-      <button
-        aria-label={tocOpen ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
-        class:workspace-top-action--active={tocOpen}
-        class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
-        title={tocOpen ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden"}
-        type="button"
-        onclick={onToggleToc}
-      >
-        <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
-          <rect x="3" y="4" width="4" height="12" rx="0.9"></rect>
-          <path d="M10 6.5h7"></path>
-          <path d="M10 10h7"></path>
-          <path d="M10 13.5h7"></path>
-        </svg>
-      </button>
-    {/if}
-    {#if showSplitToggle}
-      <button
-        aria-label={splitView ? "Eine Ansicht" : "Zwei Ansichten"}
-        class:workspace-top-action--active={splitView}
-        class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
-        title={splitView ? "Eine Ansicht" : "Zwei Ansichten"}
-        type="button"
-        onclick={onToggleSplitView}
-      >
-        <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
-          {#if splitView}
-            <rect x="2.5" y="4" width="5.5" height="12" rx="1.2"></rect>
-            <rect x="12" y="4" width="5.5" height="12" rx="1.2"></rect>
-          {:else}
-            <rect x="3" y="4" width="14" height="12" rx="1.4"></rect>
-          {/if}
-        </svg>
-      </button>
+    {#if layoutMenuEnabled}
+      <div class="learning-unit-layout-menu" data-layout-menu-root>
+        <button
+          aria-expanded={layoutMenuOpen}
+          aria-haspopup="dialog"
+          aria-label="Layout-Einstellungen"
+          class:workspace-top-action--active={layoutMenuOpen}
+          class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
+          title="Layout-Einstellungen"
+          type="button"
+          onclick={() => {
+            layoutMenuOpen = !layoutMenuOpen;
+          }}
+        >
+          <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
+            <path d="M10 4.25a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 4.25Z"></path>
+            <path d="M10 8.55a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 8.55Z"></path>
+            <path d="M10 12.85a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 12.85Z"></path>
+          </svg>
+        </button>
+
+        {#if layoutMenuOpen}
+          <div class="learning-unit-layout-menu__panel" role="dialog" aria-label="Layout-Einstellungen">
+            <label class="learning-unit-layout-menu__toggle">
+              <span>Inhaltsverzeichnis</span>
+              <input checked={tocOpen} type="checkbox" onchange={onToggleToc} />
+            </label>
+
+            {#if showSplitToggle}
+              <label class="learning-unit-layout-menu__toggle">
+                <span>Zwei Ansichten</span>
+                <input checked={splitView} type="checkbox" onchange={onToggleSplitView} />
+              </label>
+            {/if}
+
+            <label class="learning-unit-layout-menu__field">
+              <span>Breite Inhaltsverzeichnis</span>
+              <input
+                type="range"
+                min="13"
+                max="24"
+                step="0.25"
+                value={tocWidth}
+                oninput={(event) => onUpdateTocWidth(Number((event.currentTarget as HTMLInputElement).value))}
+              />
+            </label>
+
+            <label class="learning-unit-layout-menu__field">
+              <span>Breite Arbeitsfläche</span>
+              <input
+                disabled={splitView}
+                type="range"
+                min="42"
+                max="72"
+                step="0.5"
+                value={singlePaneWidth}
+                oninput={(event) =>
+                  onUpdateSinglePaneWidth(Number((event.currentTarget as HTMLInputElement).value))}
+              />
+            </label>
+
+            <label class="learning-unit-layout-menu__field">
+              <span>Aufteilung links / rechts</span>
+              <input
+                disabled={!splitView}
+                type="range"
+                min="30"
+                max="70"
+                step="1"
+                value={splitRatio}
+                oninput={(event) => onUpdateSplitRatio(Number((event.currentTarget as HTMLInputElement).value))}
+              />
+            </label>
+
+            <button class="learning-unit-layout-menu__reset" type="button" onclick={onResetLayout}>
+              Standardlayout wiederherstellen
+            </button>
+          </div>
+        {/if}
+      </div>
     {/if}
   </div>
 </section>
@@ -157,6 +244,7 @@
   class:learning-unit-content-shell--single={!splitView}
   class:learning-unit-content-shell--toc-closed={!tocOpen}
   class="learning-unit-content-shell"
+  style={shellStyle}
 >
   {#if tocOpen}
     <aside class="learning-unit-toc" aria-label="Inhaltsverzeichnis">

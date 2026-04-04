@@ -18,7 +18,9 @@
     initialHistory = [],
     initialHistoryLoaded = false,
     initialTab = "submit",
+    initialMode = null,
     submitted = false,
+    message = null,
     errorMessage = null,
     onClose = null
   }: {
@@ -30,7 +32,9 @@
     initialHistory?: LearningSubmission[];
     initialHistoryLoaded?: boolean;
     initialTab?: WorkspaceTab;
+    initialMode?: SubmissionMode | null;
     submitted?: boolean;
+    message?: string | null;
     errorMessage?: string | null;
     onClose?: (() => void) | null;
   } = $props();
@@ -113,6 +117,10 @@
     return submission.analysis_status;
   }
 
+  function humanIntent(submission: LearningSubmission): string {
+    return submission.intent === "feedback" ? "Rückmeldung" : "Abgabe";
+  }
+
   function fileEntry(submission: LearningSubmission): { mime: string; size: number; url: string } | null {
     return submission.files?.[0] ?? null;
   }
@@ -127,22 +135,15 @@
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  function taskSummary(): string {
-    const plain = task.instruction_md
-      .replace(/[#>*_`\-\[\]()]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!plain) {
-      return "Arbeite konzentriert an deiner Lösung.";
-    }
-    if (plain.length <= 180) {
-      return plain;
-    }
-    return `${plain.slice(0, 177).trim()}…`;
+  function latestFeedbackSubmission(): LearningSubmission | null {
+    return historyEntries.find((submission) => submission.intent === "feedback" && Boolean(submission.feedback_md)) ?? null;
   }
 
   onMount(() => {
     activeTab = initialTab;
+    if (initialMode === "text" || initialMode === "upload") {
+      mode = initialMode;
+    }
     historyEntries = [...initialHistory];
     historyLoaded = initialHistoryLoaded;
     if (submitted || errorMessage) {
@@ -158,20 +159,21 @@
 <section class:learning-submission-workspace--writing={activeTab === "submit" && mode === "text"} class="learning-submission-workspace">
   <header class="learning-submission-workspace__header">
     <div class="learning-submission-workspace__copy">
-      <p class="workspace-label">Abgabe</p>
-      <h5>{taskTitle}</h5>
-      <p class="learning-submission-workspace__meta">
+      <div class="learning-submission-workspace__eyebrow">
+        <p class="workspace-label">Arbeitsbereich</p>
+        <p class="learning-submission-workspace__meta">
         {#if uploadOnly()}
-          Upload-Arbeitsbereich
+          Upload
         {:else}
-          Schreib- und Abgabe-Arbeitsbereich
+          Schreiben und Abgeben
         {/if}
-      </p>
-      <p class="learning-submission-workspace__summary">{taskSummary()}</p>
+        </p>
+      </div>
+      <h5>{taskTitle}</h5>
     </div>
 
     <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onClose?.()}>
-      Zurück zum Inhalt
+      Zurück
     </button>
   </header>
 
@@ -182,7 +184,7 @@
       type="button"
       onclick={() => setTab("submit")}
     >
-      Abgabe
+      Bearbeiten
     </button>
     <button
       class:workspace-tab--active={activeTab === "history"}
@@ -240,9 +242,29 @@
           </section>
 
           <div class="learning-submission-editor__actions">
-            <button class="workspace-link-action" type="submit">Abgeben</button>
+            <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback">
+              Rückmeldung einholen
+            </button>
+            <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">
+              Endgültig abgeben
+            </button>
           </div>
         </form>
+
+        {#if message === "feedback" && latestFeedbackSubmission()}
+          <section class="learning-submission-history__section learning-submission-workspace__inline-feedback">
+            <div class="learning-submission-workspace__feedback-header">
+              <span class="learning-submission-history__intent learning-submission-history__intent--feedback">
+                Rückmeldung
+              </span>
+              <span>{latestFeedbackSubmission()?.created_at}</span>
+            </div>
+            <p class="workspace-label">Neueste Rückmeldung</p>
+            <div class="markdown-prose">
+              {@html renderMarkdown(latestFeedbackSubmission()?.feedback_md ?? "")}
+            </div>
+          </section>
+        {/if}
       {:else}
         <form method="POST" class="learning-submission-upload" enctype="multipart/form-data">
           <input type="hidden" name="task_id" value={task.id} />
@@ -267,9 +289,29 @@
           </label>
 
           <div class="learning-submission-editor__actions">
-            <button class="workspace-link-action" type="submit">Abgeben</button>
+            <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback">
+              Rückmeldung einholen
+            </button>
+            <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">
+              Endgültig abgeben
+            </button>
           </div>
         </form>
+
+        {#if message === "feedback" && latestFeedbackSubmission()}
+          <section class="learning-submission-history__section learning-submission-workspace__inline-feedback">
+            <div class="learning-submission-workspace__feedback-header">
+              <span class="learning-submission-history__intent learning-submission-history__intent--feedback">
+                Rückmeldung
+              </span>
+              <span>{latestFeedbackSubmission()?.created_at}</span>
+            </div>
+            <p class="workspace-label">Neueste Rückmeldung</p>
+            <div class="markdown-prose">
+              {@html renderMarkdown(latestFeedbackSubmission()?.feedback_md ?? "")}
+            </div>
+          </section>
+        {/if}
       {/if}
     </div>
   {:else}
@@ -287,7 +329,12 @@
                   <h6>Versuch {submission.attempt_nr}</h6>
                   <p>{submission.created_at}</p>
                 </div>
-                <span>{humanStatus(submission)}</span>
+                <div class="learning-submission-history__entry-meta">
+                  <span class={`learning-submission-history__intent learning-submission-history__intent--${submission.intent}`}>
+                    {humanIntent(submission)}
+                  </span>
+                  <span>{humanStatus(submission)}</span>
+                </div>
               </header>
 
               {#if submission.text_body}

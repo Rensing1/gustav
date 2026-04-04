@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningMaterial } from "$lib/types/learning";
 
   let {
@@ -49,7 +50,9 @@
   {#if expanded}
     <div class="learning-work-item__body">
       {#if material.kind === "markdown"}
-        <pre>{material.body_md}</pre>
+        <div class="markdown-prose learning-material-prose">
+          {@html renderMarkdown(material.body_md)}
+        </div>
       {:else}
         <section class="learning-work-item__support learning-work-item__support--open">
           <header class="learning-work-item__support-header">

@@ -31,15 +31,23 @@
     showSplitToggle = true,
     layoutMenuEnabled = false,
     tocWidth = 16.25,
-    singlePaneWidth = 52,
+    workspaceWidth = 112,
     splitRatio = 50,
+    tocGap = 1.1,
+    paneGap = 1.1,
+    fontScale = 1,
     itemDomId,
     onToggleToc,
     onToggleSplitView,
     onResetLayout,
     onUpdateTocWidth,
-    onUpdateSinglePaneWidth,
+    onPreviewWorkspaceWidth,
+    onCommitWorkspaceWidth,
+    onPreviewFontScale,
+    onCommitFontScale,
     onUpdateSplitRatio,
+    onUpdateTocGap,
+    onUpdatePaneGap,
     onSetActivePane,
     onOpenItem,
     onRemoveGroup = undefined,
@@ -71,15 +79,23 @@
     showSplitToggle?: boolean;
     layoutMenuEnabled?: boolean;
     tocWidth?: number;
-    singlePaneWidth?: number;
+    workspaceWidth?: number;
     splitRatio?: number;
+    tocGap?: number;
+    paneGap?: number;
+    fontScale?: number;
     itemDomId: (paneId: PaneId, itemKey: string) => string;
     onToggleToc: () => void;
     onToggleSplitView: () => void;
     onResetLayout: () => void;
     onUpdateTocWidth: (value: number) => void;
-    onUpdateSinglePaneWidth: (value: number) => void;
+    onPreviewWorkspaceWidth: (value: number) => void;
+    onCommitWorkspaceWidth: (value: number) => void;
+    onPreviewFontScale: (value: number) => void;
+    onCommitFontScale: (value: number) => void;
     onUpdateSplitRatio: (value: number) => void;
+    onUpdateTocGap: (value: number) => void;
+    onUpdatePaneGap: (value: number) => void;
     onSetActivePane: (paneId: PaneId) => void;
     onOpenItem: (itemKey: string) => void;
     onRemoveGroup?: ((groupId: string) => void) | undefined;
@@ -115,13 +131,20 @@
 
   let layoutMenuOpen = $state(false);
 
+  function numericValue(event: Event): number {
+    const next = Number((event.currentTarget as HTMLInputElement).value);
+    return Number.isFinite(next) ? next : 0;
+  }
+
   const shellStyle = $derived.by(
     () =>
       [
         `--learning-unit-toc-width: ${tocWidth}rem`,
-        `--learning-unit-single-width: ${singlePaneWidth}rem`,
+        `--learning-unit-workspace-width: ${workspaceWidth}rem`,
         `--learning-unit-split-left: minmax(0, ${splitRatio}fr)`,
-        `--learning-unit-split-right: minmax(0, ${100 - splitRatio}fr)`
+        `--learning-unit-split-right: minmax(0, ${100 - splitRatio}fr)`,
+        `--learning-unit-toc-gap: ${tocGap}rem`,
+        `--learning-unit-pane-gap: ${paneGap}rem`
       ].join("; ")
   );
 </script>
@@ -140,6 +163,8 @@
   }}
 />
 
+<div class="learning-unit-layout-rail">
+  <div class="learning-unit-layout-frame" style={shellStyle}>
 <section class="learning-unit-content-toolbar">
   {#if titleLabel || title || meta}
     <div class="learning-unit-content-toolbar__copy">
@@ -192,43 +217,170 @@
             {/if}
 
             <label class="learning-unit-layout-menu__field">
-              <span>Breite Inhaltsverzeichnis</span>
-              <input
-                type="range"
-                min="13"
-                max="24"
-                step="0.25"
-                value={tocWidth}
-                oninput={(event) => onUpdateTocWidth(Number((event.currentTarget as HTMLInputElement).value))}
-              />
+              <span class="learning-unit-layout-menu__field-head">
+                <span>Breite Inhaltsverzeichnis</span>
+                <span class="learning-unit-layout-menu__value">{tocWidth.toFixed(2)} rem</span>
+              </span>
+              <div class="learning-unit-layout-menu__field-controls">
+                <input
+                  type="range"
+                  min="0"
+                  max="120"
+                  step="0.25"
+                  value={tocWidth}
+                  oninput={(event) => onUpdateTocWidth(numericValue(event))}
+                />
+                <input
+                  class="learning-unit-layout-menu__number"
+                  type="number"
+                  min="0"
+                  max="120"
+                  step="0.25"
+                  value={tocWidth}
+                  oninput={(event) => onUpdateTocWidth(numericValue(event))}
+                />
+              </div>
             </label>
 
             <label class="learning-unit-layout-menu__field">
-              <span>Breite Arbeitsfläche</span>
-              <input
-                disabled={splitView}
-                type="range"
-                min="42"
-                max="72"
-                step="0.5"
-                value={singlePaneWidth}
-                oninput={(event) =>
-                  onUpdateSinglePaneWidth(Number((event.currentTarget as HTMLInputElement).value))}
-              />
+              <span class="learning-unit-layout-menu__field-head">
+                <span>Breite Arbeitsrahmen</span>
+                <span class="learning-unit-layout-menu__value">{workspaceWidth.toFixed(1)} rem</span>
+              </span>
+              <div class="learning-unit-layout-menu__field-controls">
+                <input
+                  type="range"
+                  min="16"
+                  max="320"
+                  step="0.5"
+                  value={workspaceWidth}
+                  oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))}
+                  onchange={(event) => onCommitWorkspaceWidth(numericValue(event))}
+                />
+                <input
+                  class="learning-unit-layout-menu__number"
+                  type="number"
+                  min="16"
+                  max="320"
+                  step="0.5"
+                  value={workspaceWidth}
+                  oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))}
+                  onchange={(event) => onCommitWorkspaceWidth(numericValue(event))}
+                />
+              </div>
             </label>
 
             <label class="learning-unit-layout-menu__field">
-              <span>Aufteilung links / rechts</span>
-              <input
-                disabled={!splitView}
-                type="range"
-                min="30"
-                max="70"
-                step="1"
-                value={splitRatio}
-                oninput={(event) => onUpdateSplitRatio(Number((event.currentTarget as HTMLInputElement).value))}
-              />
+              <span class="learning-unit-layout-menu__field-head">
+                <span>Schriftgröße</span>
+                <span class="learning-unit-layout-menu__value">{fontScale.toFixed(2)}x</span>
+              </span>
+              <div class="learning-unit-layout-menu__field-controls">
+                <input
+                  type="range"
+                  min="0.1"
+                  max="4"
+                  step="0.05"
+                  value={fontScale}
+                  oninput={(event) => onPreviewFontScale(numericValue(event))}
+                  onchange={(event) => onCommitFontScale(numericValue(event))}
+                />
+                <input
+                  class="learning-unit-layout-menu__number"
+                  type="number"
+                  min="0.1"
+                  max="4"
+                  step="0.05"
+                  value={fontScale}
+                  oninput={(event) => onPreviewFontScale(numericValue(event))}
+                  onchange={(event) => onCommitFontScale(numericValue(event))}
+                />
+              </div>
             </label>
+
+            <label class="learning-unit-layout-menu__field">
+              <span class="learning-unit-layout-menu__field-head">
+                <span>Aufteilung links / rechts</span>
+                <span class="learning-unit-layout-menu__value">{splitRatio.toFixed(0)} / {(100 - splitRatio).toFixed(0)}</span>
+              </span>
+              <div class="learning-unit-layout-menu__field-controls">
+                <input
+                  disabled={!splitView}
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={splitRatio}
+                  oninput={(event) => onUpdateSplitRatio(numericValue(event))}
+                />
+                <input
+                  class="learning-unit-layout-menu__number"
+                  disabled={!splitView}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={splitRatio}
+                  oninput={(event) => onUpdateSplitRatio(numericValue(event))}
+                />
+              </div>
+            </label>
+
+            <div class="learning-unit-layout-menu__section">
+              <p class="learning-unit-layout-menu__section-title">Abstände</p>
+
+              <label class="learning-unit-layout-menu__field">
+                <span class="learning-unit-layout-menu__field-head">
+                  <span>Abstand Inhaltsverzeichnis</span>
+                  <span class="learning-unit-layout-menu__value">{tocGap.toFixed(1)} rem</span>
+                </span>
+                <div class="learning-unit-layout-menu__field-controls">
+                  <input
+                    type="range"
+                    min="0"
+                    max="40"
+                    step="0.1"
+                    value={tocGap}
+                    oninput={(event) => onUpdateTocGap(numericValue(event))}
+                  />
+                  <input
+                    class="learning-unit-layout-menu__number"
+                    type="number"
+                    min="0"
+                    max="40"
+                    step="0.1"
+                    value={tocGap}
+                    oninput={(event) => onUpdateTocGap(numericValue(event))}
+                  />
+                </div>
+              </label>
+
+              <label class="learning-unit-layout-menu__field">
+                <span class="learning-unit-layout-menu__field-head">
+                  <span>Abstand Arbeitsflächen</span>
+                  <span class="learning-unit-layout-menu__value">{paneGap.toFixed(1)} rem</span>
+                </span>
+                <div class="learning-unit-layout-menu__field-controls">
+                  <input
+                    type="range"
+                    min="0"
+                    max="40"
+                    step="0.1"
+                    value={paneGap}
+                    oninput={(event) => onUpdatePaneGap(numericValue(event))}
+                  />
+                  <input
+                    class="learning-unit-layout-menu__number"
+                    type="number"
+                    min="0"
+                    max="40"
+                    step="0.1"
+                    value={paneGap}
+                    oninput={(event) => onUpdatePaneGap(numericValue(event))}
+                  />
+                </div>
+              </label>
+            </div>
 
             <button class="learning-unit-layout-menu__reset" type="button" onclick={onResetLayout}>
               Standardlayout wiederherstellen
@@ -354,3 +506,5 @@
     {/each}
   </div>
 </section>
+  </div>
+</div>

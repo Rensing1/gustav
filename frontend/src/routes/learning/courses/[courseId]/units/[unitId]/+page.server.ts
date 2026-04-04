@@ -142,7 +142,13 @@ async function loadPageData(
     historyTaskId,
     history,
     submittedTaskId: url.searchParams.get("submitted"),
-    message: url.searchParams.get("message")
+    message: url.searchParams.get("message"),
+    submissionMode:
+      url.searchParams.get("submission_mode") === "upload"
+        ? "upload"
+        : url.searchParams.get("submission_mode") === "text"
+          ? "text"
+          : null
   };
 }
 
@@ -177,6 +183,7 @@ export const actions: Actions = {
     const unitType = String(form.get("unit_type") || "linear");
     const moduleId = String(form.get("module_id") || "").trim() || null;
     const textBody = String(form.get("text_body") || "");
+    const submissionIntent = form.get("submission_intent") === "feedback" ? "feedback" : "submit";
     const fileEntry = form.get("upload_file");
     const uploadFile = fileEntry instanceof File && fileEntry.size > 0 ? fileEntry : null;
 
@@ -212,7 +219,7 @@ export const actions: Actions = {
 
     let payload: Record<string, string | number> = {};
     if (mode === "text") {
-      payload = { kind: "text", text_body: textBody.trim() };
+      payload = { intent: submissionIntent, kind: "text", text_body: textBody.trim() };
     } else {
       const mimeType = canonicalUploadMimeType(task, uploadFile as File);
       const intent = await requireBackendJson<{
@@ -262,6 +269,7 @@ export const actions: Actions = {
       }
 
       payload = {
+        intent: submissionIntent,
         kind: mimeType.startsWith("image/") ? "image" : "file",
         storage_key: intent.storage_key,
         mime_type: mimeType,
@@ -295,8 +303,13 @@ export const actions: Actions = {
 
     const destination = new URL(url);
     destination.searchParams.set("history", taskId);
-    destination.searchParams.set("submitted", taskId);
-    destination.searchParams.set("message", "submitted");
+    destination.searchParams.set("submission_mode", mode);
+    if (submissionIntent === "submit") {
+      destination.searchParams.set("submitted", taskId);
+    } else {
+      destination.searchParams.delete("submitted");
+    }
+    destination.searchParams.set("message", submissionIntent === "feedback" ? "feedback" : "submitted");
     if (moduleId) {
       destination.searchParams.set("module", moduleId);
     }

@@ -1,8 +1,15 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import "@fontsource/inter/500.css";
+  import "@fontsource/inter/600.css";
+  import "@fontsource/manrope/700.css";
+  import "@fontsource/manrope/800.css";
   import "@fontsource/nunito/400.css";
   import "@fontsource/nunito/600.css";
   import "@fontsource/nunito/700.css";
+  import "@fontsource/work-sans/400.css";
+  import "@fontsource/work-sans/500.css";
+  import "@fontsource/work-sans/600.css";
   import "$lib/styles/app.css";
   import type { Snippet } from "svelte";
   import type { BreadcrumbItem } from "$lib/types/navigation";
@@ -164,8 +171,8 @@
 <svelte:window onclick={closeAccountMenuOnWindowClick} />
 
 <div class="app-shell" data-theme={data.theme}>
-  <header class="app-topbar">
-    <div class="app-topbar-inner">
+  <header class:app-topbar--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar">
+    <div class:app-topbar-inner--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar-inner">
       <a class="brand-lockup" href="/" aria-label="Startseite">
         <img class="brand-logo" src="/gustav-logo.png" alt="" />
         <div class="brand-copy">
@@ -173,19 +180,35 @@
         </div>
       </a>
 
-      <nav class="space-nav" aria-label="Hauptnavigation">
-        {#each primaryNavItems() as item}
-          {#if data.bootstrap?.spaces?.includes(item.requiredSpace)}
-            <a
-              href={item.href}
-              aria-current={isPrimaryActive(item.href) ? "page" : undefined}
-              aria-label={item.label}
-            >
-              <span class="nav-label">{item.label}</span>
-            </a>
-          {/if}
-        {/each}
-      </nav>
+      {#if isLearnerUnitWorkspaceRoute() && currentBreadcrumbs().length}
+        <nav class="app-topbar-breadcrumbs app-topbar-breadcrumbs--learner-unit" aria-label="Breadcrumb">
+          {#each currentBreadcrumbs() as item, index}
+            {#if index > 0}
+              <span class="app-topbar-breadcrumbs__separator" aria-hidden="true">/</span>
+            {/if}
+
+            {#if item.href}
+              <a href={item.href}>{item.label}</a>
+            {:else}
+              <span class="app-topbar-breadcrumbs__current">{item.label}</span>
+            {/if}
+          {/each}
+        </nav>
+      {:else}
+        <nav class:space-nav--learner-unit={isLearnerUnitWorkspaceRoute()} class="space-nav" aria-label="Hauptnavigation">
+          {#each primaryNavItems() as item}
+            {#if data.bootstrap?.spaces?.includes(item.requiredSpace)}
+              <a
+                href={item.href}
+                aria-current={isPrimaryActive(item.href) ? "page" : undefined}
+                aria-label={item.label}
+              >
+                <span class="nav-label">{item.label}</span>
+              </a>
+            {/if}
+          {/each}
+        </nav>
+      {/if}
 
       {#if data.bootstrap}
         <details class="account-menu" bind:this={accountMenu}>
@@ -208,17 +231,23 @@
   </header>
 
   <main class="workspace-shell">
-    <div class="workspace-inner" class:workspace-inner--wide={hasWideWorkspaceShell()}>
+    <div
+      class="workspace-inner"
+      class:workspace-inner--wide={hasWideWorkspaceShell()}
+      class:workspace-inner--learner-unit-wide={isLearnerUnitWorkspaceRoute()}
+    >
       <header
         class="workspace-header"
         class:workspace-header--measure={isLearnerUnitWorkspaceRoute()}
         class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
+        class:workspace-header--learner-unit={isLearnerUnitWorkspaceRoute()}
       >
         <div class="workspace-topbar">
-          {#if currentBreadcrumbs().length}
+          {#if currentBreadcrumbs().length && !isLearnerUnitWorkspaceRoute()}
             <nav
               class="workspace-breadcrumbs"
               class:workspace-breadcrumbs--single-line={isLearnerUnitWorkspaceRoute()}
+              class:workspace-breadcrumbs--learner-unit={isLearnerUnitWorkspaceRoute()}
               aria-label="Breadcrumb"
             >
               {#each currentBreadcrumbs() as item, index}

@@ -46,6 +46,7 @@ export type LearningSection = {
 };
 
 export type LearningSubmission = {
+  intent: "feedback" | "submit";
   files?: Array<{
     mime: string;
     size: number;
@@ -138,4 +139,5 @@ export type LearningUnitPageData = {
   history: LearningSubmission[];
   submittedTaskId: string | null;
   message: string | null;
+  submissionMode: "text" | "upload" | null;
 };

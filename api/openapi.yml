@@ -2244,7 +2244,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/SubmissionTelemetry'
         - type: object
-          required: [id, attempt_nr, kind, analysis_status, created_at]
+          required: [id, attempt_nr, intent, kind, analysis_status, created_at]
           properties:
             id:
               type: string
@@ -2252,6 +2252,10 @@ components:
             attempt_nr:
               type: integer
               minimum: 1
+            intent:
+              type: string
+              enum: [feedback, submit]
+              description: Distinguishes informal feedback requests from formal submissions.
             kind:
               type: string
               enum: [text, image, file, h5p]
@@ -5080,8 +5084,11 @@ paths:
             schema:
               oneOf:
                 - type: object
-                  required: [kind, text_body]
+                  required: [intent, kind, text_body]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
                     kind:
                       type: string
                       enum: [text]
@@ -5090,8 +5097,11 @@ paths:
                       minLength: 1
                       maxLength: 65536
                 - type: object
-                  required: [kind, storage_key, mime_type, size_bytes, sha256]
+                  required: [intent, kind, storage_key, mime_type, size_bytes, sha256]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
                     kind:
                       type: string
                       enum: [image]
@@ -5109,8 +5119,11 @@ paths:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
                 - type: object
-                  required: [kind, storage_key, mime_type, size_bytes, sha256]
+                  required: [intent, kind, storage_key, mime_type, size_bytes, sha256]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
                     kind:
                       type: string
                       enum: [file]
@@ -5131,8 +5144,11 @@ paths:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
                 - type: object
-                  required: [kind, score_raw, score_max]
+                  required: [intent, kind, score_raw, score_max]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
                     kind:
                       type: string
                       enum: [h5p]

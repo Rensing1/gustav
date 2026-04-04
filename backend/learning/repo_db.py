@@ -125,6 +125,7 @@ class SubmissionInput:
     course_id: str
     task_id: str
     student_sub: str
+    intent: str
     kind: str
     text_body: Optional[str]
     storage_key: Optional[str]
@@ -1070,6 +1071,7 @@ class DBLearningRepo:
                         """
                         select id::text,
                                attempt_nr,
+                               intent,
                                kind,
                                score_raw,
                                score_max,
@@ -1202,6 +1204,7 @@ class DBLearningRepo:
                                 task_id,
                                 section_id,
                                 student_sub,
+                                intent,
                                 kind,
                                 score_raw,
                                 score_max,
@@ -1223,6 +1226,7 @@ class DBLearningRepo:
                                     %s,
                                     %s,
                                     %s,
+                                    %s,
                                     'completed',
                                     null,
                                     null,
@@ -1234,6 +1238,7 @@ class DBLearningRepo:
                             do nothing
                             returning id::text,
                                       attempt_nr,
+                                      intent,
                                       kind,
                                       score_raw,
                                       score_max,
@@ -1259,6 +1264,7 @@ class DBLearningRepo:
                                 task_uuid,
                                 section_uuid,
                                 data.student_sub,
+                                data.intent,
                                 data.kind,
                                 int(data.score_raw),
                                 int(data.score_max),
@@ -1275,6 +1281,7 @@ class DBLearningRepo:
                                 task_id,
                                 section_id,
                                 student_sub,
+                                intent,
                                 kind,
                                 text_body,
                                 storage_key,
@@ -1301,6 +1308,7 @@ class DBLearningRepo:
                                     %s,
                                     %s,
                                     %s,
+                                    %s,
                                     'pending',
                                     null,
                                     null,
@@ -1311,6 +1319,7 @@ class DBLearningRepo:
                             do nothing
                             returning id::text,
                                       attempt_nr,
+                                      intent,
                                       kind,
                                       score_raw,
                                       score_max,
@@ -1336,6 +1345,7 @@ class DBLearningRepo:
                                 task_uuid,
                                 section_uuid,
                                 data.student_sub,
+                                data.intent,
                                 data.kind,
                                 data.text_body,
                                 data.storage_key,
@@ -1353,6 +1363,7 @@ class DBLearningRepo:
                             """
                             select id::text,
                                    attempt_nr,
+                                   intent,
                                    kind,
                                    score_raw,
                                    score_max,
@@ -1407,6 +1418,7 @@ class DBLearningRepo:
                         "task_id": task_uuid,
                         "task_kind": task_kind,
                         "student_sub": data.student_sub,
+                        "intent": data.intent,
                         "kind": data.kind,
                         "attempt_nr": attempt_nr,
                         "criteria": criteria,
@@ -1441,6 +1453,7 @@ class DBLearningRepo:
                                 """
                                 select id::text,
                                        attempt_nr,
+                                       intent,
                                        kind,
                                        score_raw,
                                        score_max,
@@ -1540,6 +1553,7 @@ class DBLearningRepo:
                     """
                     select id::text,
                            attempt_nr,
+                           intent,
                            kind,
                            score_raw,
                            score_max,
@@ -1753,6 +1767,7 @@ class DBLearningRepo:
         (
             submission_id,
             attempt_nr,
+            intent,
             kind,
             score_raw,
             score_max,
@@ -1800,6 +1815,7 @@ class DBLearningRepo:
         return {
             "id": submission_id,
             "attempt_nr": int(attempt_nr),
+            "intent": intent,
             "kind": kind,
             "score_raw": score_raw,
             "score_max": score_max,

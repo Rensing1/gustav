@@ -27,6 +27,7 @@ class CreateSubmissionInput:
     course_id: str
     task_id: str
     student_sub: str
+    intent: str
     kind: str
     text_body: Optional[str]
     storage_key: Optional[str]
@@ -68,6 +69,7 @@ class CreateSubmissionUseCase:
                 course_id=req.course_id,
                 task_id=req.task_id,
                 student_sub=req.student_sub,
+                intent=req.intent,
                 kind=req.kind,
                 text_body=req.text_body,
                 storage_key=req.storage_key,

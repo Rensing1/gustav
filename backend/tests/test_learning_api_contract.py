@@ -385,7 +385,7 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
         os.environ["ASYNC_LEARNING_ANALYSIS"] = "true"
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Analyse pending"},
+            json={"intent": "submit", "kind": "text", "text_body": "Analyse pending"},
         )
         # restore env
         if prev is None:
@@ -396,6 +396,7 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
     assert response.status_code == 202
     body = response.json()
     assert body["analysis_status"] == "pending"
+    assert body["intent"] == "submit"
     assert body["text_body"] == "Analyse pending"
     assert body.get("analysis_json") is None
     assert body.get("error_code") is None
@@ -791,7 +792,11 @@ async def test_list_submissions_history_happy_path():
             resp = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
                 headers={"Idempotency-Key": f"attempt-{idx}"},
-                json={"kind": "text", "text_body": f"Antwort {idx}"},
+                json={
+                    "intent": "feedback" if idx == 1 else "submit",
+                    "kind": "text",
+                    "text_body": f"Antwort {idx}"
+                },
             )
             assert resp.status_code == 202
 
@@ -809,11 +814,13 @@ async def test_list_submissions_history_happy_path():
 
     latest, earliest = payload[0], payload[-1]
     assert latest["attempt_nr"] == 2
+    assert latest["intent"] == "submit"
     # Async: pending status until worker completes; payloads may be empty
     assert latest["analysis_status"] == "pending"
     assert latest.get("feedback_md") in (None, "", {})
     assert latest.get("analysis_json") in (None, {})
     assert earliest["attempt_nr"] == 1
+    assert earliest["intent"] == "feedback"
     assert earliest.get("analysis_json") in (None, {})
     # Telemetry is always present per contract
     telemetry_fields = (

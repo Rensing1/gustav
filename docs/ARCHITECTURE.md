@@ -248,6 +248,7 @@ E2E‑Tests (Identity):
   - `DATABASE_URL` darf in PROD kein `sslmode=disable` enthalten (TLS erzwingen).
   - `DATABASE_URL` darf in PROD/Stage nicht als Benutzer `gustav_limited` authentifizieren. Diese Rolle ist NOLOGIN; verwende einen umgebungsspezifischen Login (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.
 - In DEV/TEST sind diese Prüfungen deaktiviert, um lokale Entwicklung zu erleichtern.
+- Lokale DB-Drifts werden über `make verify-preflight-db` früh erkannt. Wenn der Check für `public.learning_submissions` einen Owner-Drift meldet und `supabase migration up` lokal deshalb scheitern würde, ist der offizielle Reparaturweg `make reset-local`.
 
 ### Storage (Supabase)
 - Self‑hosted via Supabase CLI. Storage ist privat; Zugriff ausschließlich über kurzlebige signierte URLs.

@@ -64,7 +64,15 @@ Most common:
 
 ```bash
 make test
+make verify-preflight-db
 make verify
+```
+
+If `make verify-preflight-db` reports owner drift on `public.learning_submissions`,
+use the official local repair path:
+
+```bash
+make reset-local
 ```
 
 See `docs/references/make_targets.md` for all targets and prerequisites.

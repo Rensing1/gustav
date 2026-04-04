@@ -1018,6 +1018,9 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
     """
     if not isinstance(payload, dict):
         raise ValueError("invalid_input")
+    intent = str(payload.get("intent") or "submit").strip().lower()
+    if intent not in {"feedback", "submit"}:
+        raise ValueError("invalid_input")
     kind = payload.get("kind")
     if kind not in ("text", "image", "file", "h5p"):
         raise ValueError("invalid_input")
@@ -1030,7 +1033,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         # Global limit: allow up to 64k characters for text submissions.
         if len(text_body) > 65_536:
             raise ValueError("invalid_input")
-        return kind, {"text_body": text_body.strip()}
+        return kind, {"intent": intent, "text_body": text_body.strip()}
     elif kind == "h5p":
         required = {"score_raw", "score_max"}
         if not required.issubset(payload.keys()):
@@ -1042,7 +1045,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
             raise ValueError("invalid_h5p_payload") from None
         if raw_int < 0 or max_int < 0 or raw_int > max_int:
             raise ValueError("invalid_h5p_payload")
-        return kind, {"score_raw": raw_int, "score_max": max_int}
+        return kind, {"intent": intent, "score_raw": raw_int, "score_max": max_int}
     elif kind == "image":
         # Image submissions require finalized storage metadata
         required = {"storage_key", "mime_type", "size_bytes", "sha256"}
@@ -1078,6 +1081,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
             raise ValueError("invalid_image_payload")
         return kind, {
+            "intent": intent,
             "storage_key": storage_key,
             "mime_type": mime_type,
             "size_bytes": size_int,
@@ -1114,6 +1118,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
             raise ValueError("invalid_file_payload")
         return kind, {
+            "intent": intent,
             "storage_key": storage_key,
             "mime_type": mime_type,
             "size_bytes": size_int,
@@ -1283,6 +1288,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         course_id=course_id,
         task_id=task_id,
         student_sub=str(user.get("sub", "")),
+        intent=str(clean_payload.get("intent") or "submit"),
         kind=kind,
         text_body=clean_payload.get("text_body"),
         storage_key=clean_payload.get("storage_key"),

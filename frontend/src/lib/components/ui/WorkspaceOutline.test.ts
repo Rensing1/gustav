@@ -1,4 +1,7 @@
 import { render, screen } from "@testing-library/svelte";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import WorkspaceOutline from "./WorkspaceOutline.svelte";
@@ -52,5 +55,22 @@ describe("WorkspaceOutline", () => {
     const label = screen.getByText("Was tut die Europäische Union für mich und wie verändert sie meinen Alltag?");
     expect(label).toHaveClass("workspace-outline__item-label");
     expect(label.closest(".workspace-outline__item-copy")).not.toBeNull();
+  });
+
+  it("uses a denser, more technical stitch-like typography contract", () => {
+    const cssPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../styles/design-system.css"
+    );
+    const css = readFileSync(cssPath, "utf8");
+
+    expect(css).toMatch(/\.workspace-outline\s*\{[^}]*gap:\s*0\.65rem;[^}]*padding:\s*0\.82rem 0\.85rem 0\.9rem;/s);
+    expect(css).toMatch(/\.workspace-outline__header h2\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.98rem;[^}]*text-transform:\s*uppercase;/s);
+    expect(css).toMatch(/\.workspace-outline__group-title\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.76rem;[^}]*letter-spacing:\s*0\.18em;/s);
+    expect(css).toMatch(/\.workspace-outline__item-label\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.96rem;[^}]*line-height:\s*1\.4;/s);
+    expect(css).toMatch(/\.workspace-outline__body\s*\{[^}]*gap:\s*0\.82rem;/s);
+    expect(css).toMatch(/\.workspace-outline__group\s*\{[^}]*gap:\s*0\.62rem;/s);
+    expect(css).toMatch(/\.workspace-outline__items\s*\{[^}]*gap:\s*0\.08rem;/s);
+    expect(css).toMatch(/\.workspace-outline__item\s*\{[^}]*min-height:\s*1\.82rem;[^}]*padding:\s*0\.24rem 0 0\.24rem 0\.95rem;/s);
   });
 });

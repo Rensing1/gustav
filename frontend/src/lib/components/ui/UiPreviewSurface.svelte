@@ -73,6 +73,63 @@
           task: previewTask
         }
       ]
+    },
+    {
+      id: "module-2",
+      title: "Motive und Werte",
+      items: [
+        {
+          key: "material:preview-material-2",
+          kind: "material",
+          title: "Motive",
+          position: 1,
+          contextLabel: "Motive und Werte",
+          moduleId: "module-2",
+          material: {
+            ...previewMaterial,
+            id: "preview-material-2",
+            title: "Motive"
+          }
+        },
+        {
+          key: "task:preview-task-2",
+          kind: "task",
+          title: "Aufgabe 1",
+          position: 2,
+          contextLabel: "Motive und Werte",
+          moduleId: "module-2",
+          task: {
+            ...previewTask,
+            id: "preview-task-2"
+          }
+        },
+        {
+          key: "material:preview-material-3",
+          kind: "material",
+          title: "Artikel 2 des Vertrages",
+          position: 3,
+          contextLabel: "Motive und Werte",
+          moduleId: "module-2",
+          material: {
+            ...previewMaterial,
+            id: "preview-material-3",
+            title: "Artikel 2 des Vertrages"
+          }
+        },
+        {
+          key: "material:preview-material-4",
+          kind: "material",
+          title: "Werte der Union",
+          position: 4,
+          contextLabel: "Motive und Werte",
+          moduleId: "module-2",
+          material: {
+            ...previewMaterial,
+            id: "preview-material-4",
+            title: "Werte der Union"
+          }
+        }
+      ]
     }
   ];
 

@@ -52,14 +52,14 @@
   const previewContentGroups: ContentGroup[] = [
     {
       id: "module-1",
-      title: "Modul Graphen",
+      title: "Erkundung",
       items: [
         {
           key: "material:preview-material-1",
           kind: "material",
-          title: "Einführung",
+          title: "Was tut die Europäische Union für mich und wie verändert sie meinen Alltag?",
           position: 1,
-          contextLabel: "Modul Graphen",
+          contextLabel: "Erkundung",
           moduleId: "module-1",
           material: previewMaterial
         },
@@ -68,7 +68,7 @@
           kind: "task",
           title: "Aufgabe 1",
           position: 2,
-          contextLabel: "Modul Graphen",
+          contextLabel: "Erkundung",
           moduleId: "module-1",
           task: previewTask
         }
@@ -248,7 +248,10 @@
         visiblePaneIds={["left"]}
         contentGroups={previewContentGroups}
         paneItems={{
-          left: previewContentGroups[0].items.map((item) => ({ item, expanded: true })),
+          left: previewContentGroups[0].items.map((item) => ({
+            item,
+            expanded: item.kind === "task"
+          })),
           right: []
         }}
         historyTaskId={previewTask.id}

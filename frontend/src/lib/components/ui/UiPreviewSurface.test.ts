@@ -18,6 +18,7 @@ describe("UiPreviewSurface", () => {
     expect(screen.getByRole("heading", { name: "Programmieren mit Scratch" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zurück zu Lerneinheiten" })).toHaveAttribute("href", "/teaching/units");
     expect(screen.getByRole("heading", { name: "Inhaltsverzeichnis" })).toBeInTheDocument();
+    expect(screen.getByText("Was tut die Europäische Union für mich und wie verändert sie meinen Alltag?")).toBeInTheDocument();
     expect(screen.getByLabelText("Arbeitsfeld")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Klasse 10a" })).toHaveAttribute("href", "/learning");
     expect(screen.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeInTheDocument();

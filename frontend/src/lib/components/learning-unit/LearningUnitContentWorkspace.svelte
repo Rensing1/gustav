@@ -133,7 +133,6 @@
   }
 
   let layoutMenuOpen = $state(false);
-
   const shellStyle = $derived.by(
     () =>
       [
@@ -163,38 +162,40 @@
 
 <div class="learning-unit-layout-rail">
   <div class="learning-unit-layout-frame" style={shellStyle}>
-    <WorkspaceFrameHeader eyebrow={titleLabel} title={title} meta={meta}>
-      {#snippet actions()}
-        {#if layoutMenuEnabled}
-          <WorkspaceSettingsMenu
-            open={layoutMenuOpen}
-            {tocOpen}
-            {splitView}
-            {showSplitToggle}
-            {tocWidth}
-            {workspaceWidth}
-            {splitRatio}
-            {tocGap}
-            {paneGap}
-            {fontScale}
-            onToggleMenu={() => {
-              layoutMenuOpen = !layoutMenuOpen;
-            }}
-            {onToggleToc}
-            {onToggleSplitView}
-            {onResetLayout}
-            {onUpdateTocWidth}
-            {onPreviewWorkspaceWidth}
-            {onCommitWorkspaceWidth}
-            {onPreviewFontScale}
-            {onCommitFontScale}
-            {onUpdateSplitRatio}
-            {onUpdateTocGap}
-            {onUpdatePaneGap}
-          />
-        {/if}
-      {/snippet}
-    </WorkspaceFrameHeader>
+    {#if titleLabel || title || meta || layoutMenuEnabled}
+      <WorkspaceFrameHeader eyebrow={titleLabel} title={title} meta={meta}>
+        {#snippet actions()}
+          {#if layoutMenuEnabled}
+            <WorkspaceSettingsMenu
+              open={layoutMenuOpen}
+              {tocOpen}
+              {splitView}
+              {showSplitToggle}
+              {tocWidth}
+              {workspaceWidth}
+              {splitRatio}
+              {tocGap}
+              {paneGap}
+              {fontScale}
+              onToggleMenu={() => {
+                layoutMenuOpen = !layoutMenuOpen;
+              }}
+              {onToggleToc}
+              {onToggleSplitView}
+              {onResetLayout}
+              {onUpdateTocWidth}
+              {onPreviewWorkspaceWidth}
+              {onCommitWorkspaceWidth}
+              {onPreviewFontScale}
+              {onCommitFontScale}
+              {onUpdateSplitRatio}
+              {onUpdateTocGap}
+              {onUpdatePaneGap}
+            />
+          {/if}
+        {/snippet}
+      </WorkspaceFrameHeader>
+    {/if}
 
 <section
   class:learning-unit-content-shell--single={!splitView}

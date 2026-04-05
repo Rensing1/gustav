@@ -59,7 +59,9 @@
               type="button"
               onclick={() => onOpenItem(item.key)}
             >
-              <span class="workspace-outline__item-label">{item.title}</span>
+              <span class="workspace-outline__item-copy">
+                <span class="workspace-outline__item-label">{item.title}</span>
+              </span>
             </button>
           {/each}
         </div>

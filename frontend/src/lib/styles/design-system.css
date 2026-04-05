@@ -105,7 +105,8 @@ h6,
 }
 
 .workspace-inner {
-  width: min(100%, 74rem);
+  width: min(100%, 68rem);
+  margin: 0 auto;
 }
 
 .workspace-body {
@@ -154,6 +155,18 @@ h6,
   font-family: var(--font-display);
   font-size: 1rem;
   letter-spacing: -0.03em;
+}
+
+.preview-workspace-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.preview-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
 }
 
 .workspace-back-link,
@@ -446,6 +459,14 @@ h6,
   gap: var(--space-5);
 }
 
+.preview-heading__meta {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
 .preview-card {
   padding: var(--space-5);
   border: 2px solid var(--color-border);
@@ -466,6 +487,10 @@ h6,
 .preview-card h3,
 .preview-card p {
   margin-top: 0;
+}
+
+.preview-card .page-action-head {
+  margin-bottom: var(--space-4);
 }
 
 .preview-token-grid {
@@ -525,6 +550,19 @@ h6,
   background-size: 28px 28px;
 }
 
+.preview-graph-reference {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-height: 100%;
+  padding: 1rem;
+}
+
+.preview-graph-reference .preview-graph-sample {
+  min-height: 22rem;
+  align-content: start;
+}
+
 .preview-graph-sample__phase {
   width: min(100%, 24rem);
 }
@@ -532,6 +570,353 @@ h6,
 .preview-graph-sample__node {
   position: relative;
   width: min(100%, 16rem);
+}
+
+.workspace-frame-header {
+  display: grid;
+  gap: var(--space-3);
+  padding: 1rem 1.1rem;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+.workspace-frame-header__main {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.workspace-frame-header__copy {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.workspace-frame-header__copy h2,
+.workspace-outline__header h2,
+.graph-stage-frame__copy h2,
+.graph-inspector-panel__header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  letter-spacing: -0.04em;
+}
+
+.workspace-frame-header__copy h2 {
+  font-size: clamp(1.2rem, 2vw, 1.5rem);
+}
+
+.workspace-frame-header__meta,
+.graph-stage-frame__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.workspace-frame-header__actions,
+.workspace-frame-header__secondary,
+.graph-stage-frame__actions {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.workspace-outline,
+.graph-stage-frame,
+.graph-inspector-panel {
+  border: 2px solid var(--color-border);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+.workspace-outline {
+  display: grid;
+  gap: var(--space-3);
+  padding: 1rem;
+}
+
+.workspace-outline__body,
+.workspace-outline__group,
+.workspace-outline__items,
+.graph-stage-frame,
+.graph-inspector-panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.graph-stage-frame--chromeless {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 0;
+}
+
+.workspace-outline__group-head,
+.graph-stage-frame__header,
+.graph-inspector-panel__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.workspace-outline__group-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.workspace-outline__group-remove,
+.workspace-outline__item {
+  border: 0;
+  background: transparent;
+}
+
+.workspace-outline__group-remove {
+  padding: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.workspace-outline__item {
+  position: relative;
+  width: 100%;
+  padding: 0.3rem 0 0.3rem 0.9rem;
+  text-align: left;
+  color: var(--color-text);
+}
+
+.workspace-outline__item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  background: var(--color-line);
+}
+
+.workspace-outline__item--active::before {
+  background: var(--color-accent);
+}
+
+.workspace-outline__item-label {
+  font-family: var(--font-ui);
+}
+
+.workspace-settings-menu {
+  position: relative;
+}
+
+.workspace-settings-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.7rem);
+  right: 0;
+  z-index: 20;
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.workspace-settings-menu__toggle,
+.workspace-settings-menu__field,
+.workspace-settings-menu__section,
+.graph-stage-frame__copy,
+.graph-inspector-panel__body,
+.graph-inspector-panel__footer {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.workspace-settings-menu__toggle {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.workspace-settings-menu__field-head,
+.workspace-settings-menu__field-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.workspace-settings-menu__number {
+  width: 5.5rem;
+}
+
+.workspace-settings-menu__value,
+.workspace-settings-menu__section-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.workspace-settings-menu__reset {
+  justify-self: start;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  box-shadow: var(--color-shadow);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.learning-unit-layout-frame {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.learning-unit-content-shell {
+  align-items: start;
+}
+
+.learning-unit-content-shell .workspace-outline {
+  position: sticky;
+  top: 1rem;
+}
+
+.learning-unit-content-shell .learning-unit-pane-grid {
+  gap: var(--learning-unit-pane-gap);
+}
+
+.learning-unit-content-shell .learning-unit-workspace-surface {
+  gap: 0;
+  padding: 1rem 1.15rem;
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  box-shadow: var(--color-shadow);
+}
+
+.learning-unit-content-shell .learning-unit-workspace-surface--focused {
+  padding: 1rem 1.15rem;
+  border-color: var(--color-accent);
+}
+
+.learning-unit-content-shell .learning-unit-pane__stack {
+  gap: 0;
+}
+
+.learning-unit-content-shell .learning-work-item,
+.learning-unit-content-shell .history-entry {
+  border-bottom: 2px solid var(--color-border);
+}
+
+.learning-unit-content-shell .learning-work-item__toggle {
+  padding: 0.45rem 0;
+}
+
+.learning-unit-content-shell .learning-work-item__title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.learning-unit-content-shell .learning-work-item__body {
+  padding-bottom: 0.55rem;
+}
+
+.learning-unit-content-shell .learning-work-item__start-card {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.learning-unit-content-shell .learning-task-inline-editor,
+.learning-unit-content-shell .learning-response-panel {
+  box-shadow: 3px 3px 0 0 rgba(27, 27, 27, 0.98);
+}
+
+.learning-unit-content-shell .learning-response-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.learning-unit-content-shell .learning-response-panel summary::after {
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.learning-unit-content-shell .learning-response-panel[open] summary::after {
+  content: "−";
+}
+
+.graph-stage-frame .learning-unit-stage--graph,
+.graph-stage-frame .teacher-flow-workspace {
+  height: min(82vh, 58rem);
+  min-height: 36rem;
+  background:
+    linear-gradient(var(--color-bg-base), var(--color-bg-base)),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent 23px,
+      color-mix(in srgb, var(--color-border) 14%, transparent 86%) 23px,
+      color-mix(in srgb, var(--color-border) 14%, transparent 86%) 24px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 23px,
+      color-mix(in srgb, var(--color-border) 14%, transparent 86%) 23px,
+      color-mix(in srgb, var(--color-border) 14%, transparent 86%) 24px
+    );
+  box-shadow: var(--color-shadow);
+  overflow: hidden;
+}
+
+.graph-stage-frame--chromeless .graph-stage-frame__body {
+  display: grid;
+  gap: 0;
+}
+
+.graph-stage-frame--chromeless .learning-unit-stage--graph,
+.graph-stage-frame--chromeless .teacher-flow-workspace {
+  box-shadow: none;
+}
+
+.graph-stage-frame .teacher-flow-canvas,
+.graph-stage-frame .learning-unit-stage--graph .teacher-flow-canvas {
+  background: transparent;
+}
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel {
+  position: sticky;
+  top: 1rem;
+}
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-link-action,
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-link-action--subtle,
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-link-action--danger {
+  justify-self: start;
+}
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-unit-commandbar-popover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .learning-work-item__start-card {
@@ -754,6 +1139,12 @@ h6,
   color: var(--color-text);
 }
 
+.teacher-flow-unit-node__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem 0.55rem;
+}
+
 .teacher-flow-unit-node__state {
   justify-self: end;
   font-family: var(--font-mono);
@@ -762,6 +1153,46 @@ h6,
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--color-text-muted);
+}
+
+.teacher-flow-unit-node--learner {
+  width: 100%;
+  height: 100%;
+  padding: 0.92rem 0.98rem 0.86rem;
+  appearance: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+}
+
+.teacher-flow-unit-node--learner:disabled {
+  cursor: default;
+}
+
+.teacher-flow-unit-node--interactive {
+  cursor: pointer;
+}
+
+.teacher-flow-unit-node--learner:hover:enabled,
+.teacher-flow-unit-node--learner:focus-visible {
+  border-color: var(--color-accent);
+}
+
+.teacher-flow-unit-node__state--open {
+  color: var(--color-accent);
+}
+
+.teacher-flow-unit-node__state--done {
+  color: var(--color-success);
+}
+
+.teacher-flow-unit-node__state--locked {
+  color: var(--color-text-muted);
+}
+
+.teacher-flow-unit-node--learner-locked,
+.learning-flow-node--locked .teacher-flow-unit-node--learner {
+  opacity: 0.72;
 }
 
 .teacher-flow-unit-node__editor,
@@ -820,16 +1251,40 @@ h6,
   opacity: 1;
 }
 
+.teacher-flow-workspace {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.teacher-flow-workspace--with-inspector {
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+  align-items: start;
+}
+
+.teacher-flow-workspace__canvas {
+  min-width: 0;
+}
+
 @media (max-width: 720px) {
   .workspace-body {
     width: 100%;
   }
 
   .preview-shell-sample__topbar,
+  .preview-workspace-grid,
   .learning-work-item__start-card-actions,
   .learning-task-inline-editor__header,
-  .page-action-head__main {
+  .page-action-head__main,
+  .workspace-frame-header__main,
+  .workspace-outline__group-head,
+  .graph-stage-frame__header,
+  .graph-inspector-panel__header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .teacher-flow-workspace--with-inspector,
+  .preview-workspace-grid {
+    grid-template-columns: 1fr;
   }
 }

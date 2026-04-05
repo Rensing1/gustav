@@ -1,15 +1,17 @@
 <script lang="ts">
-  import TeacherGraphCommandBar from "$lib/components/teacher-unit-graph/TeacherGraphCommandBar.svelte";
-  import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
+  import LearningUnitContentWorkspace from "$lib/components/learning-unit/LearningUnitContentWorkspace.svelte";
   import LearningResponseGroup from "$lib/components/learning-unit/LearningResponseGroup.svelte";
-  import type { LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type { ContentGroup } from "$lib/learning-unit/workspace";
+  import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
 
   import AuthFrame from "./AuthFrame.svelte";
   import BreadcrumbBar from "./BreadcrumbBar.svelte";
+  import GraphInspectorPanel from "./GraphInspectorPanel.svelte";
+  import GraphStageFrame from "./GraphStageFrame.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
-  import PageActionHead from "./PageActionHead.svelte";
   import QuietList from "./QuietList.svelte";
   import QuietListEntry from "./QuietListEntry.svelte";
+  import TeacherGraphWorkspaceFrame from "./TeacherGraphWorkspaceFrame.svelte";
 
   let { userName }: { userName: string } = $props();
 
@@ -39,6 +41,41 @@
     kind: "native"
   };
 
+  const previewMaterial: LearningMaterial = {
+    id: "preview-material-1",
+    title: "Einführung",
+    kind: "markdown",
+    position: 1,
+    body_md: "## Material\n\nKlare Objektgrenzen schaffen Ruhe im Arbeitsraum."
+  };
+
+  const previewContentGroups: ContentGroup[] = [
+    {
+      id: "module-1",
+      title: "Modul Graphen",
+      items: [
+        {
+          key: "material:preview-material-1",
+          kind: "material",
+          title: "Einführung",
+          position: 1,
+          contextLabel: "Modul Graphen",
+          moduleId: "module-1",
+          material: previewMaterial
+        },
+        {
+          key: "task:preview-task-1",
+          kind: "task",
+          title: "Aufgabe 1",
+          position: 2,
+          contextLabel: "Modul Graphen",
+          moduleId: "module-1",
+          task: previewTask
+        }
+      ]
+    }
+  ];
+
 </script>
 
 <div class="workspace-page preview-page" data-theme={previewTheme}>
@@ -49,6 +86,7 @@
       Diese interne Fläche zeigt Tokens, Shell-Bausteine und die erste
       Produktfamilie für Theme- und Strukturvergleiche.
     </p>
+    <p class="preview-heading__meta">Angemeldet als {userName}</p>
     <div class="preview-reference-banner">
       <p class="workspace-label">Mistral Referenz</p>
       <strong>Taskfläche zuerst, Graph daraus abgeleitet.</strong>
@@ -97,17 +135,7 @@
     </article>
 
     <article class="preview-card">
-      <p class="preview-card__eyebrow">Lehrkraft-Kopf</p>
-      <PageActionHead
-        backHref="/teaching/units"
-        backLabel="Zurück zu Lerneinheiten"
-        title="Programmieren mit Scratch"
-        copy="8 Phasen · 21 Module · dieselbe Graphansicht wie für Lernende"
-      />
-    </article>
-
-    <article class="preview-card">
-      <p class="preview-card__eyebrow">Commandbar</p>
+      <p class="preview-card__eyebrow">Lehrkraft-Graph</p>
       {#snippet previewCommandPopovers()}
         <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Phase hinzufügen">
           <div class="workspace-unit-commandbar-popover__header">
@@ -128,26 +156,135 @@
           </form>
         </div>
       {/snippet}
-      <TeacherGraphCommandBar
-        actions={[
+      <TeacherGraphWorkspaceFrame
+        backHref="/teaching/units"
+        backLabel="Zurück zu Lerneinheiten"
+        title="Programmieren mit Scratch"
+        copy="8 Phasen · 21 Module · dieselbe Graphansicht wie für Lernende"
+        commandBarActions={[
           { label: "Phase hinzufügen", href: "/ui-lab", active: true },
           { label: "Modul hinzufügen", href: "/ui-lab", active: false }
         ]}
-        popovers={previewCommandPopovers}
-      />
+        commandBarPopovers={previewCommandPopovers}
+        inspectorOpen={true}
+      >
+        {#snippet canvas()}
+          <div class="preview-graph-reference">
+            <div class="teacher-flow-status teacher-flow-status--success">Phase gespeichert.</div>
+
+            <div class="preview-graph-sample teacher-flow-shell">
+              <div class="preview-graph-sample__phase">
+                <div class="teacher-flow-phase-band teacher-flow-phase-band--selected">
+                  <div class="teacher-flow-phase-band__label">
+                    <span class="teacher-flow-phase-band__kicker">PHASE 01</span>
+                    <strong class="teacher-flow-phase-band__title">Erste Schritte</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="preview-graph-sample__node teacher-flow-unit-node teacher-flow-unit-node--selected">
+                <div class="teacher-flow-unit-node__copy">
+                  <div class="teacher-flow-unit-node__header">
+                    <div class="teacher-flow-unit-node__header-main">
+                      <span aria-hidden="true" class="teacher-flow-unit-node__drag-handle"></span>
+                      <span>Modul 1</span>
+                    </div>
+                    <span class="teacher-flow-unit-node__state">Module node</span>
+                    <a class="teacher-flow-unit-node__editor" href="/ui-lab">Öffnen</a>
+                  </div>
+                  <strong>Fachbegriffe</strong>
+                  <small>1 Material · 1 Aufgabe</small>
+                </div>
+
+                <div class="teacher-flow-unit-node__popover">
+                  <a class="teacher-flow-unit-node__popover-action" href="/ui-lab">Inhalt bearbeiten</a>
+                  <button class="teacher-flow-unit-node__popover-action teacher-flow-unit-node__popover-action--subtle" type="button">
+                    Eigenschaften
+                  </button>
+                  <a class="teacher-flow-unit-node__popover-action teacher-flow-unit-node__popover-action--subtle" href="/ui-lab">
+                    Aufgabe hinzufügen
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        {/snippet}
+
+        {#snippet inspector()}
+          <GraphInspectorPanel eyebrow="Property inspector" title="Abschnitt bearbeiten" closeHref="/ui-lab">
+            {#snippet children()}
+              <form class="workspace-form workspace-form--compact">
+                <label class="workspace-field">
+                  <span>Name</span>
+                  <input name="title" type="text" value="Einführung" />
+                </label>
+                <div class="workspace-unit-commandbar-popover__actions">
+                  <button class="workspace-link-action" type="button">Speichern</button>
+                  <a class="workspace-link-action workspace-link-action--subtle" href="/ui-lab">Inhalt bearbeiten</a>
+                </div>
+              </form>
+            {/snippet}
+
+            {#snippet footer()}
+              <button class="workspace-link-action workspace-link-action--danger" type="button">Abschnitt löschen</button>
+            {/snippet}
+          </GraphInspectorPanel>
+        {/snippet}
+      </TeacherGraphWorkspaceFrame>
     </article>
 
     <article class="preview-card">
       <p class="preview-card__eyebrow">Taskfläche</p>
-      <LearningTaskCard
+      <LearningUnitContentWorkspace
+        titleLabel="Taskfläche"
+        title="Erste Schritte"
+        meta="1 Modul geöffnet · Fokus auf Inhalte"
         courseId="course-1"
-        task={previewTask}
-        taskTitle="Begriffe präzisieren"
-        contextLabel="Modul Graphen"
-        unitType="linear"
-        expanded={true}
-        submitted={true}
+        unitType="modular"
+        moduleId="module-1"
+        tocOpen={true}
+        splitView={false}
+        activePane="left"
+        visiblePaneIds={["left"]}
+        contentGroups={previewContentGroups}
+        paneItems={{
+          left: previewContentGroups[0].items.map((item) => ({ item, expanded: true })),
+          right: []
+        }}
+        historyTaskId={previewTask.id}
         history={[sampleSubmission]}
+        submittedTaskId={previewTask.id}
+        submissionMessage="Aufgabe abgegeben."
+        submissionErrorTaskId={null}
+        submissionErrorMessage={null}
+        submissionFocusByPane={{ left: null, right: null }}
+        submissionModeByPane={{ left: null, right: null }}
+        showSplitToggle={true}
+        layoutMenuEnabled={true}
+        tocWidth={16.25}
+        workspaceWidth={72}
+        splitRatio={50}
+        tocGap={1.1}
+        paneGap={1.1}
+        fontScale={1}
+        itemDomId={(paneId, itemKey) => `${paneId}-${itemKey}`}
+        onToggleToc={() => {}}
+        onToggleSplitView={() => {}}
+        onResetLayout={() => {}}
+        onUpdateTocWidth={() => {}}
+        onPreviewWorkspaceWidth={() => {}}
+        onCommitWorkspaceWidth={() => {}}
+        onPreviewFontScale={() => {}}
+        onCommitFontScale={() => {}}
+        onUpdateSplitRatio={() => {}}
+        onUpdateTocGap={() => {}}
+        onUpdatePaneGap={() => {}}
+        onSetActivePane={() => {}}
+        onOpenItem={() => {}}
+        onToggleItem={() => {}}
+        onEnterSubmissionWorkspace={() => {}}
+        onEnterUploadWorkspace={() => {}}
+        onExitSubmissionWorkspace={() => {}}
       />
     </article>
 
@@ -161,41 +298,102 @@
     </article>
 
     <article class="preview-card">
-      <p class="preview-card__eyebrow">Graph-Knoten</p>
-      <div class="preview-graph-sample teacher-flow-shell">
-        <div class="preview-graph-sample__phase">
-          <div class="teacher-flow-phase-band teacher-flow-phase-band--selected">
-            <div class="teacher-flow-phase-band__label">
-              <span class="teacher-flow-phase-band__kicker">PHASE 01</span>
-              <strong class="teacher-flow-phase-band__title">Erste Schritte</strong>
-            </div>
-          </div>
-        </div>
-
-        <div class="preview-graph-sample__node teacher-flow-unit-node teacher-flow-unit-node--selected">
-          <div class="teacher-flow-unit-node__copy">
-            <div class="teacher-flow-unit-node__header">
-              <div class="teacher-flow-unit-node__header-main">
-                <span aria-hidden="true" class="teacher-flow-unit-node__drag-handle"></span>
-                <span>Modul 1</span>
+      <p class="preview-card__eyebrow">Übersicht</p>
+      <GraphStageFrame chromeless eyebrow="Graph-Stage" title="Lernpfad" copy="Taskfläche zuerst, Graph daraus abgeleitet.">
+        {#snippet children()}
+          <div class="preview-graph-sample teacher-flow-shell">
+            <div class="preview-graph-sample__phase">
+              <div class="teacher-flow-phase-band teacher-flow-phase-band--selected">
+                <div class="teacher-flow-phase-band__label">
+                  <span class="teacher-flow-phase-band__kicker">PHASE 01</span>
+                  <strong class="teacher-flow-phase-band__title">Erste Schritte</strong>
+                </div>
               </div>
-              <a class="teacher-flow-unit-node__editor" href="/ui-lab">Öffnen</a>
             </div>
-            <strong>Fachbegriffe</strong>
-            <small>1 Material · 1 Aufgabe</small>
-          </div>
 
-          <div class="teacher-flow-unit-node__popover">
-            <a class="teacher-flow-unit-node__popover-action" href="/ui-lab">Inhalt bearbeiten</a>
-            <button class="teacher-flow-unit-node__popover-action teacher-flow-unit-node__popover-action--subtle" type="button">
-              Eigenschaften
-            </button>
-            <a class="teacher-flow-unit-node__popover-action teacher-flow-unit-node__popover-action--subtle" href="/ui-lab">
-              Aufgabe hinzufügen
-            </a>
+            <div class="preview-graph-sample__node teacher-flow-unit-node teacher-flow-unit-node--selected">
+              <button
+                class="teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-open teacher-flow-unit-node--selected"
+                type="button"
+              >
+                <div class="teacher-flow-unit-node__copy">
+                  <div class="teacher-flow-unit-node__header">
+                    <div class="teacher-flow-unit-node__header-main">
+                      <span>Modul 1</span>
+                    </div>
+                    <span class="teacher-flow-unit-node__state teacher-flow-unit-node__state--open">Offen</span>
+                  </div>
+                  <strong>Fachbegriffe</strong>
+                  <div class="teacher-flow-unit-node__meta">
+                    <small>1/1 Aufgaben</small>
+                    <small>1 Materialien</small>
+                  </div>
+                </div>
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+        {/snippet}
+      </GraphStageFrame>
+    </article>
+
+    <article class="preview-card">
+      <p class="preview-card__eyebrow">Lehrkraft-Knoten</p>
+      <GraphStageFrame chromeless eyebrow="Graph-Stage" title="Teacher flow" copy="Gleiche Objektfamilie, andere Werkzeuge.">
+        {#snippet children()}
+          <div class="preview-graph-sample teacher-flow-shell">
+            <div class="preview-graph-sample__phase">
+              <div class="teacher-flow-phase-band teacher-flow-phase-band--selected">
+                <div class="teacher-flow-phase-band__label">
+                  <span class="teacher-flow-phase-band__kicker">PHASE 01</span>
+                  <strong class="teacher-flow-phase-band__title">Erste Schritte</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="preview-graph-sample__node teacher-flow-unit-node teacher-flow-unit-node--selected">
+              <div class="teacher-flow-unit-node__copy">
+                <div class="teacher-flow-unit-node__header">
+                  <div class="teacher-flow-unit-node__header-main">
+                    <span aria-hidden="true" class="teacher-flow-unit-node__drag-handle"></span>
+                    <span>Modul 1</span>
+                  </div>
+                  <span class="teacher-flow-unit-node__state">Module node</span>
+                  <a class="teacher-flow-unit-node__editor" href="/ui-lab">Öffnen</a>
+                </div>
+                <strong>Fachbegriffe</strong>
+                <small>1 Material · 1 Aufgabe</small>
+              </div>
+
+              <div class="teacher-flow-unit-node__popover">
+                <a class="teacher-flow-unit-node__popover-action" href="/ui-lab">Inhalt bearbeiten</a>
+                <button class="teacher-flow-unit-node__popover-action teacher-flow-unit-node__popover-action--subtle" type="button">
+                  Eigenschaften
+                </button>
+                <a class="teacher-flow-unit-node__popover-action teacher-flow-unit-node__popover-action--subtle" href="/ui-lab">
+                  Aufgabe hinzufügen
+                </a>
+              </div>
+            </div>
+          </div>
+        {/snippet}
+      </GraphStageFrame>
+    </article>
+
+    <article class="preview-card">
+      <p class="preview-card__eyebrow">Inspector</p>
+      <GraphInspectorPanel eyebrow="Property inspector" title="Phase bearbeiten" closeHref="/ui-lab">
+        {#snippet children()}
+          <form class="workspace-form workspace-form--compact">
+            <label class="workspace-field">
+              <span>Name</span>
+              <input name="title" type="text" value="Erste Schritte" />
+            </label>
+            <div class="workspace-unit-commandbar-popover__actions">
+              <button class="workspace-link-action" type="button">Speichern</button>
+            </div>
+          </form>
+        {/snippet}
+      </GraphInspectorPanel>
     </article>
 
     <article class="preview-card">

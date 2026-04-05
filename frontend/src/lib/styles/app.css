@@ -1403,7 +1403,6 @@ select {
 .learning-unit-toolbar {
   display: block;
   padding-bottom: 0.04rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
   overflow: visible;
 }
 

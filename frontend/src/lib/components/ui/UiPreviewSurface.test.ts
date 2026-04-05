@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/svelte";
+import { within } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 
 import UiPreviewSurface from "./UiPreviewSurface.svelte";
 
 describe("UiPreviewSurface", () => {
-  it("renders the internal preview with shell, teacher graph references, learner lists and feedback blocks", () => {
+  it("renders the internal preview with shell, content workspace, teacher graph references and feedback blocks", () => {
     render(UiPreviewSurface, {
       props: {
         userName: "Felix"
@@ -16,12 +17,33 @@ describe("UiPreviewSurface", () => {
     expect(screen.getByText("Mistral Referenz")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Programmieren mit Scratch" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zurück zu Lerneinheiten" })).toHaveAttribute("href", "/teaching/units");
+    expect(screen.getByRole("heading", { name: "Inhaltsverzeichnis" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Arbeitsfeld")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Klasse 10a" })).toHaveAttribute("href", "/learning");
     expect(screen.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeInTheDocument();
     expect(screen.getAllByText("Phase hinzufügen").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Eigenschaften" })).toBeInTheDocument();
-    expect(screen.getByText("Taskfläche")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Eigenschaften" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Taskfläche").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Property inspector").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Abschnitt bearbeiten" })).toBeInTheDocument();
     expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Erfolgreich abgemeldet" })).toBeInTheDocument();
+
+    const learnerGraphCard = screen.getByText("Übersicht", { selector: ".preview-card__eyebrow" }).closest(".preview-card");
+    expect(learnerGraphCard).not.toBeNull();
+    if (!(learnerGraphCard instanceof HTMLElement)) {
+      throw new Error("learner graph preview card missing");
+    }
+    const learnerScope = within(learnerGraphCard);
+    expect(learnerScope.getByText("Offen")).toBeInTheDocument();
+    expect(learnerScope.getByText("1/1 Aufgaben")).toBeInTheDocument();
+    expect(learnerScope.queryByText("Eigenschaften")).toBeNull();
+
+    const teacherNodeCard = screen.getByText("Lehrkraft-Knoten", { selector: ".preview-card__eyebrow" }).closest(".preview-card");
+    expect(teacherNodeCard).not.toBeNull();
+    if (!(teacherNodeCard instanceof HTMLElement)) {
+      throw new Error("teacher graph preview card missing");
+    }
+    expect(within(teacherNodeCard).getByText("Eigenschaften")).toBeInTheDocument();
   });
 });

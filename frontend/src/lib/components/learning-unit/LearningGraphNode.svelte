@@ -72,23 +72,29 @@
   />
 
   <button
-    class:learning-flow-unit-node--selected={selected}
-    class:learning-flow-unit-node--interactive={Boolean(data.openable)}
-    class={`learning-flow-unit-node learning-flow-unit-node--${data.status ?? "locked"}`}
+    class:teacher-flow-unit-node--selected={selected}
+    class:teacher-flow-unit-node--interactive={Boolean(data.openable)}
+    class={`teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-${data.status ?? "locked"}`}
     type="button"
     disabled={!data.openable}
     onclick={handleClick}
   >
-    <div class="learning-flow-unit-node__header">
-      <span class="learning-flow-unit-node__kicker">{data.kicker}</span>
-      <span class="learning-flow-unit-node__status">{statusLabel()}</span>
-    </div>
+    <div class="teacher-flow-unit-node__copy">
+      <div class="teacher-flow-unit-node__header">
+        <div class="teacher-flow-unit-node__header-main">
+          <span>{data.kicker}</span>
+        </div>
+        <span class={`teacher-flow-unit-node__state teacher-flow-unit-node__state--${data.status ?? "locked"}`}>
+          {statusLabel()}
+        </span>
+      </div>
 
-    <strong>{data.title}</strong>
+      <strong>{data.title}</strong>
 
-    <div class="learning-flow-unit-node__meta">
-      <small>{data.progressLabel}</small>
-      <small>{data.materialsLabel}</small>
+      <div class="teacher-flow-unit-node__meta">
+        <small>{data.progressLabel}</small>
+        <small>{data.materialsLabel}</small>
+      </div>
     </div>
   </button>
 </div>

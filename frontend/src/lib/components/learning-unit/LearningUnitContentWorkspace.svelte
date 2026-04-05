@@ -1,6 +1,9 @@
 <script lang="ts">
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
+  import WorkspaceFrameHeader from "$lib/components/ui/WorkspaceFrameHeader.svelte";
+  import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
+  import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";
   import type {
     ContentGroup,
     PaneId
@@ -131,11 +134,6 @@
 
   let layoutMenuOpen = $state(false);
 
-  function numericValue(event: Event): number {
-    const next = Number((event.currentTarget as HTMLInputElement).value);
-    return Number.isFinite(next) ? next : 0;
-  }
-
   const shellStyle = $derived.by(
     () =>
       [
@@ -165,232 +163,38 @@
 
 <div class="learning-unit-layout-rail">
   <div class="learning-unit-layout-frame" style={shellStyle}>
-<section class="learning-unit-content-toolbar">
-  {#if titleLabel || title || meta}
-    <div class="learning-unit-content-toolbar__copy">
-      {#if titleLabel}
-        <p class="workspace-label">{titleLabel}</p>
-      {/if}
-      {#if title}
-        <h3>{title}</h3>
-      {/if}
-      {#if meta}
-        <p class="learning-unit-content-toolbar__meta">{meta}</p>
-      {/if}
-    </div>
-  {/if}
-
-  <div class="learning-unit-content-toolbar__actions">
-    {#if layoutMenuEnabled}
-      <div class="learning-unit-layout-menu" data-layout-menu-root>
-        <button
-          aria-expanded={layoutMenuOpen}
-          aria-haspopup="dialog"
-          aria-label="Layout-Einstellungen"
-          class:workspace-top-action--active={layoutMenuOpen}
-          class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
-          title="Layout-Einstellungen"
-          type="button"
-          onclick={() => {
-            layoutMenuOpen = !layoutMenuOpen;
-          }}
-        >
-          <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
-            <path d="M10 4.25a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 4.25Z"></path>
-            <path d="M10 8.55a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 8.55Z"></path>
-            <path d="M10 12.85a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 12.85Z"></path>
-          </svg>
-        </button>
-
-        {#if layoutMenuOpen}
-          <div class="learning-unit-layout-menu__panel" role="dialog" aria-label="Layout-Einstellungen">
-            <label class="learning-unit-layout-menu__toggle">
-              <span>Inhaltsverzeichnis</span>
-              <input checked={tocOpen} type="checkbox" onchange={onToggleToc} />
-            </label>
-
-            {#if showSplitToggle}
-              <label class="learning-unit-layout-menu__toggle">
-                <span>Zwei Ansichten</span>
-                <input checked={splitView} type="checkbox" onchange={onToggleSplitView} />
-              </label>
-            {/if}
-
-            <label class="learning-unit-layout-menu__field">
-              <span class="learning-unit-layout-menu__field-head">
-                <span>Breite Inhaltsverzeichnis</span>
-                <span class="learning-unit-layout-menu__value">{tocWidth.toFixed(2)} rem</span>
-              </span>
-              <div class="learning-unit-layout-menu__field-controls">
-                <input
-                  type="range"
-                  min="0"
-                  max="120"
-                  step="0.25"
-                  value={tocWidth}
-                  oninput={(event) => onUpdateTocWidth(numericValue(event))}
-                />
-                <input
-                  class="learning-unit-layout-menu__number"
-                  type="number"
-                  min="0"
-                  max="120"
-                  step="0.25"
-                  value={tocWidth}
-                  oninput={(event) => onUpdateTocWidth(numericValue(event))}
-                />
-              </div>
-            </label>
-
-            <label class="learning-unit-layout-menu__field">
-              <span class="learning-unit-layout-menu__field-head">
-                <span>Breite Arbeitsrahmen</span>
-                <span class="learning-unit-layout-menu__value">{workspaceWidth.toFixed(1)} rem</span>
-              </span>
-              <div class="learning-unit-layout-menu__field-controls">
-                <input
-                  type="range"
-                  min="16"
-                  max="320"
-                  step="0.5"
-                  value={workspaceWidth}
-                  oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))}
-                  onchange={(event) => onCommitWorkspaceWidth(numericValue(event))}
-                />
-                <input
-                  class="learning-unit-layout-menu__number"
-                  type="number"
-                  min="16"
-                  max="320"
-                  step="0.5"
-                  value={workspaceWidth}
-                  oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))}
-                  onchange={(event) => onCommitWorkspaceWidth(numericValue(event))}
-                />
-              </div>
-            </label>
-
-            <label class="learning-unit-layout-menu__field">
-              <span class="learning-unit-layout-menu__field-head">
-                <span>Schriftgröße</span>
-                <span class="learning-unit-layout-menu__value">{fontScale.toFixed(2)}x</span>
-              </span>
-              <div class="learning-unit-layout-menu__field-controls">
-                <input
-                  type="range"
-                  min="0.1"
-                  max="4"
-                  step="0.05"
-                  value={fontScale}
-                  oninput={(event) => onPreviewFontScale(numericValue(event))}
-                  onchange={(event) => onCommitFontScale(numericValue(event))}
-                />
-                <input
-                  class="learning-unit-layout-menu__number"
-                  type="number"
-                  min="0.1"
-                  max="4"
-                  step="0.05"
-                  value={fontScale}
-                  oninput={(event) => onPreviewFontScale(numericValue(event))}
-                  onchange={(event) => onCommitFontScale(numericValue(event))}
-                />
-              </div>
-            </label>
-
-            <label class="learning-unit-layout-menu__field">
-              <span class="learning-unit-layout-menu__field-head">
-                <span>Aufteilung links / rechts</span>
-                <span class="learning-unit-layout-menu__value">{splitRatio.toFixed(0)} / {(100 - splitRatio).toFixed(0)}</span>
-              </span>
-              <div class="learning-unit-layout-menu__field-controls">
-                <input
-                  disabled={!splitView}
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={splitRatio}
-                  oninput={(event) => onUpdateSplitRatio(numericValue(event))}
-                />
-                <input
-                  class="learning-unit-layout-menu__number"
-                  disabled={!splitView}
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={splitRatio}
-                  oninput={(event) => onUpdateSplitRatio(numericValue(event))}
-                />
-              </div>
-            </label>
-
-            <div class="learning-unit-layout-menu__section">
-              <p class="learning-unit-layout-menu__section-title">Abstände</p>
-
-              <label class="learning-unit-layout-menu__field">
-                <span class="learning-unit-layout-menu__field-head">
-                  <span>Abstand Inhaltsverzeichnis</span>
-                  <span class="learning-unit-layout-menu__value">{tocGap.toFixed(1)} rem</span>
-                </span>
-                <div class="learning-unit-layout-menu__field-controls">
-                  <input
-                    type="range"
-                    min="0"
-                    max="40"
-                    step="0.1"
-                    value={tocGap}
-                    oninput={(event) => onUpdateTocGap(numericValue(event))}
-                  />
-                  <input
-                    class="learning-unit-layout-menu__number"
-                    type="number"
-                    min="0"
-                    max="40"
-                    step="0.1"
-                    value={tocGap}
-                    oninput={(event) => onUpdateTocGap(numericValue(event))}
-                  />
-                </div>
-              </label>
-
-              <label class="learning-unit-layout-menu__field">
-                <span class="learning-unit-layout-menu__field-head">
-                  <span>Abstand Arbeitsflächen</span>
-                  <span class="learning-unit-layout-menu__value">{paneGap.toFixed(1)} rem</span>
-                </span>
-                <div class="learning-unit-layout-menu__field-controls">
-                  <input
-                    type="range"
-                    min="0"
-                    max="40"
-                    step="0.1"
-                    value={paneGap}
-                    oninput={(event) => onUpdatePaneGap(numericValue(event))}
-                  />
-                  <input
-                    class="learning-unit-layout-menu__number"
-                    type="number"
-                    min="0"
-                    max="40"
-                    step="0.1"
-                    value={paneGap}
-                    oninput={(event) => onUpdatePaneGap(numericValue(event))}
-                  />
-                </div>
-              </label>
-            </div>
-
-            <button class="learning-unit-layout-menu__reset" type="button" onclick={onResetLayout}>
-              Standardlayout wiederherstellen
-            </button>
-          </div>
+    <WorkspaceFrameHeader eyebrow={titleLabel} title={title} meta={meta}>
+      {#snippet actions()}
+        {#if layoutMenuEnabled}
+          <WorkspaceSettingsMenu
+            open={layoutMenuOpen}
+            {tocOpen}
+            {splitView}
+            {showSplitToggle}
+            {tocWidth}
+            {workspaceWidth}
+            {splitRatio}
+            {tocGap}
+            {paneGap}
+            {fontScale}
+            onToggleMenu={() => {
+              layoutMenuOpen = !layoutMenuOpen;
+            }}
+            {onToggleToc}
+            {onToggleSplitView}
+            {onResetLayout}
+            {onUpdateTocWidth}
+            {onPreviewWorkspaceWidth}
+            {onCommitWorkspaceWidth}
+            {onPreviewFontScale}
+            {onCommitFontScale}
+            {onUpdateSplitRatio}
+            {onUpdateTocGap}
+            {onUpdatePaneGap}
+          />
         {/if}
-      </div>
-    {/if}
-  </div>
-</section>
+      {/snippet}
+    </WorkspaceFrameHeader>
 
 <section
   class:learning-unit-content-shell--single={!splitView}
@@ -399,48 +203,19 @@
   style={shellStyle}
 >
   {#if tocOpen}
-    <aside class="learning-unit-toc" aria-label="Inhaltsverzeichnis">
-      <header class="learning-unit-toc__header">
-        <div class="learning-unit-toc__copy">
-          <h3>Inhaltsverzeichnis</h3>
-        </div>
-      </header>
-
-      <div class="learning-unit-toc__body">
-        {#each contentGroups as group}
-          <section class="learning-unit-toc__group">
-            {#if group.title}
-              <div class="learning-unit-toc__group-head">
-                <p class="learning-unit-toc__group-title">{group.title}</p>
-                {#if unitType === "modular" && onRemoveGroup}
-                  <button
-                    aria-label={`Modul ${group.title} ausblenden`}
-                    class="learning-unit-toc__group-remove"
-                    title={`Modul ${group.title} ausblenden`}
-                    type="button"
-                    onclick={() => onRemoveGroup(group.id)}
-                  >
-                    ×
-                  </button>
-                {/if}
-              </div>
-            {/if}
-            <div class="learning-unit-toc__items">
-              {#each group.items as item}
-                <button
-                  class:learning-unit-toc__item--active={tocItemActive(item.key)}
-                  class="learning-unit-toc__item"
-                  type="button"
-                  onclick={() => onOpenItem(item.key)}
-                >
-                  <span class="learning-unit-toc__item-label">{item.title}</span>
-                </button>
-              {/each}
-            </div>
-          </section>
-        {/each}
-      </div>
-    </aside>
+    <WorkspaceOutline
+      title="Inhaltsverzeichnis"
+      groups={contentGroups.map((group) => ({
+        id: group.id,
+        title: group.title,
+        items: group.items.map((item) => ({ key: item.key, title: item.title }))
+      }))}
+      activeItemKeys={contentGroups.flatMap((group) =>
+        group.items.filter((item) => tocItemActive(item.key)).map((item) => item.key)
+      )}
+      {onOpenItem}
+      onRemoveGroup={unitType === "modular" ? onRemoveGroup : undefined}
+    />
   {/if}
 
   <div

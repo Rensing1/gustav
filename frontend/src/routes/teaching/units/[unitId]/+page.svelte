@@ -10,12 +10,11 @@
   import "@xyflow/svelte/dist/style.css";
 
   import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
-  import TeacherGraphCommandBar, {
-    type TeacherGraphCommandBarAction
-  } from "$lib/components/teacher-unit-graph/TeacherGraphCommandBar.svelte";
+  import type { TeacherGraphCommandBarAction } from "$lib/components/teacher-unit-graph/TeacherGraphCommandBar.svelte";
   import TeacherGraphEdge from "$lib/components/teacher-unit-graph/TeacherGraphEdge.svelte";
   import GraphUnitNode from "$lib/components/teacher-unit-graph/GraphUnitNode.svelte";
-  import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
+  import GraphInspectorPanel from "$lib/components/ui/GraphInspectorPanel.svelte";
+  import TeacherGraphWorkspaceFrame from "$lib/components/ui/TeacherGraphWorkspaceFrame.svelte";
   import {
     buildTeacherUnitFlow,
     type TeacherFlowEdge,
@@ -787,92 +786,86 @@
   </details>
 {/snippet}
 
-{#snippet unitHeaderSecondary()}
-  {#snippet unitCommandPopovers()}
-    {#if showCreatePhaseDialog()}
-      <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Phase hinzufügen">
-        <div class="workspace-unit-commandbar-popover__header">
-          <div>
-            <p class="workspace-label">Canvas</p>
-            <h2>Phase hinzufügen</h2>
-          </div>
-          <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-phase": null })}>
-            Schließen
-          </a>
+{#snippet unitCommandPopovers()}
+  {#if showCreatePhaseDialog()}
+    <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Phase hinzufügen">
+      <div class="workspace-unit-commandbar-popover__header">
+        <div>
+          <p class="workspace-label">Canvas</p>
+          <h2>Phase hinzufügen</h2>
         </div>
-        <form method="POST" action="?/createPhase" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
-          <label class="workspace-field">
-            <span>Titel</span>
-            <input name="title" type="text" value={createPhaseValues().title ?? ""} />
-          </label>
-          {#if actionError(form?.createPhase)}
-            <p class="workspace-note workspace-note--error">{actionError(form?.createPhase)}</p>
-          {/if}
-          <div class="workspace-unit-commandbar-popover__actions">
-            <button class="workspace-link-action" type="submit">Anlegen</button>
-          </div>
-        </form>
+        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-phase": null })}>
+          Schließen
+        </a>
       </div>
-    {/if}
-    {#if showCreateModuleDialog()}
-      <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Modul hinzufügen">
-        <div class="workspace-unit-commandbar-popover__header">
-          <div>
-            <p class="workspace-label">Canvas</p>
-            <h2>Modul hinzufügen</h2>
-          </div>
-          <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": null })}>
-            Schließen
-          </a>
+      <form method="POST" action="?/createPhase" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
+        <label class="workspace-field">
+          <span>Titel</span>
+          <input name="title" type="text" value={createPhaseValues().title ?? ""} />
+        </label>
+        {#if actionError(form?.createPhase)}
+          <p class="workspace-note workspace-note--error">{actionError(form?.createPhase)}</p>
+        {/if}
+        <div class="workspace-unit-commandbar-popover__actions">
+          <button class="workspace-link-action" type="submit">Anlegen</button>
         </div>
-        <form method="POST" action="?/createModule" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
-          <label class="workspace-field">
-            <span>Titel</span>
-            <input name="title" type="text" value={createModuleValues().title ?? ""} />
-          </label>
-          <label class="workspace-field">
-            <span>Phase</span>
-            <select name="phase_id">
-              <option value="">Bitte wählen</option>
-              {#each modularPhases() as phase}
-                <option
-                  value={phase.id}
-                  selected={(createModuleValues().phase_id ?? selectedPhaseId()) === phase.id}
-                >
-                  {phase.title}
-                </option>
-              {/each}
-            </select>
-          </label>
-          {#if actionError(form?.createModule)}
-            <p class="workspace-note workspace-note--error">{actionError(form?.createModule)}</p>
-          {/if}
-          <div class="workspace-unit-commandbar-popover__actions">
-            <button class="workspace-link-action" type="submit">Anlegen</button>
-          </div>
-        </form>
+      </form>
+    </div>
+  {/if}
+  {#if showCreateModuleDialog()}
+    <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Modul hinzufügen">
+      <div class="workspace-unit-commandbar-popover__header">
+        <div>
+          <p class="workspace-label">Canvas</p>
+          <h2>Modul hinzufügen</h2>
+        </div>
+        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": null })}>
+          Schließen
+        </a>
       </div>
-    {/if}
-  {/snippet}
-
-  <TeacherGraphCommandBar
-    actions={graphCommandActions()}
-    popovers={unitCommandPopovers}
-  />
+      <form method="POST" action="?/createModule" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
+        <label class="workspace-field">
+          <span>Titel</span>
+          <input name="title" type="text" value={createModuleValues().title ?? ""} />
+        </label>
+        <label class="workspace-field">
+          <span>Phase</span>
+          <select name="phase_id">
+            <option value="">Bitte wählen</option>
+            {#each modularPhases() as phase}
+              <option
+                value={phase.id}
+                selected={(createModuleValues().phase_id ?? selectedPhaseId()) === phase.id}
+              >
+                {phase.title}
+              </option>
+            {/each}
+          </select>
+        </label>
+        {#if actionError(form?.createModule)}
+          <p class="workspace-note workspace-note--error">{actionError(form?.createModule)}</p>
+        {/if}
+        <div class="workspace-unit-commandbar-popover__actions">
+          <button class="workspace-link-action" type="submit">Anlegen</button>
+        </div>
+      </form>
+    </div>
+  {/if}
 {/snippet}
 
-<PageActionHead
+<TeacherGraphWorkspaceFrame
   backHref="/teaching/units"
   backLabel="Zurück zu Lerneinheiten"
   title={workspaceState.unit.title}
   copy={workspaceState.unit.unit_type === "linear"
     ? `${workspaceState.counts.sections_count} Abschnitte · dieselbe Graphansicht wie für Lernende`
     : `${workspaceState.counts.phases_count} Phasen · ${workspaceState.counts.modules_count} Module · dieselbe Graphansicht wie für Lernende`}
-  actions={unitHeaderActions}
-  secondary={unitHeaderSecondary}
-/>
-
-<section class="teacher-flow-workspace teacher-flow-shell">
+  headerActions={unitHeaderActions}
+  commandBarActions={graphCommandActions()}
+  commandBarPopovers={unitCommandPopovers}
+  inspectorOpen={quickEditOpen() && localSelection.kind !== "none" && localSelection.kind !== "edge" && localSelection.kind !== "module"}
+>
+  {#snippet canvas()}
     <SvelteFlow
       bind:nodes={flowNodes}
       bind:edges={flowEdges}
@@ -901,85 +894,75 @@
           <p class={`teacher-flow-status teacher-flow-status--${graphMessage.tone}`}>{graphMessage.text}</p>
         </Panel>
       {/if}
-
     </SvelteFlow>
-</section>
+  {/snippet}
 
-{#if quickEditOpen() && localSelection.kind !== "none" && localSelection.kind !== "edge" && localSelection.kind !== "module"}
-  <div class="dialog-backdrop dialog-backdrop--light">
-    <div class="dialog-card teacher-flow-quickedit">
-      <div class="dialog-card__header">
-        <div>
-          <p class="workspace-label">Canvas</p>
-          <h2>
-            {#if localSelection.kind === "section"}
-              Abschnitt bearbeiten
-            {:else if localSelection.kind === "phase"}
-              Phase bearbeiten
-            {:else}
-              Modul bearbeiten
+  {#snippet inspector()}
+    <GraphInspectorPanel
+      eyebrow="Property inspector"
+      title={localSelection.kind === "section" ? "Abschnitt bearbeiten" : "Phase bearbeiten"}
+      closeHref={pageHref({ quick: null })}
+    >
+      {#snippet children()}
+        {#if localSelection.kind === "section"}
+          <form method="POST" action="?/saveSection" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
+            <input type="hidden" name="section_id" value={localSelection.section.id} />
+            <label class="workspace-field">
+              <span>Name</span>
+              <input name="title" type="text" value={localSelection.section.title} />
+            </label>
+            {#if actionError(form?.saveSection)}
+              <p class="workspace-note workspace-note--error">{actionError(form?.saveSection)}</p>
             {/if}
-          </h2>
-        </div>
-        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ quick: null })}>Schließen</a>
-      </div>
+            <div class="workspace-unit-commandbar-popover__actions">
+              <button class="workspace-link-action" type="submit">Speichern</button>
+              <a class="workspace-link-action workspace-link-action--subtle" href={localSelection.section.editor_href}>
+                Inhalt bearbeiten
+              </a>
+            </div>
+          </form>
+        {:else if localSelection.kind === "phase"}
+          <form method="POST" action="?/savePhase" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
+            <input type="hidden" name="phase_id" value={localSelection.phase.id} />
+            <label class="workspace-field">
+              <span>Name</span>
+              <input name="title" type="text" value={localSelection.phase.title} />
+            </label>
+            {#if actionError(form?.savePhase)}
+              <p class="workspace-note workspace-note--error">{actionError(form?.savePhase)}</p>
+            {/if}
+            <div class="workspace-unit-commandbar-popover__actions">
+              <button class="workspace-link-action" type="submit">Speichern</button>
+              <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={() => moveSelectedPhase(-1)}>
+                Nach oben
+              </button>
+              <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={() => moveSelectedPhase(1)}>
+                Nach unten
+              </button>
+              <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": "1" })}>
+                Modul hinzufügen
+              </a>
+            </div>
+          </form>
+        {/if}
+      {/snippet}
 
-      {#if localSelection.kind === "section"}
-        <form method="POST" action="?/saveSection" class="workspace-form" use:enhance={enhanceGraphForm}>
-          <input type="hidden" name="section_id" value={localSelection.section.id} />
-          <label class="workspace-field">
-            <span>Name</span>
-            <input name="title" type="text" value={localSelection.section.title} />
-          </label>
-          {#if actionError(form?.saveSection)}
-            <p class="workspace-note workspace-note--error">{actionError(form?.saveSection)}</p>
-          {/if}
-          <div class="dialog-card__actions">
-            <button class="workspace-link-action" type="submit">Speichern</button>
-            <a class="workspace-link-action workspace-link-action--subtle" href={localSelection.section.editor_href}>
-              Inhalt bearbeiten
-            </a>
-          </div>
-        </form>
-        <div class="dialog-card__danger">
+      {#snippet footer()}
+        {#if localSelection.kind === "section"}
           <form method="POST" action="?/deleteSection" class="workspace-form" use:enhance={enhanceGraphForm}>
             <input type="hidden" name="section_id" value={localSelection.section.id} />
             <button class="workspace-link-action workspace-link-action--danger" type="submit">Abschnitt löschen</button>
           </form>
-        </div>
-      {:else if localSelection.kind === "phase"}
-        <form method="POST" action="?/savePhase" class="workspace-form" use:enhance={enhanceGraphForm}>
-          <input type="hidden" name="phase_id" value={localSelection.phase.id} />
-          <label class="workspace-field">
-            <span>Name</span>
-            <input name="title" type="text" value={localSelection.phase.title} />
-          </label>
-          {#if actionError(form?.savePhase)}
-            <p class="workspace-note workspace-note--error">{actionError(form?.savePhase)}</p>
-          {/if}
-          <div class="dialog-card__actions">
-            <button class="workspace-link-action" type="submit">Speichern</button>
-            <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={() => moveSelectedPhase(-1)}>
-              Nach oben
-            </button>
-            <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={() => moveSelectedPhase(1)}>
-              Nach unten
-            </button>
-            <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": "1" })}>
-              Modul hinzufügen
-            </a>
-          </div>
-        </form>
-        <div class="dialog-card__danger">
+        {:else if localSelection.kind === "phase"}
           <form method="POST" action="?/deletePhase" class="workspace-form" use:enhance={enhanceGraphForm}>
             <input type="hidden" name="phase_id" value={localSelection.phase.id} />
             <button class="workspace-link-action workspace-link-action--danger" type="submit">Phase löschen</button>
           </form>
-        </div>
-      {/if}
-    </div>
-  </div>
-{/if}
+        {/if}
+      {/snippet}
+    </GraphInspectorPanel>
+  {/snippet}
+</TeacherGraphWorkspaceFrame>
 
 {#if data.showEditDialog}
   <div class="dialog-backdrop">

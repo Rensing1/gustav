@@ -29,4 +29,48 @@ describe("LearningTaskCard", () => {
     expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
     expect(screen.getByText("Datei auswählen")).toBeInTheDocument();
   });
+
+  it("renders collapsed tasks as a compact title row", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 3",
+        contextLabel: "Modul Graphen",
+        unitType: "linear",
+        expanded: false
+      }
+    });
+
+    const toggle = screen.getByRole("button", { name: /aufgabe 3/i });
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("title", "Aufgabe 3");
+    expect(toggle.querySelector("h4")).toBeNull();
+    expect(document.querySelector(".learning-work-item__toggle--collapsed")).not.toBeNull();
+    expect(screen.queryByText("Modul Graphen")).toBeNull();
+    expect(screen.queryByText("Aufgabe")).toBeNull();
+    expect(document.querySelector(".learning-work-item__toggle-icon svg")).not.toBeNull();
+  });
+
+  it("keeps the task header compact when expanded", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 4",
+        contextLabel: "Modul Graphen",
+        unitType: "linear",
+        expanded: true
+      }
+    });
+
+    const toggle = screen.getByRole("button", { name: /aufgabe 4/i });
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("title", "Aufgabe 4");
+    expect(toggle.querySelector("h4")).toBeNull();
+    expect(document.querySelector(".learning-work-item__toggle--collapsed")).toBeNull();
+    expect(screen.queryByText("Modul Graphen")).toBeNull();
+    expect(screen.queryByText("Aufgabe")).toBeNull();
+    expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
+  });
 });

@@ -91,42 +91,41 @@
   </article>
 {:else}
   <article class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--task" id={domId}>
-    <button class="learning-work-item__toggle" type="button" onclick={() => onToggle?.()}>
-      <div class="learning-work-item__header">
-        <div class="learning-work-item__copy">
-          <div class="learning-work-item__kicker-row">
-            {#if contextLabel}
-              <span class="learning-work-item__context">{contextLabel}</span>
-            {/if}
-            <span class="learning-work-item__kicker">Aufgabe</span>
-          </div>
-          <h4>{taskTitle}</h4>
-        </div>
+    <button
+      class:learning-work-item__toggle--collapsed={!expanded}
+      class="learning-work-item__toggle"
+      type="button"
+      title={taskTitle}
+    onclick={() => onToggle?.()}
+  >
+    <div class="learning-work-item__header">
+      <span class="learning-work-item__title">{taskTitle}</span>
 
-        <span class:learning-work-item__toggle-icon--expanded={expanded} class="learning-work-item__toggle-icon" aria-hidden="true">
-          ▾
+      <span class:learning-work-item__toggle-icon--expanded={expanded} class="learning-work-item__toggle-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20">
+            <path d="M6.25 8.25 10 12l3.75-3.75" />
+          </svg>
         </span>
       </div>
     </button>
 
     {#if expanded}
       <div class="learning-work-item__body">
-      <div class="markdown-prose">
-        {@html renderMarkdown(task.instruction_md)}
-      </div>
-
-      {#if task.kind === "h5p" && task.h5p?.content_id}
-        <section class="learning-work-item__support learning-work-item__support--open">
-          <header class="learning-work-item__support-header">
-            <h5>Interaktive Aufgabe</h5>
-          </header>
+      {#if task.kind === "h5p"}
+        {#if task.h5p?.content_id}
           <H5PTaskPlayer
             {courseId}
             taskId={task.id}
             contentId={task.h5p.content_id}
           />
-        </section>
+        {:else}
+          <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
+        {/if}
       {:else}
+        <div class="markdown-prose">
+          {@html renderMarkdown(task.instruction_md)}
+        </div>
+
         <section class="learning-work-item__start-card">
           <div class="learning-work-item__start-card-actions">
             <div class="learning-work-item__start-card-copy">

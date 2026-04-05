@@ -29,20 +29,20 @@
 </script>
 
 <article class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--material" id={domId}>
-  <button class="learning-work-item__toggle" type="button" onclick={() => onToggle?.()}>
+  <button
+    class:learning-work-item__toggle--collapsed={!expanded}
+    class="learning-work-item__toggle"
+    type="button"
+    title={material.title}
+    onclick={() => onToggle?.()}
+  >
     <div class="learning-work-item__header">
-      <div class="learning-work-item__copy">
-        <div class="learning-work-item__kicker-row">
-          {#if contextLabel}
-            <span class="learning-work-item__context">{contextLabel}</span>
-          {/if}
-          <span class="learning-work-item__kicker">{kindLabel()}</span>
-        </div>
-        <h4>{material.title}</h4>
-      </div>
+      <span class="learning-work-item__title">{material.title}</span>
 
       <span class:learning-work-item__toggle-icon--expanded={expanded} class="learning-work-item__toggle-icon" aria-hidden="true">
-        ▾
+        <svg viewBox="0 0 20 20">
+          <path d="M6.25 8.25 10 12l3.75-3.75" />
+        </svg>
       </span>
     </div>
   </button>

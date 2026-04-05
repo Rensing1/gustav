@@ -2051,7 +2051,7 @@ select {
 .learning-work-item__toggle {
   display: flex;
   align-items: center;
-  min-height: 2rem;
+  min-height: 2.2rem;
   padding-block: 0;
 }
 
@@ -2059,7 +2059,7 @@ select {
   width: 100%;
   align-items: center;
   gap: 0.45rem;
-  min-height: 2rem;
+  min-height: 2.2rem;
 }
 
 .learning-work-item__kicker-row {
@@ -2078,22 +2078,22 @@ select {
   margin: 0;
   min-width: 0;
   overflow: hidden;
-  font-size: calc(0.84rem * var(--learning-unit-font-scale));
-  font-weight: 500;
-  line-height: 1.15;
+  font-size: calc(0.88rem * var(--learning-unit-font-scale));
+  font-weight: 600;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .learning-work-item__toggle-icon {
-  width: 0.9rem;
-  height: 0.9rem;
-  flex: 0 0 0.9rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 0.95rem;
 }
 
 .learning-work-item__toggle-icon svg {
-  width: 0.72rem;
-  height: 0.72rem;
+  width: 0.76rem;
+  height: 0.76rem;
 }
 
 .learning-work-item--collapsed .learning-work-item__toggle:hover .learning-work-item__toggle-icon,

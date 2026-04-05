@@ -114,6 +114,8 @@ select {
 .app-shell {
   min-height: 100vh;
   display: block;
+  background: var(--color-bg-base);
+  color: var(--color-text);
 }
 
 .app-topbar {
@@ -229,6 +231,13 @@ select {
 
 .account-menu {
   position: relative;
+}
+
+.app-topbar-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 0.55rem;
 }
 
 .account-menu summary {
@@ -1998,8 +2007,8 @@ select {
 .learning-work-item--task .markdown-prose {
   max-width: calc(60ch * var(--learning-unit-measure-scale));
   padding: calc(1rem * var(--learning-unit-copy-padding-scale)) calc(1.05rem * var(--learning-unit-copy-padding-scale));
-  background: #f8f5ee;
-  border-left: 3px solid color-mix(in srgb, var(--color-link) 62%, white 38%);
+  background: var(--color-bg-muted);
+  border-left: 3px solid var(--color-accent);
 }
 
 .markdown-prose {
@@ -5094,7 +5103,7 @@ select {
     justify-content: flex-start;
   }
 
-  .account-menu {
+  .app-topbar-controls {
     grid-column: 1 / -1;
     justify-self: end;
   }

@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { render, screen } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 
@@ -110,5 +114,18 @@ describe("LearningTaskCard", () => {
     expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
     expect(screen.getByText("Bewertung")).toBeInTheDocument();
     expect(screen.getByText("Antwortstatus")).toBeInTheDocument();
+  });
+
+  it("uses theme tokens for the task intro panel instead of a fixed light background", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const blockMatch = css.match(/\.learning-work-item--task \.markdown-prose\s*\{([^}]*)\}/);
+
+    expect(blockMatch).not.toBeNull();
+    const block = blockMatch?.[1] ?? "";
+
+    expect(block).toMatch(/background:\s*var\(--color-bg-muted\);/);
+    expect(block).toMatch(/border-left:\s*3px solid var\(--color-accent\);/);
+    expect(block).not.toMatch(/background:\s*#f8f5ee;/);
   });
 });

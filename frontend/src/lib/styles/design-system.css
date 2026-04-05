@@ -200,6 +200,7 @@ h6,
 .workspace-button,
 .workspace-text-button,
 .design-auth-frame__action,
+.theme-toggle,
 .preview-theme-toggle button {
   border-radius: var(--radius-s);
   border: 1px solid var(--color-border);
@@ -237,6 +238,7 @@ h6,
 
 .workspace-top-action--quiet,
 .workspace-button--ghost,
+.theme-toggle,
 .preview-theme-toggle button,
 .workspace-link-action {
   background: var(--color-bg-surface);
@@ -247,11 +249,31 @@ h6,
 .workspace-top-action:focus-visible,
 .workspace-link-action:hover,
 .workspace-link-action:focus-visible,
+.theme-toggle:hover,
+.theme-toggle:focus-visible,
 .preview-theme-toggle button:hover,
 .preview-theme-toggle button:focus-visible {
   transform: translate(1px, 1px);
   box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
   text-decoration: none;
+}
+
+.theme-toggle {
+  width: 2.3rem;
+  height: 2.3rem;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.theme-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.theme-toggle[data-current-theme="dark"] {
+  color: var(--color-accent);
 }
 
 .workspace-link-action--subtle,
@@ -727,10 +749,14 @@ h6,
   align-items: center;
 }
 
+.workspace-outline__item--active {
+  background: transparent;
+}
+
 .workspace-outline__item::before {
   content: "";
   position: absolute;
-  left: 0;
+  left: 0.05rem;
   top: 0.24rem;
   bottom: 0.24rem;
   width: 1px;
@@ -738,8 +764,18 @@ h6,
 }
 
 .workspace-outline__item--active::before {
+  background: color-mix(in srgb, var(--color-line) 78%, transparent 22%);
+  width: 1px;
+}
+
+.workspace-outline__item--active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.24rem;
+  bottom: 0.24rem;
+  width: 0.22rem;
   background: var(--color-accent);
-  width: 0.28rem;
 }
 
 .workspace-outline__item-copy {
@@ -761,6 +797,7 @@ h6,
 }
 
 .workspace-outline__item--active .workspace-outline__item-label {
+  background: transparent;
   color: var(--color-accent);
   font-weight: 700;
 }
@@ -781,9 +818,12 @@ h6,
   background: color-mix(in srgb, var(--color-text-muted) 32%, transparent 68%);
 }
 
-[data-theme="dark"] .workspace-outline__item--active .workspace-outline__item-label,
-[data-theme="dark"] .workspace-outline__item--active::before {
+[data-theme="dark"] .workspace-outline__item--active .workspace-outline__item-label {
   color: var(--color-accent);
+  background: transparent;
+}
+
+[data-theme="dark"] .workspace-outline__item--active::after {
   background: var(--color-accent);
 }
 

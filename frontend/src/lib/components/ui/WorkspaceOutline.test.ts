@@ -72,5 +72,8 @@ describe("WorkspaceOutline", () => {
     expect(css).toMatch(/\.workspace-outline__group\s*\{[^}]*gap:\s*0\.62rem;/s);
     expect(css).toMatch(/\.workspace-outline__items\s*\{[^}]*gap:\s*0\.08rem;/s);
     expect(css).toMatch(/\.workspace-outline__item\s*\{[^}]*min-height:\s*1\.82rem;[^}]*padding:\s*0\.24rem 0 0\.24rem 0\.95rem;/s);
+    expect(css).toMatch(/\.workspace-outline__item--active\s*\{[^}]*background:\s*transparent;/s);
+    expect(css).toMatch(/\.workspace-outline__item--active::after\s*\{[^}]*width:\s*0\.22rem;[^}]*background:\s*var\(--color-accent\);/s);
+    expect(css).toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*color:\s*var\(--color-accent\);[^}]*font-weight:\s*700;/s);
   });
 });

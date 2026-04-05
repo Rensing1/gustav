@@ -16,12 +16,18 @@
   import "$lib/styles/app.css";
   import "$lib/styles/design-system.css";
   import BreadcrumbBar from "$lib/components/ui/BreadcrumbBar.svelte";
+  import ThemeToggle from "$lib/components/ui/ThemeToggle.svelte";
+  import { syncDocumentTheme } from "$lib/theme/client";
   import type { Snippet } from "svelte";
   import type { BreadcrumbItem } from "$lib/types/navigation";
+  import type { ThemePreference } from "$lib/types/theme";
   import type { LayoutData } from "./$types";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
   let accountMenu = $state<HTMLDetailsElement | null>(null);
+  let themeOverride = $state<ThemePreference | null>(null);
+  let currentTheme = $derived<ThemePreference>(themeOverride ?? data.theme);
+  let themeWriteController = $state<AbortController | null>(null);
 
   const learnerNavItems = [
     {
@@ -166,16 +172,57 @@
 
     accountMenu.open = false;
   }
+
+  async function toggleTheme(): Promise<void> {
+    const nextTheme: ThemePreference = currentTheme === "dark" ? "light" : "dark";
+    themeOverride = nextTheme;
+
+    themeWriteController?.abort();
+    const controller = new AbortController();
+    themeWriteController = controller;
+
+    try {
+      const response = await fetch("/theme", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ theme: nextTheme }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`theme_toggle_failed:${response.status}`);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+      console.error("Failed to persist theme preference", error);
+    } finally {
+      if (themeWriteController === controller) {
+        themeWriteController = null;
+      }
+    }
+  }
+
+  $effect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    syncDocumentTheme(document, currentTheme);
+  });
 </script>
 
 <svelte:head>
   <title>GUSTAV</title>
-  <meta name="theme-color" content={data.theme === "dark" ? "#272E33" : "#FAF4ED"} />
+  <meta name="theme-color" content={currentTheme === "dark" ? "#272E33" : "#FAF4ED"} />
 </svelte:head>
 
 <svelte:window onclick={closeAccountMenuOnWindowClick} />
 
-<div class="app-shell" data-theme={data.theme}>
+<div class="app-shell" data-theme={currentTheme}>
   <header class:app-topbar--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar">
     <div class:app-topbar-inner--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar-inner">
       <a class="brand-lockup" href="/" aria-label="Startseite">
@@ -203,23 +250,27 @@
         </nav>
       {/if}
 
-      {#if data.bootstrap}
-        <details class="account-menu" bind:this={accountMenu}>
-          <summary class="account-trigger" aria-label="Konto-Menü">
-            <span class="account-name">{data.bootstrap.user.name}</span>
-            <span class="account-avatar" aria-hidden="true">
-              {data.bootstrap.user.name.slice(0, 1).toUpperCase()}
-            </span>
-          </summary>
+      <div class="app-topbar-controls">
+        <ThemeToggle currentTheme={currentTheme} onToggle={toggleTheme} />
 
-          <div class="account-popover">
-            <p class="account-eyebrow">Angemeldet als</p>
-            <strong>{data.bootstrap.user.name}</strong>
-            <p class="identity-meta">{data.bootstrap.user.role}</p>
-            <a class="ghost-link" href="/auth/logout">Abmelden</a>
-          </div>
-        </details>
-      {/if}
+        {#if data.bootstrap}
+          <details class="account-menu" bind:this={accountMenu}>
+            <summary class="account-trigger" aria-label="Konto-Menü">
+              <span class="account-name">{data.bootstrap.user.name}</span>
+              <span class="account-avatar" aria-hidden="true">
+                {data.bootstrap.user.name.slice(0, 1).toUpperCase()}
+              </span>
+            </summary>
+
+            <div class="account-popover">
+              <p class="account-eyebrow">Angemeldet als</p>
+              <strong>{data.bootstrap.user.name}</strong>
+              <p class="identity-meta">{data.bootstrap.user.role}</p>
+              <a class="ghost-link" href="/auth/logout">Abmelden</a>
+            </div>
+          </details>
+        {/if}
+      </div>
     </div>
   </header>
 

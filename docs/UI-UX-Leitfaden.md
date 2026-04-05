@@ -1,5 +1,11 @@
 # UI/UX-Leitfaden für GUSTAV Alpha-3
 
+> Archivhinweis
+>
+> Dieses Dokument ist fachlich ersetzt durch `docs/DESIGN.md` und dient nur
+> noch als historischer Zwischenstand aus dem frühen Alpha-3-Rework.
+> Neue UI-Entscheidungen werden nicht mehr hier dokumentiert.
+
 ## Zweck
 
 Dieser Leitfaden definiert die verbindliche Gestaltungsrichtung für die neue

@@ -74,3 +74,8 @@ frontend/vite.config.js
 frontend/vite.config.d.ts
 frontend/tailwind.config.js
 frontend/tailwind.config.d.ts
+
+# Stitch local exports and scratch artifacts
+stitch/
+docs/stitch/.tmp/
+docs/stitch/exports/.tmp/

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import QuietList from "$lib/components/ui/QuietList.svelte";
+  import QuietListEntry from "$lib/components/ui/QuietListEntry.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -9,21 +11,12 @@
 </svelte:head>
 
 <div class="workspace-page learning-home">
-  <section class="learning-home-header">
-    <h2>Meine Klassen</h2>
-  </section>
-
   {#if data.home?.courses?.length}
-    <ul class="learning-home-list">
+    <QuietList>
       {#each data.home.courses as course}
-        <li>
-          <a class="learning-home-card" href={course.href}>
-            <strong>{course.title}</strong>
-            <span class="learning-home-open">Öffnen</span>
-          </a>
-        </li>
+        <QuietListEntry href={course.href} title={course.title} />
       {/each}
-    </ul>
+    </QuietList>
   {:else}
     <section class="workspace-panel learning-home-empty">
       <p class="workspace-empty">Noch keine Klassen sichtbar.</p>

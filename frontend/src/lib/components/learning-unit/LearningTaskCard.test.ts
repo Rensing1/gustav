@@ -12,7 +12,7 @@ const task: LearningTask = {
 };
 
 describe("LearningTaskCard", () => {
-  it("shows the full task statement inside the focused workspace", () => {
+  it("opens inline editing controls inside the task flow instead of a separate workspace", () => {
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -24,10 +24,11 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getAllByRole("heading", { name: "Begriffe definieren" }).length).toBe(2);
+    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
     expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
     expect(screen.getByText("Datei auswählen")).toBeInTheDocument();
+    expect(screen.queryByText("Arbeitsbereich")).toBeNull();
   });
 
   it("renders collapsed tasks as a compact title row", () => {
@@ -47,8 +48,8 @@ describe("LearningTaskCard", () => {
     expect(toggle).toHaveAttribute("title", "Aufgabe 3");
     expect(toggle.querySelector("h4")).toBeNull();
     expect(document.querySelector(".learning-work-item__toggle--collapsed")).not.toBeNull();
-    expect(screen.queryByText("Modul Graphen")).toBeNull();
-    expect(screen.queryByText("Aufgabe")).toBeNull();
+    expect(screen.getByText("Modul Graphen")).toBeInTheDocument();
+    expect(document.querySelector(".learning-work-item__kicker")).not.toBeNull();
     expect(document.querySelector(".learning-work-item__toggle-icon svg")).not.toBeNull();
   });
 
@@ -69,8 +70,45 @@ describe("LearningTaskCard", () => {
     expect(toggle).toHaveAttribute("title", "Aufgabe 4");
     expect(toggle.querySelector("h4")).toBeNull();
     expect(document.querySelector(".learning-work-item__toggle--collapsed")).toBeNull();
-    expect(screen.queryByText("Modul Graphen")).toBeNull();
-    expect(screen.queryByText("Aufgabe")).toBeNull();
+    expect(screen.getByText("Modul Graphen")).toBeInTheDocument();
+    expect(document.querySelector(".learning-work-item__kicker")).not.toBeNull();
     expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
+  });
+
+  it("shows a quiet start action and grouped response panels after submission", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        submitted: true,
+        history: [
+          {
+            id: "submission-1",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "submit",
+            created_at: "2026-04-05 10:00",
+            analysis_status: "completed",
+            text_body: "Meine Lösung",
+            feedback_md: "## Rückmeldung\n\nGut gemacht.",
+            analysis_json: {
+              schema: "learning.v1",
+              score: 8,
+              text: "Stabil",
+              criteria_results: []
+            }
+          }
+        ]
+      }
+    });
+
+    expect(screen.getByRole("button", { name: "Aufgabe bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByText("Abgabe")).toBeInTheDocument();
+    expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
+    expect(screen.getByText("Bewertung")).toBeInTheDocument();
+    expect(screen.getByText("Antwortstatus")).toBeInTheDocument();
   });
 });

@@ -1,8 +1,8 @@
 <section class="workspace-section workspace-section--hero">
-  <p class="eyebrow">Start</p>
-  <h2>Der Einstieg wird serverseitig in den passenden Arbeitsraum umgeleitet.</h2>
+  <p class="workspace-label">Start</p>
+  <h2>Der Einstieg leitet direkt in den passenden Arbeitsraum.</h2>
   <p class="workspace-lead">
-    Diese Seite bleibt nur als technischer Fallback erhalten, falls der
-    Redirect auf `Lernraum` oder `Lehrenden-Welt` nicht greift.
+    Diese Fallback-Seite bleibt bewusst knapp und technisch ruhig, falls der
+    serverseitige Redirect einmal nicht greift.
   </p>
 </section>

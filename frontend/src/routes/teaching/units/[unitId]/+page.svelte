@@ -10,8 +10,12 @@
   import "@xyflow/svelte/dist/style.css";
 
   import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
+  import TeacherGraphCommandBar, {
+    type TeacherGraphCommandBarAction
+  } from "$lib/components/teacher-unit-graph/TeacherGraphCommandBar.svelte";
   import TeacherGraphEdge from "$lib/components/teacher-unit-graph/TeacherGraphEdge.svelte";
   import GraphUnitNode from "$lib/components/teacher-unit-graph/GraphUnitNode.svelte";
+  import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import {
     buildTeacherUnitFlow,
     type TeacherFlowEdge,
@@ -160,6 +164,29 @@
 
   function closeModuleProperties() {
     openModulePropertiesId = null;
+  }
+
+  function commandHref(href: string | null | undefined): string {
+    return href ?? page.url.pathname;
+  }
+
+  function graphCommandActions(): TeacherGraphCommandBarAction[] {
+    if (workspaceState.graph.kind === "linear") {
+      return [{ label: "Abschnitt hinzufügen", href: commandHref(workspaceState.graph.create_section_href) }];
+    }
+
+    return [
+      {
+        label: "Phase hinzufügen",
+        href: commandHref(workspaceState.graph.create_phase_href),
+        active: showCreatePhaseDialog()
+      },
+      {
+        label: "Modul hinzufügen",
+        href: commandHref(workspaceState.graph.create_module_href),
+        active: showCreateModuleDialog()
+      }
+    ];
   }
 
   function isInteractiveTarget(target: EventTarget | null): boolean {
@@ -751,52 +778,17 @@
   <title>{workspaceState.unit.title} | GUSTAV</title>
 </svelte:head>
 
-<section class="workspace-composer-header workspace-unit-header">
-  <div class="workspace-unit-header-main">
-    <div class="workspace-composer-copy">
-      <a class="workspace-back-link" href="/teaching/units">Zurück zu Lerneinheiten</a>
-      <h1>{workspaceState.unit.title}</h1>
-      <p class="workspace-composer-copyline">
-        {#if workspaceState.unit.unit_type === "linear"}
-          {workspaceState.counts.sections_count} Abschnitte · dieselbe Graphansicht wie für Lernende
-        {:else}
-          {workspaceState.counts.phases_count} Phasen · {workspaceState.counts.modules_count} Module · dieselbe Graphansicht wie für Lernende
-        {/if}
-      </p>
+{#snippet unitHeaderActions()}
+  <details class="workspace-row-menu">
+    <summary aria-label="Einheitsaktionen">···</summary>
+    <div class="workspace-row-menu-popover">
+      <a class="workspace-link-action workspace-link-action--subtle" href={workspaceState.unit.edit_href}>Bearbeiten</a>
     </div>
+  </details>
+{/snippet}
 
-    <div class="workspace-unit-header-actions">
-      <details class="workspace-row-menu">
-        <summary aria-label="Einheitsaktionen">···</summary>
-        <div class="workspace-row-menu-popover">
-          <a class="workspace-link-action workspace-link-action--subtle" href={workspaceState.unit.edit_href}>Bearbeiten</a>
-        </div>
-      </details>
-    </div>
-  </div>
-
-  <div class="workspace-unit-commandbar-stack">
-    <div class="workspace-unit-commandbar" role="toolbar" aria-label="Graphwerkzeuge">
-      {#if workspaceState.graph.kind === "linear"}
-        <a class="workspace-top-action workspace-top-action--quiet" href={workspaceState.graph.create_section_href}>
-          Abschnitt hinzufügen
-        </a>
-      {:else}
-        <a
-          class={`workspace-top-action workspace-top-action--quiet ${showCreatePhaseDialog() ? "workspace-top-action--active" : ""}`}
-          href={workspaceState.graph.create_phase_href}
-        >
-          Phase hinzufügen
-        </a>
-        <a
-          class={`workspace-top-action workspace-top-action--quiet ${showCreateModuleDialog() ? "workspace-top-action--active" : ""}`}
-          href={workspaceState.graph.create_module_href}
-        >
-          Modul hinzufügen
-        </a>
-      {/if}
-    </div>
-
+{#snippet unitHeaderSecondary()}
+  {#snippet unitCommandPopovers()}
     {#if showCreatePhaseDialog()}
       <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Phase hinzufügen">
         <div class="workspace-unit-commandbar-popover__header">
@@ -822,7 +814,6 @@
         </form>
       </div>
     {/if}
-
     {#if showCreateModuleDialog()}
       <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Modul hinzufügen">
         <div class="workspace-unit-commandbar-popover__header">
@@ -862,8 +853,24 @@
         </form>
       </div>
     {/if}
-  </div>
-</section>
+  {/snippet}
+
+  <TeacherGraphCommandBar
+    actions={graphCommandActions()}
+    popovers={unitCommandPopovers}
+  />
+{/snippet}
+
+<PageActionHead
+  backHref="/teaching/units"
+  backLabel="Zurück zu Lerneinheiten"
+  title={workspaceState.unit.title}
+  copy={workspaceState.unit.unit_type === "linear"
+    ? `${workspaceState.counts.sections_count} Abschnitte · dieselbe Graphansicht wie für Lernende`
+    : `${workspaceState.counts.phases_count} Phasen · ${workspaceState.counts.modules_count} Module · dieselbe Graphansicht wie für Lernende`}
+  actions={unitHeaderActions}
+  secondary={unitHeaderSecondary}
+/>
 
 <section class="teacher-flow-workspace teacher-flow-shell">
     <SvelteFlow

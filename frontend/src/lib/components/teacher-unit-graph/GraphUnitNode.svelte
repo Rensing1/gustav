@@ -85,6 +85,7 @@
         <span aria-hidden="true" class="teacher-flow-unit-node__drag-handle"></span>
         <span>{data.kicker}</span>
       </div>
+      <span class="teacher-flow-unit-node__state">Module node</span>
       {#if data.editorHref}
         <a class="teacher-flow-unit-node__editor nodrag nopan" href={data.editorHref} onclick={stopPropagation}>
           Öffnen
@@ -118,7 +119,10 @@
   {#if data.quickEdit}
     <aside class="teacher-flow-unit-node__quickedit nodrag nopan">
       <div class="teacher-flow-unit-node__quickedit-header">
-        <p class="workspace-label">Eigenschaften</p>
+        <div>
+          <p class="workspace-label">Property inspector</p>
+          <strong>Eigenschaften</strong>
+        </div>
         <button class="teacher-flow-unit-node__quickedit-close" type="button" onclick={closeProperties}>
           Schließen
         </button>

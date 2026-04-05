@@ -7,10 +7,15 @@
   import "@fontsource/nunito/400.css";
   import "@fontsource/nunito/600.css";
   import "@fontsource/nunito/700.css";
+  import "@fontsource/space-grotesk/400.css";
+  import "@fontsource/space-grotesk/500.css";
+  import "@fontsource/space-grotesk/700.css";
   import "@fontsource/work-sans/400.css";
   import "@fontsource/work-sans/500.css";
   import "@fontsource/work-sans/600.css";
   import "$lib/styles/app.css";
+  import "$lib/styles/design-system.css";
+  import BreadcrumbBar from "$lib/components/ui/BreadcrumbBar.svelte";
   import type { Snippet } from "svelte";
   import type { BreadcrumbItem } from "$lib/types/navigation";
   import type { LayoutData } from "./$types";
@@ -181,19 +186,7 @@
       </a>
 
       {#if isLearnerUnitWorkspaceRoute() && currentBreadcrumbs().length}
-        <nav class="app-topbar-breadcrumbs app-topbar-breadcrumbs--learner-unit" aria-label="Breadcrumb">
-          {#each currentBreadcrumbs() as item, index}
-            {#if index > 0}
-              <span class="app-topbar-breadcrumbs__separator" aria-hidden="true">/</span>
-            {/if}
-
-            {#if item.href}
-              <a href={item.href}>{item.label}</a>
-            {:else}
-              <span class="app-topbar-breadcrumbs__current">{item.label}</span>
-            {/if}
-          {/each}
-        </nav>
+        <BreadcrumbBar className="app-topbar-breadcrumbs app-topbar-breadcrumbs--learner-unit" items={currentBreadcrumbs()} />
       {:else}
         <nav class:space-nav--learner-unit={isLearnerUnitWorkspaceRoute()} class="space-nav" aria-label="Hauptnavigation">
           {#each primaryNavItems() as item}
@@ -244,24 +237,10 @@
       >
         <div class="workspace-topbar">
           {#if currentBreadcrumbs().length && !isLearnerUnitWorkspaceRoute()}
-            <nav
-              class="workspace-breadcrumbs"
-              class:workspace-breadcrumbs--single-line={isLearnerUnitWorkspaceRoute()}
-              class:workspace-breadcrumbs--learner-unit={isLearnerUnitWorkspaceRoute()}
-              aria-label="Breadcrumb"
-            >
-              {#each currentBreadcrumbs() as item, index}
-                {#if index > 0}
-                  <span class="breadcrumb-separator" aria-hidden="true">/</span>
-                {/if}
-
-                {#if item.href}
-                  <a href={item.href}>{item.label}</a>
-                {:else}
-                  <span class="breadcrumb-current">{item.label}</span>
-                {/if}
-              {/each}
-            </nav>
+            <BreadcrumbBar
+              className="workspace-breadcrumbs"
+              items={currentBreadcrumbs()}
+            />
           {/if}
 
           {#if currentHeaderAction()}

@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import { onMount, tick } from "svelte";
 
+  import ModeSwitch from "$lib/components/ui/ModeSwitch.svelte";
   import LearningUnitContentWorkspace from "$lib/components/learning-unit/LearningUnitContentWorkspace.svelte";
   import LearningUnitOverview from "$lib/components/learning-unit/LearningUnitOverview.svelte";
   import {
@@ -1014,26 +1015,21 @@
     <section class="learning-unit-toolbar">
       <div class="learning-unit-toolbar__main">
         <div class="learning-unit-toolbar__leading">
-          <div class="workspace-tabs">
-            <div class="workspace-tab-group">
-              <button
-                class:workspace-tab--active={modularWorkspace.view === "overview"}
-                class="workspace-tab learning-unit-mode-tab"
-                type="button"
-                onclick={() => switchView("overview")}
-              >
-                Übersicht
-              </button>
-              <button
-                class:workspace-tab--active={modularWorkspace.view === "content"}
-                class="workspace-tab learning-unit-mode-tab"
-                type="button"
-                onclick={() => switchView("content")}
-              >
-                Inhalte
-              </button>
-            </div>
-          </div>
+          <ModeSwitch
+            label="Lerneinheit"
+            options={[
+              {
+                label: "Übersicht",
+                current: modularWorkspace.view === "overview",
+                onSelect: () => switchView("overview")
+              },
+              {
+                label: "Inhalte",
+                current: modularWorkspace.view === "content",
+                onSelect: () => switchView("content")
+              }
+            ]}
+          />
         </div>
 
         {#if modularWorkspace.view === "content"}

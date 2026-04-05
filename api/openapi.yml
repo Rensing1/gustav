@@ -5586,6 +5586,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/app/session-sync:
+    post:
+      tags: [App]
+      summary: Create or refresh the stable app session for the current BFF login
+      description: >-
+        Mints a normal `gustav_session` cookie from the authenticated bearer
+        context of the SvelteKit BFF. This keeps legacy cookie-authenticated
+        integrations such as H5P stable across frontend restarts.
+      operationId: postSessionSync
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: App session synchronized successfully
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+            Set-Cookie:
+              description: >-
+                Sets or replaces the httpOnly app session cookie `gustav_session`
+                as a host-only cookie.
+              schema:
+                type: string
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/learning/views/learner-home:
     get:
       tags: [App]

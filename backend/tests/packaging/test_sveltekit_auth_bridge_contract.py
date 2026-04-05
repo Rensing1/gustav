@@ -40,6 +40,8 @@ def test_frontend_contains_auth_bridge_routes() -> None:
     assert "reset-credentials" in helper_src
     assert "kc_action" in helper_src
     assert "jwtVerify" in helper_src
+    assert "/api/app/session-sync" in helper_src
+    assert "headers.append(\"set-cookie\"" in helper_src or "headers.append('set-cookie'" in helper_src
 
     assert "startLoginFlow" in login_path.read_text(encoding="utf-8")
     assert "startRegisterFlow" in register_path.read_text(encoding="utf-8")

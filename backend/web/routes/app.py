@@ -12,7 +12,7 @@ import json
 import inspect
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from backend.learning.usecases.courses import ListCoursesInput, ListCoursesUseCase
@@ -26,6 +26,15 @@ except ImportError:  # pragma: no cover - flat import fallback
 
 
 app_router = APIRouter(tags=["App"])
+
+
+def _resolve_main_module():
+    """Return the active FastAPI main module for shared auth/session helpers."""
+    try:
+        from backend.web import main as mod  # type: ignore
+    except Exception:
+        import main as mod  # type: ignore
+    return mod
 
 
 def _spaces_for_role(role: str) -> list[str]:
@@ -535,6 +544,34 @@ async def get_session_bootstrap(request: Request):
         "spaces": _spaces_for_role(primary_role),
     }
     return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.post("/api/app/session-sync")
+async def post_session_sync(request: Request):
+    """Mint a stable app session from a bearer-authenticated Svelte BFF request."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+
+    mod = _resolve_main_module()
+
+    stale_session_id = request.cookies.get(mod.SESSION_COOKIE_NAME)
+    if stale_session_id:
+        try:
+            mod.SESSION_STORE.delete(stale_session_id)
+        except Exception:
+            pass
+
+    session = mod.SESSION_STORE.create(
+        sub=str(user.get("sub") or ""),
+        roles=[str(role) for role in (user.get("roles") or []) if isinstance(role, str)] or ["student"],
+        name=str(user.get("name") or ""),
+        ttl_seconds=mod._app_session_ttl_seconds(),
+        id_token=getattr(request.state, "id_token", None),
+    )
+    response = Response(status_code=204, headers=_private_headers())
+    mod._set_session_cookie(response, session.session_id, request=request)
+    return response
 
 
 @app_router.get("/api/learning/views/learner-home")

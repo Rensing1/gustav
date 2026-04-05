@@ -4,6 +4,7 @@ import type { RequestEvent } from "@sveltejs/kit";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 import { env } from "$env/dynamic/private";
+import { buildApiUrl } from "$lib/server/api";
 import { clearTokenSession, createTokenSession, readTokenSession } from "$lib/server/session";
 
 const DEFAULT_KC_BASE_URL = "http://keycloak:8080";
@@ -73,6 +74,23 @@ function createJsonError(status: number, error: string): Response {
     status,
     headers: noStoreHeaders({ "content-type": "application/json" })
   });
+}
+
+async function syncAppSession(event: RequestEvent, accessToken: string): Promise<string | null> {
+  try {
+    const response = await event.fetch(buildApiUrl("/api/app/session-sync"), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`
+      }
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return response.headers.get("set-cookie");
+  } catch {
+    return null;
+  }
 }
 
 function randomBase64Url(bytes: number): string {
@@ -358,8 +376,12 @@ export async function handleAuthCallback(event: RequestEvent): Promise<Response>
     expiresAt: Math.floor(Date.now() / 1000) + Math.max(60, Number(tokens.expires_in || 300))
   });
   clearFlowCookie(event);
-
-  return createRedirectResponse(flow.redirectPath || "/");
+  const appSessionCookie = await syncAppSession(event, tokens.access_token);
+  const response = createRedirectResponse(flow.redirectPath || "/");
+  if (appSessionCookie) {
+    response.headers.append("set-cookie", appSessionCookie);
+  }
+  return response;
 }
 
 export function handleLogout(event: RequestEvent): Response {

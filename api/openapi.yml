@@ -8394,6 +8394,246 @@ paths:
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model:
+    get:
+      tags: [Teaching, H5P]
+      summary: Resolve the H5P editor model for a task (author only)
+      operationId: getTaskH5PEditorModel
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: H5P editor model for the linked task content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PEditorModelResponse'
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/save:
+    post:
+      tags: [Teaching, H5P]
+      summary: Save H5P editor parameters for a task (author only)
+      operationId: saveTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/H5PContentSaveRequest'
+      responses:
+        '200':
+          description: Saved and linked H5P content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentSaveResponse'
+        '400':
+          description: |
+            Invalid path or payload. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import:
+    post:
+      tags: [Teaching, H5P]
+      summary: Import an H5P package for a task (author only)
+      operationId: importTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Imported and linked task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid path or upload. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+              - invalid_h5p_file
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export:
+    get:
+      tags: [Teaching, H5P]
+      summary: Export the linked H5P package of a task (author only)
+      operationId: exportTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: H5P ZIP package
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found, no linked content, or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset:
+    post:
+      tags: [Teaching, H5P]
+      summary: Unlink H5P content from a task (author only)
+      operationId: resetTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Updated task without linked H5P content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
   /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder:
     post:
       tags: [Teaching]

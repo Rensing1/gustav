@@ -25,6 +25,10 @@ def test_h5p_editor_model_and_save_endpoints_exist_in_openapi():
     assert "/h5p/editor/model" in paths, "missing /h5p/editor/model in openapi.yml"
     assert "/h5p/contents" in paths, "missing /h5p/contents in openapi.yml"
     assert "/h5p/contents/{content_id}" in paths, "missing /h5p/contents/{content_id} in openapi.yml"
+    assert "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model" in paths
+    assert "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import" in paths
+    assert "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export" in paths
+    assert "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset" in paths
 
 
 def test_h5p_editor_model_contract():
@@ -75,3 +79,22 @@ def test_h5p_contents_update_contract():
     content = rb.get("content") or {}
     assert "application/json" in content
     assert "200" in (patch_op.get("responses") or {}), "PATCH /h5p/contents/{content_id} must define 200 response"
+
+
+def test_task_centric_h5p_authoring_endpoints_are_teacher_only_in_openapi():
+    spec = _load_spec()
+    paths = spec.get("paths") or {}
+
+    expectations = [
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model", "get"),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import", "post"),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export", "get"),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset", "post"),
+    ]
+
+    for path, method in expectations:
+        op = (paths.get(path) or {}).get(method)
+        assert isinstance(op, dict), f"missing {method.upper()} {path} in openapi.yml"
+        assert op.get("security"), f"{method.upper()} {path} must require authentication"
+        perms = op.get("x-permissions") or {}
+        assert perms.get("requiredRole") == "teacher", f"{method.upper()} {path} must document teacher-only permission"

@@ -29,7 +29,8 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import asyncio
 from uuid import uuid4, UUID
 
-from fastapi import APIRouter, Request
+import httpx
+from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
@@ -42,6 +43,7 @@ from backend.storage.config import get_submissions_bucket
 from .security import _is_same_origin
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
+H5P_INTERNAL_BASE = (os.getenv("H5P_INTERNAL_BASE") or "http://h5p:3000").rstrip("/")
 
 # Optional storage wiring helper (lazy rewire for local Supabase E2E)
 try:  # pragma: no cover - simple import guard
@@ -1278,6 +1280,81 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
     return JSONResponse(content=payload, status_code=status_code, headers=headers)
 
 
+async def _request_h5p_service(
+    method: str,
+    path: str,
+    *,
+    request: Request | None = None,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+    files: dict[str, tuple[str, bytes, str]] | None = None,
+    timeout: float = 30.0,
+) -> httpx.Response:
+    """Send a request to the internal H5P service while forwarding session cookies.
+
+    Why:
+        The teacher-facing API should stay task-centric, but the existing H5P
+        service still owns editor/player/import/export primitives. This helper
+        keeps the wrapper endpoints thin and testable.
+    """
+
+    headers: dict[str, str] = {}
+    if request is not None:
+        cookie_header = str(request.headers.get("cookie") or "").strip()
+        if cookie_header:
+            headers["cookie"] = cookie_header
+        origin = str(request.headers.get("origin") or "").strip()
+        if origin:
+            headers["origin"] = origin
+        referer = str(request.headers.get("referer") or "").strip()
+        if referer:
+            headers["referer"] = referer
+
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        return await client.request(
+            method=method,
+            url=f"{H5P_INTERNAL_BASE}{path}",
+            params=params,
+            json=json_body,
+            files=files,
+            headers=headers,
+        )
+
+
+def _get_owned_h5p_task(unit_id: str, section_id: str, task_id: str, author_sub: str) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    """Resolve an author-owned H5P task or return a fail-closed API error."""
+
+    try:
+        tasks = _get_tasks_service().list_tasks(unit_id, section_id, author_sub)
+    except PermissionError:
+        return None, _private_error({"error": "forbidden"}, status_code=403)
+    except LookupError:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+
+    task = next((item for item in tasks if str(_serialize_task(item).get("id") or "") == task_id), None)
+    if task is None:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    serialized = _serialize_task(task)
+    if str(serialized.get("kind") or "") != "h5p":
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    return serialized, None
+
+
+def _proxy_h5p_error_response(upstream: httpx.Response) -> JSONResponse:
+    """Map upstream H5P failures to private JSON responses."""
+
+    payload: dict[str, Any]
+    try:
+        candidate = upstream.json()
+        payload = candidate if isinstance(candidate, dict) else {"error": "bad_gateway"}
+    except Exception:
+        payload = {"error": "bad_gateway"}
+    status_code = int(upstream.status_code or 502)
+    if status_code < 400 or status_code >= 600:
+        status_code = 502
+    return _private_error(payload, status_code=status_code)
+
+
 def _clamp_limit_offset(
     *,
     limit: int | None,
@@ -2171,6 +2248,11 @@ class TaskUpdatePayload(BaseModel):
 
 class TaskReorderPayload(BaseModel):
     task_ids: object | None = None
+
+
+class H5PTaskSavePayload(BaseModel):
+    library: str
+    params: dict[str, Any]
 
 
 @teaching_router.patch("/api/teaching/courses/{course_id}")
@@ -3422,6 +3504,243 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model")
+async def get_task_h5p_editor_model(request: Request, unit_id: str, section_id: str, task_id: str):
+    """Return the H5P editor model for an owned H5P task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+
+    params: dict[str, Any] | None = None
+    content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
+    if content_id:
+        params = {"content_id": content_id}
+
+    try:
+        upstream = await _request_h5p_service("GET", "/editor/model", request=request, params=params)
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    try:
+        return _json_private(upstream.json(), status_code=200)
+    except Exception:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/save")
+async def save_task_h5p_content(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    task_id: str,
+    payload: H5PTaskSavePayload,
+):
+    """Create or update task-linked H5P content and persist the content id on the task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+
+    current_content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
+    path = f"/contents/{current_content_id}" if current_content_id else "/contents"
+    method = "PATCH" if current_content_id else "POST"
+
+    try:
+        upstream = await _request_h5p_service(
+            method,
+            path,
+            request=request,
+            json_body={"library": payload.library, "params": payload.params},
+        )
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    try:
+        upstream_payload = upstream.json()
+    except Exception:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+
+    new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
+    if not new_content_id:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+    _get_tasks_service().update_task(
+        unit_id,
+        section_id,
+        task_id,
+        sub,
+        h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+    )
+    return _json_private({"content_id": new_content_id, "metadata": (upstream_payload or {}).get("metadata") or {}}, status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import")
+async def import_task_h5p_content(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    task_id: str,
+    file: UploadFile = File(...),
+):
+    """Import an H5P archive and link the resulting content to the task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+    file_bytes = await file.read()
+    if not file_bytes:
+        return _private_error({"error": "bad_request", "detail": "invalid_h5p_file"}, status_code=400)
+
+    try:
+        upstream = await _request_h5p_service(
+            "POST",
+            "/contents/import",
+            request=request,
+            files={"file": (file.filename or "content.h5p", file_bytes, file.content_type or "application/zip")},
+        )
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    try:
+        upstream_payload = upstream.json()
+    except Exception:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+
+    new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
+    if not new_content_id:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+    updated = _get_tasks_service().update_task(
+        unit_id,
+        section_id,
+        task_id,
+        sub,
+        h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+    )
+    return _json_private(_serialize_task(updated), status_code=200)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export")
+async def export_task_h5p_content(request: Request, unit_id: str, section_id: str, task_id: str):
+    """Export the currently linked H5P content for an owned task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+    content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
+    if not content_id:
+        return _private_error({"error": "not_found"}, status_code=404)
+
+    try:
+        upstream = await _request_h5p_service("GET", f"/contents/{content_id}/export", request=request)
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    headers = {"Cache-Control": "private, no-store"}
+    content_disposition = upstream.headers.get("content-disposition")
+    if content_disposition:
+        headers["Content-Disposition"] = content_disposition
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("content-type") or "application/zip",
+        headers=headers,
+    )
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset")
+async def reset_task_h5p_content(request: Request, unit_id: str, section_id: str, task_id: str):
+    """Unlink the H5P content from a task without deleting upstream content."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+    updated = _get_tasks_service().update_task(
+        unit_id,
+        section_id,
+        task_id,
+        sub,
+        h5p={"content_id": None, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+    )
+    return _json_private(_serialize_task(updated), status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { loadH5PWebcomponentsModule } from "$lib/runtime/h5p-webcomponents";
 
   let {
     courseId,
@@ -13,7 +14,15 @@
 
   let root: HTMLDivElement | undefined;
   let status = $state("Lade H5P …");
-  const h5pWebcomponentsEntry = "/h5p/webcomponents/index.js";
+  const expiredSessionMessage = "Deine Sitzung ist abgelaufen. Bitte lade die Seite neu und melde dich bei Bedarf erneut an.";
+
+  function toDisplayMessage(error: unknown): string {
+    const raw = error instanceof Error ? error.message : String(error || "");
+    if (raw === "unauthenticated") {
+      return expiredSessionMessage;
+    }
+    return raw || "H5P konnte nicht geladen werden.";
+  }
 
   function extractScore(statement: unknown): { raw: number; max: number } | null {
     const record = statement as {
@@ -54,6 +63,17 @@
 
     let disposed = false;
     const submittedStatementIds = new Set<string>();
+    let player:
+      | (HTMLElement & {
+          loadContentCallback?: (
+            contentIdArg: string,
+            contextId?: string,
+            _ignoredUserId?: string,
+            readOnlyState?: boolean
+          ) => Promise<unknown>;
+        })
+      | undefined;
+    let detachPlayerListeners: (() => void) | undefined;
 
     async function submitAttempt(statementId: string, scoreRaw: number, scoreMax: number): Promise<void> {
       const safeKey = /^[A-Za-z0-9_-]{1,64}$/.test(statementId)
@@ -85,17 +105,14 @@
 
     async function install(): Promise<void> {
       status = "Lade H5P …";
-      // Vite must not try to bundle this module because the H5P sidecar serves it at runtime.
-      const wcModule = (await import(/* @vite-ignore */ h5pWebcomponentsEntry)) as {
-        defineElements?: (names: string[]) => void;
-      };
+      const wcModule = await loadH5PWebcomponentsModule();
       wcModule.defineElements?.(["h5p-player"]);
 
       if (disposed || !root) {
         return;
       }
 
-      const player = document.createElement("h5p-player") as HTMLElement & {
+      player = document.createElement("h5p-player") as HTMLElement & {
         loadContentCallback?: (
           contentIdArg: string,
           contextId?: string,
@@ -130,7 +147,7 @@
         return payload;
       };
 
-      player.addEventListener("xAPI", async (event: Event) => {
+      const handleXApi = async (event: Event) => {
         try {
           const detail = (event as CustomEvent<{ statement?: unknown }>).detail;
           const statement = detail?.statement;
@@ -145,19 +162,28 @@
           await submitAttempt(statementId, score.raw, score.max);
           status = `Gespeichert (${score.raw}/${score.max}).`;
         } catch (error) {
-          status = error instanceof Error ? error.message : "Abgabe fehlgeschlagen.";
+          status = toDisplayMessage(error) || "Abgabe fehlgeschlagen.";
         }
-      });
+      };
+
+      player.addEventListener("xAPI", handleXApi);
+      detachPlayerListeners = () => {
+        player?.removeEventListener("xAPI", handleXApi);
+      };
 
       status = "Bereit.";
     }
 
     void install().catch((error: unknown) => {
-      status = error instanceof Error ? error.message : "H5P konnte nicht geladen werden.";
+      status = toDisplayMessage(error);
     });
 
     return () => {
       disposed = true;
+      detachPlayerListeners?.();
+      detachPlayerListeners = undefined;
+      player = undefined;
+      root?.replaceChildren();
     };
   });
 </script>

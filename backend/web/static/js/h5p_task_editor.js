@@ -7,19 +7,20 @@
  *
  * How:
  * - Load webcomponents from `/h5p/webcomponents/*` (served by the h5p service via proxy).
- * - Use `/h5p/editor/model` to fetch the editor "model" (H5PIntegration + scripts/styles).
- * - Use `/h5p/contents` to create/update content and receive an opaque `content_id`.
- * - Patch the GUSTAV task (`/api/teaching/.../tasks/{task_id}`) to store that `content_id`.
+ * - Use task-centric Teaching endpoints under
+ *   `/api/teaching/.../tasks/{task_id}/h5p/*` for model, save, import, export
+ *   and reset.
+ * - Keep the raw H5P `content_id` internal; the task remains the visible unit
+ *   of authoring in the UI.
  */
 
-(() => {
-  /**
-   * H5P Editor theming note (important):
-   * - Lumi's `<h5p-editor>` renders the actual editor UI inside an iframe.
-   * - CSS from the parent document does not apply inside the iframe.
-   * - Therefore we inject our theme stylesheet into the iframe and copy the
-   *   required GUSTAV design tokens (CSS variables) into the iframe root.
-   */
+/**
+ * H5P Editor theming note (important):
+ * - Lumi's `<h5p-editor>` renders the actual editor UI inside an iframe.
+ * - CSS from the parent document does not apply inside the iframe.
+ * - Therefore we inject our theme stylesheet into the iframe and copy the
+ *   required GUSTAV design tokens (CSS variables) into the iframe root.
+ */
 
   const H5P_THEME_CSS_HREF = '/h5p/theme/h5p-gustav.css';
 
@@ -179,68 +180,53 @@
 
   ensureThemeObserverInstalled();
 
-  /**
-   * Initialize all embedded H5P editors in a given DOM subtree.
-   *
-   * Notes about robustness:
-   * - GUSTAV uses HTMX navigation in parts of the UI (hx-push-url). That means
-   *   pages can be swapped into `#main-content` without a full page reload.
-   * - The Lumi `<h5p-editor>` component appends its template in `connectedCallback()`
-   *   without checking for previous runs. If an element instance ever gets
-   *   reconnected, this can lead to duplicated UI.
-   *
-   * Strategy:
-   * - For every editor container we replace any existing `<h5p-editor>` node with
-   *   a fresh one and then wire callbacks. This avoids stale component state.
-   */
+  const EXPIRED_SESSION_MESSAGE =
+    'Deine Sitzung ist abgelaufen. Bitte lade die Seite neu und melde dich bei Bedarf erneut an.';
+  const activeMounts = new WeakMap();
 
-  const initAll = (contextEl) => {
-    const scope = contextEl || document;
-    scope.querySelectorAll('[data-h5p-task-editor="true"]').forEach((root) => {
-      initOne(root);
+  const toDisplayMessage = (error) => {
+    const raw = error instanceof Error ? error.message : String(error || '');
+    if (raw === 'unauthenticated') return EXPIRED_SESSION_MESSAGE;
+    return raw || 'H5P konnte nicht geladen werden.';
+  };
+
+  const addListener = (target, type, handler, cleanupFns, options) => {
+    if (!target || typeof target.addEventListener !== 'function') return;
+    target.addEventListener(type, handler, options);
+    cleanupFns.push(() => {
+      try {
+        target.removeEventListener(type, handler, options);
+      } catch {
+        // Best-effort only.
+      }
     });
   };
 
-  const initOne = (root) => {
-    if (!root || !(root instanceof Element)) return;
-
-    // Avoid double-binding if this module is executed again (e.g. via HTMX script processing).
-    const state = root.dataset.gustavH5pEditorInit || '';
-    if (state === 'ready' || state === 'pending') return;
-
-    // On the task-create page the H5P block is present but hidden until the
-    // teacher selects "H5P". We defer initialization in that case to avoid
-    // loading large webcomponent bundles unnecessarily.
-    const kindSelect = document.getElementById('task_kind');
-    const hiddenAncestor = root.closest('[hidden]');
-    if (hiddenAncestor && kindSelect && (kindSelect.value || 'native') !== 'h5p') {
-      root.dataset.gustavH5pEditorInit = 'pending';
-      kindSelect.addEventListener('change', () => {
-        if ((kindSelect.value || 'native') === 'h5p') {
-          // Ensure we only ever start once.
-          if (root.dataset.gustavH5pEditorInit === 'ready') return;
-          root.dataset.gustavH5pEditorInit = 'ready';
-          start(root);
-        }
-      }, { once: true });
-      return;
+  const createMount = (root) => {
+    if (!root || !(root instanceof Element)) {
+      throw new Error('Der H5P-Editor konnte nicht initialisiert werden.');
     }
 
     root.dataset.gustavH5pEditorInit = 'ready';
-    start(root);
-  };
+    const cleanupFns = [];
+    let disposed = false;
+    let editor = null;
 
-  const start = (root) => {
+    const statusEl = root.querySelector('[data-role="h5p-status"]');
+    const btnImport = root.querySelector('[data-role="h5p-import"]');
+    const btnExport = root.querySelector('[data-role="h5p-export"]');
+    const btnReset = root.querySelector('[data-role="h5p-reset"]');
+    const btnSave = root.querySelector('[data-role="h5p-save"]');
+    const importFileInput = root.querySelector('[data-role="h5p-import-file"]');
+    const editorHost = root.querySelector('[data-role="h5p-editor-host"]');
+
     const unitId = root.dataset.unitId || '';
     const sectionId = root.dataset.sectionId || '';
     const taskId = root.dataset.taskId || '';
     const initialContentId = root.dataset.contentId || '';
-
-    const statusEl = root.querySelector('#h5pStatus');
-    const contentIdInput = root.querySelector('#h5pContentId');
-    const btnNew = root.querySelector('#h5pNew');
-    const btnLoad = root.querySelector('#h5pLoad');
-    const btnSave = root.querySelector('#h5pSave');
+    const taskH5PBaseUrl =
+      root.dataset.taskH5pBaseUrl ||
+      `/api/teaching/units/${encodeURIComponent(unitId)}/sections/${encodeURIComponent(sectionId)}/tasks/${encodeURIComponent(taskId)}/h5p`;
 
     const hiddenContentIdInput =
       root.querySelector('input[name="h5p_content_id"]') ||
@@ -248,7 +234,7 @@
       null;
 
     const setStatus = (msg) => {
-      if (!statusEl) return;
+      if (!statusEl || disposed) return;
       statusEl.textContent = msg || '';
     };
 
@@ -261,155 +247,257 @@
       if (!editorEl) return;
       const roots = editorEl.querySelectorAll('.h5p-editor-component-root');
       if (roots.length <= 1) return;
-      // Keep the first root: the component uses `querySelector(...)` internally and
-      // will operate on the first match.
       for (let i = 1; i < roots.length; i++) {
         roots[i].remove();
       }
     };
 
-    const patchTaskContentId = async (contentId) => {
-      if (!unitId || !sectionId || !taskId) return;
-      const url =
-        root.dataset.taskPatchUrl ||
-        `/api/teaching/units/${encodeURIComponent(unitId)}/sections/${encodeURIComponent(sectionId)}/tasks/${encodeURIComponent(taskId)}`;
-      const r = await fetch(url, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ h5p: { content_id: contentId, display_options: {} } }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        throw new Error(data?.detail || data?.error || `HTTP ${r.status}`);
-      }
+    const installEditor = (cid, loadContentCallback, saveContentCallback) => {
+      if (disposed || !editorHost) return;
+      const newEl = document.createElement('h5p-editor');
+      newEl.setAttribute('content-id', cid || 'new');
+      editorHost.replaceChildren(newEl);
+
+      newEl.loadContentCallback = loadContentCallback;
+      newEl.saveContentCallback = saveContentCallback;
+      addListener(
+        newEl,
+        'editorloaded',
+        (ev) => {
+          ensureNoDuplicateTemplates(newEl);
+          applyThemeToEditorIframeWithRetry(newEl);
+          setStatus(`Editor geladen (${ev?.detail?.ubername || 'unbekannte Bibliothek'}).`);
+        },
+        cleanupFns
+      );
+
+      editor = newEl;
+      ensureNoDuplicateTemplates(editor);
     };
 
     const run = async () => {
-      if (!contentIdInput || !btnNew || !btnLoad || !btnSave) {
-        setStatus('Editor UI is incomplete (missing DOM elements).');
+      if (!btnImport || !btnExport || !btnReset || !btnSave || !importFileInput || !editorHost) {
+        setStatus('Die H5P-Editor-Oberfläche ist unvollständig.');
         return;
       }
 
-      setStatus('Loading H5P webcomponents…');
+      setStatus('Lade H5P-Webcomponents …');
       const { defineElements } = await import('/h5p/webcomponents/index.js');
+      if (disposed) return;
       defineElements(['h5p-editor']);
 
-      const loadContentCallback = async (contentId) => {
-        const url = new URL('/h5p/editor/model', window.location.origin);
-        if (contentId && contentId !== 'new') url.searchParams.set('content_id', contentId);
+      let activeContentId = initialContentId || '';
+
+      const loadContentCallback = async () => {
+        const url = new URL(`${taskH5PBaseUrl}/editor-model`, window.location.origin);
         const r = await fetch(url.toString(), { credentials: 'include' });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
         return data;
       };
 
-      const saveContentCallback = async (contentId, requestBody) => {
-        const isUpdate = Boolean(contentId && contentId !== 'new');
-        const url = isUpdate ? `/h5p/contents/${encodeURIComponent(contentId)}` : '/h5p/contents';
-        const method = isUpdate ? 'PATCH' : 'POST';
-        const r = await fetch(url, {
-          method,
+      const saveContentCallback = async (_contentId, requestBody) => {
+        const r = await fetch(`${taskH5PBaseUrl}/save`, {
+          method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+        if (data?.content_id) {
+          activeContentId = data.content_id;
+          setHiddenContentId(activeContentId);
+        }
         return { contentId: data.content_id, metadata: data.metadata };
       };
 
-      let editor = null;
-      const installEditor = (cid) => {
-        const existing = root.querySelector('#h5pEditor');
-        const newEl = document.createElement('h5p-editor');
-        newEl.id = 'h5pEditor';
-        newEl.setAttribute('content-id', cid || 'new');
-        if (existing) {
-          existing.replaceWith(newEl);
-        } else {
-          root.appendChild(newEl);
-        }
-
-        // Wire callbacks *after* the element is connected so the component can render safely.
-        newEl.loadContentCallback = loadContentCallback;
-        newEl.saveContentCallback = saveContentCallback;
-        newEl.addEventListener('editorloaded', (ev) => {
-          ensureNoDuplicateTemplates(newEl);
-          applyThemeToEditorIframeWithRetry(newEl);
-          setStatus(`Editor loaded (${ev?.detail?.ubername || 'unknown library'}).`);
-        });
-
-        editor = newEl;
-        ensureNoDuplicateTemplates(editor);
-      };
-
-      const startContentId = initialContentId || 'new';
-      contentIdInput.value = initialContentId || '';
       setHiddenContentId(initialContentId || '');
-      installEditor(startContentId);
+      installEditor(initialContentId || 'new', loadContentCallback, saveContentCallback);
 
-      btnNew.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        contentIdInput.value = '';
-        setHiddenContentId('');
-        installEditor('new');
-        setStatus('Creating new content…');
-      });
+      addListener(
+        btnImport,
+        'click',
+        (ev) => {
+          ev.preventDefault();
+          importFileInput.click();
+        },
+        cleanupFns
+      );
 
-      btnLoad.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        const cid = (contentIdInput.value || '').trim();
-        if (!cid) {
-          setStatus('Bitte zuerst eine Content ID eingeben.');
-          return;
-        }
-        setHiddenContentId(cid);
-        installEditor(cid);
-        setStatus(`Loading content ${cid}…`);
-      });
+      addListener(
+        importFileInput,
+        'change',
+        async () => {
+          const file = importFileInput.files?.[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.set('file', file, file.name || 'content.h5p');
+          try {
+            setStatus('Importiere H5P-Paket …');
+            const r = await fetch(`${taskH5PBaseUrl}/import`, {
+              method: 'POST',
+              credentials: 'include',
+              body: formData,
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data?.detail || data?.error || `HTTP ${r.status}`);
+            activeContentId = data?.h5p?.content_id || '';
+            setHiddenContentId(activeContentId);
+            installEditor(activeContentId || 'new', loadContentCallback, saveContentCallback);
+            setStatus('H5P-Paket importiert.');
+          } catch (e) {
+            setStatus(toDisplayMessage(e));
+          } finally {
+            importFileInput.value = '';
+          }
+        },
+        cleanupFns
+      );
 
-      btnSave.addEventListener('click', async (ev) => {
-        ev.preventDefault();
-        try {
-          if (!editor) {
-            setStatus('Editor not ready.');
+      addListener(
+        btnExport,
+        'click',
+        async (ev) => {
+          ev.preventDefault();
+          if (!activeContentId) {
+            setStatus('Noch kein H5P-Inhalt zum Export vorhanden.');
             return;
           }
-          setStatus('Saving…');
-          const saved = await editor.save();
-          if (saved?.contentId) {
-            contentIdInput.value = saved.contentId;
-            setHiddenContentId(saved.contentId);
-            if (taskId) await patchTaskContentId(saved.contentId);
-            setStatus(`Saved. Content ID: ${saved.contentId}`);
-          } else {
-            setStatus('Saved.');
+          try {
+            setStatus('Exportiere H5P-Paket …');
+            const r = await fetch(`${taskH5PBaseUrl}/export`, { credentials: 'include' });
+            if (!r.ok) {
+              const data = await r.json().catch(() => ({}));
+              throw new Error(data?.detail || data?.error || `HTTP ${r.status}`);
+            }
+            const blob = await r.blob();
+            const href = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = href;
+            a.download = `task-${taskId || 'h5p'}.h5p`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(href);
+            setStatus('Export abgeschlossen.');
+          } catch (e) {
+            setStatus(toDisplayMessage(e));
           }
-        } catch (e) {
-          setStatus(String(e?.message || e));
-        }
-      });
+        },
+        cleanupFns
+      );
 
-      setStatus('Ready.');
+      addListener(
+        btnReset,
+        'click',
+        async (ev) => {
+          ev.preventDefault();
+          try {
+            setStatus('Setze verknüpften H5P-Inhalt zurück …');
+            const r = await fetch(`${taskH5PBaseUrl}/reset`, {
+              method: 'POST',
+              credentials: 'include',
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data?.detail || data?.error || `HTTP ${r.status}`);
+            activeContentId = '';
+            setHiddenContentId('');
+            installEditor('new', loadContentCallback, saveContentCallback);
+            setStatus('Die Aufgabe ist wieder auf einen leeren H5P-Entwurf gesetzt.');
+          } catch (e) {
+            setStatus(toDisplayMessage(e));
+          }
+        },
+        cleanupFns
+      );
+
+      addListener(
+        btnSave,
+        'click',
+        async (ev) => {
+          ev.preventDefault();
+          try {
+            if (!editor) {
+              setStatus('Der Editor ist noch nicht bereit.');
+              return;
+            }
+            setStatus('Speichere H5P-Inhalt …');
+            const saved = await editor.save();
+            if (saved?.contentId) {
+              activeContentId = saved.contentId;
+              setHiddenContentId(saved.contentId);
+              setStatus('H5P-Inhalt gespeichert.');
+            } else {
+              setStatus('Gespeichert.');
+            }
+          } catch (e) {
+            setStatus(toDisplayMessage(e));
+          }
+        },
+        cleanupFns
+      );
+
+      setStatus('Bereit.');
     };
 
-    run().catch((e) => {
-      setStatus('Init failed: ' + String(e?.message || e));
+    const whenReady = run().catch((error) => {
+      setStatus(toDisplayMessage(error));
+      throw error;
+    });
+
+    return {
+      whenReady,
+      destroy() {
+        if (disposed) return;
+        disposed = true;
+        editor = null;
+        for (const cleanup of cleanupFns.splice(0).reverse()) {
+          try {
+            cleanup();
+          } catch {
+            // Best-effort only.
+          }
+        }
+        editorHost?.replaceChildren();
+        delete root.dataset.gustavH5pEditorInit;
+      },
+    };
+  };
+
+  const autoMountAll = (contextEl) => {
+    const scope = contextEl || document;
+    scope.querySelectorAll('[data-h5p-task-editor="true"]').forEach((root) => {
+      if (root.dataset.gustavH5pAutoMounted === 'true') return;
+      root.dataset.gustavH5pAutoMounted = 'true';
+      mountH5PTaskEditor(root);
     });
   };
 
-  // Initial page load (full navigation).
-  initAll(document);
+  export const mountH5PTaskEditor = (root) => {
+    if (!root || !(root instanceof Element)) {
+      throw new Error('Der H5P-Editor konnte nicht initialisiert werden.');
+    }
 
-  // HTMX swaps: init in the swapped subtree.
-  document.body?.addEventListener('htmx:afterSwap', (ev) => {
-    const target = ev?.detail?.target;
-    initAll(target || document);
-  });
+    const previous = activeMounts.get(root);
+    previous?.destroy?.();
 
-  // HTMX history restore (back/forward).
-  document.body?.addEventListener('htmx:restored', () => {
-    initAll(document);
-  });
-})();
+    const mount = createMount(root);
+    activeMounts.set(root, mount);
+
+    return {
+      whenReady: mount.whenReady,
+      destroy() {
+        if (activeMounts.get(root) === mount) {
+          activeMounts.delete(root);
+        }
+        mount.destroy();
+      },
+    };
+  };
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => autoMountAll(document), { once: true });
+} else {
+  autoMountAll(document);
+}

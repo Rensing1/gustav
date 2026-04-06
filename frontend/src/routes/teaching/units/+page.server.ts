@@ -28,8 +28,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
     hidePageHeading: true,
     wideWorkspaceShell: true,
     pageTitle: "Lerneinheiten",
-    pageCopy: "Finde und öffne deine Lerneinheiten in einer ruhigen, scanbaren Bestandsliste.",
-    showCreateDialog: url.searchParams.get("create") == "1"
+    pageCopy: ""
   };
 };
 

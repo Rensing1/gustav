@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 describe("teacher units catalog route contract", () => {
-  it("uses the shared page head and catalog components without rendering filter blocks", () => {
+  it("uses the shared page head and a flat catalog table without the old filter contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
     const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
@@ -19,13 +19,17 @@ describe("teacher units catalog route contract", () => {
     expect(routeSource).toContain("<PageActionHead");
     expect(routeSource).toContain("<TeacherUnitsCatalogToolbar");
     expect(routeSource).toContain("<TeacherUnitsCatalogList");
-    expect(routeSource).not.toContain("views={data.catalog.views}");
-    expect(routeSource).not.toContain("activeView={data.catalog.active_view}");
+    expect(routeSource).toContain('class="workspace-modal"');
+    expect(routeSource).not.toContain("activeViewLabel=");
+    expect(routeSource).not.toContain("data.catalog.views");
     expect(routeSource).not.toContain("data.catalog.filters");
-    expect(routeSource).not.toContain("active_filters.status");
-    expect(routeSource).not.toContain("active_filters.course_id");
+    expect(routeSource).not.toContain('href={data.catalog.create_href}');
+    expect(routeSource).not.toContain("data.showCreateDialog");
+    expect(routeSource).not.toContain("workspace-section workspace-units-catalog__workspace");
+    expect(routeSource).not.toContain("Status</span>");
     expect(serverSource).toContain("hidePageHeading: true");
     expect(serverSource).toContain("wideWorkspaceShell: true");
     expect(serverSource).not.toContain("headerAction:");
+    expect(serverSource).not.toContain("showCreateDialog:");
   });
 });

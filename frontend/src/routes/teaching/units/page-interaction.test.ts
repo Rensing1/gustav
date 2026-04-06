@@ -20,7 +20,6 @@ const sampleData: PageData = {
   wideWorkspaceShell: true,
   pageTitle: "Lerneinheiten",
   pageCopy: "",
-  showCreateDialog: false,
   catalog: {
     user: {
       sub: "teacher-1",
@@ -28,24 +27,7 @@ const sampleData: PageData = {
       role: "teacher",
       roles: ["teacher"]
     },
-    views: [
-      { id: "recent", label: "Zuletzt bearbeitet", active: true, href: "/teaching/units?view=recent" },
-      { id: "draft", label: "Entwürfe", active: false, href: "/teaching/units?view=draft" }
-    ],
-    active_view: "recent",
     query: "",
-    filters: {
-      status: [],
-      subjects: [],
-      grade_levels: [],
-      courses: []
-    },
-    active_filters: {
-      status: "all",
-      subject: "",
-      grade_level: "",
-      course_id: ""
-    },
     sort: "updated_desc",
     result_count: 1,
     items: [
@@ -53,7 +35,10 @@ const sampleData: PageData = {
         id: "unit-1",
         title: "Wie soll der Staat handeln?",
         topic: "Mehr Staat in der Krise",
-        meta: "Modular · In Bearbeitung",
+        status_label: "In Bearbeitung",
+        status_tone: "accent",
+        courses_count: 1,
+        courses: [{ id: "course-1", title: "10a Politik", href: "/teaching/courses/course-1" }],
         updated_at: "2026-04-06T09:30:00+00:00",
         href: "/teaching/units/unit-1"
       }
@@ -89,5 +74,35 @@ describe("teacher units catalog page", () => {
       noScroll: true,
       replaceState: true
     });
+  });
+
+  it("opens the create dialog locally without changing the URL", async () => {
+    render(Page, {
+      props: {
+        data: sampleData,
+        form: {} as never
+      }
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Neue Lerneinheit" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Neue Lerneinheit" }));
+
+    expect(screen.getByRole("dialog", { name: "Neue Lerneinheit" })).toBeInTheDocument();
+    expect(goto).not.toHaveBeenCalled();
+  });
+
+  it("closes the create dialog when the close button is pressed", async () => {
+    render(Page, {
+      props: {
+        data: sampleData,
+        form: {} as never
+      }
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Neue Lerneinheit" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Dialog schließen" }));
+
+    expect(screen.queryByRole("dialog", { name: "Neue Lerneinheit" })).not.toBeInTheDocument();
   });
 });

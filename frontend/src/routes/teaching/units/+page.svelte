@@ -11,6 +11,20 @@
   let queryDraft = $state("");
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
+  function openCreateDialog(): void {
+    createDialogOpen = true;
+  }
+
+  function closeCreateDialog(): void {
+    createDialogOpen = false;
+  }
+
+  function handleDialogKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      closeCreateDialog();
+    }
+  }
+
   function scheduleLiveSearch(nextQuery: string): void {
     queryDraft = nextQuery;
 
@@ -33,7 +47,7 @@
   }
 
   $effect(() => {
-    createDialogOpen = Boolean(data.showCreateDialog) || Boolean(form?.createUnit);
+    createDialogOpen = Boolean(form?.createUnit);
   });
 
   $effect(() => {
@@ -45,14 +59,16 @@
   <title>Lerneinheiten | GUSTAV</title>
 </svelte:head>
 
+<svelte:window onkeydown={handleDialogKeydown} />
+
 <div class="workspace-page workspace-units-catalog">
   <PageActionHead title={data.pageTitle}>
     {#snippet actions()}
-      <a class="workspace-link-action" href={data.catalog.create_href}>Neue Lerneinheit</a>
+      <button class="workspace-link-action" type="button" onclick={openCreateDialog}>Neue Lerneinheit</button>
     {/snippet}
   </PageActionHead>
 
-  <section class="workspace-section workspace-units-catalog__workspace">
+  <section class="workspace-units-catalog__workspace">
     <TeacherUnitsCatalogToolbar
       query={queryDraft}
       sort={data.catalog.sort}
@@ -60,7 +76,6 @@
     />
 
     <TeacherUnitsCatalogList
-      activeViewLabel={data.catalog.views.find((view) => view.active)?.label ?? "Ergebnisse"}
       resultCount={data.catalog.result_count}
       items={data.catalog.items}
     />
@@ -68,17 +83,13 @@
 </div>
 
 {#if createDialogOpen}
-  <div
-    class="workspace-modal-backdrop"
-    role="presentation"
-    tabindex="-1"
-    onclick={() => (createDialogOpen = false)}
-    onkeydown={(event) => {
-      if (event.key === "Escape") {
-        createDialogOpen = false;
-      }
-    }}
-  >
+  <div class="workspace-modal">
+    <div
+      class="workspace-modal-backdrop"
+      role="presentation"
+      tabindex="-1"
+      onclick={closeCreateDialog}
+    ></div>
     <div
       class="workspace-modal-card"
       role="dialog"
@@ -93,7 +104,7 @@
           <p class="workspace-label">Lerneinheiten</p>
           <h2 id="create-unit-title">Neue Lerneinheit</h2>
         </div>
-        <button class="workspace-icon-button" type="button" aria-label="Dialog schließen" onclick={() => (createDialogOpen = false)}>✕</button>
+        <button class="workspace-icon-button" type="button" aria-label="Dialog schließen" onclick={closeCreateDialog}>✕</button>
       </div>
 
       <form method="POST" class="workspace-form">

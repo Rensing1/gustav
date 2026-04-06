@@ -3151,64 +3151,109 @@ select {
 
 .workspace-node-editor {
   display: grid;
-  gap: 1.15rem;
+  gap: 1rem;
   align-items: start;
+}
+
+.teacher-node-editor-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.teacher-node-editor-properties {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem 1rem 1.1rem;
+}
+
+.teacher-node-editor-properties__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.teacher-node-editor-properties__head h2 {
+  margin: 0.15rem 0 0;
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  line-height: 1.1;
+}
+
+.teacher-node-editor-properties__form {
+  display: grid;
+  gap: 0.85rem;
 }
 
 .workspace-node-editor-section {
   display: grid;
   gap: 1.05rem;
-  padding: 1.15rem 1.25rem 1.2rem;
+  padding: 1rem;
 }
 
+.teacher-node-editor-section__header,
 .workspace-node-editor-section-header {
   display: flex;
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--color-line);
 }
 
+.teacher-node-editor-section__header h2,
 .workspace-node-editor-section-header h2,
 .workspace-node-editor-card-header h3 {
   margin: 0.18rem 0 0;
-  font-size: clamp(1.25rem, 2vw, 1.6rem);
+  font-size: clamp(1.1rem, 1.8vw, 1.4rem);
   line-height: 1.15;
 }
 
-.workspace-node-editor-section-header--accent {
-  padding-bottom: 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 82%, white 18%);
-}
-
+.teacher-node-editor-section__heading,
 .workspace-node-editor-section-heading {
   display: grid;
   gap: 0.15rem;
 }
 
+.teacher-node-editor-section__action,
 .workspace-node-editor-section-action {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.2rem 0;
-  border: 0;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--color-accent);
   background: transparent;
   color: var(--color-accent);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.workspace-node-editor-section-action::before {
-  content: "+";
-  display: inline-grid;
-  place-items: center;
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-accent-soft) 40%, white 60%);
-  color: var(--color-accent);
-  font-size: 0.84rem;
-  line-height: 1;
+.teacher-node-editor-section__action:hover,
+.teacher-node-editor-section__action:focus-visible,
+.workspace-node-editor-section-action:hover,
+.workspace-node-editor-section-action:focus-visible {
+  background: var(--color-accent-soft);
+}
+
+.teacher-node-editor-section__create {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px dashed var(--color-line);
+}
+
+.teacher-node-editor-section__create-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.teacher-node-editor-section__list {
+  display: grid;
+  gap: 0.8rem;
 }
 
 .workspace-node-editor-stack {
@@ -3219,13 +3264,11 @@ select {
 .workspace-node-editor-card {
   display: grid;
   gap: 0.95rem;
-  padding: 0.95rem 1.05rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 82%, white 18%);
-  border-radius: 1rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0)),
-    color-mix(in srgb, var(--color-bg-surface) 94%, white 6%);
-  box-shadow: 0 10px 28px rgba(35, 41, 45, 0.05);
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
+  box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
 }
 
 .workspace-node-editor-card--expanded {
@@ -3234,9 +3277,7 @@ select {
 
 .workspace-node-editor-card--create {
   border-style: dashed;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0)),
-    color-mix(in srgb, var(--color-bg-surface) 90%, white 10%);
+  background: var(--color-bg-surface);
 }
 
 .workspace-node-editor-entry-summary,
@@ -3266,8 +3307,7 @@ select {
 .workspace-node-editor-entry-summary-bar {
   width: 0.28rem;
   align-self: stretch;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-accent) 82%, white 18%);
+  background: var(--color-accent);
 }
 
 .workspace-node-editor-entry--task .workspace-node-editor-entry-summary-bar {
@@ -3309,9 +3349,9 @@ select {
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 86%, white 14%);
-  border-radius: 0.8rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
   color: var(--color-text-muted);
   font-size: 1rem;
   font-weight: 800;
@@ -3372,10 +3412,10 @@ select {
   gap: 0.2rem;
   min-width: 11rem;
   padding: 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 86%, white 14%);
-  border-radius: 0.9rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 94%, white 6%);
-  box-shadow: 0 12px 28px rgba(31, 37, 42, 0.14);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
+  box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
 }
 
 .workspace-node-editor-card-menu__panel form {
@@ -3421,15 +3461,33 @@ select {
   align-items: center;
 }
 
+.teacher-node-editor-criteria-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.teacher-node-editor-criteria-fieldset legend {
+  padding: 0;
+  margin-bottom: 0.55rem;
+  font: inherit;
+  font-weight: 700;
+}
+
+.teacher-node-editor-criteria-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
 .workspace-node-editor .workspace-field textarea {
   min-height: 8.5rem;
 }
 
 .workspace-node-editor-file-preview {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-border) 82%, white 18%);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 96%, white 4%);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
 }
 
 .workspace-node-editor-file-preview img,
@@ -3458,7 +3516,7 @@ select {
 }
 
 .workspace-node-editor--content-only {
-  max-width: 58rem;
+  max-width: 64rem;
 }
 
 .teacher-h5p-editor {

@@ -40,12 +40,19 @@ function asBody(entry: FormDataEntryValue | null): string {
   return typeof entry === "string" ? entry : "";
 }
 
-function parseCriteriaText(raw: string): string[] {
-  return raw
-    .split("\n")
+function normalizeCriteriaItems(values: string[]): string[] {
+  return values
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 10);
+}
+
+function readCriteriaItems(formData: FormData): string[] {
+  const repeatedEntries = formData.getAll("criteria[]").filter((entry): entry is string => typeof entry === "string");
+  if (repeatedEntries.length > 0) {
+    return normalizeCriteriaItems(repeatedEntries);
+  }
+  return normalizeCriteriaItems(asBody(formData.get("criteria_text")).split("\n"));
 }
 
 function parseOptionalPositiveInt(raw: string): number | null | typeof INVALID_NUMBER {
@@ -188,12 +195,12 @@ function taskPayloadFromForm(
     allowImplicitInstructionForH5P: boolean;
   }
 ):
-  | { ok: true; payload: Record<string, unknown>; values: Record<string, string> }
-  | { ok: false; error: string; values: Record<string, string> } {
+  | { ok: true; payload: Record<string, unknown>; values: Record<string, unknown> }
+  | { ok: false; error: string; values: Record<string, unknown> } {
   const taskKind = asText(formData.get("task_kind")) || "native";
   const instructionMdRaw = asBody(formData.get("instruction_md"));
   const instructionMd = instructionMdRaw.trim();
-  const criteriaText = asBody(formData.get("criteria_text"));
+  const criteriaItems = readCriteriaItems(formData);
   const teacherContextMdRaw = asBody(formData.get("teacher_context_md"));
   const dueAtRaw = asText(formData.get("due_at"));
   const maxAttemptsRaw = asText(formData.get("max_attempts"));
@@ -202,7 +209,7 @@ function taskPayloadFromForm(
   const values = {
     task_kind: taskKind,
     instruction_md: instructionMdRaw,
-    criteria_text: criteriaText,
+    criteria_items: criteriaItems,
     teacher_context_md: teacherContextMdRaw,
     due_at: dueAtRaw,
     max_attempts: maxAttemptsRaw,
@@ -228,7 +235,7 @@ function taskPayloadFromForm(
       taskKind === "h5p" && options.allowImplicitInstructionForH5P
         ? instructionMd || "H5P-Aufgabe"
         : instructionMd,
-    criteria: taskKind === "h5p" ? [] : parseCriteriaText(criteriaText),
+    criteria: taskKind === "h5p" ? [] : criteriaItems,
     teacher_context_md: taskKind === "h5p" ? null : teacherContextMdRaw.trim() || null,
     due_at: dueAt,
     max_attempts: maxAttempts
@@ -246,6 +253,12 @@ function taskPayloadFromForm(
 
   return { ok: true, payload, values };
 }
+
+export const __testables = {
+  normalizeCriteriaItems,
+  readCriteriaItems,
+  taskPayloadFromForm
+};
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
   await requireSpaceBootstrap(fetch, cookies, currentPath(url), "teaching");

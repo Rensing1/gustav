@@ -3,6 +3,9 @@
   import { tick } from "svelte";
 
   import TeacherH5PTaskEditor from "$lib/components/TeacherH5PTaskEditor.svelte";
+  import TeacherNodeEditorProperties from "$lib/components/teacher-node-editor/TeacherNodeEditorProperties.svelte";
+  import TeacherNodeEditorSection from "$lib/components/teacher-node-editor/TeacherNodeEditorSection.svelte";
+  import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import type {
     TeacherUnitNodeEditorMaterial,
     TeacherUnitNodeEditorTask,
@@ -30,7 +33,7 @@
   type TaskFormValues = {
     task_kind: string;
     instruction_md: string;
-    criteria_text: string;
+    criteria_items: string[];
     teacher_context_md: string;
     due_at: string;
     max_attempts: string;
@@ -49,7 +52,7 @@
     return candidate.ok && candidate.editor ? (candidate as EditorActionSuccess) : null;
   }
 
-  function actionValues<T extends Record<string, string>>(value: unknown): Partial<T> {
+  function actionValues<T extends Record<string, unknown>>(value: unknown): Partial<T> {
     if (!value || typeof value !== "object") {
       return {};
     }
@@ -106,6 +109,14 @@
 
   function createTaskValues(): Partial<TaskFormValues> {
     return actionValues<TaskFormValues>(form?.createTask);
+  }
+
+  function saveNodeValues(): { title?: string; required_prereq_count?: string } {
+    return actionValues<{ title: string; required_prereq_count: string }>(form?.saveNode);
+  }
+
+  function saveNodeError(): string | null {
+    return form?.saveNode?.error ?? null;
   }
 
   function materialKindLabel(material: TeacherUnitNodeEditorMaterial): string {
@@ -172,10 +183,6 @@
     return parts.join(" · ");
   }
 
-  function criteriaText(task: TeacherUnitNodeEditorTask): string {
-    return task.criteria.join("\n");
-  }
-
   function dateTimeLocalValue(value: string | null | undefined): string {
     if (!value) {
       return "";
@@ -202,8 +209,16 @@
     return taskValues(task).instruction_md ?? task.instruction_md;
   }
 
-  function taskCriteriaValue(task: TeacherUnitNodeEditorTask): string {
-    return taskValues(task).criteria_text ?? criteriaText(task);
+  function taskCriteriaItems(task: TeacherUnitNodeEditorTask): string[] {
+    return taskValues(task).criteria_items ?? task.criteria;
+  }
+
+  function createCriteriaItems(): string[] {
+    return createTaskValues().criteria_items ?? [];
+  }
+
+  function criteriaSlots(values: string[]): string[] {
+    return Array.from({ length: 10 }, (_, index) => values[index] ?? "");
   }
 
   function taskTeacherContextValue(task: TeacherUnitNodeEditorTask): string {
@@ -223,15 +238,21 @@
   }
 
   async function openCreateMaterial() {
-    showCreateMaterial = true;
+    showCreateMaterial = !showCreateMaterial;
     expandedMaterialId = null;
+    if (!showCreateMaterial) {
+      return;
+    }
     await tick();
     createMaterialCard?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   async function openCreateTask() {
-    showCreateTask = true;
+    showCreateTask = !showCreateTask;
     expandedTaskId = null;
+    if (!showCreateTask) {
+      return;
+    }
     await tick();
     createTaskCard?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
@@ -343,37 +364,74 @@
   <title>{editorState.node.editor_title} | GUSTAV</title>
 </svelte:head>
 
-<section class="workspace-composer-header workspace-unit-header workspace-node-editor-header">
-  <div class="workspace-composer-copy workspace-node-editor-hero-copy">
-    <a class="workspace-back-link" href={`/teaching/units/${editorState.unit.id}`}>Zurück zum Graph</a>
-    <p class="workspace-kicker">
-      {editorState.node.kind === "module" ? "Modul-Editor" : "Abschnitts-Editor"}
-    </p>
-    <h1>{editorState.node.editor_title}</h1>
-    <p class="workspace-composer-copyline">
-      {#if editorState.node.kind === "module"}
-        Materialien und Aufgaben dieses Moduls bearbeiten
-      {:else}
-        Materialien und Aufgaben dieses Abschnitts bearbeiten
-      {/if}
-    </p>
-  </div>
-</section>
+<div class="workspace-page teacher-node-editor-page">
+  <PageActionHead
+    backHref={`/teaching/units/${editorState.unit.id}`}
+    backLabel="Zurück zum Graph"
+    title={editorState.node.editor_title}
+  />
 
-<section class="workspace-node-editor workspace-node-editor--content-only">
-  <section class="workspace-panel workspace-node-editor-section workspace-node-editor-section--materials">
-    <div class="workspace-node-editor-section-header workspace-node-editor-section-header--accent">
-      <div class="workspace-node-editor-section-heading">
-        <p class="workspace-label">Material</p>
-        <h2>Materialien</h2>
-      </div>
-      <button class="workspace-node-editor-section-action" type="button" onclick={openCreateMaterial}>
-        Material hinzufügen
-      </button>
-    </div>
+  <section class="workspace-node-editor workspace-node-editor--content-only">
+    <TeacherNodeEditorProperties
+      node={editorState.node}
+      settings={editorState.settings}
+      values={saveNodeValues()}
+      error={saveNodeError()}
+    />
 
-    <div class="workspace-node-editor-stack">
-      {#if editorState.materials.length}
+    <TeacherNodeEditorSection
+      eyebrow="Material"
+      title="Materialien"
+      createLabel="Material hinzufügen"
+      showCreate={showCreateMaterial}
+      hasItems={editorState.materials.length > 0}
+      emptyMessage="Noch keine Materialien hinterlegt."
+      onCreate={openCreateMaterial}
+    >
+      {#snippet create()}
+        <form method="POST" action="?/createMaterial" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm}>
+          <input type="hidden" name="section_id" value={sectionId()} />
+
+          <label class="workspace-field">
+            <span>Materialtyp</span>
+            <select bind:value={createMaterialKind} name="material_kind">
+              <option value="markdown">Textmaterial</option>
+              <option value="file">Datei</option>
+            </select>
+          </label>
+
+          <label class="workspace-field">
+            <span>Titel</span>
+            <input name="title" type="text" value={createMaterialValues().title ?? ""} />
+          </label>
+
+          {#if createMaterialKind === "file"}
+            <label class="workspace-field">
+              <span>Datei</span>
+              <input name="upload_file" type="file" />
+            </label>
+            <label class="workspace-field">
+              <span>Alternativtext</span>
+              <input name="alt_text" type="text" value={createMaterialValues().alt_text ?? ""} />
+            </label>
+          {:else}
+            <label class="workspace-field">
+              <span>Inhalt</span>
+              <textarea name="body_md" rows="7">{createMaterialValues().body_md ?? ""}</textarea>
+            </label>
+          {/if}
+
+          {#if form?.createMaterial?.error}
+            <p class="workspace-note workspace-note--error">{form.createMaterial.error}</p>
+          {/if}
+
+          <div class="workspace-node-editor-card-actions">
+            <button class="workspace-link-action" type="submit">Material hinzufügen</button>
+          </div>
+        </form>
+      {/snippet}
+
+      {#snippet list()}
         {#each editorState.materials as material}
           <article class:workspace-node-editor-card--expanded={expandedMaterialId === material.id} class="workspace-node-editor-card workspace-node-editor-entry">
             <button class="workspace-node-editor-entry-summary" type="button" onclick={() => toggleMaterial(material.id)}>
@@ -460,80 +518,86 @@
             {/if}
           </article>
         {/each}
-      {:else}
-        <p class="workspace-empty">Noch keine Materialien hinterlegt.</p>
-      {/if}
+      {/snippet}
+    </TeacherNodeEditorSection>
 
-      {#if showCreateMaterial}
-        <article bind:this={createMaterialCard} class="workspace-node-editor-card workspace-node-editor-card--create workspace-node-editor-card--expanded">
-          <div class="workspace-node-editor-create-header">
-            <div>
-              <p class="workspace-kicker">Neu</p>
-              <h3>Material hinzufügen</h3>
-            </div>
-            {#if editorState.materials.length}
-              <button class="workspace-node-editor-entry-close" type="button" onclick={() => (showCreateMaterial = false)}>Schließen</button>
-            {/if}
+    <TeacherNodeEditorSection
+      eyebrow="Aufgaben"
+      title="Aufgaben"
+      createLabel="Aufgabe hinzufügen"
+      showCreate={showCreateTask}
+      hasItems={editorState.tasks.length > 0}
+      emptyMessage="Noch keine Aufgaben hinterlegt."
+      onCreate={openCreateTask}
+    >
+      {#snippet create()}
+        <form method="POST" action="?/createTask" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm}>
+          <input type="hidden" name="section_id" value={sectionId()} />
+
+          <label class="workspace-field">
+            <span>Aufgabentyp</span>
+            <select bind:value={createTaskKind} name="task_kind">
+              <option value="native">Normale Aufgabe</option>
+              <option value="h5p">H5P</option>
+              <option value="visual">Visuelle Aufgabe</option>
+              <option value="scratch">Scratch</option>
+              <option value="calliope">Calliope</option>
+            </select>
+          </label>
+
+          {#if createTaskKind === "h5p"}
+            <p class="workspace-note">
+              Es wird zunächst eine H5P-Aufgabe angelegt. Den eigentlichen H5P-Inhalt bearbeitest du danach in der aufgeklappten Karte.
+            </p>
+          {:else}
+            <label class="workspace-field">
+              <span>Anweisung & Beschreibung</span>
+              <textarea name="instruction_md" rows="7">{createTaskValues().instruction_md ?? ""}</textarea>
+            </label>
+
+            <fieldset class="workspace-field teacher-node-editor-criteria-fieldset">
+              <legend>Kriterien</legend>
+              <div class="teacher-node-editor-criteria-list">
+                {#each criteriaSlots(createCriteriaItems()) as criterion, index}
+                  <label class="workspace-field">
+                    <span>Kriterium {index + 1}</span>
+                    <input name="criteria[]" type="text" value={criterion} />
+                  </label>
+                {/each}
+              </div>
+            </fieldset>
+
+            <label class="workspace-field">
+              <span>Lehrkraft-Kontext</span>
+              <textarea name="teacher_context_md" rows="4">{createTaskValues().teacher_context_md ?? ""}</textarea>
+            </label>
+          {/if}
+
+          <div class="workspace-node-editor-grid">
+            <label class="workspace-field">
+              <span>Fällig bis</span>
+              <input name="due_at" type="datetime-local" value={createTaskValues().due_at ?? ""} />
+            </label>
+
+            <label class="workspace-field">
+              <span>Max. Versuche</span>
+              <input name="max_attempts" min="1" type="number" value={createTaskValues().max_attempts ?? ""} />
+            </label>
           </div>
 
-          <form method="POST" action="?/createMaterial" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm}>
-            <input type="hidden" name="section_id" value={sectionId()} />
+          <input name="h5p_content_id" type="hidden" value={createTaskValues().h5p_content_id ?? ""} />
 
-            <label class="workspace-field">
-              <span>Materialtyp</span>
-              <select bind:value={createMaterialKind} name="material_kind">
-                <option value="markdown">Textmaterial</option>
-                <option value="file">Datei</option>
-              </select>
-            </label>
+          {#if form?.createTask?.error}
+            <p class="workspace-note workspace-note--error">{form.createTask.error}</p>
+          {/if}
 
-            <label class="workspace-field">
-              <span>Titel</span>
-              <input name="title" type="text" value={createMaterialValues().title ?? ""} />
-            </label>
+          <div class="workspace-node-editor-card-actions">
+            <button class="workspace-link-action" type="submit">Aufgabe hinzufügen</button>
+          </div>
+        </form>
+      {/snippet}
 
-            {#if createMaterialKind === "file"}
-              <label class="workspace-field">
-                <span>Datei</span>
-                <input name="upload_file" type="file" />
-              </label>
-              <label class="workspace-field">
-                <span>Alternativtext</span>
-                <input name="alt_text" type="text" value={createMaterialValues().alt_text ?? ""} />
-              </label>
-            {:else}
-              <label class="workspace-field">
-                <span>Inhalt</span>
-                <textarea name="body_md" rows="7">{createMaterialValues().body_md ?? ""}</textarea>
-              </label>
-            {/if}
-
-            {#if form?.createMaterial?.error}
-              <p class="workspace-note workspace-note--error">{form.createMaterial.error}</p>
-            {/if}
-
-            <div class="workspace-node-editor-card-actions">
-              <button class="workspace-link-action" type="submit">Material hinzufügen</button>
-            </div>
-          </form>
-        </article>
-      {/if}
-    </div>
-  </section>
-
-  <section class="workspace-panel workspace-node-editor-section workspace-node-editor-section--tasks">
-    <div class="workspace-node-editor-section-header workspace-node-editor-section-header--accent">
-      <div class="workspace-node-editor-section-heading">
-        <p class="workspace-label">Aufgaben</p>
-        <h2>Aufgaben</h2>
-      </div>
-      <button class="workspace-node-editor-section-action" type="button" onclick={openCreateTask}>
-        Aufgabe hinzufügen
-      </button>
-    </div>
-
-    <div class="workspace-node-editor-stack">
-      {#if editorState.tasks.length}
+      {#snippet list()}
         {#each editorState.tasks as task, index}
           <article class:workspace-node-editor-card--expanded={expandedTaskId === task.id} class="workspace-node-editor-card workspace-node-editor-entry workspace-node-editor-entry--task">
             <button class="workspace-node-editor-entry-summary" type="button" onclick={() => toggleTask(task.id)}>
@@ -579,7 +643,6 @@
 
                   {#if task.kind === "h5p"}
                     <input type="hidden" name="instruction_md" value={taskInstructionValue(task)} />
-                    <input type="hidden" name="criteria_text" value="" />
                     <input type="hidden" name="h5p_content_id" value={task.h5p?.content_id ?? ""} />
                     <p class="workspace-note">Diese Aufgabe wird direkt im H5P-Editor gepflegt.</p>
                     <TeacherH5PTaskEditor
@@ -594,10 +657,17 @@
                       <textarea name="instruction_md" rows="7">{taskInstructionValue(task)}</textarea>
                     </label>
 
-                    <label class="workspace-field">
-                      <span>Kriterien, eine Zeile pro Kriterium</span>
-                      <textarea name="criteria_text" rows="4">{taskCriteriaValue(task)}</textarea>
-                    </label>
+                    <fieldset class="workspace-field teacher-node-editor-criteria-fieldset">
+                      <legend>Kriterien</legend>
+                      <div class="teacher-node-editor-criteria-list">
+                        {#each criteriaSlots(taskCriteriaItems(task)) as criterion, index}
+                          <label class="workspace-field">
+                            <span>Kriterium {index + 1}</span>
+                            <input name="criteria[]" type="text" value={criterion} />
+                          </label>
+                        {/each}
+                      </div>
+                    </fieldset>
 
                     <label class="workspace-field">
                       <span>Lehrkraft-Kontext</span>
@@ -641,81 +711,7 @@
             {/if}
           </article>
         {/each}
-      {:else}
-        <p class="workspace-empty">Noch keine Aufgaben hinterlegt.</p>
-      {/if}
-
-      {#if showCreateTask}
-        <article bind:this={createTaskCard} class="workspace-node-editor-card workspace-node-editor-card--create workspace-node-editor-card--expanded">
-          <div class="workspace-node-editor-create-header">
-            <div>
-              <p class="workspace-kicker">Neu</p>
-              <h3>Aufgabe hinzufügen</h3>
-            </div>
-            {#if editorState.tasks.length}
-              <button class="workspace-node-editor-entry-close" type="button" onclick={() => (showCreateTask = false)}>Schließen</button>
-            {/if}
-          </div>
-
-          <form method="POST" action="?/createTask" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm}>
-            <input type="hidden" name="section_id" value={sectionId()} />
-
-            <label class="workspace-field">
-              <span>Aufgabentyp</span>
-              <select bind:value={createTaskKind} name="task_kind">
-                <option value="native">Normale Aufgabe</option>
-                <option value="h5p">H5P</option>
-                <option value="visual">Visuelle Aufgabe</option>
-                <option value="scratch">Scratch</option>
-                <option value="calliope">Calliope</option>
-              </select>
-            </label>
-
-            {#if createTaskKind === "h5p"}
-              <p class="workspace-note">
-                Es wird zunächst eine H5P-Aufgabe angelegt. Den eigentlichen H5P-Inhalt bearbeitest du danach in der aufgeklappten Karte.
-              </p>
-            {:else}
-              <label class="workspace-field">
-                <span>Anweisung & Beschreibung</span>
-                <textarea name="instruction_md" rows="7">{createTaskValues().instruction_md ?? ""}</textarea>
-              </label>
-
-              <label class="workspace-field">
-                <span>Kriterien, eine Zeile pro Kriterium</span>
-                <textarea name="criteria_text" rows="4">{createTaskValues().criteria_text ?? ""}</textarea>
-              </label>
-
-              <label class="workspace-field">
-                <span>Lehrkraft-Kontext</span>
-                <textarea name="teacher_context_md" rows="4">{createTaskValues().teacher_context_md ?? ""}</textarea>
-              </label>
-            {/if}
-
-            <div class="workspace-node-editor-grid">
-              <label class="workspace-field">
-                <span>Fällig bis</span>
-                <input name="due_at" type="datetime-local" value={createTaskValues().due_at ?? ""} />
-              </label>
-
-              <label class="workspace-field">
-                <span>Max. Versuche</span>
-                <input name="max_attempts" min="1" type="number" value={createTaskValues().max_attempts ?? ""} />
-              </label>
-            </div>
-
-            <input name="h5p_content_id" type="hidden" value={createTaskValues().h5p_content_id ?? ""} />
-
-            {#if form?.createTask?.error}
-              <p class="workspace-note workspace-note--error">{form.createTask.error}</p>
-            {/if}
-
-            <div class="workspace-node-editor-card-actions">
-              <button class="workspace-link-action" type="submit">Aufgabe hinzufügen</button>
-            </div>
-          </form>
-        </article>
-      {/if}
-    </div>
+      {/snippet}
+    </TeacherNodeEditorSection>
   </section>
-</section>
+</div>

@@ -89,8 +89,8 @@ def test_theme_messages_de_present_and_has_keys():
 
 
 def test_theme_css_contains_component_hooks():
-    css = THEME_ROOT / "resources" / "css" / "gustav.css"
-    assert css.exists(), "gustav.css missing"
+    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    assert css.exists(), "auth-theme.css missing"
     text = css.read_text(encoding="utf-8")
     # Expected class hooks used by our FTL templates for compact layout
     for cls in [
@@ -102,8 +102,28 @@ def test_theme_css_contains_component_hooks():
         ".kc-submit",
         ".kc-message",
         ".kc-links",
+        ".kc-auth-shell",
+        ".kc-auth-card",
     ]:
         assert cls in text, f"Missing CSS hook: {cls}"
+
+
+def test_theme_css_uses_auth_design_tokens_instead_of_legacy_palette():
+    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    text = css.read_text(encoding="utf-8")
+
+    for token in [
+        "--auth-color-bg-base",
+        "--auth-color-surface",
+        "--auth-color-accent",
+        "--auth-color-border",
+        "--auth-font-display",
+        "--auth-font-body",
+        "--auth-font-mono",
+    ]:
+        assert token in text, f"Missing new auth design token {token}"
+
+    assert "legacy login.css" not in text
 
 
 def test_login_username_input_is_email():
@@ -165,8 +185,8 @@ def test_verify_email_template_uses_gustav_layout_hooks():
     for marker in [
         'class="kc-gustav"',
         'class="kc-card"',
-        "app-gustav-base.css",
         "gustav.css",
+        "auth-theme.css",
     ]:
         assert marker in text, f"login-verify-email.ftl should include {marker}"
 
@@ -178,8 +198,8 @@ def test_info_template_uses_gustav_layout_hooks():
     for marker in [
         'class="kc-gustav"',
         'class="kc-card"',
-        "app-gustav-base.css",
         "gustav.css",
+        "auth-theme.css",
     ]:
         assert marker in text, f"info.ftl should include {marker}"
 
@@ -192,8 +212,8 @@ def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
         for marker in [
             'class="kc-gustav"',
             'class="kc-card"',
-            "app-gustav-base.css",
             "gustav.css",
+            "auth-theme.css",
             '<#import "_gustav_error_components.ftl" as gustav_error>',
             "<@gustav_error.render_recovery_links",
             "<@gustav_error.render_locale_links",
@@ -437,6 +457,11 @@ def test_email_templates_present_for_verification_and_reset():
 
     assert verify_tpl.exists(), "email-verification.ftl missing for email verification flow"
     assert reset_tpl.exists(), "password-reset.ftl missing for password reset flow"
+
+
+def test_keycloak_theme_copies_shared_auth_stylesheet():
+    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    assert css.exists(), "Expected shared auth stylesheet for Keycloak theme"
 
 
 def test_email_templates_reference_support_contact():

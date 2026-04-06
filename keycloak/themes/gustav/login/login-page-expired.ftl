@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <#assign page_title = msg("gustavAuthExpiredTitle")>
   <title>${page_title} - GUSTAV</title>
-  <link rel="stylesheet" href="${url.resourcesPath}/css/app-gustav-base.css">
+  <link rel="stylesheet" href="${url.resourcesPath}/css/auth-theme.css">
   <link rel="stylesheet" href="${url.resourcesPath}/css/gustav.css">
   <script>
     (function(){
@@ -20,7 +20,9 @@
 </head>
 <body class="login-pf">
   <main id="kc-content" class="kc-gustav">
+    <div class="kc-auth-shell">
     <section class="kc-card">
+      <div class="kc-auth-card">
       <h1 class="kc-title">${page_title}</h1>
 
       <#if message?has_content>
@@ -41,7 +43,9 @@
 
       <@gustav_error.render_recovery_links appLink=app_link />
       <@gustav_error.render_locale_links />
+      </div>
     </section>
+    </div>
   </main>
 </body>
 </html>

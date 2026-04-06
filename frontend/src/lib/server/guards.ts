@@ -12,8 +12,7 @@ export function currentPath(url: URL): string {
 }
 
 function loginHref(path: string): string {
-  const params = new URLSearchParams({ redirect: path || "/" });
-  return `/auth/login?${params.toString()}`;
+  return `/?redirect=${encodeURIComponent(path || "/")}`;
 }
 
 export async function requireSessionBootstrap(

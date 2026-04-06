@@ -243,7 +243,7 @@ function createFlow(requestUrl: URL, redirectPath: string | null): AuthFlowRecor
   };
 }
 
-function parseAllowedRegistrationDomains(raw: string | undefined): Set<string> {
+export function parseAllowedRegistrationDomains(raw: string | undefined): Set<string> {
   if (!raw) {
     return new Set();
   }
@@ -255,7 +255,7 @@ function parseAllowedRegistrationDomains(raw: string | undefined): Set<string> {
   );
 }
 
-function isAllowedRegistrationEmail(email: string, allowedDomains: Set<string>): boolean {
+export function isAllowedRegistrationEmail(email: string, allowedDomains: Set<string>): boolean {
   if (!allowedDomains.size) {
     return true;
   }

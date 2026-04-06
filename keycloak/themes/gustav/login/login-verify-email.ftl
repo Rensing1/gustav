@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${msg("emailVerifyTitle")} - GUSTAV</title>
-  <link rel="stylesheet" href="${url.resourcesPath}/css/app-gustav-base.css">
+  <link rel="stylesheet" href="${url.resourcesPath}/css/auth-theme.css">
   <link rel="stylesheet" href="${url.resourcesPath}/css/gustav.css">
   <script>
     (function(){
@@ -19,7 +19,9 @@
 </head>
 <body class="login-pf">
   <main id="kc-content" class="kc-gustav">
+    <div class="kc-auth-shell">
     <section class="kc-card">
+      <div class="kc-auth-card">
       <h1 class="kc-title">${msg("emailVerifyTitle")}</h1>
 
       <#if message?has_content>
@@ -41,7 +43,9 @@
           <a href="${url.loginUrl}">${msg("doLogIn")}</a>
         </#if>
       </div>
+      </div>
     </section>
+    </div>
   </main>
 </body>
 </html>

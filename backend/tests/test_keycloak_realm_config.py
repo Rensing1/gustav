@@ -71,6 +71,20 @@ def test_realm_enables_remember_me():
     assert data.get("rememberMe", False) is True, "rememberMe should be enabled to render the checkbox"
 
 
+def test_realm_user_profile_restricts_registration_to_school_domain():
+    """Realm export should reject foreign self-registration domains at IdP level."""
+    data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
+    components = data.get("components", {})
+    providers = components.get("org.keycloak.userprofile.UserProfileProvider", [])
+    provider = providers[0] if providers else {}
+    config_items = provider.get("config", {}).get("kc.user.profile.config", [])
+    assert config_items, "declarative user profile config missing"
+    profile_config = config_items[0]
+    assert '"name": "email"' in profile_config or '"name":"email"' in profile_config
+    assert '"pattern"' in profile_config, "email profile must define a domain pattern validator"
+    assert "school\\\\.example" in profile_config, "realm export should document the allowed school domain"
+
+
 def test_realm_configures_smtp_from_address():
     """Realm export must configure a valid from address for emails.
 

@@ -4,8 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${msg("updatePasswordTitle")!msg("doResetPassword")} - GUSTAV</title>
-  <!-- Base app CSS (shared) + small login overrides -->
-  <link rel="stylesheet" href="${url.resourcesPath}/css/app-gustav-base.css">
+  <link rel="stylesheet" href="${url.resourcesPath}/css/auth-theme.css">
   <link rel="stylesheet" href="${url.resourcesPath}/css/gustav.css">
   <script>
     (function(){
@@ -19,8 +18,8 @@
   </script>
 </head>
 <body class="login-pf">
-  <main id="kc-content" class="kc-gustav">
-    <section class="kc-card">
+  <main id="kc-content" class="kc-gustav kc-auth-shell">
+    <section class="kc-card kc-auth-card">
       <h1 class="kc-title">${msg("updatePasswordTitle")!msg("doResetPassword")}</h1>
 
       <#if message?has_content>

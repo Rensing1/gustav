@@ -3,7 +3,8 @@
 Why:
     The new Browser-BFF must become the real product entry. These source-level
     tests lock in three behaviors:
-    - `/` redirects into login or the role-specific start target.
+    - `/` shows a public auth entry when no session exists.
+    - `/` redirects authenticated users into the role-specific start target.
     - room routes protect themselves with a shared guard helper.
     - diagnostics gains a top-level server loader instead of a static orphan page.
 """
@@ -16,24 +17,39 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_root_route_redirects_via_session_bootstrap_guard() -> None:
+def test_root_route_is_public_but_redirects_authenticated_users() -> None:
     root_loader_path = REPO_ROOT / "frontend" / "src" / "routes" / "+page.server.ts"
+    root_page_path = REPO_ROOT / "frontend" / "src" / "routes" / "+page.svelte"
     guard_path = REPO_ROOT / "frontend" / "src" / "lib" / "server" / "guards.ts"
 
     assert root_loader_path.is_file(), f"Missing root redirect loader: {root_loader_path}"
+    assert root_page_path.is_file(), f"Missing root auth entry page: {root_page_path}"
     assert guard_path.is_file(), f"Missing shared frontend guard helper: {guard_path}"
 
     root_loader_src = root_loader_path.read_text(encoding="utf-8")
+    root_page_src = root_page_path.read_text(encoding="utf-8")
     guard_src = guard_path.read_text(encoding="utf-8")
 
-    assert "requireSessionBootstrap" in root_loader_src
+    assert "readTypedJsonOrNull" in root_loader_src
     assert "redirect(" in root_loader_src
     assert "bootstrap.start_target" in root_loader_src
+    assert "if (bootstrap)" in root_loader_src
+    assert "return {" in root_loader_src
+
+    for needle in (
+        "Anmelden",
+        "Registrieren",
+        "Passwort vergessen",
+        '"/auth/login"',
+        '"/register"',
+        '"/forgot-password"',
+    ):
+        assert needle in root_page_src, f"Expected public auth entry marker {needle!r} in {root_page_path}"
 
     assert "requireSessionBootstrap" in guard_src
     assert "requireSpaceBootstrap" in guard_src
     assert '"/api/app/session-bootstrap"' in guard_src
-    assert "/auth/login" in guard_src
+    assert "/?redirect=" in guard_src
     assert "redirect" in guard_src
 
 

@@ -16,6 +16,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def test_frontend_contains_auth_bridge_routes() -> None:
     helper_path = REPO_ROOT / "frontend" / "src" / "lib" / "server" / "backend-auth.ts"
+    register_page_path = REPO_ROOT / "frontend" / "src" / "routes" / "register" / "+page.svelte"
+    register_page_server_path = REPO_ROOT / "frontend" / "src" / "routes" / "register" / "+page.server.ts"
+    forgot_page_path = REPO_ROOT / "frontend" / "src" / "routes" / "forgot-password" / "+page.svelte"
+    forgot_page_server_path = REPO_ROOT / "frontend" / "src" / "routes" / "forgot-password" / "+page.server.ts"
     login_path = REPO_ROOT / "frontend" / "src" / "routes" / "auth" / "login" / "+server.ts"
     register_path = REPO_ROOT / "frontend" / "src" / "routes" / "auth" / "register" / "+server.ts"
     forgot_path = REPO_ROOT / "frontend" / "src" / "routes" / "auth" / "forgot" / "+server.ts"
@@ -25,6 +29,10 @@ def test_frontend_contains_auth_bridge_routes() -> None:
 
     for path in (
         helper_path,
+        register_page_path,
+        register_page_server_path,
+        forgot_page_path,
+        forgot_page_server_path,
         login_path,
         register_path,
         forgot_path,
@@ -39,9 +47,25 @@ def test_frontend_contains_auth_bridge_routes() -> None:
     assert "protocol/openid-connect/token" in helper_src
     assert "reset-credentials" in helper_src
     assert "kc_action" in helper_src
+    assert "isAllowedRegistrationEmail" in helper_src
     assert "jwtVerify" in helper_src
     assert "/api/app/session-sync" in helper_src
     assert "headers.append(\"set-cookie\"" in helper_src or "headers.append('set-cookie'" in helper_src
+
+    register_page_src = register_page_path.read_text(encoding="utf-8")
+    register_page_server_src = register_page_server_path.read_text(encoding="utf-8")
+    forgot_page_src = forgot_page_path.read_text(encoding="utf-8")
+    forgot_page_server_src = forgot_page_server_path.read_text(encoding="utf-8")
+
+    assert 'action="/register"' in register_page_src
+    assert "Schul-E-Mail" in register_page_src
+    assert "/auth/register" in register_page_server_src
+    assert "invalid_email_domain" in register_page_server_src
+    assert "ALLOWED_REGISTRATION_DOMAINS" in register_page_server_src
+
+    assert 'action="/forgot-password"' in forgot_page_src
+    assert "Passwort vergessen" in forgot_page_src
+    assert "/auth/forgot" in forgot_page_server_src
 
     assert "startLoginFlow" in login_path.read_text(encoding="utf-8")
     assert "startRegisterFlow" in register_path.read_text(encoding="utf-8")

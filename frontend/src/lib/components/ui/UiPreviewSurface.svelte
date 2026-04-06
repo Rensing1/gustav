@@ -371,25 +371,87 @@
               </div>
             </div>
 
-            <div class="preview-graph-sample__node teacher-flow-unit-node teacher-flow-unit-node--selected">
-              <button
-                class="teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-open teacher-flow-unit-node--selected"
-                type="button"
-              >
-                <div class="teacher-flow-unit-node__copy">
-                  <div class="teacher-flow-unit-node__header">
-                    <div class="teacher-flow-unit-node__header-main">
-                      <span>Modul 1</span>
+            <div class="preview-graph-sample__learner-grid">
+              <div class="preview-graph-sample__node">
+                <button
+                  class="teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-open teacher-flow-unit-node--selected"
+                  type="button"
+                >
+                  <div class="teacher-flow-unit-node__copy">
+                    <div class="teacher-flow-unit-node__header">
+                      <div class="teacher-flow-unit-node__header-main">
+                        <span>Modul 1</span>
+                      </div>
                     </div>
-                    <span class="teacher-flow-unit-node__state teacher-flow-unit-node__state--open">Offen</span>
+                    <strong>Offenes Modul</strong>
+                    <div class="teacher-flow-unit-node__meta">
+                      <small>0/1 Aufgaben</small>
+                      <small>1 Materialien</small>
+                    </div>
                   </div>
-                  <strong>Fachbegriffe</strong>
-                  <div class="teacher-flow-unit-node__meta">
-                    <small>1/1 Aufgaben</small>
-                    <small>1 Materialien</small>
+                </button>
+              </div>
+
+              <div class="preview-graph-sample__node">
+                <button
+                  class="teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-open teacher-flow-unit-node--selected"
+                  type="button"
+                >
+                  <div class="teacher-flow-unit-node__copy">
+                    <div class="teacher-flow-unit-node__header">
+                      <div class="teacher-flow-unit-node__header-main">
+                        <span>Modul 2</span>
+                      </div>
+                    </div>
+                    <strong>Weiteres offenes Modul</strong>
+                    <div class="teacher-flow-unit-node__meta">
+                      <small>0/1 Aufgaben</small>
+                      <small>1 Materialien</small>
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+              </div>
+
+              <div class="preview-graph-sample__node">
+                <button
+                  class="teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-done"
+                  type="button"
+                >
+                  <div class="teacher-flow-unit-node__copy">
+                    <div class="teacher-flow-unit-node__header">
+                      <div class="teacher-flow-unit-node__header-main">
+                        <span>Modul 3</span>
+                      </div>
+                    </div>
+                    <strong>Abgeschlossen</strong>
+                    <div class="teacher-flow-unit-node__meta">
+                      <small>1/1 Aufgaben</small>
+                      <small>1 Materialien</small>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div class="preview-graph-sample__node">
+                <button
+                  class="teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-locked"
+                  type="button"
+                  disabled
+                >
+                  <div class="teacher-flow-unit-node__copy">
+                    <div class="teacher-flow-unit-node__header">
+                      <div class="teacher-flow-unit-node__header-main">
+                        <span>Modul 4</span>
+                      </div>
+                    </div>
+                    <strong>Noch nicht offen</strong>
+                    <div class="teacher-flow-unit-node__meta">
+                      <small>0/1 Aufgaben</small>
+                      <small>1 Materialien</small>
+                    </div>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         {/snippet}

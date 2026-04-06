@@ -37,9 +37,14 @@ describe("UiPreviewSurface", () => {
       throw new Error("learner graph preview card missing");
     }
     const learnerScope = within(learnerGraphCard);
-    expect(learnerScope.getByText("Offen")).toBeInTheDocument();
-    expect(learnerScope.getByText("1/1 Aufgaben")).toBeInTheDocument();
+    expect(learnerScope.getByText("Offenes Modul")).toBeInTheDocument();
+    expect(learnerScope.getByText("Weiteres offenes Modul")).toBeInTheDocument();
+    expect(learnerScope.getByText("Abgeschlossen")).toBeInTheDocument();
+    expect(learnerScope.getByText("Noch nicht offen")).toBeInTheDocument();
+    expect(learnerScope.queryByText("Fertig")).toBeNull();
+    expect(learnerScope.queryByText("Gesperrt")).toBeNull();
     expect(learnerScope.queryByText("Eigenschaften")).toBeNull();
+    expect(learnerGraphCard.querySelectorAll(".teacher-flow-unit-node--selected")).toHaveLength(2);
 
     const teacherNodeCard = screen.getByText("Lehrkraft-Knoten", { selector: ".preview-card__eyebrow" }).closest(".preview-card");
     expect(teacherNodeCard).not.toBeNull();

@@ -4,11 +4,11 @@ import {
   type TeacherFlowNode,
   type TeacherFlowNodeData
 } from "$lib/graph/teacher-unit-flow";
+import { learnerGraphNodeIsSelected } from "$lib/learning-unit/graph-selection";
 import type { LearningUnitGraph, LearningUnitGraphModule } from "$lib/types/learning";
 import type {
   TeacherUnitWorkspaceGraphPhase,
   TeacherUnitWorkspaceModuleItem,
-  TeacherUnitWorkspaceSelection,
   TeacherUnitWorkspaceView
 } from "$lib/types/home";
 import type { SessionBootstrapUser } from "$lib/types/session-bootstrap";
@@ -25,29 +25,20 @@ export type LearningFlowNode = TeacherFlowNode & {
   data: LearningFlowNodeData;
 };
 
-function learnerSelection(graph: LearningUnitGraph, activeModuleId: string | null): TeacherUnitWorkspaceSelection {
-  if (!activeModuleId) {
-    return { kind: "none" };
+function classTokens(value: unknown): string[] {
+  if (!value) {
+    return [];
   }
 
-  const module = graph.modules.find((candidate) => candidate.id === activeModuleId);
-  if (!module) {
-    return { kind: "none" };
+  if (typeof value === "string") {
+    return value.split(" ").filter(Boolean);
   }
 
-  return {
-    kind: "module",
-    module: {
-      id: module.id,
-      title: module.title,
-      phase_id: module.phase_id,
-      position_in_phase: module.position_in_phase,
-      required_prereq_count: module.required_prereq_count,
-      materials_count: module.materials_count,
-      tasks_count: module.tasks_total,
-      editor_href: ""
-    }
-  };
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => classTokens(entry));
+  }
+
+  return [];
 }
 
 function toTeacherPhases(graph: LearningUnitGraph): TeacherUnitWorkspaceGraphPhase[] {
@@ -80,8 +71,7 @@ function toTeacherPhases(graph: LearningUnitGraph): TeacherUnitWorkspaceGraphPha
 
 function toTeacherWorkspace(
   graph: LearningUnitGraph,
-  user: SessionBootstrapUser,
-  activeModuleId: string | null
+  user: SessionBootstrapUser
 ): TeacherUnitWorkspaceView {
   return {
     user,
@@ -102,18 +92,19 @@ function toTeacherWorkspace(
       phases: toTeacherPhases(graph),
       edges: graph.edges.map((edge) => ({ from: edge.from, to: edge.to }))
     },
-    selection: learnerSelection(graph, activeModuleId)
+    selection: { kind: "none" }
   };
 }
 
 export async function buildLearningUnitFlow(
   graph: LearningUnitGraph,
   user: SessionBootstrapUser,
-  activeModuleId: string | null,
+  openModuleIds: string[],
   onOpenModule: (moduleId: string) => void
 ): Promise<{ nodes: LearningFlowNode[]; edges: TeacherFlowEdge[] }> {
   const moduleById = new Map(graph.modules.map((module) => [module.id, module]));
-  const teacherWorkspace = toTeacherWorkspace(graph, user, activeModuleId);
+  const openModuleIdSet = new Set(openModuleIds);
+  const teacherWorkspace = toTeacherWorkspace(graph, user);
   const flow = await buildTeacherUnitFlow(teacherWorkspace);
 
   const nodes = flow.nodes.map((node) => {
@@ -133,10 +124,14 @@ export async function buildLearningUnitFlow(
 
     const module = moduleById.get(node.id);
     const openable = module?.status === "open" || module?.status === "done";
+    const selected = module
+      ? learnerGraphNodeIsSelected(module.status, openModuleIdSet, module.id)
+      : false;
 
     return {
       ...node,
       draggable: false,
+      selected,
       data: {
         ...node.data,
         selectHref: null,
@@ -152,7 +147,14 @@ export async function buildLearningUnitFlow(
         onSelect: openable && module ? () => onOpenModule(module.id) : null
       },
       class: [
-        node.class,
+        classTokens(node.class)
+          .filter(
+            (token: string) =>
+              token !== "teacher-flow-node--active"
+              && token !== "teacher-flow-node--context"
+              && token !== "teacher-flow-node--muted"
+          )
+          .join(" "),
         module ? `learning-flow-node--${module.status}` : ""
       ]
         .filter(Boolean)
@@ -165,6 +167,15 @@ export async function buildLearningUnitFlow(
     selectable: false,
     focusable: false,
     selected: false
+    ,
+    class: classTokens(edge.class)
+      .filter(
+        (token: string) =>
+          token !== "teacher-flow-edge--selected"
+          && token !== "teacher-flow-edge--related"
+          && token !== "teacher-flow-edge--muted"
+      )
+      .join(" ")
   }));
 
   return { nodes, edges };

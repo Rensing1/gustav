@@ -1,4 +1,4 @@
-import { render } from "@testing-library/svelte";
+import { render, screen } from "@testing-library/svelte";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,5 +114,74 @@ describe("LearningUnitContentWorkspace", () => {
     expect(css).toMatch(/\.learning-work-item__title\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*min-height:\s*1\.4rem;/s);
     expect(css).not.toMatch(/\.learning-unit-toc__item--active\s*\{[^}]*font-weight:/s);
     expect(css).toMatch(/\.learning-unit-toc__item--active::before\s*\{[^}]*background:/s);
+  });
+
+  it("marks all items of open modular groups in the outline", () => {
+    render(LearningUnitContentWorkspace, {
+      props: {
+        titleLabel: "",
+        title: "",
+        meta: null,
+        courseId: "course-1",
+        unitType: "modular",
+        tocOpen: true,
+        splitView: false,
+        activePane: "left",
+        visiblePaneIds: ["left"],
+        contentGroups: [
+          {
+            id: "module-1",
+            title: "Fachbegriffe",
+            items: [
+              { key: "material:1", kind: "material", title: "Was ist Programmieren?", position: 1, contextLabel: "Fachbegriffe", material: { id: "material-1", title: "Was ist Programmieren?", kind: "markdown", body_md: "Material" } },
+              { key: "task:1", kind: "task", title: "Aufgabe 1", position: 2, contextLabel: "Fachbegriffe", task: { id: "task-1", instruction_md: "Aufgabe", criteria: [], kind: "native" } }
+            ]
+          },
+          {
+            id: "module-2",
+            title: "Algorithmen",
+            items: [
+              { key: "material:2", kind: "material", title: "Schulbuch", position: 1, contextLabel: "Algorithmen", material: { id: "material-2", title: "Schulbuch", kind: "markdown", body_md: "Material" } }
+            ]
+          }
+        ],
+        paneItems: {
+          left: [],
+          right: []
+        },
+        historyTaskId: null,
+        history: [],
+        submittedTaskId: null,
+        submissionMessage: null,
+        submissionErrorTaskId: null,
+        submissionErrorMessage: null,
+        submissionFocusByPane: { left: null, right: null },
+        submissionModeByPane: { left: null, right: null },
+        showSplitToggle: false,
+        layoutMenuEnabled: false,
+        itemDomId: (_paneId: "left" | "right", itemKey: string) => itemKey,
+        onToggleToc: () => {},
+        onToggleSplitView: () => {},
+        onResetLayout: () => {},
+        onUpdateTocWidth: () => {},
+        onPreviewWorkspaceWidth: () => {},
+        onCommitWorkspaceWidth: () => {},
+        onPreviewFontScale: () => {},
+        onCommitFontScale: () => {},
+        onUpdateSplitRatio: () => {},
+        onUpdateTocGap: () => {},
+        onUpdatePaneGap: () => {},
+        onSetActivePane: () => {},
+        onOpenItem: () => {},
+        onToggleItem: () => {},
+        onEnterSubmissionWorkspace: () => {},
+        onEnterUploadWorkspace: () => {},
+        onExitSubmissionWorkspace: () => {}
+      }
+    });
+
+    expect(screen.getByRole("button", { name: "Was ist Programmieren?" })).toHaveClass("workspace-outline__item--active");
+    expect(screen.getByRole("button", { name: "Aufgabe 1" })).toHaveClass("workspace-outline__item--active");
+    expect(screen.getByRole("button", { name: "Schulbuch" })).toHaveClass("workspace-outline__item--active");
   });
 });

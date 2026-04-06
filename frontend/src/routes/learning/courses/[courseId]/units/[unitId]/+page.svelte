@@ -23,6 +23,7 @@
     type PaneStackEntry,
     type PaneStacks
   } from "$lib/learning-unit/workspace";
+  import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
     LearningModuleContent,
@@ -849,7 +850,7 @@
       const flow = await buildLearningUnitFlow(
         data.graph,
         data.user,
-        modularWorkspace.view === "overview" ? null : modularWorkspace.activeTab,
+        highlightedLearnerGraphModuleIds(modularWorkspace.openTabs),
         openModule
       );
 

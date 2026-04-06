@@ -113,6 +113,10 @@
   }
 
   function tocItemActive(itemKey: string): boolean {
+    if (unitType === "modular") {
+      return contentGroups.some((group) => group.items.some((item) => item.key === itemKey));
+    }
+
     return visiblePaneIds.some((paneId) =>
       (paneItems[paneId] ?? []).some((entry) => entry.item.key === itemKey && entry.expanded)
     );

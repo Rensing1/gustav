@@ -1,5 +1,8 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import TeacherUnitsCatalogList from "$lib/components/teacher-units-catalog/TeacherUnitsCatalogList.svelte";
+  import TeacherUnitsCatalogToolbar from "$lib/components/teacher-units-catalog/TeacherUnitsCatalogToolbar.svelte";
+  import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -17,11 +20,7 @@
 
     searchTimer = setTimeout(async () => {
       const params = new URLSearchParams();
-      params.set("view", data.catalog.active_view);
-      params.set("status", data.catalog.active_filters.status);
-      if (data.catalog.active_filters.course_id) {
-        params.set("course_id", data.catalog.active_filters.course_id);
-      }
+      params.set("sort", data.catalog.sort);
       if (nextQuery.trim()) {
         params.set("query", nextQuery.trim());
       }
@@ -47,79 +46,24 @@
 </svelte:head>
 
 <div class="workspace-page workspace-units-catalog">
-  <section class="workspace-section workspace-units-header">
-    <p class="workspace-label">Lerneinheiten</p>
-  </section>
+  <PageActionHead title={data.pageTitle}>
+    {#snippet actions()}
+      <a class="workspace-link-action" href={data.catalog.create_href}>Neue Lerneinheit</a>
+    {/snippet}
+  </PageActionHead>
 
-  <section class="workspace-panel workspace-section workspace-units-listing">
-    <div class="workspace-units-toolbar">
-      <nav class="workspace-units-views" aria-label="Katalogansichten">
-        {#each data.catalog.views as view}
-          <a
-            href={`/teaching/units?view=${view.id}`}
-            class:workspace-item-active={view.active}
-          >
-            <strong>{view.label}</strong>
-          </a>
-        {/each}
-      </nav>
+  <section class="workspace-section workspace-units-catalog__workspace">
+    <TeacherUnitsCatalogToolbar
+      query={queryDraft}
+      sort={data.catalog.sort}
+      onQueryInput={scheduleLiveSearch}
+    />
 
-      <div class="workspace-units-controls">
-        <form class="workspace-units-search" method="GET">
-          <input type="hidden" name="view" value={data.catalog.active_view} />
-          <input type="hidden" name="status" value={data.catalog.active_filters.status} />
-          <input type="hidden" name="course_id" value={data.catalog.active_filters.course_id} />
-          <div class="workspace-search-input">
-            <input
-              id="units-query"
-              type="search"
-              name="query"
-              value={queryDraft}
-              placeholder="Titel oder Thema durchsuchen"
-              oninput={(event) => scheduleLiveSearch((event.currentTarget as HTMLInputElement).value)}
-            />
-            <button class="workspace-link-action" type="submit">Suchen</button>
-          </div>
-        </form>
-
-        <form method="GET">
-          <input type="hidden" name="view" value={data.catalog.active_view} />
-          <input type="hidden" name="query" value={data.catalog.query} />
-          <input type="hidden" name="status" value={data.catalog.active_filters.status} />
-          <select
-            name="sort"
-            class="workspace-select-submit"
-            onchange={(event) => (event.currentTarget as HTMLSelectElement).form?.requestSubmit()}
-          >
-            <option value="updated_desc" selected={data.catalog.sort === "updated_desc"}>Zuletzt bearbeitet</option>
-            <option value="title_asc" selected={data.catalog.sort === "title_asc"}>Titel A–Z</option>
-          </select>
-        </form>
-      </div>
-    </div>
-
-    <div class="workspace-section-header">
-      <div class="workspace-section-heading">
-        <p class="workspace-label">{data.catalog.views.find((view) => view.active)?.label ?? "Ergebnisse"}</p>
-        <p class="workspace-note">{data.catalog.result_count} Einheiten</p>
-      </div>
-    </div>
-
-    {#if data.catalog.items.length}
-      <div class="workspace-list workspace-units-list">
-        {#each data.catalog.items as unit}
-          <a href={unit.href}>
-            <strong>{unit.title}</strong>
-            {#if unit.topic}
-              <p class="workspace-note">{unit.topic}</p>
-            {/if}
-            <span class="workspace-action">{unit.meta}</span>
-          </a>
-        {/each}
-      </div>
-    {:else}
-      <p class="workspace-empty">Noch keine passenden Lerneinheiten gefunden.</p>
-    {/if}
+    <TeacherUnitsCatalogList
+      activeViewLabel={data.catalog.views.find((view) => view.active)?.label ?? "Ergebnisse"}
+      resultCount={data.catalog.result_count}
+      items={data.catalog.items}
+    />
   </section>
 </div>
 

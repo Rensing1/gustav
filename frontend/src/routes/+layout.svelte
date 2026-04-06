@@ -156,8 +156,12 @@
     return /^\/learning\/courses\/[^/]+\/units\/[^/]+$/.test(page.url.pathname);
   }
 
+  function routeRequestsWideWorkspaceShell(): boolean {
+    return page.data.wideWorkspaceShell === true;
+  }
+
   function hasWideWorkspaceShell(): boolean {
-    return isTeacherUnitWorkspaceRoute() || isLearnerUnitWorkspaceRoute();
+    return routeRequestsWideWorkspaceShell() || isTeacherUnitWorkspaceRoute() || isLearnerUnitWorkspaceRoute();
   }
 
   function closeAccountMenuOnWindowClick(event: MouseEvent): void {

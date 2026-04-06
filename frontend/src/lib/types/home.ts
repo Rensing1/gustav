@@ -11,6 +11,16 @@ export type LearnerHome = {
   courses: LearnerHomeCourse[];
 };
 
+export type ConcernBoxCourseOption = {
+  id: string;
+  title: string;
+};
+
+export type LearnerConcernBoxView = {
+  user: SessionBootstrapUser;
+  courses: ConcernBoxCourseOption[];
+};
+
 export type TeacherHomeEntry = {
   id: string;
   title: string;
@@ -21,6 +31,30 @@ export type TeacherHomeEntry = {
 export type TeacherHome = {
   user: SessionBootstrapUser;
   entries: TeacherHomeEntry[];
+};
+
+export type TeacherConcernBoxFilterOption = {
+  id: "open" | "archived";
+  label: string;
+  active: boolean;
+};
+
+export type TeacherConcernBoxEntry = {
+  id: string;
+  course_id: string;
+  course_title: string;
+  message_text: string;
+  anonymous: boolean;
+  student_name: string | null;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type TeacherConcernBoxView = {
+  user: SessionBootstrapUser;
+  scopes: TeacherConcernBoxFilterOption[];
+  active_scope: "open" | "archived";
+  entries: TeacherConcernBoxEntry[];
 };
 
 export type TeacherCourseListItem = {

@@ -134,6 +134,48 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LearnerHomeCourse'
+    ConcernBoxCourseOption:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+    LearnerConcernBoxView:
+      type: object
+      required: [user, courses]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConcernBoxCourseOption'
+    ConcernBoxEntryCreate:
+      type: object
+      required: [course_id, message_text, anonymous]
+      properties:
+        course_id:
+          type: string
+        message_text:
+          type: string
+          minLength: 1
+        anonymous:
+          type: boolean
+      example:
+        course_id: "course-1"
+        message_text: "Mehr Zeit für Rückfragen am Stundenende wäre hilfreich."
+        anonymous: true
+    ConcernBoxEntryCreated:
+      type: object
+      required: [id, created_at]
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
     TeacherHomeEntry:
       type: object
       required: [id, title, href, description]
@@ -249,6 +291,58 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TeacherCourseContextMember'
+    TeacherConcernBoxFilterOption:
+      type: object
+      required: [id, label, active]
+      properties:
+        id:
+          type: string
+          enum: [open, archived]
+        label:
+          type: string
+        active:
+          type: boolean
+    TeacherConcernBoxEntry:
+      type: object
+      required: [id, course_id, course_title, message_text, anonymous, created_at]
+      properties:
+        id:
+          type: string
+        course_id:
+          type: string
+        course_title:
+          type: string
+        message_text:
+          type: string
+        anonymous:
+          type: boolean
+        student_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+    TeacherConcernBoxView:
+      type: object
+      required: [user, scopes, active_scope, entries]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherConcernBoxFilterOption'
+        active_scope:
+          type: string
+          enum: [open, archived]
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherConcernBoxEntry'
     TeacherUnitsCatalogViewOption:
       type: object
       required: [id, label, active]
@@ -5668,6 +5762,113 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/learning/views/concern-box:
+    get:
+      tags: [App]
+      summary: Return the learner concern box form read-model
+      description: >-
+        Returns the current learner identity and all learner-visible courses for
+        the concern box form.
+      operationId: getLearnerConcernBox
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Learner concern box payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerConcernBoxView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a learner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/concern-box/entries:
+    post:
+      tags: [App]
+      summary: Create a learner concern box entry
+      description: >-
+        Creates one concern box entry for a course the current learner belongs
+        to. The learner may choose whether the teacher sees the name.
+      operationId: createLearnerConcernBoxEntry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConcernBoxEntryCreate'
+      responses:
+        '201':
+          description: Concern box entry created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConcernBoxEntryCreated'
+        '400':
+          description: Invalid request payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a learner or not a member of the course
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/teaching/views/teacher-home:
     get:
       tags: [App]
@@ -5703,6 +5904,162 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/concern-box:
+    get:
+      tags: [App]
+      summary: Return the teacher concern box inbox read-model
+      description: >-
+        Returns all concern box entries from courses owned by the current
+        teacher, filtered by inbox scope.
+      operationId: getTeacherConcernBox
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [open, archived]
+            default: open
+      responses:
+        '200':
+          description: Teacher concern box payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherConcernBoxView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/concern-box/entries/{entry_id}/archive:
+    post:
+      tags: [App]
+      summary: Archive one concern box entry
+      description: Archives one teacher-visible concern box entry.
+      operationId: archiveTeacherConcernBoxEntry
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Entry archived
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '403':
+          description: Caller is not the owning teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entry not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/concern-box/entries/{entry_id}/restore:
+    post:
+      tags: [App]
+      summary: Restore one archived concern box entry
+      description: Restores one archived concern box entry into the open inbox.
+      operationId: restoreTeacherConcernBoxEntry
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Entry restored
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '403':
+          description: Caller is not the owning teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entry not found
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

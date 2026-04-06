@@ -141,6 +141,18 @@ class TaskData:
     h5p_display_options: Dict[str, Any] | None = None
 
 
+@dataclass
+class ConcernBoxEntryData:
+    id: str
+    course_id: str
+    student_sub: str
+    message_text: str
+    anonymous: bool
+    created_at: str
+    archived_at: Optional[str] | None = None
+    archived_by: Optional[str] | None = None
+
+
 class _Repo:
     def __init__(self) -> None:
         self.courses: Dict[str, Course] = {}
@@ -157,6 +169,7 @@ class _Repo:
         self.task_ids_by_section: Dict[str, List[str]] = {}
         self.upload_intents: Dict[str, Dict[str, Any]] = {}
         self.module_section_releases: Dict[tuple[str, str], Dict[str, Any]] = {}
+        self.concern_box_entries: Dict[str, ConcernBoxEntryData] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
         normalized = (title or "").strip()
@@ -208,6 +221,83 @@ class _Repo:
         bucket = self.members.get(course_id) or {}
         bucket.pop(student_id, None)
         self.members[course_id] = bucket
+
+    def student_has_course(self, course_id: str, student_sub: str) -> bool:
+        return student_sub in (self.members.get(course_id) or {})
+
+    def create_concern_box_entry(
+        self,
+        *,
+        course_id: str,
+        student_sub: str,
+        message_text: str,
+        anonymous: bool,
+    ) -> dict[str, Any] | None:
+        text = (message_text or "").strip()
+        if not text:
+            raise ValueError("invalid_message_text")
+        if not self.student_has_course(course_id, student_sub):
+            return None
+        now = datetime.now(timezone.utc).isoformat()
+        entry_id = str(uuid4())
+        entry = ConcernBoxEntryData(
+            id=entry_id,
+            course_id=course_id,
+            student_sub=student_sub,
+            message_text=text,
+            anonymous=bool(anonymous),
+            created_at=now,
+        )
+        self.concern_box_entries[entry_id] = entry
+        return {"id": entry_id, "created_at": now}
+
+    def list_concern_box_entries_for_teacher(self, owner_sub: str, scope: str) -> list[dict[str, Any]]:
+        include_archived = scope == "archived"
+        entries: list[dict[str, Any]] = []
+        for entry in self.concern_box_entries.values():
+            course = self.courses.get(entry.course_id)
+            if not course or course.teacher_id != owner_sub:
+                continue
+            if include_archived != bool(entry.archived_at):
+                continue
+            entries.append(
+                {
+                    "id": entry.id,
+                    "course_id": entry.course_id,
+                    "course_title": course.title,
+                    "student_sub": entry.student_sub,
+                    "message_text": entry.message_text,
+                    "anonymous": entry.anonymous,
+                    "created_at": entry.created_at,
+                    "archived_at": entry.archived_at,
+                }
+            )
+        entries.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        return entries
+
+    def archive_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
+        entry = self.concern_box_entries.get(entry_id)
+        if not entry:
+            return False
+        course = self.courses.get(entry.course_id)
+        if not course or course.teacher_id != owner_sub:
+            return False
+        entry.archived_at = datetime.now(timezone.utc).isoformat()
+        entry.archived_by = owner_sub
+        self.concern_box_entries[entry_id] = entry
+        return True
+
+    def restore_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
+        entry = self.concern_box_entries.get(entry_id)
+        if not entry:
+            return False
+        course = self.courses.get(entry.course_id)
+        if not course or course.teacher_id != owner_sub:
+            return False
+        entry.archived_at = None
+        entry.archived_by = None
+        self.concern_box_entries[entry_id] = entry
+        return True
 
     def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Course | None:
         c = self.courses.get(course_id)

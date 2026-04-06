@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from backend.learning.usecases.courses import ListCoursesInput, ListCoursesUseCase
 
@@ -26,6 +27,12 @@ except ImportError:  # pragma: no cover - flat import fallback
 
 
 app_router = APIRouter(tags=["App"])
+
+
+class ConcernBoxEntryCreatePayload(BaseModel):
+    course_id: str = Field(min_length=1)
+    message_text: str = Field(min_length=1)
+    anonymous: bool = True
 
 
 def _resolve_main_module():
@@ -85,6 +92,18 @@ def _list_learner_courses(student_sub: str, limit: int, offset: int) -> list[dic
     )
 
 
+def _list_concern_box_courses_for_student(student_sub: str, limit: int, offset: int) -> list[dict]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    return [
+        {
+            "id": str(_field_value(item, "id") or ""),
+            "title": str(_field_value(item, "title") or ""),
+        }
+        for item in (repo.list_courses_for_student(student_id=student_sub, limit=limit, offset=offset) or [])
+        if str(_field_value(item, "id") or "")
+    ]
+
+
 def _teacher_home_entries() -> list[dict[str, str]]:
     return [
         {
@@ -111,6 +130,13 @@ def _teacher_home_entries() -> list[dict[str, str]]:
             "href": "/live",
             "description": "Operative Kurs-Lerneinheit-Matrix.",
         },
+    ]
+
+
+def _teacher_concern_box_scopes(active_scope: str) -> list[dict[str, object]]:
+    return [
+        {"id": "open", "label": "Offen", "active": active_scope == "open"},
+        {"id": "archived", "label": "Archiv", "active": active_scope == "archived"},
     ]
 
 
@@ -599,6 +625,57 @@ async def get_learner_home(request: Request, limit: int = 12, offset: int = 0):
     return JSONResponse(body, headers=_private_headers())
 
 
+@app_router.get("/api/learning/views/concern-box")
+async def get_learner_concern_box(request: Request, limit: int = 50, offset: int = 0):
+    """Return learner-visible courses for the concern box form."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not _user_has_role(user, "student"):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    courses = _list_concern_box_courses_for_student(
+        str(user.get("sub") or ""), limit=int(limit or 50), offset=int(offset or 0)
+    )
+    body = {
+        "user": _user_payload(user),
+        "courses": courses,
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.post("/api/learning/concern-box/entries")
+async def create_learner_concern_box_entry(request: Request, payload: ConcernBoxEntryCreatePayload):
+    """Create one concern box entry for the current learner."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not _user_has_role(user, "student"):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
+    if csrf:
+        return csrf
+
+    student_sub = str(user.get("sub") or "")
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    if not repo.student_has_course(payload.course_id, student_sub):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    try:
+        created = repo.create_concern_box_entry(
+            course_id=payload.course_id,
+            student_sub=student_sub,
+            message_text=payload.message_text,
+            anonymous=payload.anonymous,
+        )
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_message_text"}, status_code=400, headers=_private_headers())
+
+    if created is None:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    return JSONResponse(created, status_code=201, headers=_private_headers())
+
+
 @app_router.get("/api/teaching/views/teacher-home")
 async def get_teacher_home(request: Request):
     """Return the teacher home read-model for the primary teaching spaces."""
@@ -612,6 +689,89 @@ async def get_teacher_home(request: Request):
         {"user": _user_payload(user), "entries": _teacher_home_entries()},
         headers=_private_headers(),
     )
+
+
+@app_router.get("/api/teaching/views/concern-box")
+async def get_teacher_concern_box(request: Request, scope: str = "open"):
+    """Return the teacher concern box inbox for owned courses."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    normalized_scope = "archived" if scope == "archived" else "open"
+    owner_sub = str(user.get("sub") or "")
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    raw_entries = repo.list_concern_box_entries_for_teacher(owner_sub, normalized_scope)
+    visible_subs = sorted(
+        {
+            str(item.get("student_sub") or "")
+            for item in raw_entries
+            if isinstance(item, dict) and not bool(item.get("anonymous")) and str(item.get("student_sub") or "")
+        }
+    )
+    names_by_sub = teaching_routes.resolve_student_names(visible_subs) if visible_subs else {}  # type: ignore[attr-defined]
+    body = {
+        "user": _user_payload(user),
+        "scopes": _teacher_concern_box_scopes(normalized_scope),
+        "active_scope": normalized_scope,
+        "entries": [
+            {
+                "id": str(item.get("id") or ""),
+                "course_id": str(item.get("course_id") or ""),
+                "course_title": str(item.get("course_title") or ""),
+                "message_text": str(item.get("message_text") or ""),
+                "anonymous": bool(item.get("anonymous")),
+                "student_name": None
+                if bool(item.get("anonymous"))
+                else names_by_sub.get(str(item.get("student_sub") or ""), "Unbekannt"),
+                "created_at": str(item.get("created_at") or ""),
+                "archived_at": item.get("archived_at"),
+            }
+            for item in raw_entries
+            if isinstance(item, dict)
+        ],
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.post("/api/teaching/concern-box/entries/{entry_id}/archive")
+async def archive_teacher_concern_box_entry(request: Request, entry_id: str):
+    """Archive one concern box entry owned by the current teacher."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
+    if csrf:
+        return csrf
+
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    updated = repo.archive_concern_box_entry_owned(entry_id, str(user.get("sub") or ""))
+    if not updated:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+    return Response(status_code=204, headers=_private_headers())
+
+
+@app_router.post("/api/teaching/concern-box/entries/{entry_id}/restore")
+async def restore_teacher_concern_box_entry(request: Request, entry_id: str):
+    """Restore one archived concern box entry owned by the current teacher."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
+    if csrf:
+        return csrf
+
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    updated = repo.restore_concern_box_entry_owned(entry_id, str(user.get("sub") or ""))
+    if not updated:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+    return Response(status_code=204, headers=_private_headers())
 
 
 @app_router.get("/api/teaching/views/courses")

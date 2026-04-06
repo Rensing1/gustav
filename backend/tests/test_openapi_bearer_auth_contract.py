@@ -20,7 +20,12 @@ def test_openapi_documents_bearer_auth_for_bff_endpoints() -> None:
     for path, verb in (
         ("/api/app/session-bootstrap", "get"),
         ("/api/learning/views/learner-home", "get"),
+        ("/api/learning/views/concern-box", "get"),
+        ("/api/learning/concern-box/entries", "post"),
         ("/api/teaching/views/teacher-home", "get"),
+        ("/api/teaching/views/concern-box", "get"),
+        ("/api/teaching/concern-box/entries/{entry_id}/archive", "post"),
+        ("/api/teaching/concern-box/entries/{entry_id}/restore", "post"),
         ("/api/teaching/views/courses/{course_id}/context", "get"),
         ("/api/diagnostics/views/courses/{course_id}/matrix", "get"),
         ("/api/diagnostics/views/learners/{student_sub}/profile", "get"),

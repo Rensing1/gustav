@@ -110,10 +110,67 @@ describe("LearningUnitContentWorkspace", () => {
     expect(css).not.toMatch(/\.learning-unit-pane\s*\{[^}]*min-height:\s*20rem;/s);
     expect(css).not.toMatch(/\.learning-unit-workspace-surface\s*\{[^}]*min-height:\s*100%;/s);
     expect(css).toMatch(/\.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0\s+1\.3rem;/s);
+    expect(css).not.toMatch(/\.learning-unit-pane--workspace-mode\s*\{/s);
+    expect(css).not.toMatch(/\.learning-unit-workspace-surface--focused\s*\{/s);
+    expect(css).not.toMatch(/\.learning-unit-pane__stack--workspace-mode\s*\{/s);
     expect(css).toMatch(/\.learning-unit-pane-grid--single\s*\{[^}]*width:\s*min\(100%,\s*48rem\);[^}]*justify-self:\s*center;/s);
     expect(css).toMatch(/\.learning-work-item__title\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*min-height:\s*1\.4rem;/s);
     expect(css).not.toMatch(/\.learning-unit-toc__item--active\s*\{[^}]*font-weight:/s);
     expect(css).toMatch(/\.learning-unit-toc__item--active::before\s*\{[^}]*background:/s);
+  });
+
+  it("keeps other pane items visible even when one task editor is open", () => {
+    const { container } = render(LearningUnitContentWorkspace, {
+      props: {
+        titleLabel: "",
+        title: "",
+        meta: null,
+        courseId: "course-1",
+        unitType: "linear",
+        tocOpen: false,
+        splitView: false,
+        activePane: "left",
+        visiblePaneIds: ["left"],
+        contentGroups,
+        paneItems: {
+          left: contentGroups[0].items.map((item) => ({ item, expanded: true })),
+          right: []
+        },
+        historyTaskId: null,
+        history: [],
+        submittedTaskId: null,
+        submissionMessage: null,
+        submissionErrorTaskId: null,
+        submissionErrorMessage: null,
+        submissionFocusByPane: { left: "task:1", right: null },
+        submissionModeByPane: { left: "text", right: null },
+        showSplitToggle: false,
+        layoutMenuEnabled: false,
+        itemDomId: (_paneId: "left" | "right", itemKey: string) => itemKey,
+        onToggleToc: () => {},
+        onToggleSplitView: () => {},
+        onResetLayout: () => {},
+        onUpdateTocWidth: () => {},
+        onPreviewWorkspaceWidth: () => {},
+        onCommitWorkspaceWidth: () => {},
+        onPreviewFontScale: () => {},
+        onCommitFontScale: () => {},
+        onUpdateSplitRatio: () => {},
+        onUpdateTocGap: () => {},
+        onUpdatePaneGap: () => {},
+        onSetActivePane: () => {},
+        onOpenItem: () => {},
+        onToggleItem: () => {},
+        onEnterSubmissionWorkspace: () => {},
+        onEnterUploadWorkspace: () => {},
+        onExitSubmissionWorkspace: () => {}
+      }
+    });
+
+    expect(screen.getByText("Was tut die Europäische Union für mich?")).toBeInTheDocument();
+    expect(screen.getAllByText("Aufgabe 1").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(container.querySelectorAll(".learning-work-item")).toHaveLength(2);
   });
 
   it("marks all items of open modular groups in the outline", () => {

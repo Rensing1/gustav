@@ -683,8 +683,8 @@
       setModularWorkspaceState({
         ...modularWorkspace,
         submissionFocus: {
-          ...modularWorkspace.submissionFocus,
-          [paneId]: { itemKey, mode }
+          left: paneId === "left" ? { itemKey, mode } : { itemKey: null, mode: null },
+          right: paneId === "right" ? { itemKey, mode } : { itemKey: null, mode: null }
         }
       });
       return;
@@ -693,8 +693,8 @@
     setLinearWorkspaceState({
       ...linearWorkspace,
       submissionFocus: {
-        ...linearWorkspace.submissionFocus,
-        [paneId]: { itemKey, mode }
+        left: paneId === "left" ? { itemKey, mode } : { itemKey: null, mode: null },
+        right: paneId === "right" ? { itemKey, mode } : { itemKey: null, mode: null }
       }
     });
   }
@@ -710,13 +710,9 @@
         .filter((entry): entry is { item: LearningContentItem; expanded: boolean } => Boolean(entry));
     }
 
-    const leftEntries = buildEntries(currentPaneStacks().left);
-    const rightEntries = buildEntries(currentPaneStacks().right);
-    const focus = submissionFocusState();
-
     return {
-      left: focus.left.itemKey ? leftEntries.filter((entry) => entry.item.key === focus.left.itemKey) : leftEntries,
-      right: focus.right.itemKey ? rightEntries.filter((entry) => entry.item.key === focus.right.itemKey) : rightEntries
+      left: buildEntries(currentPaneStacks().left),
+      right: buildEntries(currentPaneStacks().right)
     };
   }
 

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 
 import LearningTaskCard from "./LearningTaskCard.svelte";
@@ -79,7 +79,25 @@ describe("LearningTaskCard", () => {
     expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
   });
 
-  it("shows a quiet start action and grouped response panels after submission", () => {
+  it("shows a primary CTA directly after the task prompt when no history exists", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        history: []
+      }
+    });
+
+    expect(screen.getByRole("button", { name: "Aufgabe bearbeiten" })).toBeInTheDocument();
+    expect(screen.queryByText("Nächster Schritt")).toBeNull();
+    expect(screen.queryByText("Antwortstatus")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Abgabe" })).toBeNull();
+  });
+
+  it("shows the latest submission before a quieter retry CTA", async () => {
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -104,19 +122,66 @@ describe("LearningTaskCard", () => {
               text: "Stabil",
               criteria_results: []
             }
+          },
+          {
+            id: "submission-0",
+            attempt_nr: 0,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-04-04 09:00",
+            analysis_status: "completed",
+            text_body: "Alter Versuch",
+            feedback_md: "Frühere Rückmeldung",
+            analysis_json: {
+              schema: "learning.v1",
+              score: 5,
+              text: "Früher",
+              criteria_results: []
+            }
           }
         ]
       }
     });
 
-    expect(screen.getByRole("button", { name: "Aufgabe bearbeiten" })).toBeInTheDocument();
-    expect(screen.getByText("Abgabe")).toBeInTheDocument();
-    expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
-    expect(screen.getByText("Bewertung")).toBeInTheDocument();
-    expect(screen.getByText("Antwortstatus")).toBeInTheDocument();
+    const summary = screen.getByRole("region", { name: "Letzte Abgabe" });
+    const tabs = within(summary).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Abgabe", "Rückmeldung", "Auswertung"]);
+    expect(within(summary).getByText("Meine Lösung")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Weitere Versuche" })).toBeInTheDocument();
+    expect(screen.queryByText("Alter Versuch")).toBeNull();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Rückmeldung" }));
+    expect(within(summary).getByText("Gut gemacht.")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Auswertung" }));
+    expect(within(summary).getByText("Punktestand: 8")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Weitere Versuche" }));
+    expect(screen.getByText("Alter Versuch")).toBeInTheDocument();
+    expect(screen.queryByText("Antwortstatus")).toBeNull();
   });
 
-  it("uses theme tokens for the task intro panel instead of a fixed light background", () => {
+  it("uses the same CTA pattern for H5P tasks without rendering a history block", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          kind: "h5p",
+          h5p: { content_id: "content-1" }
+        },
+        taskTitle: "Interaktive Aufgabe",
+        unitType: "linear",
+        expanded: true
+      }
+    });
+
+    expect(screen.getByRole("button", { name: "Aufgabe bearbeiten" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Letzte Abgabe" })).toBeNull();
+  });
+
+  it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
     const blockMatch = css.match(/\.learning-work-item--task \.markdown-prose\s*\{([^}]*)\}/);
@@ -127,5 +192,7 @@ describe("LearningTaskCard", () => {
     expect(block).toMatch(/background:\s*var\(--color-bg-muted\);/);
     expect(block).toMatch(/border-left:\s*3px solid var\(--color-accent\);/);
     expect(block).not.toMatch(/background:\s*#f8f5ee;/);
+    expect(css).toMatch(/\.learning-task-submission-summary\s*\{/);
+    expect(css).not.toMatch(/\.learning-work-item__start-card\s*\{/);
   });
 });

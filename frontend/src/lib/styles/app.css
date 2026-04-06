@@ -1996,15 +1996,6 @@ select {
   border: 0;
 }
 
-.learning-unit-pane--workspace-mode {
-  gap: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  grid-template-rows: minmax(0, 1fr);
-}
-
 .learning-unit-workspace-surface {
   display: grid;
   gap: 0.25rem;
@@ -2016,20 +2007,11 @@ select {
   box-shadow: 0 14px 32px rgba(36, 41, 44, 0.035);
 }
 
-.learning-unit-workspace-surface--focused {
-  gap: 0;
-  padding: 1.15rem 1.3rem 1.15rem;
-}
-
 .learning-unit-pane__stack {
   display: flex;
   flex-direction: column;
   gap: 0;
   min-height: 0;
-}
-
-.learning-unit-pane__stack--workspace-mode {
-  gap: 0;
 }
 
 .learning-unit-pane__empty {
@@ -2391,52 +2373,106 @@ select {
   display: none;
 }
 
-.learning-work-item__start-card {
-  display: grid;
-  gap: 0.32rem;
-  padding: 0.95rem 0 0.05rem;
-  border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 62%, white 38%);
-  border-radius: 0;
-  background: transparent;
-}
-
-.learning-work-item__start-card-hint {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: calc(0.8rem * var(--learning-unit-label-scale));
-  font-weight: 620;
-}
-
-.learning-work-item__start-card-actions {
+.learning-task-cta-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.85rem;
-  flex-wrap: wrap;
+  justify-content: flex-start;
+  padding-top: 0.25rem;
 }
 
-.learning-work-item__start-card-copy {
-  display: grid;
-  gap: 0.22rem;
-}
-
-.learning-work-item__start-card-copy h5 {
-  margin: 0;
-  font-size: calc(1rem * var(--learning-unit-headline-scale));
-  line-height: 1.2;
-}
-
-.learning-work-item__start-card .workspace-top-action {
-  border-radius: 0.18rem;
-}
-
-.learning-work-item--task .learning-work-item__start-card .workspace-top-action {
+.learning-task-cta-row .workspace-top-action {
   min-height: 2rem;
   padding: 0.35rem 0.75rem;
   font-family: var(--font-learner-label);
   font-size: calc(0.86rem * var(--learning-unit-label-scale));
   font-weight: 700;
+}
+
+.learning-task-submission-summary {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.95rem 0 0.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 62%, white 38%);
+}
+
+.learning-task-submission-summary__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.learning-task-submission-summary__copy {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.learning-task-submission-summary__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: calc(0.76rem * var(--learning-unit-label-scale));
+  font-weight: 620;
+}
+
+.learning-task-submission-summary__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.learning-task-submission-summary__tabs .workspace-tab {
+  min-height: 1.9rem;
+}
+
+.learning-task-submission-summary__panel {
+  padding: 0.8rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  background: color-mix(in srgb, var(--color-bg-surface) 94%, white 6%);
+}
+
+.learning-task-submission-summary__panel .markdown-prose {
+  max-width: calc(58ch * var(--learning-unit-measure-scale));
+  gap: calc(0.7rem * var(--learning-unit-copy-gap-scale));
+  padding: 0;
+  background: transparent;
+  border-left: 0;
+}
+
+.learning-task-submission-summary__plain {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  font-size: calc(0.9rem * var(--learning-unit-font-scale));
+  line-height: 1.6;
+}
+
+.learning-task-submission-summary__older-toggle {
+  min-height: 1.9rem;
+}
+
+.learning-task-submission-summary__history {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.15rem;
+}
+
+.learning-task-submission-summary__history-entry {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.7rem 0.85rem;
+  border-left: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
+  background: color-mix(in srgb, var(--color-bg-muted) 72%, white 28%);
+}
+
+.learning-task-submission-summary__history-entry header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.learning-task-submission-summary__history-entry p {
+  margin: 0;
 }
 
 .learning-work-item__support summary {

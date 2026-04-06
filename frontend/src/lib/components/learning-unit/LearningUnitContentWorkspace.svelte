@@ -108,10 +108,6 @@
     onExitSubmissionWorkspace: (paneId: PaneId) => void;
   } = $props();
 
-  function paneHasSubmissionFocus(paneId: PaneId): boolean {
-    return submissionFocusByPane[paneId] !== null;
-  }
-
   function tocItemActive(itemKey: string): boolean {
     if (unitType === "modular") {
       return contentGroups.some((group) => group.items.some((item) => item.key === itemKey));
@@ -230,18 +226,14 @@
   >
     {#each visiblePaneIds as paneId}
       <section
-        class:learning-unit-pane--workspace-mode={paneHasSubmissionFocus(paneId)}
         class:learning-unit-pane--active={activePane === paneId}
         class="learning-unit-pane"
         aria-label={splitView ? (paneId === "left" ? "Linkes Arbeitsfeld" : "Rechtes Arbeitsfeld") : "Arbeitsfeld"}
         use:activateOnPointer={paneId}
       >
-        <div
-          class:learning-unit-workspace-surface--focused={paneHasSubmissionFocus(paneId)}
-          class="learning-unit-workspace-surface"
-        >
+        <div class="learning-unit-workspace-surface">
           {#if paneItems[paneId]?.length}
-            <div class:learning-unit-pane__stack--workspace-mode={paneHasSubmissionFocus(paneId)} class="learning-unit-pane__stack">
+            <div class="learning-unit-pane__stack">
               {#each paneItems[paneId] as entry}
                 {#if entry.item.kind === "material" && entry.item.material}
                   <LearningMaterialCard

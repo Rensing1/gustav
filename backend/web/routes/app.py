@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import inspect
-from urllib.parse import urlencode
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Request, Response
@@ -494,26 +493,6 @@ def _build_teacher_unit_course_refs(owner_sub: str) -> tuple[dict[str, list[dict
             )
 
     return course_refs_by_unit, courses
-
-
-def _teacher_units_view_label(view_id: str) -> str:
-    return {
-        "recent": "Zuletzt bearbeitet",
-        "all": "Alle",
-        "active": "Im Unterricht aktiv",
-        "draft": "Entwürfe",
-        "unassigned": "Ohne Kurs",
-        "archived": "Archiv",
-    }.get(view_id, view_id)
-
-
-def _teacher_units_status_label(status_id: str) -> str:
-    return {
-        "all": "Alle",
-        "active": "Im Unterricht aktiv",
-        "draft": "Entwürfe",
-        "unassigned": "Ohne Kurs",
-    }.get(status_id, status_id)
 
 
 def _list_unit_task_ids(unit_id: str, owner_sub: str) -> list[str]:
@@ -1028,15 +1007,15 @@ async def get_teacher_course_list(request: Request, limit: int = 25, offset: int
 @app_router.get("/api/teaching/views/units/catalog")
 async def get_teacher_units_catalog(
     request: Request,
-    view: str = "recent",
     query: str = "",
-    status: str = "all",
-    course_id: str | None = None,
-    subject: str | None = None,
-    grade_level: str | None = None,
     sort: str | None = None,
 ):
-    """Return the teacher units catalog with stable views and a compact bestandsliste."""
+    """Return the teacher units catalog as a structured bestandsliste.
+
+    The payload stays intentionally small and UI-ready. It avoids mixed meta
+    strings so the frontend can render a flat table-like inventory with a
+    separate course cell and a dedicated title link.
+    """
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
@@ -1044,20 +1023,10 @@ async def get_teacher_units_catalog(
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    course_refs_by_unit, courses = _build_teacher_unit_course_refs(owner_sub)
+    course_refs_by_unit, _ = _build_teacher_unit_course_refs(owner_sub)
     units = _list_teacher_units(owner_sub, limit=200, offset=0)
 
     items: list[dict[str, object]] = []
-    subject_options: dict[str, str] = {}
-    grade_options: dict[str, str] = {}
-
-    for course in courses:
-        course_subject = str(course.get("subject") or "").strip()
-        if course_subject:
-            subject_options[course_subject] = course_subject
-        course_grade = str(course.get("grade_level") or "").strip()
-        if course_grade:
-            grade_options[course_grade] = course_grade
 
     for unit in units:
         unit_id = str(unit.get("id") or "")
@@ -1077,35 +1046,36 @@ async def get_teacher_units_catalog(
             )
             if part
         )
+
+        if courses_count > 0:
+            status_label = "Aktiv im Unterricht"
+            status_tone = "success"
+        elif sections_count == 0:
+            status_label = "Entwurf"
+            status_tone = "muted"
+        else:
+            status_label = "In Bearbeitung"
+            status_tone = "accent"
+
         item = {
             "id": unit_id,
             "title": str(unit.get("title") or ""),
-            "topic": str(unit.get("summary") or unit.get("unit_type") or "").strip() or None,
+            "topic": str(unit.get("summary") or "").strip() or None,
             "updated_at": last_activity,
             "href": f"/teaching/units/{unit_id}",
-            "sections_count": sections_count,
             "courses_count": courses_count,
-            "course_ids": [str(ref.get("id") or "") for ref in refs],
-            "subjects": sorted(
+            "courses": [
                 {
-                    str(course.get("subject") or "").strip()
-                    for course in courses
-                    if str(course.get("id") or "") in {str(ref.get("id") or "") for ref in refs}
-                    and str(course.get("subject") or "").strip()
+                    "id": str(ref.get("id") or ""),
+                    "title": str(ref.get("title") or ""),
+                    "href": str(ref.get("href") or ""),
                 }
-            ),
-            "grade_levels": sorted(
-                {
-                    str(course.get("grade_level") or "").strip()
-                    for course in courses
-                    if str(course.get("id") or "") in {str(ref.get("id") or "") for ref in refs}
-                    and str(course.get("grade_level") or "").strip()
-                }
-            ),
-            "is_active": courses_count > 0,
-            "is_draft": sections_count == 0,
+                for ref in refs
+                if str(ref.get("id") or "")
+            ],
+            "status_label": status_label,
+            "status_tone": status_tone,
             "searchable": haystack,
-            "meta": f"{sections_count} Abschnitt{'e' if sections_count != 1 else ''} · {courses_count} Kurs{'e' if courses_count != 1 else ''}",
         }
         items.append(item)
 
@@ -1114,29 +1084,7 @@ async def get_teacher_units_catalog(
         needle = query_value.lower()
         items = [item for item in items if needle in str(item["searchable"])]
 
-    if status == "active":
-        items = [item for item in items if bool(item["is_active"])]
-    elif status == "draft":
-        items = [item for item in items if bool(item["is_draft"])]
-    elif status == "unassigned":
-        items = [item for item in items if not bool(item["is_active"])]
-
-    if course_id:
-        items = [item for item in items if course_id in item["course_ids"]]
-    if subject:
-        items = [item for item in items if subject in item["subjects"]]
-    if grade_level:
-        items = [item for item in items if grade_level in item["grade_levels"]]
-
-    active_view = view if view in {"recent", "all", "active", "draft", "unassigned"} else "recent"
-    if active_view == "active":
-        items = [item for item in items if bool(item["is_active"])]
-    elif active_view == "draft":
-        items = [item for item in items if bool(item["is_draft"])]
-    elif active_view == "unassigned":
-        items = [item for item in items if not bool(item["is_active"])]
-
-    active_sort = sort or ("updated_desc" if active_view != "all" else "title_asc")
+    active_sort = sort or "updated_desc"
     if active_sort == "title_asc":
         items.sort(key=lambda item: str(item["title"]).lower())
     else:
@@ -1147,7 +1095,10 @@ async def get_teacher_units_catalog(
             "id": str(item["id"]),
             "title": str(item["title"]),
             "topic": item["topic"],
-            "meta": str(item["meta"]),
+            "status_label": str(item["status_label"]),
+            "status_tone": str(item["status_tone"]),
+            "courses_count": int(item["courses_count"]),
+            "courses": item["courses"],
             "updated_at": str(item["updated_at"]),
             "href": str(item["href"]),
         }
@@ -1156,50 +1107,7 @@ async def get_teacher_units_catalog(
 
     body = {
         "user": _user_payload(user),
-        "views": [
-            {
-                "id": view_id,
-                "label": _teacher_units_view_label(view_id),
-                "active": view_id == active_view,
-                "href": f"/teaching/units?{urlencode({'view': view_id})}",
-            }
-            for view_id in ("recent", "all", "active", "draft", "unassigned")
-        ],
-        "active_view": active_view,
         "query": query_value,
-        "filters": {
-            "status": [
-                {
-                    "id": status_id,
-                    "label": _teacher_units_status_label(status_id),
-                    "active": status_id == status,
-                }
-                for status_id in ("all", "active", "draft", "unassigned")
-            ],
-            "subjects": [
-                {"id": value, "label": value, "active": value == (subject or "")}
-                for value in sorted(subject_options)
-            ],
-            "grade_levels": [
-                {"id": value, "label": value, "active": value == (grade_level or "")}
-                for value in sorted(grade_options)
-            ],
-            "courses": [
-                {
-                    "id": str(course.get("id") or ""),
-                    "label": str(course.get("title") or ""),
-                    "active": str(course.get("id") or "") == (course_id or ""),
-                }
-                for course in courses
-                if str(course.get("id") or "")
-            ],
-        },
-        "active_filters": {
-            "status": status,
-            "subject": subject or "",
-            "grade_level": grade_level or "",
-            "course_id": course_id or "",
-        },
         "sort": active_sort,
         "result_count": len(list_items),
         "items": list_items,

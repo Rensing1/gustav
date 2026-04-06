@@ -13,11 +13,7 @@ def test_openapi_documents_teacher_units_catalog_view() -> None:
     schema = spec["components"]["schemas"]["TeacherUnitsCatalogView"]
     assert schema["required"] == [
         "user",
-        "views",
-        "active_view",
         "query",
-        "filters",
-        "active_filters",
         "sort",
         "result_count",
         "items",
@@ -25,4 +21,13 @@ def test_openapi_documents_teacher_units_catalog_view() -> None:
     ]
 
     item = spec["components"]["schemas"]["TeacherUnitsCatalogItem"]
-    assert item["required"] == ["id", "title", "meta", "updated_at", "href"]
+    assert item["required"] == [
+        "id",
+        "title",
+        "status_label",
+        "status_tone",
+        "courses_count",
+        "courses",
+        "updated_at",
+        "href",
+    ]

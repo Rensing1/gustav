@@ -102,29 +102,26 @@ async def test_teacher_units_catalog_returns_recent_units_as_list(
     assert response.headers.get("Cache-Control") == "private, no-store"
 
     payload = response.json()
-    assert payload["active_view"] == "recent"
     assert payload["query"] == ""
     assert payload["result_count"] == 2
     assert payload["create_href"] == "/teaching/units?create=1"
-    assert payload["views"][0]["id"] == "recent"
-    assert payload["views"][0]["active"] is True
-    assert [view["id"] for view in payload["views"]] == ["recent", "all", "active", "draft", "unassigned"]
-    assert payload["filters"]["status"] == [
-        {"id": "all", "label": "Alle", "active": True},
-        {"id": "active", "label": "Im Unterricht aktiv", "active": False},
-        {"id": "draft", "label": "Entwürfe", "active": False},
-        {"id": "unassigned", "label": "Ohne Kurs", "active": False},
-    ]
     assert payload["items"][0]["id"] == active_unit_id
     assert payload["items"][0]["title"] == "Lineare Gleichungen"
-    assert payload["items"][0]["meta"] == "1 Abschnitt · 1 Kurs"
+    assert payload["items"][0]["status_label"] == "Aktiv im Unterricht"
+    assert payload["items"][0]["status_tone"] == "success"
+    assert payload["items"][0]["courses_count"] == 1
+    assert payload["items"][0]["courses"] == [
+        {"id": course_id, "title": "8a Mathematik", "href": f"/teaching/courses/{course_id}"}
+    ]
     assert payload["items"][1]["id"] == draft_unit_id
-    assert payload["items"][1]["meta"] == "0 Abschnitte · 0 Kurse"
-    assert "selected_item" not in payload
+    assert payload["items"][1]["status_label"] == "Entwurf"
+    assert payload["items"][1]["status_tone"] == "muted"
+    assert payload["items"][1]["courses_count"] == 0
+    assert payload["items"][1]["courses"] == []
 
 
 @pytest.mark.anyio
-async def test_teacher_units_catalog_filters_by_query_and_status(
+async def test_teacher_units_catalog_filters_by_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = SessionStore()
@@ -144,21 +141,15 @@ async def test_teacher_units_catalog_filters_by_query_and_status(
         )
 
         response = await client.get(
-            "/api/teaching/views/units/catalog?query=funktion&status=draft",
+            "/api/teaching/views/units/catalog?query=funktion",
             headers=headers,
         )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["query"] == "funktion"
-    assert payload["active_filters"] == {
-        "status": "draft",
-        "subject": "",
-        "grade_level": "",
-        "course_id": "",
-    }
-    assert payload["result_count"] == 0
-    assert payload["items"] == []
+    assert payload["result_count"] == 1
+    assert payload["items"][0]["title"] == "Quadratische Funktionen"
 
 
 @pytest.mark.anyio

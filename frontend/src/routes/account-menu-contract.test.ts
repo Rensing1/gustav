@@ -65,4 +65,17 @@ describe("account menu contract", () => {
     expect(cssSource).not.toMatch(/\.app-topbar-tools \.theme-toggle\s*\{[^}]*box-shadow:\s*var\(--color-shadow\);/s);
     expect(cssSource).not.toMatch(/\.account-trigger\s*\{[^}]*box-shadow:\s*var\(--color-shadow\);/s);
   });
+
+  it("defines a subtle dotted global background without overriding it in the shared themes", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const appCss = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");
+    const designSystemCss = readFileSync(path.resolve(currentDir, "../lib/styles/design-system.css"), "utf8");
+    const authThemeCss = readFileSync(path.resolve(currentDir, "../lib/styles/auth-theme.css"), "utf8");
+
+    expect(appCss).toMatch(/--app-bg-dot-color:\s*rgba\([^)]+\);/);
+    expect(appCss).toMatch(/html,\s*body\s*\{[^}]*background-color:\s*var\(--color-bg-base\);[^}]*radial-gradient\(circle,\s*var\(--app-bg-dot-color\)\s+1\.35px,\s*transparent\s+1\.5px\);[^}]*background-size:\s*1\.75rem 1\.75rem;/s);
+    expect(appCss).toMatch(/\.app-shell\s*\{[^}]*background:\s*transparent;/s);
+    expect(designSystemCss).not.toMatch(/body\s*\{[^}]*background:\s*var\(--color-bg-base\);/s);
+    expect(authThemeCss).toMatch(/\.design-auth-shell,[\s\S]*?\.kc-gustav\s*\{[^}]*radial-gradient\(circle,\s*var\(--app-bg-dot-color\)\s+1\.35px,\s*transparent\s+1\.5px\)/s);
+  });
 });

@@ -14,6 +14,10 @@
   --color-line: rgba(84, 89, 82, 0.12);
   --color-rail-active: rgba(255, 250, 243, 0.78);
   --color-shadow: 0 18px 38px rgba(35, 41, 45, 0.035);
+  --app-bg-dot-color: rgba(121, 128, 135, 0.38);
+  --app-bg-dot-size: 1.35px;
+  --app-bg-dot-fade-size: 1.5px;
+  --app-bg-dot-spacing: 1.75rem;
   --font-ui: "Nunito", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-reading: var(--font-ui);
   --space-1: 0.25rem;
@@ -43,16 +47,19 @@
   --color-line: rgba(221, 210, 189, 0.14);
   --color-rail-active: rgba(255, 255, 255, 0.04);
   --color-shadow: 0 26px 60px rgba(0, 0, 0, 0.24);
+  --app-bg-dot-color: rgba(221, 210, 189, 0.24);
 }
 
-html {
-  background: var(--color-bg-base);
+html,
+body {
+  background-color: var(--color-bg-base);
+  background-image: radial-gradient(circle, var(--app-bg-dot-color) 1.35px, transparent 1.5px);
+  background-size: 1.75rem 1.75rem;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--color-bg-base);
   color: var(--color-text);
   font-family: var(--font-ui);
   font-feature-settings: "kern", "liga", "calt";
@@ -114,7 +121,7 @@ select {
 .app-shell {
   min-height: 100vh;
   display: block;
-  background: var(--color-bg-base);
+  background: transparent;
   color: var(--color-text);
 }
 

@@ -36,8 +36,13 @@ html[data-theme="dark"] {
   place-items: center;
   padding: clamp(1.5rem, 3vw, 2.75rem);
   background:
+    radial-gradient(circle, var(--app-bg-dot-color) 1.35px, transparent 1.5px),
     linear-gradient(135deg, var(--auth-color-accent-soft), transparent 32%),
     linear-gradient(0deg, var(--auth-color-bg-base), var(--auth-color-bg-base));
+  background-size:
+    1.75rem 1.75rem,
+    auto,
+    auto;
   color: var(--auth-color-text);
 }
 

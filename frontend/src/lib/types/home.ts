@@ -104,39 +104,27 @@ export type TeacherCourseContextView = {
   members: TeacherCourseContextMember[];
 };
 
-export type TeacherUnitsCatalogOption = {
+export type TeacherUnitsCatalogCourse = {
   id: string;
-  label: string;
-  active: boolean;
-  href?: string | null;
+  title: string;
+  href: string;
 };
 
 export type TeacherUnitsCatalogItem = {
   id: string;
   title: string;
   topic?: string | null;
-  meta: string;
+  status_label: string;
+  status_tone: "accent" | "success" | "muted";
+  courses_count: number;
+  courses: TeacherUnitsCatalogCourse[];
   updated_at: string;
   href: string;
 };
 
 export type TeacherUnitsCatalogView = {
   user: SessionBootstrapUser;
-  views: TeacherUnitsCatalogOption[];
-  active_view: string;
   query: string;
-  filters: {
-    status: TeacherUnitsCatalogOption[];
-    subjects: TeacherUnitsCatalogOption[];
-    grade_levels: TeacherUnitsCatalogOption[];
-    courses: TeacherUnitsCatalogOption[];
-  };
-  active_filters: {
-    status: string;
-    subject: string;
-    grade_level: string;
-    course_id: string;
-  };
   sort: string;
   result_count: number;
   items: TeacherUnitsCatalogItem[];

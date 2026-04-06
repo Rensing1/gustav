@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
+
   let {
     query,
     sort,
@@ -8,12 +10,24 @@
     sort: string;
     onQueryInput?: ((nextQuery: string) => void) | null;
   } = $props();
+
+  async function updateSort(nextSort: string): Promise<void> {
+    const params = new URLSearchParams();
+    params.set("sort", nextSort);
+    if (query.trim()) {
+      params.set("query", query.trim());
+    }
+    await goto(`/teaching/units?${params.toString()}`, {
+      keepFocus: true,
+      noScroll: true,
+      replaceState: true,
+    });
+  }
 </script>
 
 <section class="teacher-units-catalog-toolbar">
   <div class="teacher-units-catalog-toolbar__controls">
-    <form class="teacher-units-catalog-toolbar__search" method="GET">
-      <input type="hidden" name="sort" value={sort} />
+    <div class="teacher-units-catalog-toolbar__search">
       <label>
         <span>Suche</span>
         <input
@@ -25,22 +39,20 @@
           oninput={(event) => onQueryInput?.((event.currentTarget as HTMLInputElement).value)}
         />
       </label>
-      <button class="workspace-link-action" type="submit">Suchen</button>
-    </form>
+    </div>
 
-    <form class="teacher-units-catalog-toolbar__sort" method="GET">
-      <input type="hidden" name="query" value={query} />
+    <div class="teacher-units-catalog-toolbar__sort">
       <label>
         <span>Sortierung</span>
         <select
           name="sort"
           aria-label="Sortierung"
-          onchange={(event) => (event.currentTarget as HTMLSelectElement).form?.requestSubmit()}
+          onchange={(event) => void updateSort((event.currentTarget as HTMLSelectElement).value)}
         >
           <option value="updated_desc" selected={sort === "updated_desc"}>Zuletzt bearbeitet</option>
           <option value="title_asc" selected={sort === "title_asc"}>Titel A-Z</option>
         </select>
       </label>
-    </form>
+    </div>
   </div>
 </section>

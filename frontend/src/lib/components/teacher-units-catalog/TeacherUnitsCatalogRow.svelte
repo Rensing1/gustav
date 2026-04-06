@@ -19,25 +19,43 @@
     }
     return dateFormatter.format(parsed);
   }
+
+  function courseSummary(): string {
+    if (!unit.courses.length) {
+      return "Ohne Kurs";
+    }
+    const labels = unit.courses
+      .map((course) => String(course.title || "").trim())
+      .filter((title) => title.length > 0)
+      .map((title) => title.split(/\s+/, 1)[0]);
+
+    if (!labels.length) {
+      return "Ohne Kurs";
+    }
+
+    return labels.join(", ");
+  }
 </script>
 
 <li class="teacher-units-catalog-row">
-  <a class="teacher-units-catalog-row__link" href={unit.href}>
-    <div class="teacher-units-catalog-row__meta">
-      <span class="teacher-units-catalog-row__kicker">Einheit</span>
-      <span class="teacher-units-catalog-row__status">{unit.meta}</span>
-    </div>
-
+  <div class="teacher-units-catalog-row__grid">
     <div class="teacher-units-catalog-row__main">
-      <strong>{unit.title}</strong>
+      <a class="teacher-units-catalog-row__title" href={unit.href}>
+        <strong>{unit.title}</strong>
+      </a>
       {#if unit.topic}
         <p>{unit.topic}</p>
       {/if}
+    </div>
+
+    <div class="teacher-units-catalog-row__courses">
+      <span class="teacher-units-catalog-row__kicker">Kurse</span>
+      <span class="teacher-units-catalog-row__course-list" title={courseSummary()}>{courseSummary()}</span>
     </div>
 
     <div class="teacher-units-catalog-row__time">
       <span class="teacher-units-catalog-row__kicker">Aktualisiert</span>
       <span>{formatUpdatedAt(unit.updated_at)}</span>
     </div>
-  </a>
+  </div>
 </li>

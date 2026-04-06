@@ -5,16 +5,6 @@
 
   let { data, selected = false }: NodeProps & { data: LearningFlowNodeData; selected?: boolean } = $props();
 
-  function statusLabel(): string {
-    if (data.status === "done") {
-      return "Fertig";
-    }
-    if (data.status === "open") {
-      return "Offen";
-    }
-    return "Gesperrt";
-  }
-
   function handleClick(event: MouseEvent) {
     event.stopPropagation();
     data.onSelect?.();
@@ -84,9 +74,6 @@
         <div class="teacher-flow-unit-node__header-main">
           <span>{data.kicker}</span>
         </div>
-        <span class={`teacher-flow-unit-node__state teacher-flow-unit-node__state--${data.status ?? "locked"}`}>
-          {statusLabel()}
-        </span>
       </div>
 
       <strong>{data.title}</strong>

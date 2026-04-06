@@ -131,11 +131,11 @@
       <form method="POST" action="?/saveModule" class="teacher-flow-unit-node__quickedit-form" use:enhance={enhanceGraphForm}>
         <input type="hidden" name="module_id" value={id} />
         <input type="hidden" name="current_phase_id" value={data.phaseId ?? ""} />
-        <label class="teacher-flow-unit-node__quickedit-field">
+        <label class="teacher-flow-unit-node__quickedit-field workspace-field">
           <span>Name</span>
           <input name="title" type="text" value={data.quickEdit.title} />
         </label>
-        <label class="teacher-flow-unit-node__quickedit-field">
+        <label class="teacher-flow-unit-node__quickedit-field workspace-field">
           <span>Phase</span>
           <select name="phase_id">
             {#each data.quickEdit.phaseOptions as phase}
@@ -145,7 +145,7 @@
             {/each}
           </select>
         </label>
-        <label class="teacher-flow-unit-node__quickedit-field">
+        <label class="teacher-flow-unit-node__quickedit-field workspace-field">
           <span>Freischaltung</span>
           <input
             name="required_prereq_count"

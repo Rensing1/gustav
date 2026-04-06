@@ -256,6 +256,47 @@ async def auth_forgot(request: Request, login_hint: str | None = None):
     return RedirectResponse(url=target, status_code=302, headers=headers)
 
 
+@auth_router.get("/auth/password")
+async def auth_password(request: Request, redirect: str | None = None):
+    """Redirect to Keycloak password update flow for the current user."""
+    mod = _resolve_active_main(request)
+    if mod is None:  # pragma: no cover - fallback when aliasing failed
+        try:
+            from backend.web import main as mod  # type: ignore
+        except Exception:
+            import main as mod  # type: ignore
+
+    code_verifier = OIDCClient.generate_code_verifier()
+    code_challenge = OIDCClient.code_challenge_s256(code_verifier)
+    nonce = secrets.token_urlsafe(16)
+    safe_redirect = safe_inapp_path(redirect) or "/profile"
+    rec = mod.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
+    final_state = rec.state
+
+    current_base = _request_app_base(request).rstrip("/")
+    dynamic_redirect_uri = f"{current_base}/auth/callback"
+    allowed_base = (os.getenv("WEB_BASE") or getattr(mod, "OIDC_CFG").redirect_uri).rstrip("/")
+    same_host = _same_origin(dynamic_redirect_uri, allowed_base)
+    redirect_uri = dynamic_redirect_uri if same_host else getattr(mod, "OIDC_CFG").redirect_uri
+
+    cfg = OIDCConfig(
+        base_url=getattr(mod, "OIDC_CFG").base_url,
+        realm=getattr(mod, "OIDC_CFG").realm,
+        client_id=getattr(mod, "OIDC_CFG").client_id,
+        redirect_uri=redirect_uri,
+        public_base_url=getattr(mod, "OIDC_CFG").public_base_url,
+    )
+    oidc = OIDCClient(cfg)
+    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
+    sep = "&" if "?" in url else "?"
+    url = f"{url}{sep}kc_action=UPDATE_PASSWORD"
+    headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
+    if request.headers.get("HX-Request"):
+        headers["HX-Redirect"] = url
+        return Response(status_code=204, headers=headers)
+    return RedirectResponse(url=url, status_code=302, headers=headers)
+
+
 @auth_router.get("/auth/register")
 async def auth_register(request: Request, login_hint: str | None = None):
     """

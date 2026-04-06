@@ -11,12 +11,14 @@ from __future__ import annotations
 import json
 import inspect
 from urllib.parse import urlencode
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.learning.usecases.courses import ListCoursesInput, ListCoursesUseCase
+from identity_access.admin_client import AdminClient
 
 try:
     from . import learning as learning_routes
@@ -33,6 +35,19 @@ class ConcernBoxEntryCreatePayload(BaseModel):
     course_id: str = Field(min_length=1)
     message_text: str = Field(min_length=1)
     anonymous: bool = True
+
+
+class ProfileDisplayNameUpdatePayload(BaseModel):
+    display_name: str = Field(min_length=1, max_length=80)
+
+
+class ProfileNameUpdatePayload(BaseModel):
+    first_name: str = Field(default="", max_length=80)
+    last_name: str = Field(default="", max_length=80)
+
+
+class ProfileNameLockedError(RuntimeError):
+    """Raised when Vorname/Nachname are currently locked."""
 
 
 def _resolve_main_module():
@@ -84,6 +99,162 @@ def _user_payload(user: dict) -> dict[str, object]:
         "role": primary_role,
         "roles": [str(role) for role in (user.get("roles") or []) if isinstance(role, str)],
     }
+
+
+def _current_claims(request: Request) -> dict[str, object]:
+    """Re-resolve bearer claims for BFF-owned routes that need raw identity data."""
+    auth_header = str(request.headers.get("authorization") or "")
+    if not auth_header.lower().startswith("bearer "):
+        return {}
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return {}
+    mod = _resolve_main_module()
+    try:
+        claims = mod.verify_bearer_token(token=token, cfg=mod.OIDC_CFG)
+    except Exception:
+        return {}
+    return claims if isinstance(claims, dict) else {}
+
+
+def _claims_email(claims: dict[str, object]) -> str:
+    return str(claims.get("email") or claims.get("preferred_username") or "").strip()
+
+
+def _parse_lock_timestamp(value: object) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _split_name_suggestion(identifier: str) -> tuple[str, str]:
+    try:
+        from identity_access import directory  # type: ignore
+
+        humanized = str(directory.humanize_identifier(identifier) or "").strip()
+    except Exception:
+        humanized = ""
+    if not humanized:
+        return "", ""
+    parts = [part for part in humanized.split(" ") if part]
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], " ".join(parts[1:])
+
+
+def _profile_identity_defaults(claims: dict[str, object]) -> dict[str, object]:
+    email = _claims_email(claims)
+    first_name, last_name = _split_name_suggestion(email)
+    return {
+        "display_name": str(claims.get("gustav_display_name") or claims.get("name") or first_name or "Benutzer"),
+        "email": email,
+        "first_name": first_name,
+        "last_name": last_name,
+        "name_locked_until": None,
+        "name_can_edit": True,
+    }
+
+
+def _normalized_attributes(payload: object) -> dict[str, list[str]]:
+    attrs = payload if isinstance(payload, dict) else {}
+    out: dict[str, list[str]] = {}
+    for key, value in attrs.items():
+        if not isinstance(key, str):
+            continue
+        if isinstance(value, list):
+            out[key] = [str(item) for item in value if str(item or "").strip()]
+        elif value is not None and str(value).strip():
+            out[key] = [str(value)]
+    return out
+
+
+def _load_profile_identity(sub: str, claims: dict[str, object]) -> dict[str, object]:
+    defaults = _profile_identity_defaults(claims)
+    mod = _resolve_main_module()
+    client = AdminClient(mod.OIDC_CFG)
+    try:
+        user = client.get_user(user_id=sub)
+    except Exception:
+        return defaults
+
+    attributes = _normalized_attributes(user.get("attributes"))
+    display_name = str((attributes.get("display_name") or [defaults["display_name"]])[0] or "").strip()
+    email = str(user.get("email") or defaults["email"] or "").strip()
+    first_name = str(user.get("firstName") or "").strip()
+    last_name = str(user.get("lastName") or "").strip()
+    if not first_name and not last_name:
+        first_name = str(defaults["first_name"] or "")
+        last_name = str(defaults["last_name"] or "")
+
+    locked_until = _parse_lock_timestamp((attributes.get("name_locked_until") or [None])[0])
+    now = datetime.now(timezone.utc)
+    can_edit = locked_until is None or locked_until <= now
+    lock_value = locked_until.astimezone(timezone.utc).isoformat() if locked_until else None
+
+    return {
+        "display_name": display_name or str(defaults["display_name"]),
+        "email": email,
+        "first_name": first_name,
+        "last_name": last_name,
+        "name_locked_until": lock_value,
+        "name_can_edit": can_edit,
+    }
+
+
+def _update_profile_display_name(sub: str, display_name: str) -> None:
+    """Persist only the mutable display-name attribute for one profile.
+
+    Why:
+        Some identity providers treat fields like `username` or `email` as
+        read-only. This update therefore sends only the attribute delta that is
+        actually needed and keeps the existing attribute bag intact.
+    """
+    mod = _resolve_main_module()
+    client = AdminClient(mod.OIDC_CFG)
+    user = client.get_user(user_id=sub)
+    attributes = _normalized_attributes(user.get("attributes"))
+    attributes["display_name"] = [str(display_name).strip()]
+    client.update_user(
+        user_id=sub,
+        payload={
+            "email": str(user.get("email") or "").strip(),
+            "attributes": attributes,
+        },
+    )
+
+
+def _update_profile_name(sub: str, first_name: str, last_name: str) -> None:
+    """Persist only Vorname, Nachname and the lock attribute for one profile.
+
+    Why:
+        Login-related fields can be externally managed and therefore immutable.
+        We update only the profile fields that belong to this use case so the
+        request also works for brokered or restricted accounts.
+    """
+    mod = _resolve_main_module()
+    client = AdminClient(mod.OIDC_CFG)
+    user = client.get_user(user_id=sub)
+    attributes = _normalized_attributes(user.get("attributes"))
+    locked_until = _parse_lock_timestamp((attributes.get("name_locked_until") or [None])[0])
+    now = datetime.now(timezone.utc)
+    if locked_until is not None and locked_until > now:
+        raise ProfileNameLockedError(locked_until.astimezone(timezone.utc).isoformat())
+
+    next_lock = (now + timedelta(days=180)).astimezone(timezone.utc).isoformat()
+    attributes["name_locked_until"] = [next_lock]
+    payload = {
+        "firstName": str(first_name).strip(),
+        "lastName": str(last_name).strip(),
+        "email": str(user.get("email") or "").strip(),
+        "attributes": attributes,
+    }
+    client.update_user(user_id=sub, payload=payload)
 
 
 def _list_learner_courses(student_sub: str, limit: int, offset: int) -> list[dict]:
@@ -598,6 +769,66 @@ async def post_session_sync(request: Request):
     response = Response(status_code=204, headers=_private_headers())
     mod._set_session_cookie(response, session.session_id, request=request)
     return response
+
+
+@app_router.get("/api/app/profile")
+async def get_app_profile(request: Request):
+    """Return the authenticated user's profile read-model."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+
+    claims = _current_claims(request)
+    profile = _load_profile_identity(str(user.get("sub") or ""), claims)
+    body = {
+        "user": _user_payload(user),
+        "display_name": str(profile.get("display_name") or ""),
+        "email": str(profile.get("email") or ""),
+        "first_name": str(profile.get("first_name") or ""),
+        "last_name": str(profile.get("last_name") or ""),
+        "name_locked_until": profile.get("name_locked_until"),
+        "name_can_edit": bool(profile.get("name_can_edit")),
+        "password_change_href": "/auth/password",
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.patch("/api/app/profile/display-name")
+async def patch_profile_display_name(request: Request, payload: ProfileDisplayNameUpdatePayload):
+    """Update only the display name for the current user."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+
+    display_name = str(payload.display_name or "").strip()
+    if not display_name:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_display_name"}, status_code=400, headers=_private_headers())
+
+    _update_profile_display_name(str(user.get("sub") or ""), display_name)
+    return Response(status_code=204, headers=_private_headers())
+
+
+@app_router.patch("/api/app/profile/name")
+async def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload):
+    """Update Vorname/Nachname for the current user."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+
+    first_name = str(payload.first_name or "").strip()
+    last_name = str(payload.last_name or "").strip()
+    if not first_name and not last_name:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_name"}, status_code=400, headers=_private_headers())
+
+    try:
+        _update_profile_name(str(user.get("sub") or ""), first_name, last_name)
+    except ProfileNameLockedError as exc:
+        return JSONResponse(
+            {"error": "name_locked", "detail": str(exc)},
+            status_code=409,
+            headers=_private_headers(),
+        )
+    return Response(status_code=204, headers=_private_headers())
 
 
 @app_router.get("/api/learning/views/learner-home")

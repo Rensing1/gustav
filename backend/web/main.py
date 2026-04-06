@@ -411,6 +411,7 @@ def _requires_bff_bearer_auth(path: str) -> bool:
     """Return whether a path belongs to the new BFF-owned read-model surface."""
     return path in ("/api/app/session-bootstrap", "/api/app/session-sync") or path.startswith(
         (
+            "/api/app/profile",
             "/api/learning/views/",
             "/api/teaching/views/",
             "/api/diagnostics/views/",

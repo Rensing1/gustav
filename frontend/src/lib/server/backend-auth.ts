@@ -341,6 +341,13 @@ export function startForgotFlow(event: RequestEvent): Response {
   return createRedirectResponse(url.toString());
 }
 
+export function startPasswordFlow(event: RequestEvent): Response {
+  const redirectPath = safeRedirectPath(event.url.searchParams.get("redirect")) || "/profile";
+  const flow = createFlow(event.url, redirectPath);
+  setFlowCookie(event, flow);
+  return createRedirectResponse(buildAuthorizationUrl(flow, { kc_action: "UPDATE_PASSWORD" }));
+}
+
 export async function handleAuthCallback(event: RequestEvent): Promise<Response> {
   const code = event.url.searchParams.get("code");
   const state = event.url.searchParams.get("state");

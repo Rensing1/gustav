@@ -266,6 +266,7 @@
               <p class="account-eyebrow">Angemeldet als</p>
               <strong>{data.bootstrap.user.name}</strong>
               <p class="identity-meta">{data.bootstrap.user.role}</p>
+              <a class="ghost-link" href="/profile">Profil</a>
               {#if data.bootstrap.user.role === "student"}
                 <a class="ghost-link" href="/learning/kummerkasten">Kummerkasten</a>
               {:else}

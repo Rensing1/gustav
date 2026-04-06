@@ -19,6 +19,9 @@ def test_openapi_documents_bearer_auth_for_bff_endpoints() -> None:
 
     for path, verb in (
         ("/api/app/session-bootstrap", "get"),
+        ("/api/app/profile", "get"),
+        ("/api/app/profile/display-name", "patch"),
+        ("/api/app/profile/name", "patch"),
         ("/api/learning/views/learner-home", "get"),
         ("/api/learning/views/concern-box", "get"),
         ("/api/learning/concern-box/entries", "post"),

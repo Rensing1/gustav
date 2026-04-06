@@ -255,31 +255,30 @@
       {/if}
 
       <div class="app-topbar-controls">
-        <ThemeToggle currentTheme={currentTheme} onToggle={toggleTheme} />
+        <div class="app-topbar-tools">
+          <ThemeToggle currentTheme={currentTheme} onToggle={toggleTheme} />
 
-        {#if data.bootstrap}
-          <details class="account-menu" bind:this={accountMenu}>
-            <summary class="account-trigger" aria-label="Konto-Menü">
-              <span class="account-name">{data.bootstrap.user.name}</span>
-              <span class="account-avatar" aria-hidden="true">
-                {data.bootstrap.user.name.slice(0, 1).toUpperCase()}
-              </span>
-            </summary>
+          {#if data.bootstrap}
+            <details class="account-menu" bind:this={accountMenu}>
+              <summary class="account-trigger" aria-label="Konto-Menü">
+                <span class="account-trigger__name">{data.bootstrap.user.name}</span>
+                <span class="account-trigger__initial" aria-hidden="true">
+                  {data.bootstrap.user.name.slice(0, 1).toUpperCase()}
+                </span>
+              </summary>
 
-            <div class="account-popover">
-              <p class="account-eyebrow">Angemeldet als</p>
-              <strong>{data.bootstrap.user.name}</strong>
-              <p class="identity-meta">{data.bootstrap.user.role}</p>
-              <a class="ghost-link" href="/profile">Profil</a>
-              {#if data.bootstrap.user.role === "student"}
-                <a class="ghost-link" href="/learning/kummerkasten">Kummerkasten</a>
-              {:else}
-                <a class="ghost-link" href="/teaching/kummerkasten">Kummerkasten</a>
-              {/if}
-              <a class="ghost-link" href="/auth/logout">Abmelden</a>
-            </div>
-          </details>
-        {/if}
+              <div class="account-menu__panel">
+                <a class="account-menu__action" href="/profile">Profil</a>
+                {#if data.bootstrap.user.role === "student"}
+                  <a class="account-menu__action" href="/learning/kummerkasten">Kummerkasten</a>
+                {:else}
+                  <a class="account-menu__action" href="/teaching/kummerkasten">Kummerkasten</a>
+                {/if}
+                <a class="account-menu__action" href="/auth/logout">Abmelden</a>
+              </div>
+            </details>
+          {/if}
+        </div>
       </div>
     </div>
   </header>

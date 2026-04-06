@@ -75,13 +75,13 @@
     <div class="workspace-settings-menu__panel" role="dialog" aria-label="Layout-Einstellungen">
       <label class="workspace-settings-menu__toggle">
         <span>Inhaltsverzeichnis</span>
-        <input checked={tocOpen} type="checkbox" onchange={onToggleToc} />
+        <input class="workspace-settings-menu__checkbox" checked={tocOpen} type="checkbox" onchange={onToggleToc} />
       </label>
 
       {#if showSplitToggle}
         <label class="workspace-settings-menu__toggle">
           <span>Zwei Ansichten</span>
-          <input checked={splitView} type="checkbox" onchange={onToggleSplitView} />
+          <input class="workspace-settings-menu__checkbox" checked={splitView} type="checkbox" onchange={onToggleSplitView} />
         </label>
       {/if}
 
@@ -91,7 +91,7 @@
           <span class="workspace-settings-menu__value">{tocWidth.toFixed(2)} rem</span>
         </span>
         <div class="workspace-settings-menu__field-controls">
-          <input type="range" min="0" max="120" step="0.25" value={tocWidth} oninput={(event) => onUpdateTocWidth(numericValue(event))} />
+          <input class="workspace-settings-menu__range" type="range" min="0" max="120" step="0.25" value={tocWidth} oninput={(event) => onUpdateTocWidth(numericValue(event))} />
           <input class="workspace-settings-menu__number" type="number" min="0" max="120" step="0.25" value={tocWidth} oninput={(event) => onUpdateTocWidth(numericValue(event))} />
         </div>
       </label>
@@ -102,7 +102,7 @@
           <span class="workspace-settings-menu__value">{workspaceWidth.toFixed(1)} rem</span>
         </span>
         <div class="workspace-settings-menu__field-controls">
-          <input type="range" min="16" max="320" step="0.5" value={workspaceWidth} oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))} onchange={(event) => onCommitWorkspaceWidth(numericValue(event))} />
+          <input class="workspace-settings-menu__range" type="range" min="16" max="320" step="0.5" value={workspaceWidth} oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))} onchange={(event) => onCommitWorkspaceWidth(numericValue(event))} />
           <input class="workspace-settings-menu__number" type="number" min="16" max="320" step="0.5" value={workspaceWidth} oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))} onchange={(event) => onCommitWorkspaceWidth(numericValue(event))} />
         </div>
       </label>
@@ -113,7 +113,7 @@
           <span class="workspace-settings-menu__value">{fontScale.toFixed(2)}x</span>
         </span>
         <div class="workspace-settings-menu__field-controls">
-          <input type="range" min="0.1" max="4" step="0.05" value={fontScale} oninput={(event) => onPreviewFontScale(numericValue(event))} onchange={(event) => onCommitFontScale(numericValue(event))} />
+          <input class="workspace-settings-menu__range" type="range" min="0.1" max="4" step="0.05" value={fontScale} oninput={(event) => onPreviewFontScale(numericValue(event))} onchange={(event) => onCommitFontScale(numericValue(event))} />
           <input class="workspace-settings-menu__number" type="number" min="0.1" max="4" step="0.05" value={fontScale} oninput={(event) => onPreviewFontScale(numericValue(event))} onchange={(event) => onCommitFontScale(numericValue(event))} />
         </div>
       </label>
@@ -124,7 +124,7 @@
           <span class="workspace-settings-menu__value">{splitRatio.toFixed(0)} / {(100 - splitRatio).toFixed(0)}</span>
         </span>
         <div class="workspace-settings-menu__field-controls">
-          <input disabled={!splitView} type="range" min="0" max="100" step="1" value={splitRatio} oninput={(event) => onUpdateSplitRatio(numericValue(event))} />
+          <input class="workspace-settings-menu__range" disabled={!splitView} type="range" min="0" max="100" step="1" value={splitRatio} oninput={(event) => onUpdateSplitRatio(numericValue(event))} />
           <input class="workspace-settings-menu__number" disabled={!splitView} type="number" min="0" max="100" step="1" value={splitRatio} oninput={(event) => onUpdateSplitRatio(numericValue(event))} />
         </div>
       </label>
@@ -138,7 +138,7 @@
             <span class="workspace-settings-menu__value">{tocGap.toFixed(1)} rem</span>
           </span>
           <div class="workspace-settings-menu__field-controls">
-            <input type="range" min="0" max="40" step="0.1" value={tocGap} oninput={(event) => onUpdateTocGap(numericValue(event))} />
+            <input class="workspace-settings-menu__range" type="range" min="0" max="40" step="0.1" value={tocGap} oninput={(event) => onUpdateTocGap(numericValue(event))} />
             <input class="workspace-settings-menu__number" type="number" min="0" max="40" step="0.1" value={tocGap} oninput={(event) => onUpdateTocGap(numericValue(event))} />
           </div>
         </label>
@@ -149,7 +149,7 @@
             <span class="workspace-settings-menu__value">{paneGap.toFixed(1)} rem</span>
           </span>
           <div class="workspace-settings-menu__field-controls">
-            <input type="range" min="0" max="40" step="0.1" value={paneGap} oninput={(event) => onUpdatePaneGap(numericValue(event))} />
+            <input class="workspace-settings-menu__range" type="range" min="0" max="40" step="0.1" value={paneGap} oninput={(event) => onUpdatePaneGap(numericValue(event))} />
             <input class="workspace-settings-menu__number" type="number" min="0" max="40" step="0.1" value={paneGap} oninput={(event) => onUpdatePaneGap(numericValue(event))} />
           </div>
         </label>

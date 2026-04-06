@@ -3,6 +3,7 @@
   import { onMount, tick } from "svelte";
 
   import ModeSwitch from "$lib/components/ui/ModeSwitch.svelte";
+  import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";
   import LearningUnitContentWorkspace from "$lib/components/learning-unit/LearningUnitContentWorkspace.svelte";
   import LearningUnitOverview from "$lib/components/learning-unit/LearningUnitOverview.svelte";
   import {
@@ -78,7 +79,7 @@
   let moduleErrors = $state.raw<Record<string, string | null>>({});
   let workspaceReady = $state(false);
   let historyRestored = $state(false);
-  let modularLayoutMenuOpen = $state(false);
+  let modularSettingsMenuOpen = $state(false);
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
   let workspaceRoot = $state<HTMLDivElement | null>(null);
 
@@ -779,11 +780,6 @@
     };
   }
 
-  function numericValue(event: Event): number {
-    const next = Number((event.currentTarget as HTMLInputElement).value);
-    return Number.isFinite(next) ? next : 0;
-  }
-
   function applyWorkspaceWidth(value: number) {
     workspaceRoot?.style.setProperty("--learning-unit-workspace-width", `${value}rem`);
   }
@@ -984,20 +980,6 @@
   });
 </script>
 
-<svelte:document
-  onclick={(event) => {
-    const target = event.target;
-    if (!(target instanceof Element) || !target.closest("[data-layout-menu-root]")) {
-      modularLayoutMenuOpen = false;
-    }
-  }}
-  onkeydown={(event) => {
-    if (event.key === "Escape") {
-      modularLayoutMenuOpen = false;
-    }
-  }}
-/>
-
 <svelte:head>
   <title>{data.selectedUnit?.unit.title ?? "Lernraum"} | GUSTAV</title>
 </svelte:head>
@@ -1034,210 +1016,32 @@
 
         {#if modularWorkspace.view === "content"}
           <div class="learning-unit-toolbar__utility">
-            <div class="learning-unit-layout-menu" data-layout-menu-root>
-              <button
-                aria-expanded={modularLayoutMenuOpen}
-                aria-haspopup="dialog"
-                aria-label="Layout-Einstellungen"
-                class:workspace-top-action--active={modularLayoutMenuOpen}
-                class="workspace-top-action workspace-top-action--quiet learning-unit-view-toggle"
-                title="Layout-Einstellungen"
-                type="button"
-                onclick={() => {
-                  modularLayoutMenuOpen = !modularLayoutMenuOpen;
-                }}
-              >
-                <svg aria-hidden="true" class="learning-unit-view-toggle__icon" viewBox="0 0 20 20">
-                  <path d="M10 4.25a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 4.25Z"></path>
-                  <path d="M10 8.55a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 8.55Z"></path>
-                  <path d="M10 12.85a1.45 1.45 0 1 0 0.001 2.901A1.45 1.45 0 0 0 10 12.85Z"></path>
-                </svg>
-              </button>
-
-              {#if modularLayoutMenuOpen}
-                <div class="learning-unit-layout-menu__panel" role="dialog" aria-label="Layout-Einstellungen">
-                  <label class="learning-unit-layout-menu__toggle">
-                    <span>Inhaltsverzeichnis</span>
-                    <input checked={workspaceTocOpen()} type="checkbox" onchange={toggleToc} />
-                  </label>
-
-                  <label class="learning-unit-layout-menu__toggle">
-                    <span>Zwei Ansichten</span>
-                    <input checked={workspaceSplitView()} type="checkbox" onchange={() => setSplitView(!workspaceSplitView())} />
-                  </label>
-
-                  <label class="learning-unit-layout-menu__field">
-                    <span class="learning-unit-layout-menu__field-head">
-                      <span>Breite Inhaltsverzeichnis</span>
-                      <span class="learning-unit-layout-menu__value">{layoutPreferences.tocWidth.toFixed(2)} rem</span>
-                    </span>
-                    <div class="learning-unit-layout-menu__field-controls">
-                      <input
-                        type="range"
-                        min="0"
-                        max="120"
-                        step="0.25"
-                        value={layoutPreferences.tocWidth}
-                        oninput={(event) => updateLayoutPreferences({ tocWidth: numericValue(event) })}
-                      />
-                      <input
-                        class="learning-unit-layout-menu__number"
-                        type="number"
-                        min="0"
-                        max="120"
-                        step="0.25"
-                        value={layoutPreferences.tocWidth}
-                        oninput={(event) => updateLayoutPreferences({ tocWidth: numericValue(event) })}
-                      />
-                    </div>
-                  </label>
-
-                  <label class="learning-unit-layout-menu__field">
-                    <span class="learning-unit-layout-menu__field-head">
-                      <span>Breite Arbeitsrahmen</span>
-                      <span class="learning-unit-layout-menu__value">{layoutPreferences.workspaceWidth.toFixed(1)} rem</span>
-                    </span>
-                    <div class="learning-unit-layout-menu__field-controls">
-                      <input
-                        type="range"
-                        min="16"
-                        max="320"
-                        step="0.5"
-                        value={layoutPreferences.workspaceWidth}
-                        oninput={(event) => previewWorkspaceWidth(numericValue(event))}
-                        onchange={(event) => commitWorkspaceWidth(numericValue(event))}
-                      />
-                      <input
-                        class="learning-unit-layout-menu__number"
-                        type="number"
-                        min="16"
-                        max="320"
-                        step="0.5"
-                        value={layoutPreferences.workspaceWidth}
-                        oninput={(event) => previewWorkspaceWidth(numericValue(event))}
-                        onchange={(event) => commitWorkspaceWidth(numericValue(event))}
-                      />
-                    </div>
-                  </label>
-
-                  <label class="learning-unit-layout-menu__field">
-                    <span class="learning-unit-layout-menu__field-head">
-                      <span>Schriftgröße</span>
-                      <span class="learning-unit-layout-menu__value">{layoutPreferences.fontScale.toFixed(2)}x</span>
-                    </span>
-                    <div class="learning-unit-layout-menu__field-controls">
-                      <input
-                        type="range"
-                        min="0.1"
-                        max="4"
-                        step="0.05"
-                        value={layoutPreferences.fontScale}
-                        oninput={(event) => previewFontScale(numericValue(event))}
-                        onchange={(event) => commitFontScale(numericValue(event))}
-                      />
-                      <input
-                        class="learning-unit-layout-menu__number"
-                        type="number"
-                        min="0.1"
-                        max="4"
-                        step="0.05"
-                        value={layoutPreferences.fontScale}
-                        oninput={(event) => previewFontScale(numericValue(event))}
-                        onchange={(event) => commitFontScale(numericValue(event))}
-                      />
-                    </div>
-                  </label>
-
-                  <label class="learning-unit-layout-menu__field">
-                    <span class="learning-unit-layout-menu__field-head">
-                      <span>Aufteilung links / rechts</span>
-                      <span class="learning-unit-layout-menu__value">{layoutPreferences.splitRatio.toFixed(0)} / {(100 - layoutPreferences.splitRatio).toFixed(0)}</span>
-                    </span>
-                    <div class="learning-unit-layout-menu__field-controls">
-                      <input
-                        disabled={!workspaceSplitView()}
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={layoutPreferences.splitRatio}
-                        oninput={(event) => updateLayoutPreferences({ splitRatio: numericValue(event) })}
-                      />
-                      <input
-                        class="learning-unit-layout-menu__number"
-                        disabled={!workspaceSplitView()}
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={layoutPreferences.splitRatio}
-                        oninput={(event) => updateLayoutPreferences({ splitRatio: numericValue(event) })}
-                      />
-                    </div>
-                  </label>
-
-                  <div class="learning-unit-layout-menu__section">
-                    <p class="learning-unit-layout-menu__section-title">Abstände</p>
-
-                    <label class="learning-unit-layout-menu__field">
-                      <span class="learning-unit-layout-menu__field-head">
-                        <span>Abstand Inhaltsverzeichnis</span>
-                        <span class="learning-unit-layout-menu__value">{layoutPreferences.tocGap.toFixed(1)} rem</span>
-                      </span>
-                      <div class="learning-unit-layout-menu__field-controls">
-                        <input
-                          type="range"
-                          min="0"
-                          max="40"
-                          step="0.1"
-                          value={layoutPreferences.tocGap}
-                          oninput={(event) => updateLayoutPreferences({ tocGap: numericValue(event) })}
-                        />
-                        <input
-                          class="learning-unit-layout-menu__number"
-                          type="number"
-                          min="0"
-                          max="40"
-                          step="0.1"
-                          value={layoutPreferences.tocGap}
-                          oninput={(event) => updateLayoutPreferences({ tocGap: numericValue(event) })}
-                        />
-                      </div>
-                    </label>
-
-                    <label class="learning-unit-layout-menu__field">
-                      <span class="learning-unit-layout-menu__field-head">
-                        <span>Abstand Arbeitsflächen</span>
-                        <span class="learning-unit-layout-menu__value">{layoutPreferences.paneGap.toFixed(1)} rem</span>
-                      </span>
-                      <div class="learning-unit-layout-menu__field-controls">
-                        <input
-                          type="range"
-                          min="0"
-                          max="40"
-                          step="0.1"
-                          value={layoutPreferences.paneGap}
-                          oninput={(event) => updateLayoutPreferences({ paneGap: numericValue(event) })}
-                        />
-                        <input
-                          class="learning-unit-layout-menu__number"
-                          type="number"
-                          min="0"
-                          max="40"
-                          step="0.1"
-                          value={layoutPreferences.paneGap}
-                          oninput={(event) => updateLayoutPreferences({ paneGap: numericValue(event) })}
-                        />
-                      </div>
-                    </label>
-                  </div>
-
-                  <button class="learning-unit-layout-menu__reset" type="button" onclick={resetLayoutPreferences}>
-                    Standardlayout wiederherstellen
-                  </button>
-                </div>
-              {/if}
-            </div>
+            <WorkspaceSettingsMenu
+              open={modularSettingsMenuOpen}
+              tocOpen={workspaceTocOpen()}
+              splitView={workspaceSplitView()}
+              showSplitToggle={true}
+              tocWidth={layoutPreferences.tocWidth}
+              workspaceWidth={layoutPreferences.workspaceWidth}
+              splitRatio={layoutPreferences.splitRatio}
+              tocGap={layoutPreferences.tocGap}
+              paneGap={layoutPreferences.paneGap}
+              fontScale={layoutPreferences.fontScale}
+              onToggleMenu={() => {
+                modularSettingsMenuOpen = !modularSettingsMenuOpen;
+              }}
+              onToggleToc={toggleToc}
+              onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+              onResetLayout={resetLayoutPreferences}
+              onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
+              onPreviewWorkspaceWidth={previewWorkspaceWidth}
+              onCommitWorkspaceWidth={commitWorkspaceWidth}
+              onPreviewFontScale={previewFontScale}
+              onCommitFontScale={commitFontScale}
+              onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
+              onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
+              onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
+            />
           </div>
         {/if}
       </div>

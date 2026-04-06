@@ -167,6 +167,7 @@ SNAPSHOT ?= .tmp/snapshot_backup_latest.tar.gz
 # Supabase local uses `supabase_admin` as DB superuser; `postgres` is not a superuser.
 # Snapshot restores need superuser privileges to drop/recreate Supabase-managed schemas.
 DSN ?= postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres
+SNAPSHOT_IMPORT_ARGS ?=
 LEGACY_SCHEMA ?= legacy_raw
 WORKDIR ?= .tmp/migration_run
 SNAPSHOT_WORKDIR ?= .tmp/snapshot_import_run
@@ -240,6 +241,7 @@ import-snapshot:
 	  --snapshot $(SNAPSHOT) \
 	  --dsn $(DSN) \
 	  --workdir $(SNAPSHOT_WORKDIR) \
+	  $(SNAPSHOT_IMPORT_ARGS) \
 	  --verbose && \
 	supabase migration up && \
 	$(MAKE) db-login-user
@@ -252,6 +254,7 @@ import-snapshot-dry:
 	  --snapshot $(SNAPSHOT) \
 	  --dsn $(DSN) \
 	  --workdir $(SNAPSHOT_WORKDIR) \
+	  $(SNAPSHOT_IMPORT_ARGS) \
 	  --dry-run \
 	  --verbose
 

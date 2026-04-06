@@ -183,6 +183,7 @@ def test_main_normalizes_restore_target_ownership_after_restore(
         keycloak_admin_client_secret="",
         dry_run=False,
         allow_remote_dsn=False,
+        allow_missing_h5p=False,
         verbose=False,
     )
 
@@ -272,6 +273,7 @@ def test_main_restores_optional_h5p_storage_archive(
         keycloak_admin_client_secret="",
         dry_run=False,
         allow_remote_dsn=False,
+        allow_missing_h5p=False,
         verbose=False,
     )
 
@@ -341,6 +343,7 @@ def test_main_fails_fast_when_snapshot_has_h5p_refs_but_no_h5p_archive(
         keycloak_admin_client_secret="",
         dry_run=False,
         allow_remote_dsn=False,
+        allow_missing_h5p=False,
         verbose=False,
     )
 
@@ -366,6 +369,82 @@ def test_main_fails_fast_when_snapshot_has_h5p_refs_but_no_h5p_archive(
     )
 
     assert mod.main() == 1
+
+
+def test_main_allows_missing_h5p_when_opted_in(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+    workdir = tmp_path / "workdir"
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(workdir),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=True,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        allow_missing_h5p=True,
+        verbose=False,
+    )
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, None, None),
+    )
+    monkeypatch.setattr(mod, "extract_snapshot_migration_history", lambda _dump: [])
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_normalize_restore_target_ownership", lambda _dsn, _owner: None)
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda _dsn, _rows: None)
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda _dsn, _root: (_ for _ in ()).throw(
+            RuntimeError(
+                "Snapshot references H5P content that is missing from local H5P storage. "
+                "Missing content_ids: 2689406715, 2689406716. "
+                "Provide h5p_storage.tar.gz or re-import the missing H5P packages."
+            )
+        ),
+    )
+
+    assert mod.main() == 0
+
+    reports = sorted(workdir.glob("run_*/report.json"))
+    assert len(reports) == 1
+    report = reports[0].read_text(encoding="utf-8")
+    assert '"allow_missing_h5p": true' in report
+    assert '"missing_ids": [' in report
+    assert '"2689406715"' in report
+    assert '"2689406716"' in report
+    assert "h5p_storage_warning" in report
 
 
 def test_extract_snapshot_migration_history_reads_supabase_copy_block(tmp_path: Path) -> None:

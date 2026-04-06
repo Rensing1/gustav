@@ -173,6 +173,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dry-run", action="store_true", help="Run preflight checks only (no writes)")
     parser.add_argument("--allow-remote-dsn", action="store_true", help="Allow restoring into non-local DSNs (dangerous)")
+    parser.add_argument(
+        "--allow-missing-h5p",
+        action="store_true",
+        help="Continue the import when H5P DB rows reference missing local H5P content files",
+    )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     return parser.parse_args()
 
@@ -984,6 +989,14 @@ def _assert_snapshot_h5p_storage_complete(dsn: str, h5p_root: Path) -> dict[str,
     )
 
 
+def _parse_missing_h5p_ids(error_text: str) -> list[str]:
+    """Extract missing H5P content IDs from the consistency error message."""
+    match = re.search(r"Missing content_ids:\s*([0-9,\s-]+)\.", error_text)
+    if not match:
+        return []
+    return [item.strip() for item in match.group(1).split(",") if item.strip()]
+
+
 def _build_object_url(base_url: str, bucket: str, key: str) -> str:
     encoded_key = quote(key, safe="/")
     encoded_bucket = quote(bucket, safe="")
@@ -1214,6 +1227,7 @@ def main() -> int:
         "skip_storage": bool(args.skip_storage),
         "skip_keycloak": bool(args.skip_keycloak),
         "no_reset": bool(args.no_reset),
+        "allow_missing_h5p": bool(args.allow_missing_h5p),
     }
 
     try:
@@ -1267,8 +1281,21 @@ def main() -> int:
         if files.h5p_storage_tar_gz is not None:
             restored_h5p_root = _restore_h5p_storage_tar(files.h5p_storage_tar_gz, LOCAL_H5P_STORAGE_ROOT)
             report["h5p_storage_restored_to"] = str(restored_h5p_root)
-        h5p_consistency = _assert_snapshot_h5p_storage_complete(dsn, LOCAL_H5P_STORAGE_ROOT)
-        report["h5p_storage_result"] = h5p_consistency
+        try:
+            h5p_consistency = _assert_snapshot_h5p_storage_complete(dsn, LOCAL_H5P_STORAGE_ROOT)
+            report["h5p_storage_result"] = h5p_consistency
+        except RuntimeError as exc:
+            if not args.allow_missing_h5p:
+                raise
+            report["h5p_storage_result"] = {
+                "expected_ids": [],
+                "missing_ids": _parse_missing_h5p_ids(str(exc)),
+            }
+            report["h5p_storage_warning"] = str(exc)
+            LOG.warning(
+                "Continuing snapshot import despite missing H5P content because --allow-missing-h5p was set: %s",
+                exc,
+            )
 
         if files.keycloak_db_sql_gz and not args.skip_keycloak:
             _restore_keycloak_db_sql_gz(

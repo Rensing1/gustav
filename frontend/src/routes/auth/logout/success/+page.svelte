@@ -7,9 +7,8 @@
 </svelte:head>
 
 <AuthFrame
-  eyebrow="Session beendet"
-  title="Erfolgreich abgemeldet"
-  body="Du wurdest von GUSTAV und dem Anmeldedienst abgemeldet. Der Rücksprung bleibt bewusst Teil derselben Produktsprache."
+  embedded
+  title="Abgemeldet"
   actionHref="/auth/login"
   actionLabel="Erneut anmelden"
 />

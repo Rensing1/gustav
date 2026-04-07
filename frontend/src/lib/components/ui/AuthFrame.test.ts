@@ -19,4 +19,18 @@ describe("AuthFrame", () => {
     expect(screen.getByRole("heading", { name: "Erfolgreich abgemeldet" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Erneut anmelden" })).toHaveAttribute("href", "/auth/login");
   });
+
+  it("renders the auth frame without optional copy blocks", () => {
+    render(AuthFrame, {
+      props: {
+        title: "Anmelden",
+        actionHref: "/auth/login",
+        actionLabel: "Anmelden"
+      }
+    });
+
+    expect(screen.getByRole("heading", { name: "Anmelden" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Anmelden" })).toHaveAttribute("href", "/auth/login");
+    expect(screen.queryByText("Session beendet")).not.toBeInTheDocument();
+  });
 });

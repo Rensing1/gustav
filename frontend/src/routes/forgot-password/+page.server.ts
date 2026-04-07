@@ -13,6 +13,8 @@ function safeRedirectPath(value: string | null): string | null {
 
 export const load: PageServerLoad = async ({ url }) => {
   return {
+    hidePageHeading: true,
+    authLayout: true,
     redirectPath: safeRedirectPath(url.searchParams.get("redirect")),
   };
 };

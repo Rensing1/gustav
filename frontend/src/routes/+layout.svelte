@@ -137,6 +137,10 @@
     return page.data.hidePageHeading === true;
   }
 
+  function isAuthLayout(): boolean {
+    return page.data.authLayout === true;
+  }
+
   function pageTitle(): string {
     return typeof page.data.pageTitle === "string" && page.data.pageTitle.length > 0
       ? page.data.pageTitle
@@ -227,7 +231,7 @@
 
 <svelte:window onclick={closeAccountMenuOnWindowClick} />
 
-<div class="app-shell" data-theme={currentTheme}>
+<div class:app-shell--auth-route={isAuthLayout()} class="app-shell" data-theme={currentTheme}>
   <header class:app-topbar--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar">
     <div class:app-topbar-inner--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar-inner">
       <a class="brand-lockup" href="/" aria-label="Startseite">
@@ -284,42 +288,49 @@
     </div>
   </header>
 
-  <main class="workspace-shell">
+  <main class:workspace-shell--auth={isAuthLayout()} class="workspace-shell">
     <div
       class="workspace-inner"
+      class:workspace-inner--auth={isAuthLayout()}
       class:workspace-inner--wide={hasWideWorkspaceShell()}
       class:workspace-inner--learner-unit-wide={isLearnerUnitWorkspaceRoute()}
     >
-      <header
-        class="workspace-header"
-        class:workspace-header--measure={isLearnerUnitWorkspaceRoute()}
-        class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
-        class:workspace-header--learner-unit={isLearnerUnitWorkspaceRoute()}
-      >
-        <div class="workspace-topbar">
-          {#if currentBreadcrumbs().length && !isLearnerUnitWorkspaceRoute()}
-            <BreadcrumbBar
-              className="workspace-breadcrumbs"
-              items={currentBreadcrumbs()}
-            />
-          {/if}
+      {#if !isAuthLayout()}
+        <header
+          class="workspace-header"
+          class:workspace-header--measure={isLearnerUnitWorkspaceRoute()}
+          class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
+          class:workspace-header--learner-unit={isLearnerUnitWorkspaceRoute()}
+        >
+          <div class="workspace-topbar">
+            {#if currentBreadcrumbs().length && !isLearnerUnitWorkspaceRoute()}
+              <BreadcrumbBar
+                className="workspace-breadcrumbs"
+                items={currentBreadcrumbs()}
+              />
+            {/if}
 
-          {#if currentHeaderAction()}
-            <a class="workspace-topbar-action" href={currentHeaderAction()?.href}>
-              {currentHeaderAction()?.label}
-            </a>
-          {/if}
-        </div>
-
-        {#if !hidePageHeading()}
-          <div class="workspace-heading">
-            <h1>{pageTitle()}</h1>
-            <p class="workspace-copy">{pageCopy()}</p>
+            {#if currentHeaderAction()}
+              <a class="workspace-topbar-action" href={currentHeaderAction()?.href}>
+                {currentHeaderAction()?.label}
+              </a>
+            {/if}
           </div>
-        {/if}
-      </header>
 
-      <div class="workspace-body" class:workspace-body--wide={hasWideWorkspaceShell()}>
+          {#if !hidePageHeading()}
+            <div class="workspace-heading">
+              <h1>{pageTitle()}</h1>
+              <p class="workspace-copy">{pageCopy()}</p>
+            </div>
+          {/if}
+        </header>
+      {/if}
+
+      <div
+        class="workspace-body"
+        class:workspace-body--auth={isAuthLayout()}
+        class:workspace-body--wide={hasWideWorkspaceShell()}
+      >
         {@render children()}
       </div>
     </div>

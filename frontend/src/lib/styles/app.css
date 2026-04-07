@@ -125,6 +125,11 @@ select {
   color: var(--color-text);
 }
 
+.app-shell--auth-route {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .app-topbar {
   position: sticky;
   top: 0;
@@ -452,11 +457,22 @@ select {
   padding: 0 var(--space-5) 2.5rem;
 }
 
+.workspace-shell--auth {
+  display: grid;
+  min-height: 100%;
+  padding-top: var(--space-5);
+}
+
 .workspace-inner {
   width: min(100%, 42rem);
   margin: 0 auto;
   display: grid;
   grid-template-rows: auto 1fr;
+}
+
+.workspace-inner--auth {
+  width: min(100%, 38rem);
+  min-height: 100%;
 }
 
 .workspace-inner--wide {
@@ -667,6 +683,13 @@ select {
   display: grid;
   gap: 1rem;
   align-content: start;
+}
+
+.workspace-body--auth {
+  width: 100%;
+  min-height: 100%;
+  place-items: center;
+  align-content: center;
 }
 
 .workspace-body--wide {

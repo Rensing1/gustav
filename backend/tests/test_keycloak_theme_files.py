@@ -108,6 +108,13 @@ def test_theme_css_contains_component_hooks():
         assert cls in text, f"Missing CSS hook: {cls}"
 
 
+def test_theme_properties_define_explicit_auth_theme_version():
+    props = THEME_ROOT / "theme.properties"
+    assert props.exists(), "theme.properties missing"
+    text = props.read_text(encoding="utf-8")
+    assert "gustavThemeVersion=" in text, "theme.properties should define an explicit cache-busting version"
+
+
 def test_theme_css_uses_auth_design_tokens_instead_of_legacy_palette():
     css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
     text = css.read_text(encoding="utf-8")
@@ -166,6 +173,16 @@ def test_update_password_templates_use_login_css_hooks():
             "kc-message",
         ]:
             assert cls in text, f"{name} should contain CSS hook {cls}"
+
+
+def test_keycloak_primary_forms_use_workspace_primitives() -> None:
+    """Keycloak auth forms should reuse the same button and field primitives as Svelte auth pages."""
+    for name in ["login.ftl", "register.ftl", "login-reset-password.ftl", "login-update-password.ftl", "update-password.ftl"]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        assert "workspace-button" in text, f"{name} should opt into the shared workspace button primitive"
+        assert "workspace-field" in text, f"{name} should opt into the shared workspace field primitive"
+        assert 'class="kc-form-shell"' in text, f"{name} should wrap fields in a shared inner form shell"
 
 
 def test_update_password_templates_use_keycloak_field_names():
@@ -462,6 +479,28 @@ def test_email_templates_present_for_verification_and_reset():
 def test_keycloak_theme_copies_shared_auth_stylesheet():
     css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
     assert css.exists(), "Expected shared auth stylesheet for Keycloak theme"
+
+
+def test_keycloak_templates_use_versioned_theme_stylesheet_links():
+    for name in [
+        "login.ftl",
+        "register.ftl",
+        "login-reset-password.ftl",
+        "login-update-password.ftl",
+        "update-password.ftl",
+        "login-verify-email.ftl",
+        "info.ftl",
+        "error.ftl",
+        "login-page-expired.ftl",
+    ]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        assert 'css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}' in text, (
+            f"{name} should version auth-theme.css for cache busting"
+        )
+        assert 'css/gustav.css?v=${properties.gustavThemeVersion!"dev"}' in text, (
+            f"{name} should version gustav.css for cache busting"
+        )
 
 
 def test_email_templates_reference_support_contact():

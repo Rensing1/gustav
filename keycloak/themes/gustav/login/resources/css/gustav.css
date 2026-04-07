@@ -58,7 +58,7 @@ a:hover {
 
 .kc-auth-card,
 .kc-card {
-  width: min(100%, 38rem);
+  width: min(100%, 28rem);
 }
 
 .kc-title {
@@ -83,10 +83,54 @@ a:hover {
   align-items: center;
   justify-content: center;
   text-decoration: none;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-.kc-submit:hover {
-  transform: translate(-1px, -1px);
+.kc-form .workspace-field {
+  display: grid;
+}
+
+.kc-form .workspace-field .kc-label {
+  display: block;
+}
+
+.kc-form .workspace-field .kc-input {
+  width: 100%;
+}
+
+.kc-form .workspace-button,
+.kc-form .kc-submit,
+.kc-form .btn,
+.kc-form .btn-primary {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none !important;
+  text-shadow: none !important;
+  font-size: 0.76rem;
+}
+
+.kc-form .workspace-button:hover,
+.kc-form .kc-submit:hover,
+.kc-form .btn:hover,
+.kc-form .btn-primary:hover {
+  transform: translate(1px, 1px);
+}
+
+.kc-form .workspace-button:focus-visible,
+.kc-form .kc-submit:focus-visible,
+.kc-form .btn:focus-visible,
+.kc-form .btn-primary:focus-visible {
+  outline: 2px solid var(--auth-color-accent);
+  outline-offset: 2px;
+}
+
+.kc-form input.kc-input,
+.kc-form textarea.kc-input,
+.kc-form select.kc-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none !important;
 }
 
 @media (max-width: 720px) {

@@ -11,9 +11,8 @@
 </svelte:head>
 
 <AuthFrame
-  eyebrow="Passwort zurücksetzen"
-  title="Reset sicher anstoßen"
-  body="GUSTAV sammelt optional die Schul-E-Mail und leitet dann direkt in den Keycloak-Reset-Flow weiter."
+  embedded
+  title="Passwort zurücksetzen"
   actionHref="/auth/forgot"
   actionLabel="Zum Reset"
   actions={[
@@ -33,7 +32,7 @@
           type="email"
           autocomplete="email"
         />
-        <span class="auth-field__hint">Optional. Wenn eine Adresse eingetragen ist, wird sie im Reset-Formular vorausgefüllt.</span>
+        <span class="auth-field__hint">Optional.</span>
       </label>
       <div class="auth-actions">
         <button class="workspace-button auth-submit" type="submit">Passwort vergessen</button>

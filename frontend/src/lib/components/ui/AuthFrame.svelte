@@ -17,9 +17,9 @@
     embedded = false,
     children
   }: {
-    eyebrow: string;
+    eyebrow?: string;
     title: string;
-    body: string;
+    body?: string;
     actionHref: string;
     actionLabel: string;
     actions?: AuthAction[];
@@ -30,9 +30,13 @@
 
 <section class:design-auth-shell--embedded={embedded} class="design-auth-shell">
   <article class="design-auth-frame">
-    <p class="design-auth-frame__eyebrow">{eyebrow}</p>
+    {#if eyebrow}
+      <p class="design-auth-frame__eyebrow">{eyebrow}</p>
+    {/if}
     <h1 class="design-auth-frame__title">{title}</h1>
-    <p class="design-auth-frame__body">{body}</p>
+    {#if body}
+      <p class="design-auth-frame__body">{body}</p>
+    {/if}
     {#if children}
       <div class="design-auth-frame__content">
         {@render children()}

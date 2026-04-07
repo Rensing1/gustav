@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${msg("emailVerifyTitle")} - GUSTAV</title>
-  <link rel="stylesheet" href="${url.resourcesPath}/css/auth-theme.css">
-  <link rel="stylesheet" href="${url.resourcesPath}/css/gustav.css">
+  <link rel="stylesheet" href="${url.resourcesPath}/css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}">
+  <link rel="stylesheet" href="${url.resourcesPath}/css/gustav.css?v=${properties.gustavThemeVersion!"dev"}">
   <script>
     (function(){
       try {

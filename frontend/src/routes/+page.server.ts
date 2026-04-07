@@ -29,6 +29,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
   const reason = url.searchParams.get("reason") || null;
 
   return {
+    hidePageHeading: true,
+    authLayout: true,
     redirectPath,
     reason,
   };

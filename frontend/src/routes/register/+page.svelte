@@ -11,9 +11,8 @@
 </svelte:head>
 
 <AuthFrame
-  eyebrow="Registrierung"
-  title="Schulzugang vorbereiten"
-  body="GUSTAV prüft die Schul-E-Mail vor dem Wechsel zum Anmeldedienst. Die eigentliche Registrierung und Verifizierung bleiben beim IdP."
+  embedded
+  title="Registrieren"
   actionHref="/auth/register"
   actionLabel="Weiter zum Anmeldedienst"
   actions={[
@@ -35,7 +34,7 @@
           autocomplete="email"
           required
         />
-        <span class="auth-field__hint">Nur freigegebene Schul-Domains dürfen sich selbst registrieren.</span>
+        <span class="auth-field__hint">Nur freigegebene Schul-Domains.</span>
       </label>
       {#if form?.error === "invalid_email_domain"}
         <p class="auth-field__error">Diese E-Mail-Domain ist für die Selbstregistrierung nicht freigegeben.</p>

@@ -111,6 +111,10 @@ services:
     environment:
       - ORIGIN=${WEB_BASE:-https://app.localhost}
       - API_INTERNAL_BASE_URL=http://gustav-alpha2:8000
+      # Learning uploads still enter the SvelteKit action as multipart/form-data.
+      # Keep the transport limit slightly above the 10 MiB product contract so
+      # multipart overhead does not trigger adapter-node's 512K default.
+      - BODY_SIZE_LIMIT=11M
       - KC_BASE_URL=http://keycloak:8080
       - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}
       - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}

@@ -16,15 +16,19 @@
     onToggle?: (() => void) | null;
   } = $props();
 
-  function kindLabel(): string {
-    if (material.kind === "markdown") {
-      return "Material";
-    }
-    return "Datei";
-  }
-
   function fileMeta(): string {
     return material.filename_original || material.mime_type || "Datei-Material";
+  }
+
+  function hasPreviewUrl(): boolean {
+    return material.kind === "file" && Boolean(material.file_url);
+  }
+
+  function showsInlinePreview(): boolean {
+    return (
+      hasPreviewUrl() &&
+      (material.mime_type?.startsWith("image/") === true || material.mime_type === "application/pdf")
+    );
   }
 </script>
 
@@ -55,10 +59,21 @@
         </div>
       {:else}
         <section class="learning-work-item__support learning-work-item__support--open">
-          <header class="learning-work-item__support-header">
-            <h5>Datei</h5>
-          </header>
-          <p class="learning-work-item__file-meta">{fileMeta()}</p>
+          {#if hasPreviewUrl() && material.mime_type?.startsWith("image/")}
+            <img alt="Materialvorschau" class="learning-material-file__image" src={material.file_url ?? undefined} />
+          {:else if hasPreviewUrl() && material.mime_type === "application/pdf"}
+            <iframe
+              class="learning-material-file__frame"
+              src={material.file_url ?? undefined}
+              title={`Material ${material.title}`}
+            ></iframe>
+          {/if}
+          {#if !showsInlinePreview()}
+            <p class="learning-work-item__file-meta">{fileMeta()}</p>
+          {/if}
+          {#if hasPreviewUrl() && !showsInlinePreview()}
+            <a class="learning-work-item__link" href={material.file_url ?? undefined}>Datei öffnen</a>
+          {/if}
         </section>
       {/if}
     </div>

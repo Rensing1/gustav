@@ -51,4 +51,48 @@ describe("LearningMaterialCard", () => {
     expect(screen.queryByText("Material")).toBeNull();
     expect(document.querySelector(".learning-work-item__toggle-icon svg")).not.toBeNull();
   });
+
+  it("renders an inline image preview for file materials when a preview URL exists", () => {
+    render(LearningMaterialCard, {
+      props: {
+        material: {
+          id: "material-3",
+          title: "Schaubild",
+          kind: "file",
+          mime_type: "image/png",
+          size_bytes: 2048,
+          filename_original: "schaubild.png",
+          file_url: "/materials/schaubild.png"
+        },
+        expanded: true
+      }
+    });
+
+    expect(screen.getByRole("img", { name: "Materialvorschau" })).toBeInTheDocument();
+    expect(screen.queryByText("Datei")).not.toBeInTheDocument();
+    expect(screen.queryByText("schaubild.png")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Datei öffnen" })).toBeNull();
+  });
+
+  it("renders an inline PDF preview for file materials when a preview URL exists", () => {
+    render(LearningMaterialCard, {
+      props: {
+        material: {
+          id: "material-4",
+          title: "Arbeitsblatt",
+          kind: "file",
+          mime_type: "application/pdf",
+          size_bytes: 4096,
+          filename_original: "arbeitsblatt.pdf",
+          file_url: "/materials/arbeitsblatt.pdf"
+        },
+        expanded: true
+      }
+    });
+
+    expect(document.querySelector(".learning-material-file__frame")).not.toBeNull();
+    expect(screen.queryByText("Datei")).not.toBeInTheDocument();
+    expect(screen.queryByText("arbeitsblatt.pdf")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Datei öffnen" })).toBeNull();
+  });
 });

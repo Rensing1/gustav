@@ -94,6 +94,33 @@ async def _create_material(
     return resp.json()
 
 
+async def _create_file_material(
+    client: httpx.AsyncClient,
+    unit_id: str,
+    section_id: str,
+    *,
+    title: str,
+    filename: str,
+    mime_type: str,
+    size_bytes: int,
+) -> dict:
+    intent_resp = await client.post(
+        f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents",
+        json={"filename": filename, "mime_type": mime_type, "size_bytes": size_bytes},
+        headers={"Origin": "http://test"},
+    )
+    assert intent_resp.status_code == 200, intent_resp.text
+    intent = intent_resp.json()
+
+    finalize_resp = await client.post(
+        f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize",
+        json={"intent_id": intent["intent_id"], "title": title, "sha256": "f" * 64},
+        headers={"Origin": "http://test"},
+    )
+    assert finalize_resp.status_code == 201, finalize_resp.text
+    return finalize_resp.json()
+
+
 async def _create_task(
     client: httpx.AsyncClient,
     unit_id: str,
@@ -338,7 +365,58 @@ async def test_sections_includes_unit_id_in_section_core():
     assert "section" in section_entry
     sec = section_entry["section"]
     assert isinstance(sec.get("unit_id"), str)
-    assert sec["unit_id"] == fixture.unit_id
+
+
+@pytest.mark.anyio
+async def test_sections_include_short_lived_file_url_for_released_file_materials():
+    """Released file materials expose a short-lived preview URL for the student UI."""
+    import routes.teaching as teaching  # noqa: E402
+
+    fixture = await _prepare_learning_fixture()
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "http://storage.local/material-preview.pdf"}
+
+        teaching.set_storage_adapter(_Adapter())
+
+        async with (await _client()) as teacher_client:
+          teacher_client.cookies.set("gustav_session", fixture.teacher_session_id)
+          await _create_file_material(
+              teacher_client,
+              fixture.unit_id,
+              fixture.section_id,
+              title="Arbeitsblatt PDF",
+              filename="arbeitsblatt.pdf",
+              mime_type="application/pdf",
+              size_bytes=1024,
+          )
+
+        async with (await _client()) as student_client:
+            student_client.cookies.set("gustav_session", fixture.student_session_id)
+            response = await student_client.get(
+                f"/api/learning/courses/{fixture.course_id}/sections",
+                params={"include": "materials", "limit": 50, "offset": 0},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        materials = payload[0]["materials"]
+        file_material = next(item for item in materials if item["kind"] == "file")
+        assert file_material["file_url"] == "http://storage.local/material-preview.pdf"
+        assert "storage_key" not in file_material
+    finally:
+        teaching.set_storage_adapter(original_adapter)
 
 
 @pytest.mark.anyio

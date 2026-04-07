@@ -2565,6 +2565,23 @@ select {
   color: var(--color-text-muted);
 }
 
+.learning-material-file__image,
+.learning-material-file__frame {
+  width: 100%;
+  border: 0;
+  border-radius: 0.22rem;
+  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+}
+
+.learning-material-file__image {
+  max-height: 28rem;
+  object-fit: contain;
+}
+
+.learning-material-file__frame {
+  min-height: 22rem;
+}
+
 .submit-form {
   display: grid;
   gap: 0.9rem;

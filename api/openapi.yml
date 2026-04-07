@@ -2161,6 +2161,11 @@ components:
           type: string
           nullable: true
           description: Original filename supplied by the author (files only)
+        file_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Short-lived inline preview/download URL for file materials visible to the student
         alt_text:
           type: string
           nullable: true

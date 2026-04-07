@@ -18,6 +18,7 @@ export type LearningMaterial = {
   mime_type?: string | null;
   size_bytes?: number | null;
   filename_original?: string | null;
+  file_url?: string | null;
   alt_text?: string | null;
   position?: number | null;
 };

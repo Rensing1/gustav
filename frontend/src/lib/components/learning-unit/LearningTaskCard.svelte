@@ -49,6 +49,7 @@
   type SummaryTab = "submission" | "feedback" | "evaluation";
   let activeSummaryTab = $state<SummaryTab>("submission");
   let olderAttemptsOpen = $state(false);
+  let draftText = $state("");
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope";
@@ -113,6 +114,10 @@
       return "Rückmeldung";
     }
     return "Auswertung";
+  }
+
+  function updateDraft(value: string) {
+    draftText = value;
   }
 
 </script>
@@ -291,9 +296,9 @@
                   <span>Deine Lösung</span>
                   <MarkdownWysiwygEditor
                     name="text_body"
-                    value=""
+                    value={draftText}
                     placeholder="Schreibe hier deine Lösung."
-                    onInput={() => {}}
+                    onInput={updateDraft}
                   />
                 </section>
                 <div class="learning-submission-editor__actions">

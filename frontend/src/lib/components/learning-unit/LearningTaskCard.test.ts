@@ -16,6 +16,18 @@ const task: LearningTask = {
 };
 
 describe("LearningTaskCard", () => {
+  it("binds the inline markdown editor to local draft state instead of a constant empty string", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "LearningTaskCard.svelte"), "utf8");
+
+    expect(source).toContain("let draftText = $state(\"\")");
+    expect(source).toContain("function updateDraft(value: string)");
+    expect(source).toContain("value={draftText}");
+    expect(source).toContain("onInput={updateDraft}");
+    expect(source).not.toContain("value=\"\"");
+    expect(source).not.toContain("onInput={() => {}}");
+  });
+
   it("opens inline editing controls inside the task flow instead of a separate workspace", () => {
     render(LearningTaskCard, {
       props: {

@@ -250,106 +250,6 @@
           </section>
         {/if}
 
-        {#if showSubmissionSummary()}
-          <section class="learning-task-submission-summary" aria-label="Meine Abgabe">
-            <header class="learning-task-submission-summary__header">
-              <div class="learning-task-submission-summary__copy">
-                <p class="workspace-label">Meine Abgabe</p>
-                {#if latestSubmission()}
-                  <p class="learning-task-submission-summary__meta">{latestSubmissionOrThrow().created_at}</p>
-                {/if}
-              </div>
-            </header>
-
-            {#if feedbackPendingMessage()}
-              <p class="workspace-note">{feedbackPendingMessage()}</p>
-            {/if}
-
-            <div class="learning-task-submission-summary__tabs" role="tablist" aria-label="Letzte Abgabe">
-              <button
-                class:workspace-tab--active={activeSummaryTab === "submission"}
-                class="workspace-tab"
-                role="tab"
-                type="button"
-                aria-selected={activeSummaryTab === "submission"}
-                onclick={() => (activeSummaryTab = "submission")}
-              >
-                Abgabe
-              </button>
-              <button
-                class:workspace-tab--active={activeSummaryTab === "feedback"}
-                class="workspace-tab"
-                role="tab"
-                type="button"
-                aria-selected={activeSummaryTab === "feedback"}
-                onclick={() => (activeSummaryTab = "feedback")}
-              >
-                Rückmeldung
-              </button>
-              <button
-                class:workspace-tab--active={activeSummaryTab === "evaluation"}
-                class="workspace-tab"
-                role="tab"
-                type="button"
-                aria-selected={activeSummaryTab === "evaluation"}
-                onclick={() => (activeSummaryTab = "evaluation")}
-              >
-                Auswertung
-              </button>
-            </div>
-
-            <div class="learning-task-submission-summary__panel" role="tabpanel" aria-label={summaryPanelLabel(activeSummaryTab)}>
-              {#if activeSummaryTab === "submission"}
-                {#if latestSubmission() && latestSubmissionOrThrow().text_body}
-                  <div class="markdown-prose">
-                    <p>{latestSubmissionOrThrow().text_body}</p>
-                  </div>
-                {:else if latestSubmission()}
-                  <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
-                {:else if feedbackPending}
-                  <p class="learning-task-submission-summary__plain">Die aktuelle Abgabe wird vorbereitet.</p>
-                {:else}
-                  <p class="learning-task-submission-summary__plain">Es liegt noch keine Abgabe vor.</p>
-                {/if}
-              {:else if activeSummaryTab === "feedback"}
-                {#if feedbackPendingMessage()}
-                  <p class="workspace-note">{feedbackPendingMessage()}</p>
-                {:else if latestSubmission() && latestSubmissionOrThrow().feedback_md}
-                  <div class="markdown-prose">
-                    {@html renderMarkdown(latestSubmissionOrThrow().feedback_md)}
-                  </div>
-                {:else}
-                  <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
-                {/if}
-              {:else}
-                {#if latestSubmission() && renderEvaluationCriteria(latestSubmissionOrThrow())}
-                  <ul class="learning-unit-criteria">
-                    {#each latestSubmissionOrThrow().analysis_json?.criteria_results ?? [] as criterion}
-                      <li>
-                        <strong>{criterion.criterion}</strong>
-                        {#if criterion.score !== undefined && criterion.score !== null}
-                          : {criterion.score}/{criterion.max_score ?? 10}
-                        {/if}
-                        {#if criterion.explanation_md}
-                          <div class="markdown-prose">
-                            {@html renderMarkdown(criterion.explanation_md)}
-                          </div>
-                        {/if}
-                      </li>
-                    {/each}
-                  </ul>
-                {:else if latestSubmission()}
-                  <p class="learning-task-submission-summary__plain">{evaluationSummary(latestSubmissionOrThrow())}</p>
-                {:else if feedbackPendingMessage()}
-                  <p class="workspace-note">{feedbackPendingMessage()}</p>
-                {:else}
-                  <p class="learning-task-submission-summary__plain">Es liegt noch keine Auswertung vor.</p>
-                {/if}
-              {/if}
-            </div>
-          </section>
-        {/if}
-
         {#if submissionFocused}
           <section class="learning-task-inline-editor">
             <header class="learning-task-inline-editor__header">
@@ -465,6 +365,105 @@
               </form>
             {/if}
           </div>
+          {#if showSubmissionSummary()}
+            <section class="learning-task-submission-summary" aria-label="Meine Abgabe">
+              <header class="learning-task-submission-summary__header">
+                <div class="learning-task-submission-summary__copy">
+                  <p class="workspace-label">Meine Abgabe</p>
+                  {#if latestSubmission()}
+                    <p class="learning-task-submission-summary__meta">{latestSubmissionOrThrow().created_at}</p>
+                  {/if}
+                </div>
+              </header>
+
+              {#if feedbackPendingMessage()}
+                <p class="workspace-note">{feedbackPendingMessage()}</p>
+              {/if}
+
+              <div class="learning-task-submission-summary__tabs" role="tablist" aria-label="Letzte Abgabe">
+                <button
+                  class:workspace-tab--active={activeSummaryTab === "submission"}
+                  class="workspace-tab"
+                  role="tab"
+                  type="button"
+                  aria-selected={activeSummaryTab === "submission"}
+                  onclick={() => (activeSummaryTab = "submission")}
+                >
+                  Abgabe
+                </button>
+                <button
+                  class:workspace-tab--active={activeSummaryTab === "feedback"}
+                  class="workspace-tab"
+                  role="tab"
+                  type="button"
+                  aria-selected={activeSummaryTab === "feedback"}
+                  onclick={() => (activeSummaryTab = "feedback")}
+                >
+                  Rückmeldung
+                </button>
+                <button
+                  class:workspace-tab--active={activeSummaryTab === "evaluation"}
+                  class="workspace-tab"
+                  role="tab"
+                  type="button"
+                  aria-selected={activeSummaryTab === "evaluation"}
+                  onclick={() => (activeSummaryTab = "evaluation")}
+                >
+                  Auswertung
+                </button>
+              </div>
+
+              <div class="learning-task-submission-summary__panel" role="tabpanel" aria-label={summaryPanelLabel(activeSummaryTab)}>
+                {#if activeSummaryTab === "submission"}
+                  {#if latestSubmission() && latestSubmissionOrThrow().text_body}
+                    <div class="markdown-prose">
+                      <p>{latestSubmissionOrThrow().text_body}</p>
+                    </div>
+                  {:else if latestSubmission()}
+                    <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
+                  {:else if feedbackPending}
+                    <p class="learning-task-submission-summary__plain">Die aktuelle Abgabe wird vorbereitet.</p>
+                  {:else}
+                    <p class="learning-task-submission-summary__plain">Es liegt noch keine Abgabe vor.</p>
+                  {/if}
+                {:else if activeSummaryTab === "feedback"}
+                  {#if feedbackPendingMessage()}
+                    <p class="workspace-note">{feedbackPendingMessage()}</p>
+                  {:else if latestSubmission() && latestSubmissionOrThrow().feedback_md}
+                    <div class="markdown-prose">
+                      {@html renderMarkdown(latestSubmissionOrThrow().feedback_md)}
+                    </div>
+                  {:else}
+                    <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
+                  {/if}
+                {:else}
+                  {#if latestSubmission() && renderEvaluationCriteria(latestSubmissionOrThrow())}
+                    <ul class="learning-unit-criteria">
+                      {#each latestSubmissionOrThrow().analysis_json?.criteria_results ?? [] as criterion}
+                        <li>
+                          <strong>{criterion.criterion}</strong>
+                          {#if criterion.score !== undefined && criterion.score !== null}
+                            : {criterion.score}/{criterion.max_score ?? 10}
+                          {/if}
+                          {#if criterion.explanation_md}
+                            <div class="markdown-prose">
+                              {@html renderMarkdown(criterion.explanation_md)}
+                            </div>
+                          {/if}
+                        </li>
+                      {/each}
+                    </ul>
+                  {:else if latestSubmission()}
+                    <p class="learning-task-submission-summary__plain">{evaluationSummary(latestSubmissionOrThrow())}</p>
+                  {:else if feedbackPendingMessage()}
+                    <p class="workspace-note">{feedbackPendingMessage()}</p>
+                  {:else}
+                    <p class="learning-task-submission-summary__plain">Es liegt noch keine Auswertung vor.</p>
+                  {/if}
+                {/if}
+              </div>
+            </section>
+          {/if}
         {/if}
       </div>
     {/if}

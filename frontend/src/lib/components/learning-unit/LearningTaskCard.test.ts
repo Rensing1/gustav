@@ -286,6 +286,43 @@ describe("LearningTaskCard", () => {
     expect(within(summary).getByText("Gut strukturiert.")).toBeInTheDocument();
   });
 
+  it("keeps the action row above the review area so the review toggle stays in place", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: true,
+        history: [
+          {
+            id: "submission-1",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "submit",
+            created_at: "2026-04-05 10:00",
+            analysis_status: "completed",
+            text_body: "Meine Lösung",
+            feedback_md: "## Rückmeldung\n\nGut gemacht.",
+            analysis_json: {
+              schema: "learning.v1",
+              score: 8,
+              text: "Stabil",
+              criteria_results: []
+            }
+          }
+        ]
+      }
+    });
+
+    const actionRow = document.querySelector(".learning-task-cta-row");
+    const summary = screen.getByRole("region", { name: "Meine Abgabe" });
+
+    expect(actionRow).not.toBeNull();
+    expect(actionRow && (actionRow.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+  });
+
   it("uses the same CTA pattern for H5P tasks without rendering a history block", () => {
     render(LearningTaskCard, {
       props: {
@@ -305,7 +342,7 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByRole("region", { name: "Letzte Abgabe" })).toBeNull();
   });
 
-  it("shows a local pending note while feedback is being generated", () => {
+  it("shows a local pending note inside the open editor while feedback is being generated", () => {
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -330,9 +367,9 @@ describe("LearningTaskCard", () => {
         feedbackStatusMessage: "Rückmeldung wird erstellt ..."
       }
     });
-
-    expect(screen.getByRole("region", { name: "Meine Abgabe" })).toBeInTheDocument();
-    expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.getByText("Entwurf wird ausgewertet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
   });
 
@@ -398,5 +435,26 @@ describe("LearningTaskCard", () => {
     expect(block).not.toMatch(/background:\s*#f8f5ee;/);
     expect(css).toMatch(/\.learning-task-submission-summary\s*\{/);
     expect(css).not.toMatch(/\.learning-work-item__start-card\s*\{/);
+  });
+
+  it("styles the review tabs as technical text tabs instead of rounded pills", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const blockMatch = css.match(/\.learning-task-submission-summary__tabs \.workspace-tab\s*\{([^}]*)\}/);
+    const activeBlockMatch = css.match(/\.learning-task-submission-summary__tabs \.workspace-tab--active\s*\{([^}]*)\}/);
+
+    expect(blockMatch).not.toBeNull();
+    expect(activeBlockMatch).not.toBeNull();
+
+    const block = blockMatch?.[1] ?? "";
+    const activeBlock = activeBlockMatch?.[1] ?? "";
+
+    expect(block).toMatch(/border:\s*0;/);
+    expect(block).toMatch(/border-bottom:\s*2px solid transparent;/);
+    expect(block).toMatch(/border-radius:\s*0;/);
+    expect(block).toMatch(/background:\s*transparent;/);
+    expect(activeBlock).toMatch(/border-bottom-color:/);
+    expect(activeBlock).toMatch(/background:\s*transparent;/);
+    expect(activeBlock).toMatch(/box-shadow:\s*none;/);
   });
 });

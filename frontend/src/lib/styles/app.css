@@ -2403,6 +2403,7 @@ select {
   flex-wrap: wrap;
   gap: 0.55rem;
   padding-top: 0.25rem;
+  padding-bottom: 0.2rem;
 }
 
 .learning-task-cta-row .workspace-top-action {
@@ -2441,7 +2442,7 @@ select {
 .learning-task-submission-summary {
   display: grid;
   gap: 0.75rem;
-  padding: 0.95rem 0 0.25rem;
+  padding: 0.7rem 0 0.25rem;
   border-top: 1px solid color-mix(in srgb, var(--color-border) 62%, white 38%);
 }
 
@@ -2472,7 +2473,30 @@ select {
 }
 
 .learning-task-submission-summary__tabs .workspace-tab {
-  min-height: 1.9rem;
+  min-height: auto;
+  padding: 0.12rem 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-learner-label);
+  font-size: calc(0.86rem * var(--learning-unit-label-scale));
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.learning-task-submission-summary__tabs .workspace-tab:hover,
+.learning-task-submission-summary__tabs .workspace-tab:focus-visible {
+  color: color-mix(in srgb, var(--color-link) 70%, var(--color-text) 30%);
+  background: transparent;
+}
+
+.learning-task-submission-summary__tabs .workspace-tab--active {
+  border-bottom-color: color-mix(in srgb, var(--color-link) 52%, var(--color-border) 48%);
+  color: color-mix(in srgb, var(--color-link) 82%, var(--color-text) 18%);
+  background: transparent;
+  box-shadow: none;
 }
 
 .learning-task-submission-summary__panel {

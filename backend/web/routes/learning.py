@@ -39,6 +39,8 @@ from backend.learning.usecases.courses import (
 from backend.learning.usecases.submissions import (
     CreateSubmissionInput,
     CreateSubmissionUseCase,
+    FinalizeLatestDraftInput,
+    FinalizeLatestDraftUseCase,
     ListSubmissionsInput,
     ListSubmissionsUseCase,
 )
@@ -1376,6 +1378,58 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     # - Other kinds enter the async pipeline → 202 Accepted.
     status_code = 201 if kind == "h5p" else 202
     return JSONResponse(submission, status_code=status_code, headers=_cache_headers_success())
+
+
+@learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize")
+async def finalize_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any] | None = None):
+    """Create a final submission from the latest completed feedback draft."""
+    if not _require_strict_same_origin(request):
+        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
+
+    user, auth_error = _require_student(request)
+    if auth_error:
+        return auth_error
+
+    try:
+        UUID(course_id)
+        UUID(task_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if idempotency_key is not None and len(idempotency_key) > 64:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+    if idempotency_key is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+
+    finalize_input = FinalizeLatestDraftInput(
+        course_id=course_id,
+        task_id=task_id,
+        student_sub=str(user.get("sub", "")),
+        idempotency_key=idempotency_key,
+    )
+
+    try:
+        submission = FinalizeLatestDraftUseCase(_get_repo()).execute(finalize_input)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+    except LookupError as exc:
+        detail = str(exc) or "not_found"
+        if detail == "draft_missing":
+            return JSONResponse({"error": "conflict", "detail": detail}, status_code=409, headers=_cache_headers_error())
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+    except RuntimeError as exc:
+        return JSONResponse({"error": "conflict", "detail": str(exc) or "draft_not_ready"}, status_code=409, headers=_cache_headers_error())
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc) or "invalid_input"}, status_code=400, headers=_cache_headers_error())
+    except Exception:
+        return JSONResponse(
+            {"error": "service_unavailable", "detail": "submission_persistence_unavailable"},
+            status_code=503,
+            headers=_cache_headers_error(),
+        )
+
+    return JSONResponse(submission, status_code=201, headers=_cache_headers_success())
 
 
 def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, course_id: str, task_id: str, student_sub: str) -> None:

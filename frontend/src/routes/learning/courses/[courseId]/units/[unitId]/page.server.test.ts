@@ -145,14 +145,15 @@ describe("learning unit route actions", () => {
 
   it("keeps final submissions inline and marks them as submit-pending", async () => {
     mockModularLoad();
-    backendRequestMock.mockResolvedValue(jsonResponse({ id: "submission-2", analysis_status: "pending" }));
+    backendRequestMock.mockResolvedValue(
+      jsonResponse({ id: "submission-2", intent: "submit", analysis_status: "completed", created_at: "2026-04-07T12:00:00+00:00" }, 201)
+    );
 
     const form = new FormData();
     form.set("task_id", "task-1");
     form.set("task_kind", "native");
     form.set("unit_type", "modular");
     form.set("module_id", "module-7");
-    form.set("text_body", "Meine Abgabe");
     form.set("submission_intent", "submit");
 
     const result = await actions.default({
@@ -163,13 +164,24 @@ describe("learning unit route actions", () => {
       url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
     } as Parameters<typeof actions.default>[0]);
 
+    expect(backendRequestMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/learning/courses/course-1/tasks/task-1/submissions/finalize",
+      expect.objectContaining({
+        method: "POST",
+        includeSameOrigin: true
+      })
+    );
     expect(result).toEqual({
-      feedbackRequestedTaskId: "task-1",
-      feedbackSubmissionId: "submission-2",
-      historyTaskId: "task-1",
-      message: "submit_pending",
-      pendingIntent: "submit",
-      submissionMode: "text"
+      finalizedTaskId: "task-1",
+      finalizedSubmission: {
+        id: "submission-2",
+        intent: "submit",
+        analysis_status: "completed",
+        created_at: "2026-04-07T12:00:00+00:00"
+      },
+      message: "submitted"
     });
   });
 });

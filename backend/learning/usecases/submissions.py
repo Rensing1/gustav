@@ -10,6 +10,16 @@ class LearningSubmissionRepoProtocol(Protocol):
     def create_submission(self, data: SubmissionInput) -> dict:
         ...
 
+    def finalize_latest_feedback_submission(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_id: str,
+        idempotency_key: str | None,
+    ) -> dict:
+        ...
+
     def list_submissions(
         self,
         *,
@@ -118,4 +128,35 @@ class ListSubmissionsUseCase:
             task_id=req.task_id,
             limit=limit,
             offset=offset,
+        )
+
+
+@dataclass
+class FinalizeLatestDraftInput:
+    course_id: str
+    task_id: str
+    student_sub: str
+    idempotency_key: Optional[str]
+
+
+class FinalizeLatestDraftUseCase:
+    def __init__(self, repo: LearningSubmissionRepoProtocol) -> None:
+        self._repo = repo
+
+    def execute(self, req: FinalizeLatestDraftInput) -> dict:
+        """Finalize the latest completed feedback draft without re-running analysis.
+
+        Intent:
+            Promote the newest reviewed draft to a formal submission while
+            preserving the draft history and avoiding a second worker/LLM run.
+
+        Permissions:
+            Caller must be the enrolled student and the task must be visible in
+            the course context. The repository enforces this via RLS-aware checks.
+        """
+        return self._repo.finalize_latest_feedback_submission(
+            student_sub=req.student_sub,
+            course_id=req.course_id,
+            task_id=req.task_id,
+            idempotency_key=req.idempotency_key,
         )

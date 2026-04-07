@@ -210,6 +210,38 @@ export const actions: Actions = {
       });
     }
 
+    if (submissionIntent === "submit") {
+      const response = await backendRequest(
+        fetch,
+        cookies,
+        `/api/learning/courses/${encodeURIComponent(params.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions/finalize`,
+        {
+          method: "POST",
+          includeSameOrigin: true,
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": randomUUID()
+          },
+          body: JSON.stringify({})
+        }
+      );
+
+      if (!response.ok) {
+        const backendError = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
+        return fail(response.status, {
+          message: backendError.detail || backendError.error || "Die finale Abgabe ist fehlgeschlagen.",
+          taskId
+        });
+      }
+
+      const submission = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      return {
+        finalizedTaskId: taskId,
+        finalizedSubmission: submission,
+        message: "submitted"
+      };
+    }
+
     const mode = submissionMode(task, uploadFile, textBody);
     if (!mode) {
       return fail(400, {
@@ -304,23 +336,12 @@ export const actions: Actions = {
 
     const submission = (await response.json().catch(() => null)) as { id?: string } | null;
 
-    if (submissionIntent === "feedback") {
-      return {
-        feedbackRequestedTaskId: taskId,
-        feedbackSubmissionId: submission?.id ?? null,
-        historyTaskId: taskId,
-        message: "feedback_pending",
-        pendingIntent: "feedback",
-        submissionMode: mode
-      };
-    }
-
     return {
       feedbackRequestedTaskId: taskId,
       feedbackSubmissionId: submission?.id ?? null,
       historyTaskId: taskId,
-      message: "submit_pending",
-      pendingIntent: "submit",
+      message: "feedback_pending",
+      pendingIntent: "feedback",
       submissionMode: mode
     };
   }

@@ -203,6 +203,75 @@ class DBLearningRepo:
         """
         cur.execute("select set_config('app.current_course_id', %s, true)", (course_id,))
 
+    def _task_submission_summary_map(
+        self,
+        conn: Connection,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_ids: Sequence[str],
+    ) -> dict[str, dict[str, Any]]:
+        """Return lightweight latest-submission metadata per task for learner UI.
+
+        Why:
+            The learner task cards need stable CTA/status hints before the full
+            history for a task is loaded. We keep this summary intentionally
+            small and derive it from the student's own submissions only.
+        """
+        if not task_ids:
+            return {}
+
+        uuid_ids = [UUID(task_id) for task_id in task_ids]
+        with conn.cursor() as cur:
+            self._set_current_sub(cur, student_sub)
+            self._set_current_course_id(cur, course_id)
+            cur.execute(
+                """
+                with latest as (
+                    select distinct on (task_id)
+                           task_id::text,
+                           intent,
+                           analysis_status,
+                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"') as created_at_iso
+                      from public.learning_submissions
+                     where course_id = %s::uuid
+                       and student_sub = %s
+                       and task_id = any(%s::uuid[])
+                     order by task_id, created_at desc, attempt_nr desc
+                ),
+                finals as (
+                    select task_id::text,
+                           to_char(max(created_at) at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"') as final_created_at_iso
+                      from public.learning_submissions
+                     where course_id = %s::uuid
+                       and student_sub = %s
+                       and intent = 'submit'
+                       and task_id = any(%s::uuid[])
+                     group by task_id
+                )
+                select latest.task_id,
+                       latest.intent,
+                       latest.analysis_status,
+                       latest.created_at_iso,
+                       finals.final_created_at_iso
+                  from latest
+             left join finals on finals.task_id = latest.task_id
+                """,
+                (course_id, student_sub, uuid_ids, course_id, student_sub, uuid_ids),
+            )
+            rows = cur.fetchall() or []
+
+        summary: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            summary[str(row[0])] = {
+                "has_submission": True,
+                "latest_submission_intent": row[1],
+                "latest_submission_analysis_status": row[2],
+                "latest_submission_created_at": row[3],
+                "latest_final_submission_at": row[4],
+            }
+        return summary
+
     # ------------------------------------------------------------------
     def list_courses_for_student(self, *, student_sub: str, limit: int, offset: int) -> List[dict]:
         """Return the student's courses with minimal fields, alphabetically.
@@ -703,6 +772,27 @@ class DBLearningRepo:
                             }
                         )
 
+                if include_tasks and tasks:
+                    summaries = self._task_submission_summary_map(
+                        conn,
+                        student_sub=student_sub,
+                        course_id=course_uuid,
+                        task_ids=[str(task["id"]) for task in tasks],
+                    )
+                    for task in tasks:
+                        task.update(
+                            summaries.get(
+                                str(task["id"]),
+                                {
+                                    "has_submission": False,
+                                    "latest_submission_intent": None,
+                                    "latest_submission_analysis_status": None,
+                                    "latest_submission_created_at": None,
+                                    "latest_final_submission_at": None,
+                                },
+                            )
+                        )
+
         return {"module": module, "materials": materials, "tasks": tasks}
 
     # ------------------------------------------------------------------
@@ -856,6 +946,26 @@ class DBLearningRepo:
                     "updated_at": row[10],
                 }
             )
+        if tasks:
+            summaries = self._task_submission_summary_map(
+                conn,
+                student_sub=student_sub,
+                course_id=course_id,
+                task_ids=[str(task["id"]) for task in tasks],
+            )
+            for task in tasks:
+                task.update(
+                    summaries.get(
+                        str(task["id"]),
+                        {
+                            "has_submission": False,
+                            "latest_submission_intent": None,
+                            "latest_submission_analysis_status": None,
+                            "latest_submission_created_at": None,
+                            "latest_final_submission_at": None,
+                        },
+                    )
+                )
         return tasks
 
     def list_released_sections_by_unit(
@@ -1499,6 +1609,314 @@ class DBLearningRepo:
                             raise
                     else:
                         raise
+        return self._row_to_submission(row)
+
+    def finalize_latest_feedback_submission(
+        self,
+        *,
+        student_sub: str,
+        course_id: str,
+        task_id: str,
+        idempotency_key: str | None,
+    ) -> dict:
+        """Persist a final submission by copying the newest completed draft.
+
+        Why:
+            The student-facing UX distinguishes between a feedback draft and a
+            formal submission. Finalizing must therefore reuse the most recent
+            completed draft instead of enqueueing a second analysis run.
+        """
+        course_uuid = str(UUID(course_id))
+        task_uuid = str(UUID(task_id))
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                self._set_current_sub(cur, student_sub)
+                self._set_current_course_id(cur, course_uuid)
+                cur.execute(
+                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
+                    (course_uuid, student_sub),
+                )
+                if not bool(cur.fetchone()[0]):
+                    raise PermissionError("not_course_member")
+
+                norm_key = None
+                if idempotency_key and isinstance(idempotency_key, str):
+                    candidate = idempotency_key.strip()
+                    norm_key = candidate if candidate else None
+
+                if norm_key:
+                    cur.execute(
+                        """
+                        select id::text,
+                               attempt_nr,
+                               intent,
+                               kind,
+                               score_raw,
+                               score_max,
+                               text_body,
+                               mime_type,
+                               size_bytes,
+                               storage_key,
+                               sha256,
+                               analysis_status,
+                               analysis_json,
+                               feedback_md,
+                               error_code,
+                               coalesce(vision_attempts, 0),
+                               vision_last_error,
+                               to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               feedback_last_error,
+                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                          from public.learning_submissions
+                         where course_id = %s::uuid
+                           and task_id = %s::uuid
+                           and student_sub = %s
+                           and intent = 'submit'
+                           and idempotency_key = %s
+                        """,
+                        (course_uuid, task_uuid, student_sub, norm_key),
+                    )
+                    existing = cur.fetchone()
+                    if existing:
+                        return self._row_to_submission(existing)
+
+                cur.execute(
+                    """
+                    select task_id::text,
+                           section_id::text,
+                           unit_id::text,
+                           kind,
+                           h5p_content_id,
+                           max_attempts
+                      from public.get_task_metadata_for_student(%s, %s, %s)
+                    """,
+                    (student_sub, course_uuid, task_uuid),
+                )
+                meta = cur.fetchone()
+                if not meta:
+                    raise LookupError("task_not_visible")
+                section_uuid = str(UUID(meta[1]))
+                unit_uuid = str(UUID(meta[2]))
+                if not self._is_modular_section_open_or_done(
+                    cur=cur,
+                    course_uuid=course_uuid,
+                    student_sub=student_sub,
+                    unit_uuid=unit_uuid,
+                    section_uuid=section_uuid,
+                ):
+                    raise LookupError("task_not_visible")
+
+                task_kind = str(meta[3] or "native")
+                max_attempts = meta[5]
+                if task_kind == "h5p":
+                    raise ValueError("invalid_input")
+
+                if max_attempts is not None:
+                    cur.execute(
+                        """
+                        select count(*)
+                          from public.learning_submissions
+                         where course_id = %s::uuid
+                           and task_id = %s::uuid
+                           and student_sub = %s
+                           and intent = 'submit'
+                        """,
+                        (course_uuid, task_uuid, student_sub),
+                    )
+                    if int(cur.fetchone()[0] or 0) >= int(max_attempts):
+                        raise ValueError("max_attempts_exceeded")
+
+                cur.execute(
+                    """
+                    select kind,
+                           score_raw,
+                           score_max,
+                           text_body,
+                           mime_type,
+                           size_bytes,
+                           storage_key,
+                           sha256,
+                           analysis_json,
+                           feedback_md,
+                           coalesce(vision_attempts, 0),
+                           vision_last_error,
+                           feedback_last_attempt_at,
+                           feedback_last_error,
+                           analysis_status
+                      from public.learning_submissions
+                     where course_id = %s::uuid
+                       and task_id = %s::uuid
+                       and student_sub = %s
+                       and intent = 'feedback'
+                     order by created_at desc, attempt_nr desc
+                     limit 1
+                    """,
+                    (course_uuid, task_uuid, student_sub),
+                )
+                latest_draft = cur.fetchone()
+                if not latest_draft:
+                    raise LookupError("draft_missing")
+                if str(latest_draft[14] or "") != "completed":
+                    raise RuntimeError("draft_not_ready")
+
+                cur.execute(
+                    "select public.next_attempt_nr(%s, %s, %s)",
+                    (course_uuid, task_uuid, student_sub),
+                )
+                attempt_nr = int(cur.fetchone()[0])
+
+                deterministic_id = None
+                if norm_key:
+                    deterministic_id = str(
+                        uuid5(
+                            UUID("00000000-0000-0000-0000-000000000002"),
+                            f"{course_uuid}:{task_uuid}:{student_sub}:{norm_key}",
+                        )
+                    )
+
+                cur.execute(
+                    """
+                    insert into public.learning_submissions (
+                        id,
+                        course_id,
+                        task_id,
+                        section_id,
+                        student_sub,
+                        intent,
+                        kind,
+                        score_raw,
+                        score_max,
+                        text_body,
+                        storage_key,
+                        mime_type,
+                        size_bytes,
+                        sha256,
+                        attempt_nr,
+                        analysis_status,
+                        analysis_json,
+                        feedback_md,
+                        error_code,
+                        vision_attempts,
+                        vision_last_error,
+                        feedback_last_attempt_at,
+                        feedback_last_error,
+                        idempotency_key,
+                        completed_at
+                    )
+                    values (
+                        coalesce(%s::uuid, gen_random_uuid()),
+                        %s::uuid,
+                        %s::uuid,
+                        %s::uuid,
+                        %s,
+                        'submit',
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        'completed',
+                        %s::jsonb,
+                        %s,
+                        null,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        now()
+                    )
+                    on conflict (course_id, task_id, student_sub, idempotency_key)
+                    do nothing
+                    returning id::text,
+                              attempt_nr,
+                              intent,
+                              kind,
+                              score_raw,
+                              score_max,
+                              text_body,
+                              mime_type,
+                              size_bytes,
+                              storage_key,
+                              sha256,
+                              analysis_status,
+                              analysis_json,
+                              feedback_md,
+                              error_code,
+                              coalesce(vision_attempts, 0),
+                              vision_last_error,
+                              to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                              feedback_last_error,
+                              to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                              to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                    """,
+                    (
+                        deterministic_id,
+                        course_uuid,
+                        task_uuid,
+                        section_uuid,
+                        student_sub,
+                        latest_draft[0],
+                        latest_draft[1],
+                        latest_draft[2],
+                        latest_draft[3],
+                        latest_draft[6],
+                        latest_draft[4],
+                        latest_draft[5],
+                        latest_draft[7],
+                        attempt_nr,
+                        Json(latest_draft[8]) if Json is not None else json.dumps(latest_draft[8]),
+                        latest_draft[9],
+                        latest_draft[10],
+                        latest_draft[11],
+                        latest_draft[12],
+                        latest_draft[13],
+                        norm_key,
+                    ),
+                )
+                row = cur.fetchone()
+                if row is None and norm_key:
+                    cur.execute(
+                        """
+                        select id::text,
+                               attempt_nr,
+                               intent,
+                               kind,
+                               score_raw,
+                               score_max,
+                               text_body,
+                               mime_type,
+                               size_bytes,
+                               storage_key,
+                               sha256,
+                               analysis_status,
+                               analysis_json,
+                               feedback_md,
+                               error_code,
+                               coalesce(vision_attempts, 0),
+                               vision_last_error,
+                               to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               feedback_last_error,
+                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                               to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                          from public.learning_submissions
+                         where course_id = %s::uuid
+                           and task_id = %s::uuid
+                           and student_sub = %s
+                           and intent = 'submit'
+                           and idempotency_key = %s
+                        """,
+                        (course_uuid, task_uuid, student_sub, norm_key),
+                    )
+                    row = cur.fetchone()
+                conn.commit()
+
         return self._row_to_submission(row)
 
     def list_submissions(

@@ -38,12 +38,12 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("const fastPollAttempts = 30");
     expect(routeSource).toContain("pendingSubmissionIntent");
     expect(routeSource).toContain("Die Rückmeldung dauert länger als üblich ...");
-    expect(routeSource).toContain("Die Auswertung dauert länger als üblich ...");
     expect(routeSource).not.toContain("Die Rückmeldung ist noch nicht fertig. Bitte prüfe den Verlauf gleich erneut.");
     expect(serverSource).toContain("moduleIdOverride");
     expect(serverSource).toContain("feedbackRequestedTaskId");
     expect(serverSource).toContain('message: "feedback_pending"');
-    expect(serverSource).toContain('message: "submit_pending"');
+    expect(serverSource).toContain("/submissions/finalize");
+    expect(serverSource).toContain('message: "submitted"');
     expect(serverSource).not.toContain("throw redirect(303");
   });
 

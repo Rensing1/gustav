@@ -2205,6 +2205,29 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        has_submission:
+          type: boolean
+          description: True when the learner has at least one stored submission for this task.
+        latest_submission_intent:
+          type: string
+          nullable: true
+          enum: [feedback, submit]
+          description: Intent of the learner's newest submission for this task.
+        latest_submission_analysis_status:
+          type: string
+          nullable: true
+          enum: [pending, extracted, completed, failed]
+          description: Analysis status of the learner's newest submission for this task.
+        latest_submission_created_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Creation timestamp of the learner's newest submission for this task.
+        latest_final_submission_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Creation timestamp of the learner's newest final submission (`intent=submit`) for this task.
         kind:
           type: string
           enum: [native, h5p, visual, scratch, calliope]
@@ -5352,6 +5375,88 @@ paths:
                 $ref: '#/components/schemas/Error'
       x-gustav-notes:
         - Default response is 202 pending; 201 is best-effort and MUST NOT be relied upon by clients.
+
+  /api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize:
+    post:
+      tags: [Learning]
+      summary: Finalize the learner's latest reviewed draft for a task
+      description: >-
+        Creates a new `intent=submit` submission by copying the learner's newest
+        completed `intent=feedback` submission for the same task. This path does
+        not enqueue a new worker or trigger another feedback run.
+      operationId: finalizeLearningSubmission
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+            pattern: '^[A-Za-z0-9_-]{1,64}$'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '201':
+          description: Final submission created synchronously from the latest reviewed draft.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningSubmission'
+        '400':
+          description: Bad request (invalid_uuid | invalid_input | max_attempts_exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or task not visible to the learner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: No finalizable draft exists yet (`draft_missing` or `draft_not_ready`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable while persistence checks are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /auth/login:
     get:

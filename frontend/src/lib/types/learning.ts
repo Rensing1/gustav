@@ -27,6 +27,10 @@ export type LearningTask = {
   instruction_md: string;
   criteria: string[];
   has_submission?: boolean;
+  latest_submission_intent?: "feedback" | "submit" | null;
+  latest_submission_analysis_status?: "pending" | "extracted" | "completed" | "failed" | null;
+  latest_submission_created_at?: string | null;
+  latest_final_submission_at?: string | null;
   position?: number | null;
   kind: "native" | "h5p" | "visual" | "scratch" | "calliope";
   h5p?: {

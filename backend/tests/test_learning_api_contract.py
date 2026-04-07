@@ -554,6 +554,93 @@ async def test_feedback_requests_do_not_consume_final_attempt_limit():
 
 
 @pytest.mark.anyio
+async def test_finalize_latest_feedback_submission_creates_final_submission_without_worker_job():
+    """Finalizing the latest reviewed draft should not enqueue a new worker job."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        feedback_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert feedback_response.status_code == 202
+        feedback_submission_id = feedback_response.json()["id"]
+
+    _require_db_or_skip()
+    import psycopg  # type: ignore
+    from backend.learning.repo_db import _dsn  # type: ignore
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available for finalize contract test.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'completed',
+                       feedback_md = '## Rückmeldung\n\nStark.',
+                       analysis_json = '{"schema":"criteria.v2","criteria_results":[{"criterion":"Graph korrekt","score":8,"max_score":10,"explanation_md":"Treffend."}]}'::jsonb,
+                       completed_at = now()
+                 where id = %s::uuid
+                """,
+                (feedback_submission_id,),
+            )
+            conn.commit()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        finalize_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
+            headers={"Idempotency-Key": "finalize-key-1"},
+            json={},
+        )
+
+    assert finalize_response.status_code == 201, finalize_response.text
+    body = finalize_response.json()
+    assert body["intent"] == "submit"
+    assert body["attempt_nr"] == 2
+    assert body["analysis_status"] == "completed"
+    assert body["feedback_md"].startswith("## Rückmeldung")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where submission_id = %s::uuid",
+                (body["id"],),
+            )
+            assert int(cur.fetchone()[0] or 0) == 0
+
+
+@pytest.mark.anyio
+async def test_finalize_requires_completed_feedback_draft():
+    """Final submit must be blocked until the latest draft has completed feedback."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        feedback_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert feedback_response.status_code == 202
+
+        finalize_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
+            json={},
+        )
+
+    assert finalize_response.status_code == 409
+    assert finalize_response.json().get("detail") == "draft_not_ready"
+
+
+@pytest.mark.anyio
 async def test_create_submission_uses_teacher_defined_criteria_names():
     """Rubric scores should expose the criteria defined by the teacher."""
 

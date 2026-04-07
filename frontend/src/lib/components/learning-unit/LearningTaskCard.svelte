@@ -70,6 +70,27 @@
     return Boolean(task.has_submission || submitted || history.length > 0);
   }
 
+  function latestSubmissionIntent(): "feedback" | "submit" | null {
+    return latestSubmission()?.intent ?? task.latest_submission_intent ?? null;
+  }
+
+  function latestSubmissionStatus(): "pending" | "extracted" | "completed" | "failed" | null {
+    return latestSubmission()?.analysis_status ?? task.latest_submission_analysis_status ?? null;
+  }
+
+  function latestFinalSubmissionAt(): string | null {
+    const fromHistory = history.find((entry) => entry.intent === "submit")?.created_at ?? null;
+    return fromHistory ?? task.latest_final_submission_at ?? null;
+  }
+
+  function hasFinalSubmission(): boolean {
+    return Boolean(latestFinalSubmissionAt());
+  }
+
+  function canFinalizeLatestDraft(): boolean {
+    return latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "completed";
+  }
+
   function latestSubmission(): LearningSubmission | null {
     return history[0] ?? null;
   }
@@ -87,7 +108,13 @@
   }
 
   function actionLabel(): string {
-    return hasRetryState() ? "Erneut bearbeiten" : "Aufgabe bearbeiten";
+    if (task.kind === "h5p") {
+      return hasSubmission() ? "Erneut bearbeiten" : "Aufgabe bearbeiten";
+    }
+    if (!hasSubmission()) {
+      return "Entwurf erstellen";
+    }
+    return hasFinalSubmission() ? "Erneut bearbeiten" : "Entwurf weiterbearbeiten";
   }
 
   function showSubmissionSummary(): boolean {
@@ -100,10 +127,6 @@
 
   function showStandalonePendingNote(): boolean {
     return Boolean(!submissionFocused && feedbackPendingMessage() && !showSubmissionSummary());
-  }
-
-  function hasRetryState(): boolean {
-    return hasSubmission() || Boolean(feedbackPending && pendingIntent === "submit");
   }
 
   function fileSummary(submission: LearningSubmission): string {
@@ -149,6 +172,34 @@
     return Boolean(submission.analysis_json?.criteria_results?.length);
   }
 
+  function statusHeadline(): string {
+    if (hasFinalSubmission()) {
+      return `Final abgegeben am ${latestFinalSubmissionAt()}`;
+    }
+    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "completed") {
+      return "Entwurf mit Rückmeldung vorhanden";
+    }
+    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "failed") {
+      return "Entwurf vorhanden, Rückmeldung fehlgeschlagen";
+    }
+    if (latestSubmissionIntent() === "feedback") {
+      return "Entwurf wird ausgewertet";
+    }
+    return "Noch nicht abgegeben";
+  }
+
+  function statusDetail(): string | null {
+    if (hasFinalSubmission() && latestSubmissionIntent() === "feedback") {
+      if (latestSubmissionStatus() === "completed") {
+        return "Ein neuer Entwurf mit Rückmeldung liegt bereits vor.";
+      }
+      if (latestSubmissionStatus() === "pending" || latestSubmissionStatus() === "extracted") {
+        return "Ein neuer Entwurf wird gerade ausgewertet.";
+      }
+    }
+    return null;
+  }
+
   function updateDraft(value: string) {
     draftText = value;
   }
@@ -188,6 +239,16 @@
         <div class="markdown-prose">
           {@html renderMarkdown(task.instruction_md)}
         </div>
+
+        {#if task.kind !== "h5p"}
+          <section class="learning-task-status" aria-label="Aufgabenstatus">
+            <p class="workspace-label">Status</p>
+            <p class="learning-task-status__headline">{statusHeadline()}</p>
+            {#if statusDetail()}
+              <p class="learning-task-status__detail">{statusDetail()}</p>
+            {/if}
+          </section>
+        {/if}
 
         {#if showSubmissionSummary()}
           <section class="learning-task-submission-summary" aria-label="Meine Abgabe">
@@ -329,9 +390,6 @@
                   <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
                     Rückmeldung einholen
                   </button>
-                  <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit" disabled={feedbackPending}>
-                    Endgültig abgeben
-                  </button>
                 </div>
               </form>
             {:else}
@@ -354,9 +412,6 @@
                 <div class="learning-submission-editor__actions">
                   <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
                     Rückmeldung einholen
-                  </button>
-                  <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit" disabled={feedbackPending}>
-                    Endgültig abgeben
                   </button>
                 </div>
               </form>
@@ -382,14 +437,33 @@
               </button>
             {/if}
             <button
-              class:workspace-top-action--accent={!hasRetryState()}
-              class:workspace-top-action--quiet={hasRetryState()}
+              class:workspace-top-action--accent={!hasSubmission()}
+              class:workspace-top-action--quiet={hasSubmission()}
               class="workspace-top-action"
               type="button"
               onclick={() => onEnterSubmissionWorkspace?.()}
             >
               {actionLabel()}
             </button>
+            {#if task.kind !== "h5p" && canFinalizeLatestDraft()}
+              <form method="POST" use:enhance={enhanceSubmit}>
+                <input type="hidden" name="task_id" value={task.id} />
+                <input type="hidden" name="task_kind" value={task.kind} />
+                <input type="hidden" name="unit_type" value={unitType} />
+                {#if moduleId}
+                  <input type="hidden" name="module_id" value={moduleId} />
+                {/if}
+                <button
+                  class="workspace-top-action workspace-top-action--accent"
+                  name="submission_intent"
+                  type="submit"
+                  value="submit"
+                  disabled={feedbackPending}
+                >
+                  Endgültig abgeben
+                </button>
+              </form>
+            {/if}
           </div>
         {/if}
       </div>

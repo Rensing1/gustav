@@ -109,7 +109,8 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByRole("button", { name: "Aufgabe bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByText("Noch nicht abgegeben")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entwurf erstellen" })).toBeInTheDocument();
     expect(screen.queryByText("Nächster Schritt")).toBeNull();
     expect(screen.queryByText("Antwortstatus")).toBeNull();
     expect(screen.queryByRole("button", { name: "Meine Abgabe" })).toBeNull();
@@ -169,10 +170,35 @@ describe("LearningTaskCard", () => {
       }
     });
 
+    expect(screen.getByText("Final abgegeben am 2026-04-05 10:00")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Weitere Versuche" })).toBeNull();
+  });
+
+  it("enables final submit only when the latest draft has completed feedback", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          has_submission: true,
+          latest_submission_intent: "feedback",
+          latest_submission_analysis_status: "completed",
+          latest_submission_created_at: "2026-04-07T10:35:29+00:00"
+        },
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        history: []
+      }
+    });
+
+    expect(screen.getByText("Entwurf mit Rückmeldung vorhanden")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entwurf weiterbearbeiten" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
   });
 
   it("opens the review area with submission, feedback and evaluation views", async () => {
@@ -308,7 +334,6 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("region", { name: "Meine Abgabe" })).toBeInTheDocument();
     expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
   });
 
   it("shows the first feedback pending state inside the open editor even without a review panel", () => {
@@ -331,39 +356,33 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
   });
 
-  it("keeps the editor open for feedback pending but closes it after a final pending submission", () => {
-    const { rerender } = render(LearningTaskCard, {
+  it("shows a completed final submission as closed review state with a retry action", () => {
+    render(LearningTaskCard, {
       props: {
         courseId: "course-1",
         task,
         taskTitle: "Aufgabe 7",
         unitType: "linear",
         expanded: true,
-        submissionFocused: true,
-        feedbackPending: true,
-        feedbackStatusMessage: "Rückmeldung wird erstellt ...",
-        pendingIntent: "feedback"
+        history: [
+          {
+            id: "submission-9",
+            attempt_nr: 2,
+            kind: "text",
+            intent: "submit",
+            created_at: "2026-04-07T12:10:00+00:00",
+            analysis_status: "completed",
+            text_body: "Finale Lösung",
+            feedback_md: "## Rückmeldung\n\nPasst."
+          }
+        ]
       }
-    });
-
-    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
-
-    rerender({
-      courseId: "course-1",
-      task,
-      taskTitle: "Aufgabe 7",
-      unitType: "linear",
-      expanded: true,
-      submissionFocused: false,
-      feedbackPending: true,
-      feedbackStatusMessage: "Abgabe wird verarbeitet ...",
-      pendingIntent: "submit"
     });
 
     expect(screen.queryByRole("button", { name: "Bearbeitung schließen" })).toBeNull();
     expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
-    expect(screen.getByText("Abgabe wird verarbeitet ...")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Meine Abgabe" })).toBeNull();
+    expect(screen.getByText("Final abgegeben am 2026-04-07T12:10:00+00:00")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();
   });
 
   it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {

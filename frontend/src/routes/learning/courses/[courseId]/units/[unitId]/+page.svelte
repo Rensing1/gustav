@@ -862,12 +862,13 @@
 
         if (matchingSubmission?.analysis_status === "completed") {
           setTaskHistory(taskId, entries);
-          submissionMessageState = intent === "submit" ? "submitted" : "feedback";
+          submissionMessageState = "feedback";
           feedbackPendingTaskId = null;
           feedbackStatusTaskId = null;
           feedbackStatusMessage = null;
           pendingSubmissionIntent = null;
-          setReviewPanelOpen(taskId, intent === "feedback");
+          clearSubmissionWorkspace();
+          setReviewPanelOpen(taskId, true);
           return;
         }
 
@@ -906,21 +907,36 @@
       }
 
       const intent = submitter.value === "feedback" ? "feedback" : "submit";
-
-      feedbackPendingTaskId = taskId;
-      feedbackStatusTaskId = taskId;
-      pendingSubmissionIntent = intent;
-      feedbackStatusMessage = intent === "submit" ? "Abgabe wird verarbeitet ..." : "Rückmeldung wird erstellt ...";
+      if (intent === "feedback") {
+        feedbackPendingTaskId = taskId;
+        feedbackStatusTaskId = taskId;
+        pendingSubmissionIntent = intent;
+        feedbackStatusMessage = "Rückmeldung wird erstellt ...";
+      }
 
       return async ({ result }) => {
         if (result.type === "success") {
           const payload = (result.data ?? {}) as {
             feedbackRequestedTaskId?: string;
             feedbackSubmissionId?: string | null;
+            finalizedTaskId?: string;
+            finalizedSubmission?: LearningSubmission | null;
             pendingIntent?: "feedback" | "submit";
+            message?: string;
           };
-          if ((payload.pendingIntent ?? intent) === "submit") {
+          if (payload.finalizedTaskId && payload.finalizedSubmission) {
             clearSubmissionWorkspace();
+            setTaskHistory(payload.finalizedTaskId, [
+              payload.finalizedSubmission,
+              ...historyForTask(payload.finalizedTaskId).filter((entry) => entry.id !== payload.finalizedSubmission?.id)
+            ]);
+            setReviewPanelOpen(payload.finalizedTaskId, false);
+            submissionMessageState = payload.message ?? "submitted";
+            feedbackPendingTaskId = null;
+            feedbackStatusTaskId = null;
+            pendingSubmissionIntent = null;
+            feedbackStatusMessage = null;
+            return;
           }
           await pollFeedbackSubmission(
             payload.feedbackRequestedTaskId ?? taskId,
@@ -938,9 +954,7 @@
           feedbackStatusTaskId = taskId;
           feedbackStatusMessage =
             payload.message ??
-            (intent === "submit"
-              ? "Die Abgabe konnte nicht verarbeitet werden."
-              : "Die Rückmeldung konnte nicht angefordert werden.");
+            (intent === "submit" ? "Die finale Abgabe konnte nicht erstellt werden." : "Die Rückmeldung konnte nicht angefordert werden.");
           return;
         }
 

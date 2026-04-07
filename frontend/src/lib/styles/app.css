@@ -2520,6 +2520,34 @@ select {
   line-height: 1.6;
 }
 
+.learning-task-submission-summary__asset {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.learning-task-submission-summary__asset-meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: calc(0.82rem * var(--learning-unit-label-scale));
+}
+
+.learning-task-submission-summary__image,
+.learning-task-submission-summary__frame {
+  width: 100%;
+  border: 0;
+  border-radius: 0.22rem;
+  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+}
+
+.learning-task-submission-summary__image {
+  max-height: 28rem;
+  object-fit: contain;
+}
+
+.learning-task-submission-summary__frame {
+  min-height: 22rem;
+}
+
 .learning-task-submission-summary__older-toggle {
   min-height: 1.9rem;
 }
@@ -2785,9 +2813,50 @@ select {
   background: color-mix(in srgb, var(--color-bg) 97%, white 3%);
 }
 
+.learning-submission-upload__dropzone input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 .learning-submission-upload__copy {
   color: var(--color-text-muted);
   font-size: 0.92rem;
+}
+
+.learning-submission-upload__selected {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  background: color-mix(in srgb, var(--color-bg-surface) 95%, white 5%);
+}
+
+.learning-submission-upload__selected-name,
+.learning-submission-upload__selected-meta {
+  margin: 0;
+}
+
+.learning-submission-upload__selected-name {
+  font-size: calc(0.92rem * var(--learning-unit-font-scale));
+  font-weight: 700;
+}
+
+.learning-submission-upload__selected-meta {
+  color: var(--color-text-muted);
+  font-size: calc(0.82rem * var(--learning-unit-label-scale));
+}
+
+.learning-submission-upload__selected-actions {
+  display: inline-flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
 }
 
 .learning-submission-history__entry-header {

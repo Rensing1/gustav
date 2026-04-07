@@ -110,7 +110,7 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.getByText("Noch nicht abgegeben")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Entwurf erstellen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe beginnen" })).toBeInTheDocument();
     expect(screen.queryByText("Nächster Schritt")).toBeNull();
     expect(screen.queryByText("Antwortstatus")).toBeNull();
     expect(screen.queryByRole("button", { name: "Meine Abgabe" })).toBeNull();
@@ -199,6 +199,98 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Entwurf weiterbearbeiten" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+  });
+
+  it("opens native tasks in text mode with a text/upload switch", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 8",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true
+      }
+    });
+
+    expect(screen.getByRole("button", { name: "Text" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
+    expect(screen.getByText("Deine Lösung")).toBeInTheDocument();
+  });
+
+  it("renders upload-only tasks directly in the task-specific upload editor", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          id: "task-scratch",
+          kind: "scratch"
+        },
+        taskTitle: "Scratch-Aufgabe",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true
+      }
+    });
+
+    expect(screen.queryByRole("button", { name: "Text" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Upload" })).toBeNull();
+    expect(screen.getByText(".sb3-Datei auswählen")).toBeInTheDocument();
+  });
+
+  it("shows a compact file card with replace and remove actions after selecting a file", async () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 9",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        initialSubmissionMode: "upload"
+      }
+    });
+
+    const input = screen.getByLabelText("Datei auswählen") as HTMLInputElement;
+    const file = new File(["dummy"], "loesung.pdf", { type: "application/pdf" });
+
+    await fireEvent.change(input, { target: { files: [file] } });
+
+    expect(screen.getByText("loesung.pdf")).toBeInTheDocument();
+    expect(screen.getByText(/PDF ·/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ersetzen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entfernen" })).toBeInTheDocument();
+  });
+
+  it("delegates upload feedback requests to a browser-side callback instead of submitting the file form", async () => {
+    const onSubmitUploadFeedback = vi.fn(async () => {});
+
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 9",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        initialSubmissionMode: "upload",
+        onSubmitUploadFeedback
+      }
+    });
+
+    const input = screen.getByLabelText("Datei auswählen") as HTMLInputElement;
+    const file = new File(["dummy"], "loesung.pdf", { type: "application/pdf" });
+
+    await fireEvent.change(input, { target: { files: [file] } });
+    await fireEvent.click(screen.getByRole("button", { name: "Rückmeldung einholen" }));
+
+    expect(onSubmitUploadFeedback).toHaveBeenCalledWith({
+      taskId: "task-1",
+      taskKind: "native",
+      file,
+      moduleId: null
+    });
   });
 
   it("opens the review area with submission, feedback and evaluation views", async () => {
@@ -338,7 +430,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByRole("button", { name: "Aufgabe bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe beginnen" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Letzte Abgabe" })).toBeNull();
   });
 
@@ -420,6 +512,110 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
     expect(screen.getByText("Final abgegeben am 2026-04-07T12:10:00+00:00")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();
+  });
+
+  it("renders an inline image preview for uploaded image submissions", async () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          has_submission: true
+        },
+        taskTitle: "Aufgabe 10",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: false,
+        history: [
+          {
+            id: "submission-image",
+            attempt_nr: 1,
+            kind: "image",
+            intent: "feedback",
+            created_at: "2026-04-07T12:10:00+00:00",
+            analysis_status: "completed",
+            files: [{ mime: "image/png", size: 2048, url: "/uploads/test.png" }]
+          }
+        ]
+      }
+    });
+
+    await rerender({
+      courseId: "course-1",
+      task: {
+        ...task,
+        has_submission: true
+      },
+      taskTitle: "Aufgabe 10",
+      unitType: "linear",
+      expanded: true,
+      reviewPanelOpen: true,
+      history: [
+        {
+          id: "submission-image",
+          attempt_nr: 1,
+          kind: "image",
+          intent: "feedback",
+          created_at: "2026-04-07T12:10:00+00:00",
+          analysis_status: "completed",
+          files: [{ mime: "image/png", size: 2048, url: "/uploads/test.png" }]
+        }
+      ]
+    });
+
+    expect(screen.getByRole("img", { name: "Abgabevorschau" })).toBeInTheDocument();
+  });
+
+  it("renders an inline PDF preview for uploaded PDF submissions", async () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          has_submission: true
+        },
+        taskTitle: "Aufgabe 11",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: false,
+        history: [
+          {
+            id: "submission-pdf",
+            attempt_nr: 1,
+            kind: "file",
+            intent: "feedback",
+            created_at: "2026-04-07T12:10:00+00:00",
+            analysis_status: "completed",
+            files: [{ mime: "application/pdf", size: 4096, url: "/uploads/test.pdf" }]
+          }
+        ]
+      }
+    });
+
+    await rerender({
+      courseId: "course-1",
+      task: {
+        ...task,
+        has_submission: true
+      },
+      taskTitle: "Aufgabe 11",
+      unitType: "linear",
+      expanded: true,
+      reviewPanelOpen: true,
+      history: [
+        {
+          id: "submission-pdf",
+          attempt_nr: 1,
+          kind: "file",
+          intent: "feedback",
+          created_at: "2026-04-07T12:10:00+00:00",
+          analysis_status: "completed",
+          files: [{ mime: "application/pdf", size: 4096, url: "/uploads/test.pdf" }]
+        }
+      ]
+    });
+
+    expect(document.querySelector(".learning-task-submission-summary__frame")).not.toBeNull();
   });
 
   it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {

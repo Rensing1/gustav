@@ -64,7 +64,8 @@
     onEnterSubmissionWorkspace,
     onEnterUploadWorkspace,
     onExitSubmissionWorkspace,
-    onToggleReviewPanel
+    onToggleReviewPanel,
+    onSubmitUploadFeedback = null
   }: {
     titleLabel: string;
     title: string;
@@ -119,6 +120,14 @@
     onEnterUploadWorkspace: (paneId: PaneId, itemKey: string) => void;
     onExitSubmissionWorkspace: (paneId: PaneId) => void;
     onToggleReviewPanel: (taskId: string) => void;
+    onSubmitUploadFeedback?:
+      | ((payload: {
+          taskId: string;
+          taskKind: "native" | "visual" | "scratch" | "calliope";
+          file: File;
+          moduleId: string | null;
+        }) => void | Promise<void>)
+      | null;
   } = $props();
 
   function tocItemActive(itemKey: string): boolean {
@@ -282,6 +291,7 @@
                     onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
                     onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
                     onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
+                    {onSubmitUploadFeedback}
                   />
                 {/if}
               {/each}

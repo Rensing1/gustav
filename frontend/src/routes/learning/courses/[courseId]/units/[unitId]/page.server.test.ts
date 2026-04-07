@@ -184,4 +184,38 @@ describe("learning unit route actions", () => {
       message: "submitted"
     });
   });
+
+  it("rejects upload submissions in the route action so browser-direct upload stays the primary path", async () => {
+    mockModularLoad();
+
+    const form = new FormData();
+    form.set("task_id", "task-1");
+    form.set("task_kind", "native");
+    form.set("unit_type", "modular");
+    form.set("module_id", "module-7");
+    form.set("submission_intent", "feedback");
+    form.set("upload_file", new File(["pdf"], "loesung.pdf", { type: "application/pdf" }));
+
+    const result = await actions.default({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      request: requestWithFormData(form),
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+    } as Parameters<typeof actions.default>[0]);
+
+    expect(requireBackendJsonMock).not.toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/learning/courses/course-1/tasks/task-1/upload-intents",
+      expect.anything()
+    );
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        message: "Datei-Uploads benötigen aktiviertes JavaScript.",
+        taskId: "task-1"
+      }
+    });
+  });
 });

@@ -30,7 +30,8 @@
     onToggleReviewPanel = null,
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
-    onExitSubmissionWorkspace = null
+    onExitSubmissionWorkspace = null,
+    onSubmitUploadFeedback = null
   }: {
     courseId: string;
     task: LearningTask;
@@ -56,11 +57,24 @@
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
+    onSubmitUploadFeedback?: ((payload: {
+      taskId: string;
+      taskKind: UploadTaskKind;
+      file: File;
+      moduleId: string | null;
+    }) => void | Promise<void>) | null;
   } = $props();
 
   type SummaryTab = "submission" | "feedback" | "evaluation";
+  type SubmissionMode = "text" | "upload";
+  type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope">;
   let activeSummaryTab = $state<SummaryTab>("submission");
   let draftText = $state("");
+  let editorMode = $state<SubmissionMode>("text");
+  let selectedUploadFile = $state<File | null>(null);
+  let hideExistingUpload = $state(false);
+  let uploadInput = $state<HTMLInputElement | null>(null);
+  let lastSubmissionFocused = $state(false);
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope";
@@ -108,11 +122,8 @@
   }
 
   function actionLabel(): string {
-    if (task.kind === "h5p") {
-      return hasSubmission() ? "Erneut bearbeiten" : "Aufgabe bearbeiten";
-    }
     if (!hasSubmission()) {
-      return "Entwurf erstellen";
+      return "Aufgabe beginnen";
     }
     return hasFinalSubmission() ? "Erneut bearbeiten" : "Entwurf weiterbearbeiten";
   }
@@ -135,6 +146,125 @@
       return "Keine Datei hinterlegt.";
     }
     return `${first.mime} · ${Math.max(1, Math.round(first.size / 1024))} KB`;
+  }
+
+  function formatBytes(size: number | null | undefined): string {
+    if (!size || size <= 0) {
+      return "Datei";
+    }
+    if (size < 1024 * 1024) {
+      return `${Math.max(1, Math.round(size / 1024))} KB`;
+    }
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function isUploadSubmission(submission: LearningSubmission | null): boolean {
+    return submission?.kind === "image" || submission?.kind === "file";
+  }
+
+  function currentUploadSubmission(): LearningSubmission | null {
+    if (hideExistingUpload || selectedUploadFile) {
+      return null;
+    }
+    const latest = latestSubmission();
+    return isUploadSubmission(latest) ? latest : null;
+  }
+
+  function preferredEditorMode(): SubmissionMode {
+    if (uploadOnly()) {
+      return "upload";
+    }
+    if (initialSubmissionMode === "text" || initialSubmissionMode === "upload") {
+      return initialSubmissionMode;
+    }
+    return isUploadSubmission(latestSubmission()) ? "upload" : "text";
+  }
+
+  function setEditorMode(next: SubmissionMode) {
+    editorMode = next;
+  }
+
+  function editorModeIs(next: SubmissionMode): boolean {
+    return editorMode === next;
+  }
+
+  function uploadTitle(): string {
+    if (task.kind === "scratch") {
+      return ".sb3-Datei auswählen";
+    }
+    if (task.kind === "calliope") {
+      return ".hex-Datei auswählen";
+    }
+    return "Datei auswählen";
+  }
+
+  function uploadCopy(): string {
+    if (task.kind === "scratch") {
+      return "Scratch-Datei (.sb3) hochladen";
+    }
+    if (task.kind === "calliope") {
+      return "Calliope-Datei (.hex) hochladen";
+    }
+    if (task.kind === "visual") {
+      return "Bild oder PDF auswählen";
+    }
+    return "Datei auswählen und als Entwurf hochladen";
+  }
+
+  function uploadAccept(): string | undefined {
+    if (task.kind === "scratch") {
+      return ".sb3,application/x.scratch.sb3";
+    }
+    if (task.kind === "calliope") {
+      return ".hex,application/x.makecode.hex";
+    }
+    return ".pdf,image/png,image/jpeg,application/pdf,image/png,image/jpeg";
+  }
+
+  function handleUploadSelection(event: Event) {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    selectedUploadFile = target.files?.[0] ?? null;
+    hideExistingUpload = false;
+  }
+
+  function clearUploadSelection() {
+    selectedUploadFile = null;
+    hideExistingUpload = true;
+    if (uploadInput) {
+      uploadInput.value = "";
+    }
+  }
+
+  function triggerUploadPicker() {
+    uploadInput?.click();
+  }
+
+  function hasUploadReadyForSubmit(): boolean {
+    return Boolean(selectedUploadFile);
+  }
+
+  function submitUploadFeedback() {
+    if (!selectedUploadFile) {
+      return;
+    }
+    void onSubmitUploadFeedback?.({
+      taskId: task.id,
+      taskKind: task.kind as UploadTaskKind,
+      file: selectedUploadFile,
+      moduleId
+    });
+  }
+
+  function selectedUploadLabel(file: File): string {
+    const type = file.type === "application/pdf" ? "PDF" : file.type.startsWith("image/") ? "Bild" : file.type || "Datei";
+    return `${type} · ${formatBytes(file.size)}`;
+  }
+
+  function submittedFile(): { mime: string; size: number; url: string } | null {
+    return latestSubmission()?.files?.[0] ?? null;
   }
 
   function evaluationSummary(submission: LearningSubmission): string {
@@ -210,6 +340,18 @@
     }
   });
 
+  $effect(() => {
+    if (submissionFocused && !lastSubmissionFocused) {
+      editorMode = preferredEditorMode();
+      selectedUploadFile = null;
+      hideExistingUpload = false;
+      if (uploadInput) {
+        uploadInput.value = "";
+      }
+    }
+    lastSubmissionFocused = submissionFocused;
+  });
+
 </script>
 
 <article class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--task" id={domId}>
@@ -273,7 +415,7 @@
               {:else}
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}
-            {:else if initialSubmissionMode === "upload" || uploadOnly()}
+            {:else if editorMode === "upload" || uploadOnly()}
               <form class="learning-submission-upload" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
                 <input type="hidden" name="task_id" value={task.id} />
                 <input type="hidden" name="task_kind" value={task.kind} />
@@ -281,13 +423,82 @@
                 {#if moduleId}
                   <input type="hidden" name="module_id" value={moduleId} />
                 {/if}
+                {#if !uploadOnly()}
+                  <div class="learning-submission-workspace__mode-switch learning-task-inline-editor__mode-switch" role="tablist" aria-label="Bearbeitungsmodus">
+                    <button
+                      class:workspace-tab--active={editorModeIs("text")}
+                      class="workspace-tab"
+                      type="button"
+                      onclick={() => setEditorMode("text")}
+                    >
+                      Text
+                    </button>
+                    <button
+                      class:workspace-tab--active={editorModeIs("upload")}
+                      class="workspace-tab"
+                      type="button"
+                      onclick={() => setEditorMode("upload")}
+                    >
+                      Upload
+                    </button>
+                  </div>
+                {/if}
                 <label class="learning-submission-upload__dropzone">
-                  <span class="learning-submission-upload__title">Datei auswählen</span>
-                  <span class="learning-submission-upload__copy">Bild oder PDF hochladen</span>
-                  <input name="upload_file" type="file" />
+                  <span class="learning-submission-upload__title">{uploadTitle()}</span>
+                  <span class="learning-submission-upload__copy">{uploadCopy()}</span>
+                  <input
+                    bind:this={uploadInput}
+                    aria-label="Datei auswählen"
+                    name="upload_file"
+                    type="file"
+                    accept={uploadAccept()}
+                    onchange={handleUploadSelection}
+                  />
                 </label>
+                {#if selectedUploadFile}
+                  <section class="learning-submission-upload__selected" aria-label="Ausgewählte Datei">
+                    <div>
+                      <p class="learning-submission-upload__selected-name">{selectedUploadFile.name}</p>
+                      <p class="learning-submission-upload__selected-meta">{selectedUploadLabel(selectedUploadFile)}</p>
+                    </div>
+                    <div class="learning-submission-upload__selected-actions">
+                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={triggerUploadPicker}>
+                        Ersetzen
+                      </button>
+                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={clearUploadSelection}>
+                        Entfernen
+                      </button>
+                    </div>
+                  </section>
+                {:else if currentUploadSubmission()}
+                  <section class="learning-submission-upload__selected" aria-label="Bisherige Datei">
+                    <div>
+                      <p class="learning-submission-upload__selected-name">Bisherige Datei</p>
+                      <p class="learning-submission-upload__selected-meta">{fileSummary(currentUploadSubmission()!)}</p>
+                    </div>
+                    <div class="learning-submission-upload__selected-actions">
+                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={triggerUploadPicker}>
+                        Ersetzen
+                      </button>
+                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={clearUploadSelection}>
+                        Entfernen
+                      </button>
+                    </div>
+                  </section>
+                {/if}
                 <div class="learning-submission-editor__actions">
-                  <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
+                  <button
+                    class="workspace-top-action workspace-top-action--quiet"
+                    name="submission_intent"
+                    type={onSubmitUploadFeedback ? "button" : "submit"}
+                    value="feedback"
+                    disabled={feedbackPending || !hasUploadReadyForSubmit()}
+                    onclick={() => {
+                      if (onSubmitUploadFeedback) {
+                        submitUploadFeedback();
+                      }
+                    }}
+                  >
                     Rückmeldung einholen
                   </button>
                 </div>
@@ -300,6 +511,24 @@
                 {#if moduleId}
                   <input type="hidden" name="module_id" value={moduleId} />
                 {/if}
+                <div class="learning-submission-workspace__mode-switch learning-task-inline-editor__mode-switch" role="tablist" aria-label="Bearbeitungsmodus">
+                  <button
+                    class:workspace-tab--active={editorModeIs("text")}
+                    class="workspace-tab"
+                    type="button"
+                    onclick={() => setEditorMode("text")}
+                  >
+                    Text
+                  </button>
+                  <button
+                    class:workspace-tab--active={editorModeIs("upload")}
+                    class="workspace-tab"
+                    type="button"
+                    onclick={() => setEditorMode("upload")}
+                  >
+                    Upload
+                  </button>
+                </div>
                 <section class="learning-submission-editor__field">
                   <span>Deine Lösung</span>
                   <MarkdownWysiwygEditor
@@ -341,7 +570,13 @@
               class:workspace-top-action--quiet={hasSubmission()}
               class="workspace-top-action"
               type="button"
-              onclick={() => onEnterSubmissionWorkspace?.()}
+              onclick={() => {
+                if (uploadOnly() || preferredEditorMode() === "upload") {
+                  onEnterUploadWorkspace?.();
+                  return;
+                }
+                onEnterSubmissionWorkspace?.();
+              }}
             >
               {actionLabel()}
             </button>
@@ -418,6 +653,27 @@
                   {#if latestSubmission() && latestSubmissionOrThrow().text_body}
                     <div class="markdown-prose">
                       <p>{latestSubmissionOrThrow().text_body}</p>
+                    </div>
+                  {:else if submittedFile()?.mime.startsWith("image/")}
+                    <div class="learning-task-submission-summary__asset">
+                      <img alt="Abgabevorschau" class="learning-task-submission-summary__image" src={submittedFile()?.url} />
+                      <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
+                      <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                    </div>
+                  {:else if submittedFile()?.mime === "application/pdf"}
+                    <div class="learning-task-submission-summary__asset">
+                      <iframe
+                        class="learning-task-submission-summary__frame"
+                        src={submittedFile()?.url}
+                        title={`Abgabe ${latestSubmissionOrThrow().created_at}`}
+                      ></iframe>
+                      <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
+                      <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                    </div>
+                  {:else if submittedFile()}
+                    <div class="learning-task-submission-summary__asset">
+                      <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
+                      <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
                     </div>
                   {:else if latestSubmission()}
                     <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>

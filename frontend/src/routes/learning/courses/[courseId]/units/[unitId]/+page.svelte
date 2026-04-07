@@ -29,6 +29,7 @@
   import type {
     LearningSubmission,
     LearningModuleContent,
+    LearningTask,
     LearningUnitGraphModule
   } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
@@ -71,6 +72,12 @@
     linear?: Partial<LinearWorkspaceState>;
     layout?: Partial<LayoutPreferences>;
   };
+  type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope">;
+  type UploadIntent = {
+    storage_key: string;
+    url: string;
+    headers?: Record<string, string>;
+  };
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -90,6 +97,8 @@
   let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
   let reviewPanelOpenByTask = $state.raw<Record<string, boolean>>({});
   let submissionMessageState = $state<string | null>(data.message);
+  let clientSubmissionErrorTaskId = $state<string | null>(null);
+  let clientSubmissionErrorMessage = $state<string | null>(null);
   let feedbackPendingTaskId = $state<string | null>(null);
   let feedbackStatusTaskId = $state<string | null>(null);
   let feedbackStatusMessage = $state<string | null>(null);
@@ -807,6 +816,19 @@
     return null;
   }
 
+  function activeSubmissionErrorTaskId(): string | null {
+    return clientSubmissionErrorTaskId ?? actionTaskId();
+  }
+
+  function activeSubmissionErrorMessage(): string | null {
+    return clientSubmissionErrorTaskId ? clientSubmissionErrorMessage : (form?.message ?? null);
+  }
+
+  function setClientSubmissionError(taskId: string | null, message: string | null) {
+    clientSubmissionErrorTaskId = taskId;
+    clientSubmissionErrorMessage = message;
+  }
+
   function clearSubmissionWorkspace() {
     if (isModularUnit()) {
       setModularWorkspaceState({
@@ -820,6 +842,99 @@
       ...linearWorkspace,
       submissionFocus: defaultSubmissionFocus()
     });
+  }
+
+  function canonicalUploadMimeType(taskKind: UploadTaskKind, file: File): string {
+    if (taskKind === "scratch") {
+      return "application/x.scratch.sb3";
+    }
+    if (taskKind === "calliope") {
+      return "application/x.makecode.hex";
+    }
+    const fileType = String(file.type || "").trim().toLowerCase();
+    if (fileType) {
+      return fileType;
+    }
+    return taskKind === "visual" ? "image/png" : "application/pdf";
+  }
+
+  async function sha256Hex(file: File): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function requestUploadIntent(taskId: string, taskKind: UploadTaskKind, file: File): Promise<UploadIntent> {
+    const mimeType = canonicalUploadMimeType(taskKind, file);
+    const response = await fetch(
+      `/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/upload-intents`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          kind: mimeType.startsWith("image/") ? "image" : "file",
+          filename: file.name || "submission.bin",
+          mime_type: mimeType,
+          size_bytes: file.size
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
+      throw new Error(payload.detail || payload.error || "upload_intent_failed");
+    }
+
+    return (await response.json()) as UploadIntent;
+  }
+
+  async function uploadFileToStorage(intent: UploadIntent, file: File): Promise<void> {
+    const response = await fetch(intent.url, {
+      method: "PUT",
+      headers: intent.headers,
+      body: file
+    });
+
+    if (!response.ok) {
+      throw new Error("upload_failed");
+    }
+  }
+
+  async function createUploadSubmission(
+    taskId: string,
+    taskKind: UploadTaskKind,
+    file: File,
+    intent: UploadIntent
+  ): Promise<{ id?: string | null }> {
+    const mimeType = canonicalUploadMimeType(taskKind, file);
+    const response = await fetch(
+      `/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID()
+        },
+        body: JSON.stringify({
+          intent: "feedback",
+          kind: mimeType.startsWith("image/") ? "image" : "file",
+          storage_key: intent.storage_key,
+          mime_type: mimeType,
+          size_bytes: file.size,
+          sha256: await sha256Hex(file)
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
+      throw new Error(payload.detail || payload.error || "submission_failed");
+    }
+
+    return (await response.json().catch(() => ({}))) as { id?: string | null };
   }
 
   async function loadSubmissionHistory(taskId: string): Promise<LearningSubmission[]> {
@@ -900,6 +1015,52 @@
     }
   }
 
+  async function submitUploadFeedback(payload: {
+    taskId: string;
+    taskKind: UploadTaskKind;
+    file: File;
+    moduleId: string | null;
+  }) {
+    const { taskId, taskKind, file } = payload;
+
+    setClientSubmissionError(null, null);
+    submissionMessageState = null;
+    feedbackPendingTaskId = taskId;
+    feedbackStatusTaskId = taskId;
+    pendingSubmissionIntent = "feedback";
+    feedbackStatusMessage = "Rückmeldung wird erstellt ...";
+
+    try {
+      const intent = await requestUploadIntent(taskId, taskKind, file);
+      await uploadFileToStorage(intent, file);
+      const submission = await createUploadSubmission(taskId, taskKind, file, intent);
+      await pollFeedbackSubmission(taskId, submission.id ?? null, "feedback");
+    } catch (caught) {
+      feedbackPendingTaskId = null;
+      feedbackStatusTaskId = taskId;
+      pendingSubmissionIntent = null;
+
+      const reason = caught instanceof Error ? caught.message : "upload_failed";
+      if (reason === "invalid_image_payload" || reason === "invalid_file_payload") {
+        feedbackStatusMessage = "Die Datei ist für diese Aufgabe nicht zulässig.";
+        setClientSubmissionError(taskId, "Die Datei ist für diese Aufgabe nicht zulässig.");
+        return;
+      }
+      if (reason === "max_upload_size_exceeded") {
+        feedbackStatusMessage = "Die Datei ist zu groß.";
+        setClientSubmissionError(taskId, "Die Datei ist zu groß.");
+        return;
+      }
+      if (reason === "upload_failed") {
+        feedbackStatusMessage = "Die Datei konnte nicht hochgeladen werden.";
+        setClientSubmissionError(taskId, "Die Datei konnte nicht hochgeladen werden.");
+        return;
+      }
+      feedbackStatusMessage = "Die Rückmeldung konnte nicht angefordert werden.";
+      setClientSubmissionError(taskId, "Die Rückmeldung konnte nicht angefordert werden.");
+    }
+  }
+
   function enhanceTaskForm(taskId: string): SubmitFunction {
     return ({ submitter }) => {
       if (!(submitter instanceof HTMLButtonElement)) {
@@ -907,6 +1068,7 @@
       }
 
       const intent = submitter.value === "feedback" ? "feedback" : "submit";
+      setClientSubmissionError(null, null);
       if (intent === "feedback") {
         feedbackPendingTaskId = taskId;
         feedbackStatusTaskId = taskId;
@@ -1360,8 +1522,8 @@
                 historyByTask={submissionHistoryByTask}
                 submittedTaskId={data.submittedTaskId}
                 submissionMessage={submissionMessageState}
-                submissionErrorTaskId={actionTaskId()}
-                submissionErrorMessage={form?.message ?? null}
+                submissionErrorTaskId={activeSubmissionErrorTaskId()}
+                submissionErrorMessage={activeSubmissionErrorMessage()}
                 {feedbackPendingTaskId}
                 {feedbackStatusTaskId}
                 {feedbackStatusMessage}
@@ -1370,6 +1532,7 @@
                 submissionModeByPane={workspaceSubmissionModes()}
                 reviewPanelOpenByTask={reviewPanelOpenByTask}
                 {enhanceTaskForm}
+                onSubmitUploadFeedback={submitUploadFeedback}
                 showSplitToggle={false}
                 layoutMenuEnabled={false}
                 tocWidth={layoutPreferences.tocWidth}
@@ -1422,8 +1585,8 @@
         historyByTask={submissionHistoryByTask}
         submittedTaskId={data.submittedTaskId}
         submissionMessage={submissionMessageState}
-        submissionErrorTaskId={actionTaskId()}
-        submissionErrorMessage={form?.message ?? null}
+        submissionErrorTaskId={activeSubmissionErrorTaskId()}
+        submissionErrorMessage={activeSubmissionErrorMessage()}
         {feedbackPendingTaskId}
         {feedbackStatusTaskId}
         {feedbackStatusMessage}
@@ -1432,6 +1595,7 @@
         submissionModeByPane={workspaceSubmissionModes()}
         reviewPanelOpenByTask={reviewPanelOpenByTask}
         {enhanceTaskForm}
+        onSubmitUploadFeedback={submitUploadFeedback}
         showSplitToggle={true}
         layoutMenuEnabled={true}
         tocWidth={layoutPreferences.tocWidth}

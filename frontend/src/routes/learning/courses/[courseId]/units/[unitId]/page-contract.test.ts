@@ -44,6 +44,13 @@ describe("learning unit route contract", () => {
     expect(serverSource).toContain('message: "feedback_pending"');
     expect(serverSource).toContain("/submissions/finalize");
     expect(serverSource).toContain('message: "submitted"');
+    expect(routeSource).toContain("async function requestUploadIntent");
+    expect(routeSource).toContain("async function uploadFileToStorage");
+    expect(routeSource).toContain("crypto.subtle.digest(\"SHA-256\"");
+    expect(routeSource).toContain("/upload-intents");
+    expect(routeSource).toContain("async function submitUploadFeedback");
+    expect(serverSource).not.toContain("const uploadResponse = await fetch(uploadUrl");
+    expect(serverSource).not.toContain("/upload-intents");
     expect(serverSource).not.toContain("throw redirect(303");
   });
 

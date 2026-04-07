@@ -26,20 +26,6 @@ function historyHref(url: URL, taskId: string, moduleId: string | null): string 
   return `${next.pathname}?${next.searchParams.toString()}`;
 }
 
-function canonicalUploadMimeType(task: LearningTask, file: File): string {
-  if (task.kind === "scratch") {
-    return "application/x.scratch.sb3";
-  }
-  if (task.kind === "calliope") {
-    return "application/x.makecode.hex";
-  }
-  const fileType = String(file.type || "").trim().toLowerCase();
-  if (fileType) {
-    return fileType;
-  }
-  return task.kind === "visual" ? "image/png" : "application/pdf";
-}
-
 function submissionMode(task: LearningTask, file: File | null, textBody: string): "text" | "upload" | null {
   if (file && file.size > 0) {
     return "upload";
@@ -250,65 +236,11 @@ export const actions: Actions = {
       });
     }
 
-    let payload: Record<string, string | number> = {};
-    if (mode === "text") {
-      payload = { intent: submissionIntent, kind: "text", text_body: textBody.trim() };
-    } else {
-      const mimeType = canonicalUploadMimeType(task, uploadFile as File);
-      const intent = await requireBackendJson<{
-        storage_key: string;
-        url: string;
-        headers: Record<string, string>;
-      }>(
-        fetch,
-        cookies,
-        `/api/learning/courses/${encodeURIComponent(params.courseId)}/tasks/${encodeURIComponent(taskId)}/upload-intents`,
-        {
-          method: "POST",
-          includeSameOrigin: true,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            kind: mimeType.startsWith("image/") ? "image" : "file",
-            filename: (uploadFile as File).name || "submission.bin",
-            mime_type: mimeType,
-            size_bytes: (uploadFile as File).size
-          })
-        }
-      );
-
-      const uploadUrl = intent.url.startsWith("http")
-        ? intent.url
-        : new URL(intent.url, "http://gustav-alpha2:8000").toString();
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: intent.headers,
-        body: uploadFile
+    if (mode === "upload") {
+      return fail(400, {
+        message: "Datei-Uploads benötigen aktiviertes JavaScript.",
+        taskId
       });
-      if (!uploadResponse.ok) {
-        return fail(502, {
-          message: "Die Datei konnte nicht gespeichert werden.",
-          taskId
-        });
-      }
-
-      const uploadResult = (await uploadResponse.json().catch(() => null)) as
-        | { sha256?: string; size_bytes?: number }
-        | null;
-      if (!uploadResult?.sha256 || !uploadResult?.size_bytes) {
-        return fail(502, {
-          message: "Die Upload-Antwort ist unvollstaendig.",
-          taskId
-        });
-      }
-
-      payload = {
-        intent: submissionIntent,
-        kind: mimeType.startsWith("image/") ? "image" : "file",
-        storage_key: intent.storage_key,
-        mime_type: mimeType,
-        size_bytes: uploadResult.size_bytes,
-        sha256: uploadResult.sha256
-      };
     }
 
     const response = await backendRequest(
@@ -322,7 +254,7 @@ export const actions: Actions = {
           "content-type": "application/json",
           "idempotency-key": randomUUID()
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ intent: submissionIntent, kind: "text", text_body: textBody.trim() })
       }
     );
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { applyAction } from "$app/forms";
   import { browser } from "$app/environment";
   import { onMount, tick } from "svelte";
 
@@ -26,12 +27,15 @@
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
+    LearningSubmission,
     LearningModuleContent,
     LearningUnitGraphModule
   } from "$lib/types/learning";
+  import type { SubmitFunction } from "@sveltejs/kit";
   import type { ActionData, PageData } from "./$types";
 
   type WorkspaceViewMode = "overview" | "content";
+  type ModularRestoreState = "idle" | "restoring" | "ready" | "failed";
   type SubmissionFocusState = {
     itemKey: string | null;
     mode: "text" | "upload" | null;
@@ -83,6 +87,15 @@
   let modularSettingsMenuOpen = $state(false);
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
   let workspaceRoot = $state<HTMLDivElement | null>(null);
+  let historyTaskIdState = $state<string | null>(data.historyTaskId);
+  let historyState = $state<LearningSubmission[]>(data.history);
+  let submissionMessageState = $state<string | null>(data.message);
+  let feedbackPendingTaskId = $state<string | null>(null);
+  let feedbackStatusTaskId = $state<string | null>(null);
+  let feedbackStatusMessage = $state<string | null>(null);
+  let modularRestoreState = $state<ModularRestoreState>("idle");
+  let modularRestoreMessage = $state<string | null>(null);
+  let feedbackPollToken = 0;
 
   let rebuildToken = 0;
 
@@ -483,43 +496,95 @@
     window.history.replaceState(window.history.state, "", href);
   }
 
+  function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  async function fetchModuleContent(moduleId: string): Promise<LearningModuleContent> {
+    const response = await fetch(
+      `/learning/courses/${encodeURIComponent(data.courseId)}/units/${encodeURIComponent(data.unitId)}/modules/${encodeURIComponent(moduleId)}?include=materials,tasks`,
+      {
+        credentials: "include",
+        cache: "no-store"
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`module_fetch_failed_${response.status}`);
+    }
+
+    return (await response.json()) as LearningModuleContent;
+  }
+
   async function ensureModuleLoaded(moduleId: string) {
     if (!browser || moduleCache[moduleId] || moduleLoading[moduleId]) {
-      return;
+      return Boolean(moduleCache[moduleId]);
     }
 
     moduleLoading = { ...moduleLoading, [moduleId]: true };
     moduleErrors = { ...moduleErrors, [moduleId]: null };
 
     try {
-      const response = await fetch(
-        `/learning/courses/${encodeURIComponent(data.courseId)}/units/${encodeURIComponent(data.unitId)}/modules/${encodeURIComponent(moduleId)}?include=materials,tasks`,
-        {
-          credentials: "include",
-          cache: "no-store"
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`module_fetch_failed_${response.status}`);
-      }
-
-      const payload = (await response.json()) as LearningModuleContent;
+      const payload = await fetchModuleContent(moduleId);
       moduleCache = {
         ...moduleCache,
         [moduleId]: plainModule(payload)
       };
+      return true;
     } catch {
       moduleErrors = {
         ...moduleErrors,
         [moduleId]: "Das Modul konnte nicht geladen werden."
       };
+      return false;
     } finally {
       moduleLoading = {
         ...moduleLoading,
         [moduleId]: false
       };
     }
+  }
+
+  async function restoreOpenModules(moduleIds: string[]) {
+    if (!browser || !isModularUnit()) {
+      return;
+    }
+
+    const pendingIds = moduleIds.filter((moduleId) => !moduleCache[moduleId]);
+    if (!pendingIds.length) {
+      modularRestoreState = "ready";
+      modularRestoreMessage = null;
+      restoreHistoryContext();
+      return;
+    }
+
+    modularRestoreState = "restoring";
+    modularRestoreMessage = null;
+
+    const restorePromise = Promise.all(pendingIds.map((moduleId) => ensureModuleLoaded(moduleId))).then((results) =>
+      results.every(Boolean)
+    );
+    const timeoutPromise = delay(8000).then(() => false);
+    const restoreSucceeded = await Promise.race([restorePromise, timeoutPromise]);
+
+    if (restoreSucceeded) {
+      modularRestoreState = "ready";
+      modularRestoreMessage = null;
+      restoreHistoryContext();
+      return;
+    }
+
+    modularRestoreState = "failed";
+    modularRestoreMessage = "Die Inhalte konnten nicht wiederhergestellt werden. Bitte öffne die Module erneut.";
+    historyRestored = false;
+    setModularWorkspaceState({
+      ...modularWorkspace,
+      view: "overview",
+      submissionFocus: defaultSubmissionFocus()
+    });
+    syncModuleUrl(null);
   }
 
   function setModularWorkspaceState(next: ModularWorkspaceState) {
@@ -723,6 +788,107 @@
     return null;
   }
 
+  async function loadSubmissionHistory(taskId: string): Promise<LearningSubmission[]> {
+    const response = await fetch(
+      `/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions?limit=10&offset=0`,
+      {
+        credentials: "include",
+        cache: "no-store"
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`history_failed_${response.status}`);
+    }
+    return (await response.json()) as LearningSubmission[];
+  }
+
+  async function pollFeedbackSubmission(taskId: string, submissionId: string | null) {
+    const pollToken = ++feedbackPollToken;
+    const fastPollAttempts = 30;
+    historyTaskIdState = taskId;
+    submissionMessageState = null;
+    feedbackPendingTaskId = taskId;
+    feedbackStatusTaskId = taskId;
+    feedbackStatusMessage = "Rückmeldung wird erstellt ...";
+
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const entries = await loadSubmissionHistory(taskId);
+        const matchingSubmission = submissionId
+          ? entries.find((entry) => entry.id === submissionId) ?? null
+          : entries.find((entry) => entry.intent === "feedback") ?? null;
+
+        if (pollToken !== feedbackPollToken) {
+          return;
+        }
+
+        if (matchingSubmission?.analysis_status === "completed" && matchingSubmission.feedback_md) {
+          historyState = entries;
+          submissionMessageState = "feedback";
+          feedbackPendingTaskId = null;
+          feedbackStatusTaskId = null;
+          feedbackStatusMessage = null;
+          return;
+        }
+
+        if (matchingSubmission?.analysis_status === "failed") {
+          historyState = entries;
+          feedbackPendingTaskId = null;
+          feedbackStatusTaskId = taskId;
+          feedbackStatusMessage = "Die Rückmeldung konnte nicht erstellt werden.";
+          return;
+        }
+      } catch {
+        if (pollToken !== feedbackPollToken) {
+          return;
+        }
+      }
+
+      if (attempt >= fastPollAttempts && feedbackStatusTaskId === taskId) {
+        feedbackStatusMessage = "Die Rückmeldung dauert länger als üblich ...";
+      }
+
+      await delay(attempt >= fastPollAttempts ? 5000 : 2000);
+    }
+  }
+
+  function enhanceTaskForm(taskId: string): SubmitFunction {
+    return ({ submitter }) => {
+      if (!(submitter instanceof HTMLButtonElement) || submitter.value !== "feedback") {
+        return;
+      }
+
+      feedbackPendingTaskId = taskId;
+      feedbackStatusTaskId = taskId;
+      feedbackStatusMessage = "Rückmeldung wird erstellt ...";
+
+      return async ({ result }) => {
+        if (result.type === "success") {
+          const payload = (result.data ?? {}) as {
+            feedbackRequestedTaskId?: string;
+            feedbackSubmissionId?: string | null;
+          };
+          await pollFeedbackSubmission(
+            payload.feedbackRequestedTaskId ?? taskId,
+            payload.feedbackSubmissionId ?? null
+          );
+          return;
+        }
+
+        feedbackPendingTaskId = null;
+
+        if (result.type === "failure") {
+          const payload = (result.data ?? {}) as { message?: string };
+          feedbackStatusTaskId = taskId;
+          feedbackStatusMessage = payload.message ?? "Die Rückmeldung konnte nicht angefordert werden.";
+          return;
+        }
+
+        await applyAction(result);
+      };
+    };
+  }
+
   function openModule(moduleId: string) {
     const module = graphModuleById(moduleId);
     if (!module || (module.status !== "open" && module.status !== "done")) {
@@ -739,6 +905,8 @@
       openTabs,
       activeTab: moduleId
     });
+    modularRestoreState = "ready";
+    modularRestoreMessage = null;
     syncModuleUrl(moduleId);
     void ensureModuleLoaded(moduleId);
   }
@@ -892,8 +1060,10 @@
       const seeded = seedModularWorkspaceState(stored.modular);
       setModularWorkspaceState(seeded);
       layoutPreferences = stored.layout;
-      for (const moduleId of seeded.openTabs) {
-        void ensureModuleLoaded(moduleId);
+      if (seeded.view === "content" && seeded.openTabs.length > 0) {
+        void restoreOpenModules(seeded.openTabs);
+      } else {
+        modularRestoreState = "idle";
       }
     } else {
       setLinearWorkspaceState(stored.linear);
@@ -903,7 +1073,15 @@
     applyWorkspaceWidth(stored.layout.workspaceWidth);
     applyFontScale(stored.layout.fontScale);
     workspaceReady = true;
-    restoreHistoryContext();
+    if (!isModularUnit()) {
+      restoreHistoryContext();
+    }
+  });
+
+  $effect(() => {
+    historyTaskIdState = data.historyTaskId;
+    historyState = data.history;
+    submissionMessageState = data.message;
   });
 
   $effect(() => {
@@ -929,21 +1107,13 @@
   });
 
   $effect(() => {
-    if (!isModularUnit() || !workspaceReady || !modularWorkspace.openTabs.length) {
-      return;
-    }
-
-    for (const moduleId of modularWorkspace.openTabs) {
-      void ensureModuleLoaded(moduleId);
-    }
-  });
-
-  $effect(() => {
     if (!workspaceReady) {
       return;
     }
 
-    restoreHistoryContext();
+    if (!isModularUnit() || modularRestoreState === "ready") {
+      restoreHistoryContext();
+    }
   });
 
   $effect(() => {
@@ -984,6 +1154,10 @@
 <div bind:this={workspaceRoot} class="workspace-page learning-unit-space">
   {#if data.message === "submitted"}
     <p class="flash flash-success learning-unit-flash">Abgabe gespeichert.</p>
+  {/if}
+
+  {#if modularRestoreMessage}
+    <p class="flash flash-error learning-unit-flash">{modularRestoreMessage}</p>
   {/if}
 
   {#if form?.message}
@@ -1050,9 +1224,13 @@
       <div class="learning-unit-layout-rail">
         <div class="learning-unit-layout-frame">
           <section class="learning-unit-stage learning-unit-stage--content">
-            {#if modularWorkspace.activeTab && moduleLoading[modularWorkspace.activeTab]}
+            {#if modularRestoreState === "restoring"}
               <section class="workspace-panel learning-unit-empty-state">
-                <p class="learning-unit-empty-copy">Modul wird geladen …</p>
+                <p class="learning-unit-empty-copy">Inhalte werden wiederhergestellt …</p>
+              </section>
+            {:else if modularRestoreState === "failed"}
+              <section class="workspace-panel learning-unit-empty-state">
+                <p class="learning-unit-empty-copy">Der Lernraum wechselt zurück in die Übersicht.</p>
               </section>
             {:else if modularWorkspace.activeTab && moduleErrors[modularWorkspace.activeTab]}
               <section class="workspace-panel learning-unit-empty-state">
@@ -1083,14 +1261,18 @@
                 visiblePaneIds={visiblePaneIds()}
                 contentGroups={contentGroups()}
                 paneItems={paneItemsById()}
-                historyTaskId={data.historyTaskId}
-                history={data.history}
+                historyTaskId={historyTaskIdState}
+                history={historyState}
                 submittedTaskId={data.submittedTaskId}
-                submissionMessage={data.message}
+                submissionMessage={submissionMessageState}
                 submissionErrorTaskId={actionTaskId()}
                 submissionErrorMessage={form?.message ?? null}
+                {feedbackPendingTaskId}
+                {feedbackStatusTaskId}
+                {feedbackStatusMessage}
                 submissionFocusByPane={workspaceSubmissionFocus()}
                 submissionModeByPane={workspaceSubmissionModes()}
+                {enhanceTaskForm}
                 showSplitToggle={false}
                 layoutMenuEnabled={false}
                 tocWidth={layoutPreferences.tocWidth}
@@ -1139,14 +1321,18 @@
         visiblePaneIds={visiblePaneIds()}
         contentGroups={contentGroups()}
         paneItems={paneItemsById()}
-        historyTaskId={data.historyTaskId}
-        history={data.history}
+        historyTaskId={historyTaskIdState}
+        history={historyState}
         submittedTaskId={data.submittedTaskId}
-        submissionMessage={data.message}
+        submissionMessage={submissionMessageState}
         submissionErrorTaskId={actionTaskId()}
         submissionErrorMessage={form?.message ?? null}
+        {feedbackPendingTaskId}
+        {feedbackStatusTaskId}
+        {feedbackStatusMessage}
         submissionFocusByPane={workspaceSubmissionFocus()}
         submissionModeByPane={workspaceSubmissionModes()}
+        {enhanceTaskForm}
         showSplitToggle={true}
         layoutMenuEnabled={true}
         tocWidth={layoutPreferences.tocWidth}

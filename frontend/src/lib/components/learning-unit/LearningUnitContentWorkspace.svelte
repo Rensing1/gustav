@@ -4,6 +4,7 @@
   import WorkspaceFrameHeader from "$lib/components/ui/WorkspaceFrameHeader.svelte";
   import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
   import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";
+  import type { SubmitFunction } from "@sveltejs/kit";
   import type {
     ContentGroup,
     PaneId
@@ -29,8 +30,12 @@
     submissionMessage = null,
     submissionErrorTaskId = null,
     submissionErrorMessage = null,
+    feedbackPendingTaskId = null,
+    feedbackStatusTaskId = null,
+    feedbackStatusMessage = null,
     submissionFocusByPane,
     submissionModeByPane,
+    enhanceTaskForm = null,
     showSplitToggle = true,
     layoutMenuEnabled = false,
     tocWidth = 16.25,
@@ -77,8 +82,12 @@
     submissionMessage?: string | null;
     submissionErrorTaskId?: string | null;
     submissionErrorMessage?: string | null;
+    feedbackPendingTaskId?: string | null;
+    feedbackStatusTaskId?: string | null;
+    feedbackStatusMessage?: string | null;
     submissionFocusByPane: Record<PaneId, string | null>;
     submissionModeByPane: Record<PaneId, "text" | "upload" | null>;
+    enhanceTaskForm?: ((taskId: string) => SubmitFunction | undefined) | null;
     showSplitToggle?: boolean;
     layoutMenuEnabled?: boolean;
     tocWidth?: number;
@@ -258,8 +267,11 @@
                     submitted={submittedTaskId === entry.item.task.id}
                     message={submissionMessage}
                     errorMessage={submissionErrorTaskId === entry.item.task.id ? submissionErrorMessage : null}
+                    feedbackPending={feedbackPendingTaskId === entry.item.task.id}
+                    feedbackStatusMessage={feedbackStatusTaskId === entry.item.task.id ? feedbackStatusMessage : null}
                     submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
                     initialSubmissionMode={submissionModeByPane[paneId]}
+                    enhanceSubmit={enhanceTaskForm?.(entry.item.task.id)}
                     onToggle={() => onToggleItem(paneId, entry.item.key)}
                     onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
                     onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}

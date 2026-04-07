@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { enhance } from "$app/forms";
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type { SubmitFunction } from "@sveltejs/kit";
 
   let {
     courseId,
@@ -18,8 +20,11 @@
     submitted = false,
     message = null,
     errorMessage = null,
+    feedbackPending = false,
+    feedbackStatusMessage = null,
     submissionFocused = false,
     initialSubmissionMode = null,
+    enhanceSubmit = undefined,
     onToggle = null,
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
@@ -38,8 +43,11 @@
     submitted?: boolean;
     message?: string | null;
     errorMessage?: string | null;
+    feedbackPending?: boolean;
+    feedbackStatusMessage?: string | null;
     submissionFocused?: boolean;
     initialSubmissionMode?: "text" | "upload" | null;
+    enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
@@ -114,6 +122,13 @@
       return "Rückmeldung";
     }
     return "Auswertung";
+  }
+
+  function feedbackPendingMessage(): string | null {
+    if (feedbackPending) {
+      return feedbackStatusMessage ?? "Rückmeldung wird erstellt ...";
+    }
+    return feedbackStatusMessage;
   }
 
   function updateDraft(value: string) {
@@ -256,6 +271,12 @@
               </button>
             </header>
 
+            {#if feedbackPendingMessage()}
+              <p class:workspace-note--error={!feedbackPending} class="workspace-note">
+                {feedbackPendingMessage()}
+              </p>
+            {/if}
+
             {#if task.kind === "h5p"}
               {#if task.h5p?.content_id}
                 <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} />
@@ -263,7 +284,7 @@
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}
             {:else if initialSubmissionMode === "upload" || uploadOnly()}
-              <form class="learning-submission-upload" method="POST" enctype="multipart/form-data">
+              <form class="learning-submission-upload" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
                 <input type="hidden" name="task_id" value={task.id} />
                 <input type="hidden" name="task_kind" value={task.kind} />
                 <input type="hidden" name="unit_type" value={unitType} />
@@ -276,7 +297,7 @@
                   <input name="upload_file" type="file" />
                 </label>
                 <div class="learning-submission-editor__actions">
-                  <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback">
+                  <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
                     Rückmeldung einholen
                   </button>
                   <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">
@@ -285,7 +306,7 @@
                 </div>
               </form>
             {:else}
-              <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data">
+              <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
                 <input type="hidden" name="task_id" value={task.id} />
                 <input type="hidden" name="task_kind" value={task.kind} />
                 <input type="hidden" name="unit_type" value={unitType} />
@@ -302,7 +323,7 @@
                   />
                 </section>
                 <div class="learning-submission-editor__actions">
-                  <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback">
+                  <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
                     Rückmeldung einholen
                   </button>
                   <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">

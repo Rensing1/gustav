@@ -58,7 +58,8 @@ async function loadPageData(
   cookies: Parameters<PageServerLoad>[0]["cookies"],
   courseId: string,
   unitId: string,
-  url: URL
+  url: URL,
+  moduleIdOverride: string | null = null
 ): Promise<LearningUnitPageData> {
   const [bootstrap, units, home] = await Promise.all([
     requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning"),
@@ -81,7 +82,7 @@ async function loadPageData(
     home.courses.find((course) => course.id === courseId)?.title ?? "Kursraum";
 
   const historyTaskId = url.searchParams.get("history");
-  const moduleId = url.searchParams.get("module");
+  const moduleId = moduleIdOverride ?? url.searchParams.get("module");
 
   let sections: LearningSection[] = [];
   let graph: LearningUnitGraph | null = null;
@@ -189,7 +190,7 @@ export const actions: Actions = {
 
     let pageData: LearningUnitPageData;
     try {
-      pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url);
+      pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url, moduleId);
     } catch {
       return fail(400, {
         message: "Die Lerneinheit konnte fuer die Abgabe nicht geladen werden.",
@@ -301,6 +302,18 @@ export const actions: Actions = {
       });
     }
 
+    const submission = (await response.json().catch(() => null)) as { id?: string } | null;
+
+    if (submissionIntent === "feedback") {
+      return {
+        feedbackRequestedTaskId: taskId,
+        feedbackSubmissionId: submission?.id ?? null,
+        historyTaskId: taskId,
+        message: "feedback_pending",
+        submissionMode: mode
+      };
+    }
+
     const destination = new URL(url);
     destination.searchParams.set("history", taskId);
     destination.searchParams.set("submission_mode", mode);
@@ -309,7 +322,7 @@ export const actions: Actions = {
     } else {
       destination.searchParams.delete("submitted");
     }
-    destination.searchParams.set("message", submissionIntent === "feedback" ? "feedback" : "submitted");
+    destination.searchParams.set("message", "submitted");
     if (moduleId) {
       destination.searchParams.set("module", moduleId);
     }

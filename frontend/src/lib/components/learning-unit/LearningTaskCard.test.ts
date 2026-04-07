@@ -193,6 +193,23 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByRole("region", { name: "Letzte Abgabe" })).toBeNull();
   });
 
+  it("shows a local pending note while feedback is being generated", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 6",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        feedbackPending: true,
+        feedbackStatusMessage: "Rückmeldung wird erstellt ..."
+      }
+    });
+
+    expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
+  });
+
   it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");

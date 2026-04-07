@@ -25,4 +25,35 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain("focus.left.itemKey ? leftEntries.filter");
     expect(routeSource).not.toContain("focus.right.itemKey ? rightEntries.filter");
   });
+
+  it("keeps feedback requests inline with local polling instead of a redirect-only flow", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
+
+    expect(routeSource).toContain('import { applyAction } from "$app/forms";');
+    expect(routeSource).toContain("async function pollFeedbackSubmission");
+    expect(routeSource).toContain("function enhanceTaskForm");
+    expect(routeSource).toContain("feedbackPendingTaskId");
+    expect(routeSource).toContain("const fastPollAttempts = 30");
+    expect(routeSource).toContain('feedbackStatusMessage = "Die Rückmeldung dauert länger als üblich ..."');
+    expect(routeSource).not.toContain("Die Rückmeldung ist noch nicht fertig. Bitte prüfe den Verlauf gleich erneut.");
+    expect(serverSource).toContain("moduleIdOverride");
+    expect(serverSource).toContain("feedbackRequestedTaskId");
+    expect(serverSource).toContain('message: "feedback_pending"');
+  });
+
+  it("restores open modular tabs through an explicit restore flow with overview fallback", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("type ModularRestoreState = \"idle\" | \"restoring\" | \"ready\" | \"failed\"");
+    expect(routeSource).toContain("let modularRestoreState = $state<ModularRestoreState>(\"idle\")");
+    expect(routeSource).toContain("async function restoreOpenModules");
+    expect(routeSource).toContain("Promise.race([restorePromise, timeoutPromise])");
+    expect(routeSource).toContain("modularRestoreState = \"failed\"");
+    expect(routeSource).toContain("view: \"overview\"");
+    expect(routeSource).not.toContain("if (!isModularUnit() || !workspaceReady || !modularWorkspace.openTabs.length)");
+    expect(routeSource).not.toContain("for (const moduleId of modularWorkspace.openTabs)");
+  });
 });

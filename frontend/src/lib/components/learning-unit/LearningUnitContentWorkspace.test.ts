@@ -37,6 +37,19 @@ const contentGroups: ContentGroup[] = [
           criteria: [],
           kind: "native"
         }
+      },
+      {
+        key: "task:2",
+        kind: "task",
+        title: "Aufgabe 2",
+        position: 3,
+        contextLabel: null,
+        task: {
+          id: "task-2",
+          instruction_md: "Vergleiche zwei Positionen.",
+          criteria: [],
+          kind: "native"
+        }
       }
     ]
   }
@@ -65,8 +78,7 @@ describe("LearningUnitContentWorkspace", () => {
           left: contentGroups[0].items.map((item) => ({ item, expanded: false })),
           right: []
         },
-        historyTaskId: null,
-        history: [],
+        historyByTask: {},
         submittedTaskId: null,
         submissionMessage: null,
         submissionErrorTaskId: null,
@@ -92,7 +104,8 @@ describe("LearningUnitContentWorkspace", () => {
         onToggleItem: () => {},
         onEnterSubmissionWorkspace: () => {},
         onEnterUploadWorkspace: () => {},
-        onExitSubmissionWorkspace: () => {}
+        onExitSubmissionWorkspace: () => {},
+        onToggleReviewPanel: () => {}
       }
     });
 
@@ -104,7 +117,7 @@ describe("LearningUnitContentWorkspace", () => {
     expect(pane).not.toBeNull();
     expect(surface).not.toBeNull();
     expect(frameHeader).toBeNull();
-    expect(stack?.children).toHaveLength(2);
+    expect(stack?.children).toHaveLength(3);
     expect(css).toMatch(/\.learning-unit-pane__stack\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
     expect(css).toMatch(/\.learning-unit-pane\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\);/s);
     expect(css).not.toMatch(/\.learning-unit-pane\s*\{[^}]*min-height:\s*20rem;/s);
@@ -136,8 +149,7 @@ describe("LearningUnitContentWorkspace", () => {
           left: contentGroups[0].items.map((item) => ({ item, expanded: true })),
           right: []
         },
-        historyTaskId: null,
-        history: [],
+        historyByTask: {},
         submittedTaskId: null,
         submissionMessage: null,
         submissionErrorTaskId: null,
@@ -163,14 +175,81 @@ describe("LearningUnitContentWorkspace", () => {
         onToggleItem: () => {},
         onEnterSubmissionWorkspace: () => {},
         onEnterUploadWorkspace: () => {},
-        onExitSubmissionWorkspace: () => {}
+        onExitSubmissionWorkspace: () => {},
+        onToggleReviewPanel: () => {}
       }
     });
 
     expect(screen.getByText("Was tut die Europäische Union für mich?")).toBeInTheDocument();
     expect(screen.getAllByText("Aufgabe 1").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
-    expect(container.querySelectorAll(".learning-work-item")).toHaveLength(2);
+    expect(container.querySelectorAll(".learning-work-item")).toHaveLength(3);
+  });
+
+  it("passes submission history only to the matching task card", () => {
+    render(LearningUnitContentWorkspace, {
+      props: {
+        titleLabel: "",
+        title: "",
+        meta: null,
+        courseId: "course-1",
+        unitType: "linear",
+        tocOpen: false,
+        splitView: false,
+        activePane: "left",
+        visiblePaneIds: ["left"],
+        contentGroups,
+        paneItems: {
+          left: contentGroups[0].items.map((item) => ({ item, expanded: true })),
+          right: []
+        },
+        historyByTask: {
+          "task-1": [
+            {
+              id: "submission-1",
+              attempt_nr: 1,
+              kind: "text",
+              intent: "submit",
+              created_at: "2026-04-07T10:35:29+00:00",
+              analysis_status: "completed",
+              text_body: "Meine Lösung"
+            }
+          ]
+        },
+        submittedTaskId: null,
+        submissionMessage: null,
+        submissionErrorTaskId: null,
+        submissionErrorMessage: null,
+        submissionFocusByPane: { left: null, right: null },
+        submissionModeByPane: { left: null, right: null },
+        reviewPanelOpenByTask: {},
+        showSplitToggle: false,
+        layoutMenuEnabled: false,
+        itemDomId: (_paneId: "left" | "right", itemKey: string) => itemKey,
+        onToggleToc: () => {},
+        onToggleSplitView: () => {},
+        onResetLayout: () => {},
+        onUpdateTocWidth: () => {},
+        onPreviewWorkspaceWidth: () => {},
+        onCommitWorkspaceWidth: () => {},
+        onPreviewFontScale: () => {},
+        onCommitFontScale: () => {},
+        onUpdateSplitRatio: () => {},
+        onUpdateTocGap: () => {},
+        onUpdatePaneGap: () => {},
+        onSetActivePane: () => {},
+        onOpenItem: () => {},
+        onToggleItem: () => {},
+        onEnterSubmissionWorkspace: () => {},
+        onEnterUploadWorkspace: () => {},
+        onExitSubmissionWorkspace: () => {},
+        onToggleReviewPanel: () => {}
+      }
+    });
+
+    expect(screen.getAllByRole("button", { name: "Erneut bearbeiten" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Meine Abgabe" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Aufgabe bearbeiten" })).toHaveLength(1);
   });
 
   it("marks all items of open modular groups in the outline", () => {
@@ -206,8 +285,7 @@ describe("LearningUnitContentWorkspace", () => {
           left: [],
           right: []
         },
-        historyTaskId: null,
-        history: [],
+        historyByTask: {},
         submittedTaskId: null,
         submissionMessage: null,
         submissionErrorTaskId: null,
@@ -233,7 +311,8 @@ describe("LearningUnitContentWorkspace", () => {
         onToggleItem: () => {},
         onEnterSubmissionWorkspace: () => {},
         onEnterUploadWorkspace: () => {},
-        onExitSubmissionWorkspace: () => {}
+        onExitSubmissionWorkspace: () => {},
+        onToggleReviewPanel: () => {}
       }
     });
 

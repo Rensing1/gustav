@@ -13,7 +13,6 @@
     contextLabel = null,
     unitType,
     moduleId = null,
-    historyOpen = false,
     history = [],
     domId = undefined,
     expanded = true,
@@ -25,8 +24,10 @@
     pendingIntent = null,
     submissionFocused = false,
     initialSubmissionMode = null,
+    reviewPanelOpen = false,
     enhanceSubmit = undefined,
     onToggle = null,
+    onToggleReviewPanel = null,
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null
@@ -37,7 +38,6 @@
     contextLabel?: string | null;
     unitType: "linear" | "modular";
     moduleId?: string | null;
-    historyOpen?: boolean;
     history?: LearningSubmission[];
     domId?: string;
     expanded?: boolean;
@@ -49,8 +49,10 @@
     pendingIntent?: "feedback" | "submit" | null;
     submissionFocused?: boolean;
     initialSubmissionMode?: "text" | "upload" | null;
+    reviewPanelOpen?: boolean;
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
+    onToggleReviewPanel?: (() => void) | null;
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
@@ -58,15 +60,14 @@
 
   type SummaryTab = "submission" | "feedback" | "evaluation";
   let activeSummaryTab = $state<SummaryTab>("submission");
-  let olderAttemptsOpen = $state(false);
   let draftText = $state("");
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope";
   }
 
-  function hasSubmissionHistory(): boolean {
-    return submitted || historyOpen || history.length > 0 || feedbackPending;
+  function hasSubmission(): boolean {
+    return Boolean(task.has_submission || submitted || history.length > 0);
   }
 
   function latestSubmission(): LearningSubmission | null {
@@ -86,15 +87,23 @@
   }
 
   function actionLabel(): string {
-    return hasSubmissionHistory() ? "Erneut bearbeiten" : "Aufgabe bearbeiten";
+    return hasRetryState() ? "Erneut bearbeiten" : "Aufgabe bearbeiten";
   }
 
   function showSubmissionSummary(): boolean {
-    return task.kind !== "h5p" && (history.length > 0 || feedbackPending);
+    return task.kind !== "h5p" && reviewPanelOpen && hasSubmission();
   }
 
-  function olderSubmissions(): LearningSubmission[] {
-    return history.slice(1);
+  function showInlinePendingNote(): boolean {
+    return Boolean(submissionFocused && feedbackPendingMessage() && !showSubmissionSummary());
+  }
+
+  function showStandalonePendingNote(): boolean {
+    return Boolean(!submissionFocused && feedbackPendingMessage() && !showSubmissionSummary());
+  }
+
+  function hasRetryState(): boolean {
+    return hasSubmission() || Boolean(feedbackPending && pendingIntent === "submit");
   }
 
   function fileSummary(submission: LearningSubmission): string {
@@ -144,6 +153,12 @@
     draftText = value;
   }
 
+  $effect(() => {
+    if (!reviewPanelOpen) {
+      activeSummaryTab = "submission";
+    }
+  });
+
 </script>
 
 <article class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--task" id={domId}>
@@ -174,22 +189,15 @@
           {@html renderMarkdown(task.instruction_md)}
         </div>
 
-        {#if showSubmissionSummary() && latestSubmission()}
-          <section class="learning-task-submission-summary" aria-label="Letzte Abgabe">
+        {#if showSubmissionSummary()}
+          <section class="learning-task-submission-summary" aria-label="Meine Abgabe">
             <header class="learning-task-submission-summary__header">
               <div class="learning-task-submission-summary__copy">
-                <p class="workspace-label">Letzter Versuch</p>
-                <p class="learning-task-submission-summary__meta">{latestSubmissionOrThrow().created_at}</p>
+                <p class="workspace-label">Meine Abgabe</p>
+                {#if latestSubmission()}
+                  <p class="learning-task-submission-summary__meta">{latestSubmissionOrThrow().created_at}</p>
+                {/if}
               </div>
-              {#if olderSubmissions().length > 0}
-                <button
-                  class="workspace-top-action workspace-top-action--quiet learning-task-submission-summary__older-toggle"
-                  type="button"
-                  onclick={() => (olderAttemptsOpen = !olderAttemptsOpen)}
-                >
-                  Weitere Versuche
-                </button>
-              {/if}
             </header>
 
             {#if feedbackPendingMessage()}
@@ -278,24 +286,6 @@
                 {/if}
               {/if}
             </div>
-
-            {#if olderAttemptsOpen && olderSubmissions().length > 0}
-              <div class="learning-task-submission-summary__history">
-                {#each olderSubmissions() as submission}
-                  <article class="learning-task-submission-summary__history-entry">
-                    <header>
-                      <p class="workspace-label">Versuch {submission.attempt_nr}</p>
-                      <p class="learning-task-submission-summary__meta">{submission.created_at}</p>
-                    </header>
-                    {#if submission.text_body}
-                      <p>{submission.text_body}</p>
-                    {:else}
-                      <p>{fileSummary(submission)}</p>
-                    {/if}
-                  </article>
-                {/each}
-              </div>
-            {/if}
           </section>
         {/if}
 
@@ -311,6 +301,10 @@
                 Bearbeitung schließen
               </button>
             </header>
+
+            {#if showInlinePendingNote()}
+              <p class="workspace-note">{feedbackPendingMessage()}</p>
+            {/if}
 
             {#if task.kind === "h5p"}
               {#if task.h5p?.content_id}
@@ -373,10 +367,23 @@
             {/if}
           </section>
         {:else}
+          {#if showStandalonePendingNote()}
+            <p class="workspace-note">{feedbackPendingMessage()}</p>
+          {/if}
           <div class="learning-task-cta-row">
+            {#if hasSubmission() && task.kind !== "h5p"}
+              <button
+                class:workspace-top-action--active={reviewPanelOpen}
+                class="workspace-top-action workspace-top-action--quiet"
+                type="button"
+                onclick={() => onToggleReviewPanel?.()}
+              >
+                Meine Abgabe
+              </button>
+            {/if}
             <button
-              class:workspace-top-action--accent={!hasSubmissionHistory()}
-              class:workspace-top-action--quiet={hasSubmissionHistory()}
+              class:workspace-top-action--accent={!hasRetryState()}
+              class:workspace-top-action--quiet={hasRetryState()}
               class="workspace-top-action"
               type="button"
               onclick={() => onEnterSubmissionWorkspace?.()}

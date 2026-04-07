@@ -87,8 +87,8 @@
   let modularSettingsMenuOpen = $state(false);
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
   let workspaceRoot = $state<HTMLDivElement | null>(null);
-  let historyTaskIdState = $state<string | null>(data.historyTaskId);
-  let historyState = $state<LearningSubmission[]>(data.history);
+  let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
+  let reviewPanelOpenByTask = $state.raw<Record<string, boolean>>({});
   let submissionMessageState = $state<string | null>(data.message);
   let feedbackPendingTaskId = $state<string | null>(null);
   let feedbackStatusTaskId = $state<string | null>(null);
@@ -478,6 +478,24 @@
     return currentPaneStacks()[paneId].some((entry) => entry.key === itemKey);
   }
 
+  function historyForTask(taskId: string): LearningSubmission[] {
+    return submissionHistoryByTask[taskId] ?? [];
+  }
+
+  function setTaskHistory(taskId: string, entries: LearningSubmission[]) {
+    submissionHistoryByTask = {
+      ...submissionHistoryByTask,
+      [taskId]: entries
+    };
+  }
+
+  function setReviewPanelOpen(taskId: string, open: boolean) {
+    reviewPanelOpenByTask = {
+      ...reviewPanelOpenByTask,
+      [taskId]: open
+    };
+  }
+
   function syncModuleUrl(moduleId: string | null) {
     if (!browser) {
       return;
@@ -825,7 +843,6 @@
   ) {
     const pollToken = ++feedbackPollToken;
     const fastPollAttempts = 30;
-    historyTaskIdState = taskId;
     submissionMessageState = null;
     feedbackPendingTaskId = taskId;
     feedbackStatusTaskId = taskId;
@@ -844,17 +861,18 @@
         }
 
         if (matchingSubmission?.analysis_status === "completed") {
-          historyState = entries;
+          setTaskHistory(taskId, entries);
           submissionMessageState = intent === "submit" ? "submitted" : "feedback";
           feedbackPendingTaskId = null;
           feedbackStatusTaskId = null;
           feedbackStatusMessage = null;
           pendingSubmissionIntent = null;
+          setReviewPanelOpen(taskId, intent === "feedback");
           return;
         }
 
         if (matchingSubmission?.analysis_status === "failed") {
-          historyState = entries;
+          setTaskHistory(taskId, entries);
           feedbackPendingTaskId = null;
           feedbackStatusTaskId = taskId;
           pendingSubmissionIntent = null;
@@ -929,6 +947,27 @@
         await applyAction(result);
       };
     };
+  }
+
+  async function toggleReviewPanel(taskId: string) {
+    const nextOpen = !Boolean(reviewPanelOpenByTask[taskId]);
+    if (!nextOpen) {
+      setReviewPanelOpen(taskId, false);
+      return;
+    }
+
+    if (!historyForTask(taskId).length) {
+      try {
+        const entries = await loadSubmissionHistory(taskId);
+        setTaskHistory(taskId, entries);
+      } catch {
+        feedbackStatusTaskId = taskId;
+        feedbackStatusMessage = "Die Abgabe konnte nicht geladen werden.";
+        return;
+      }
+    }
+
+    setReviewPanelOpen(taskId, true);
   }
 
   function openModule(moduleId: string) {
@@ -1084,8 +1123,8 @@
     }
 
     historyRestored = true;
-    setSubmissionWorkspace("left", itemKey, data.submissionMode);
-    void scrollToItem("left", itemKey);
+    openItemInPane(itemKey, "left", { activatePane: true, scroll: true });
+    setReviewPanelOpen(data.historyTaskId, true);
   }
 
   onMount(() => {
@@ -1121,8 +1160,9 @@
   });
 
   $effect(() => {
-    historyTaskIdState = data.historyTaskId;
-    historyState = data.history;
+    if (data.historyTaskId) {
+      setTaskHistory(data.historyTaskId, data.history);
+    }
     submissionMessageState = data.message;
   });
 
@@ -1303,8 +1343,7 @@
                 visiblePaneIds={visiblePaneIds()}
                 contentGroups={contentGroups()}
                 paneItems={paneItemsById()}
-                historyTaskId={historyTaskIdState}
-                history={historyState}
+                historyByTask={submissionHistoryByTask}
                 submittedTaskId={data.submittedTaskId}
                 submissionMessage={submissionMessageState}
                 submissionErrorTaskId={actionTaskId()}
@@ -1315,6 +1354,7 @@
                 {pendingSubmissionIntent}
                 submissionFocusByPane={workspaceSubmissionFocus()}
                 submissionModeByPane={workspaceSubmissionModes()}
+                reviewPanelOpenByTask={reviewPanelOpenByTask}
                 {enhanceTaskForm}
                 showSplitToggle={false}
                 layoutMenuEnabled={false}
@@ -1340,6 +1380,7 @@
                 onOpenItem={openItemFromToc}
                 onRemoveGroup={removeOpenModule}
                 onToggleItem={togglePaneItem}
+                onToggleReviewPanel={toggleReviewPanel}
                 onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
                 onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
                 onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
@@ -1364,8 +1405,7 @@
         visiblePaneIds={visiblePaneIds()}
         contentGroups={contentGroups()}
         paneItems={paneItemsById()}
-        historyTaskId={historyTaskIdState}
-        history={historyState}
+        historyByTask={submissionHistoryByTask}
         submittedTaskId={data.submittedTaskId}
         submissionMessage={submissionMessageState}
         submissionErrorTaskId={actionTaskId()}
@@ -1376,6 +1416,7 @@
         {pendingSubmissionIntent}
         submissionFocusByPane={workspaceSubmissionFocus()}
         submissionModeByPane={workspaceSubmissionModes()}
+        reviewPanelOpenByTask={reviewPanelOpenByTask}
         {enhanceTaskForm}
         showSplitToggle={true}
         layoutMenuEnabled={true}
@@ -1400,6 +1441,7 @@
         onSetActivePane={setActivePane}
         onOpenItem={openItemFromToc}
         onToggleItem={togglePaneItem}
+        onToggleReviewPanel={toggleReviewPanel}
         onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
         onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
         onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}

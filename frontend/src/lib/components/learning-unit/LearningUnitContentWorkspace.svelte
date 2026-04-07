@@ -24,8 +24,7 @@
     visiblePaneIds,
     contentGroups,
     paneItems,
-    historyTaskId,
-    history,
+    historyByTask,
     submittedTaskId = null,
     submissionMessage = null,
     submissionErrorTaskId = null,
@@ -36,6 +35,7 @@
     pendingSubmissionIntent = null,
     submissionFocusByPane,
     submissionModeByPane,
+    reviewPanelOpenByTask = {},
     enhanceTaskForm = null,
     showSplitToggle = true,
     layoutMenuEnabled = false,
@@ -63,7 +63,8 @@
     onToggleItem,
     onEnterSubmissionWorkspace,
     onEnterUploadWorkspace,
-    onExitSubmissionWorkspace
+    onExitSubmissionWorkspace,
+    onToggleReviewPanel
   }: {
     titleLabel: string;
     title: string;
@@ -77,8 +78,7 @@
     visiblePaneIds: PaneId[];
     contentGroups: ContentGroup[];
     paneItems: Record<PaneId, Array<{ item: ContentGroup["items"][number]; expanded: boolean }>>;
-    historyTaskId: string | null;
-    history: LearningSubmission[];
+    historyByTask: Record<string, LearningSubmission[]>;
     submittedTaskId?: string | null;
     submissionMessage?: string | null;
     submissionErrorTaskId?: string | null;
@@ -89,6 +89,7 @@
     pendingSubmissionIntent?: "feedback" | "submit" | null;
     submissionFocusByPane: Record<PaneId, string | null>;
     submissionModeByPane: Record<PaneId, "text" | "upload" | null>;
+    reviewPanelOpenByTask?: Record<string, boolean>;
     enhanceTaskForm?: ((taskId: string) => SubmitFunction | undefined) | null;
     showSplitToggle?: boolean;
     layoutMenuEnabled?: boolean;
@@ -117,6 +118,7 @@
     onEnterSubmissionWorkspace: (paneId: PaneId, itemKey: string, mode?: "text" | "upload") => void;
     onEnterUploadWorkspace: (paneId: PaneId, itemKey: string) => void;
     onExitSubmissionWorkspace: (paneId: PaneId) => void;
+    onToggleReviewPanel: (taskId: string) => void;
   } = $props();
 
   function tocItemActive(itemKey: string): boolean {
@@ -262,8 +264,7 @@
                     contextLabel={entry.item.contextLabel}
                     {unitType}
                     moduleId={entry.item.moduleId ?? moduleId}
-                    historyOpen={historyTaskId === entry.item.task.id}
-                    {history}
+                    history={historyByTask[entry.item.task.id] ?? []}
                     domId={itemDomId(paneId, entry.item.key)}
                     expanded={entry.expanded}
                     submitted={submittedTaskId === entry.item.task.id}
@@ -274,8 +275,10 @@
                     pendingIntent={feedbackPendingTaskId === entry.item.task.id ? pendingSubmissionIntent : null}
                     submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
                     initialSubmissionMode={submissionModeByPane[paneId]}
+                    reviewPanelOpen={Boolean(reviewPanelOpenByTask[entry.item.task!.id])}
                     enhanceSubmit={enhanceTaskForm?.(entry.item.task.id)}
                     onToggle={() => onToggleItem(paneId, entry.item.key)}
+                    onToggleReviewPanel={() => onToggleReviewPanel(entry.item.task!.id)}
                     onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
                     onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
                     onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}

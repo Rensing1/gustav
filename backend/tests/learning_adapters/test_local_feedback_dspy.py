@@ -324,6 +324,31 @@ def test_adapter_maps_invalid_analysis_json_to_permanent_invalid_analysis(
     assert str(exc.value) == "feedback_invalid_analysis"
 
 
+def test_adapter_maps_invalid_feedback_format_to_permanent_feedback_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deterministic feedback-format violations must not be retried forever."""
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    def _boom(**_kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("invalid_feedback_format")
+
+    monkeypatch.setattr(feedback_program, "analyze_feedback", _boom)
+
+    adapter = local_feedback.build()
+    with pytest.raises(FeedbackPermanentError) as exc:
+        adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+    assert str(exc.value) == "invalid_feedback_format"
+
+
 def test_adapter_analyze_visual_requires_visual_model(monkeypatch: pytest.MonkeyPatch) -> None:
     from backend.learning.adapters import local_feedback
 

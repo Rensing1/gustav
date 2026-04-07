@@ -201,6 +201,7 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
             course_id=fixture.course_id,
             task_id=fixture.task["id"],
             student_sub=fixture.student_sub,
+            intent="submit",
             kind="text",
             text_body="Pending answer for retry path",
             storage_key=None,
@@ -323,6 +324,7 @@ async def test_worker_processes_pending_submission_to_completed():
             course_id=fixture.course_id,
             task_id=fixture.task["id"],
             student_sub=fixture.student_sub,
+            intent="submit",
             kind="text",
             text_body="Schülerantwort pending",
             storage_key=None,
@@ -700,6 +702,74 @@ async def test_worker_marks_feedback_failure_records_job_error(monkeypatch: pyte
     assert submission_error == "feedback_failed"
     assert feedback_last_error is not None
     assert "permanent feedback failure" in feedback_last_error
+
+
+@pytest.mark.anyio
+async def test_worker_logs_safe_feedback_context_and_persists_specific_feedback_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Feedback failures should keep stable codes while logging safe job context."""
+
+    _require_db_or_skip()
+    monkeypatch.setenv("SERVICE_ROLE_DSN", _dsn())
+    fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
+        idempotency_key="worker-feedback-specific-reason"
+    )
+
+    caplog.set_level(logging.INFO, logger=worker_module.LOG.name)
+    tick = datetime.now(tz=timezone.utc)
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=_StubVisionAdapter(text_md="## Answer\n\nContent."),
+        feedback_adapter=_PermanentFeedbackAdapter(message="invalid_feedback_format"),
+        now=tick,
+    )
+
+    assert processed is True
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select status,
+                       retry_count,
+                       error_code
+                  from public.learning_submission_jobs
+                 where id = %s::uuid
+                """,
+                (job_id,),
+            )
+            status, retry_count, job_error_code = cur.fetchone()
+
+            cur.execute(
+                "select set_config('app.current_sub', %s, true)",
+                (fixture.student_sub,),
+            )
+            cur.execute(
+                """
+                select analysis_status,
+                       error_code,
+                       feedback_last_error
+                  from public.learning_submissions
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            submission_status, submission_error, feedback_last_error = cur.fetchone()
+
+    assert status == "failed"
+    assert retry_count == 0
+    assert job_error_code == "feedback_failed"
+    assert submission_status == "failed"
+    assert submission_error == "feedback_failed"
+    assert feedback_last_error == "invalid_feedback_format"
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert "invalid_feedback_format" in messages
+    assert fixture.task["id"] in messages
+    assert "intent=submit" in messages
+    assert "criteria_count=2" in messages
 
 
 @pytest.mark.anyio
@@ -1306,6 +1376,7 @@ async def test_create_submission_tags_queue_jobs_under_pytest(monkeypatch: pytes
             course_id=fixture.course_id,
             task_id=fixture.task["id"],
             student_sub=fixture.student_sub,
+            intent="submit",
             kind="text",
             text_body="pytest tags jobs",
             storage_key=None,
@@ -1369,6 +1440,7 @@ async def test_worker_skips_pytest_tagged_jobs_when_configured(monkeypatch: pyte
             course_id=fixture.course_id,
             task_id=fixture.task["id"],
             student_sub=fixture.student_sub,
+            intent="submit",
             kind="text",
             text_body="pytest job",
             storage_key=None,
@@ -1385,6 +1457,7 @@ async def test_worker_skips_pytest_tagged_jobs_when_configured(monkeypatch: pyte
             course_id=fixture.course_id,
             task_id=fixture.task["id"],
             student_sub=fixture.student_sub,
+            intent="submit",
             kind="text",
             text_body="non-pytest job",
             storage_key=None,

@@ -52,6 +52,12 @@ except Exception:  # pragma: no cover
 LOG = logging.getLogger(__name__)
 
 
+def _exception_cause_class_name(exc: Exception) -> str | None:
+    """Return the direct cause class name without leaking raw upstream payloads."""
+    cause = getattr(exc, "__cause__", None)
+    return cause.__class__.__name__ if cause is not None else None
+
+
 def _require_psycopg() -> None:
     if not HAVE_PSYCOPG:
         raise RuntimeError("psycopg3 is required for the learning worker")
@@ -435,10 +441,17 @@ def _process_job(
             feedback_result = analyze_visual(**analyze_kwargs)
         except FeedbackPermanentError as exc:
             LOG.warning(
-                "Feedback permanent error for submission %s job %s: %s",
+                "Feedback permanent error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
                 job.submission_id,
                 job.id,
-                exc.__class__.__name__,
+                submission.get("task_id"),
+                task_kind,
+                submission.get("intent") or payload.get("intent") or "submit",
+                len(payload.get("criteria", [])),
+                bool(instruction_md),
+                bool(teacher_context_md),
+                str(exc),
+                _exception_cause_class_name(exc),
             )
             _set_current_sub(conn, student_sub)
             _handle_feedback_error(
@@ -458,10 +471,17 @@ def _process_job(
             return
         except FeedbackTransientError as exc:
             LOG.info(
-                "Feedback transient error for submission %s job %s: %s",
+                "Feedback transient error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
                 job.submission_id,
                 job.id,
-                exc.__class__.__name__,
+                submission.get("task_id"),
+                task_kind,
+                submission.get("intent") or payload.get("intent") or "submit",
+                len(payload.get("criteria", [])),
+                bool(instruction_md),
+                bool(teacher_context_md),
+                str(exc),
+                _exception_cause_class_name(exc),
             )
             _set_current_sub(conn, student_sub)
             _handle_feedback_error(
@@ -560,11 +580,18 @@ def _process_job(
         feedback_result = feedback_adapter.analyze(**analyze_kwargs)  # type: ignore[arg-type]
     except FeedbackPermanentError as exc:
         LOG.warning(
-            "Feedback permanent error for submission %s job %s: %s",
+            "Feedback permanent error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
             job.submission_id,
             job.id,
-            exc.__class__.__name__,
-        )
+            submission.get("task_id"),
+            task_kind,
+            submission.get("intent") or payload.get("intent") or "submit",
+            len(payload.get("criteria", [])),
+            bool(instruction_md),
+            bool(teacher_context_md),
+            str(exc),
+            _exception_cause_class_name(exc),
+            )
         _set_current_sub(conn, student_sub)
         if cached_vision is None and (submission.get("kind") or "").strip() != "text":
             _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
@@ -585,10 +612,17 @@ def _process_job(
         return
     except FeedbackTransientError as exc:
         LOG.info(
-            "Feedback transient error for submission %s job %s: %s",
+            "Feedback transient error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
             job.submission_id,
             job.id,
-            exc.__class__.__name__,
+            submission.get("task_id"),
+            task_kind,
+            submission.get("intent") or payload.get("intent") or "submit",
+            len(payload.get("criteria", [])),
+            bool(instruction_md),
+            bool(teacher_context_md),
+            str(exc),
+            _exception_cause_class_name(exc),
         )
         _set_current_sub(conn, student_sub)
         if cached_vision is None and (submission.get("kind") or "").strip() != "text":

@@ -47,6 +47,22 @@ describe("learning unit route contract", () => {
     expect(serverSource).not.toContain("throw redirect(303");
   });
 
+  it("tracks submission history per task instead of one global history payload for all cards", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const workspaceSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
+      "utf8"
+    );
+
+    expect(routeSource).toContain("let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({})");
+    expect(routeSource).toContain("function historyForTask(taskId: string): LearningSubmission[]");
+    expect(routeSource).not.toContain("let historyState = $state<LearningSubmission[]>(data.history)");
+    expect(workspaceSource).toContain("historyByTask");
+    expect(workspaceSource).toContain("history={historyByTask[entry.item.task.id] ?? []}");
+    expect(workspaceSource).not.toContain("{history}");
+  });
+
   it("restores open modular tabs through an explicit restore flow with overview fallback", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

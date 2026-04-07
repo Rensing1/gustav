@@ -3,10 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import LearningTaskCard from "./LearningTaskCard.svelte";
 import type { LearningTask } from "$lib/types/learning";
+
+beforeAll(() => {
+  vi.stubGlobal("__SVELTEKIT_PAYLOAD__", { base: "", assets: "" });
+  vi.stubGlobal("__SVELTEKIT_PATHS__", { base: "", assets: "" });
+  vi.stubGlobal("__SVELTEKIT_APP_DIR__", "_app");
+});
 
 const task: LearningTask = {
   id: "task-1",
@@ -106,10 +112,11 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Aufgabe bearbeiten" })).toBeInTheDocument();
     expect(screen.queryByText("Nächster Schritt")).toBeNull();
     expect(screen.queryByText("Antwortstatus")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Meine Abgabe" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "Abgabe" })).toBeNull();
   });
 
-  it("shows the latest submission before a quieter retry CTA", async () => {
+  it("shows separate review and retry actions when a submission exists", async () => {
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -117,7 +124,7 @@ describe("LearningTaskCard", () => {
         taskTitle: "Aufgabe 5",
         unitType: "linear",
         expanded: true,
-        submitted: true,
+        reviewPanelOpen: false,
         history: [
           {
             id: "submission-1",
@@ -162,14 +169,87 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const summary = screen.getByRole("region", { name: "Letzte Abgabe" });
+    expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Weitere Versuche" })).toBeNull();
+  });
+
+  it("opens the review area with submission, feedback and evaluation views", async () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: false,
+        history: [
+          {
+            id: "submission-1",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "submit",
+            created_at: "2026-04-05 10:00",
+            analysis_status: "completed",
+            text_body: "Meine Lösung",
+            feedback_md: "## Rückmeldung\n\nGut gemacht.",
+            analysis_json: {
+              schema: "learning.v1",
+              score: 8,
+              text: "Stabil",
+              criteria_results: [
+                {
+                  criterion: "Klarheit",
+                  score: 8,
+                  max_score: 10,
+                  explanation_md: "Gut strukturiert."
+                }
+              ]
+            }
+          }
+        ]
+      }
+    });
+
+    await rerender({
+      courseId: "course-1",
+      task,
+      taskTitle: "Aufgabe 5",
+      unitType: "linear",
+      expanded: true,
+      reviewPanelOpen: true,
+      history: [
+        {
+          id: "submission-1",
+          attempt_nr: 1,
+          kind: "text",
+          intent: "submit",
+          created_at: "2026-04-05 10:00",
+          analysis_status: "completed",
+          text_body: "Meine Lösung",
+          feedback_md: "## Rückmeldung\n\nGut gemacht.",
+          analysis_json: {
+            schema: "learning.v1",
+            score: 8,
+            text: "Stabil",
+            criteria_results: [
+              {
+                criterion: "Klarheit",
+                score: 8,
+                max_score: 10,
+                explanation_md: "Gut strukturiert."
+              }
+            ]
+          }
+        }
+      ]
+    });
+
+    const summary = screen.getByRole("region", { name: "Meine Abgabe" });
     const tabs = within(summary).getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Abgabe", "Rückmeldung", "Auswertung"]);
     expect(within(summary).getByText("Meine Lösung")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Weitere Versuche" })).toBeInTheDocument();
-    expect(screen.queryByText("Alter Versuch")).toBeNull();
-
     await fireEvent.click(screen.getByRole("tab", { name: "Rückmeldung" }));
     expect(within(summary).getByText("Gut gemacht.")).toBeInTheDocument();
 
@@ -178,11 +258,6 @@ describe("LearningTaskCard", () => {
     const criteriaItem = within(summary).getByText("Klarheit").closest("li");
     expect(criteriaItem?.textContent).toContain("8/10");
     expect(within(summary).getByText("Gut strukturiert.")).toBeInTheDocument();
-
-    await fireEvent.click(screen.getByRole("button", { name: "Weitere Versuche" }));
-    expect(screen.getByText("Alter Versuch")).toBeInTheDocument();
-    expect(screen.queryByText("Antwortstatus")).toBeNull();
-    expect(screen.queryByText("Frühere Rückmeldung")).toBeNull();
   });
 
   it("uses the same CTA pattern for H5P tasks without rendering a history block", () => {
@@ -224,15 +299,36 @@ describe("LearningTaskCard", () => {
           }
         ],
         submissionFocused: true,
+        reviewPanelOpen: true,
         feedbackPending: true,
         feedbackStatusMessage: "Rückmeldung wird erstellt ..."
       }
     });
 
-    expect(screen.getByRole("region", { name: "Letzte Abgabe" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Meine Abgabe" })).toBeInTheDocument();
     expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+  });
+
+  it("shows the first feedback pending state inside the open editor even without a review panel", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 6",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        feedbackPending: true,
+        feedbackStatusMessage: "Rückmeldung wird erstellt ...",
+        pendingIntent: "feedback"
+      }
+    });
+
+    expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
   });
 
   it("keeps the editor open for feedback pending but closes it after a final pending submission", () => {
@@ -266,6 +362,8 @@ describe("LearningTaskCard", () => {
 
     expect(screen.queryByRole("button", { name: "Bearbeitung schließen" })).toBeNull();
     expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByText("Abgabe wird verarbeitet ...")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Meine Abgabe" })).toBeNull();
   });
 
   it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {

@@ -311,14 +311,14 @@
           })),
           right: []
         }}
-        historyTaskId={previewTask.id}
-        history={[sampleSubmission]}
+        historyByTask={{ [previewTask.id]: [sampleSubmission] }}
         submittedTaskId={previewTask.id}
         submissionMessage="Aufgabe abgegeben."
         submissionErrorTaskId={null}
         submissionErrorMessage={null}
         submissionFocusByPane={{ left: null, right: null }}
         submissionModeByPane={{ left: null, right: null }}
+        reviewPanelOpenByTask={{ [previewTask.id]: true }}
         showSplitToggle={true}
         layoutMenuEnabled={true}
         tocWidth={16.25}
@@ -345,6 +345,7 @@
         onEnterSubmissionWorkspace={() => {}}
         onEnterUploadWorkspace={() => {}}
         onExitSubmissionWorkspace={() => {}}
+        onToggleReviewPanel={() => {}}
       />
     </article>
 

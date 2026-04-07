@@ -38,6 +38,8 @@ def _raise_feedback_error_for_exception(exc: Exception, *, default_transient_cod
     normalized = str(exc or "").strip().lower()
     if ("invalid_criterion_idx" in normalized) or ("invalid_analysis_json" in normalized):
         raise FeedbackInvalidAnalysisError("feedback_invalid_analysis") from exc
+    if normalized in {"invalid_feedback_format", "empty_feedback_md"}:
+        raise FeedbackPermanentError(normalized) from exc
     raise FeedbackTransientError(default_transient_code) from exc
 
 

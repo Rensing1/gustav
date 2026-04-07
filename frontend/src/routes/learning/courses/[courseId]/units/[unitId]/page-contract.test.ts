@@ -36,11 +36,15 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("function enhanceTaskForm");
     expect(routeSource).toContain("feedbackPendingTaskId");
     expect(routeSource).toContain("const fastPollAttempts = 30");
-    expect(routeSource).toContain('feedbackStatusMessage = "Die Rückmeldung dauert länger als üblich ..."');
+    expect(routeSource).toContain("pendingSubmissionIntent");
+    expect(routeSource).toContain("Die Rückmeldung dauert länger als üblich ...");
+    expect(routeSource).toContain("Die Auswertung dauert länger als üblich ...");
     expect(routeSource).not.toContain("Die Rückmeldung ist noch nicht fertig. Bitte prüfe den Verlauf gleich erneut.");
     expect(serverSource).toContain("moduleIdOverride");
     expect(serverSource).toContain("feedbackRequestedTaskId");
     expect(serverSource).toContain('message: "feedback_pending"');
+    expect(serverSource).toContain('message: "submit_pending"');
+    expect(serverSource).not.toContain("throw redirect(303");
   });
 
   it("restores open modular tabs through an explicit restore flow with overview fallback", () => {

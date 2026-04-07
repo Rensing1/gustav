@@ -93,6 +93,7 @@
   let feedbackPendingTaskId = $state<string | null>(null);
   let feedbackStatusTaskId = $state<string | null>(null);
   let feedbackStatusMessage = $state<string | null>(null);
+  let pendingSubmissionIntent = $state<"feedback" | "submit" | null>(null);
   let modularRestoreState = $state<ModularRestoreState>("idle");
   let modularRestoreMessage = $state<string | null>(null);
   let feedbackPollToken = 0;
@@ -788,6 +789,21 @@
     return null;
   }
 
+  function clearSubmissionWorkspace() {
+    if (isModularUnit()) {
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        submissionFocus: defaultSubmissionFocus()
+      });
+      return;
+    }
+
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      submissionFocus: defaultSubmissionFocus()
+    });
+  }
+
   async function loadSubmissionHistory(taskId: string): Promise<LearningSubmission[]> {
     const response = await fetch(
       `/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions?limit=10&offset=0`,
@@ -802,14 +818,19 @@
     return (await response.json()) as LearningSubmission[];
   }
 
-  async function pollFeedbackSubmission(taskId: string, submissionId: string | null) {
+  async function pollFeedbackSubmission(
+    taskId: string,
+    submissionId: string | null,
+    intent: "feedback" | "submit"
+  ) {
     const pollToken = ++feedbackPollToken;
     const fastPollAttempts = 30;
     historyTaskIdState = taskId;
     submissionMessageState = null;
     feedbackPendingTaskId = taskId;
     feedbackStatusTaskId = taskId;
-    feedbackStatusMessage = "Rückmeldung wird erstellt ...";
+    pendingSubmissionIntent = intent;
+    feedbackStatusMessage = intent === "submit" ? "Abgabe wird verarbeitet ..." : "Rückmeldung wird erstellt ...";
 
     for (let attempt = 0; ; attempt += 1) {
       try {
@@ -822,12 +843,13 @@
           return;
         }
 
-        if (matchingSubmission?.analysis_status === "completed" && matchingSubmission.feedback_md) {
+        if (matchingSubmission?.analysis_status === "completed") {
           historyState = entries;
-          submissionMessageState = "feedback";
+          submissionMessageState = intent === "submit" ? "submitted" : "feedback";
           feedbackPendingTaskId = null;
           feedbackStatusTaskId = null;
           feedbackStatusMessage = null;
+          pendingSubmissionIntent = null;
           return;
         }
 
@@ -835,7 +857,11 @@
           historyState = entries;
           feedbackPendingTaskId = null;
           feedbackStatusTaskId = taskId;
-          feedbackStatusMessage = "Die Rückmeldung konnte nicht erstellt werden.";
+          pendingSubmissionIntent = null;
+          feedbackStatusMessage =
+            intent === "submit"
+              ? "Die Auswertung konnte nicht erstellt werden."
+              : "Die Rückmeldung konnte nicht erstellt werden.";
           return;
         }
       } catch {
@@ -845,7 +871,10 @@
       }
 
       if (attempt >= fastPollAttempts && feedbackStatusTaskId === taskId) {
-        feedbackStatusMessage = "Die Rückmeldung dauert länger als üblich ...";
+        feedbackStatusMessage =
+          intent === "submit"
+            ? "Die Auswertung dauert länger als üblich ..."
+            : "Die Rückmeldung dauert länger als üblich ...";
       }
 
       await delay(attempt >= fastPollAttempts ? 5000 : 2000);
@@ -854,33 +883,46 @@
 
   function enhanceTaskForm(taskId: string): SubmitFunction {
     return ({ submitter }) => {
-      if (!(submitter instanceof HTMLButtonElement) || submitter.value !== "feedback") {
+      if (!(submitter instanceof HTMLButtonElement)) {
         return;
       }
 
+      const intent = submitter.value === "feedback" ? "feedback" : "submit";
+
       feedbackPendingTaskId = taskId;
       feedbackStatusTaskId = taskId;
-      feedbackStatusMessage = "Rückmeldung wird erstellt ...";
+      pendingSubmissionIntent = intent;
+      feedbackStatusMessage = intent === "submit" ? "Abgabe wird verarbeitet ..." : "Rückmeldung wird erstellt ...";
 
       return async ({ result }) => {
         if (result.type === "success") {
           const payload = (result.data ?? {}) as {
             feedbackRequestedTaskId?: string;
             feedbackSubmissionId?: string | null;
+            pendingIntent?: "feedback" | "submit";
           };
+          if ((payload.pendingIntent ?? intent) === "submit") {
+            clearSubmissionWorkspace();
+          }
           await pollFeedbackSubmission(
             payload.feedbackRequestedTaskId ?? taskId,
-            payload.feedbackSubmissionId ?? null
+            payload.feedbackSubmissionId ?? null,
+            payload.pendingIntent ?? intent
           );
           return;
         }
 
         feedbackPendingTaskId = null;
+        pendingSubmissionIntent = null;
 
         if (result.type === "failure") {
           const payload = (result.data ?? {}) as { message?: string };
           feedbackStatusTaskId = taskId;
-          feedbackStatusMessage = payload.message ?? "Die Rückmeldung konnte nicht angefordert werden.";
+          feedbackStatusMessage =
+            payload.message ??
+            (intent === "submit"
+              ? "Die Abgabe konnte nicht verarbeitet werden."
+              : "Die Rückmeldung konnte nicht angefordert werden.");
           return;
         }
 
@@ -1270,6 +1312,7 @@
                 {feedbackPendingTaskId}
                 {feedbackStatusTaskId}
                 {feedbackStatusMessage}
+                {pendingSubmissionIntent}
                 submissionFocusByPane={workspaceSubmissionFocus()}
                 submissionModeByPane={workspaceSubmissionModes()}
                 {enhanceTaskForm}
@@ -1330,6 +1373,7 @@
         {feedbackPendingTaskId}
         {feedbackStatusTaskId}
         {feedbackStatusMessage}
+        {pendingSubmissionIntent}
         submissionFocusByPane={workspaceSubmissionFocus()}
         submissionModeByPane={workspaceSubmissionModes()}
         {enhanceTaskForm}

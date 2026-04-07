@@ -22,6 +22,7 @@
     errorMessage = null,
     feedbackPending = false,
     feedbackStatusMessage = null,
+    pendingIntent = null,
     submissionFocused = false,
     initialSubmissionMode = null,
     enhanceSubmit = undefined,
@@ -45,6 +46,7 @@
     errorMessage?: string | null;
     feedbackPending?: boolean;
     feedbackStatusMessage?: string | null;
+    pendingIntent?: "feedback" | "submit" | null;
     submissionFocused?: boolean;
     initialSubmissionMode?: "text" | "upload" | null;
     enhanceSubmit?: SubmitFunction;
@@ -64,7 +66,7 @@
   }
 
   function hasSubmissionHistory(): boolean {
-    return submitted || historyOpen || history.length > 0;
+    return submitted || historyOpen || history.length > 0 || feedbackPending;
   }
 
   function latestSubmission(): LearningSubmission | null {
@@ -88,7 +90,7 @@
   }
 
   function showSubmissionSummary(): boolean {
-    return task.kind !== "h5p" && history.length > 0;
+    return task.kind !== "h5p" && (history.length > 0 || feedbackPending);
   }
 
   function olderSubmissions(): LearningSubmission[] {
@@ -126,9 +128,16 @@
 
   function feedbackPendingMessage(): string | null {
     if (feedbackPending) {
-      return feedbackStatusMessage ?? "Rückmeldung wird erstellt ...";
+      if (feedbackStatusMessage) {
+        return feedbackStatusMessage;
+      }
+      return pendingIntent === "submit" ? "Abgabe wird verarbeitet ..." : "Rückmeldung wird erstellt ...";
     }
     return feedbackStatusMessage;
+  }
+
+  function renderEvaluationCriteria(submission: LearningSubmission): boolean {
+    return Boolean(submission.analysis_json?.criteria_results?.length);
   }
 
   function updateDraft(value: string) {
@@ -183,6 +192,10 @@
               {/if}
             </header>
 
+            {#if feedbackPendingMessage()}
+              <p class="workspace-note">{feedbackPendingMessage()}</p>
+            {/if}
+
             <div class="learning-task-submission-summary__tabs" role="tablist" aria-label="Letzte Abgabe">
               <button
                 class:workspace-tab--active={activeSummaryTab === "submission"}
@@ -218,15 +231,21 @@
 
             <div class="learning-task-submission-summary__panel" role="tabpanel" aria-label={summaryPanelLabel(activeSummaryTab)}>
               {#if activeSummaryTab === "submission"}
-                {#if latestSubmissionOrThrow().text_body}
+                {#if latestSubmission() && latestSubmissionOrThrow().text_body}
                   <div class="markdown-prose">
                     <p>{latestSubmissionOrThrow().text_body}</p>
                   </div>
-                {:else}
+                {:else if latestSubmission()}
                   <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
+                {:else if feedbackPending}
+                  <p class="learning-task-submission-summary__plain">Die aktuelle Abgabe wird vorbereitet.</p>
+                {:else}
+                  <p class="learning-task-submission-summary__plain">Es liegt noch keine Abgabe vor.</p>
                 {/if}
               {:else if activeSummaryTab === "feedback"}
-                {#if latestSubmissionOrThrow().feedback_md}
+                {#if feedbackPendingMessage()}
+                  <p class="workspace-note">{feedbackPendingMessage()}</p>
+                {:else if latestSubmission() && latestSubmissionOrThrow().feedback_md}
                   <div class="markdown-prose">
                     {@html renderMarkdown(latestSubmissionOrThrow().feedback_md)}
                   </div>
@@ -234,7 +253,29 @@
                   <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
                 {/if}
               {:else}
-                <p class="learning-task-submission-summary__plain">{evaluationSummary(latestSubmissionOrThrow())}</p>
+                {#if latestSubmission() && renderEvaluationCriteria(latestSubmissionOrThrow())}
+                  <ul class="learning-unit-criteria">
+                    {#each latestSubmissionOrThrow().analysis_json?.criteria_results ?? [] as criterion}
+                      <li>
+                        <strong>{criterion.criterion}</strong>
+                        {#if criterion.score !== undefined && criterion.score !== null}
+                          : {criterion.score}/{criterion.max_score ?? 10}
+                        {/if}
+                        {#if criterion.explanation_md}
+                          <div class="markdown-prose">
+                            {@html renderMarkdown(criterion.explanation_md)}
+                          </div>
+                        {/if}
+                      </li>
+                    {/each}
+                  </ul>
+                {:else if latestSubmission()}
+                  <p class="learning-task-submission-summary__plain">{evaluationSummary(latestSubmissionOrThrow())}</p>
+                {:else if feedbackPendingMessage()}
+                  <p class="workspace-note">{feedbackPendingMessage()}</p>
+                {:else}
+                  <p class="learning-task-submission-summary__plain">Es liegt noch keine Auswertung vor.</p>
+                {/if}
               {/if}
             </div>
 
@@ -271,12 +312,6 @@
               </button>
             </header>
 
-            {#if feedbackPendingMessage()}
-              <p class:workspace-note--error={!feedbackPending} class="workspace-note">
-                {feedbackPendingMessage()}
-              </p>
-            {/if}
-
             {#if task.kind === "h5p"}
               {#if task.h5p?.content_id}
                 <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} />
@@ -300,7 +335,7 @@
                   <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
                     Rückmeldung einholen
                   </button>
-                  <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">
+                  <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit" disabled={feedbackPending}>
                     Endgültig abgeben
                   </button>
                 </div>
@@ -326,7 +361,7 @@
                   <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
                     Rückmeldung einholen
                   </button>
-                  <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">
+                  <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit" disabled={feedbackPending}>
                     Endgültig abgeben
                   </button>
                 </div>

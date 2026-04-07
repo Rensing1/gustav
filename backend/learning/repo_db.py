@@ -1177,8 +1177,23 @@ class DBLearningRepo:
                 )
                 attempt_nr = int(cur.fetchone()[0])
                 # H5P attempts are not limited at the GUSTAV DB layer (H5P can enforce its own limits).
-                if task_kind != "h5p" and max_attempts is not None and attempt_nr > int(max_attempts):
-                    raise ValueError("max_attempts_exceeded")
+                # Native feedback runs are stored as submissions, but only final submissions
+                # consume the teacher-defined attempt limit.
+                if task_kind != "h5p" and max_attempts is not None and data.intent == "submit":
+                    cur.execute(
+                        """
+                        select count(*)
+                          from public.learning_submissions
+                         where course_id = %s::uuid
+                           and task_id = %s::uuid
+                           and student_sub = %s
+                           and intent = 'submit'
+                        """,
+                        (course_uuid, task_uuid, data.student_sub),
+                    )
+                    final_attempt_count = int(cur.fetchone()[0] or 0)
+                    if final_attempt_count >= int(max_attempts):
+                        raise ValueError("max_attempts_exceeded")
 
                 try:
                     # Async path: record pending status and enqueue job. Idempotency is enforced

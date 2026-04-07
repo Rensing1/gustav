@@ -132,7 +132,14 @@ describe("LearningTaskCard", () => {
               schema: "learning.v1",
               score: 8,
               text: "Stabil",
-              criteria_results: []
+              criteria_results: [
+                {
+                  criterion: "Klarheit",
+                  score: 8,
+                  max_score: 10,
+                  explanation_md: "Gut strukturiert."
+                }
+              ]
             }
           },
           {
@@ -167,11 +174,15 @@ describe("LearningTaskCard", () => {
     expect(within(summary).getByText("Gut gemacht.")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("tab", { name: "Auswertung" }));
-    expect(within(summary).getByText("Punktestand: 8")).toBeInTheDocument();
+    expect(within(summary).getByText("Klarheit")).toBeInTheDocument();
+    const criteriaItem = within(summary).getByText("Klarheit").closest("li");
+    expect(criteriaItem?.textContent).toContain("8/10");
+    expect(within(summary).getByText("Gut strukturiert.")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "Weitere Versuche" }));
     expect(screen.getByText("Alter Versuch")).toBeInTheDocument();
     expect(screen.queryByText("Antwortstatus")).toBeNull();
+    expect(screen.queryByText("Frühere Rückmeldung")).toBeNull();
   });
 
   it("uses the same CTA pattern for H5P tasks without rendering a history block", () => {
@@ -201,13 +212,60 @@ describe("LearningTaskCard", () => {
         taskTitle: "Aufgabe 6",
         unitType: "linear",
         expanded: true,
+        history: [
+          {
+            id: "submission-2",
+            attempt_nr: 2,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-04-07T10:35:29+00:00",
+            analysis_status: "pending",
+            text_body: "Ich weiß es doch auch nicht :("
+          }
+        ],
         submissionFocused: true,
         feedbackPending: true,
         feedbackStatusMessage: "Rückmeldung wird erstellt ..."
       }
     });
 
+    expect(screen.getByRole("region", { name: "Letzte Abgabe" })).toBeInTheDocument();
     expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+  });
+
+  it("keeps the editor open for feedback pending but closes it after a final pending submission", () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 7",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        feedbackPending: true,
+        feedbackStatusMessage: "Rückmeldung wird erstellt ...",
+        pendingIntent: "feedback"
+      }
+    });
+
+    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+
+    rerender({
+      courseId: "course-1",
+      task,
+      taskTitle: "Aufgabe 7",
+      unitType: "linear",
+      expanded: true,
+      submissionFocused: false,
+      feedbackPending: true,
+      feedbackStatusMessage: "Abgabe wird verarbeitet ...",
+      pendingIntent: "submit"
+    });
+
+    expect(screen.queryByRole("button", { name: "Bearbeitung schließen" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
   });
 
   it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {

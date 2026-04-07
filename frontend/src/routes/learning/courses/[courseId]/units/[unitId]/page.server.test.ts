@@ -138,11 +138,12 @@ describe("learning unit route actions", () => {
       feedbackSubmissionId: "submission-1",
       historyTaskId: "task-1",
       message: "feedback_pending",
+      pendingIntent: "feedback",
       submissionMode: "text"
     });
   });
 
-  it("keeps final submissions on the redirect flow", async () => {
+  it("keeps final submissions inline and marks them as submit-pending", async () => {
     mockModularLoad();
     backendRequestMock.mockResolvedValue(jsonResponse({ id: "submission-2", analysis_status: "pending" }));
 
@@ -154,21 +155,21 @@ describe("learning unit route actions", () => {
     form.set("text_body", "Meine Abgabe");
     form.set("submission_intent", "submit");
 
-    try {
-      await actions.default({
-        fetch: vi.fn() as unknown as typeof fetch,
-        cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
-        params: { courseId: "course-1", unitId: "unit-1" },
-        request: requestWithFormData(form),
-        url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
-      } as Parameters<typeof actions.default>[0]);
-      throw new Error("redirect_expected");
-    } catch (caught) {
-      const redirect = caught as { status?: number; location?: string };
-      expect(redirect.status).toBe(303);
-      expect(redirect.location).toContain("history=task-1");
-      expect(redirect.location).toContain("submitted=task-1");
-      expect(redirect.location).toContain("message=submitted");
-    }
+    const result = await actions.default({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      request: requestWithFormData(form),
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+    } as Parameters<typeof actions.default>[0]);
+
+    expect(result).toEqual({
+      feedbackRequestedTaskId: "task-1",
+      feedbackSubmissionId: "submission-2",
+      historyTaskId: "task-1",
+      message: "submit_pending",
+      pendingIntent: "submit",
+      submissionMode: "text"
+    });
   });
 });

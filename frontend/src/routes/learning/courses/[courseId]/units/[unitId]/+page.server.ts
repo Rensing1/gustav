@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { error, fail, redirect } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
@@ -310,22 +310,18 @@ export const actions: Actions = {
         feedbackSubmissionId: submission?.id ?? null,
         historyTaskId: taskId,
         message: "feedback_pending",
+        pendingIntent: "feedback",
         submissionMode: mode
       };
     }
 
-    const destination = new URL(url);
-    destination.searchParams.set("history", taskId);
-    destination.searchParams.set("submission_mode", mode);
-    if (submissionIntent === "submit") {
-      destination.searchParams.set("submitted", taskId);
-    } else {
-      destination.searchParams.delete("submitted");
-    }
-    destination.searchParams.set("message", "submitted");
-    if (moduleId) {
-      destination.searchParams.set("module", moduleId);
-    }
-    throw redirect(303, `${destination.pathname}?${destination.searchParams.toString()}`);
+    return {
+      feedbackRequestedTaskId: taskId,
+      feedbackSubmissionId: submission?.id ?? null,
+      historyTaskId: taskId,
+      message: "submit_pending",
+      pendingIntent: "submit",
+      submissionMode: mode
+    };
   }
 };

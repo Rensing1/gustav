@@ -519,6 +519,41 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
 
 
 @pytest.mark.anyio
+async def test_feedback_requests_do_not_consume_final_attempt_limit():
+    """Feedback runs stay async, but only final submissions count against max_attempts."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=1)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        feedback_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert feedback_response.status_code == 202
+        feedback_payload = feedback_response.json()
+        assert feedback_payload["intent"] == "feedback"
+        assert feedback_payload["attempt_nr"] == 1
+
+        final_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "submit", "kind": "text", "text_body": "Jetzt ist es final."},
+        )
+        assert final_response.status_code == 202
+        final_payload = final_response.json()
+        assert final_payload["intent"] == "submit"
+        assert final_payload["attempt_nr"] == 2
+
+        blocked_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "submit", "kind": "text", "text_body": "Noch ein finaler Versuch."},
+        )
+        assert blocked_response.status_code == 400
+        assert blocked_response.json().get("detail") == "max_attempts_exceeded"
+
+
+@pytest.mark.anyio
 async def test_create_submission_uses_teacher_defined_criteria_names():
     """Rubric scores should expose the criteria defined by the teacher."""
 

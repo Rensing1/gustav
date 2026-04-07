@@ -5139,6 +5139,8 @@ paths:
         - For `Task.kind=scratch`, only `kind=file` with `mime_type=application/x.scratch.sb3` is accepted (upload-only).
         - For `Task.kind=calliope`, only `kind=file` with `mime_type=application/x.makecode.hex` is accepted (upload-only).
         - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously (response 201).
+        - `intent=feedback` creates a feedback snapshot but does not consume the task's `max_attempts` budget.
+        - `intent=submit` creates a final submission attempt and does count against `max_attempts`.
         
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is

@@ -33,6 +33,7 @@
     feedbackPendingTaskId = null,
     feedbackStatusTaskId = null,
     feedbackStatusMessage = null,
+    pendingSubmissionIntent = null,
     submissionFocusByPane,
     submissionModeByPane,
     enhanceTaskForm = null,
@@ -85,6 +86,7 @@
     feedbackPendingTaskId?: string | null;
     feedbackStatusTaskId?: string | null;
     feedbackStatusMessage?: string | null;
+    pendingSubmissionIntent?: "feedback" | "submit" | null;
     submissionFocusByPane: Record<PaneId, string | null>;
     submissionModeByPane: Record<PaneId, "text" | "upload" | null>;
     enhanceTaskForm?: ((taskId: string) => SubmitFunction | undefined) | null;
@@ -269,6 +271,7 @@
                     errorMessage={submissionErrorTaskId === entry.item.task.id ? submissionErrorMessage : null}
                     feedbackPending={feedbackPendingTaskId === entry.item.task.id}
                     feedbackStatusMessage={feedbackStatusTaskId === entry.item.task.id ? feedbackStatusMessage : null}
+                    pendingIntent={feedbackPendingTaskId === entry.item.task.id ? pendingSubmissionIntent : null}
                     submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
                     initialSubmissionMode={submissionModeByPane[paneId]}
                     enhanceSubmit={enhanceTaskForm?.(entry.item.task.id)}

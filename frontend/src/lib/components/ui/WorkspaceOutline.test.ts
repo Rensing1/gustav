@@ -71,13 +71,16 @@ describe("WorkspaceOutline", () => {
 
     expect(designDoc).toContain("### 7.3 Flächen");
     expect(designDoc).toContain("## 13. Verbotene Alt-Muster");
+    expect(css).toMatch(
+      /\.workspace-outline,\s*\.graph-stage-frame,\s*\.graph-inspector-panel\s*\{[^}]*border:\s*2px solid var\(--color-border\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
+    );
     expect(css).toMatch(/\.workspace-outline\s*\{[^}]*gap:\s*0\.65rem;[^}]*padding:\s*0\.82rem 0\.85rem 0\.9rem;/s);
-    expect(css).toMatch(/\.workspace-outline__header h2\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.98rem;[^}]*text-transform:\s*uppercase;/s);
-    expect(css).toMatch(/\.workspace-outline__group-title\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.76rem;[^}]*letter-spacing:\s*0\.18em;/s);
-    expect(css).toMatch(/\.workspace-outline__item-label\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.96rem;[^}]*line-height:\s*1\.4;/s);
-    expect(css).toMatch(/\.workspace-outline__body\s*\{[^}]*gap:\s*0\.82rem;/s);
-    expect(css).toMatch(/\.workspace-outline__group\s*\{[^}]*gap:\s*0\.62rem;/s);
-    expect(css).toMatch(/\.workspace-outline__items\s*\{[^}]*gap:\s*0\.08rem;/s);
+    expect(css).toMatch(/\.workspace-outline__header h2\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.9rem;[^}]*text-transform:\s*uppercase;/s);
+    expect(css).toMatch(/\.workspace-outline__group-title\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.7rem;[^}]*letter-spacing:\s*0\.18em;/s);
+    expect(css).toMatch(/\.workspace-outline__item-label\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.82rem;[^}]*line-height:\s*1\.4;/s);
+    expect(css).toMatch(/\.workspace-outline__body\s*\{[^}]*gap:\s*1rem;/s);
+    expect(css).toMatch(/\.workspace-outline__group\s*\{[^}]*gap:\s*0\.78rem;/s);
+    expect(css).toMatch(/\.workspace-outline__items\s*\{[^}]*gap:\s*0\.2rem;/s);
     expect(css).toMatch(/\.workspace-outline__item\s*\{[^}]*min-height:\s*1\.82rem;[^}]*padding:\s*0\.24rem 0 0\.24rem 0\.95rem;/s);
     expect(css).toMatch(/\.workspace-outline__item--active\s*\{[^}]*background:\s*transparent;/s);
     expect(css).not.toMatch(/\.workspace-outline__item--active::after\s*\{/s);

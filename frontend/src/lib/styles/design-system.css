@@ -1202,6 +1202,9 @@ h6,
 .learning-unit-content-shell .workspace-outline {
   position: sticky;
   top: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  background: var(--color-bg-surface);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
 }
 
 .learning-unit-content-shell .learning-unit-pane-grid {
@@ -1223,7 +1226,7 @@ h6,
   border-color: var(--color-accent);
 }
 
-.learning-unit-content-shell .learning-unit-pane__stack {
+.learning-unit-content-shell .learning-unit-pane__stack:not(.learning-unit-pane__stack--modules) {
   gap: 0;
 }
 
@@ -1237,7 +1240,7 @@ h6,
 }
 
 .learning-unit-content-shell .learning-work-item--material .learning-work-item__toggle {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-5) var(--space-2);
 }
 
 .learning-unit-content-shell .learning-work-item__title {
@@ -1245,6 +1248,12 @@ h6,
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.03em;
+}
+
+.learning-unit-content-shell .learning-work-item--material .learning-work-item__title {
+  font-size: calc(1.08rem * var(--learning-unit-font-scale));
+  font-weight: 600;
+  line-height: 1.18;
 }
 
 .learning-unit-content-shell .learning-work-item__body {

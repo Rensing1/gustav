@@ -86,5 +86,8 @@ describe("WorkspaceOutline", () => {
     expect(css).not.toMatch(/\.workspace-outline__item--active::after\s*\{/s);
     expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*color:\s*var\(--color-accent\);/s);
     expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*font-weight:\s*700;/s);
+    expect(css).toMatch(
+      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*1rem;[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+    );
   });
 });

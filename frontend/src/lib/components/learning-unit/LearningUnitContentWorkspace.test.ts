@@ -125,7 +125,7 @@ describe("LearningUnitContentWorkspace", () => {
     expect(appCss).not.toMatch(/\.learning-unit-pane__stack--workspace-mode\s*\{/s);
     expect(appCss).toMatch(/\.learning-unit-pane-grid--single\s*\{[^}]*width:\s*100%;[^}]*justify-self:\s*stretch;/s);
     expect(appCss).toMatch(/\.learning-work-item__title\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*min-height:\s*1\.4rem;/s);
-    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*1rem;[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*1rem;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
   });
 
@@ -318,12 +318,77 @@ describe("LearningUnitContentWorkspace", () => {
     expect(screen.getByRole("button", { name: "Schulbuch" })).toHaveClass("workspace-outline__item--active");
   });
 
+  it("renders modular groups as their own surface cards instead of one pane-wide card", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const appCss = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+
+    const { container } = render(LearningUnitContentWorkspace, {
+      props: {
+        titleLabel: "",
+        title: "",
+        meta: null,
+        courseId: "course-1",
+        unitType: "modular",
+        tocOpen: false,
+        splitView: false,
+        activePane: "left",
+        visiblePaneIds: ["left"],
+        contentGroups,
+        paneItems: {
+          left: contentGroups[0].items.map((item) => ({ item, expanded: true })),
+          right: []
+        },
+        historyByTask: {},
+        submittedTaskId: null,
+        submissionMessage: null,
+        submissionErrorTaskId: null,
+        submissionErrorMessage: null,
+        submissionFocusByPane: { left: null, right: null },
+        submissionModeByPane: { left: null, right: null },
+        showSplitToggle: false,
+        layoutMenuEnabled: false,
+        itemDomId: (_paneId: "left" | "right", itemKey: string) => itemKey,
+        onToggleToc: () => {},
+        onToggleSplitView: () => {},
+        onResetLayout: () => {},
+        onUpdateTocWidth: () => {},
+        onPreviewWorkspaceWidth: () => {},
+        onCommitWorkspaceWidth: () => {},
+        onPreviewFontScale: () => {},
+        onCommitFontScale: () => {},
+        onUpdateSplitRatio: () => {},
+        onUpdateTocGap: () => {},
+        onUpdatePaneGap: () => {},
+        onSetActivePane: () => {},
+        onOpenItem: () => {},
+        onToggleItem: () => {},
+        onEnterSubmissionWorkspace: () => {},
+        onEnterUploadWorkspace: () => {},
+        onExitSubmissionWorkspace: () => {},
+        onToggleReviewPanel: () => {}
+      }
+    });
+
+    expect(container.querySelector(".learning-unit-workspace-surface")).not.toBeNull();
+    expect(container.querySelectorAll(".learning-unit-module")).toHaveLength(1);
+    expect(appCss).toMatch(
+      /\.learning-unit-module\s*\{[^}]*padding:\s*var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+    );
+    expect(appCss).toMatch(
+      /\.learning-unit-pane-grid--split \.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-4\);[^}]*padding:\s*var\(--space-4\);/s
+    );
+  });
+
   it("renders modular groups as separate module blocks with materials before tasks", () => {
     const cssPath = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
       "../../styles/app.css"
     );
     const css = readFileSync(cssPath, "utf8");
+    const designSystemCss = readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../styles/design-system.css"),
+      "utf8"
+    );
     const { container } = render(LearningUnitContentWorkspace, {
       props: {
         titleLabel: "",
@@ -451,10 +516,15 @@ describe("LearningUnitContentWorkspace", () => {
 
     const modules = container.querySelectorAll(".learning-unit-module");
     expect(modules).toHaveLength(2);
+    expect(screen.getByText("M01")).toBeInTheDocument();
+    expect(screen.getByText("M02")).toBeInTheDocument();
+    expect(screen.getByText("1 Material · 1 Aufgabe")).toBeInTheDocument();
+    expect(screen.getByText("1 Material")).toBeInTheDocument();
     expect(screen.getAllByText("Materialien")).toHaveLength(2);
     expect(screen.getAllByText("Aufgaben")).toHaveLength(2);
     expect(screen.getByText("Fachbegriffe")).toBeInTheDocument();
     expect(screen.getByText("Algorithmen")).toBeInTheDocument();
+    expect(screen.queryByText(/^Modul$/)).toBeNull();
 
     const firstModule = modules[0];
     const materialsSection = firstModule?.querySelector(".learning-unit-module__materials");
@@ -468,19 +538,30 @@ describe("LearningUnitContentWorkspace", () => {
         Boolean(materialsSection.compareDocumentPosition(tasksSection) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true);
     expect(css).not.toMatch(/\.learning-unit-module\s*\{[^}]*border-bottom:/s);
-    expect(css).not.toMatch(/\.learning-unit-module\s*\{[^}]*background:/s);
-    expect(css).not.toMatch(/\.learning-unit-module\s*\{[^}]*box-shadow:/s);
+    expect(css).toMatch(
+      /\.learning-unit-module\s*\{[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+    );
     expect(css).toMatch(
       /\.learning-unit-pane__stack--modules\s*\{[^}]*gap:\s*var\(--space-7\);[^}]*padding:\s*var\(--space-5\)\s+0\s+var\(--space-6\);/s
     );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-pane__stack:not\(\.learning-unit-pane__stack--modules\)\s*\{[^}]*gap:\s*0;/s
+    );
+    expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.learning-unit-pane__stack\s*\{[^}]*gap:\s*0;/s);
     expect(css).toMatch(
-      /\.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-5\);[^}]*padding:\s*0\s+0\s+var\(--space-5\);/s
+      /\.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-5\);[^}]*padding:\s*var\(--space-5\);/s
+    );
+    expect(css).toMatch(
+      /\.learning-unit-pane-grid--split \.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-4\);[^}]*padding:\s*var\(--space-4\);/s
     );
     expect(css).toMatch(/\.learning-unit-module__materials,\s*\.learning-unit-module__tasks\s*\{[^}]*gap:\s*var\(--space-4\);/s);
     expect(css).toMatch(
       /\.learning-unit-module__tasks\s*\{[^}]*margin-top:\s*var\(--space-6\);/s
     );
     expect(css).toMatch(/\.learning-unit-module__section-body\s*\{[^}]*gap:\s*var\(--space-4\);/s);
+    expect(css).toMatch(
+      /\.learning-unit-module__section-body\s*>\s*\.learning-work-item:last-child,\s*\.learning-unit-module__section-body\s*>\s*\.learning-task-workspace:last-child\s*\{[^}]*border-bottom:\s*0;[^}]*padding-bottom:\s*0;/s
+    );
   });
 
   it("omits the materials section when a module has no materials", () => {
@@ -585,10 +666,13 @@ describe("LearningUnitContentWorkspace", () => {
     });
 
     const module = container.querySelector(".learning-unit-module");
+    expect(module?.textContent).toContain("M01");
     expect(module?.textContent).toContain("Ohne Material");
+    expect(module?.textContent).toContain("1 Aufgabe");
     expect(module?.querySelector(".learning-unit-module__materials")).toBeNull();
     expect(module?.querySelector(".learning-unit-module__tasks")).not.toBeNull();
     expect(screen.queryByText("Materialien")).toBeNull();
     expect(screen.getByText("Aufgaben")).toBeInTheDocument();
+    expect(screen.queryByText(/^Modul$/)).toBeNull();
   });
 });

@@ -197,6 +197,27 @@
       })
       .filter((group) => group.materials.length > 0 || group.tasks.length > 0);
   }
+
+  function moduleDisplayIndex(groupIndex: number): string {
+    return `M${String(groupIndex + 1).padStart(2, "0")}`;
+  }
+
+  function moduleMetaText(group: {
+    materials: Array<{ item: LearningContentItem; expanded: boolean }>;
+    tasks: Array<{ item: LearningContentItem; expanded: boolean }>;
+  }): string {
+    const parts: string[] = [];
+
+    if (group.materials.length > 0) {
+      parts.push(group.materials.length === 1 ? "1 Material" : `${group.materials.length} Materialien`);
+    }
+
+    if (group.tasks.length > 0) {
+      parts.push(group.tasks.length === 1 ? "1 Aufgabe" : `${group.tasks.length} Aufgaben`);
+    }
+
+    return parts.join(" · ");
+  }
 </script>
 
 <svelte:document
@@ -286,12 +307,13 @@
           {#if paneItems[paneId]?.length}
             {#if unitType === "modular"}
               <div class="learning-unit-pane__stack learning-unit-pane__stack--modules">
-                {#each modularGroupsForPane(paneId) as group}
+                {#each modularGroupsForPane(paneId) as group, groupIndex}
                   <section class="learning-unit-module" aria-label={group.title ?? "Modul"}>
                     <header class="learning-unit-module__header">
                       <div class="learning-unit-module__copy">
-                        <p class="workspace-label">Modul</p>
+                        <p class="learning-unit-module__index">{moduleDisplayIndex(groupIndex)}</p>
                         <h4 class="learning-unit-module__title">{group.title ?? "Modul"}</h4>
+                        <p class="learning-unit-module__meta">{moduleMetaText(group)}</p>
                       </div>
                     </header>
 

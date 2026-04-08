@@ -26,6 +26,8 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("### 7.1 Spacing");
     expect(designDoc).toContain("### 7.3 Flächen");
     expect(designDoc).toContain("### 11.3 Inhalte");
+    expect(designDoc).toContain("Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in");
+    expect(designDoc).toContain("den finalen Designsystem-Layer in `frontend/src/lib/styles/design-system.css`");
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;/s);
     expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*background:\s*transparent;/s);
     expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*border:\s*0;/s);
@@ -35,7 +37,10 @@ describe("learning unit route contract", () => {
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-work-item__toggle\s*\{[^}]*padding:\s*0\.45rem 0;/s);
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell \.learning-work-item--material \.learning-work-item__toggle\s*\{[^}]*padding:\s*var\(--space-4\) var\(--space-5\);/s
+      /\.learning-unit-content-shell \.learning-work-item--material \.learning-work-item__toggle\s*\{[^}]*padding:\s*var\(--space-4\) var\(--space-5\) var\(--space-2\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-work-item--material \.learning-work-item__title\s*\{[^}]*font-size:\s*calc\(1\.08rem \* var\(--learning-unit-font-scale\)\);[^}]*font-weight:\s*600;[^}]*line-height:\s*1\.18;/s
     );
     expect(appCss).toMatch(/\.learning-unit-toolbar__utility\s*\{[^}]*justify-content:\s*flex-end;[^}]*margin-left:\s*auto;/s);
     expect(appCss).toMatch(/\.learning-unit-layout-frame--toolbar\s*\{[^}]*width:\s*min\(100%,\s*var\(--learning-unit-workspace-width\)\);/s);
@@ -100,8 +105,13 @@ describe("learning unit route contract", () => {
     expect(workspaceSource).toContain("history={historyByTask[task.id] ?? []}");
     expect(workspaceSource).toContain("compactLayout={true}");
     expect(workspaceSource).toContain('class="learning-unit-module"');
+    expect(workspaceSource).toContain('class="learning-unit-module__index"');
+    expect(workspaceSource).toContain('class="learning-unit-module__meta"');
     expect(workspaceSource).toContain('class="learning-unit-module__materials"');
     expect(workspaceSource).toContain('class="learning-unit-module__tasks"');
+    expect(workspaceSource).toContain("moduleDisplayIndex(groupIndex)");
+    expect(workspaceSource).toContain("moduleMetaText(group)");
+    expect(workspaceSource).not.toContain('<p class="workspace-label">Modul</p>');
     expect(workspaceSource).toContain("{#if group.materials.length}");
     expect(workspaceSource).toContain('class="learning-unit-workspace-surface"');
     expect(taskCardSource).not.toContain("learning-task-row__preview");
@@ -121,6 +131,7 @@ describe("learning unit route contract", () => {
   it("derives modular spacing from DESIGN.md instead of flattening modules into one continuous list", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(designDoc).toContain("- `--space-4`: `1rem`");
@@ -128,14 +139,48 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("- `--space-6`: `2rem`");
     expect(designDoc).toContain("- `--space-7`: `3rem`");
     expect(appCss).toMatch(/\.learning-unit-pane__stack--modules\s*\{[^}]*gap:\s*var\(--space-7\);/s);
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-pane__stack:not\(\.learning-unit-pane__stack--modules\)\s*\{[^}]*gap:\s*0;/s
+    );
+    expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.learning-unit-pane__stack\s*\{[^}]*gap:\s*0;/s);
     expect(appCss).toMatch(/\.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-5\);/s);
     expect(appCss).toMatch(/\.learning-unit-module__materials,\s*\.learning-unit-module__tasks\s*\{[^}]*gap:\s*var\(--space-4\);/s);
     expect(appCss).toMatch(/\.learning-unit-module__tasks\s*\{[^}]*margin-top:\s*var\(--space-6\);/s);
+    expect(appCss).toMatch(
+      /\.learning-unit-module__index\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*text-transform:\s*uppercase;/s
+    );
+    expect(appCss).toMatch(
+      /\.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);/s
+    );
     expect(appCss).toMatch(
       /\.learning-unit-module__section-head h5\s*\{[^}]*font-size:\s*calc\(1\.02rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*800;/s
     );
     expect(appCss).toMatch(
       /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(8\.5rem,\s*10\.5rem\)\s+minmax\(0,\s*1fr\)\s+auto;/s
+    );
+  });
+
+  it("uses one subtle card per module while keeping the pane surface itself cardless", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
+    const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
+
+    expect(designDoc).toContain("### 7.3 Flächen");
+    expect(designDoc).toContain("### 11.3 Inhalte");
+    expect(designDoc).toContain("## 13. Verbotene Alt-Muster");
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+    );
+    expect(appCss).toMatch(
+      /\.learning-unit-module\s*\{[^}]*padding:\s*var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+    );
+    expect(appCss).toMatch(
+      /\.learning-work-item--material\s*\{[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+    );
+    expect(appCss).toMatch(
+      /\.learning-unit-pane-grid--split \.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-4\);[^}]*padding:\s*var\(--space-4\);/s
     );
   });
 
@@ -175,6 +220,9 @@ describe("learning unit route contract", () => {
     expect(appCss).not.toMatch(/\.learning-task-status\s*\{[^}]*border-top:/s);
     expect(appCss).not.toMatch(/\.learning-task-submission-summary\s*\{[^}]*border-top:/s);
     expect(appCss).toMatch(/\.learning-task-row\s*\{[^}]*border:\s*1px solid/s);
+    expect(appCss).toMatch(
+      /\.learning-unit-module__section-body\s*>\s*\.learning-work-item:last-child,\s*\.learning-unit-module__section-body\s*>\s*\.learning-task-workspace:last-child\s*\{[^}]*border-bottom:\s*0;[^}]*padding-bottom:\s*0;/s
+    );
   });
 
   it("restores open modular tabs through an explicit restore flow with overview fallback", () => {

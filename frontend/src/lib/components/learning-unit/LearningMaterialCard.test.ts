@@ -126,19 +126,22 @@ describe("LearningMaterialCard", () => {
     const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
 
     expect(css).toMatch(
-      /\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(30rem,\s*66vw,\s*46rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid/s
+      /\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(30rem,\s*66vw,\s*46rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
     );
     expect(css).toMatch(
       /\.learning-unit-pane-grid--split\s+\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(24rem,\s*88%,\s*34rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);/s
     );
     expect(css).toMatch(
-      /\.learning-work-item--material\s+\.learning-work-item__toggle\s*\{[^}]*display:\s*block;[^}]*padding:\s*var\(--space-4\)\s+var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);/s
+      /\.learning-work-item--material\s+\.learning-work-item__toggle\s*\{[^}]*display:\s*block;[^}]*padding:\s*var\(--space-4\)\s+var\(--space-5\)\s+var\(--space-2\);[^}]*background:\s*var\(--color-bg-surface\);/s
     );
     expect(css).toMatch(
-      /\.learning-work-item--material\s+\.learning-work-item__body\s*\{[^}]*padding:\s*var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);/s
+      /\.learning-work-item--material\s+\.learning-work-item__body\s*\{[^}]*padding:\s*0\s+var\(--space-5\)\s+var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);/s
     );
     expect(css).toMatch(
       /\.learning-work-item--material\s+\.learning-material-card__header-inner,\s*\.learning-work-item--material\s+\.learning-material-card__body-inner\s*\{[^}]*width:\s*var\(--learning-material-rail-width\);[^}]*margin-inline:\s*auto;/s
+    );
+    expect(css).toMatch(
+      /\.learning-work-item--material\s+\.learning-work-item__title\s*\{[^}]*font-size:\s*calc\(1\.08rem \* var\(--learning-unit-font-scale\)\);[^}]*font-weight:\s*600;[^}]*line-height:\s*1\.18;/s
     );
     expect(css).not.toMatch(
       /\.learning-work-item--material\s+\.learning-work-item__support\s*\{[^}]*width:\s*min\(100%,\s*calc\(clamp\(/s
@@ -151,7 +154,10 @@ describe("LearningMaterialCard", () => {
       /\.learning-unit-content-shell\s+\.learning-work-item__toggle\s*\{[^}]*padding:\s*0\.45rem 0;/s
     );
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell\s+\.learning-work-item--material\s+\.learning-work-item__toggle\s*\{[^}]*padding:\s*var\(--space-4\)\s+var\(--space-5\);/s
+      /\.learning-unit-content-shell\s+\.learning-work-item--material\s+\.learning-work-item__toggle\s*\{[^}]*padding:\s*var\(--space-4\)\s+var\(--space-5\)\s+var\(--space-2\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell\s+\.learning-work-item--material\s+\.learning-work-item__title\s*\{[^}]*font-size:\s*calc\(1\.08rem \* var\(--learning-unit-font-scale\)\);[^}]*font-weight:\s*600;[^}]*line-height:\s*1\.18;/s
     );
   });
 

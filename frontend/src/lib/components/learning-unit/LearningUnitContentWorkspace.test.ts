@@ -246,7 +246,7 @@ describe("LearningUnitContentWorkspace", () => {
 
     expect(screen.getAllByRole("button", { name: "Erneut bearbeiten" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Meine Abgabe" })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Aufgabe beginnen" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Aufgabe 2 beginnen" })).toHaveLength(1);
   });
 
   it("marks all items of open modular groups in the outline", () => {

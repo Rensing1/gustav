@@ -88,13 +88,14 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByText("Aufgabe offen")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Aufgabe beginnen" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Aufgabe 3" })).toBeInTheDocument();
+    expect(screen.getByText("## Arbeitsauftrag")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe 3 beginnen" })).toBeInTheDocument();
+    expect(screen.queryByText("Aufgabe offen")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Aufgabe 3" })).toBeNull();
     expect(screen.queryByText(/Erkläre den Zusammenhang/i)).toBeNull();
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
-    expect(document.querySelector(".learning-task-row__status")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__copy")).not.toBeNull();
+    expect(document.querySelector(".learning-task-row__preview")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__actions")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Bearbeitung schließen" })).toBeNull();
   });
@@ -134,6 +135,7 @@ describe("LearningTaskCard", () => {
 
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
     expect(screen.getByRole("region", { name: "Meine Abgabe" })).toBeInTheDocument();
+    expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
 
     await rerender({
       courseId: "course-1",
@@ -148,17 +150,40 @@ describe("LearningTaskCard", () => {
 
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.queryByText("Die Bearbeitung bleibt Teil derselben Arbeitsfläche.")).toBeNull();
+    expect(document.querySelector(".learning-task-inline-editor__statement")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
+    expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
   });
 
-  it("styles the compact modular task row as a fixed three-column layout", () => {
+  it("styles the compact modular task row as a preview-plus-actions layout", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
 
     expect(css).toMatch(
-      /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(8\.5rem,\s*10\.5rem\)\s+minmax\(0,\s*1fr\)\s+auto;[^}]*align-items:\s*center;/s
+      /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;[^}]*align-items:\s*center;/s
     );
-    expect(css).toMatch(/\.learning-task-row__status\s*\{[^}]*min-width:\s*0;[^}]*padding-right:\s*var\(--space-3\);/s);
+    expect(css).toMatch(/\.learning-task-row__preview\s*\{[^}]*font-size:\s*calc\(0\.86rem \* var\(--learning-unit-font-scale\)\);[^}]*white-space:\s*nowrap;[^}]*text-overflow:\s*ellipsis;/s);
     expect(css).toMatch(/\.learning-task-row__actions\s*\{[^}]*justify-content:\s*flex-end;[^}]*justify-self:\s*end;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*padding:\s*0;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*border-left:\s*0;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*background:\s*transparent;/s);
+  });
+
+  it("falls back to the task title when the instruction markdown is empty", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: { ...task, instruction_md: " \n\n " },
+        taskTitle: "Aufgabe 8",
+        unitType: "modular",
+        expanded: true,
+        compactLayout: true
+      }
+    });
+
+    expect(screen.getByText("Aufgabe 8")).toBeInTheDocument();
   });
 
   it("keeps the task header compact when expanded", () => {
@@ -173,7 +198,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const toggle = screen.getByRole("button", { name: /aufgabe 4/i });
+    const toggle = screen.getByRole("button", { name: "Modul Graphen Aufgabe 4" });
     expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAttribute("title", "Aufgabe 4");
     expect(toggle.querySelector("h4")).toBeNull();
@@ -196,7 +221,7 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.getByText("Noch nicht abgegeben")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Aufgabe beginnen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe 5 beginnen" })).toBeInTheDocument();
     expect(screen.queryByText("Nächster Schritt")).toBeNull();
     expect(screen.queryByText("Antwortstatus")).toBeNull();
     expect(screen.queryByRole("button", { name: "Meine Abgabe" })).toBeNull();
@@ -516,7 +541,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByRole("button", { name: "Aufgabe beginnen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Interaktive Aufgabe beginnen" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Letzte Abgabe" })).toBeNull();
   });
 

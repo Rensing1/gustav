@@ -114,7 +114,10 @@ describe("learning unit route contract", () => {
     expect(workspaceSource).not.toContain('<p class="workspace-label">Modul</p>');
     expect(workspaceSource).toContain("{#if group.materials.length}");
     expect(workspaceSource).toContain('class="learning-unit-workspace-surface"');
-    expect(taskCardSource).not.toContain("learning-task-row__preview");
+    expect(taskCardSource).toContain("learning-task-row__preview");
+    expect(taskCardSource).toContain("taskPreviewLine()");
+    expect(taskCardSource).toContain("return `${taskTitle} beginnen`;");
+    expect(taskCardSource).not.toContain("compactStatusLabel()");
     expect(workspaceSource).not.toContain("{history}");
   });
 
@@ -156,8 +159,12 @@ describe("learning unit route contract", () => {
       /\.learning-unit-module__section-head h5\s*\{[^}]*font-size:\s*calc\(1\.02rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*800;/s
     );
     expect(appCss).toMatch(
-      /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(8\.5rem,\s*10\.5rem\)\s+minmax\(0,\s*1fr\)\s+auto;/s
+      /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/s
     );
+    expect(appCss).toMatch(/\.learning-task-row__preview\s*\{[^}]*white-space:\s*nowrap;[^}]*text-overflow:\s*ellipsis;/s);
+    expect(designDoc).toContain("kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile");
+    expect(designDoc).toContain("Status wird primär über Balken und Tönung getragen");
+    expect(designDoc).toContain("Die vollständige Aufgabenstellung erscheint erst beim Start der Bearbeitung inline");
   });
 
   it("uses one subtle card per module while keeping the pane surface itself cardless", () => {

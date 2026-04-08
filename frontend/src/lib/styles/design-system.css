@@ -1419,6 +1419,31 @@ h6,
   letter-spacing: -0.03em;
 }
 
+.learning-unit-content-shell .learning-task-inline-editor__statement {
+  margin-top: var(--space-2);
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
+
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h1),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h2),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h3),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h4),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h5),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h6) {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: calc(0.98rem * var(--learning-unit-font-scale));
+  line-height: 1.18;
+}
+
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(p),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(ul),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(ol) {
+  margin: var(--space-2) 0 0;
+}
+
 .learning-response-group {
   margin-top: var(--space-4);
   display: grid;

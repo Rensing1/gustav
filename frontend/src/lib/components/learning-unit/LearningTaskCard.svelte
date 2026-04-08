@@ -126,9 +126,18 @@
 
   function actionLabel(): string {
     if (!hasSubmission()) {
-      return "Aufgabe beginnen";
+      return `${taskTitle} beginnen`;
     }
     return hasFinalSubmission() ? "Erneut bearbeiten" : "Entwurf weiterbearbeiten";
+  }
+
+  function taskPreviewLine(): string {
+    const firstNonEmptyLine = task.instruction_md
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+
+    return firstNonEmptyLine ?? taskTitle;
   }
 
   function showSubmissionSummary(): boolean {
@@ -357,32 +366,6 @@
     return "new";
   }
 
-  function compactStatusLabel(): string {
-    if (hasFinalSubmission()) {
-      return "Final abgegeben";
-    }
-    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "completed") {
-      return "Entwurf mit Rückmeldung";
-    }
-    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "failed") {
-      return "Rückmeldung fehlgeschlagen";
-    }
-    if (latestSubmissionIntent() === "feedback") {
-      return "Rückmeldung läuft";
-    }
-    return "Aufgabe offen";
-  }
-
-  function compactStatusMeta(): string | null {
-    if (hasFinalSubmission()) {
-      return latestFinalSubmissionAt();
-    }
-    if (latestSubmission()) {
-      return latestSubmissionOrThrow().created_at;
-    }
-    return null;
-  }
-
   function compactRowActive(): boolean {
     return submissionFocused || reviewPanelOpen;
   }
@@ -422,17 +405,10 @@
       class:learning-task-row--new={compactTaskTone() === "new"}
       class:learning-task-row--pending={compactTaskTone() === "pending"}
       class="learning-task-row"
-      aria-label={taskTitle}
+      aria-label={taskPreviewLine()}
     >
-      <div class="learning-task-row__status">
-        <p class="learning-task-row__status-label">{compactStatusLabel()}</p>
-        {#if compactStatusMeta()}
-          <p class="learning-task-row__status-meta">{compactStatusMeta()}</p>
-        {/if}
-      </div>
-
       <div class="learning-task-row__copy">
-        <h5 class="learning-task-row__title">{taskTitle}</h5>
+        <p class="learning-task-row__preview">{taskPreviewLine()}</p>
       </div>
 
       <div class="learning-task-row__actions">
@@ -529,7 +505,13 @@
               <div>
                 <p class="workspace-label">{taskKicker()}</p>
                 <h5 class="learning-task-inline-editor__title">{taskTitle}</h5>
-                <p class="learning-task-inline-editor__copy">Die Bearbeitung bleibt Teil derselben Arbeitsfläche.</p>
+                {#if usesCompactTaskLayout()}
+                  <div class="markdown-prose learning-task-inline-editor__statement">
+                    {@html renderMarkdown(task.instruction_md)}
+                  </div>
+                {:else}
+                  <p class="learning-task-inline-editor__copy">Die Bearbeitung bleibt Teil derselben Arbeitsfläche.</p>
+                {/if}
               </div>
               <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onExitSubmissionWorkspace?.()}>
                 Bearbeitung schließen
@@ -746,6 +728,12 @@
 
               {#if feedbackPendingMessage()}
                 <p class="workspace-note">{feedbackPendingMessage()}</p>
+              {/if}
+
+              {#if usesCompactTaskLayout()}
+                <div class="markdown-prose learning-task-inline-editor__statement">
+                  {@html renderMarkdown(task.instruction_md)}
+                </div>
               {/if}
 
               <div class="learning-task-submission-summary__tabs" role="tablist" aria-label="Letzte Abgabe">

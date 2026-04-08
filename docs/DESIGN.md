@@ -275,6 +275,10 @@ Verbindliche Familien:
 - Task-Fläche bleibt Fokusraum
 - Bearbeitung bleibt inline
 - Rückmeldung und Bewertung erscheinen als technische Disclosure-Familie
+- kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile statt
+  redundanter Status-/Titellabels
+- Status wird primär über Balken und Tönung getragen
+- Die vollständige Aufgabenstellung erscheint erst beim Start der Bearbeitung inline
 - Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in
   den finalen Designsystem-Layer in `frontend/src/lib/styles/design-system.css`,
   nicht nur in `app.css`, damit Surface-, Spacing- und Typografie-Regeln im

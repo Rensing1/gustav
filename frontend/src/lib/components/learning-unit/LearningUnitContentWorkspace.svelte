@@ -36,7 +36,7 @@
     pendingSubmissionIntent = null,
     submissionFocusByPane,
     submissionModeByPane,
-    reviewPanelOpenByTask = {},
+    reviewFocusByPane = { left: null, right: null },
     enhanceTaskForm = null,
     showSplitToggle = true,
     layoutMenuEnabled = false,
@@ -91,8 +91,8 @@
     pendingSubmissionIntent?: "feedback" | "submit" | null;
     submissionFocusByPane: Record<PaneId, string | null>;
     submissionModeByPane: Record<PaneId, "text" | "upload" | null>;
-    reviewPanelOpenByTask?: Record<string, boolean>;
-    enhanceTaskForm?: ((taskId: string) => SubmitFunction | undefined) | null;
+    reviewFocusByPane?: Record<PaneId, string | null>;
+    enhanceTaskForm?: ((taskId: string, paneId: PaneId) => SubmitFunction | undefined) | null;
     showSplitToggle?: boolean;
     layoutMenuEnabled?: boolean;
     tocWidth?: number;
@@ -120,13 +120,14 @@
     onEnterSubmissionWorkspace: (paneId: PaneId, itemKey: string, mode?: "text" | "upload") => void;
     onEnterUploadWorkspace: (paneId: PaneId, itemKey: string) => void;
     onExitSubmissionWorkspace: (paneId: PaneId) => void;
-    onToggleReviewPanel: (taskId: string) => void;
+    onToggleReviewPanel: (paneId: PaneId, taskId: string) => void;
     onSubmitUploadFeedback?:
       | ((payload: {
           taskId: string;
           taskKind: "native" | "visual" | "scratch" | "calliope";
           file: File;
           moduleId: string | null;
+          paneId: PaneId;
         }) => void | Promise<void>)
       | null;
   } = $props();
@@ -365,14 +366,18 @@
                               pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
                               submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
                               initialSubmissionMode={submissionModeByPane[paneId]}
-                              reviewPanelOpen={Boolean(reviewPanelOpenByTask[task.id])}
-                              enhanceSubmit={enhanceTaskForm?.(task.id)}
+                              reviewPanelOpen={reviewFocusByPane[paneId] === entry.item.key}
+                              enhanceSubmit={enhanceTaskForm?.(task.id, paneId)}
                               onToggle={() => onToggleItem(paneId, entry.item.key)}
-                              onToggleReviewPanel={() => onToggleReviewPanel(task.id)}
+                              onToggleReviewPanel={() => onToggleReviewPanel(paneId, task.id)}
                               onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
                               onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
                               onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
-                              {onSubmitUploadFeedback}
+                              onSubmitUploadFeedback={
+                                onSubmitUploadFeedback
+                                  ? (payload) => onSubmitUploadFeedback({ ...payload, paneId })
+                                  : null
+                              }
                             />
                           {/if}
                         {/each}
@@ -412,14 +417,18 @@
                       pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
                       submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
                       initialSubmissionMode={submissionModeByPane[paneId]}
-                      reviewPanelOpen={Boolean(reviewPanelOpenByTask[task.id])}
-                      enhanceSubmit={enhanceTaskForm?.(task.id)}
+                      reviewPanelOpen={reviewFocusByPane[paneId] === entry.item.key}
+                      enhanceSubmit={enhanceTaskForm?.(task.id, paneId)}
                       onToggle={() => onToggleItem(paneId, entry.item.key)}
-                      onToggleReviewPanel={() => onToggleReviewPanel(task.id)}
+                      onToggleReviewPanel={() => onToggleReviewPanel(paneId, task.id)}
                       onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
                       onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
                       onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
-                      {onSubmitUploadFeedback}
+                      onSubmitUploadFeedback={
+                        onSubmitUploadFeedback
+                          ? (payload) => onSubmitUploadFeedback({ ...payload, paneId })
+                          : null
+                      }
                     />
                   {/if}
                 {/each}

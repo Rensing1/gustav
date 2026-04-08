@@ -278,7 +278,9 @@ Verbindliche Familien:
 - kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile statt
   redundanter Status-/Titellabels
 - Status wird primär über Balken und Tönung getragen
-- Die vollständige Aufgabenstellung erscheint erst beim Start der Bearbeitung inline
+- Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline
+- Pro Pane ist in der kompakten Task-Zeile genau eine Detailansicht aktiv
+- `Meine Abgabe` und Bearbeitung sind pro Pane exklusiv und erneut klickbar
 - Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in
   den finalen Designsystem-Layer in `frontend/src/lib/styles/design-system.css`,
   nicht nur in `app.css`, damit Surface-, Spacing- und Typografie-Regeln im

@@ -318,7 +318,7 @@
         submissionErrorMessage={null}
         submissionFocusByPane={{ left: null, right: null }}
         submissionModeByPane={{ left: null, right: null }}
-        reviewPanelOpenByTask={{ [previewTask.id]: true }}
+        reviewFocusByPane={{ left: `task:${previewTask.id}`, right: null }}
         showSplitToggle={true}
         layoutMenuEnabled={true}
         tocWidth={16.25}

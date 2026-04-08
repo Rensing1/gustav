@@ -423,6 +423,7 @@
           </button>
         {/if}
         <button
+          class:workspace-top-action--active={submissionFocused}
           class:workspace-top-action--accent={!hasSubmission()}
           class:workspace-top-action--quiet={hasSubmission()}
           class="workspace-top-action"

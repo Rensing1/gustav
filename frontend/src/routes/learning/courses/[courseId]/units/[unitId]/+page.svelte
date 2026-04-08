@@ -14,16 +14,24 @@
   import {
     contentGroupsForModules,
     contentGroupsForSections,
+    emptyReviewFocus,
+    emptySubmissionFocus,
     flattenContentGroups,
     normalizePaneStacks,
     orderedOpenModules,
     reconcilePaneStacks,
     reopenMaterialEntries,
+    setPaneReviewFocus,
+    setPaneSubmissionFocus,
+    togglePaneReviewFocus,
+    togglePaneSubmissionFocus,
     type ContentGroup,
     type LearningContentItem,
     type PaneId,
     type PaneStackEntry,
-    type PaneStacks
+    type PaneStacks,
+    type ReviewFocusByPane,
+    type SubmissionFocusState
   } from "$lib/learning-unit/workspace";
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
@@ -38,10 +46,6 @@
 
   type WorkspaceViewMode = "overview" | "content";
   type ModularRestoreState = "idle" | "restoring" | "ready" | "failed";
-  type SubmissionFocusState = {
-    itemKey: string | null;
-    mode: "text" | "upload" | null;
-  };
   type ModularWorkspaceState = {
     view: WorkspaceViewMode;
     openTabs: string[];
@@ -96,7 +100,7 @@
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
   let workspaceRoot = $state<HTMLDivElement | null>(null);
   let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
-  let reviewPanelOpenByTask = $state.raw<Record<string, boolean>>({});
+  let reviewFocusByPane = $state<ReviewFocusByPane>(emptyReviewFocus());
   let submissionMessageState = $state<string | null>(data.message);
   let clientSubmissionErrorTaskId = $state<string | null>(null);
   let clientSubmissionErrorMessage = $state<string | null>(null);
@@ -109,13 +113,6 @@
   let feedbackPollToken = 0;
 
   let rebuildToken = 0;
-
-  function defaultSubmissionFocus(): Record<PaneId, SubmissionFocusState> {
-    return {
-      left: { itemKey: null, mode: null },
-      right: { itemKey: null, mode: null }
-    };
-  }
 
   function isModularUnit(): boolean {
     return data.selectedUnit?.unit.unit_type === "modular";
@@ -172,7 +169,7 @@
       tocOpen: chromeDefaults.tocOpen,
       activePane: chromeDefaults.activePane,
       paneStacks: null,
-      submissionFocus: defaultSubmissionFocus()
+      submissionFocus: emptySubmissionFocus()
     };
   }
 
@@ -183,7 +180,7 @@
       tocOpen: chromeDefaults.tocOpen,
       activePane: chromeDefaults.activePane,
       paneStacks: null,
-      submissionFocus: defaultSubmissionFocus()
+      submissionFocus: emptySubmissionFocus()
   };
   }
 
@@ -499,13 +496,6 @@
     };
   }
 
-  function setReviewPanelOpen(taskId: string, open: boolean) {
-    reviewPanelOpenByTask = {
-      ...reviewPanelOpenByTask,
-      [taskId]: open
-    };
-  }
-
   function syncModuleUrl(moduleId: string | null) {
     if (!browser) {
       return;
@@ -607,14 +597,15 @@
     }
 
     modularRestoreState = "failed";
-    modularRestoreMessage = "Die Inhalte konnten nicht wiederhergestellt werden. Bitte öffne die Module erneut.";
-    historyRestored = false;
-    setModularWorkspaceState({
-      ...modularWorkspace,
-      view: "overview",
-      submissionFocus: defaultSubmissionFocus()
-    });
-    syncModuleUrl(null);
+      modularRestoreMessage = "Die Inhalte konnten nicht wiederhergestellt werden. Bitte öffne die Module erneut.";
+      historyRestored = false;
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        view: "overview",
+        submissionFocus: emptySubmissionFocus()
+      });
+      reviewFocusByPane = emptyReviewFocus();
+      syncModuleUrl(null);
   }
 
   function setModularWorkspaceState(next: ModularWorkspaceState) {
@@ -623,6 +614,29 @@
 
   function setLinearWorkspaceState(next: LinearWorkspaceState) {
     linearWorkspace = next;
+  }
+
+  function applySubmissionFocus(nextValue: Record<PaneId, SubmissionFocusState>) {
+    if (isModularUnit()) {
+      setModularWorkspaceState({
+        ...modularWorkspace,
+        submissionFocus: nextValue
+      });
+      return;
+    }
+
+    setLinearWorkspaceState({
+      ...linearWorkspace,
+      submissionFocus: nextValue
+    });
+  }
+
+  function applyTaskDetailState(next: {
+    submissionFocus: Record<PaneId, SubmissionFocusState>;
+    reviewFocus: ReviewFocusByPane;
+  }) {
+    applySubmissionFocus(next.submissionFocus);
+    reviewFocusByPane = next.reviewFocus;
   }
 
   function setActivePane(paneId: PaneId) {
@@ -664,6 +678,9 @@
           ? modularWorkspace.submissionFocus
           : { left: modularWorkspace.submissionFocus.left, right: { itemKey: null, mode: null } }
       });
+      if (!nextValue) {
+        reviewFocusByPane = { left: reviewFocusByPane.left, right: null };
+      }
       return;
     }
 
@@ -676,6 +693,9 @@
         ? linearWorkspace.submissionFocus
         : { left: linearWorkspace.submissionFocus.left, right: { itemKey: null, mode: null } }
     });
+    if (!nextValue) {
+      reviewFocusByPane = { left: reviewFocusByPane.left, right: null };
+    }
   }
 
   function toggleToc() {
@@ -799,24 +819,12 @@
   }
 
   function setSubmissionWorkspace(paneId: PaneId, itemKey: string | null, mode: "text" | "upload" | null = null) {
-    if (isModularUnit()) {
-      setModularWorkspaceState({
-        ...modularWorkspace,
-        submissionFocus: {
-          left: paneId === "left" ? { itemKey, mode } : { itemKey: null, mode: null },
-          right: paneId === "right" ? { itemKey, mode } : { itemKey: null, mode: null }
-        }
-      });
+    if (!itemKey || !mode) {
+      applyTaskDetailState(setPaneSubmissionFocus(submissionFocusState(), reviewFocusByPane, paneId, null, null));
       return;
     }
 
-    setLinearWorkspaceState({
-      ...linearWorkspace,
-      submissionFocus: {
-        left: paneId === "left" ? { itemKey, mode } : { itemKey: null, mode: null },
-        right: paneId === "right" ? { itemKey, mode } : { itemKey: null, mode: null }
-      }
-    });
+    applyTaskDetailState(togglePaneSubmissionFocus(submissionFocusState(), reviewFocusByPane, paneId, itemKey, mode));
   }
 
   function paneItemsById(): Record<PaneId, Array<{ item: LearningContentItem; expanded: boolean }>> {
@@ -857,18 +865,7 @@
   }
 
   function clearSubmissionWorkspace() {
-    if (isModularUnit()) {
-      setModularWorkspaceState({
-        ...modularWorkspace,
-        submissionFocus: defaultSubmissionFocus()
-      });
-      return;
-    }
-
-    setLinearWorkspaceState({
-      ...linearWorkspace,
-      submissionFocus: defaultSubmissionFocus()
-    });
+    applySubmissionFocus(emptySubmissionFocus());
   }
 
   function canonicalUploadMimeType(taskKind: UploadTaskKind, file: File): string {
@@ -981,7 +978,8 @@
   async function pollFeedbackSubmission(
     taskId: string,
     submissionId: string | null,
-    intent: "feedback" | "submit"
+    intent: "feedback" | "submit",
+    paneId: PaneId
   ) {
     const pollToken = ++feedbackPollToken;
     const fastPollAttempts = 30;
@@ -1009,8 +1007,7 @@
           feedbackStatusTaskId = null;
           feedbackStatusMessage = null;
           pendingSubmissionIntent = null;
-          clearSubmissionWorkspace();
-          setReviewPanelOpen(taskId, true);
+          applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, paneId, taskItemKey(taskId)));
           return;
         }
 
@@ -1047,8 +1044,9 @@
     taskKind: UploadTaskKind;
     file: File;
     moduleId: string | null;
+    paneId: PaneId;
   }) {
-    const { taskId, taskKind, file } = payload;
+    const { taskId, taskKind, file, paneId } = payload;
 
     setClientSubmissionError(null, null);
     submissionMessageState = null;
@@ -1061,7 +1059,7 @@
       const intent = await requestUploadIntent(taskId, taskKind, file);
       await uploadFileToStorage(intent, file);
       const submission = await createUploadSubmission(taskId, taskKind, file, intent);
-      await pollFeedbackSubmission(taskId, submission.id ?? null, "feedback");
+      await pollFeedbackSubmission(taskId, submission.id ?? null, "feedback", paneId);
     } catch (caught) {
       feedbackPendingTaskId = null;
       feedbackStatusTaskId = taskId;
@@ -1088,7 +1086,7 @@
     }
   }
 
-  function enhanceTaskForm(taskId: string): SubmitFunction {
+  function enhanceTaskForm(taskId: string, paneId: PaneId): SubmitFunction {
     return ({ submitter }) => {
       if (!(submitter instanceof HTMLButtonElement)) {
         return;
@@ -1114,12 +1112,12 @@
             message?: string;
           };
           if (payload.finalizedTaskId && payload.finalizedSubmission) {
-            clearSubmissionWorkspace();
+            applyTaskDetailState(setPaneSubmissionFocus(submissionFocusState(), reviewFocusByPane, paneId, null, null));
             setTaskHistory(payload.finalizedTaskId, [
               payload.finalizedSubmission,
               ...historyForTask(payload.finalizedTaskId).filter((entry) => entry.id !== payload.finalizedSubmission?.id)
             ]);
-            setReviewPanelOpen(payload.finalizedTaskId, false);
+            applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, paneId, null));
             submissionMessageState = payload.message ?? "submitted";
             feedbackPendingTaskId = null;
             feedbackStatusTaskId = null;
@@ -1130,7 +1128,8 @@
           await pollFeedbackSubmission(
             payload.feedbackRequestedTaskId ?? taskId,
             payload.feedbackSubmissionId ?? null,
-            payload.pendingIntent ?? intent
+            payload.pendingIntent ?? intent,
+            paneId
           );
           return;
         }
@@ -1152,10 +1151,11 @@
     };
   }
 
-  async function toggleReviewPanel(taskId: string) {
-    const nextOpen = !Boolean(reviewPanelOpenByTask[taskId]);
+  async function toggleReviewPanel(paneId: PaneId, taskId: string) {
+    const itemKey = taskItemKey(taskId);
+    const nextOpen = reviewFocusByPane[paneId] !== itemKey;
     if (!nextOpen) {
-      setReviewPanelOpen(taskId, false);
+      applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, paneId, null));
       return;
     }
 
@@ -1170,7 +1170,7 @@
       }
     }
 
-    setReviewPanelOpen(taskId, true);
+    applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, paneId, itemKey));
   }
 
   function openModule(moduleId: string) {
@@ -1339,7 +1339,7 @@
 
     historyRestored = true;
     openItemInPane(itemKey, "left", { activatePane: true, scroll: true });
-    setReviewPanelOpen(data.historyTaskId, true);
+    applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, "left", itemKey));
   }
 
   onMount(() => {
@@ -1585,7 +1585,7 @@
                 {pendingSubmissionIntent}
                 submissionFocusByPane={workspaceSubmissionFocus()}
                 submissionModeByPane={workspaceSubmissionModes()}
-                reviewPanelOpenByTask={reviewPanelOpenByTask}
+                {reviewFocusByPane}
                 {enhanceTaskForm}
                 onSubmitUploadFeedback={submitUploadFeedback}
                 showSplitToggle={false}
@@ -1650,7 +1650,7 @@
             {pendingSubmissionIntent}
             submissionFocusByPane={workspaceSubmissionFocus()}
             submissionModeByPane={workspaceSubmissionModes()}
-            reviewPanelOpenByTask={reviewPanelOpenByTask}
+            {reviewFocusByPane}
             {enhanceTaskForm}
             onSubmitUploadFeedback={submitUploadFeedback}
             showSplitToggle={true}

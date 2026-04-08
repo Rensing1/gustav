@@ -16,6 +16,15 @@ export type PaneStackEntry = {
 
 export type PaneStacks = Record<PaneId, PaneStackEntry[]>;
 
+export type SubmissionFocusState = {
+  itemKey: string | null;
+  mode: "text" | "upload" | null;
+};
+
+export type SubmissionFocusByPane = Record<PaneId, SubmissionFocusState>;
+
+export type ReviewFocusByPane = Record<PaneId, string | null>;
+
 export type LearningContentKind = "material" | "task";
 
 export type LearningContentItem = {
@@ -40,6 +49,89 @@ export function emptyPaneStacks(): PaneStacks {
     left: [],
     right: []
   };
+}
+
+export function emptySubmissionFocus(): SubmissionFocusByPane {
+  return {
+    left: { itemKey: null, mode: null },
+    right: { itemKey: null, mode: null }
+  };
+}
+
+export function emptyReviewFocus(): ReviewFocusByPane {
+  return {
+    left: null,
+    right: null
+  };
+}
+
+export function setPaneSubmissionFocus(
+  submissionFocus: SubmissionFocusByPane,
+  reviewFocus: ReviewFocusByPane,
+  paneId: PaneId,
+  itemKey: string | null,
+  mode: "text" | "upload" | null
+): { submissionFocus: SubmissionFocusByPane; reviewFocus: ReviewFocusByPane } {
+  return {
+    submissionFocus: {
+      ...submissionFocus,
+      [paneId]: { itemKey, mode }
+    },
+    reviewFocus: {
+      ...reviewFocus,
+      [paneId]: itemKey ? null : reviewFocus[paneId]
+    }
+  };
+}
+
+export function togglePaneSubmissionFocus(
+  submissionFocus: SubmissionFocusByPane,
+  reviewFocus: ReviewFocusByPane,
+  paneId: PaneId,
+  itemKey: string,
+  mode: "text" | "upload"
+): { submissionFocus: SubmissionFocusByPane; reviewFocus: ReviewFocusByPane } {
+  const current = submissionFocus[paneId];
+  const sameTarget = current.itemKey === itemKey && current.mode === mode;
+
+  if (sameTarget) {
+    return setPaneSubmissionFocus(submissionFocus, reviewFocus, paneId, null, null);
+  }
+
+  return setPaneSubmissionFocus(submissionFocus, reviewFocus, paneId, itemKey, mode);
+}
+
+export function setPaneReviewFocus(
+  submissionFocus: SubmissionFocusByPane,
+  reviewFocus: ReviewFocusByPane,
+  paneId: PaneId,
+  itemKey: string | null
+): { submissionFocus: SubmissionFocusByPane; reviewFocus: ReviewFocusByPane } {
+  return {
+    submissionFocus: {
+      ...submissionFocus,
+      [paneId]: itemKey ? { itemKey: null, mode: null } : submissionFocus[paneId]
+    },
+    reviewFocus: {
+      ...reviewFocus,
+      [paneId]: itemKey
+    }
+  };
+}
+
+export function togglePaneReviewFocus(
+  submissionFocus: SubmissionFocusByPane,
+  reviewFocus: ReviewFocusByPane,
+  paneId: PaneId,
+  itemKey: string
+): { submissionFocus: SubmissionFocusByPane; reviewFocus: ReviewFocusByPane } {
+  const sameTarget = reviewFocus[paneId] === itemKey;
+
+  if (sameTarget) {
+    return setPaneReviewFocus(submissionFocus, reviewFocus, paneId, null);
+  }
+
+  return setPaneReviewFocus(submissionFocus, reviewFocus, paneId, itemKey);
 }
 
 export function normalizePaneStacks(raw: unknown): PaneStacks | null {

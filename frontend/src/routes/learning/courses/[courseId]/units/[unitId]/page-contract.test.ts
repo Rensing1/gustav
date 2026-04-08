@@ -52,8 +52,12 @@ describe("learning unit route contract", () => {
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
     expect(routeSource).toContain("function setSubmissionWorkspace");
-    expect(routeSource).toContain("left: paneId === \"left\" ? { itemKey, mode } : { itemKey: null, mode: null }");
-    expect(routeSource).toContain("right: paneId === \"right\" ? { itemKey, mode } : { itemKey: null, mode: null }");
+    expect(routeSource).toContain("let reviewFocusByPane = $state<ReviewFocusByPane>(emptyReviewFocus())");
+    expect(routeSource).toContain("togglePaneSubmissionFocus");
+    expect(routeSource).toContain("togglePaneReviewFocus");
+    expect(routeSource).toContain("setPaneReviewFocus");
+    expect(routeSource).toContain("function toggleReviewPanel(paneId: PaneId, taskId: string)");
+    expect(routeSource).not.toContain("reviewPanelOpenByTask");
     expect(routeSource).not.toContain("focus.left.itemKey ? leftEntries.filter");
     expect(routeSource).not.toContain("focus.right.itemKey ? rightEntries.filter");
   });
@@ -164,7 +168,8 @@ describe("learning unit route contract", () => {
     expect(appCss).toMatch(/\.learning-task-row__preview\s*\{[^}]*white-space:\s*nowrap;[^}]*text-overflow:\s*ellipsis;/s);
     expect(designDoc).toContain("kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile");
     expect(designDoc).toContain("Status wird primär über Balken und Tönung getragen");
-    expect(designDoc).toContain("Die vollständige Aufgabenstellung erscheint erst beim Start der Bearbeitung inline");
+    expect(designDoc).toContain("Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline");
+    expect(designDoc).toContain("`Meine Abgabe` und Bearbeitung sind pro Pane exklusiv und erneut klickbar");
   });
 
   it("uses one subtle card per module while keeping the pane surface itself cardless", () => {

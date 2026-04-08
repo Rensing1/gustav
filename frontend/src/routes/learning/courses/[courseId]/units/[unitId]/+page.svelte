@@ -18,6 +18,7 @@
     normalizePaneStacks,
     orderedOpenModules,
     reconcilePaneStacks,
+    reopenMaterialEntries,
     type ContentGroup,
     type LearningContentItem,
     type PaneId,
@@ -598,6 +599,7 @@
     const restoreSucceeded = await Promise.race([restorePromise, timeoutPromise]);
 
     if (restoreSucceeded) {
+      reopenModularMaterials(moduleIds);
       modularRestoreState = "ready";
       modularRestoreMessage = null;
       restoreHistoryContext();
@@ -760,6 +762,31 @@
       return;
     }
     void scrollToItem(workspaceActivePane(), itemKey);
+  }
+
+  function reopenModularMaterials(moduleIds: string[]) {
+    if (!isModularUnit() || !moduleIds.length) {
+      return;
+    }
+
+    const items = currentContentItems();
+    const currentStacks = currentPaneStacks();
+    const nextLeft = reopenMaterialEntries(currentStacks.left, items, moduleIds);
+    const nextRight = reopenMaterialEntries(currentStacks.right, items, moduleIds);
+    const changed = nextLeft.some((entry, index) => entry.expanded !== currentStacks.left[index]?.expanded)
+      || nextRight.some((entry, index) => entry.expanded !== currentStacks.right[index]?.expanded);
+
+    if (!changed) {
+      return;
+    }
+
+    setModularWorkspaceState({
+      ...modularWorkspace,
+      paneStacks: {
+        left: nextLeft,
+        right: nextRight
+      }
+    });
   }
 
   function togglePaneItem(paneId: PaneId, itemKey: string) {
@@ -1152,6 +1179,7 @@
       return;
     }
 
+    const moduleAlreadyLoaded = Boolean(moduleCache[moduleId]);
     const openTabs = modularWorkspace.openTabs.includes(moduleId)
       ? modularWorkspace.openTabs
       : [...modularWorkspace.openTabs, moduleId];
@@ -1165,7 +1193,17 @@
     modularRestoreState = "ready";
     modularRestoreMessage = null;
     syncModuleUrl(moduleId);
-    void ensureModuleLoaded(moduleId);
+
+    if (moduleAlreadyLoaded) {
+      reopenModularMaterials([moduleId]);
+      return;
+    }
+
+    void ensureModuleLoaded(moduleId).then((loaded) => {
+      if (loaded) {
+        reopenModularMaterials([moduleId]);
+      }
+    });
   }
 
   function removeOpenModule(moduleId: string) {
@@ -1189,6 +1227,7 @@
   }
 
   function switchView(view: WorkspaceViewMode) {
+    modularSettingsMenuOpen = false;
     setModularWorkspaceState({
       ...modularWorkspace,
       view
@@ -1405,11 +1444,25 @@
   });
 </script>
 
+<svelte:document
+  onclick={(event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest("[data-layout-menu-root]")) {
+      modularSettingsMenuOpen = false;
+    }
+  }}
+  onkeydown={(event) => {
+    if (event.key === "Escape") {
+      modularSettingsMenuOpen = false;
+    }
+  }}
+/>
+
 <svelte:head>
   <title>{data.selectedUnit?.unit.title ?? "Lernraum"} | GUSTAV</title>
 </svelte:head>
 
-<div bind:this={workspaceRoot} class="workspace-page learning-unit-space">
+<div bind:this={workspaceRoot} class="workspace-page workspace-page--learner-unit-content learning-unit-space">
   {#if data.message === "submitted"}
     <p class="flash flash-success learning-unit-flash">Abgabe gespeichert.</p>
   {/if}
@@ -1424,55 +1477,57 @@
 
   {#if isModularUnit()}
     <section class="learning-unit-toolbar">
-      <div class="learning-unit-toolbar__main">
-        <div class="learning-unit-toolbar__leading">
-          <ModeSwitch
-            label="Lerneinheit"
-            options={[
-              {
-                label: "Übersicht",
-                current: modularWorkspace.view === "overview",
-                onSelect: () => switchView("overview")
-              },
-              {
-                label: "Inhalte",
-                current: modularWorkspace.view === "content",
-                onSelect: () => switchView("content")
-              }
-            ]}
-          />
-        </div>
-
-        {#if modularWorkspace.view === "content"}
-          <div class="learning-unit-toolbar__utility">
-            <WorkspaceSettingsMenu
-              open={modularSettingsMenuOpen}
-              tocOpen={workspaceTocOpen()}
-              splitView={workspaceSplitView()}
-              showSplitToggle={true}
-              tocWidth={layoutPreferences.tocWidth}
-              workspaceWidth={layoutPreferences.workspaceWidth}
-              splitRatio={layoutPreferences.splitRatio}
-              tocGap={layoutPreferences.tocGap}
-              paneGap={layoutPreferences.paneGap}
-              fontScale={layoutPreferences.fontScale}
-              onToggleMenu={() => {
-                modularSettingsMenuOpen = !modularSettingsMenuOpen;
-              }}
-              onToggleToc={toggleToc}
-              onToggleSplitView={() => setSplitView(!workspaceSplitView())}
-              onResetLayout={resetLayoutPreferences}
-              onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
-              onPreviewWorkspaceWidth={previewWorkspaceWidth}
-              onCommitWorkspaceWidth={commitWorkspaceWidth}
-              onPreviewFontScale={previewFontScale}
-              onCommitFontScale={commitFontScale}
-              onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
-              onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
-              onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
+      <div class="learning-unit-layout-frame learning-unit-layout-frame--toolbar">
+        <div class="learning-unit-toolbar__main">
+          <div class="learning-unit-toolbar__leading">
+            <ModeSwitch
+              label="Lerneinheit"
+              options={[
+                {
+                  label: "Übersicht",
+                  current: modularWorkspace.view === "overview",
+                  onSelect: () => switchView("overview")
+                },
+                {
+                  label: "Inhalte",
+                  current: modularWorkspace.view === "content",
+                  onSelect: () => switchView("content")
+                }
+              ]}
             />
           </div>
-        {/if}
+
+          {#if modularWorkspace.view === "content"}
+            <div class="learning-unit-toolbar__utility">
+              <WorkspaceSettingsMenu
+                open={modularSettingsMenuOpen}
+                tocOpen={workspaceTocOpen()}
+                splitView={workspaceSplitView()}
+                showSplitToggle={true}
+                tocWidth={layoutPreferences.tocWidth}
+                workspaceWidth={layoutPreferences.workspaceWidth}
+                splitRatio={layoutPreferences.splitRatio}
+                tocGap={layoutPreferences.tocGap}
+                paneGap={layoutPreferences.paneGap}
+                fontScale={layoutPreferences.fontScale}
+                onToggleMenu={() => {
+                  modularSettingsMenuOpen = !modularSettingsMenuOpen;
+                }}
+                onToggleToc={toggleToc}
+                onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+                onResetLayout={resetLayoutPreferences}
+                onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
+                onPreviewWorkspaceWidth={previewWorkspaceWidth}
+                onCommitWorkspaceWidth={commitWorkspaceWidth}
+                onPreviewFontScale={previewFontScale}
+                onCommitFontScale={commitFontScale}
+                onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
+                onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
+                onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
+              />
+            </div>
+          {/if}
+        </div>
       </div>
     </section>
 
@@ -1568,62 +1623,66 @@
       </div>
     {/if}
   {:else}
-    <section class="learning-unit-stage learning-unit-stage--content">
-      <LearningUnitContentWorkspace
-        titleLabel="Lerneinheit"
-        title={data.selectedUnit?.unit.title ?? "Lerneinheit"}
-        meta={null}
-        courseId={data.courseId}
-        unitType="linear"
-        moduleId={null}
-        tocOpen={workspaceTocOpen()}
-        splitView={workspaceSplitView()}
-        activePane={workspaceActivePane()}
-        visiblePaneIds={visiblePaneIds()}
-        contentGroups={contentGroups()}
-        paneItems={paneItemsById()}
-        historyByTask={submissionHistoryByTask}
-        submittedTaskId={data.submittedTaskId}
-        submissionMessage={submissionMessageState}
-        submissionErrorTaskId={activeSubmissionErrorTaskId()}
-        submissionErrorMessage={activeSubmissionErrorMessage()}
-        {feedbackPendingTaskId}
-        {feedbackStatusTaskId}
-        {feedbackStatusMessage}
-        {pendingSubmissionIntent}
-        submissionFocusByPane={workspaceSubmissionFocus()}
-        submissionModeByPane={workspaceSubmissionModes()}
-        reviewPanelOpenByTask={reviewPanelOpenByTask}
-        {enhanceTaskForm}
-        onSubmitUploadFeedback={submitUploadFeedback}
-        showSplitToggle={true}
-        layoutMenuEnabled={true}
-        tocWidth={layoutPreferences.tocWidth}
-        workspaceWidth={layoutPreferences.workspaceWidth}
-        splitRatio={layoutPreferences.splitRatio}
-        tocGap={layoutPreferences.tocGap}
-        paneGap={layoutPreferences.paneGap}
-        fontScale={layoutPreferences.fontScale}
-        {itemDomId}
-        onToggleToc={toggleToc}
-        onToggleSplitView={() => setSplitView(!workspaceSplitView())}
-        onResetLayout={resetLayoutPreferences}
-        onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
-        onPreviewWorkspaceWidth={previewWorkspaceWidth}
-        onCommitWorkspaceWidth={commitWorkspaceWidth}
-        onPreviewFontScale={previewFontScale}
-        onCommitFontScale={commitFontScale}
-        onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
-        onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
-        onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
-        onSetActivePane={setActivePane}
-        onOpenItem={openItemFromToc}
-        onToggleItem={togglePaneItem}
-        onToggleReviewPanel={toggleReviewPanel}
-        onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
-        onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
-        onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
-      />
-    </section>
+    <div class="learning-unit-layout-rail">
+      <div class="learning-unit-layout-frame">
+        <section class="learning-unit-stage learning-unit-stage--content">
+          <LearningUnitContentWorkspace
+            titleLabel="Lerneinheit"
+            title={data.selectedUnit?.unit.title ?? "Lerneinheit"}
+            meta={null}
+            courseId={data.courseId}
+            unitType="linear"
+            moduleId={null}
+            tocOpen={workspaceTocOpen()}
+            splitView={workspaceSplitView()}
+            activePane={workspaceActivePane()}
+            visiblePaneIds={visiblePaneIds()}
+            contentGroups={contentGroups()}
+            paneItems={paneItemsById()}
+            historyByTask={submissionHistoryByTask}
+            submittedTaskId={data.submittedTaskId}
+            submissionMessage={submissionMessageState}
+            submissionErrorTaskId={activeSubmissionErrorTaskId()}
+            submissionErrorMessage={activeSubmissionErrorMessage()}
+            {feedbackPendingTaskId}
+            {feedbackStatusTaskId}
+            {feedbackStatusMessage}
+            {pendingSubmissionIntent}
+            submissionFocusByPane={workspaceSubmissionFocus()}
+            submissionModeByPane={workspaceSubmissionModes()}
+            reviewPanelOpenByTask={reviewPanelOpenByTask}
+            {enhanceTaskForm}
+            onSubmitUploadFeedback={submitUploadFeedback}
+            showSplitToggle={true}
+            layoutMenuEnabled={true}
+            tocWidth={layoutPreferences.tocWidth}
+            workspaceWidth={layoutPreferences.workspaceWidth}
+            splitRatio={layoutPreferences.splitRatio}
+            tocGap={layoutPreferences.tocGap}
+            paneGap={layoutPreferences.paneGap}
+            fontScale={layoutPreferences.fontScale}
+            {itemDomId}
+            onToggleToc={toggleToc}
+            onToggleSplitView={() => setSplitView(!workspaceSplitView())}
+            onResetLayout={resetLayoutPreferences}
+            onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
+            onPreviewWorkspaceWidth={previewWorkspaceWidth}
+            onCommitWorkspaceWidth={commitWorkspaceWidth}
+            onPreviewFontScale={previewFontScale}
+            onCommitFontScale={commitFontScale}
+            onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
+            onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
+            onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
+            onSetActivePane={setActivePane}
+            onOpenItem={openItemFromToc}
+            onToggleItem={togglePaneItem}
+            onToggleReviewPanel={toggleReviewPanel}
+            onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
+            onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
+            onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
+          />
+        </section>
+      </div>
+    </div>
   {/if}
 </div>

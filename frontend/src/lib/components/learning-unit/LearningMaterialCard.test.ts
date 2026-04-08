@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { render, screen } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 
@@ -94,5 +98,81 @@ describe("LearningMaterialCard", () => {
     expect(screen.queryByText("Datei")).not.toBeInTheDocument();
     expect(screen.queryByText("arbeitsblatt.pdf")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Datei öffnen" })).toBeNull();
+  });
+
+  it("keeps material rows compact while leaving markdown content open", () => {
+    render(LearningMaterialCard, {
+      props: {
+        material: {
+          id: "material-5",
+          title: "Grundlagen",
+          kind: "markdown",
+          body_md: "Einführung in das Thema."
+        },
+        expanded: true
+      }
+    });
+
+    expect(screen.getByRole("button", { name: /grundlagen/i })).toBeInTheDocument();
+    expect(screen.getByText("Einführung in das Thema.")).toBeInTheDocument();
+    expect(document.querySelector(".learning-work-item__body")).not.toBeNull();
+    expect(document.querySelector(".learning-material-card__header-inner")).not.toBeNull();
+    expect(document.querySelector(".learning-material-card__body-inner")).not.toBeNull();
+  });
+
+  it("renders material accordions as non-transparent reading surfaces", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
+
+    expect(css).toMatch(
+      /\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(30rem,\s*66vw,\s*46rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid/s
+    );
+    expect(css).toMatch(
+      /\.learning-unit-pane-grid--split\s+\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(24rem,\s*88%,\s*34rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);/s
+    );
+    expect(css).toMatch(
+      /\.learning-work-item--material\s+\.learning-work-item__toggle\s*\{[^}]*display:\s*block;[^}]*padding:\s*var\(--space-4\)\s+var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);/s
+    );
+    expect(css).toMatch(
+      /\.learning-work-item--material\s+\.learning-work-item__body\s*\{[^}]*padding:\s*var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);/s
+    );
+    expect(css).toMatch(
+      /\.learning-work-item--material\s+\.learning-material-card__header-inner,\s*\.learning-work-item--material\s+\.learning-material-card__body-inner\s*\{[^}]*width:\s*var\(--learning-material-rail-width\);[^}]*margin-inline:\s*auto;/s
+    );
+    expect(css).not.toMatch(
+      /\.learning-work-item--material\s+\.learning-work-item__support\s*\{[^}]*width:\s*min\(100%,\s*calc\(clamp\(/s
+    );
+    expect(css).not.toMatch(
+      /\.learning-unit-pane-grid--split\s+\.learning-work-item--material\s+\.learning-work-item__support\s*\{[^}]*width:\s*min\(100%,\s*calc\(clamp\(/s
+    );
+    expect(css).not.toMatch(/\.learning-work-item--material\s+\.learning-work-item__body\s*\{[^}]*background:\s*transparent;/s);
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell\s+\.learning-work-item__toggle\s*\{[^}]*padding:\s*0\.45rem 0;/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell\s+\.learning-work-item--material\s+\.learning-work-item__toggle\s*\{[^}]*padding:\s*var\(--space-4\)\s+var\(--space-5\);/s
+    );
+  });
+
+  it("uses the same inner rail for material headers and file bodies", () => {
+    render(LearningMaterialCard, {
+      props: {
+        material: {
+          id: "material-6",
+          title: "Europa-Link",
+          kind: "file",
+          mime_type: "text/html",
+          filename_original: "europa.html",
+          file_url: "https://example.com/europa"
+        },
+        expanded: true
+      }
+    });
+
+    expect(document.querySelector(".learning-material-card__header-inner")).not.toBeNull();
+    expect(document.querySelector(".learning-material-card__body-inner")).not.toBeNull();
+    expect(document.querySelector(".learning-material-card__support")).not.toBeNull();
+    expect(document.querySelector(".learning-work-item__support")).toBeNull();
   });
 });

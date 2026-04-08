@@ -75,6 +75,92 @@ describe("LearningTaskCard", () => {
     expect(document.querySelector(".learning-work-item__toggle-icon svg")).not.toBeNull();
   });
 
+  it("uses a compact modular task row with status and CTA before opening review or editing", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 3",
+        contextLabel: "Modul Graphen",
+        unitType: "modular",
+        expanded: true,
+        compactLayout: true
+      }
+    });
+
+    expect(screen.getByText("Aufgabe offen")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe beginnen" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Aufgabe 3" })).toBeInTheDocument();
+    expect(screen.queryByText(/Erkläre den Zusammenhang/i)).toBeNull();
+    expect(document.querySelector(".learning-task-row")).not.toBeNull();
+    expect(document.querySelector(".learning-task-row__status")).not.toBeNull();
+    expect(document.querySelector(".learning-task-row__copy")).not.toBeNull();
+    expect(document.querySelector(".learning-task-row__actions")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Bearbeitung schließen" })).toBeNull();
+  });
+
+  it("keeps the compact task row visible while review and editor open underneath", async () => {
+    const history = [
+      {
+        id: "submission-1",
+        attempt_nr: 1,
+        kind: "text" as const,
+        intent: "submit" as const,
+        created_at: "2026-04-07T12:10:00+00:00",
+        analysis_status: "completed" as const,
+        text_body: "Meine Lösung",
+        feedback_md: "## Rückmeldung\n\nPasst.",
+        analysis_json: {
+          schema: "learning.v1",
+          score: 8,
+          text: "Stabil",
+          criteria_results: []
+        }
+      }
+    ];
+
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 3",
+        unitType: "modular",
+        compactLayout: true,
+        expanded: true,
+        reviewPanelOpen: true,
+        history
+      }
+    });
+
+    expect(document.querySelector(".learning-task-row")).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Meine Abgabe" })).toBeInTheDocument();
+
+    await rerender({
+      courseId: "course-1",
+      task,
+      taskTitle: "Aufgabe 3",
+      unitType: "modular",
+      compactLayout: true,
+      expanded: true,
+      submissionFocused: true,
+      history
+    });
+
+    expect(document.querySelector(".learning-task-row")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+  });
+
+  it("styles the compact modular task row as a fixed three-column layout", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+
+    expect(css).toMatch(
+      /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(8\.5rem,\s*10\.5rem\)\s+minmax\(0,\s*1fr\)\s+auto;[^}]*align-items:\s*center;/s
+    );
+    expect(css).toMatch(/\.learning-task-row__status\s*\{[^}]*min-width:\s*0;[^}]*padding-right:\s*var\(--space-3\);/s);
+    expect(css).toMatch(/\.learning-task-row__actions\s*\{[^}]*justify-content:\s*flex-end;[^}]*justify-self:\s*end;/s);
+  });
+
   it("keeps the task header compact when expanded", () => {
     render(LearningTaskCard, {
       props: {

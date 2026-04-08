@@ -17,4 +17,16 @@ describe("WorkspaceFrameHeader", () => {
     expect(screen.getByRole("heading", { name: "Erste Schritte" })).toBeInTheDocument();
     expect(screen.getByText("1 Modul geöffnet · Fokus auf Inhalte")).toBeInTheDocument();
   });
+
+  it("does not render an empty heading when no copy is provided", () => {
+    render(WorkspaceFrameHeader, {
+      props: {
+        eyebrow: "",
+        title: "",
+        meta: null
+      }
+    });
+
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+  });
 });

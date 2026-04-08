@@ -8,11 +8,36 @@ describe("learning unit route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
     const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
+    const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(routeSource).toContain('import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";');
     expect(routeSource).toContain("<WorkspaceSettingsMenu");
+    expect(routeSource).toContain('class="learning-unit-toolbar__utility"');
+    expect(routeSource).toContain('class="learning-unit-layout-frame learning-unit-layout-frame--toolbar"');
+    expect(routeSource).toContain("layoutMenuEnabled={false}");
+    expect(routeSource).toContain("modularSettingsMenuOpen = !modularSettingsMenuOpen");
+    expect(routeSource).toContain('!target.closest("[data-layout-menu-root]")');
+    expect(routeSource).toContain('if (event.key === "Escape")');
+    expect(routeSource).not.toContain('<div class="learning-unit-layout-rail">\n        <div class="learning-unit-layout-frame learning-unit-layout-frame--toolbar">');
     expect(routeSource).not.toContain("learning-unit-layout-menu");
     expect(appCss).not.toContain(".learning-unit-layout-menu");
+    expect(designDoc).toContain("## 7. Form, Raum und Bewegung");
+    expect(designDoc).toContain("### 7.1 Spacing");
+    expect(designDoc).toContain("### 7.3 Flächen");
+    expect(designDoc).toContain("### 11.3 Inhalte");
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*background:\s*transparent;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*border:\s*0;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*box-shadow:\s*none;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-work-item__toggle\s*\{[^}]*padding:\s*0\.45rem 0;/s);
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-work-item--material \.learning-work-item__toggle\s*\{[^}]*padding:\s*var\(--space-4\) var\(--space-5\);/s
+    );
+    expect(appCss).toMatch(/\.learning-unit-toolbar__utility\s*\{[^}]*justify-content:\s*flex-end;[^}]*margin-left:\s*auto;/s);
+    expect(appCss).toMatch(/\.learning-unit-layout-frame--toolbar\s*\{[^}]*width:\s*min\(100%,\s*var\(--learning-unit-workspace-width\)\);/s);
+    expect(appCss).toMatch(/\.learning-unit-toolbar__utility \.workspace-top-action--quiet\s*\{[^}]*border-color:\s*color-mix\(in srgb,\s*var\(--color-border\) 38%,\s*transparent 62%\);/s);
   });
 
   it("keeps pane item lists intact while tracking a single inline submission focus", () => {
@@ -61,13 +86,93 @@ describe("learning unit route contract", () => {
       path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
       "utf8"
     );
+    const taskCardSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningTaskCard.svelte"),
+      "utf8"
+    );
 
     expect(routeSource).toContain("let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({})");
     expect(routeSource).toContain("function historyForTask(taskId: string): LearningSubmission[]");
     expect(routeSource).not.toContain("let historyState = $state<LearningSubmission[]>(data.history)");
     expect(workspaceSource).toContain("historyByTask");
-    expect(workspaceSource).toContain("history={historyByTask[entry.item.task.id] ?? []}");
+    expect(workspaceSource).toContain("history={historyByTask[task.id] ?? []}");
+    expect(workspaceSource).toContain("compactLayout={true}");
+    expect(workspaceSource).toContain('class="learning-unit-module"');
+    expect(workspaceSource).toContain('class="learning-unit-module__materials"');
+    expect(workspaceSource).toContain('class="learning-unit-module__tasks"');
+    expect(workspaceSource).toContain("{#if group.materials.length}");
+    expect(workspaceSource).toContain('class="learning-unit-workspace-surface"');
+    expect(taskCardSource).not.toContain("learning-task-row__preview");
     expect(workspaceSource).not.toContain("{history}");
+  });
+
+  it("reopens modular materials on restore and module reopen instead of persisting them closed", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("reopenMaterialEntries");
+    expect(routeSource).toContain("function reopenModularMaterials");
+    expect(routeSource).toContain("reopenModularMaterials(moduleIds)");
+    expect(routeSource).toContain("reopenModularMaterials([moduleId])");
+  });
+
+  it("derives modular spacing from DESIGN.md instead of flattening modules into one continuous list", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
+
+    expect(designDoc).toContain("- `--space-4`: `1rem`");
+    expect(designDoc).toContain("- `--space-5`: `1.5rem`");
+    expect(designDoc).toContain("- `--space-6`: `2rem`");
+    expect(designDoc).toContain("- `--space-7`: `3rem`");
+    expect(appCss).toMatch(/\.learning-unit-pane__stack--modules\s*\{[^}]*gap:\s*var\(--space-7\);/s);
+    expect(appCss).toMatch(/\.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-5\);/s);
+    expect(appCss).toMatch(/\.learning-unit-module__materials,\s*\.learning-unit-module__tasks\s*\{[^}]*gap:\s*var\(--space-4\);/s);
+    expect(appCss).toMatch(/\.learning-unit-module__tasks\s*\{[^}]*margin-top:\s*var\(--space-6\);/s);
+    expect(appCss).toMatch(
+      /\.learning-unit-module__section-head h5\s*\{[^}]*font-size:\s*calc\(1\.02rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*800;/s
+    );
+    expect(appCss).toMatch(
+      /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(8\.5rem,\s*10\.5rem\)\s+minmax\(0,\s*1fr\)\s+auto;/s
+    );
+  });
+
+  it("lets the learner workspace use the viewport width instead of capping the content area in the center", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const workspaceSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
+      "utf8"
+    );
+    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
+
+    expect(designDoc).toContain("### 7.1 Spacing");
+    expect(designDoc).toContain("### 11.3 Inhalte");
+    expect(appCss).not.toMatch(/\.learning-unit-pane-grid--single\s*\{[^}]*48rem/s);
+    expect(appCss).toMatch(
+      /\.learning-unit-space\.workspace-page--learner-unit-content\s*\{[^}]*width:\s*100vw;[^}]*margin-left:\s*calc\(50%\s*-\s*50vw\);/s
+    );
+    expect(appCss).toMatch(/\.learning-unit-layout-frame\s*\{[^}]*width:\s*min\(100%,\s*var\(--learning-unit-workspace-width\)\);/s);
+    expect(routeSource).toContain('class="learning-unit-layout-rail"');
+    expect(routeSource).toContain('class="learning-unit-layout-frame"');
+    expect(workspaceSource).not.toContain('class="learning-unit-layout-rail"');
+    expect(workspaceSource).not.toContain('class="learning-unit-layout-frame"');
+  });
+
+  it("removes horizontal page separators while keeping task rows as the primary objects", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
+
+    expect(designDoc).toContain("### 7.3 Flächen");
+    expect(designDoc).toContain("## 13. Verbotene Alt-Muster");
+    expect(appCss).not.toMatch(/\.learning-unit-module\s*\{[^}]*border-bottom:/s);
+    expect(appCss).not.toMatch(/\.learning-unit-module__section-head\s*\{[^}]*border-bottom:/s);
+    expect(appCss).toMatch(/\.learning-work-item__body\s*\{[^}]*display:\s*grid;[^}]*padding:\s*0\.95rem 0 1\.1rem;[^}]*\}/s);
+    expect(appCss).not.toMatch(/\.learning-task-status\s*\{[^}]*border-top:/s);
+    expect(appCss).not.toMatch(/\.learning-task-submission-summary\s*\{[^}]*border-top:/s);
+    expect(appCss).toMatch(/\.learning-task-row\s*\{[^}]*border:\s*1px solid/s);
   });
 
   it("restores open modular tabs through an explicit restore flow with overview fallback", () => {

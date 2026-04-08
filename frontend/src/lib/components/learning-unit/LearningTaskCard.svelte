@@ -25,6 +25,7 @@
     submissionFocused = false,
     initialSubmissionMode = null,
     reviewPanelOpen = false,
+    compactLayout = false,
     enhanceSubmit = undefined,
     onToggle = null,
     onToggleReviewPanel = null,
@@ -51,6 +52,7 @@
     submissionFocused?: boolean;
     initialSubmissionMode?: "text" | "upload" | null;
     reviewPanelOpen?: boolean;
+    compactLayout?: boolean;
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
     onToggleReviewPanel?: (() => void) | null;
@@ -68,6 +70,7 @@
   type SummaryTab = "submission" | "feedback" | "evaluation";
   type SubmissionMode = "text" | "upload";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope">;
+  type CompactTaskTone = "new" | "draft" | "pending" | "final" | "error";
   let activeSummaryTab = $state<SummaryTab>("submission");
   let draftText = $state("");
   let editorMode = $state<SubmissionMode>("text");
@@ -130,6 +133,10 @@
 
   function showSubmissionSummary(): boolean {
     return task.kind !== "h5p" && reviewPanelOpen && hasSubmission();
+  }
+
+  function usesCompactTaskLayout(): boolean {
+    return compactLayout;
   }
 
   function showInlinePendingNote(): boolean {
@@ -334,6 +341,52 @@
     draftText = value;
   }
 
+  function compactTaskTone(): CompactTaskTone {
+    if (hasFinalSubmission()) {
+      return "final";
+    }
+    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "failed") {
+      return "error";
+    }
+    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "completed") {
+      return "draft";
+    }
+    if (latestSubmissionIntent() === "feedback") {
+      return "pending";
+    }
+    return "new";
+  }
+
+  function compactStatusLabel(): string {
+    if (hasFinalSubmission()) {
+      return "Final abgegeben";
+    }
+    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "completed") {
+      return "Entwurf mit Rückmeldung";
+    }
+    if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "failed") {
+      return "Rückmeldung fehlgeschlagen";
+    }
+    if (latestSubmissionIntent() === "feedback") {
+      return "Rückmeldung läuft";
+    }
+    return "Aufgabe offen";
+  }
+
+  function compactStatusMeta(): string | null {
+    if (hasFinalSubmission()) {
+      return latestFinalSubmissionAt();
+    }
+    if (latestSubmission()) {
+      return latestSubmissionOrThrow().created_at;
+    }
+    return null;
+  }
+
+  function compactRowActive(): boolean {
+    return submissionFocused || reviewPanelOpen;
+  }
+
   $effect(() => {
     if (!reviewPanelOpen) {
       activeSummaryTab = "submission";
@@ -354,42 +407,120 @@
 
 </script>
 
-<article class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--task" id={domId}>
+<article
+  class:learning-work-item--collapsed={!expanded && !usesCompactTaskLayout()}
+  class:learning-work-item--task-compact={usesCompactTaskLayout()}
+  class="learning-work-item learning-work-item--task"
+  id={domId}
+>
+  {#if usesCompactTaskLayout()}
+    <section
+      class:learning-task-row--active={compactRowActive()}
+      class:learning-task-row--draft={compactTaskTone() === "draft"}
+      class:learning-task-row--error={compactTaskTone() === "error"}
+      class:learning-task-row--final={compactTaskTone() === "final"}
+      class:learning-task-row--new={compactTaskTone() === "new"}
+      class:learning-task-row--pending={compactTaskTone() === "pending"}
+      class="learning-task-row"
+      aria-label={taskTitle}
+    >
+      <div class="learning-task-row__status">
+        <p class="learning-task-row__status-label">{compactStatusLabel()}</p>
+        {#if compactStatusMeta()}
+          <p class="learning-task-row__status-meta">{compactStatusMeta()}</p>
+        {/if}
+      </div>
+
+      <div class="learning-task-row__copy">
+        <h5 class="learning-task-row__title">{taskTitle}</h5>
+      </div>
+
+      <div class="learning-task-row__actions">
+        {#if hasSubmission() && task.kind !== "h5p"}
+          <button
+            class:workspace-top-action--active={reviewPanelOpen}
+            class="workspace-top-action workspace-top-action--quiet"
+            type="button"
+            onclick={() => onToggleReviewPanel?.()}
+          >
+            Meine Abgabe
+          </button>
+        {/if}
+        <button
+          class:workspace-top-action--accent={!hasSubmission()}
+          class:workspace-top-action--quiet={hasSubmission()}
+          class="workspace-top-action"
+          type="button"
+          onclick={() => {
+            if (uploadOnly() || preferredEditorMode() === "upload") {
+              onEnterUploadWorkspace?.();
+              return;
+            }
+            onEnterSubmissionWorkspace?.();
+          }}
+        >
+          {actionLabel()}
+        </button>
+        {#if task.kind !== "h5p" && canFinalizeLatestDraft()}
+          <form method="POST" use:enhance={enhanceSubmit}>
+            <input type="hidden" name="task_id" value={task.id} />
+            <input type="hidden" name="task_kind" value={task.kind} />
+            <input type="hidden" name="unit_type" value={unitType} />
+            {#if moduleId}
+              <input type="hidden" name="module_id" value={moduleId} />
+            {/if}
+            <button
+              class="workspace-top-action workspace-top-action--accent"
+              name="submission_intent"
+              type="submit"
+              value="submit"
+              disabled={feedbackPending}
+            >
+              Endgültig abgeben
+            </button>
+          </form>
+        {/if}
+      </div>
+    </section>
+  {:else}
     <button
       class:learning-work-item__toggle--collapsed={!expanded}
       class="learning-work-item__toggle"
       type="button"
       title={taskTitle}
-    onclick={() => onToggle?.()}
-  >
-    <div class="learning-work-item__header">
-      <div class="learning-work-item__header-copy">
-        <span class="learning-work-item__kicker">{taskKicker()}</span>
-        <span class="learning-work-item__title">{taskTitle}</span>
-      </div>
-
-      <span class:learning-work-item__toggle-icon--expanded={expanded} class="learning-work-item__toggle-icon" aria-hidden="true">
-        <svg viewBox="0 0 20 20">
-            <path d="M6.25 8.25 10 12l3.75-3.75" />
-          </svg>
-        </span>
-      </div>
-    </button>
-
-    {#if expanded}
-      <div class="learning-work-item__body">
-        <div class="markdown-prose">
-          {@html renderMarkdown(task.instruction_md)}
+      onclick={() => onToggle?.()}
+    >
+      <div class="learning-work-item__header">
+        <div class="learning-work-item__header-copy">
+          <span class="learning-work-item__kicker">{taskKicker()}</span>
+          <span class="learning-work-item__title">{taskTitle}</span>
         </div>
 
-        {#if task.kind !== "h5p"}
-          <section class="learning-task-status" aria-label="Aufgabenstatus">
-            <p class="workspace-label">Status</p>
-            <p class="learning-task-status__headline">{statusHeadline()}</p>
-            {#if statusDetail()}
-              <p class="learning-task-status__detail">{statusDetail()}</p>
-            {/if}
-          </section>
+        <span class:learning-work-item__toggle-icon--expanded={expanded} class="learning-work-item__toggle-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20">
+              <path d="M6.25 8.25 10 12l3.75-3.75" />
+            </svg>
+          </span>
+        </div>
+      </button>
+  {/if}
+
+    {#if expanded || usesCompactTaskLayout()}
+      <div class="learning-work-item__body">
+        {#if !usesCompactTaskLayout()}
+          <div class="markdown-prose">
+            {@html renderMarkdown(task.instruction_md)}
+          </div>
+
+          {#if task.kind !== "h5p"}
+            <section class="learning-task-status" aria-label="Aufgabenstatus">
+              <p class="workspace-label">Status</p>
+              <p class="learning-task-status__headline">{statusHeadline()}</p>
+              {#if statusDetail()}
+                <p class="learning-task-status__detail">{statusDetail()}</p>
+              {/if}
+            </section>
+          {/if}
         {/if}
 
         {#if submissionFocused}
@@ -554,52 +685,54 @@
           {#if showStandalonePendingNote()}
             <p class="workspace-note">{feedbackPendingMessage()}</p>
           {/if}
-          <div class="learning-task-cta-row">
-            {#if hasSubmission() && task.kind !== "h5p"}
-              <button
-                class:workspace-top-action--active={reviewPanelOpen}
-                class="workspace-top-action workspace-top-action--quiet"
-                type="button"
-                onclick={() => onToggleReviewPanel?.()}
-              >
-                Meine Abgabe
-              </button>
-            {/if}
-            <button
-              class:workspace-top-action--accent={!hasSubmission()}
-              class:workspace-top-action--quiet={hasSubmission()}
-              class="workspace-top-action"
-              type="button"
-              onclick={() => {
-                if (uploadOnly() || preferredEditorMode() === "upload") {
-                  onEnterUploadWorkspace?.();
-                  return;
-                }
-                onEnterSubmissionWorkspace?.();
-              }}
-            >
-              {actionLabel()}
-            </button>
-            {#if task.kind !== "h5p" && canFinalizeLatestDraft()}
-              <form method="POST" use:enhance={enhanceSubmit}>
-                <input type="hidden" name="task_id" value={task.id} />
-                <input type="hidden" name="task_kind" value={task.kind} />
-                <input type="hidden" name="unit_type" value={unitType} />
-                {#if moduleId}
-                  <input type="hidden" name="module_id" value={moduleId} />
-                {/if}
+          {#if !usesCompactTaskLayout()}
+            <div class="learning-task-cta-row">
+              {#if hasSubmission() && task.kind !== "h5p"}
                 <button
-                  class="workspace-top-action workspace-top-action--accent"
-                  name="submission_intent"
-                  type="submit"
-                  value="submit"
-                  disabled={feedbackPending}
+                  class:workspace-top-action--active={reviewPanelOpen}
+                  class="workspace-top-action workspace-top-action--quiet"
+                  type="button"
+                  onclick={() => onToggleReviewPanel?.()}
                 >
-                  Endgültig abgeben
+                  Meine Abgabe
                 </button>
-              </form>
-            {/if}
-          </div>
+              {/if}
+              <button
+                class:workspace-top-action--accent={!hasSubmission()}
+                class:workspace-top-action--quiet={hasSubmission()}
+                class="workspace-top-action"
+                type="button"
+                onclick={() => {
+                  if (uploadOnly() || preferredEditorMode() === "upload") {
+                    onEnterUploadWorkspace?.();
+                    return;
+                  }
+                  onEnterSubmissionWorkspace?.();
+                }}
+              >
+                {actionLabel()}
+              </button>
+              {#if task.kind !== "h5p" && canFinalizeLatestDraft()}
+                <form method="POST" use:enhance={enhanceSubmit}>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <input type="hidden" name="task_kind" value={task.kind} />
+                  <input type="hidden" name="unit_type" value={unitType} />
+                  {#if moduleId}
+                    <input type="hidden" name="module_id" value={moduleId} />
+                  {/if}
+                  <button
+                    class="workspace-top-action workspace-top-action--accent"
+                    name="submission_intent"
+                    type="submit"
+                    value="submit"
+                    disabled={feedbackPending}
+                  >
+                    Endgültig abgeben
+                  </button>
+                </form>
+              {/if}
+            </div>
+          {/if}
           {#if showSubmissionSummary()}
             <section class="learning-task-submission-summary" aria-label="Meine Abgabe">
               <header class="learning-task-submission-summary__header">

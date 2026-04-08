@@ -1216,6 +1216,10 @@ h6,
 .learning-unit-content-shell .workspace-outline {
   position: sticky;
   top: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .learning-unit-content-shell .learning-unit-pane-grid {
@@ -1224,12 +1228,12 @@ h6,
 
 .learning-unit-content-shell .learning-unit-workspace-surface {
   gap: 0;
-  padding: 1rem 1.15rem;
-  border: 2px solid var(--color-border);
+  padding: 0;
+  border: 0;
   border-radius: 0;
-  background: var(--color-bg-surface);
+  background: transparent;
   color: var(--color-text);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .learning-unit-content-shell .learning-unit-workspace-surface--focused {
@@ -1248,6 +1252,10 @@ h6,
 
 .learning-unit-content-shell .learning-work-item__toggle {
   padding: 0.45rem 0;
+}
+
+.learning-unit-content-shell .learning-work-item--material .learning-work-item__toggle {
+  padding: var(--space-4) var(--space-5);
 }
 
 .learning-unit-content-shell .learning-work-item__title {

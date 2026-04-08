@@ -261,3 +261,24 @@ export function reconcilePaneStacks(
     right: splitView ? canonicalEntries(filtered.right) : []
   };
 }
+
+export function reopenMaterialEntries(
+  entries: PaneStackEntry[],
+  items: LearningContentItem[],
+  moduleIds: string[]
+): PaneStackEntry[] {
+  const targetModules = new Set(moduleIds);
+  const materialKeys = new Set(
+    items
+      .filter((item) => item.kind === "material" && item.moduleId && targetModules.has(item.moduleId))
+      .map((item) => item.key)
+  );
+
+  if (!materialKeys.size) {
+    return entries;
+  }
+
+  return entries.map((entry) =>
+    materialKeys.has(entry.key) && !entry.expanded ? { ...entry, expanded: true } : entry
+  );
+}

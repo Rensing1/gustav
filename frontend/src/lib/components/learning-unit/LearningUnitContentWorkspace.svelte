@@ -7,6 +7,7 @@
   import type { SubmitFunction } from "@sveltejs/kit";
   import type {
     ContentGroup,
+    LearningContentItem,
     PaneId
   } from "$lib/learning-unit/workspace";
   import type { LearningSubmission } from "$lib/types/learning";
@@ -166,6 +167,36 @@
         `--learning-unit-pane-gap: ${paneGap}rem`
       ].join("; ")
   );
+
+  function paneItemEntryMap(
+    paneId: PaneId
+  ): Map<string, { item: LearningContentItem; expanded: boolean }> {
+    return new Map((paneItems[paneId] ?? []).map((entry) => [entry.item.key, entry]));
+  }
+
+  function modularGroupsForPane(paneId: PaneId): Array<{
+    id: string;
+    title: string | null;
+    materials: Array<{ item: LearningContentItem; expanded: boolean }>;
+    tasks: Array<{ item: LearningContentItem; expanded: boolean }>;
+  }> {
+    const entriesByKey = paneItemEntryMap(paneId);
+
+    return contentGroups
+      .map((group) => {
+        const entries = group.items
+          .map((item) => entriesByKey.get(item.key) ?? null)
+          .filter((entry): entry is { item: LearningContentItem; expanded: boolean } => Boolean(entry));
+
+        return {
+          id: group.id,
+          title: group.title,
+          materials: entries.filter((entry) => entry.item.kind === "material"),
+          tasks: entries.filter((entry) => entry.item.kind === "task")
+        };
+      })
+      .filter((group) => group.materials.length > 0 || group.tasks.length > 0);
+  }
 </script>
 
 <svelte:document
@@ -182,42 +213,40 @@
   }}
 />
 
-<div class="learning-unit-layout-rail">
-  <div class="learning-unit-layout-frame" style={shellStyle}>
-    {#if titleLabel || title || meta || layoutMenuEnabled}
-      <WorkspaceFrameHeader eyebrow={titleLabel} title={title} meta={meta}>
-        {#snippet actions()}
-          {#if layoutMenuEnabled}
-            <WorkspaceSettingsMenu
-              open={layoutMenuOpen}
-              {tocOpen}
-              {splitView}
-              {showSplitToggle}
-              {tocWidth}
-              {workspaceWidth}
-              {splitRatio}
-              {tocGap}
-              {paneGap}
-              {fontScale}
-              onToggleMenu={() => {
-                layoutMenuOpen = !layoutMenuOpen;
-              }}
-              {onToggleToc}
-              {onToggleSplitView}
-              {onResetLayout}
-              {onUpdateTocWidth}
-              {onPreviewWorkspaceWidth}
-              {onCommitWorkspaceWidth}
-              {onPreviewFontScale}
-              {onCommitFontScale}
-              {onUpdateSplitRatio}
-              {onUpdateTocGap}
-              {onUpdatePaneGap}
-            />
-          {/if}
-        {/snippet}
-      </WorkspaceFrameHeader>
-    {/if}
+{#if titleLabel || title || meta || layoutMenuEnabled}
+  <WorkspaceFrameHeader eyebrow={titleLabel} title={title} meta={meta}>
+    {#snippet actions()}
+      {#if layoutMenuEnabled}
+        <WorkspaceSettingsMenu
+          open={layoutMenuOpen}
+          {tocOpen}
+          {splitView}
+          {showSplitToggle}
+          {tocWidth}
+          {workspaceWidth}
+          {splitRatio}
+          {tocGap}
+          {paneGap}
+          {fontScale}
+          onToggleMenu={() => {
+            layoutMenuOpen = !layoutMenuOpen;
+          }}
+          {onToggleToc}
+          {onToggleSplitView}
+          {onResetLayout}
+          {onUpdateTocWidth}
+          {onPreviewWorkspaceWidth}
+          {onCommitWorkspaceWidth}
+          {onPreviewFontScale}
+          {onCommitFontScale}
+          {onUpdateSplitRatio}
+          {onUpdateTocGap}
+          {onUpdatePaneGap}
+        />
+      {/if}
+    {/snippet}
+  </WorkspaceFrameHeader>
+{/if}
 
 <section
   class:learning-unit-content-shell--single={!splitView}
@@ -255,47 +284,125 @@
       >
         <div class="learning-unit-workspace-surface">
           {#if paneItems[paneId]?.length}
-            <div class="learning-unit-pane__stack">
-              {#each paneItems[paneId] as entry}
-                {#if entry.item.kind === "material" && entry.item.material}
-                  <LearningMaterialCard
-                    material={entry.item.material}
-                    domId={itemDomId(paneId, entry.item.key)}
-                    contextLabel={entry.item.contextLabel}
-                    expanded={entry.expanded}
-                    onToggle={() => onToggleItem(paneId, entry.item.key)}
-                  />
-                {:else if entry.item.kind === "task" && entry.item.task}
-                  <LearningTaskCard
-                    {courseId}
-                    task={entry.item.task}
-                    taskTitle={entry.item.title}
-                    contextLabel={entry.item.contextLabel}
-                    {unitType}
-                    moduleId={entry.item.moduleId ?? moduleId}
-                    history={historyByTask[entry.item.task.id] ?? []}
-                    domId={itemDomId(paneId, entry.item.key)}
-                    expanded={entry.expanded}
-                    submitted={submittedTaskId === entry.item.task.id}
-                    message={submissionMessage}
-                    errorMessage={submissionErrorTaskId === entry.item.task.id ? submissionErrorMessage : null}
-                    feedbackPending={feedbackPendingTaskId === entry.item.task.id}
-                    feedbackStatusMessage={feedbackStatusTaskId === entry.item.task.id ? feedbackStatusMessage : null}
-                    pendingIntent={feedbackPendingTaskId === entry.item.task.id ? pendingSubmissionIntent : null}
-                    submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
-                    initialSubmissionMode={submissionModeByPane[paneId]}
-                    reviewPanelOpen={Boolean(reviewPanelOpenByTask[entry.item.task!.id])}
-                    enhanceSubmit={enhanceTaskForm?.(entry.item.task.id)}
-                    onToggle={() => onToggleItem(paneId, entry.item.key)}
-                    onToggleReviewPanel={() => onToggleReviewPanel(entry.item.task!.id)}
-                    onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
-                    onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
-                    onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
-                    {onSubmitUploadFeedback}
-                  />
-                {/if}
-              {/each}
-            </div>
+            {#if unitType === "modular"}
+              <div class="learning-unit-pane__stack learning-unit-pane__stack--modules">
+                {#each modularGroupsForPane(paneId) as group}
+                  <section class="learning-unit-module" aria-label={group.title ?? "Modul"}>
+                    <header class="learning-unit-module__header">
+                      <div class="learning-unit-module__copy">
+                        <p class="workspace-label">Modul</p>
+                        <h4 class="learning-unit-module__title">{group.title ?? "Modul"}</h4>
+                      </div>
+                    </header>
+
+                    {#if group.materials.length}
+                      <section class="learning-unit-module__materials" aria-label="Materialien">
+                        <div class="learning-unit-module__section-head">
+                          <h5>Materialien</h5>
+                        </div>
+                        <div class="learning-unit-module__section-body">
+                          {#each group.materials as entry}
+                            {#if entry.item.material}
+                              <LearningMaterialCard
+                                material={entry.item.material}
+                                domId={itemDomId(paneId, entry.item.key)}
+                                contextLabel={null}
+                                expanded={entry.expanded}
+                                onToggle={() => onToggleItem(paneId, entry.item.key)}
+                              />
+                            {/if}
+                          {/each}
+                        </div>
+                      </section>
+                    {/if}
+
+                    <section class="learning-unit-module__tasks" aria-label="Aufgaben">
+                      <div class="learning-unit-module__section-head">
+                        <h5>Aufgaben</h5>
+                      </div>
+                      <div class="learning-unit-module__section-body">
+                        {#each group.tasks as entry}
+                          {#if entry.item.task}
+                            {@const task = entry.item.task}
+                            <LearningTaskCard
+                              {courseId}
+                              {task}
+                              taskTitle={entry.item.title}
+                              contextLabel={null}
+                              {unitType}
+                              moduleId={entry.item.moduleId ?? moduleId}
+                              history={historyByTask[task.id] ?? []}
+                              domId={itemDomId(paneId, entry.item.key)}
+                              expanded={true}
+                              compactLayout={true}
+                              submitted={submittedTaskId === task.id}
+                              message={submissionMessage}
+                              errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
+                              feedbackPending={feedbackPendingTaskId === task.id}
+                              feedbackStatusMessage={feedbackStatusTaskId === task.id ? feedbackStatusMessage : null}
+                              pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
+                              submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
+                              initialSubmissionMode={submissionModeByPane[paneId]}
+                              reviewPanelOpen={Boolean(reviewPanelOpenByTask[task.id])}
+                              enhanceSubmit={enhanceTaskForm?.(task.id)}
+                              onToggle={() => onToggleItem(paneId, entry.item.key)}
+                              onToggleReviewPanel={() => onToggleReviewPanel(task.id)}
+                              onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
+                              onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
+                              onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
+                              {onSubmitUploadFeedback}
+                            />
+                          {/if}
+                        {/each}
+                      </div>
+                    </section>
+                  </section>
+                {/each}
+              </div>
+            {:else}
+              <div class="learning-unit-pane__stack">
+                {#each paneItems[paneId] as entry}
+                  {#if entry.item.kind === "material" && entry.item.material}
+                    <LearningMaterialCard
+                      material={entry.item.material}
+                      domId={itemDomId(paneId, entry.item.key)}
+                      contextLabel={entry.item.contextLabel}
+                      expanded={entry.expanded}
+                      onToggle={() => onToggleItem(paneId, entry.item.key)}
+                    />
+                  {:else if entry.item.kind === "task" && entry.item.task}
+                    {@const task = entry.item.task}
+                    <LearningTaskCard
+                      {courseId}
+                      {task}
+                      taskTitle={entry.item.title}
+                      contextLabel={entry.item.contextLabel}
+                      {unitType}
+                      moduleId={entry.item.moduleId ?? moduleId}
+                      history={historyByTask[task.id] ?? []}
+                      domId={itemDomId(paneId, entry.item.key)}
+                      expanded={entry.expanded}
+                      submitted={submittedTaskId === task.id}
+                      message={submissionMessage}
+                      errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
+                      feedbackPending={feedbackPendingTaskId === task.id}
+                      feedbackStatusMessage={feedbackStatusTaskId === task.id ? feedbackStatusMessage : null}
+                      pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
+                      submissionFocused={submissionFocusByPane[paneId] === entry.item.key}
+                      initialSubmissionMode={submissionModeByPane[paneId]}
+                      reviewPanelOpen={Boolean(reviewPanelOpenByTask[task.id])}
+                      enhanceSubmit={enhanceTaskForm?.(task.id)}
+                      onToggle={() => onToggleItem(paneId, entry.item.key)}
+                      onToggleReviewPanel={() => onToggleReviewPanel(task.id)}
+                      onEnterSubmissionWorkspace={() => onEnterSubmissionWorkspace(paneId, entry.item.key, "text")}
+                      onEnterUploadWorkspace={() => onEnterUploadWorkspace(paneId, entry.item.key)}
+                      onExitSubmissionWorkspace={() => onExitSubmissionWorkspace(paneId)}
+                      {onSubmitUploadFeedback}
+                    />
+                  {/if}
+                {/each}
+              </div>
+            {/if}
           {:else}
             <div class="learning-unit-pane__empty">
               <p class="learning-unit-empty-copy">In diesem Bereich sind aktuell keine Inhalte geöffnet.</p>
@@ -306,5 +413,3 @@
     {/each}
   </div>
 </section>
-  </div>
-</div>

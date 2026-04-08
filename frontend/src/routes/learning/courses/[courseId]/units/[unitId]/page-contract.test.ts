@@ -212,6 +212,28 @@ describe("learning unit route contract", () => {
     );
   });
 
+  it("documents and styles learner markdown as a shared GFM-capable surface", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const packageJson = readFileSync(path.resolve(currentDir, "../../../../../../../../frontend/package.json"), "utf8");
+    const markdownSource = readFileSync(path.resolve(currentDir, "../../../../../../lib/utils/markdown.ts"), "utf8");
+    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
+
+    expect(packageJson).toContain('"markdown-it"');
+    expect(packageJson).toContain('"isomorphic-dompurify"');
+    expect(markdownSource).toContain("MarkdownIt");
+    expect(markdownSource).toContain("DOMPurify");
+    expect(markdownSource).toContain("ALLOWED_TAGS");
+    expect(markdownSource).toContain('"br"');
+    expect(markdownSource).toContain("linkify: true");
+    expect(markdownSource).toContain("breaks: true");
+    expect(appCss).toMatch(/\.markdown-prose table\s*\{[^}]*width:\s*100%;[^}]*border-collapse:\s*collapse;/s);
+    expect(appCss).toMatch(/\.markdown-prose th,\s*\.markdown-prose td\s*\{[^}]*border:\s*1px solid/s);
+    expect(appCss).toMatch(/\.markdown-prose a\s*\{[^}]*color:\s*var\(--color-link\);/s);
+    expect(designDoc).toContain("Markdown im Schüler-Lernraum wird zentral");
+    expect(designDoc).toContain("nummerierte Listen, Links, Tabellen, `<br>`");
+  });
+
   it("lets the learner workspace use the viewport width instead of capping the content area in the center", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

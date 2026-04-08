@@ -89,4 +89,42 @@ describe("LearningSubmissionWorkspace", () => {
     expect(within(historyEntries[0] as HTMLElement).getAllByText("Rückmeldung").length).toBeGreaterThan(0);
     expect(within(historyEntries[1] as HTMLElement).getAllByText("Abgabe").length).toBeGreaterThan(0);
   });
+
+  it("renders markdown for submission, feedback and evaluation history in the learner workspace", () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "course-1",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialTab: "history",
+        initialHistoryLoaded: true,
+        initialHistory: [
+          feedbackSubmission({
+            text_body: "## Lösung\n\n**Antwort**<br>mit Umbruch\n\n1. Schritt\n2. Schritt\n\n| A | B |\n| --- | --- |\n| 1 | 2 |",
+            feedback_md: "## Rückmeldung\n\n*Gut* gemacht.\n\n- Präzise",
+            analysis_json: {
+              schema: "learning.v1",
+              score: 8,
+              text: "Stabil",
+              criteria_results: [
+                {
+                  criterion: "Kriterium",
+                  explanation_md: "[Hinweis](https://example.com)\n\n| Name | Wert |\n| --- | --- |\n| A | B |"
+                }
+              ]
+            }
+          })
+        ]
+      }
+    });
+
+    expect(document.querySelector(".learning-submission-history .markdown-prose h2")).not.toBeNull();
+    expect(document.querySelector(".learning-submission-history .markdown-prose strong")).not.toBeNull();
+    expect(document.querySelector(".learning-submission-history .markdown-prose em")).not.toBeNull();
+    expect(document.querySelector(".learning-submission-history .markdown-prose br")).not.toBeNull();
+    expect(document.querySelector(".learning-submission-history .markdown-prose ol")).not.toBeNull();
+    expect(document.querySelector(".learning-submission-history .markdown-prose table")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Hinweis" })).toHaveAttribute("href", "https://example.com");
+  });
 });

@@ -2382,6 +2382,33 @@ select {
   padding-left: 1.2rem;
 }
 
+.markdown-prose a {
+  color: var(--color-link);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+.markdown-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.96em;
+}
+
+.markdown-prose th,
+.markdown-prose td {
+  border: 1px solid color-mix(in srgb, var(--color-border) 18%, transparent 82%);
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-prose th {
+  font-family: var(--font-technical);
+  font-size: 0.9em;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--color-bg-muted) 88%, white 12%);
+}
+
 .markdown-prose code {
   padding: 0.08rem 0.34rem;
   border-radius: 0.4rem;

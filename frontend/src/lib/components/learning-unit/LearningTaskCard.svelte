@@ -774,7 +774,7 @@
                 {#if activeSummaryTab === "submission"}
                   {#if latestSubmission() && latestSubmissionOrThrow().text_body}
                     <div class="markdown-prose">
-                      <p>{latestSubmissionOrThrow().text_body}</p>
+                      {@html renderMarkdown(latestSubmissionOrThrow().text_body)}
                     </div>
                   {:else if submittedFile()?.mime.startsWith("image/")}
                     <div class="learning-task-submission-summary__asset">

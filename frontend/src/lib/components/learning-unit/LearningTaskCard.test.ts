@@ -16,7 +16,8 @@ beforeAll(() => {
 
 const task: LearningTask = {
   id: "task-1",
-  instruction_md: "## Arbeitsauftrag\n\nErkläre den Zusammenhang.",
+  instruction_md:
+    "## Arbeitsauftrag\n\n**Erkläre** den *Zusammenhang*.<br>Nutze den Text.\n\n- Aspekt eins\n- Aspekt zwei\n\n1. Schritt eins\n2. Schritt zwei\n\n[Quelle](https://example.com)\n\n| Kriterium | Gewicht |\n| --- | --- |\n| Klarheit | 2 |",
   criteria: ["Klarheit"],
   kind: "native"
 };
@@ -48,7 +49,7 @@ describe("LearningTaskCard", () => {
 
     expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
-    expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
+    expect(screen.getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Datei auswählen")).toBeInTheDocument();
     expect(screen.queryByText("Arbeitsbereich")).toBeNull();
   });
@@ -92,7 +93,7 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Aufgabe 3 beginnen" })).toBeInTheDocument();
     expect(screen.queryByText("Aufgabe offen")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Aufgabe 3" })).toBeNull();
-    expect(screen.queryByText(/Erkläre den Zusammenhang/i)).toBeNull();
+    expect(screen.queryByText(/Erkläre/i)).toBeNull();
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__copy")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__preview")).not.toBeNull();
@@ -135,7 +136,7 @@ describe("LearningTaskCard", () => {
 
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
     expect(screen.getByRole("region", { name: "Meine Abgabe" })).toBeInTheDocument();
-    expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
+    expect(screen.getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
 
     await rerender({
       courseId: "course-1",
@@ -153,7 +154,7 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByText("Die Bearbeitung bleibt Teil derselben Arbeitsfläche.")).toBeNull();
     expect(document.querySelector(".learning-task-inline-editor__statement")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
-    expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
+    expect(screen.getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
   });
 
   it("styles the compact modular task row as a preview-plus-actions layout", () => {
@@ -186,6 +187,61 @@ describe("LearningTaskCard", () => {
     expect(screen.getByText("Aufgabe 8")).toBeInTheDocument();
   });
 
+  it("renders markdown in the compact review summary for submission, feedback and evaluation", async () => {
+    const history = [
+      {
+        id: "submission-1",
+        attempt_nr: 1,
+        kind: "text" as const,
+        intent: "submit" as const,
+        created_at: "2026-04-07T12:10:00+00:00",
+        analysis_status: "completed" as const,
+        text_body: "## Lösung\n\n**Antwort**<br>mit Umbruch\n\n1. Schritt\n2. Schritt\n\n| A | B |\n| --- | --- |\n| 1 | 2 |",
+        feedback_md: "## Rückmeldung\n\n*Gut* gemacht.\n\n- Präzise",
+        analysis_json: {
+          schema: "learning.v1",
+          score: 8,
+          text: "Stabil",
+          criteria_results: [
+            {
+              criterion: "Klarheit",
+              score: 2,
+              max_score: 2,
+              explanation_md: "Siehe [Hinweis](https://example.com).\n\n| Kriterium | Wert |\n| --- | --- |\n| Klarheit | gut |"
+            }
+          ]
+        }
+      }
+    ];
+
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 3",
+        unitType: "modular",
+        compactLayout: true,
+        expanded: true,
+        reviewPanelOpen: true,
+        history
+      }
+    });
+
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose h2")).not.toBeNull();
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose strong")).not.toBeNull();
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose br")).not.toBeNull();
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose ol")).not.toBeNull();
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose table")).not.toBeNull();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Rückmeldung" }));
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose em")).not.toBeNull();
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose ul")).not.toBeNull();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Auswertung" }));
+    expect(screen.getByRole("link", { name: "Hinweis" })).toHaveAttribute("href", "https://example.com");
+    expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose table")).not.toBeNull();
+  });
+
   it("keeps the task header compact when expanded", () => {
     render(LearningTaskCard, {
       props: {
@@ -205,7 +261,7 @@ describe("LearningTaskCard", () => {
     expect(document.querySelector(".learning-work-item__toggle--collapsed")).toBeNull();
     expect(screen.getByText("Modul Graphen")).toBeInTheDocument();
     expect(document.querySelector(".learning-work-item__kicker")).not.toBeNull();
-    expect(screen.getByText("Erkläre den Zusammenhang.")).toBeInTheDocument();
+    expect(screen.getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
   });
 
   it("shows a primary CTA directly after the task prompt when no history exists", () => {

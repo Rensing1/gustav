@@ -15,7 +15,8 @@ describe("LearningMaterialCard", () => {
           id: "material-1",
           title: "Einführung",
           kind: "markdown",
-          body_md: "## Überschrift\n\n**Wichtiger** Text."
+          body_md:
+            "## Überschrift\n\n**Wichtiger** *Text*<br>mit Umbruch\n\n- Eins\n- Zwei\n\n1. Erster\n2. Zweiter\n\n[Link](https://example.com)\n\n| Name | Wert |\n| --- | --- |\n| Alpha | Beta |"
         },
         expanded: true
       }
@@ -28,6 +29,12 @@ describe("LearningMaterialCard", () => {
     expect(screen.queryByText("Material")).toBeNull();
     expect(screen.getByRole("heading", { name: "Überschrift" })).toBeInTheDocument();
     expect(screen.getByText("Wichtiger", { exact: false })).toBeInTheDocument();
+    expect(document.querySelector("em")).not.toBeNull();
+    expect(document.querySelector("br")).not.toBeNull();
+    expect(document.querySelector("ul")).not.toBeNull();
+    expect(document.querySelector("ol")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Link" })).toHaveAttribute("href", "https://example.com");
+    expect(document.querySelector("table")).not.toBeNull();
     expect(document.querySelector(".learning-work-item__toggle--collapsed")).toBeNull();
     expect(document.querySelector("pre")).toBeNull();
   });

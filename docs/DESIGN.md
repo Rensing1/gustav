@@ -288,6 +288,10 @@ Verbindliche Familien:
 - Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline
 - Pro Pane ist in der kompakten Task-Zeile genau eine Detailansicht aktiv
 - `Meine Abgabe` und Bearbeitung sind pro Pane exklusiv und erneut klickbar
+- Markdown im Schüler-Lernraum wird zentral über einen sanitizten GFM-Renderer
+  ausgegeben
+- Unterstützt werden mindestens: Überschriften, Fett, Kursiv, Listen,
+  nummerierte Listen, Links, Tabellen, `<br>`
 - Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in
   den finalen Designsystem-Layer in `frontend/src/lib/styles/design-system.css`,
   nicht nur in `app.css`, damit Surface-, Spacing- und Typografie-Regeln im

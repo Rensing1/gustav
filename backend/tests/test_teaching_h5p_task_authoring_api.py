@@ -126,6 +126,100 @@ async def test_task_h5p_import_links_uploaded_content_to_task(monkeypatch: pytes
 
 
 @pytest.mark.anyio
+async def test_task_h5p_save_rolls_back_upstream_content_when_local_persist_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import routes.teaching as teaching  # noqa: E402
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-h5p-save-rollback", name="T", roles=["teacher"])  # type: ignore
+
+    seen: list[tuple[str, str]] = []
+
+    async def fake_h5p_request(method: str, path: str, **_kwargs):  # type: ignore[no-untyped-def]
+        seen.append((method, path))
+        if method == "POST" and path == "/contents":
+            return httpx.Response(201, json={"content_id": "271828", "metadata": {"title": "Demo"}})
+        if method == "DELETE" and path == "/contents/271828":
+            return httpx.Response(204)
+        raise AssertionError(f"unexpected upstream call: {(method, path)}")
+
+    monkeypatch.setattr(teaching, "_request_h5p_service", fake_h5p_request)
+
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+        task = await _create_h5p_task(client, unit["id"], section["id"], content_id=None)
+        original_service = teaching._get_tasks_service()
+
+        class FailingTasksService:
+            def list_tasks(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                return original_service.list_tasks(*args, **kwargs)
+
+            def update_task(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+                raise RuntimeError("db_write_failed")
+
+        monkeypatch.setattr(teaching, "_get_tasks_service", lambda: FailingTasksService())
+
+        response = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks/{task['id']}/h5p/save",
+            json={"library": "H5P.Text 1.1", "params": {"text": "<p>Hello</p>"}},
+        )
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "internal_error"
+    assert seen == [("POST", "/contents"), ("DELETE", "/contents/271828")]
+
+
+@pytest.mark.anyio
+async def test_task_h5p_import_rolls_back_upstream_content_when_local_persist_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import routes.teaching as teaching  # noqa: E402
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-h5p-import-rollback", name="T", roles=["teacher"])  # type: ignore
+
+    seen: list[tuple[str, str]] = []
+
+    async def fake_h5p_request(method: str, path: str, **_kwargs):  # type: ignore[no-untyped-def]
+        seen.append((method, path))
+        if method == "POST" and path == "/contents/import":
+            return httpx.Response(201, json={"content_id": "314159"})
+        if method == "DELETE" and path == "/contents/314159":
+            return httpx.Response(204)
+        raise AssertionError(f"unexpected upstream call: {(method, path)}")
+
+    monkeypatch.setattr(teaching, "_request_h5p_service", fake_h5p_request)
+
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+        task = await _create_h5p_task(client, unit["id"], section["id"], content_id=None)
+        original_service = teaching._get_tasks_service()
+
+        class FailingTasksService:
+            def list_tasks(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                return original_service.list_tasks(*args, **kwargs)
+
+            def update_task(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+                raise RuntimeError("db_write_failed")
+
+        monkeypatch.setattr(teaching, "_get_tasks_service", lambda: FailingTasksService())
+
+        response = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks/{task['id']}/h5p/import",
+            files={"file": ("interactive.h5p", b"PK\\x03\\x04demo", "application/zip")},
+        )
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "internal_error"
+    assert seen == [("POST", "/contents/import"), ("DELETE", "/contents/314159")]
+
+
+@pytest.mark.anyio
 async def test_task_h5p_reset_clears_linked_content_id_without_hitting_h5p_service(monkeypatch: pytest.MonkeyPatch) -> None:
     import routes.teaching as teaching  # noqa: E402
 

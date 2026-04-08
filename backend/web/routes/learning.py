@@ -318,40 +318,22 @@ def _resolve_student_material_file_url(
     section_id: str,
     material_id: str,
 ) -> str | None:
-    if not (student_sub and _is_uuid_like(course_id) and _is_uuid_like(section_id) and _is_uuid_like(material_id)):
-        return None
+    material_urls = _load_released_section_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        section_material_pairs=[(section_id, material_id)],
+    )
+    return material_urls.get(str(material_id))
 
-    repo = _get_repo()
-    dsn = str(getattr(repo, "_dsn", "") or "").strip()
-    adapter = _teaching_storage_adapter()
-    if not dsn or adapter is None or not hasattr(adapter, "presign_download"):
+
+def _presign_material_url(*, adapter: object, storage_key: str) -> str | None:
+    """Return a short-lived preview URL for a material storage key."""
+
+    if not storage_key or not hasattr(adapter, "presign_download"):
         return None
 
     try:
         from teaching.services.materials import MaterialFileSettings  # type: ignore
-
-        storage_key = None
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                set_current_sub = getattr(repo, "_set_current_sub", None)
-                if callable(set_current_sub):
-                    set_current_sub(cur, student_sub)
-                else:
-                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-                cur.execute(
-                    """
-                    select storage_key
-                      from public.get_released_materials_for_student(%s, %s::uuid, %s::uuid)
-                     where id::text = %s
-                     limit 1
-                    """,
-                    (student_sub, str(course_id), str(section_id), str(material_id)),
-                )
-                row = cur.fetchone()
-                if row and isinstance(row[0], str) and row[0].strip():
-                    storage_key = row[0].strip()
-        if not storage_key:
-            return None
 
         settings = MaterialFileSettings()
         presign = adapter.presign_download(
@@ -364,6 +346,176 @@ def _resolve_student_material_file_url(
         return str(url).strip() if isinstance(url, str) and url.strip() else None
     except Exception:
         return None
+
+
+def _load_released_section_material_urls(
+    *,
+    student_sub: str,
+    course_id: str,
+    section_material_pairs: list[tuple[str, str]],
+) -> dict[str, str | None]:
+    """Load released section-material URLs with one DB connection."""
+
+    valid_pairs = [
+        (str(section_id), str(material_id))
+        for section_id, material_id in section_material_pairs
+        if _is_uuid_like(section_id) and _is_uuid_like(material_id)
+    ]
+    if not (student_sub and _is_uuid_like(course_id) and valid_pairs):
+        return {}
+
+    repo = _get_repo()
+    dsn = str(getattr(repo, "_dsn", "") or "").strip()
+    adapter = _teaching_storage_adapter()
+    if not dsn or adapter is None or not hasattr(adapter, "presign_download"):
+        return {}
+
+    try:
+        section_ids = [section_id for section_id, _ in valid_pairs]
+        material_ids = [material_id for _, material_id in valid_pairs]
+        storage_keys: dict[str, str] = {}
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                set_current_sub = getattr(repo, "_set_current_sub", None)
+                if callable(set_current_sub):
+                    set_current_sub(cur, student_sub)
+                else:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                cur.execute(
+                    """
+                    with requested(section_id, material_id) as (
+                        select * from unnest(%s::uuid[], %s::uuid[])
+                    )
+                    select requested.material_id::text, released.storage_key
+                      from requested
+                      join lateral public.get_released_materials_for_student(%s, %s::uuid, requested.section_id) released
+                        on released.id = requested.material_id
+                    """,
+                    (section_ids, material_ids, student_sub, str(course_id)),
+                )
+                for material_id, storage_key in cur.fetchall() or []:
+                    if isinstance(material_id, str) and isinstance(storage_key, str) and storage_key.strip():
+                        storage_keys[material_id] = storage_key.strip()
+        return {
+            material_id: _presign_material_url(adapter=adapter, storage_key=storage_key)
+            for material_id, storage_key in storage_keys.items()
+        }
+    except Exception:
+        return {}
+
+
+def _load_modular_material_urls(
+    *,
+    student_sub: str,
+    course_id: str,
+    unit_id: str,
+    module_id: str,
+    material_ids: list[str],
+) -> dict[str, str | None]:
+    """Load modular material URLs with one DB connection."""
+
+    valid_material_ids = [str(material_id) for material_id in material_ids if _is_uuid_like(material_id)]
+    if not (
+        student_sub
+        and _is_uuid_like(course_id)
+        and _is_uuid_like(unit_id)
+        and _is_uuid_like(module_id)
+        and valid_material_ids
+    ):
+        return {}
+
+    repo = _get_repo()
+    dsn = str(getattr(repo, "_dsn", "") or "").strip()
+    adapter = _teaching_storage_adapter()
+    if not dsn or adapter is None or not hasattr(adapter, "presign_download"):
+        return {}
+
+    try:
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                set_current_sub = getattr(repo, "_set_current_sub", None)
+                if callable(set_current_sub):
+                    set_current_sub(cur, student_sub)
+                else:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                set_current_course_id = getattr(repo, "_set_current_course_id", None)
+                if callable(set_current_course_id):
+                    set_current_course_id(cur, str(course_id))
+                else:
+                    cur.execute("select set_config('app.current_course_id', %s, true)", (str(course_id),))
+
+                cur.execute(
+                    """
+                    select exists(
+                             select 1
+                               from public.course_memberships
+                              where course_id = %s::uuid
+                                and student_id = %s
+                         )
+                    """,
+                    (str(course_id), student_sub),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return {}
+
+                cur.execute(
+                    """
+                    select exists(
+                             select 1
+                               from public.course_modules
+                              where course_id = %s::uuid
+                                and unit_id = %s::uuid
+                         )
+                    """,
+                    (str(course_id), str(unit_id)),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return {}
+
+                cur.execute(
+                    """
+                    select section_id::text
+                      from public.unit_modules
+                     where id = %s::uuid
+                       and unit_id = %s::uuid
+                     limit 1
+                    """,
+                    (str(module_id), str(unit_id)),
+                )
+                section_row = cur.fetchone()
+                section_id = section_row[0] if section_row and isinstance(section_row[0], str) and section_row[0].strip() else None
+                if not section_id:
+                    return {}
+
+                cur.execute(
+                    "select public.modular_section_is_open_or_done_for_student(%s, %s::uuid, %s::uuid, %s::uuid)",
+                    (student_sub, str(course_id), str(unit_id), str(section_id)),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return {}
+
+                cur.execute(
+                    """
+                    select id::text, storage_key
+                      from public.unit_materials
+                     where id = any(%s::uuid[])
+                       and section_id = %s::uuid
+                       and kind = 'file'
+                     order by position asc
+                    """,
+                    (valid_material_ids, str(section_id)),
+                )
+                storage_keys = {
+                    str(material_id): str(storage_key).strip()
+                    for material_id, storage_key in cur.fetchall() or []
+                    if isinstance(material_id, str) and isinstance(storage_key, str) and storage_key.strip()
+                }
+        return {
+            material_id: _presign_material_url(adapter=adapter, storage_key=storage_key)
+            for material_id, storage_key in storage_keys.items()
+        }
+    except Exception:
+        return {}
 
 
 def _resolve_student_modular_material_file_url(
@@ -419,7 +571,7 @@ def _resolve_student_modular_material_file_url(
                     (str(course_id), student_sub),
                 )
                 if not bool((cur.fetchone() or [False])[0]):
-                    return None
+                    return {}
 
                 cur.execute(
                     """
@@ -433,7 +585,7 @@ def _resolve_student_modular_material_file_url(
                     (str(course_id), str(unit_id)),
                 )
                 if not bool((cur.fetchone() or [False])[0]):
-                    return None
+                    return {}
 
                 cur.execute(
                     """
@@ -448,43 +600,55 @@ def _resolve_student_modular_material_file_url(
                 section_row = cur.fetchone()
                 section_id = section_row[0] if section_row and isinstance(section_row[0], str) and section_row[0].strip() else None
                 if not section_id:
-                    return None
+                    return {}
 
                 cur.execute(
                     "select public.modular_section_is_open_or_done_for_student(%s, %s::uuid, %s::uuid, %s::uuid)",
                     (student_sub, str(course_id), str(unit_id), str(section_id)),
                 )
                 if not bool((cur.fetchone() or [False])[0]):
-                    return None
+                    return {}
 
                 cur.execute(
                     """
-                    select storage_key
+                    select id::text, storage_key
                       from public.unit_materials
-                     where id = %s::uuid
+                     where id = any(%s::uuid[])
                        and section_id = %s::uuid
                        and kind = 'file'
-                     limit 1
+                     order by position asc
                     """,
-                    (str(material_id), str(section_id)),
+                    (valid_material_ids, str(section_id)),
                 )
-                row = cur.fetchone()
-                if row and isinstance(row[0], str) and row[0].strip():
-                    storage_key = row[0].strip()
-        if not storage_key:
-            return None
-
-        settings = MaterialFileSettings()
-        presign = adapter.presign_download(
-            bucket=settings.storage_bucket,
-            key=storage_key,
-            expires_in=settings.download_url_ttl_seconds,
-            disposition="inline",
-        )
-        url = presign.get("url") if isinstance(presign, dict) else None
-        return str(url).strip() if isinstance(url, str) and url.strip() else None
+                storage_keys = {
+                    str(material_id): str(storage_key).strip()
+                    for material_id, storage_key in cur.fetchall() or []
+                    if isinstance(material_id, str) and isinstance(storage_key, str) and storage_key.strip()
+                }
+        return {
+            material_id: _presign_material_url(adapter=adapter, storage_key=storage_key)
+            for material_id, storage_key in storage_keys.items()
+        }
     except Exception:
-        return None
+        return {}
+
+
+def _resolve_student_modular_material_file_url(
+    *,
+    student_sub: str,
+    course_id: str,
+    unit_id: str,
+    module_id: str,
+    material_id: str,
+) -> str | None:
+    material_urls = _load_modular_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        unit_id=unit_id,
+        module_id=module_id,
+        material_ids=[material_id],
+    )
+    return material_urls.get(str(material_id))
 
 
 def _attach_section_material_files(
@@ -493,21 +657,25 @@ def _attach_section_material_files(
     course_id: str,
     sections: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    section_material_pairs = [
+        (str((section.get("section") or {}).get("id") or ""), str(material.get("id") or ""))
+        for section in sections
+        for material in (section.get("materials") or [])
+        if isinstance(section, dict) and isinstance(material, dict) and material.get("kind") == "file"
+    ]
+    material_urls = _load_released_section_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        section_material_pairs=section_material_pairs,
+    )
     enriched: list[dict[str, Any]] = []
     for section in sections:
         payload = dict(section)
-        section_core = dict(payload.get("section") or {})
-        section_id = str(section_core.get("id") or "")
         materials = []
         for material in payload.get("materials") or []:
             material_payload = dict(material)
             if material_payload.get("kind") == "file":
-                material_payload["file_url"] = _resolve_student_material_file_url(
-                    student_sub=student_sub,
-                    course_id=course_id,
-                    section_id=section_id,
-                    material_id=str(material_payload.get("id") or ""),
-                )
+                material_payload["file_url"] = material_urls.get(str(material_payload.get("id") or ""))
             else:
                 material_payload["file_url"] = None
             materials.append(material_payload)
@@ -525,17 +693,22 @@ def _attach_modular_material_files(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     out = dict(payload)
+    material_urls = _load_modular_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        unit_id=unit_id,
+        module_id=module_id,
+        material_ids=[
+            str(material.get("id") or "")
+            for material in (out.get("materials") or [])
+            if isinstance(material, dict) and material.get("kind") == "file"
+        ],
+    )
     materials = []
     for material in out.get("materials") or []:
         material_payload = dict(material)
         if material_payload.get("kind") == "file":
-            material_payload["file_url"] = _resolve_student_modular_material_file_url(
-                student_sub=student_sub,
-                course_id=course_id,
-                unit_id=unit_id,
-                module_id=module_id,
-                material_id=str(material_payload.get("id") or ""),
-            )
+            material_payload["file_url"] = material_urls.get(str(material_payload.get("id") or ""))
         else:
             material_payload["file_url"] = None
         materials.append(material_payload)

@@ -206,7 +206,10 @@ def verify_bearer_token(
         logger.warning("Bearer token JOSE verification failed: %s", exc.__class__.__name__)
         raise BearerTokenVerificationError("invalid_bearer_token") from exc
 
-    _validate_temporal_claims(claims)
+    try:
+        _validate_temporal_claims(claims)
+    except IDTokenVerificationError as exc:
+        raise BearerTokenVerificationError("invalid_bearer_token") from exc
     _validate_bearer_audience(claims, cfg.client_id)
     return claims
 

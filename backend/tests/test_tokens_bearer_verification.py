@@ -83,3 +83,31 @@ def test_verify_bearer_token_maps_jwks_fetch_failures_to_bearer_error() -> None:
         verify_bearer_token(token="dummy", cfg=cfg, cache=FailingCache())
 
     assert exc_info.value.code == "jwks_fetch_failed"
+
+
+def test_verify_bearer_token_maps_expired_claims_to_bearer_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
+    monkeypatch.setattr(
+        tokens_mod.jwt,
+        "decode",
+        lambda token, key, algorithms=None, **kwargs: {
+            "iss": "http://kc.example/realms/gustav",
+            "aud": ["gustav-web"],
+            "sub": "teacher-1",
+            "exp": 1,
+        },
+    )
+
+    cfg = OIDCConfig(
+        base_url="http://kc.example",
+        realm="gustav",
+        client_id="gustav-web",
+        redirect_uri="http://app/auth/callback",
+    )
+
+    with pytest.raises(BearerTokenVerificationError) as exc_info:
+        verify_bearer_token(token="dummy", cfg=cfg, cache=FakeCache())
+
+    assert exc_info.value.code == "invalid_bearer_token"

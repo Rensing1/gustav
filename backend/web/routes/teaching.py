@@ -1445,6 +1445,34 @@ def _proxy_h5p_error_response(upstream: httpx.Response) -> JSONResponse:
     return _private_error(payload, status_code=status_code)
 
 
+async def _rollback_h5p_content(content_id: str, request: Request | None) -> None:
+    """Delete a just-created H5P content item after a local persist failure.
+
+    Why:
+        The task-centric teaching API must not leave orphaned H5P content behind
+        when the upstream create/import succeeded but the local task update
+        failed afterwards.
+    """
+
+    content_id = str(content_id or "").strip()
+    if not content_id:
+        return
+    try:
+        response = await _request_h5p_service("DELETE", f"/contents/{content_id}", request=request)
+        if int(response.status_code or 500) not in (204, 404):
+            logger.warning(
+                "H5P rollback delete failed content_id=%s status=%s",
+                content_id,
+                int(response.status_code or 500),
+            )
+    except Exception as exc:
+        logger.warning(
+            "H5P rollback delete failed content_id=%s reason=%s",
+            content_id,
+            exc.__class__.__name__,
+        )
+
+
 def _clamp_limit_offset(
     *,
     limit: int | None,
@@ -3687,13 +3715,29 @@ async def save_task_h5p_content(
     new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
     if not new_content_id:
         return _private_error({"error": "bad_gateway"}, status_code=502)
-    _get_tasks_service().update_task(
-        unit_id,
-        section_id,
-        task_id,
-        sub,
-        h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
-    )
+    try:
+        _get_tasks_service().update_task(
+            unit_id,
+            section_id,
+            task_id,
+            sub,
+            h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+        )
+    except ValueError as exc:
+        await _rollback_h5p_content(new_content_id, request)
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_h5p_config", "invalid_task_kind_config"}:
+            detail = "invalid_input"
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "internal_error"}, status_code=500)
     return _json_private({"content_id": new_content_id, "metadata": (upstream_payload or {}).get("metadata") or {}}, status_code=200)
 
 
@@ -3749,13 +3793,29 @@ async def import_task_h5p_content(
     new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
     if not new_content_id:
         return _private_error({"error": "bad_gateway"}, status_code=502)
-    updated = _get_tasks_service().update_task(
-        unit_id,
-        section_id,
-        task_id,
-        sub,
-        h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
-    )
+    try:
+        updated = _get_tasks_service().update_task(
+            unit_id,
+            section_id,
+            task_id,
+            sub,
+            h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+        )
+    except ValueError as exc:
+        await _rollback_h5p_content(new_content_id, request)
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_h5p_config", "invalid_task_kind_config"}:
+            detail = "invalid_input"
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "internal_error"}, status_code=500)
     return _json_private(_serialize_task(updated), status_code=200)
 
 

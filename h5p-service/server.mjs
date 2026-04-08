@@ -1647,6 +1647,28 @@ async function main() {
     }),
   );
 
+  app.delete("/contents/:contentId", requireTeacher, requireSameOrigin, asyncHandler(async (req, res) => {
+    const { contentId } = req.params;
+    if (!(await contentStorage.contentExists(contentId))) {
+      sendJson(res, 404, { error: "not_found" }, { Vary: "Origin" });
+      return;
+    }
+    try {
+      await h5pEditor.deleteContent(contentId, req.user);
+      res.status(204);
+      for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Vary", "Origin");
+      res.end();
+    } catch (err) {
+      if (err?.httpStatusCode) {
+        sendJson(res, err.httpStatusCode, { error: err.errorId || "h5p_error" }, { Vary: "Origin" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" }, { Vary: "Origin" });
+    }
+  }));
+
   app.get("/contents/:contentId/export", requireTeacher, asyncHandler(async (req, res) => {
     const { contentId } = req.params;
     if (!(await contentStorage.contentExists(contentId))) {

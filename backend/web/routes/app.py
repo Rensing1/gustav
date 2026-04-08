@@ -45,6 +45,13 @@ class ProfileNameUpdatePayload(BaseModel):
     last_name: str = Field(default="", max_length=80)
 
 
+class BFFSessionSyncPayload(BaseModel):
+    access_token: str = Field(min_length=1)
+    refresh_token: str | None = None
+    id_token: str = Field(min_length=1)
+    expires_at: int = Field(gt=0)
+
+
 class ProfileNameLockedError(RuntimeError):
     """Raised when Vorname/Nachname are currently locked."""
 
@@ -750,6 +757,91 @@ async def post_session_sync(request: Request):
     return response
 
 
+@app_router.put("/backend-internal/app/bff-session")
+async def put_bff_session(payload: BFFSessionSyncPayload):
+    """Persist or update the opaque Browser-BFF token session."""
+    mod = _resolve_main_module()
+    store = getattr(mod, "BFF_SESSION_STORE")
+    session = store.create(
+        access_token=payload.access_token,
+        refresh_token=payload.refresh_token,
+        id_token=payload.id_token,
+        expires_at=int(payload.expires_at),
+    )
+    return JSONResponse(
+        {
+            "session_id": session.session_id,
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "id_token": session.id_token,
+            "expires_at": session.expires_at,
+        },
+        headers=_private_headers(),
+    )
+
+
+@app_router.get("/backend-internal/app/bff-session")
+async def get_bff_session(request: Request):
+    """Return the stored Browser-BFF token session for an opaque session id."""
+    session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
+    if not session_id:
+        return Response(status_code=204, headers=_private_headers())
+    mod = _resolve_main_module()
+    store = getattr(mod, "BFF_SESSION_STORE")
+    session = store.get(session_id)
+    if session is None:
+        return Response(status_code=204, headers=_private_headers())
+    return JSONResponse(
+        {
+            "session_id": session.session_id,
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "id_token": session.id_token,
+            "expires_at": session.expires_at,
+        },
+        headers=_private_headers(),
+    )
+
+
+@app_router.patch("/backend-internal/app/bff-session")
+async def patch_bff_session(request: Request, payload: BFFSessionSyncPayload):
+    """Update an existing Browser-BFF token session."""
+    session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
+    if not session_id:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    mod = _resolve_main_module()
+    store = getattr(mod, "BFF_SESSION_STORE")
+    session = store.update(
+        session_id,
+        access_token=payload.access_token,
+        refresh_token=payload.refresh_token,
+        id_token=payload.id_token,
+        expires_at=int(payload.expires_at),
+    )
+    if session is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    return JSONResponse(
+        {
+            "session_id": session.session_id,
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "id_token": session.id_token,
+            "expires_at": session.expires_at,
+        },
+        headers=_private_headers(),
+    )
+
+
+@app_router.delete("/backend-internal/app/bff-session")
+async def delete_bff_session(request: Request):
+    """Delete one Browser-BFF token session."""
+    session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
+    if session_id:
+        mod = _resolve_main_module()
+        getattr(mod, "BFF_SESSION_STORE").delete(session_id)
+    return Response(status_code=204, headers=_private_headers())
+
+
 @app_router.get("/api/app/profile")
 async def get_app_profile(request: Request):
     """Return the authenticated user's profile read-model."""
@@ -868,6 +960,8 @@ async def create_learner_concern_box_entry(request: Request, payload: ConcernBox
 
     student_sub = str(user.get("sub") or "")
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    if not teaching_routes._is_uuid_like(payload.course_id):  # type: ignore[attr-defined]
+        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400, headers=_private_headers())
     if not repo.student_has_course(payload.course_id, student_sub):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 

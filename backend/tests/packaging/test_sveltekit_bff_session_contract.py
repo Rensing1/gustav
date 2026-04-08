@@ -20,12 +20,13 @@ def test_frontend_owns_server_side_token_session() -> None:
     api_src = api_helper_path.read_text(encoding="utf-8")
 
     assert "gustav_bff_session" in session_src
-    assert "Map<string" in session_src
+    assert "Map<string" not in session_src
     assert "accessToken" in session_src
     assert "refreshToken" in session_src
     assert "idToken" in session_src
     assert "cookies.set" in session_src
     assert "cookies.delete" in session_src
+    assert "/backend-internal/app/bff-session" in session_src
 
     assert "createTokenSession" in auth_src
     assert "clearTokenSession" in auth_src
@@ -44,9 +45,12 @@ def test_frontend_refreshes_expiring_token_sessions_before_backend_calls() -> No
     api_src = api_helper_path.read_text(encoding="utf-8")
 
     assert "readFreshTokenSession" in session_src
+    assert 'method: "GET"' in session_src or 'method: \'GET\'' in session_src
+    assert 'method: "PUT"' in session_src or 'method: \'PUT\'' in session_src
+    assert 'method: "DELETE"' in session_src or 'method: \'DELETE\'' in session_src
     assert "grant_type" in session_src
     assert "refresh_token" in session_src
-    assert "TOKEN_SESSIONS.set" in session_src
+    assert "TOKEN_SESSIONS.set" not in session_src
     assert "clearFrontendSessionCookie" in session_src
 
     assert "readFreshTokenSession" in api_src

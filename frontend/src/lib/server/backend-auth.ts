@@ -37,7 +37,7 @@ function useSecureCookie(): boolean {
 }
 
 function frontendSessionSecret(): string {
-  return env.FRONTEND_SESSION_SECRET || "CHANGE_ME_DEV";
+  return String(env.FRONTEND_SESSION_SECRET || "").trim();
 }
 
 function kcBaseUrl(): string {
@@ -105,10 +105,24 @@ function safeRedirectPath(path: string | null | undefined): string | null {
   if (!path || !path.startsWith("/")) {
     return null;
   }
-  if (path.startsWith("//")) {
+  if (path.startsWith("//") || path.includes("..") || path.length > 256) {
     return null;
   }
   return path;
+}
+
+export function assertSecureFrontendSessionConfig(): void {
+  const gustavEnv = String(env.GUSTAV_ENV || "dev").trim().toLowerCase();
+  const isProdLike = ["prod", "production", "stage", "staging"].includes(gustavEnv);
+  if (!isProdLike) {
+    return;
+  }
+  const secret = frontendSessionSecret();
+  if (!secret || secret.toUpperCase().startsWith("CHANGE_ME")) {
+    throw new Error(
+      "Refusing to start: FRONTEND_SESSION_SECRET is unset or a placeholder in production."
+    );
+  }
 }
 
 function resolveAppBase(requestUrl: URL): string {
@@ -376,7 +390,7 @@ export async function handleAuthCallback(event: RequestEvent): Promise<Response>
     return createJsonError(400, message);
   }
 
-  createTokenSession(event.cookies, {
+  await createTokenSession(event.cookies, event.fetch, {
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token ?? null,
     idToken: tokens.id_token,
@@ -391,11 +405,31 @@ export async function handleAuthCallback(event: RequestEvent): Promise<Response>
   return response;
 }
 
-export function handleLogout(event: RequestEvent): Response {
-  const tokenSession = readTokenSession(event.cookies);
+export async function handleLogout(event: RequestEvent): Promise<Response> {
+  const tokenSession = await readTokenSession(event.cookies, event.fetch);
   const redirectPath = safeRedirectPath(event.url.searchParams.get("redirect")) || "/auth/logout/success";
-  clearTokenSession(event.cookies);
+  await clearTokenSession(event.cookies, event.fetch);
+  const backendLogoutBaseUrl = buildApiUrl("/auth/logout");
 
+  const backendLogoutResponse = await event.fetch(
+    `${backendLogoutBaseUrl}?redirect=${encodeURIComponent(redirectPath)}`,
+    {
+      method: "GET",
+      headers: {
+        cookie: event.request.headers.get("cookie") || ""
+      },
+      redirect: "manual"
+    }
+  );
+  const location = backendLogoutResponse.headers.get("location");
+  if (location) {
+    const response = createRedirectResponse(location);
+    const clearedAppSession = backendLogoutResponse.headers.get("set-cookie");
+    if (clearedAppSession) {
+      response.headers.append("set-cookie", clearedAppSession);
+    }
+    return response;
+  }
   const url = new URL(logoutEndpoint());
   url.searchParams.set("post_logout_redirect_uri", `${resolveAppBase(event.url)}${redirectPath}`);
   if (tokenSession?.idToken) {
@@ -403,6 +437,5 @@ export function handleLogout(event: RequestEvent): Response {
   } else {
     url.searchParams.set("client_id", kcClientId());
   }
-
   return createRedirectResponse(url.toString());
 }

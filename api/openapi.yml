@@ -3940,6 +3940,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags: [H5P]
+      summary: Delete an H5P content item (trusted teachers only)
+      description: >-
+        Deletes an existing H5P content item that is no longer needed.
+        Trusted content model: only teachers/admins may delete content. Browser clients MUST pass
+        same-origin indicators (Origin/Referer). Scope: content is global (not course-scoped) and
+        referenced by `Task.h5p.content_id`.
+      operationId: deleteH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may delete content (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Content deleted
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /h5p/contents/{content_id}/export:
     get:
       tags: [H5P]

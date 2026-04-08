@@ -57,3 +57,12 @@ async def test_concern_box_entries_table_and_policies_exist() -> None:
     assert "concern_box_entries_insert_member" in policies
     assert "concern_box_entries_select_owner" in policies
     assert "concern_box_entries_update_owner" in policies
+
+
+def test_concern_box_insert_function_binds_student_to_session_sub() -> None:
+    sql = (
+        "supabase/migrations/20260406093338_concern_box_entries_insert_function.sql"
+    )
+    source = open(sql, encoding="utf-8").read()
+
+    assert "current_setting('app.current_sub', true)" in source

@@ -45,6 +45,7 @@ from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
 from identity_access.domain import ALLOWED_ROLES
 from identity_access.tokens import BearerTokenVerificationError, IDTokenVerificationError, verify_bearer_token, verify_id_token
+from identity_access.bff_sessions import BFFSessionStore
 import sys as _sys
 
 try:
@@ -280,6 +281,16 @@ if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").low
 else:
     SESSION_STORE = SessionStore()
 
+if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
+    try:
+        from identity_access.bff_sessions_db import DBBFFSessionStore
+
+        BFF_SESSION_STORE = DBBFFSessionStore()
+    except ImportError:
+        BFF_SESSION_STORE = BFFSessionStore()
+else:
+    BFF_SESSION_STORE = BFFSessionStore()
+
 # --- Auth Helpers & Middleware --------------------------------------------------
 
 def _session_cookie_options() -> dict:
@@ -412,7 +423,9 @@ def _requires_bff_bearer_auth(path: str) -> bool:
     return path in ("/api/app/session-bootstrap", "/api/app/session-sync") or path.startswith(
         (
             "/api/app/profile",
+            "/api/learning/concern-box/",
             "/api/learning/views/",
+            "/api/teaching/concern-box/",
             "/api/teaching/views/",
             "/api/diagnostics/views/",
             "/api/live/views/",

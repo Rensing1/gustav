@@ -50,6 +50,7 @@ def test_frontend_contains_auth_bridge_routes() -> None:
     assert "isAllowedRegistrationEmail" in helper_src
     assert "jwtVerify" in helper_src
     assert "/api/app/session-sync" in helper_src
+    assert 'buildApiUrl("/auth/logout")' in helper_src or "buildApiUrl('/auth/logout')" in helper_src
     assert "headers.append(\"set-cookie\"" in helper_src or "headers.append('set-cookie'" in helper_src
 
     register_page_src = register_page_path.read_text(encoding="utf-8")

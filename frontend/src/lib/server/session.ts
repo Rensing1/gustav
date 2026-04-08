@@ -1,14 +1,14 @@
-import { randomUUID } from "node:crypto";
-
 import type { Cookies } from "@sveltejs/kit";
 
 import { env } from "$env/dynamic/private";
 
-export const FRONTEND_SESSION_COOKIE_NAME = "gustav_bff_session";
+const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
+const DEFAULT_FRONTEND_SESSION_COOKIE_NAME = "gustav_bff_session";
 const DEFAULT_KC_BASE_URL = "http://keycloak:8080";
 const DEFAULT_KC_CLIENT_ID = "gustav-web";
 const DEFAULT_KC_REALM = "gustav";
 const TOKEN_REFRESH_LEEWAY_SECONDS = 30;
+const BFF_SESSION_PATH = "/backend-internal/app/bff-session";
 
 export type FrontendTokenSession = {
   sessionId: string;
@@ -18,8 +18,6 @@ export type FrontendTokenSession = {
   expiresAt: number;
 };
 
-const TOKEN_SESSIONS = new Map<string, FrontendTokenSession>();
-
 type KeycloakRefreshResponse = {
   access_token?: string;
   refresh_token?: string;
@@ -27,11 +25,23 @@ type KeycloakRefreshResponse = {
   expires_in?: number;
 };
 
+type StoredFrontendTokenSession = {
+  session_id: string;
+  access_token: string;
+  refresh_token?: string | null;
+  id_token: string;
+  expires_at: number;
+};
+
 function useSecureCookie(): boolean {
   if ((env.ORIGIN || "").startsWith("https://")) {
     return true;
   }
   return (env.NODE_ENV || "").toLowerCase() === "production";
+}
+
+function frontendSessionCookieName(): string {
+  return env.FRONTEND_SESSION_COOKIE_NAME || DEFAULT_FRONTEND_SESSION_COOKIE_NAME;
 }
 
 function kcBaseUrl(): string {
@@ -50,6 +60,11 @@ function tokenEndpoint(): string {
   return `${kcBaseUrl()}/realms/${kcRealm()}/protocol/openid-connect/token`;
 }
 
+function buildApiUrl(path: string): string {
+  const baseUrl = env.API_INTERNAL_BASE_URL || DEFAULT_API_INTERNAL_BASE_URL;
+  return new URL(path, baseUrl).toString();
+}
+
 function nowEpochSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -62,11 +77,11 @@ export function buildBackendAuthorizationHeader(accessToken: string | null | und
 }
 
 export function readFrontendSessionCookie(cookies: Cookies): string | null {
-  return cookies.get(FRONTEND_SESSION_COOKIE_NAME) ?? null;
+  return cookies.get(frontendSessionCookieName()) ?? null;
 }
 
 export function setFrontendSessionCookie(cookies: Cookies, sessionId: string): void {
-  cookies.set(FRONTEND_SESSION_COOKIE_NAME, sessionId, {
+  cookies.set(frontendSessionCookieName(), sessionId, {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
@@ -75,7 +90,7 @@ export function setFrontendSessionCookie(cookies: Cookies, sessionId: string): v
 }
 
 export function clearFrontendSessionCookie(cookies: Cookies): void {
-  cookies.delete(FRONTEND_SESSION_COOKIE_NAME, {
+  cookies.delete(frontendSessionCookieName(), {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
@@ -91,29 +106,75 @@ function expiresSoon(record: FrontendTokenSession): boolean {
   return record.expiresAt <= nowEpochSeconds() + TOKEN_REFRESH_LEEWAY_SECONDS;
 }
 
-function readStoredTokenSession(cookies: Cookies): FrontendTokenSession | null {
+function toFrontendTokenSession(record: StoredFrontendTokenSession): FrontendTokenSession {
+  return {
+    sessionId: record.session_id,
+    accessToken: record.access_token,
+    refreshToken: record.refresh_token ?? null,
+    idToken: record.id_token,
+    expiresAt: record.expires_at
+  };
+}
+
+async function fetchStoredTokenSession(
+  cookies: Cookies,
+  fetchFn: typeof fetch
+): Promise<FrontendTokenSession | null> {
   const sessionId = readFrontendSessionCookie(cookies);
   if (!sessionId) {
     return null;
   }
-  return TOKEN_SESSIONS.get(sessionId) ?? null;
+  const response = await fetchFn(buildApiUrl(BFF_SESSION_PATH), {
+    method: "GET",
+    headers: {
+      "x-gustav-bff-session": sessionId
+    }
+  });
+  if (response.status === 204 || response.status === 401) {
+    clearFrontendSessionCookie(cookies);
+    return null;
+  }
+  if (!response.ok) {
+    return null;
+  }
+  return toFrontendTokenSession((await response.json()) as StoredFrontendTokenSession);
 }
 
-function replaceTokenSession(
+async function persistTokenSession(
   cookies: Cookies,
-  current: FrontendTokenSession,
-  tokens: KeycloakRefreshResponse
-): FrontendTokenSession {
-  const nextRecord: FrontendTokenSession = {
-    sessionId: current.sessionId,
-    accessToken: tokens.access_token || current.accessToken,
-    refreshToken: tokens.refresh_token ?? current.refreshToken,
-    idToken: tokens.id_token ?? current.idToken,
-    expiresAt: nowEpochSeconds() + Math.max(60, Number(tokens.expires_in || 300))
+  fetchFn: typeof fetch,
+  tokens: {
+    accessToken: string;
+    refreshToken?: string | null;
+    idToken: string;
+    expiresAt: number;
+  },
+  sessionId?: string | null
+): Promise<FrontendTokenSession | null> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json"
   };
-  TOKEN_SESSIONS.set(current.sessionId, nextRecord);
-  setFrontendSessionCookie(cookies, current.sessionId);
-  return nextRecord;
+  if (sessionId) {
+    headers["x-gustav-bff-session"] = sessionId;
+  }
+  const requestInit = {
+    headers,
+    body: JSON.stringify({
+      access_token: tokens.accessToken,
+      refresh_token: tokens.refreshToken ?? null,
+      id_token: tokens.idToken,
+      expires_at: tokens.expiresAt
+    })
+  };
+  const response = sessionId
+    ? await fetchFn(buildApiUrl(BFF_SESSION_PATH), { method: "PATCH", ...requestInit })
+    : await fetchFn(buildApiUrl(BFF_SESSION_PATH), { method: "PUT", ...requestInit });
+  if (!response.ok) {
+    return null;
+  }
+  const record = toFrontendTokenSession((await response.json()) as StoredFrontendTokenSession);
+  setFrontendSessionCookie(cookies, record.sessionId);
+  return record;
 }
 
 async function refreshTokenSession(
@@ -123,7 +184,7 @@ async function refreshTokenSession(
 ): Promise<FrontendTokenSession | null> {
   if (!current.refreshToken) {
     if (isExpired(current)) {
-      clearTokenSession(cookies);
+      await clearTokenSession(cookies, fetchFn);
       return null;
     }
     return current;
@@ -144,7 +205,7 @@ async function refreshTokenSession(
 
   if (!response.ok) {
     if (isExpired(current)) {
-      clearTokenSession(cookies);
+      await clearTokenSession(cookies, fetchFn);
       return null;
     }
     return current;
@@ -153,44 +214,48 @@ async function refreshTokenSession(
   const tokens = (await response.json()) as KeycloakRefreshResponse;
   if (!tokens.access_token) {
     if (isExpired(current)) {
-      clearTokenSession(cookies);
+      await clearTokenSession(cookies, fetchFn);
       return null;
     }
     return current;
   }
 
-  return replaceTokenSession(cookies, current, tokens);
+  return await persistTokenSession(
+    cookies,
+    fetchFn,
+    {
+      accessToken: tokens.access_token || current.accessToken,
+      refreshToken: tokens.refresh_token ?? current.refreshToken,
+      idToken: tokens.id_token ?? current.idToken,
+      expiresAt: nowEpochSeconds() + Math.max(60, Number(tokens.expires_in || 300))
+    },
+    current.sessionId
+  );
 }
 
-export function createTokenSession(
+export async function createTokenSession(
   cookies: Cookies,
+  fetchFn: typeof fetch,
   tokens: {
     accessToken: string;
     refreshToken?: string | null;
     idToken: string;
     expiresAt: number;
   }
-): FrontendTokenSession {
-  const sessionId = randomUUID();
-  const record: FrontendTokenSession = {
-    sessionId,
-    accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken ?? null,
-    idToken: tokens.idToken,
-    expiresAt: tokens.expiresAt
-  };
-  TOKEN_SESSIONS.set(sessionId, record);
-  setFrontendSessionCookie(cookies, sessionId);
-  return record;
+): Promise<FrontendTokenSession | null> {
+  return await persistTokenSession(cookies, fetchFn, tokens, null);
 }
 
-export function readTokenSession(cookies: Cookies): FrontendTokenSession | null {
-  const record = readStoredTokenSession(cookies);
+export async function readTokenSession(
+  cookies: Cookies,
+  fetchFn: typeof fetch
+): Promise<FrontendTokenSession | null> {
+  const record = await fetchStoredTokenSession(cookies, fetchFn);
   if (!record) {
     return null;
   }
   if (isExpired(record)) {
-    clearTokenSession(cookies);
+    await clearTokenSession(cookies, fetchFn);
     return null;
   }
   return record;
@@ -201,7 +266,7 @@ export async function readFreshTokenSession(
   fetchFn: typeof fetch,
   options?: { forceRefresh?: boolean }
 ): Promise<FrontendTokenSession | null> {
-  const record = readStoredTokenSession(cookies);
+  const record = await readTokenSession(cookies, fetchFn);
   if (!record) {
     return null;
   }
@@ -211,10 +276,19 @@ export async function readFreshTokenSession(
   return await refreshTokenSession(cookies, record, fetchFn);
 }
 
-export function clearTokenSession(cookies: Cookies): void {
+export async function clearTokenSession(
+  cookies: Cookies,
+  fetchFn: typeof fetch
+): Promise<void> {
   const sessionId = readFrontendSessionCookie(cookies);
-  if (sessionId) {
-    TOKEN_SESSIONS.delete(sessionId);
-  }
   clearFrontendSessionCookie(cookies);
+  if (!sessionId) {
+    return;
+  }
+  await fetchFn(buildApiUrl(BFF_SESSION_PATH), {
+    method: "DELETE",
+    headers: {
+      "x-gustav-bff-session": sessionId
+    }
+  });
 }

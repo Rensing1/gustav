@@ -74,10 +74,9 @@ class AdminClient:
         )
         if response.status_code not in (204,):
             logger.warning(
-                "Keycloak user update failed for user_id=%s status=%s body=%s",
+                "Keycloak user update failed for user_id=%s status=%s error=user_update_failed",
                 user_id,
                 response.status_code,
-                (response.text or "")[:500],
             )
             raise ValueError("user_update_failed")
 

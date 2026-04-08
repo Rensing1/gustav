@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -44,6 +45,10 @@ def _mock_bearer_auth(
     return {"Authorization": "Bearer test.jwt"}
 
 
+def _unique_sub(prefix: str) -> str:
+    return f"{prefix}-{uuid4().hex[:8]}"
+
+
 async def _seed_course_for_teacher(client: httpx.AsyncClient, title: str = "Mathe 9b") -> str:
     response = await client.post(
         "/api/teaching/courses",
@@ -58,9 +63,11 @@ async def _seed_course_for_teacher(client: httpx.AsyncClient, title: str = "Math
 async def test_learner_concern_box_view_returns_current_courses(monkeypatch: pytest.MonkeyPatch) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
-    teacher = store.create(sub="teacher-concern", roles=["teacher"], name="Ada", ttl_seconds=60)
-    student = store.create(sub="student-concern", roles=["student"], name="Lena", ttl_seconds=60)
-    teacher_headers = _mock_bearer_auth(monkeypatch, sub="teacher-concern", roles=["teacher"], name="Ada")
+    teacher_sub = _unique_sub("teacher-concern")
+    student_sub = _unique_sub("student-concern")
+    teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
+    student = store.create(sub=student_sub, roles=["student"], name="Lena", ttl_seconds=60)
+    teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher_sub, roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -70,7 +77,7 @@ async def test_learner_concern_box_view_returns_current_courses(monkeypatch: pyt
             json={"student_sub": student.sub},
             headers={"Origin": "http://test"},
         )
-        learner_headers = _mock_bearer_auth(monkeypatch, sub="student-concern", roles=["student"], name="Lena")
+        learner_headers = _mock_bearer_auth(monkeypatch, sub=student_sub, roles=["student"], name="Lena")
 
         response = await client.get("/api/learning/views/concern-box", headers=learner_headers)
 
@@ -78,7 +85,7 @@ async def test_learner_concern_box_view_returns_current_courses(monkeypatch: pyt
     assert response.headers.get("Cache-Control") == "private, no-store"
     body = response.json()
     assert body["user"] == {
-        "sub": "student-concern",
+        "sub": student_sub,
         "name": "Lena",
         "role": "student",
         "roles": ["student"],
@@ -90,8 +97,10 @@ async def test_learner_concern_box_view_returns_current_courses(monkeypatch: pyt
 async def test_learner_can_create_anonymous_concern_box_entry(monkeypatch: pytest.MonkeyPatch) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
-    teacher = store.create(sub="teacher-concern-write", roles=["teacher"], name="Ada", ttl_seconds=60)
-    student = store.create(sub="student-concern-write", roles=["student"], name="Lena", ttl_seconds=60)
+    teacher_sub = _unique_sub("teacher-concern-write")
+    student_sub = _unique_sub("student-concern-write")
+    teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
+    student = store.create(sub=student_sub, roles=["student"], name="Lena", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -103,7 +112,7 @@ async def test_learner_can_create_anonymous_concern_box_entry(monkeypatch: pytes
         )
 
         learner_headers = _mock_bearer_auth(
-            monkeypatch, sub="student-concern-write", roles=["student"], name="Lena"
+            monkeypatch, sub=student_sub, roles=["student"], name="Lena"
         )
         response = await client.post(
             "/api/learning/concern-box/entries",
@@ -125,13 +134,13 @@ async def test_learner_can_create_anonymous_concern_box_entry(monkeypatch: pytes
 async def test_learner_concern_box_rejects_course_without_membership(monkeypatch: pytest.MonkeyPatch) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
-    teacher = store.create(sub="teacher-concern-forbidden", roles=["teacher"], name="Ada", ttl_seconds=60)
+    teacher = store.create(sub=_unique_sub("teacher-concern-forbidden"), roles=["teacher"], name="Ada", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", teacher.session_id)
         course_id = await _seed_course_for_teacher(client, title="Mathe 9b concern forbidden")
         learner_headers = _mock_bearer_auth(
-            monkeypatch, sub="student-concern-forbidden", roles=["student"], name="Lena"
+            monkeypatch, sub=_unique_sub("student-concern-forbidden"), roles=["student"], name="Lena"
         )
 
         response = await client.post(
@@ -149,19 +158,71 @@ async def test_learner_concern_box_rejects_course_without_membership(monkeypatch
 
 
 @pytest.mark.anyio
+async def test_learner_concern_box_write_requires_bearer_even_with_cookie_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = SessionStore()
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+    student = store.create(sub="student-cookie-only", roles=["student"], name="Lena", ttl_seconds=60)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", student.session_id)
+        response = await client.post(
+            "/api/learning/concern-box/entries",
+            headers={"Origin": "http://test"},
+            json={
+                "course_id": "11111111-1111-1111-1111-111111111111",
+                "message_text": "Nur Cookie darf hier nicht reichen.",
+                "anonymous": True,
+            },
+        )
+
+    assert response.status_code == 401
+    assert response.headers.get("Cache-Control") == "private, no-store"
+    assert response.json() == {"error": "unauthenticated"}
+
+
+@pytest.mark.anyio
+async def test_learner_concern_box_rejects_invalid_course_id_as_bad_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = SessionStore()
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+    learner_headers = _mock_bearer_auth(
+        monkeypatch, sub="student-invalid-course", roles=["student"], name="Lena"
+    )
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/learning/concern-box/entries",
+            headers={**learner_headers, "Origin": "http://test"},
+            json={
+                "course_id": "not-a-uuid",
+                "message_text": "Ungültige Kurs-ID",
+                "anonymous": True,
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_course_id"}
+
+
+@pytest.mark.anyio
 async def test_teacher_concern_box_view_masks_anonymous_entries_and_shows_named_entries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
+    student_sub = _unique_sub("student-concern-reader")
     monkeypatch.setattr(
         teaching_routes,
         "resolve_student_names",
-        lambda subs: {"student-concern-reader": "Lena"},
+        lambda subs: {student_sub: "Lena"},
     )
-    teacher = store.create(sub="teacher-concern-reader", roles=["teacher"], name="Ada", ttl_seconds=60)
-    student = store.create(sub="student-concern-reader", roles=["student"], name="Lena", ttl_seconds=60)
-    teacher_headers = _mock_bearer_auth(monkeypatch, sub="teacher-concern-reader", roles=["teacher"], name="Ada")
+    teacher_sub = _unique_sub("teacher-concern-reader")
+    teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
+    student = store.create(sub=student_sub, roles=["student"], name="Lena", ttl_seconds=60)
+    teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher_sub, roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -173,7 +234,7 @@ async def test_teacher_concern_box_view_masks_anonymous_entries_and_shows_named_
         )
 
         learner_headers = _mock_bearer_auth(
-            monkeypatch, sub="student-concern-reader", roles=["student"], name="Lena"
+            monkeypatch, sub=student_sub, roles=["student"], name="Lena"
         )
         await client.post(
             "/api/learning/concern-box/entries",
@@ -193,7 +254,7 @@ async def test_teacher_concern_box_view_masks_anonymous_entries_and_shows_named_
                 "anonymous": False,
             },
         )
-        teacher_headers = _mock_bearer_auth(monkeypatch, sub="teacher-concern-reader", roles=["teacher"], name="Ada")
+        teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher_sub, roles=["teacher"], name="Ada")
 
         response = await client.get("/api/teaching/views/concern-box", headers=teacher_headers)
 
@@ -210,9 +271,11 @@ async def test_teacher_concern_box_view_masks_anonymous_entries_and_shows_named_
 async def test_teacher_can_archive_and_restore_concern_box_entry(monkeypatch: pytest.MonkeyPatch) -> None:
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
-    teacher = store.create(sub="teacher-concern-archive", roles=["teacher"], name="Ada", ttl_seconds=60)
-    student = store.create(sub="student-concern-archive", roles=["student"], name="Lena", ttl_seconds=60)
-    teacher_headers = _mock_bearer_auth(monkeypatch, sub="teacher-concern-archive", roles=["teacher"], name="Ada")
+    teacher_sub = _unique_sub("teacher-concern-archive")
+    student_sub = _unique_sub("student-concern-archive")
+    teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
+    student = store.create(sub=student_sub, roles=["student"], name="Lena", ttl_seconds=60)
+    teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher_sub, roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -223,7 +286,7 @@ async def test_teacher_can_archive_and_restore_concern_box_entry(monkeypatch: py
             headers={"Origin": "http://test"},
         )
         learner_headers = _mock_bearer_auth(
-            monkeypatch, sub="student-concern-archive", roles=["student"], name="Lena"
+            monkeypatch, sub=student_sub, roles=["student"], name="Lena"
         )
         created = await client.post(
             "/api/learning/concern-box/entries",
@@ -235,7 +298,7 @@ async def test_teacher_can_archive_and_restore_concern_box_entry(monkeypatch: py
             },
         )
         entry_id = str(created.json()["id"])
-        teacher_headers = _mock_bearer_auth(monkeypatch, sub="teacher-concern-archive", roles=["teacher"], name="Ada")
+        teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher_sub, roles=["teacher"], name="Ada")
 
         archive_response = await client.post(
             f"/api/teaching/concern-box/entries/{entry_id}/archive",

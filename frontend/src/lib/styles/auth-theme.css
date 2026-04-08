@@ -20,6 +20,7 @@
   --auth-radius-s: 0;
   --auth-radius-l: 2px;
   --auth-dot-color: rgba(27, 27, 27, 0.14);
+  --app-bg-dot-color: var(--auth-dot-color);
 }
 
 [data-theme="dark"],
@@ -40,6 +41,7 @@ html[data-theme="dark"] {
   --auth-color-shadow: 4px 4px 0 0 rgba(240, 241, 241, 0.4);
   --auth-color-button-shadow: 4px 4px 0 0 rgba(240, 241, 241, 0.4);
   --auth-dot-color: rgba(240, 241, 241, 0.18);
+  --app-bg-dot-color: var(--auth-dot-color);
 }
 
 .design-auth-shell,
@@ -50,7 +52,7 @@ html[data-theme="dark"] {
   place-items: center;
   padding: clamp(1.5rem, 3vw, 2.75rem);
   background:
-    radial-gradient(circle, var(--auth-dot-color) 1.35px, transparent 1.5px),
+    radial-gradient(circle, var(--app-bg-dot-color) 1.35px, transparent 1.5px),
     linear-gradient(0deg, var(--auth-color-bg-base), var(--auth-color-bg-base));
   background-size:
     1.75rem 1.75rem,

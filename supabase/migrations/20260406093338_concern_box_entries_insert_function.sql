@@ -18,6 +18,10 @@ begin
     return;
   end if;
 
+  if p_student_sub <> current_setting('app.current_sub', true) then
+    return;
+  end if;
+
   if p_message_text is null or btrim(p_message_text) = '' then
     return;
   end if;

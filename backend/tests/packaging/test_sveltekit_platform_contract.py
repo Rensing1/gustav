@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def test_frontend_contains_sveltekit_basics() -> None:
     package_path = REPO_ROOT / "frontend" / "package.json"
     app_html_path = REPO_ROOT / "frontend" / "src" / "app.html"
+    hooks_server_path = REPO_ROOT / "frontend" / "src" / "hooks.server.ts"
     layout_server_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.server.ts"
     dockerfile_path = REPO_ROOT / "frontend" / "Dockerfile"
     dockerignore_path = REPO_ROOT / "frontend" / ".dockerignore"
@@ -25,6 +26,7 @@ def test_frontend_contains_sveltekit_basics() -> None:
 
     assert package_path.is_file(), f"Missing frontend package manifest: {package_path}"
     assert app_html_path.is_file(), f"Missing SvelteKit app shell: {app_html_path}"
+    assert hooks_server_path.is_file(), f"Missing SvelteKit server hook: {hooks_server_path}"
     assert layout_server_path.is_file(), f"Missing root layout server loader: {layout_server_path}"
     assert dockerfile_path.is_file(), f"Missing frontend container image definition: {dockerfile_path}"
     assert dockerignore_path.is_file(), f"Missing frontend .dockerignore: {dockerignore_path}"
@@ -50,6 +52,9 @@ def test_frontend_contains_sveltekit_basics() -> None:
     app_html = app_html_path.read_text(encoding="utf-8")
     assert "%sveltekit.head%" in app_html
     assert "%sveltekit.body%" in app_html
+
+    hooks_server_src = hooks_server_path.read_text(encoding="utf-8")
+    assert "assertSecureFrontendSessionConfig" in hooks_server_src
 
     layout_server_src = layout_server_path.read_text(encoding="utf-8")
     assert "/api/app/session-bootstrap" in layout_server_src
@@ -86,7 +91,7 @@ def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     assert "KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}" in compose_src
     assert "KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}" in compose_src
     assert "KC_REALM=${KC_REALM:-gustav}" in compose_src
-    assert "FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET:-CHANGE_ME_DEV}" in compose_src
+    assert "FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET}" in compose_src
 
     assert "@api_path path /api/* /internal/*" in caddy_src
     assert "handle @api_path" in caddy_src

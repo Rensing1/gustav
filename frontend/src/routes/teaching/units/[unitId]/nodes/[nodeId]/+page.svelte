@@ -71,7 +71,7 @@
   let showCreateTask = $state(false);
   let createMaterialKind = $state<"markdown" | "file">("markdown");
   let createTaskKind = $state<"native" | "h5p" | "visual" | "scratch" | "calliope">("native");
-  let handledForm = $state<ActionData | undefined>(undefined);
+  let handledForm: ActionData | undefined = undefined;
   let createMaterialCard = $state<HTMLElement | null>(null);
   let createTaskCard = $state<HTMLElement | null>(null);
 

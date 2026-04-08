@@ -62,8 +62,15 @@ describe("WorkspaceOutline", () => {
       path.dirname(fileURLToPath(import.meta.url)),
       "../../styles/design-system.css"
     );
+    const designDocPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../../../../docs/DESIGN.md"
+    );
     const css = readFileSync(cssPath, "utf8");
+    const designDoc = readFileSync(designDocPath, "utf8");
 
+    expect(designDoc).toContain("### 7.3 Flächen");
+    expect(designDoc).toContain("## 13. Verbotene Alt-Muster");
     expect(css).toMatch(/\.workspace-outline\s*\{[^}]*gap:\s*0\.65rem;[^}]*padding:\s*0\.82rem 0\.85rem 0\.9rem;/s);
     expect(css).toMatch(/\.workspace-outline__header h2\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.98rem;[^}]*text-transform:\s*uppercase;/s);
     expect(css).toMatch(/\.workspace-outline__group-title\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.76rem;[^}]*letter-spacing:\s*0\.18em;/s);
@@ -73,7 +80,8 @@ describe("WorkspaceOutline", () => {
     expect(css).toMatch(/\.workspace-outline__items\s*\{[^}]*gap:\s*0\.08rem;/s);
     expect(css).toMatch(/\.workspace-outline__item\s*\{[^}]*min-height:\s*1\.82rem;[^}]*padding:\s*0\.24rem 0 0\.24rem 0\.95rem;/s);
     expect(css).toMatch(/\.workspace-outline__item--active\s*\{[^}]*background:\s*transparent;/s);
-    expect(css).toMatch(/\.workspace-outline__item--active::after\s*\{[^}]*width:\s*0\.22rem;[^}]*background:\s*var\(--color-accent\);/s);
-    expect(css).toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*color:\s*var\(--color-accent\);[^}]*font-weight:\s*700;/s);
+    expect(css).not.toMatch(/\.workspace-outline__item--active::after\s*\{/s);
+    expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*color:\s*var\(--color-accent\);/s);
+    expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*font-weight:\s*700;/s);
   });
 });

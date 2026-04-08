@@ -955,16 +955,6 @@ h6,
   width: 1px;
 }
 
-.workspace-outline__item--active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.24rem;
-  bottom: 0.24rem;
-  width: 0.22rem;
-  background: var(--color-accent);
-}
-
 .workspace-outline__item-copy {
   min-width: 0;
   display: grid;
@@ -985,8 +975,8 @@ h6,
 
 .workspace-outline__item--active .workspace-outline__item-label {
   background: transparent;
-  color: var(--color-accent);
-  font-weight: 700;
+  color: var(--color-text);
+  font-weight: 500;
 }
 
 [data-theme="dark"] .workspace-outline {
@@ -1006,12 +996,8 @@ h6,
 }
 
 [data-theme="dark"] .workspace-outline__item--active .workspace-outline__item-label {
-  color: var(--color-accent);
+  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
   background: transparent;
-}
-
-[data-theme="dark"] .workspace-outline__item--active::after {
-  background: var(--color-accent);
 }
 
 .workspace-settings-menu {

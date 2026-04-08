@@ -559,6 +559,21 @@ describe("LearningUnitContentWorkspace", () => {
       /\.learning-unit-module__tasks\s*\{[^}]*margin-top:\s*var\(--space-6\);/s
     );
     expect(css).toMatch(/\.learning-unit-module__section-body\s*\{[^}]*gap:\s*var\(--space-4\);/s);
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__header\s*\{[^}]*margin-bottom:\s*var\(--space-6\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__title\s*\{[^}]*color:\s*var\(--color-link\);[^}]*font-size:\s*calc\(1\.56rem \* var\(--learning-unit-headline-scale\)\);[^}]*line-height:\s*1\.06;[^}]*display:\s*-webkit-box;[^}]*-webkit-line-clamp:\s*2;/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__meta\s*\{[^}]*font-size:\s*calc\(0\.78rem \* var\(--learning-unit-label-scale\)\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__section-head\s*\{[^}]*margin-bottom:\s*var\(--space-2\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;/s
+    );
     expect(css).toMatch(
       /\.learning-unit-module__section-body\s*>\s*\.learning-work-item:last-child,\s*\.learning-unit-module__section-body\s*>\s*\.learning-task-workspace:last-child\s*\{[^}]*border-bottom:\s*0;[^}]*padding-bottom:\s*0;/s
     );

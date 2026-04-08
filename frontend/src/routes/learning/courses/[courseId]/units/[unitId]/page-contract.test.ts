@@ -156,11 +156,27 @@ describe("learning unit route contract", () => {
     expect(appCss).toMatch(
       /\.learning-unit-module__index\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*text-transform:\s*uppercase;/s
     );
-    expect(appCss).toMatch(
-      /\.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);/s
+    expect(designDoc).toContain("Der Modultitel ist der klare Einstiegspunkt eines Moduls");
+    expect(designDoc).toContain("`MATERIALIEN` und `AUFGABEN` bleiben technische Marker");
+    expect(designDoc).toContain("Zwei Zeilen für lange Modultitel sind erlaubt");
+    expect(designDoc).toContain("Der Abstand vom Modulkopf zum ersten Abschnitt ist größer");
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__title\s*\{[^}]*color:\s*var\(--color-link\);[^}]*font-size:\s*calc\(1\.56rem \* var\(--learning-unit-headline-scale\)\);[^}]*line-height:\s*1\.06;[^}]*display:\s*-webkit-box;[^}]*-webkit-line-clamp:\s*2;/s
     );
-    expect(appCss).toMatch(
-      /\.learning-unit-module__section-head h5\s*\{[^}]*font-size:\s*calc\(1\.02rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*800;/s
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-pane-grid--split \.learning-unit-module__title\s*\{[^}]*font-size:\s*calc\(1\.34rem \* var\(--learning-unit-headline-scale\)\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*font-size:\s*calc\(0\.78rem \* var\(--learning-unit-label-scale\)\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*color:\s*color-mix\(in srgb,\s*var\(--color-text\) 78%,\s*transparent 22%\);[^}]*font-family:\s*var\(--font-technical\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*0\.14em;/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__header\s*\{[^}]*margin-bottom:\s*var\(--space-6\);/s
+    );
+    expect(designSystemCss).toMatch(
+      /\.learning-unit-content-shell \.learning-unit-module__section-head\s*\{[^}]*margin-bottom:\s*var\(--space-2\);/s
     );
     expect(appCss).toMatch(
       /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/s

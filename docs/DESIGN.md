@@ -274,6 +274,13 @@ Verbindliche Familien:
 
 - Task-Fläche bleibt Fokusraum
 - Bearbeitung bleibt inline
+- Der Modultitel ist der klare Einstiegspunkt eines Moduls
+- `MATERIALIEN` und `AUFGABEN` bleiben technische Marker, keine konkurrierenden
+  Subheadlines
+- Zwei Zeilen für lange Modultitel sind erlaubt; der Modulkopf wächst nicht
+  beliebig
+- Der Abstand vom Modulkopf zum ersten Abschnitt ist größer als der Abstand vom
+  Abschnittslabel zu seinem Block
 - Rückmeldung und Bewertung erscheinen als technische Disclosure-Familie
 - kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile statt
   redundanter Status-/Titellabels

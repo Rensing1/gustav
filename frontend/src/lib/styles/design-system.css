@@ -1260,6 +1260,53 @@ h6,
   padding-bottom: 0.55rem;
 }
 
+.learning-unit-content-shell .learning-unit-module__header {
+  margin-bottom: var(--space-6);
+}
+
+.learning-unit-content-shell .learning-unit-module__copy {
+  gap: var(--space-2);
+}
+
+.learning-unit-content-shell .learning-unit-module__index {
+  color: color-mix(in srgb, var(--color-text) 62%, transparent 38%);
+}
+
+.learning-unit-content-shell .learning-unit-module__title {
+  color: var(--color-link);
+  font-size: calc(1.56rem * var(--learning-unit-headline-scale));
+  line-height: 1.06;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: balance;
+}
+
+.learning-unit-content-shell .learning-unit-pane-grid--split .learning-unit-module__title {
+  font-size: calc(1.34rem * var(--learning-unit-headline-scale));
+}
+
+.learning-unit-content-shell .learning-unit-module__meta {
+  color: color-mix(in srgb, var(--color-text) 54%, transparent 46%);
+  font-family: var(--font-technical);
+  font-size: calc(0.78rem * var(--learning-unit-label-scale));
+  letter-spacing: 0.08em;
+}
+
+.learning-unit-content-shell .learning-unit-module__section-head {
+  margin-bottom: var(--space-2);
+}
+
+.learning-unit-content-shell .learning-unit-module__section-head h5 {
+  padding-bottom: 0;
+  color: color-mix(in srgb, var(--color-text) 78%, transparent 22%);
+  font-family: var(--font-technical);
+  font-size: calc(0.82rem * var(--learning-unit-label-scale));
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
 .learning-unit-content-shell .learning-work-item__start-card {
   margin-top: var(--space-3);
   padding-top: var(--space-3);

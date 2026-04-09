@@ -49,7 +49,7 @@ def test_frontend_live_page_uses_dashboard_read_model() -> None:
     assert "submitted-unscored" in page_source
     assert "<pre>{data.dashboard.selected_student_panel" not in page_source
     assert page_source.index('<p class="workspace-label">Abgabe</p>') < page_source.index(
-        '<p class="workspace-label">Aufgabe</p>'
+        '<p class="workspace-label">Aufgabe als Referenz</p>'
     )
     assert "Referenz" in page_source
     assert "Keine Vorschau" in page_source

@@ -354,13 +354,15 @@
                           <a class="workspace-link-action" href={selectedFile.url}>Datei öffnen</a>
                         </div>
                       {:else}
-                        <p class="learning-task-submission-summary__plain">Keine Vorschau. Für diese Aufgabe liegt noch keine lesbare Abgabe vor.</p>
+                        <p class="learning-task-submission-summary__plain">Keine Vorschau für diese Abgabe verfügbar.</p>
+                        <p class="learning-task-submission-summary__plain">
+                          Die Submission wurde erkannt, aber für diesen Typ steht hier aktuell keine direkt lesbare Darstellung bereit.
+                        </p>
                       {/if}
                     </section>
 
                     <section class="live-panel-block">
-                      <p class="workspace-label">Aufgabe</p>
-                      <p class="workspace-note">Referenz</p>
+                      <p class="workspace-label">Aufgabe als Referenz</p>
                       <div class="markdown-prose">
                         {@html renderMarkdown(selectedSubmission.instruction_md)}
                       </div>

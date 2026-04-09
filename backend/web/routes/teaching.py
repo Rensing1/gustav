@@ -5495,33 +5495,138 @@ async def get_unit_live_summary(
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
-                aggregate_rows = repo.list_unit_latest_submission_aggregates_for_owner(
-                    course_id=course_id,
-                    unit_id=unit_id,
-                    owner_sub=sub,
-                    student_subs=member_subs,
-                )
-                has_map = {
-                    (str(row.get("student_sub") or ""), str(row.get("task_id") or ""))
-                    for row in aggregate_rows
-                    if bool(row.get("has_submission"))
-                }
-                avg_map = {
-                    (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): row.get("average_score")
-                    for row in aggregate_rows
-                }
-                h5p_map = {
-                    (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): bool(row.get("h5p_completed"))
-                    for row in aggregate_rows
-                    if row.get("h5p_completed") is not None
-                }
-                score_map = {
-                    (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): (
-                        _safe_int(row.get("score_raw")),
-                        _safe_int(row.get("score_max")),
+                try:
+                    aggregate_rows = repo.list_unit_latest_submission_aggregates_for_owner(
+                        course_id=course_id,
+                        unit_id=unit_id,
+                        owner_sub=sub,
+                        student_subs=member_subs,
                     )
-                    for row in aggregate_rows
-                }
+                    has_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or ""))
+                        for row in aggregate_rows
+                        if bool(row.get("has_submission"))
+                    }
+                    avg_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): row.get("average_score")
+                        for row in aggregate_rows
+                    }
+                    h5p_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): bool(row.get("h5p_completed"))
+                        for row in aggregate_rows
+                        if row.get("h5p_completed") is not None
+                    }
+                    score_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): (
+                            _safe_int(row.get("score_raw")),
+                            _safe_int(row.get("score_max")),
+                        )
+                        for row in aggregate_rows
+                    }
+                except Exception as exc:
+                    logger.warning(
+                        "Unit summary bulk aggregate fallback: get_unit_latest_submission_aggregates_for_owner unavailable — %s",
+                        exc,
+                        extra={"course_id": course_id, "unit_id": unit_id},
+                    )
+                    import psycopg  # type: ignore
+                    dsn = getattr(repo, "_dsn", None)
+                    helper_rows: list[dict[str, Any]] = []
+                    if dsn:
+                        with psycopg.connect(dsn) as conn:
+                            with conn.cursor() as cur:
+                                cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                                try:
+                                    helper_rows = _load_unit_live_helper_rows(
+                                        cur,
+                                        owner_sub=sub,
+                                        course_id=course_id,
+                                        unit_id=unit_id,
+                                        updated_since_dt=updated_since_dt,
+                                        limit=int(limit),
+                                        offset=int(offset),
+                                    )
+                                    has_map = {(row["student_sub"], row["task_id"]) for row in helper_rows}
+                                    task_ids_by_student: dict[str, list[str]] = {}
+                                    for row in helper_rows:
+                                        student_sub = str(row["student_sub"])
+                                        task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
+                                    latest_state_by_task = (
+                                        _load_latest_submission_state_by_task(cur, sub, course_id, task_ids_by_student)
+                                        if any(
+                                            row.get("score_raw") is None or row.get("score_max") is None
+                                            for row in helper_rows
+                                        )
+                                        else {}
+                                    )
+                                    submission_ids_by_student: dict[str, list[str]] = {}
+                                    for row in helper_rows:
+                                        student_sub = str(row["student_sub"])
+                                        task_id = str(row["task_id"])
+                                        latest_state = latest_state_by_task.get((student_sub, task_id), {})
+                                        submission_id = latest_state.get("submission_id") or row.get("submission_id")
+                                        if submission_id:
+                                            submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
+                                        score_raw = _safe_int(row.get("score_raw"))
+                                        score_max = _safe_int(row.get("score_max"))
+                                        if score_raw is None or score_max is None:
+                                            score_raw = latest_state.get("score_raw", score_raw)
+                                            score_max = latest_state.get("score_max", score_max)
+                                        score_map[(student_sub, task_id)] = (score_raw, score_max)
+                                    avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
+                                    avg_map = {
+                                        (
+                                            str(row["student_sub"]),
+                                            str(row["task_id"]),
+                                        ): avg_by_id.get(
+                                            latest_state_by_task.get((str(row["student_sub"]), str(row["task_id"])), {}).get("submission_id")
+                                            or row.get("submission_id")
+                                        )
+                                        for row in helper_rows
+                                    }
+                                    h5p_map = {
+                                        (str(row["student_sub"]), str(row["task_id"])): bool(row["h5p_completed"])
+                                        for row in helper_rows
+                                        if row.get("h5p_completed") is not None
+                                    }
+                                except Exception as legacy_exc:
+                                    logger.warning(
+                                        "Unit summary fallback: get_unit_latest_submissions_for_owner unavailable — %s",
+                                        legacy_exc,
+                                        extra={"course_id": course_id, "unit_id": unit_id},
+                                    )
+                                    helper_rows = []
+                                if tasks and member_subs:
+                                    task_ids = [t["id"] for t in tasks]
+                                    if not helper_rows:
+                                        cur.execute(
+                                            """
+                                            select distinct student_sub::text, task_id::text
+                                            from public.learning_submissions
+                                            where course_id = %s
+                                              and task_id = any(%s)
+                                              and student_sub = any(%s)
+                                            """,
+                                            (course_id, task_ids, member_subs),
+                                        )
+                                        rows = cur.fetchall() or []
+                                        has_map = {(r[0], r[1]) for r in rows}
+                                    if not has_map:
+                                        for sid in member_subs:
+                                            cur.execute("select set_config('app.current_sub', %s, true)", (sid,))
+                                            cur.execute(
+                                                """
+                                                select distinct task_id::text
+                                                from public.learning_submissions
+                                                where course_id = %s
+                                                  and student_sub = %s
+                                                  and task_id = any(%s)
+                                                """,
+                                                (course_id, sid, task_ids),
+                                            )
+                                            for (tid,) in cur.fetchall() or []:
+                                                has_map.add((sid, tid))
+                                        cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
         except Exception:
             has_map = set()
             avg_map = {}

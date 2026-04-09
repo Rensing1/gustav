@@ -115,6 +115,24 @@ def fetch_live_h5p_helper_result_signature(conn) -> str | None:  # noqa: ANN001
     return str(row[0])
 
 
+def has_live_bulk_aggregate_helper(conn) -> bool:  # noqa: ANN001
+    """Return whether the newer live bulk aggregate helper exists."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select 1
+            from pg_proc p
+            join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public'
+              and p.proname = 'get_unit_latest_submission_aggregates_for_owner'
+              and oidvectortypes(p.proargtypes) = 'text, uuid, uuid, text[]'
+            limit 1
+            """
+        )
+        row = cur.fetchone()
+    return bool(row and row[0])
+
+
 def constraint_supports_calliope(definition: str | None) -> bool:
     """Check whether the constraint definition allows `kind='calliope'`."""
     if not definition:
@@ -167,6 +185,7 @@ def run_preflight(*, dsn: str | None = None, out: TextIO | None = None, err: Tex
             unit_tasks_kind = fetch_unit_tasks_kind_constraintdef(conn)
             submission_error_codes = fetch_learning_submissions_error_code_constraintdef(conn)
             h5p_helper_signature = fetch_live_h5p_helper_result_signature(conn)
+            live_bulk_helper_present = has_live_bulk_aggregate_helper(conn)
     except Exception as exc:
         print(f"Database preflight failed: cannot connect/check schema ({exc}).", file=err_stream)
         print(_remediation_hint(), file=err_stream)
@@ -232,8 +251,16 @@ def run_preflight(*, dsn: str | None = None, out: TextIO | None = None, err: Tex
         print(_remediation_hint(), file=err_stream)
         return 2
 
+    if not live_bulk_helper_present:
+        print(
+            "Database preflight failed: get_unit_latest_submission_aggregates_for_owner is missing.",
+            file=err_stream,
+        )
+        print(_remediation_hint(), file=err_stream)
+        return 2
+
     print(
-        "DB preflight OK: owner, calliope, feedback_invalid_analysis, and latest H5P score columns are present.",
+        "DB preflight OK: owner, calliope, feedback_invalid_analysis, live bulk aggregates, and latest H5P score columns are present.",
         file=out_stream,
     )
     return 0

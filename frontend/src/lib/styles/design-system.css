@@ -334,7 +334,26 @@ h6,
   color: var(--color-accent);
 }
 
-.workspace-link-action--subtle,
+.workspace-top-action--subtle,
+.workspace-link-action--subtle {
+  min-height: 1.72rem;
+  padding: 0.24rem 0.58rem;
+  font-size: 0.7rem;
+  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+  border-color: color-mix(in srgb, var(--color-border) 72%, white 28%);
+  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+}
+
+.workspace-top-action--subtle:hover,
+.workspace-top-action--subtle:focus-visible,
+.workspace-link-action--subtle:hover,
+.workspace-link-action--subtle:focus-visible {
+  transform: none;
+  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+  color: var(--color-text);
+}
+
 .teacher-flow-unit-node__popover-action--subtle {
   color: var(--color-text-muted);
 }
@@ -1456,23 +1475,6 @@ h6,
   align-items: start;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-.learning-task-inline-editor__close {
-  min-height: 1.72rem;
-  padding: 0.24rem 0.58rem;
-  font-size: 0.7rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
-  border-color: color-mix(in srgb, var(--color-border) 72%, white 28%);
-  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
-  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
-}
-
-.learning-task-inline-editor__close:hover,
-.learning-task-inline-editor__close:focus-visible {
-  transform: none;
-  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
-  color: var(--color-text);
 }
 
 .learning-task-inline-editor__title {

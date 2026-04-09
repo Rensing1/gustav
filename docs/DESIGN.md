@@ -224,6 +224,10 @@ Zusätzliche Regeln:
 - technisch-präzise statt pädagogisch-begleitend
 - Actions eher knapp und objektartig
 - Status- und Metatexte dürfen technischer klingen
+- `accent` für Primäraktionen
+- `quiet` für normale Sekundäraktionen
+- `subtle` für kleine, nicht-dominante Nebenaktionen wie `Pausieren`,
+  `Schließen` oder `Bearbeiten` in dichten UI-Kontexten
 
 ## 9. Accessibility
 

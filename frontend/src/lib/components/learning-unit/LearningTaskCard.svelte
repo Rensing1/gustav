@@ -514,7 +514,7 @@
                 {/if}
               </div>
               <button
-                class="learning-task-inline-editor__close workspace-top-action workspace-top-action--quiet"
+                class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
                 type="button"
                 onclick={() => onExitSubmissionWorkspace?.()}
               >

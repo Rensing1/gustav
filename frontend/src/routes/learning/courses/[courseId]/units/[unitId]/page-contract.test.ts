@@ -186,6 +186,11 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("Status wird primär über Balken und Tönung getragen");
     expect(designDoc).toContain("Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline");
     expect(designDoc).toContain("`Meine Abgabe` und Bearbeitung sind pro Pane exklusiv und erneut klickbar");
+    expect(designDoc).toContain("`accent` für Primäraktionen");
+    expect(designDoc).toContain("`quiet` für normale Sekundäraktionen");
+    expect(designDoc).toContain("`subtle` für kleine, nicht-dominante Nebenaktionen");
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*1\.72rem;/s);
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*box-shadow:\s*1px 1px 0/s);
   });
 
   it("uses one subtle card per module while keeping the pane surface itself cardless", () => {

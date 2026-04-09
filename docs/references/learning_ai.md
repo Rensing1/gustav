@@ -7,12 +7,12 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 ---
 
 ## 1. Purpose & Scope
-- **OCR**: Extract handwritten or printed text from image/PDF submissions and populate `text_body`.
-- **Feedback**: Generate formative feedback (and optional rubric scoring) from `text_body` using DSPy programs.
+- **OCR**: Extract handwritten or printed text from image/PDF submissions and populate `text_body` where the submission path uses OCR.
+- **Feedback**: Generate formative feedback (and optional rubric scoring) either from `text_body` or directly from the uploaded visual artifact, depending on the submission path.
 - **Endpoint**: Inference runs against an operator-configured **OpenAI-compatible API endpoint** (`OPENAI_BASE_URL`).
   - The endpoint may be local or remote; GUSTAV does not enforce host/path rules.
   - Privacy/GDPR responsibility is therefore shared: operators must ensure the endpoint is compliant for student data.
-- **Async-first**: Submissions with `kind=image|file` return `202` with `analysis_status=pending`. A worker processes OCR + feedback and updates the submission to `completed` or `failed`.
+- **Async-first**: Submissions with `kind=image|file` return `202` with `analysis_status=pending`. A worker processes either OCR + feedback or direct visual feedback and updates the submission to `completed` or `failed`.
 - **Teacher-only context**: Tasks can include `teacher_context_md` (KI-Kontext/Wissensbasis). It is used as model context but must never be exposed in student-facing DTOs.
 
 ---
@@ -20,7 +20,7 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 ## 2. Architecture Overview
 1. **HTTP Layer** validates request & permissions, calls the use case `IngestLearningSubmission`.
 2. **Use Case** stores the submission with `analysis_status=pending` (for text/image/file) and enqueues a job via the queue port.
-3. **Worker** (`process_learning_submission_jobs`) leases jobs FIFO, runs OCR (if needed), runs feedback analysis, persists results, and emits follow-up events.
+3. **Worker** (`process_learning_submission_jobs`) leases jobs FIFO, runs OCR only when needed, otherwise routes directly into visual feedback analysis, persists results, and emits follow-up events.
 4. **Persistence** is guarded by repository functions and RLS. Worker updates go through `SECURITY DEFINER` helpers to mutate `analysis_status`, `analysis_json`, `feedback_md`.
 5. **Observability**: Structured logs + counters/gauges.
 
@@ -37,7 +37,7 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 
 Production adapters:
 - OCR: `backend/learning/adapters/local_vision.py` (DSPy-only, OpenAI-compatible endpoint).
-- Feedback: `backend/learning/adapters/local_feedback.py` (DSPy-only, OpenAI-compatible endpoint; visual tasks via `analyze_visual`).
+- Feedback: `backend/learning/adapters/local_feedback.py` (DSPy-only, OpenAI-compatible endpoint; visual tasks and native upload submissions via `analyze_visual`).
   - Note: Concrete adapters may accept additional optional kwargs (`instruction_md`, `teacher_context_md`). The worker passes them when supported.
 
 ---

@@ -2400,7 +2400,10 @@ components:
             text_body:
               type: string
               nullable: true
-              description: Unified text representation; empty while analysis is pending or when OCR/analysis failed.
+              description: >-
+                Unified text representation for text submissions and OCR-based pipelines.
+                Empty while analysis is pending or when OCR/analysis failed; may remain
+                empty for completed visual-direct file analyses.
             mime_type:
               type: string
               nullable: true
@@ -2524,10 +2527,12 @@ components:
           type: string
           maxLength: 65536
           description: |
-            Best-effort extracted text, even for file/image/pdf submissions once
-            processing has completed. The content matches the learner-facing
-            text_body representation and is only shortened to the global
-            text_body limit defined by the Learning API (currently 64k characters, i.e. 65,536).
+            Best-effort text representation when the submission path produces one.
+            Text submissions expose their original text; OCR-based file/image/pdf
+            submissions may expose extracted text. Visual-direct analyses may leave
+            this field empty even after processing has completed. The content is only
+            shortened to the global text_body limit defined by the Learning API
+            (currently 64k characters, i.e. 65,536).
           nullable: true
         files:
           type: array
@@ -5232,6 +5237,7 @@ paths:
         existing feedback submission instead of starting a second worker run.
         
         Task-type rules:
+        - For `Task.kind=native`, `kind=image|file` is accepted. These uploads are processed directly by the visual feedback pipeline and do not run through OCR first.
         - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).
         - For `Task.kind=scratch`, only `kind=file` with `mime_type=application/x.scratch.sb3` is accepted (upload-only).
         - For `Task.kind=calliope`, only `kind=file` with `mime_type=application/x.makecode.hex` is accepted (upload-only).

@@ -38,6 +38,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # noqa:
 )
 from backend.tests.test_learning_worker_jobs import _dsn  # type: ignore  # noqa: E402
 from backend.tests.test_learning_visual_upload_only_api import _prepare_visual_task_fixture  # type: ignore  # noqa: E402
+from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
 
 
@@ -156,6 +157,77 @@ async def test_worker_routes_visual_tasks_to_visual_feedback(monkeypatch: pytest
     assert row is not None
     status, feedback_md, analysis_json = row
     assert status == "completed"
+    assert feedback_md == "VLM Feedback"
+    assert isinstance(analysis_json, dict)
+    assert analysis_json.get("schema") == "criteria.v2"
+
+
+@pytest.mark.anyio
+async def test_worker_routes_native_uploads_to_visual_feedback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    fx = await _prepare_learning_fixture()
+    dsn = _dsn()
+    monkeypatch.setenv("SERVICE_ROLE_DSN", dsn)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+        conn.commit()
+
+    storage_key = f"submissions/{fx.course_id}/{fx.task['id']}/{fx.student_sub}/native-upload.png"
+    payload_bytes = b"\x89PNG\r\n\x1a\n" + b"y" * 128
+    target = tmp_path / storage_key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload_bytes)
+    sha = hashlib.sha256(payload_bytes).hexdigest()
+
+    repo = DBLearningRepo(dsn=dsn)
+    usecase = CreateSubmissionUseCase(repo)
+    submission = usecase.execute(
+        CreateSubmissionInput(
+            course_id=fx.course_id,
+            task_id=fx.task["id"],
+            student_sub=fx.student_sub,
+            kind="image",
+            text_body=None,
+            storage_key=storage_key,
+            mime_type="image/png",
+            size_bytes=len(payload_bytes),
+            sha256=sha,
+            score_raw=None,
+            score_max=None,
+            idempotency_key=f"native-upload-worker-{uuid.uuid4().hex}",
+            intent="feedback",
+        )
+    )
+
+    vision = _ExplodingVisionAdapter()
+    feedback = _StubVisualFeedbackAdapter()
+
+    processed = run_once(
+        dsn=os.getenv("SERVICE_ROLE_DSN") or dsn,
+        vision_adapter=vision,
+        feedback_adapter=feedback,
+        now=datetime.now(tz=timezone.utc),
+    )
+
+    assert processed is True
+    assert vision.called is False
+    assert feedback.called is True
+    assert (feedback.last_payload or {}).get("task_kind") == "native"
+
+    with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (fx.student_sub,))
+            cur.execute(
+                "select analysis_status, text_body, feedback_md, analysis_json from public.learning_submissions where id = %s::uuid",
+                (submission["id"],),
+            )
+            row = cur.fetchone()
+    assert row is not None
+    status, text_body, feedback_md, analysis_json = row
+    assert status == "completed"
+    assert text_body is None
     assert feedback_md == "VLM Feedback"
     assert isinstance(analysis_json, dict)
     assert analysis_json.get("schema") == "criteria.v2"

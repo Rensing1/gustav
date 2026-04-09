@@ -388,6 +388,10 @@ def _process_job(
 
     student_sub = str(submission.get("student_sub") or payload.get("student_sub") or "")
     _set_current_sub(conn, student_sub)
+    course_id = str(submission.get("course_id") or payload.get("course_id") or "")
+    if course_id:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_course_id', %s, true)", (course_id,))
 
     # Accept both freshly queued and already extracted submissions (pages persisted).
     if submission.get("analysis_status") not in ("pending", "extracted"):
@@ -402,6 +406,14 @@ def _process_job(
         return
 
     task_kind = str(payload.get("task_kind") or "").strip().lower()
+    submission_kind = str(submission.get("kind") or "").strip().lower()
+    internal_metadata = submission.get("internal_metadata") if isinstance(submission, dict) else None
+    analysis_mode = _resolve_analysis_mode(
+        payload=payload,
+        internal_metadata=internal_metadata if isinstance(internal_metadata, dict) else {},
+        task_kind=task_kind,
+        submission_kind=submission_kind,
+    )
     task_context = _fetch_task_context(
         conn=conn,
         task_id=str(submission.get("task_id") or payload.get("task_id") or ""),
@@ -415,7 +427,7 @@ def _process_job(
     # ---------------------------------------------------------------------
     # Visual tasks: evaluate directly from image/PDF (no OCR pipeline)
     # ---------------------------------------------------------------------
-    if task_kind == "visual":
+    if analysis_mode == "visual_direct":
         try:
             analyze_visual = getattr(feedback_adapter, "analyze_visual", None)
             if not callable(analyze_visual):
@@ -499,7 +511,7 @@ def _process_job(
         _update_submission_completed(
             conn=conn,
             submission_id=job.submission_id,
-            text_md="",
+            text_md=None,
             analysis_json=feedback_result.analysis_json,
             feedback_md=feedback_result.feedback_md,
         )
@@ -516,7 +528,7 @@ def _process_job(
         if cached_vision is not None:
             vision_result = cached_vision
         else:
-            if (submission.get("kind") or "").strip() == "text":
+            if submission_kind == "text":
                 vision_result = VisionResult(
                     text_md=str(submission.get("text_body") or ""),
                     raw_metadata={"adapter": "worker", "backend": "pass_through", "reason": "text_submission"},
@@ -651,6 +663,31 @@ def _process_job(
     conn.commit()
 
 
+def _resolve_analysis_mode(
+    *,
+    payload: dict,
+    internal_metadata: dict,
+    task_kind: str,
+    submission_kind: str,
+) -> str:
+    """Return the processing mode for this submission attempt.
+
+    Why:
+        Task kind describes the pedagogical task family, but file uploads on
+        native tasks now use the same direct visual-analysis path as visual
+        tasks. Keeping this decision in one helper prevents drift between queue
+        payloads, persisted metadata, and legacy fallbacks.
+    """
+    explicit = str(payload.get("analysis_mode") or internal_metadata.get("analysis_mode") or "").strip().lower()
+    if explicit in {"text_direct", "visual_direct", "ocr_text"}:
+        return explicit
+    if submission_kind == "text":
+        return "text_direct"
+    if task_kind in {"native", "visual"}:
+        return "visual_direct"
+    return "ocr_text"
+
+
 def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]:
     with conn.cursor() as cur:
         cur.execute(
@@ -725,7 +762,7 @@ def _update_submission_completed(
     *,
     conn: Connection,
     submission_id: str,
-    text_md: str,
+    text_md: str | None,
     analysis_json: dict,
     feedback_md: str,
 ) -> None:
@@ -1079,8 +1116,9 @@ def _resolve_worker_dsn() -> str:
     Resolve the Postgres DSN for the learning worker with least-privilege guards.
 
     Behavior:
-        - Favors explicit overrides (LEARNING_DATABASE_URL/LEARNING_DB_URL/DATABASE_URL).
-        - Falls back to the app login role derived from APP_DB_USER/APP_DB_PASSWORD.
+        - Favors explicit overrides (LEARNING_DATABASE_URL/LEARNING_DB_URL).
+        - Falls back to the dedicated worker login role derived from
+          LEARNING_WORKER_DB_USER/LEARNING_WORKER_DB_PASSWORD.
         - Rejects service-role/superuser accounts (postgres, service_role) unless
           ALLOW_SERVICE_DSN_FOR_TESTING=true (opt-in for local debugging).
     """

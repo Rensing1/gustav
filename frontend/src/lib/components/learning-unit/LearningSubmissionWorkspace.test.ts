@@ -127,4 +127,36 @@ describe("LearningSubmissionWorkspace", () => {
     expect(document.querySelector(".learning-submission-history .markdown-prose table")).not.toBeNull();
     expect(screen.getByRole("link", { name: "Hinweis" })).toHaveAttribute("href", "https://example.com");
   });
+
+  it("renders completed native upload feedback without requiring text_body", () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "course-1",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialTab: "history",
+        initialHistoryLoaded: true,
+        initialHistory: [
+          feedbackSubmission({
+            kind: "image",
+            text_body: null,
+            mime_type: "image/png",
+            files: [{ mime: "image/png", size: 2048, url: "https://example.com/upload.png" }],
+            feedback_md: "## Rückmeldung\n\nDie Grafik ist gut lesbar.",
+            analysis_json: {
+              schema: "criteria.v2",
+              score: 8,
+              criteria_results: [{ criterion: "Anschaulichkeit", score: 8, max_score: 10, explanation_md: "Stimmige Darstellung." }]
+            }
+          })
+        ]
+      }
+    });
+
+    expect(screen.queryByText("Abgabe")).toBeNull();
+    expect(screen.getByText("Datei")).toBeInTheDocument();
+    expect(screen.getByText(/Die Grafik ist gut lesbar/i)).toBeInTheDocument();
+    expect(screen.getByText(/Anschaulichkeit/)).toBeInTheDocument();
+  });
 });

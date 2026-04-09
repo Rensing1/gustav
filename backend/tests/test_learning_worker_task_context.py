@@ -11,10 +11,13 @@ from datetime import datetime, timezone
 from typing import Sequence
 
 import pytest
+import httpx
+from httpx import ASGITransport
 
 pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
 
+import main  # type: ignore  # noqa: E402
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
 from backend.learning.repo_db import DBLearningRepo  # noqa: E402
 from backend.learning.usecases.submissions import (  # noqa: E402
@@ -27,6 +30,15 @@ from backend.learning.workers.process_learning_submission_jobs import (  # noqa:
     run_once,
 )
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
+from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+
+
+async def _client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=main.app),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    )
 
 
 def _dsn() -> str:
@@ -124,6 +136,103 @@ class _FeedbackCapturingAdapter:
             analysis_json={"schema": "criteria.v2", "score": 3, "criteria_results": []},
         )
 
+    def analyze_visual(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        submission: dict,
+        job_payload: dict,
+        criteria: Sequence[str],
+        instruction_md=None,
+        teacher_context_md=None,
+    ) -> FeedbackResult:
+        self.last_kwargs = {
+            "submission": submission,
+            "job_payload": job_payload,
+            "criteria": list(criteria),
+            "instruction_md": instruction_md,
+            "teacher_context_md": teacher_context_md,
+        }
+        return FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 3, "criteria_results": []},
+        )
+
+
+async def _prepare_modular_learning_fixture() -> dict:
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo as _DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, _DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="teacher-worker-modular", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="student-worker-modular", name="Schüler", roles=["student"])  # type: ignore
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_resp = await client.post("/api/teaching/courses", json={"title": "Kurs Modular Worker"})
+        assert course_resp.status_code == 201, course_resp.text
+        course_id = course_resp.json()["id"]
+
+        unit_resp = await client.post(
+            "/api/teaching/units",
+            json={"title": "Einheit Modular Worker", "unit_type": "modular"},
+        )
+        assert unit_resp.status_code == 201, unit_resp.text
+        unit_id = unit_resp.json()["id"]
+
+        section_resp = await client.post(
+            f"/api/teaching/units/{unit_id}/sections",
+            json={"title": "Modul 1"},
+        )
+        assert section_resp.status_code == 201, section_resp.text
+        section_id = section_resp.json()["id"]
+
+        task_resp = await client.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            json={
+                "instruction_md": "### Entwickle eine begründete Zukunftshypothese",
+                "criteria": ["Kriterium A", "Kriterium B"],
+                "teacher_context_md": "Achte auf Belege aus Material M1 und M2.",
+                "max_attempts": 2,
+            },
+        )
+        assert task_resp.status_code == 201, task_resp.text
+        task = task_resp.json()
+
+        module_resp = await client.post(
+            f"/api/teaching/courses/{course_id}/modules",
+            json={"unit_id": unit_id},
+        )
+        assert module_resp.status_code == 201, module_resp.text
+        module_id = module_resp.json()["id"]
+
+        member_resp = await client.post(
+            f"/api/teaching/courses/{course_id}/members",
+            json={"student_sub": student.sub},  # type: ignore[attr-defined]
+        )
+        assert member_resp.status_code in (201, 204), member_resp.text
+
+    return {
+        "teacher_session_id": teacher.session_id,
+        "student_session_id": student.session_id,
+        "student_sub": student.sub,  # type: ignore[attr-defined]
+        "course_id": course_id,
+        "module_id": module_id,
+        "unit_id": unit_id,
+        "section_id": section_id,
+        "task": task,
+    }
+
 
 @pytest.mark.anyio
 async def test_worker_passes_task_context_to_feedback_adapter():
@@ -178,6 +287,109 @@ async def test_worker_passes_task_context_to_feedback_adapter():
     assert captured_kwargs is not None, "Worker did not process the targeted submission"
     assert captured_kwargs.get("instruction_md") == fixture.task.get("instruction_md")
     assert captured_kwargs.get("teacher_context_md") == fixture.task.get("teacher_context_md")
+
+
+@pytest.mark.anyio
+async def test_modular_submission_job_payload_includes_instruction_but_not_teacher_context():
+    fixture = await _prepare_modular_learning_fixture()
+    dsn = _dsn()
+    worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+        conn.commit()
+
+    repo = DBLearningRepo(dsn=dsn)
+    create = CreateSubmissionUseCase(repo)
+    submission = create.execute(
+        CreateSubmissionInput(
+            course_id=fixture["course_id"],
+            task_id=fixture["task"]["id"],
+            student_sub=fixture["student_sub"],
+            kind="image",
+            text_body=None,
+            storage_key="submissions/modular/context.png",
+            mime_type="image/png",
+            size_bytes=123,
+            sha256="a" * 64,
+            score_raw=None,
+            score_max=None,
+            idempotency_key="modular-payload-context",
+            intent="feedback",
+        )
+    )
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                "select payload from public.learning_submission_jobs where submission_id = %s::uuid",
+                (submission["id"],),
+            )
+            row = cur.fetchone()
+            assert row is not None, "Job row missing"
+            payload = row[0]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+
+    assert payload.get("instruction_md") == fixture["task"]["instruction_md"]
+    assert "teacher_context_md" not in payload
+
+
+@pytest.mark.anyio
+async def test_worker_passes_modular_visual_task_context_to_visual_feedback_adapter(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    fixture = await _prepare_modular_learning_fixture()
+    dsn = _dsn()
+    worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
+    monkeypatch.setenv("SERVICE_ROLE_DSN", worker_dsn)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("delete from public.learning_submission_jobs")
+        conn.commit()
+
+    storage_key = f"submissions/{fixture['course_id']}/{fixture['task']['id']}/{fixture['student_sub']}/visual-context.png"
+    target = tmp_path / storage_key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload_bytes = b"\x89PNG\r\n\x1a\n" + b"z" * 64
+    target.write_bytes(payload_bytes)
+
+    repo = DBLearningRepo(dsn=dsn)
+    create = CreateSubmissionUseCase(repo)
+    submission = create.execute(
+        CreateSubmissionInput(
+            course_id=fixture["course_id"],
+            task_id=fixture["task"]["id"],
+            student_sub=fixture["student_sub"],
+            kind="image",
+            text_body=None,
+            storage_key=storage_key,
+            mime_type="image/png",
+            size_bytes=len(payload_bytes),
+            sha256="b" * 64,
+            score_raw=None,
+            score_max=None,
+            idempotency_key="modular-visual-context",
+            intent="feedback",
+        )
+    )
+
+    adapter = _FeedbackCapturingAdapter()
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=_Vision(text="unused"),
+        feedback_adapter=adapter,
+        now=datetime.now(tz=timezone.utc),
+    )
+
+    assert processed is True
+    assert not _job_pending(worker_dsn=worker_dsn, submission_id=submission["id"])
+    assert adapter.last_kwargs is not None
+    assert adapter.last_kwargs.get("instruction_md") == fixture["task"]["instruction_md"]
+    assert adapter.last_kwargs.get("teacher_context_md") == "Achte auf Belege aus Material M1 und M2."
+
+
 def _job_pending(*, worker_dsn: str, submission_id: str) -> bool:
     """Return True when a queue entry for the submission still exists."""
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]

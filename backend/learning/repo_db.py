@@ -1407,6 +1407,10 @@ class DBLearningRepo:
                         raise ValueError("max_attempts_exceeded")
 
                 try:
+                    analysis_mode = "text_direct"
+                    if data.kind in ("image", "file"):
+                        analysis_mode = "visual_direct" if task_kind in {"native", "visual"} else "ocr_text"
+
                     # Async path: record pending status and enqueue job. Idempotency is enforced
                     # via ON CONFLICT on (course_id, task_id, student_sub, idempotency_key).
                     # For stronger guarantees independent of index inference, when an
@@ -1519,7 +1523,8 @@ class DBLearningRepo:
                                 analysis_json,
                                 feedback_md,
                                 error_code,
-                                idempotency_key
+                                idempotency_key,
+                                internal_metadata
                             )
                             values (
                                     coalesce(%s::uuid, gen_random_uuid()),
@@ -1539,7 +1544,8 @@ class DBLearningRepo:
                                     null,
                                     null,
                                     null,
-                                    %s
+                                    %s,
+                                    jsonb_build_object('analysis_mode', %s::text)
                             )
                             on conflict (course_id, task_id, student_sub, idempotency_key)
                             do nothing
@@ -1580,6 +1586,7 @@ class DBLearningRepo:
                                 data.sha256,
                                 attempt_nr,
                                 norm_key,
+                                analysis_mode,
                             ),
                         )
                     row = cur.fetchone()
@@ -1618,24 +1625,30 @@ class DBLearningRepo:
                         conn.commit()
                         return self._row_to_submission(row)
                     submission_id = row[0]
-                    # Enrich job payload with task instruction for the Feedback adapter.
+                    # Enrich job payload with the visible task instruction.
+                    #
+                    # Why:
+                    #   Visual-native uploads skip OCR and go straight into the
+                    #   feedback model. The queue payload must therefore carry
+                    #   the student-visible task instruction even for modular
+                    #   units. `get_released_tasks_for_student(...)` is section-
+                    #   shaped and can miss the concrete task here, so we read
+                    #   the already-authorized task row directly.
                     instruction_md: str | None = None
                     try:
-                        section_id = str(meta[1])  # from get_task_metadata_for_student
                         cur.execute(
                             """
-                            select id::text, instruction_md
-                              from public.get_released_tasks_for_student(%s, %s, %s)
+                            select instruction_md
+                              from public.unit_tasks
+                             where id = %s::uuid
                             """,
-                            (data.student_sub, course_uuid, section_id),
+                            (task_uuid,),
                         )
-                        rows_ctx = cur.fetchall() or []
-                        for tid, instr in rows_ctx:
-                            if str(tid) == task_uuid:
-                                instruction_md = instr
-                                break
+                        row_ctx = cur.fetchone()
+                        if row_ctx:
+                            instruction_md = row_ctx[0]
                     except Exception:
-                        # Be tolerant: missing helper or columns shouldn't block submissions
+                        # Be tolerant: missing context must not block submissions.
                         instruction_md = None
 
                     job_payload = {
@@ -1649,6 +1662,7 @@ class DBLearningRepo:
                         "attempt_nr": attempt_nr,
                         "criteria": criteria,
                         "instruction_md": instruction_md,
+                        "analysis_mode": analysis_mode,
                     }
                     if _running_under_pytest():
                         # Tag jobs created by in-process tests so a local docker worker

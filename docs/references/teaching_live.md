@@ -73,7 +73,7 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
   - Tabs für „Text“ (Auszug aus `text_body`) und bei Datei-Abgaben zusätzlich „Datei“ mit Inline-Vorschau.
   - Wenn Analyse/Feedback vorliegen, erscheinen zusätzliche Tabs „Auswertung“ (Kriterienkarten aus `analysis_json`) und „Rückmeldung“ (Markdown aus `feedback_md`), in dieser Reihenfolge.
 - Semantik:
-  - `text_body`: Best‑Effort‑Textrepräsentation der Abgabe, unabhängig vom `kind` (Text/PDF/Bild/Datei). Die Lehrkraft sieht hier denselben Text wie der Schüler im Learning‑Bereich; die Länge ist nur durch das globale `text_body`‑Limit (aktuell 65.536 Zeichen ≙ 64k) begrenzt.
+  - `text_body`: Best‑Effort‑Textrepräsentation der Abgabe, wenn der jeweilige Submission-Pfad eine Textrepräsentation erzeugt. Text- und OCR-basierte Abgaben liefern hier denselben Text wie im Learning-Bereich; visuell direkt ausgewertete Datei-Abgaben können das Feld auch im Status `completed` leer lassen. Die Länge ist nur durch das globale `text_body`‑Limit (aktuell 65.536 Zeichen ≙ 64k) begrenzt.
   - `instruction_md`: Aufgabenstellung der Aufgabe; wird im API-Contract des Detailobjekts mitgeliefert und in SSR oberhalb der Einreichung gerendert.
   - `feedback_md`: Formatives Feedback („Rückmeldung“) in Markdown; wird angezeigt im Tab „Rückmeldung“.
   - `analysis_json`: Strukturierte Kriterien‑Auswertung („Auswertung“) im Schema `AnalysisJsonCriteriaV1|V2` (insb. `criteria.v2` mit `criteria_results`).

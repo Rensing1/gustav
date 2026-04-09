@@ -66,6 +66,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
     courseUnits,
     courses,
     dashboard,
+    liveWideWorkspaceShell: true,
     selectedCourseId,
     selectedStudentSub,
     selectedTaskId,

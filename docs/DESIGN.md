@@ -93,6 +93,30 @@ Regeln:
 - Sekundäraktionen bleiben sichtbar, aber schwächer
 - Seitenkopf nutzt klare Kante und kompakte Meta-Zeile
 
+### 3.5 Arbeitsbreiten
+
+Workspace-Seiten folgen einer klaren Seitenachse. Zentrierung wird nicht über
+viewport-relative Sonderrechnungen gelöst.
+
+Regeln:
+
+- jede Seite hat genau eine zentrierte Layoutachse
+- unterschiedliche Inhaltsbreiten werden über innere Container mit
+  `max-width` und `margin-inline: auto` gesteuert
+- `100vw`, `50vw` oder ähnliche Breakout-Formeln sind für reguläre
+  Workspace-Flächen nicht erlaubt
+- wenn eine Seite zwei Breiten benötigt, dann als klar benannte Bereiche, nicht
+  als lokale CSS-Hacks
+
+Spezialfall `/live`:
+
+- der Auswahl- und KPI-Bereich bleibt kompakter
+- der Arbeitsbereich aus Tabelle und Detailpanel ist breiter, aber bleibt auf
+  derselben Mittelachse zentriert
+- der breite Arbeitsbereich darf auf großen Displays spürbar großzügiger sein
+  als Standard-Workspace-Flächen
+- Tabelle und Detailpanel sind getrennte Objekte, kein gemeinsamer Außenrahmen
+
 ## 4. Light und Dark
 
 Light und Dark bleiben gleichrangig.

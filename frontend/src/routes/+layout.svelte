@@ -165,8 +165,16 @@
     return page.data.wideWorkspaceShell === true;
   }
 
+  function routeRequestsLiveWorkspaceShell(): boolean {
+    return /^\/live(?:$|\/|\?)/.test(page.url.pathname);
+  }
+
   function hasWideWorkspaceShell(): boolean {
     return routeRequestsWideWorkspaceShell() || isTeacherUnitWorkspaceRoute() || isLearnerUnitWorkspaceRoute();
+  }
+
+  function hasLiveWorkspaceShell(): boolean {
+    return routeRequestsLiveWorkspaceShell();
   }
 
   function closeAccountMenuOnWindowClick(event: MouseEvent): void {
@@ -293,6 +301,7 @@
       class="workspace-inner"
       class:workspace-inner--auth={isAuthLayout()}
       class:workspace-inner--wide={hasWideWorkspaceShell()}
+      class:workspace-inner--live-wide={hasLiveWorkspaceShell()}
       class:workspace-inner--learner-unit-wide={isLearnerUnitWorkspaceRoute()}
     >
       {#if !isAuthLayout()}

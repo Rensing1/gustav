@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import type { LearningSubmission } from "$lib/types/learning";
-  import type { LiveDetailSubmission } from "$lib/types/home";
+  import type { LiveDetailSubmission, LiveUnitDashboardRow } from "$lib/types/home";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { PageData } from "./$types";
@@ -10,6 +10,8 @@
   let { data }: { data: PageData } = $props();
 
   type PanelTab = "submission" | "evaluation" | "feedback";
+  type SortKey = "student" | "progress" | "average" | "latest";
+  type SortDirection = "asc" | "desc";
 
   const formatScore = (value: number | null | undefined) =>
     typeof value === "number" ? `Ø ${value.toFixed(1)}` : "Noch unbewertet";
@@ -41,6 +43,19 @@
     const parts = submissionTimestampFormatter.formatToParts(parsed);
     const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
     return `${get("day")}.${get("month")}.${get("year")}, ab ${get("hour")}:${get("minute")} Uhr`;
+  }
+
+  function formatSubmissionDate(value: string): string {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    return new Intl.DateTimeFormat("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone: "Europe/Berlin",
+    }).format(parsed);
   }
 
   function stripSubmissionSchemaHeader(value: string | null | undefined): string {
@@ -117,8 +132,93 @@
     return submission?.files?.[0] ?? null;
   }
 
+  function defaultRowSort(left: LiveUnitDashboardRow, right: LiveUnitDashboardRow): number {
+    return left.student.name.localeCompare(right.student.name, "de-DE", { sensitivity: "base" });
+  }
+
+  function compareNullableNumbers(left: number | null | undefined, right: number | null | undefined, direction: SortDirection): number {
+    const leftMissing = typeof left !== "number";
+    const rightMissing = typeof right !== "number";
+    if (leftMissing && rightMissing) {
+      return 0;
+    }
+    if (leftMissing) {
+      return 1;
+    }
+    if (rightMissing) {
+      return -1;
+    }
+    return direction === "asc" ? left - right : right - left;
+  }
+
+  function compareNullableDates(left: string | null | undefined, right: string | null | undefined, direction: SortDirection): number {
+    const leftMs = left ? new Date(left).getTime() : Number.NaN;
+    const rightMs = right ? new Date(right).getTime() : Number.NaN;
+    const leftMissing = Number.isNaN(leftMs);
+    const rightMissing = Number.isNaN(rightMs);
+    if (leftMissing && rightMissing) {
+      return 0;
+    }
+    if (leftMissing) {
+      return 1;
+    }
+    if (rightMissing) {
+      return -1;
+    }
+    return direction === "asc" ? leftMs - rightMs : rightMs - leftMs;
+  }
+
   let unitsLoading = $state(false);
   let activePanelTab = $state<PanelTab>("submission");
+  let activeSortKey = $state<SortKey | null>(null);
+  let activeSortDirection = $state<SortDirection | null>(null);
+
+  const sortedRows = $derived.by(() => {
+    const rows = [...(data.dashboard?.rows ?? [])];
+    rows.sort((left, right) => {
+      if (!activeSortKey || !activeSortDirection) {
+        return defaultRowSort(left, right);
+      }
+      if (activeSortKey === "student") {
+        const compare = activeSortDirection === "asc"
+          ? left.student.name.localeCompare(right.student.name, "de-DE", { sensitivity: "base" })
+          : right.student.name.localeCompare(left.student.name, "de-DE", { sensitivity: "base" });
+        return compare || defaultRowSort(left, right);
+      }
+      if (activeSortKey === "progress") {
+        return compareNullableNumbers(left.progress_percent, right.progress_percent, activeSortDirection) || defaultRowSort(left, right);
+      }
+      if (activeSortKey === "average") {
+        return compareNullableNumbers(left.average_score, right.average_score, activeSortDirection) || defaultRowSort(left, right);
+      }
+      return (
+        compareNullableDates(left.latest_submission?.created_at, right.latest_submission?.created_at, activeSortDirection)
+        || defaultRowSort(left, right)
+      );
+    });
+    return rows;
+  });
+
+  function toggleSort(key: SortKey): void {
+    if (activeSortKey !== key) {
+      activeSortKey = key;
+      activeSortDirection = "desc";
+      return;
+    }
+    if (activeSortDirection === "desc") {
+      activeSortDirection = "asc";
+      return;
+    }
+    activeSortKey = null;
+    activeSortDirection = null;
+  }
+
+  function ariaSortFor(key: SortKey): "ascending" | "descending" | "none" {
+    if (activeSortKey !== key || !activeSortDirection) {
+      return "none";
+    }
+    return activeSortDirection === "asc" ? "ascending" : "descending";
+  }
 
   async function updateCourse(nextCourseId: string): Promise<void> {
     unitsLoading = Boolean(nextCourseId);
@@ -170,97 +270,110 @@
 </svelte:head>
 
 <div class="workspace-page live-page">
-  <section class="workspace-panel workspace-panel--plain workspace-section live-selection-bar">
-    {#if data.courses.length}
-      <div class="live-selection__stack">
-        <label class="live-selection__field">
-          <span>Kurs</span>
-          <select
-            name="course_id"
-            onchange={(event) => void updateCourse((event.currentTarget as HTMLSelectElement).value)}
-          >
-            <option value="">Kurs wählen</option>
-            {#each data.courses as course}
-              <option value={course.id} selected={data.selectedCourseId === course.id}>{course.title}</option>
-            {/each}
-          </select>
-        </label>
-
-        {#if data.selectedCourseId}
+  <div class="live-page__intro">
+    <section class="workspace-panel workspace-panel--plain workspace-section live-selection-bar">
+      {#if data.courses.length}
+        <div class="live-selection__stack">
           <label class="live-selection__field">
-            <span>Lerneinheit</span>
+            <span>Kurs</span>
             <select
-              name="unit_id"
-              disabled={unitsLoading || !data.courseUnits?.units?.length}
-              onchange={(event) => void updateUnit((event.currentTarget as HTMLSelectElement).value)}
+              name="course_id"
+              onchange={(event) => void updateCourse((event.currentTarget as HTMLSelectElement).value)}
             >
-              {#if unitsLoading}
-                <option value="">Lerneinheiten werden geladen...</option>
-              {:else if !data.courseUnits?.units?.length}
-                <option value="">Keine Lerneinheiten verfügbar</option>
-              {:else}
-                <option value="">Lerneinheit wählen</option>
-                {#each data.courseUnits.units as unit}
-                  <option value={unit.id} selected={data.selectedUnitId === unit.id}>
-                    {unit.position}. {unit.title}
-                  </option>
-                {/each}
-              {/if}
+              <option value="">Kurs wählen</option>
+              {#each data.courses as course}
+                <option value={course.id} selected={data.selectedCourseId === course.id}>{course.title}</option>
+              {/each}
             </select>
           </label>
-        {/if}
-      </div>
-    {:else}
-      <p class="workspace-empty">Noch keine Kurse für den Live-Raum verfügbar.</p>
-    {/if}
-  </section>
 
-  {#if data.dashboard}
-    <section class="workspace-section live-kpi-section">
-      <div class="live-summary-grid">
-        <article class="live-summary-card">
-          <span>Lernende</span>
-          <strong>{data.dashboard.summary.learners_count}</strong>
-        </article>
-        <article class="live-summary-card">
-          <span>Aufgaben</span>
-          <strong>{data.dashboard.summary.tasks_count}</strong>
-        </article>
-        <article class="live-summary-card">
-          <span>Bearbeitet</span>
-          <strong>{data.dashboard.summary.completion_rate_percent}%</strong>
-        </article>
-        <article class="live-summary-card">
-          <span>Ø Bewertung</span>
-          <strong>{formatScore(data.dashboard.summary.average_score)}</strong>
-        </article>
-      </div>
+          {#if data.selectedCourseId}
+            <label class="live-selection__field">
+              <span>Lerneinheit</span>
+              <select
+                name="unit_id"
+                disabled={unitsLoading || !data.courseUnits?.units?.length}
+                onchange={(event) => void updateUnit((event.currentTarget as HTMLSelectElement).value)}
+              >
+                {#if unitsLoading}
+                  <option value="">Lerneinheiten werden geladen...</option>
+                {:else if !data.courseUnits?.units?.length}
+                  <option value="">Keine Lerneinheiten verfügbar</option>
+                {:else}
+                  <option value="">Lerneinheit wählen</option>
+                  {#each data.courseUnits.units as unit}
+                    <option value={unit.id} selected={data.selectedUnitId === unit.id}>
+                      {unit.position}. {unit.title}
+                    </option>
+                  {/each}
+                {/if}
+              </select>
+            </label>
+          {/if}
+        </div>
+      {:else}
+        <p class="workspace-empty">Noch keine Kurse für den Live-Raum verfügbar.</p>
+      {/if}
     </section>
 
-    <section class="workspace-panel workspace-section">
-      <div class="workspace-section-header">
-        <div class="workspace-section-heading">
-          <p class="workspace-label">Klassenübersicht</p>
-          <h3>Lernstand in der gewählten Lerneinheit</h3>
-          <p class="workspace-note">
-            Fortschritt, Durchschnitt und letzte Abgabe bleiben in der gemeinsamen Arbeitsfläche sichtbar.
-          </p>
+    {#if data.dashboard}
+      <section class="workspace-section live-kpi-section">
+        <div class="live-summary-grid">
+          <article class="live-summary-card">
+            <span>Lernende</span>
+            <strong>{data.dashboard.summary.learners_count}</strong>
+          </article>
+          <article class="live-summary-card">
+            <span>Aufgaben</span>
+            <strong>{data.dashboard.summary.tasks_count}</strong>
+          </article>
+          <article class="live-summary-card">
+            <span>Bearbeitet</span>
+            <strong>{data.dashboard.summary.completion_rate_percent}%</strong>
+          </article>
+          <article class="live-summary-card">
+            <span>Ø Bewertung</span>
+            <strong>{formatScore(data.dashboard.summary.average_score)}</strong>
+          </article>
         </div>
-      </div>
+      </section>
+    {/if}
+  </div>
 
-      <div class="live-dashboard">
-        <div class="workspace-data-table-wrap">
+  {#if data.dashboard}
+    <section class="live-page__workspace" aria-label="Live-Arbeitsbereich">
+      <div class="live-workspace">
+        <section class="workspace-panel workspace-section live-table-panel">
+          <div class="workspace-section-header">
+            <div class="workspace-section-heading">
+              <p class="workspace-label">Klassenübersicht</p>
+              <h3>Lernstand in der gewählten Lerneinheit</h3>
+              <p class="workspace-note">
+                Fortschritt, Durchschnitt und letzte Abgabe bleiben in der gemeinsamen Arbeitsfläche sichtbar.
+              </p>
+            </div>
+          </div>
+
+          <div class="workspace-data-table-wrap">
           <table class="workspace-data-table">
             <thead>
               <tr>
-                <th>Schüler</th>
-                <th>Bearbeitet</th>
-                <th>Ø Bewertung</th>
-                <th>Letzte Abgabe</th>
+                <th aria-sort={ariaSortFor("student")}>
+                  <button class="live-sort-button" type="button" onclick={() => toggleSort("student")}>Schüler</button>
+                </th>
+                <th aria-sort={ariaSortFor("progress")}>
+                  <button class="live-sort-button" type="button" onclick={() => toggleSort("progress")}>Bearbeitet</button>
+                </th>
+                <th aria-sort={ariaSortFor("average")}>
+                  <button class="live-sort-button" type="button" onclick={() => toggleSort("average")}>Ø Bewertung</button>
+                </th>
+                <th aria-sort={ariaSortFor("latest")}>
+                  <button class="live-sort-button" type="button" onclick={() => toggleSort("latest")}>Letzte Abgabe</button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {#each data.dashboard.rows as row}
+              {#each sortedRows as row}
                 <tr class:is-selected={data.selectedStudentSub === row.student.sub}>
                   <td><a href={row.href}>{row.student.name}</a></td>
                   <td>{row.progress_percent}%</td>
@@ -268,9 +381,8 @@
                   <td>
                     {#if row.latest_submission}
                       <a href={row.href} class="live-latest-link">
-                        <strong>{row.latest_submission.task_label}</strong>
-                        <span>{formatScore(row.latest_submission.average_score)}</span>
-                        <span>{row.latest_submission.created_at}</span>
+                        <span class="live-latest-link__date">{formatSubmissionDate(row.latest_submission.created_at)}</span>
+                        <span class="live-latest-link__score">{formatScore(row.latest_submission.average_score)}</span>
                       </a>
                     {:else}
                       <span class="workspace-empty">Noch keine Abgabe</span>
@@ -280,7 +392,8 @@
               {/each}
             </tbody>
           </table>
-        </div>
+          </div>
+        </section>
 
         <aside class="workspace-panel live-panel" aria-label="Schülerdetail">
           {#if data.dashboard.selected_student_panel}
@@ -459,6 +572,20 @@
     gap: 1.15rem;
   }
 
+  .live-page__intro,
+  .live-page__workspace {
+    width: 100%;
+    margin-inline: auto;
+  }
+
+  .live-page__intro {
+    max-width: 112rem;
+  }
+
+  .live-page__workspace {
+    max-width: 132rem;
+  }
+
   .live-kpi-section {
     background: transparent;
     border: 0;
@@ -493,7 +620,8 @@
 
   .live-selection__field select,
   .live-summary-card,
-  .live-panel {
+  .live-panel,
+  .live-table-panel {
     border: 1px solid var(--color-border, #1b1b1b);
     border-radius: 0;
   }
@@ -513,7 +641,8 @@
   }
 
   .live-summary-card,
-  .live-panel {
+  .live-panel,
+  .live-table-panel {
     padding: var(--space-4);
     background: var(--color-bg-surface, #fff);
   }
@@ -524,20 +653,45 @@
     font-size: 1.25rem;
   }
 
-  .live-dashboard {
+  .live-workspace {
     display: grid;
     grid-template-columns:
-      minmax(34rem, 1.9fr)
-      minmax(clamp(20rem, 30vw, 24rem), clamp(26rem, 33vw, 32rem));
-    gap: clamp(0.9rem, 1.4vw, 1.4rem);
+      minmax(0, 2.35fr)
+      minmax(22rem, 1fr);
+    gap: clamp(1.2rem, 1.8vw, 1.8rem);
     align-items: start;
   }
 
   .live-latest-link {
     color: inherit;
     text-decoration: none;
-    display: grid;
-    gap: var(--space-1);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .live-latest-link__date,
+  .live-latest-link__score {
+    white-space: nowrap;
+  }
+
+  .live-sort-button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    cursor: pointer;
+  }
+
+  .live-table-panel {
+    min-width: 0;
+    background: color-mix(in srgb, var(--color-bg-surface, #fff) 97%, var(--color-border, #1b1b1b) 3%);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-border, #1b1b1b) 24%, transparent 76%),
+      0 18px 36px color-mix(in srgb, var(--color-shadow, rgba(0, 0, 0, 0.18)) 42%, transparent 58%);
   }
 
   .live-panel {
@@ -546,6 +700,16 @@
     min-width: 0;
     position: sticky;
     top: calc(var(--space-5) + 4rem);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--color-bg-surface, #fff) 94%, var(--color-accent, #ff512f) 6%) 0%,
+        var(--color-bg-surface, #fff) 18%
+      );
+    border-color: color-mix(in srgb, var(--color-accent, #ff512f) 24%, var(--color-border, #1b1b1b) 76%);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-accent, #ff512f) 14%, transparent 86%),
+      0 24px 44px color-mix(in srgb, var(--color-shadow, rgba(0, 0, 0, 0.18)) 52%, transparent 48%);
   }
 
   .live-panel__header,
@@ -666,6 +830,20 @@
     border-color: #49b36f;
   }
 
+  :global(.dark) .live-table-panel {
+    background: color-mix(in srgb, var(--color-bg-surface, #171717) 94%, white 6%);
+  }
+
+  :global(.dark) .live-panel {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--color-bg-surface, #171717) 90%, var(--color-accent, #ff866b) 10%) 0%,
+        var(--color-bg-surface, #171717) 18%
+      );
+    border-color: color-mix(in srgb, var(--color-accent, #ff866b) 24%, white 76%);
+  }
+
   .live-panel-summary {
     border: 1px solid var(--color-line, rgba(27, 27, 27, 0.14));
   }
@@ -682,7 +860,7 @@
 
   @media (max-width: 960px) {
     .live-summary-grid,
-    .live-dashboard,
+    .live-workspace,
     .live-selection__stack {
       grid-template-columns: 1fr;
     }

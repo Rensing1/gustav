@@ -14,4 +14,13 @@ describe("root layout contract", () => {
       "return routeRequestsWideWorkspaceShell() || isTeacherUnitWorkspaceRoute() || isLearnerUnitWorkspaceRoute();"
     );
   });
+
+  it("uses a dedicated wide workspace shell for the live route", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const layoutSource = readFileSync(path.resolve(currentDir, "+layout.svelte"), "utf8");
+
+    expect(layoutSource).toContain("function routeRequestsLiveWorkspaceShell(): boolean");
+    expect(layoutSource).toContain("return /^\\/live(?:$|\\/|\\?)/.test(page.url.pathname);");
+    expect(layoutSource).toContain("class:workspace-inner--live-wide={hasLiveWorkspaceShell()}");
+  });
 });

@@ -479,6 +479,10 @@ select {
   width: min(100%, 112rem);
 }
 
+.workspace-inner--live-wide {
+  width: min(100%, 144rem);
+}
+
 .workspace-inner--learner-unit-wide {
   width: min(100%, 144rem);
 }

@@ -60,3 +60,17 @@ Datum: 2026-04-09
 - Oberhalb der Tabs stehen ein subtil formatierter Zeitstempel und direkt darunter die Aufgabenstellung.
 - Die Aufgabenstellung wird als Markdown gerendert und nicht mehr als nachgelagerter Referenzblock gezeigt.
 - Die Tab-Sprache wird an die Schüleransicht angeglichen: `Abgabe`, `Rückmeldung`, `Auswertung`.
+
+## Nachtrag: Breiterer Arbeitsbereich und sortierbare Tabelle
+- Der obere Auswahlbereich bleibt in seiner bisherigen Breite und Struktur.
+- Der untere Arbeitsbereich aus Tabelle und Detailpanel wird separat auf `128rem` verbreitert.
+- Tabelle und Detailpanel werden als zwei getrennte Panels nebeneinander dargestellt.
+- Die Tabelle erhält klickbare, clientseitige Sortierköpfe mit lokalem Sortzustand.
+- In der Spalte `Letzte Abgabe` stehen nur noch Datum und Bewertung nebeneinander; der Aufgabenname entfällt dort.
+
+## Nachtrag: Zentrierte Zweicontainer-Logik
+- `/live` folgt intern zwei klaren Inhaltsbreiten statt lokaler Breakout-Hacks.
+- Der Intro-Bereich mit Auswahl und KPIs bleibt als zentrierter Container bei `112rem`.
+- Der untere Arbeitsbereich mit Tabelle und Detailpanel bleibt ebenfalls zentriert und nutzt eine breitere, eigene Maximalbreite.
+- Viewport-relative Breitenrechnungen werden entfernt; die Seite bleibt auf einer gemeinsamen Mittelachse.
+- Das Tabellen-/Panel-Grid verwendet flexible Spalten statt harter Mindestbreiten, damit mittlere Viewports nicht nach rechts gedrückt werden.

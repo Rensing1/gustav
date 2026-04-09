@@ -36,6 +36,7 @@ def test_theme_templates_present():
         "info.ftl": (THEME_ROOT / "info.ftl").exists(),
         "error.ftl": (THEME_ROOT / "error.ftl").exists(),
         "login-page-expired.ftl": (THEME_ROOT / "login-page-expired.ftl").exists(),
+        "logout-confirm.ftl": (THEME_ROOT / "logout-confirm.ftl").exists(),
     }
     tmpl_dir = THEME_ROOT / "templates"
     dir_files = {
@@ -48,6 +49,7 @@ def test_theme_templates_present():
         "info.ftl": (tmpl_dir / "info.ftl").exists(),
         "error.ftl": (tmpl_dir / "error.ftl").exists(),
         "login-page-expired.ftl": (tmpl_dir / "login-page-expired.ftl").exists(),
+        "logout-confirm.ftl": (tmpl_dir / "logout-confirm.ftl").exists(),
     }
     for name in [
         "login.ftl",
@@ -60,6 +62,7 @@ def test_theme_templates_present():
         "info.ftl",
         "error.ftl",
         "login-page-expired.ftl",
+        "logout-confirm.ftl",
     ]:
         assert root_files[name] or dir_files[name], f"{name} missing"
 
@@ -239,6 +242,35 @@ def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
         assert 'id="kc-locale"' not in text, f"{name} should not render a dominant locale dropdown"
 
 
+def test_logout_confirm_template_uses_gustav_layout_and_footer_links():
+    """Logout confirmation should keep the GUSTAV auth shell instead of the parent Keycloak theme."""
+    tpl = _resolve_login_template("logout-confirm.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for marker in [
+        'class="kc-gustav"',
+        'class="kc-card"',
+        "gustav.css",
+        "auth-theme.css",
+        '<#import "_gustav_error_components.ftl" as gustav_error>',
+        "<@gustav_error.render_locale_links",
+    ]:
+        assert marker in text, f"logout-confirm.ftl should include {marker}"
+    assert 'id="kc-locale"' not in text, "logout-confirm.ftl should not render a dominant locale dropdown"
+
+
+def test_logout_confirm_template_references_logout_i18n_keys():
+    """Logout confirmation should use explicit i18n keys for title, hint and CTAs."""
+    tpl = _resolve_login_template("logout-confirm.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for key in [
+        "gustavLogoutConfirmTitle",
+        "gustavLogoutConfirmHint",
+        "gustavLogoutConfirmSubmit",
+        "gustavBackToApp",
+    ]:
+        assert key in text, f"logout-confirm.ftl should reference i18n key {key}"
+
+
 def test_error_templates_expose_context_specific_guidance_and_i18n_keys():
     """Error pages should use deterministic, context-specific guidance and CTA keys."""
     helper_text = (THEME_ROOT / "_gustav_error_components.ftl").read_text(encoding="utf-8")
@@ -279,6 +311,9 @@ def test_error_page_i18n_keys_exist_in_de_and_en_bundles():
         "gustavAuthErrorGeneralHint=",
         "gustavAuthErrorCookieHint=",
         "gustavAuthErrorTokenHint=",
+        "gustavLogoutConfirmTitle=",
+        "gustavLogoutConfirmHint=",
+        "gustavLogoutConfirmSubmit=",
         "gustavBackToApp=",
         "gustavTryLoginAgain=",
         "gustavLanguageLabel=",

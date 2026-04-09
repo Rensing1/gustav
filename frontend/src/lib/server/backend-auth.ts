@@ -441,15 +441,7 @@ export async function handleLogout(event: RequestEvent): Promise<Response> {
       redirect: "manual"
     }
   );
-  const location = backendLogoutResponse.headers.get("location");
-  if (location) {
-    const response = createRedirectResponse(location);
-    const clearedAppSession = backendLogoutResponse.headers.get("set-cookie");
-    if (clearedAppSession) {
-      response.headers.append("set-cookie", clearedAppSession);
-    }
-    return response;
-  }
+
   const url = new URL(logoutEndpoint());
   url.searchParams.set("post_logout_redirect_uri", `${resolveAppBase(event.url)}${redirectPath}`);
   if (tokenSession?.idToken) {
@@ -457,5 +449,10 @@ export async function handleLogout(event: RequestEvent): Promise<Response> {
   } else {
     url.searchParams.set("client_id", kcClientId());
   }
-  return createRedirectResponse(url.toString());
+  const response = createRedirectResponse(url.toString());
+  const clearedAppSession = backendLogoutResponse.headers.get("set-cookie");
+  if (clearedAppSession) {
+    response.headers.append("set-cookie", clearedAppSession);
+  }
+  return response;
 }

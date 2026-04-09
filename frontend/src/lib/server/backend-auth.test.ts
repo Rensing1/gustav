@@ -35,7 +35,7 @@ vi.mock("jose", () => ({
   jwtVerify: jwtVerifyMock
 }));
 
-import { handleAuthCallback, startLoginFlow, startRegisterFlow } from "./backend-auth";
+import { handleAuthCallback, handleLogout, startLoginFlow, startRegisterFlow } from "./backend-auth";
 
 class MemoryCookies {
   store = new Map<string, string>();
@@ -196,5 +196,72 @@ describe("handleAuthCallback", () => {
     expect(response.headers.get("set-cookie")).toContain("gustav_session=app-session");
     expect(cookies.get("gustav_bff_oidc_flow")).toBeUndefined();
     expect(cookies.deleteCalls).toHaveLength(1);
+  });
+});
+
+describe("handleLogout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("prefers the BFF id_token hint over a backend client_id-only redirect", async () => {
+    readTokenSessionMock.mockResolvedValue({
+      sessionId: "bff-session-logout",
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      idToken: "bff-id-token",
+      expiresAt: 4102444800
+    });
+    clearTokenSessionMock.mockResolvedValue(undefined);
+
+    const cookies = new MemoryCookies();
+    const eventFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(null, {
+          status: 302,
+          headers: {
+            location:
+              "https://id.localhost/realms/gustav/protocol/openid-connect/logout?client_id=gustav-web&post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fauth%2Flogout%2Fsuccess",
+            "set-cookie": "gustav_session=; Path=/; Max-Age=0; HttpOnly"
+          }
+        })
+      );
+
+    const response = await handleLogout(
+      createEvent("https://app.localhost/auth/logout?redirect=/auth/logout/success", cookies, eventFetch)
+    );
+
+    expect(clearTokenSessionMock).toHaveBeenCalledWith(cookies, eventFetch);
+    expect(eventFetch).toHaveBeenCalledOnce();
+    expect(response.status).toBe(302);
+    const location = response.headers.get("location") || "";
+    expect(location).toContain("post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fauth%2Flogout%2Fsuccess");
+    expect(location).toContain("id_token_hint=bff-id-token");
+    expect(location).not.toContain("client_id=gustav-web");
+    expect(response.headers.get("set-cookie")).toContain("gustav_session=");
+  });
+
+  it("falls back to client_id when no BFF id_token is available", async () => {
+    readTokenSessionMock.mockResolvedValue(null);
+    clearTokenSessionMock.mockResolvedValue(undefined);
+
+    const cookies = new MemoryCookies();
+    const eventFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: {
+          location: "http://backend.test/auth/logout?redirect=%2Fcourses"
+        }
+      })
+    );
+
+    const response = await handleLogout(createEvent("https://app.localhost/auth/logout?redirect=/courses", cookies, eventFetch));
+
+    expect(response.status).toBe(302);
+    const location = response.headers.get("location") || "";
+    expect(location).toContain("client_id=gustav-web");
+    expect(location).not.toContain("id_token_hint=");
+    expect(location).toContain("post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fcourses");
   });
 });

@@ -159,8 +159,10 @@ def test_main_normalizes_restore_target_ownership_after_restore(
     snapshot_dir.mkdir()
     db_dump = snapshot_dir / "supabase_db.sql.gz"
     storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    keycloak_dump = snapshot_dir / "keycloak_db.sql.gz"
     db_dump.write_bytes(b"dummy")
     storage_tar.write_bytes(b"dummy")
+    keycloak_dump.write_bytes(b"dummy")
 
     args = argparse.Namespace(
         snapshot=str(snapshot_dir),
@@ -170,7 +172,7 @@ def test_main_normalizes_restore_target_ownership_after_restore(
         workdir=str(tmp_path / "workdir"),
         no_reset=False,
         skip_storage=True,
-        skip_keycloak=True,
+        skip_keycloak=False,
         keycloak_db_container="gustav-keycloak-db",
         keycloak_db_user="keycloak",
         keycloak_db_name="keycloak",
@@ -189,10 +191,15 @@ def test_main_normalizes_restore_target_ownership_after_restore(
 
     owner_calls: list[tuple[str, str]] = []
     sync_calls: list[tuple[str, list[mod.SnapshotMigration]]] = []
+    theme_calls: list[tuple[str, str, str, str, str, str, str]] = []
 
     monkeypatch.setattr(mod, "parse_args", lambda: args)
     monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
-    monkeypatch.setattr(mod, "resolve_snapshot_files", lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar))
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, None, keycloak_dump),
+    )
     monkeypatch.setattr(
         mod,
         "extract_snapshot_migration_history",
@@ -212,8 +219,40 @@ def test_main_normalizes_restore_target_ownership_after_restore(
     monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
     monkeypatch.setattr(
         mod,
+        "_restore_keycloak_db_sql_gz",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        mod,
+        "_localize_keycloak_for_local_web",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        mod,
         "_normalize_restore_target_ownership",
         lambda dsn, owner: owner_calls.append((dsn, owner)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_localize_keycloak_theme",
+        lambda *,
+        keycloak_db_container,
+        keycloak_db_user,
+        keycloak_db_name,
+        realm,
+        login_theme,
+        account_theme,
+        email_theme: theme_calls.append(
+            (
+                keycloak_db_container,
+                keycloak_db_user,
+                keycloak_db_name,
+                realm,
+                login_theme,
+                account_theme,
+                email_theme,
+            )
+        ),
     )
     monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda dsn, rows: sync_calls.append((dsn, rows)))
     monkeypatch.setattr(
@@ -221,6 +260,8 @@ def test_main_normalizes_restore_target_ownership_after_restore(
         "_assert_snapshot_h5p_storage_complete",
         lambda _dsn, _root: {"expected_ids": [], "missing_ids": []},
     )
+    monkeypatch.setattr(mod, "_sync_keycloak_admin_client_secret", lambda **_kwargs: None)
+    monkeypatch.setattr(mod, "_restart_container", lambda _container_name: None)
 
     assert mod.main() == 0
     assert owner_calls == [(args.dsn, "postgres")]
@@ -236,6 +277,9 @@ def test_main_normalizes_restore_target_ownership_after_restore(
                 )
             ],
         )
+    ]
+    assert theme_calls == [
+        ("gustav-keycloak-db", "keycloak", "keycloak", "gustav", "gustav", "gustav", "gustav")
     ]
 
 

@@ -825,6 +825,53 @@ def _localize_keycloak_for_local_web(
     )
 
 
+def _build_keycloak_theme_localization_sql(
+    *,
+    realm: str,
+    login_theme: str,
+    account_theme: str,
+    email_theme: str,
+) -> str:
+    return f"""
+do $$
+begin
+  update realm
+     set login_theme = {_sql_literal(login_theme)},
+         account_theme = {_sql_literal(account_theme)},
+         email_theme = {_sql_literal(email_theme)}
+   where name = {_sql_literal(realm)};
+
+  if not found then
+    raise exception 'Keycloak realm not found: %', {_sql_literal(realm)};
+  end if;
+end $$;
+"""
+
+
+def _localize_keycloak_theme(
+    *,
+    keycloak_db_container: str,
+    keycloak_db_user: str,
+    keycloak_db_name: str,
+    realm: str,
+    login_theme: str,
+    account_theme: str,
+    email_theme: str,
+) -> None:
+    sql = _build_keycloak_theme_localization_sql(
+        realm=realm,
+        login_theme=login_theme,
+        account_theme=account_theme,
+        email_theme=email_theme,
+    )
+    _run_docker_psql(
+        container=keycloak_db_container,
+        db_user=keycloak_db_user,
+        db_name=keycloak_db_name,
+        sql=sql,
+    )
+
+
 def _restart_container(container_name: str) -> None:
     subprocess.run(["docker", "restart", container_name], check=True)
 
@@ -1320,6 +1367,15 @@ def main() -> int:
                 realm=args.keycloak_realm,
                 web_client_id=args.keycloak_web_client_id,
                 app_base_url=args.keycloak_web_base,
+            )
+            _localize_keycloak_theme(
+                keycloak_db_container=args.keycloak_db_container,
+                keycloak_db_user=args.keycloak_db_user,
+                keycloak_db_name=args.keycloak_db_name,
+                realm=args.keycloak_realm,
+                login_theme="gustav",
+                account_theme="gustav",
+                email_theme="gustav",
             )
             _sync_keycloak_admin_client_secret(
                 keycloak_db_container=args.keycloak_db_container,

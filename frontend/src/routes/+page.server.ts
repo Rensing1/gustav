@@ -1,7 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
-import { readTypedJsonOrNull } from "$lib/server/api";
 import type { SessionBootstrap } from "$lib/types/session-bootstrap";
 
 function safeRedirectPath(value: string | null): string | null {
@@ -14,12 +13,8 @@ function safeRedirectPath(value: string | null): string | null {
   return value;
 }
 
-export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
-  const bootstrap = await readTypedJsonOrNull<SessionBootstrap>(
-    fetch,
-    cookies,
-    "/api/app/session-bootstrap"
-  );
+export const load: PageServerLoad = async ({ parent, url }) => {
+  const { bootstrap } = (await parent()) as { bootstrap: SessionBootstrap | null };
 
   if (bootstrap) {
     throw redirect(303, bootstrap.start_target);

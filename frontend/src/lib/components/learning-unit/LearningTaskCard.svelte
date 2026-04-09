@@ -1,7 +1,9 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
+  import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
+  import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
@@ -281,6 +283,11 @@
 
   function submittedFile(): { mime: string; size: number; url: string } | null {
     return latestSubmission()?.files?.[0] ?? null;
+  }
+
+  function submittedArtifact() {
+    const submission = latestSubmission();
+    return submission ? buildSubmissionArtifactView(submission) : null;
   }
 
   function evaluationSummary(submission: LearningSubmission): string {
@@ -579,10 +586,11 @@
                       <p class="learning-submission-upload__selected-meta">{selectedUploadLabel(selectedUploadFile)}</p>
                     </div>
                     <div class="learning-submission-upload__selected-actions">
-                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={triggerUploadPicker}>
-                        Ersetzen
-                      </button>
-                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={clearUploadSelection}>
+                      <button
+                        class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
+                        type="button"
+                        onclick={clearUploadSelection}
+                      >
                         Entfernen
                       </button>
                     </div>
@@ -594,10 +602,11 @@
                       <p class="learning-submission-upload__selected-meta">{fileSummary(currentUploadSubmission()!)}</p>
                     </div>
                     <div class="learning-submission-upload__selected-actions">
-                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={triggerUploadPicker}>
-                        Ersetzen
-                      </button>
-                      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={clearUploadSelection}>
+                      <button
+                        class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
+                        type="button"
+                        onclick={clearUploadSelection}
+                      >
                         Entfernen
                       </button>
                     </div>
@@ -775,7 +784,9 @@
 
               <div class="learning-task-submission-summary__panel" role="tabpanel" aria-label={summaryPanelLabel(activeSummaryTab)}>
                 {#if activeSummaryTab === "submission"}
-                  {#if latestSubmission() && latestSubmissionOrThrow().text_body}
+                  {#if latestSubmission() && submittedArtifact()}
+                    <LearningSubmissionArtifactView submission={latestSubmissionOrThrow()} />
+                  {:else if latestSubmission() && latestSubmissionOrThrow().text_body}
                     <div class="markdown-prose">
                       {@html renderMarkdown(latestSubmissionOrThrow().text_body)}
                     </div>

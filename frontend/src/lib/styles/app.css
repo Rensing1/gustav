@@ -2796,6 +2796,102 @@ select {
   gap: 0.7rem;
 }
 
+.learning-submission-artifact {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.learning-submission-artifact__header {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.learning-submission-artifact__eyebrow {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-link) 78%, var(--color-text) 22%);
+  font-size: calc(0.74rem * var(--learning-unit-label-scale));
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.learning-submission-artifact__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: calc(0.82rem * var(--learning-unit-label-scale));
+}
+
+.learning-submission-artifact__code {
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  background: color-mix(in srgb, var(--color-bg-surface) 96%, white 4%);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: calc(0.86rem * var(--learning-unit-font-scale));
+  line-height: 1.55;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.learning-submission-artifact__code code {
+  font: inherit;
+  white-space: pre;
+}
+
+.scratch-evidence {
+  font-size: calc(0.92rem * var(--learning-unit-font-scale));
+  line-height: 1.58;
+}
+
+.scratch-evidence > * {
+  margin: 0;
+}
+
+.scratch-evidence > h1:first-child {
+  display: none;
+}
+
+.scratch-evidence h2 {
+  margin-top: 0.9rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  font-size: calc(1rem * var(--learning-unit-font-scale));
+}
+
+.scratch-evidence h2:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.scratch-evidence h3 {
+  margin-top: 0.7rem;
+  color: var(--color-text-muted);
+  font-size: calc(0.88rem * var(--learning-unit-font-scale));
+  font-weight: 700;
+}
+
+.makecode-evidence {
+  font-size: calc(0.92rem * var(--learning-unit-font-scale));
+  line-height: 1.58;
+}
+
+.makecode-evidence > h2:first-child {
+  margin-top: 0;
+  font-size: calc(0.94rem * var(--learning-unit-font-scale));
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  color: var(--color-text-muted);
+}
+
+.makecode-evidence pre {
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
 .learning-task-submission-summary__asset-meta {
   margin: 0;
   color: var(--color-text-muted);

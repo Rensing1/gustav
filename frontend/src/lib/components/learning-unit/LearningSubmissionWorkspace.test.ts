@@ -159,4 +159,76 @@ describe("LearningSubmissionWorkspace", () => {
     expect(screen.getByText(/Die Grafik ist gut lesbar/i)).toBeInTheDocument();
     expect(screen.getByText(/Anschaulichkeit/)).toBeInTheDocument();
   });
+
+  it("renders makecode hex history entries as curated code plus a download action", () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "course-1",
+        task: { ...nativeTask, kind: "calliope" },
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialTab: "history",
+        initialHistoryLoaded: true,
+        initialHistory: [
+          feedbackSubmission({
+            kind: "file",
+            text_body:
+              '# makecode.evidence.v1\n\n## Summary\n\n- files_count: 2\n\n## Files\n\n### file: "main.ts"\n```typescript\nlet count = 1\n```\n\n### file: "main.py"\n```python\nprint("hi")\n```',
+            files: [
+              {
+                mime: "application/x.makecode.hex",
+                size: 2048,
+                url: "https://example.com/upload.hex",
+                download_url: "https://example.com/upload.hex?download=1"
+              }
+            ]
+          })
+        ]
+      }
+    });
+
+    expect(screen.getByText('print("hi")')).toBeInTheDocument();
+    expect(screen.queryByText("makecode.evidence.v1")).toBeNull();
+    expect(screen.queryByText("let count = 1")).toBeNull();
+    expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute(
+      "href",
+      "https://example.com/upload.hex?download=1"
+    );
+  });
+
+  it("renders scratch sb3 history entries as a structure view plus a download action", () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "course-1",
+        task: { ...nativeTask, kind: "scratch" },
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialTab: "history",
+        initialHistoryLoaded: true,
+        initialHistory: [
+          feedbackSubmission({
+            kind: "file",
+            text_body:
+              "# scratch.evidence.v2\n\n## Summary\n- stage_present: true\n\n## Target Stage\n### Script 1\n- event_whenflagclicked\n- looks_say MESSAGE=\"Hallo\"",
+            files: [
+              {
+                mime: "application/x.scratch.sb3",
+                size: 4096,
+                url: "https://example.com/upload.sb3",
+                download_url: "https://example.com/upload.sb3?download=1"
+              }
+            ]
+          })
+        ]
+      }
+    });
+
+    expect(document.querySelector(".scratch-evidence")).not.toBeNull();
+    expect(screen.queryByText("scratch.evidence.v2")).toBeNull();
+    expect(screen.getByText("Target Stage")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute(
+      "href",
+      "https://example.com/upload.sb3?download=1"
+    );
+  });
 });

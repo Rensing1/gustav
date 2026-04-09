@@ -22,9 +22,10 @@ const task: LearningTask = {
   kind: "native"
 };
 
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
 describe("LearningTaskCard", () => {
   it("binds the inline markdown editor to local draft state instead of a constant empty string", () => {
-    const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(path.resolve(currentDir, "LearningTaskCard.svelte"), "utf8");
 
     expect(source).toContain("let draftText = $state(\"\")");
@@ -411,7 +412,7 @@ describe("LearningTaskCard", () => {
     expect(screen.getByText(".sb3-Datei auswählen")).toBeInTheDocument();
   });
 
-  it("shows a compact file card with replace and remove actions after selecting a file", async () => {
+  it("shows a compact file card with only a subtle remove action after selecting a file", async () => {
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -431,8 +432,11 @@ describe("LearningTaskCard", () => {
 
     expect(screen.getByText("loesung.pdf")).toBeInTheDocument();
     expect(screen.getByText(/PDF ·/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ersetzen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Entfernen" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ersetzen" })).toBeNull();
+    expect(readFileSync(path.resolve(currentDir, "LearningTaskCard.svelte"), "utf8")).toContain(
+      'workspace-top-action workspace-top-action--quiet workspace-top-action--subtle'
+    );
   });
 
   it("delegates upload feedback requests to a browser-side callback instead of submitting the file form", async () => {
@@ -788,6 +792,162 @@ describe("LearningTaskCard", () => {
     });
 
     expect(document.querySelector(".learning-task-submission-summary__frame")).not.toBeNull();
+  });
+
+  it("renders makecode hex submissions as curated code plus a download action", async () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          kind: "calliope",
+          has_submission: true
+        },
+        taskTitle: "Aufgabe 12",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: false,
+        history: [
+          {
+            id: "submission-hex",
+            attempt_nr: 1,
+            kind: "file",
+            intent: "submit",
+            created_at: "2026-04-07T12:10:00+00:00",
+            analysis_status: "completed",
+            text_body:
+              '# makecode.evidence.v1\n\n## Summary\n\n- files_count: 2\n\n## Files\n\n### file: "main.ts"\n```typescript\nlet count = 1\n```\n\n### file: "main.py"\n```python\nprint("hi")\n```',
+            files: [
+              {
+                mime: "application/x.makecode.hex",
+                size: 4096,
+                url: "/uploads/test.hex",
+                download_url: "/uploads/test.hex?download=1"
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    await rerender({
+      courseId: "course-1",
+      task: {
+        ...task,
+        kind: "calliope",
+        has_submission: true
+      },
+      taskTitle: "Aufgabe 12",
+      unitType: "linear",
+      expanded: true,
+      reviewPanelOpen: true,
+      history: [
+        {
+          id: "submission-hex",
+          attempt_nr: 1,
+          kind: "file",
+          intent: "submit",
+          created_at: "2026-04-07T12:10:00+00:00",
+          analysis_status: "completed",
+          text_body:
+            '# makecode.evidence.v1\n\n## Summary\n\n- files_count: 2\n\n## Files\n\n### file: "main.ts"\n```typescript\nlet count = 1\n```\n\n### file: "main.py"\n```python\nprint("hi")\n```',
+          files: [
+            {
+              mime: "application/x.makecode.hex",
+              size: 4096,
+              url: "/uploads/test.hex",
+              download_url: "/uploads/test.hex?download=1"
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(screen.getByText('print("hi")')).toBeInTheDocument();
+    expect(screen.queryByText("makecode.evidence.v1")).toBeNull();
+    expect(screen.queryByText("let count = 1")).toBeNull();
+    expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute(
+      "href",
+      "/uploads/test.hex?download=1"
+    );
+  });
+
+  it("renders scratch sb3 submissions as a structure view plus a download action", async () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          kind: "scratch",
+          has_submission: true
+        },
+        taskTitle: "Aufgabe 13",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: false,
+        history: [
+          {
+            id: "submission-sb3",
+            attempt_nr: 1,
+            kind: "file",
+            intent: "submit",
+            created_at: "2026-04-07T12:10:00+00:00",
+            analysis_status: "completed",
+            text_body:
+              "# scratch.evidence.v2\n\n## Summary\n- stage_present: true\n\n## Target Stage\n### Script 1\n- event_whenflagclicked\n- looks_say MESSAGE=\"Hallo\"",
+            files: [
+              {
+                mime: "application/x.scratch.sb3",
+                size: 8192,
+                url: "/uploads/test.sb3",
+                download_url: "/uploads/test.sb3?download=1"
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    await rerender({
+      courseId: "course-1",
+      task: {
+        ...task,
+        kind: "scratch",
+        has_submission: true
+      },
+      taskTitle: "Aufgabe 13",
+      unitType: "linear",
+      expanded: true,
+      reviewPanelOpen: true,
+      history: [
+        {
+          id: "submission-sb3",
+          attempt_nr: 1,
+          kind: "file",
+          intent: "submit",
+          created_at: "2026-04-07T12:10:00+00:00",
+          analysis_status: "completed",
+          text_body:
+            "# scratch.evidence.v2\n\n## Summary\n- stage_present: true\n\n## Target Stage\n### Script 1\n- event_whenflagclicked\n- looks_say MESSAGE=\"Hallo\"",
+          files: [
+            {
+              mime: "application/x.scratch.sb3",
+              size: 8192,
+              url: "/uploads/test.sb3",
+              download_url: "/uploads/test.sb3?download=1"
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(document.querySelector(".scratch-evidence")).not.toBeNull();
+    expect(screen.queryByText("scratch.evidence.v2")).toBeNull();
+    expect(screen.getByText("Target Stage")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute(
+      "href",
+      "/uploads/test.sb3?download=1"
+    );
   });
 
   it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {

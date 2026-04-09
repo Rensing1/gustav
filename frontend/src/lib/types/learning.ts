@@ -57,6 +57,7 @@ export type LearningSubmission = {
     mime: string;
     size: number;
     url: string;
+    download_url?: string;
   }>;
   id: string;
   attempt_nr: number;

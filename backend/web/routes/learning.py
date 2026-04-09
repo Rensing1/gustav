@@ -140,11 +140,24 @@ def _attach_submission_files(submission: dict[str, Any]) -> dict[str, Any]:
     if not url:
         return payload
 
+    try:
+        download_presigned = adapter.presign_download(
+            bucket=bucket,
+            key=storage_key,
+            expires_in=60,
+            disposition="attachment",
+        )
+    except Exception:
+        download_presigned = None
+
+    download_url = str((download_presigned or {}).get("url") or "").strip() or url
+
     payload["files"] = [
         {
             "mime": mime_type,
             "size": size_int,
             "url": url,
+            "download_url": download_url,
         }
     ]
     return payload

@@ -2426,7 +2426,7 @@ components:
                 keys directly.
               items:
                 type: object
-                required: [mime, size, url]
+                required: [mime, size, url, download_url]
                 properties:
                   mime:
                     type: string
@@ -2435,6 +2435,13 @@ components:
                   url:
                     type: string
                     format: uri
+                  download_url:
+                    type: string
+                    format: uri
+                    description: |-
+                      Short-lived signed attachment URL for downloading the
+                      original uploaded file without relying on the inline
+                      preview target.
             analysis_status:
               type: string
               enum: [pending, extracted, completed, failed]

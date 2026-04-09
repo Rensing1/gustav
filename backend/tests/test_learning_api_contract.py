@@ -914,6 +914,8 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
     try:
         class _Adapter:
             def presign_download(self, *, bucket, key, expires_in, disposition):
+                if disposition == "attachment":
+                    return {"url": "http://storage.local/finalized-upload.pdf?download=1"}
                 return {"url": "http://storage.local/finalized-upload.pdf"}
 
         learning.set_storage_adapter(_Adapter())
@@ -973,6 +975,7 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
                 "mime": "application/pdf",
                 "size": 2048,
                 "url": "http://storage.local/finalized-upload.pdf",
+                "download_url": "http://storage.local/finalized-upload.pdf?download=1",
             }
         ]
     finally:

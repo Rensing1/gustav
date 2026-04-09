@@ -2,7 +2,9 @@
   import { browser } from "$app/environment";
   import { onMount } from "svelte";
 
+  import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
+  import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
 
@@ -123,6 +125,10 @@
 
   function fileEntry(submission: LearningSubmission): { mime: string; size: number; url: string } | null {
     return submission.files?.[0] ?? null;
+  }
+
+  function artifactEntry(submission: LearningSubmission) {
+    return buildSubmissionArtifactView(submission);
   }
 
   function formatBytes(size: number | null | undefined): string {
@@ -337,7 +343,12 @@
                 </div>
               </header>
 
-              {#if submission.text_body}
+              {#if artifactEntry(submission)}
+                <section class="learning-submission-history__section">
+                  <p class="workspace-label">Abgabe</p>
+                  <LearningSubmissionArtifactView submission={submission} />
+                </section>
+              {:else if submission.text_body}
                 <section class="learning-submission-history__section">
                   <p class="workspace-label">Abgabe</p>
                   <div class="markdown-prose">
@@ -346,7 +357,7 @@
                 </section>
               {/if}
 
-              {#if fileEntry(submission)}
+              {#if fileEntry(submission) && !artifactEntry(submission)}
                 <section class="learning-submission-history__section">
                   <p class="workspace-label">Datei</p>
                   {#if fileEntry(submission)?.mime.startsWith("image/")}

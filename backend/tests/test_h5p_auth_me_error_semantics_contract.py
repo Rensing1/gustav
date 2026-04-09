@@ -30,9 +30,8 @@ def test_h5p_auth_me_upstream_unavailable_has_distinct_error() -> None:
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
 
     js = server_path.read_text(encoding="utf-8")
-    block = _extract_block(js, start_token="if (!me.ok)", end_token="authCache.delete(sid);")
+    block = _extract_block(js, start_token="if (!me.ok)", end_token="req.gustavMe = me.payload;")
 
     assert 'error: "unauthenticated"' in block
     assert 'error: "upstream_unavailable"' in block
     assert '502, { error: "unauthenticated" }' not in block
-

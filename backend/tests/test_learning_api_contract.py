@@ -508,8 +508,8 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
 
 
 @pytest.mark.anyio
-async def test_create_submission_requires_explicit_intent() -> None:
-    """The public contract requires the learner to declare feedback vs. final submission."""
+async def test_create_submission_defaults_missing_intent_to_submit() -> None:
+    """Missing intent remains backwards-compatible and is treated as a final submission."""
 
     fixture = await _prepare_learning_fixture()
 
@@ -520,8 +520,10 @@ async def test_create_submission_requires_explicit_intent() -> None:
             json={"kind": "text", "text_body": "Intent fehlt"},
         )
 
-    assert response.status_code == 400
-    assert response.json() == {"error": "bad_request", "detail": "invalid_input"}
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["intent"] == "submit"
+    assert payload["kind"] == "text"
 
 
 @pytest.mark.anyio

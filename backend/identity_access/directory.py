@@ -217,15 +217,15 @@ def _login_label(u: dict) -> str:
 
 
 def _display_name(u: dict) -> str:
-    # 1) first + last names
+    # 1) explicit display_name attribute
+    dn = _get_attr(u, "display_name")
+    if dn:
+        return dn
+    # 2) first + last names
     first = (u.get("firstName") or "").strip()
     last = (u.get("lastName") or "").strip()
     if first or last:
         return " ".join([p for p in (first, last) if p]).strip()
-    # 2) explicit display_name attribute
-    dn = _get_attr(u, "display_name")
-    if dn:
-        return dn
     # 3) email or username humanized
     email = (u.get("email") or "").strip()
     if email:

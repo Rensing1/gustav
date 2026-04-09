@@ -26,8 +26,10 @@ def test_teacher_unit_workspace_page_renders_graph_workspace() -> None:
 
     assert "@xyflow/svelte" in src
     assert "SvelteFlow" in src
-    assert "teacher-flow-page-tools" in src
-    assert "teacher-flow-quickedit" in src
+    assert "TeacherGraphWorkspaceFrame" in src
+    assert "GraphInspectorPanel" in src
+    assert "workspace-unit-commandbar-popover" in src
+    assert "teacher-flow-quickedit" not in src
     assert "GraphUnitNode" in src
     assert "GraphPhaseBand" in src
     assert "editor_href" in src or "/nodes/" in src

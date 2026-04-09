@@ -5234,6 +5234,7 @@ paths:
         - For `Task.kind=scratch`, only `kind=file` with `mime_type=application/x.scratch.sb3` is accepted (upload-only).
         - For `Task.kind=calliope`, only `kind=file` with `mime_type=application/x.makecode.hex` is accepted (upload-only).
         - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously (response 201).
+        - When `intent` is omitted, the server treats the request as `intent=submit` for backwards compatibility.
         - `intent=feedback` creates a feedback snapshot but does not consume the task's `max_attempts` budget.
         - `intent=submit` creates a final submission attempt and does count against `max_attempts`.
         
@@ -5281,11 +5282,13 @@ paths:
             schema:
               oneOf:
                 - type: object
-                  required: [intent, kind, text_body]
+                  required: [kind, text_body]
                   properties:
                     intent:
                       type: string
                       enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [text]
@@ -5294,11 +5297,13 @@ paths:
                       minLength: 1
                       maxLength: 65536
                 - type: object
-                  required: [intent, kind, storage_key, mime_type, size_bytes, sha256]
+                  required: [kind, storage_key, mime_type, size_bytes, sha256]
                   properties:
                     intent:
                       type: string
                       enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [image]
@@ -5316,11 +5321,13 @@ paths:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
                 - type: object
-                  required: [intent, kind, storage_key, mime_type, size_bytes, sha256]
+                  required: [kind, storage_key, mime_type, size_bytes, sha256]
                   properties:
                     intent:
                       type: string
                       enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [file]
@@ -5341,11 +5348,13 @@ paths:
                       type: string
                       pattern: '^[0-9a-f]{64}$'
                 - type: object
-                  required: [intent, kind, score_raw, score_max]
+                  required: [kind, score_raw, score_max]
                   properties:
                     intent:
                       type: string
                       enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [h5p]
@@ -5459,6 +5468,9 @@ paths:
       operationId: finalizeLearningSubmission
       security:
         - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required for browser-triggered requests (Origin/Referer must match server origin)."
+        - "RLS: learner ownership, course membership and draft visibility are enforced by backend helpers."
       parameters:
         - in: path
           name: course_id
@@ -5929,6 +5941,9 @@ paths:
       operationId: postSessionSync
       security:
         - bearerAuth: []
+      x-security-notes:
+        - "CSRF: Endpoint is intended for the authenticated same-origin BFF bridge, not cross-site browser forms."
+        - "Auth: requires a valid bearer-authenticated BFF context before minting the app cookie."
       responses:
         '204':
           description: App session synchronized successfully
@@ -5991,6 +6006,9 @@ paths:
       operationId: patchAppProfileDisplayName
       security:
         - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "Auth: updates only the current authenticated user's profile attributes."
       requestBody:
         required: true
         content:
@@ -6024,6 +6042,9 @@ paths:
       operationId: patchAppProfileName
       security:
         - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "Auth: updates only the current authenticated user's profile attributes."
       requestBody:
         required: true
         content:
@@ -6156,6 +6177,9 @@ paths:
       operationId: createLearnerConcernBoxEntry
       security:
         - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "Auth: only enrolled learners may create entries for their own courses."
       requestBody:
         required: true
         content:
@@ -6313,6 +6337,9 @@ paths:
       operationId: archiveTeacherConcernBoxEntry
       security:
         - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "Auth: only the owning teacher may archive the referenced entry."
       parameters:
         - in: path
           name: entry_id
@@ -6365,6 +6392,9 @@ paths:
       operationId: restoreTeacherConcernBoxEntry
       security:
         - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "Auth: only the owning teacher may restore the referenced entry."
       parameters:
         - in: path
           name: entry_id

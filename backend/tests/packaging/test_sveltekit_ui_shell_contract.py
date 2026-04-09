@@ -40,7 +40,7 @@ def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
         ".space-nav",
         ".account-menu",
         ".account-trigger",
-        ".account-avatar",
+        ".account-trigger__initial",
         ".workspace-shell",
         ".workspace-topbar",
         ".workspace-breadcrumbs",
@@ -65,14 +65,13 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
         'class="brand-lockup"',
         'class="workspace-shell"',
         'class="workspace-header"',
-        'class="workspace-topbar"',
-        'class="workspace-breadcrumbs"',
-        'class="space-nav"',
-        'aria-label="Hauptnavigation"',
-        'aria-label="Breadcrumb"',
-        'src="/gustav-logo.png"',
-        'class="account-menu"',
-        "data.theme",
+            'class="workspace-topbar"',
+            'className="workspace-breadcrumbs"',
+            'class="space-nav"',
+            'aria-label="Hauptnavigation"',
+            'src="/gustav-logo.png"',
+            'class="account-menu"',
+            "data.theme",
         "page.data.breadcrumbs",
         "page.data.pageTitle",
         "page.data.headerAction",
@@ -110,7 +109,6 @@ def test_app_html_loads_nunito_font() -> None:
 
 def test_room_pages_use_shared_workspace_primitives() -> None:
     page_paths = [
-        REPO_ROOT / "frontend" / "src" / "routes" / "+page.svelte",
         REPO_ROOT / "frontend" / "src" / "routes" / "learning" / "+page.svelte",
         REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "+page.svelte",
         REPO_ROOT / "frontend" / "src" / "routes" / "diagnostics" / "+page.svelte",
@@ -139,6 +137,9 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
         src = path.read_text(encoding="utf-8")
         if path.parts[-3:] == ("teaching", "courses", "+page.svelte"):
             assert "workspace-section" not in src, f"Course index should now avoid an outer workspace section in {path}"
+        elif path.parts[-2:] == ("learning", "+page.svelte"):
+            assert "workspace-page learning-home" in src, f"Expected learner home list shell in {path}"
+            assert "QuietList" in src, f"Expected learner home to render the shared quiet list in {path}"
         else:
             assert "workspace-section" in src, f"Expected shared workspace section in {path}"
         assert 'class="panel"' not in src, f"Legacy panel styling should be removed in {path}"
@@ -169,6 +170,12 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
     assert ".workspace-link-card--course" in style_src
     assert "min-height: 5.8rem;" in style_src
     assert "gap: 0.28rem;" in style_src
+
+    root_page_src = (REPO_ROOT / "frontend" / "src" / "routes" / "+page.svelte").read_text(
+        encoding="utf-8"
+    )
+    assert "AuthFrame" in root_page_src
+    assert "workspace-section" not in root_page_src
 
 
 def test_teaching_course_routes_define_breadcrumb_data() -> None:

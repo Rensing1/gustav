@@ -28,9 +28,9 @@ def test_learning_sveltekit_routes_exist() -> None:
     task_card_src = task_card.read_text(encoding="utf-8")
 
     assert "/api/learning/courses/" in loader_src
-    assert "/upload-intents" in loader_src
     assert "/submissions" in loader_src
     assert "LearningUnitContentWorkspace" in page_src
+    assert "/upload-intents" in page_src
     assert "H5PTaskPlayer" in task_card_src
     assert "/h5p/player/model" in component_src
     assert "/bff/h5p/submissions" in component_src
@@ -38,6 +38,7 @@ def test_learning_sveltekit_routes_exist() -> None:
     assert "/h5p/webcomponents/index.js" in runtime_loader_src
     assert "@vite-ignore" in runtime_loader_src
     assert "Deine Sitzung ist abgelaufen." in component_src
+    assert "/upload-intents" not in loader_src
 
 
 def test_h5p_service_knows_frontend_bff_cookie_bridge() -> None:

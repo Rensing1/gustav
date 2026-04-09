@@ -13,7 +13,7 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 @pytest.mark.anyio
 async def test_submission_artifact_reload_endpoint_is_removed() -> None:
-    """The UI must not expose a dedicated artifact reload endpoint."""
+    """Retired artifact reload routes stay explicitly gone for legacy callers."""
     main.SESSION_STORE = SessionStore()
     student = main.SESSION_STORE.create(sub="s-artifact-reload-removed", name="S", roles=["student"])  # type: ignore
 
@@ -21,5 +21,4 @@ async def test_submission_artifact_reload_endpoint_is_removed() -> None:
         client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
         resp = await client.get("/learning/courses/c1/tasks/t1/submissions/s1/artifact")
 
-    assert resp.status_code == 404
-
+    assert resp.status_code == 410

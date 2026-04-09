@@ -37,7 +37,6 @@ class CreateSubmissionInput:
     course_id: str
     task_id: str
     student_sub: str
-    intent: str
     kind: str
     text_body: Optional[str]
     storage_key: Optional[str]
@@ -47,6 +46,7 @@ class CreateSubmissionInput:
     score_raw: Optional[int]
     score_max: Optional[int]
     idempotency_key: Optional[str]
+    intent: str = "submit"
 
 
 class CreateSubmissionUseCase:
@@ -74,12 +74,13 @@ class CreateSubmissionUseCase:
             Caller must be an enrolled student in the course with access to the
             released task (enforced at the DB boundary via RLS and helper functions).
         """
+        intent = str(req.intent or "submit").strip().lower() or "submit"
         return self._repo.create_submission(
             SubmissionInput(
                 course_id=req.course_id,
                 task_id=req.task_id,
                 student_sub=req.student_sub,
-                intent=req.intent,
+                intent=intent,
                 kind=req.kind,
                 text_body=req.text_body,
                 storage_key=req.storage_key,

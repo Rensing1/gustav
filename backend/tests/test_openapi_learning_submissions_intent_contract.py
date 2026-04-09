@@ -42,3 +42,12 @@ def test_learning_submission_schema_exposes_intent() -> None:
     assert "intent" in required
     intent = schema["allOf"][1]["properties"]["intent"]
     assert intent["enum"] == ["feedback", "submit"]
+
+
+def test_learning_submission_description_documents_inflight_feedback_deduplication() -> None:
+    spec = _load_spec()
+    post_op = spec["paths"]["/api/learning/courses/{course_id}/tasks/{task_id}/submissions"]["post"]
+    description = str(post_op.get("description") or "")
+
+    assert "identical in-flight `intent=feedback` requests are deduplicated server-side" in description
+    assert "reuse the existing feedback submission" in description

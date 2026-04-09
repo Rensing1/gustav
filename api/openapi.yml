@@ -5227,7 +5227,9 @@ paths:
         Accepts text submissions directly or stores metadata for an already uploaded
         image or file asset. All submissions enter an asynchronous analysis pipeline; clients
         poll submission detail endpoints to observe status changes. Duplicate requests can
-        be avoided using the optional Idempotency-Key header.
+        be avoided using the optional Idempotency-Key header. Additionally, identical
+        in-flight `intent=feedback` requests are deduplicated server-side and reuse the
+        existing feedback submission instead of starting a second worker run.
         
         Task-type rules:
         - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).

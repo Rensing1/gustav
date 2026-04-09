@@ -1128,6 +1128,98 @@ class DBLearningRepo:
 
                 return False
 
+    def _find_matching_inflight_feedback_submission(
+        self,
+        cur: Any,
+        *,
+        course_uuid: str,
+        task_uuid: str,
+        student_sub: str,
+        data: SubmissionInput,
+    ) -> Any | None:
+        """Return the newest matching in-flight feedback submission, if any.
+
+        Why:
+            The learner UI already disables the feedback button locally, but
+            accidental double-clicks or parallel retries can still reach the
+            backend with different idempotency keys. Reusing the active
+            feedback submission prevents duplicate worker runs without blocking
+            a deliberate re-run after completion.
+        """
+        if data.intent != "feedback" or data.kind == "h5p":
+            return None
+
+        base_query = """
+            select id::text,
+                   attempt_nr,
+                   intent,
+                   kind,
+                   score_raw,
+                   score_max,
+                   text_body,
+                   mime_type,
+                   size_bytes,
+                   storage_key,
+                   sha256,
+                   analysis_status,
+                   analysis_json,
+                   feedback_md,
+                   error_code,
+                   coalesce(vision_attempts, 0),
+                   vision_last_error,
+                   to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                   feedback_last_error,
+                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                   to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+              from public.learning_submissions
+             where course_id = %s::uuid
+               and task_id = %s::uuid
+               and student_sub = %s
+               and intent = 'feedback'
+               and (
+                    analysis_status in ('pending', 'extracted')
+                    or error_code in ('vision_retrying', 'feedback_retrying')
+               )
+        """
+
+        if data.kind == "text":
+            text_body = str(data.text_body or "").strip()
+            if not text_body:
+                return None
+            cur.execute(
+                base_query
+                + """
+                   and kind = 'text'
+                   and btrim(coalesce(text_body, '')) = %s
+                 order by created_at desc, attempt_nr desc
+                 limit 1
+                """,
+                (course_uuid, task_uuid, student_sub, text_body),
+            )
+            return cur.fetchone()
+
+        if data.kind not in {"image", "file"}:
+            return None
+
+        mime_type = str(data.mime_type or "").strip().lower()
+        sha256 = str(data.sha256 or "").strip().lower()
+        if not mime_type or not sha256 or data.size_bytes is None:
+            return None
+
+        cur.execute(
+            base_query
+            + """
+               and kind = %s
+               and coalesce(mime_type, '') = %s
+               and coalesce(sha256, '') = %s
+               and coalesce(size_bytes, -1) = %s
+             order by created_at desc, attempt_nr desc
+             limit 1
+            """,
+            (course_uuid, task_uuid, student_sub, data.kind, mime_type, sha256, int(data.size_bytes)),
+        )
+        return cur.fetchone()
+
     # ------------------------------------------------------------------
     def create_submission(self, data: SubmissionInput) -> dict:
         """Persist a student submission after enforcing membership and attempts.
@@ -1286,6 +1378,15 @@ class DBLearningRepo:
                     (course_uuid, task_uuid, data.student_sub),
                 )
                 attempt_nr = int(cur.fetchone()[0])
+                existing_feedback = self._find_matching_inflight_feedback_submission(
+                    cur,
+                    course_uuid=course_uuid,
+                    task_uuid=task_uuid,
+                    student_sub=data.student_sub,
+                    data=data,
+                )
+                if existing_feedback:
+                    return self._row_to_submission(existing_feedback)
                 # H5P attempts are not limited at the GUSTAV DB layer (H5P can enforce its own limits).
                 # Native feedback runs are stored as submissions, but only final submissions
                 # consume the teacher-defined attempt limit.

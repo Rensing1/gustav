@@ -634,6 +634,213 @@ async def test_feedback_requests_do_not_consume_final_attempt_limit():
 
 
 @pytest.mark.anyio
+async def test_feedback_request_reuses_matching_inflight_text_submission_even_with_new_idempotency_key():
+    """Identical in-flight feedback requests should not enqueue a second analysis run."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        first = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "feedback-first"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert first.status_code == 202
+        first_payload = first.json()
+
+        second = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "feedback-second"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert second.status_code == 202
+        second_payload = second.json()
+
+    assert second_payload["id"] == first_payload["id"]
+    assert second_payload["attempt_nr"] == first_payload["attempt_nr"]
+    assert second_payload["analysis_status"] == "pending"
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available for queue verification.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select count(*)
+                  from public.learning_submissions
+                 where course_id = %s::uuid
+                   and task_id = %s::uuid
+                   and student_sub = %s
+                   and intent = 'feedback'
+                """,
+                (fixture.course_id, fixture.task["id"], fixture.student_sub),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where submission_id = %s::uuid",
+                (first_payload["id"],),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+
+
+@pytest.mark.anyio
+async def test_feedback_request_reuses_matching_inflight_upload_submission_even_with_new_idempotency_key():
+    """Identical upload feedback requests should reuse the existing pending submission."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    payload = {
+        "intent": "feedback",
+        "kind": "image",
+        "storage_key": "uploads/student123/solution-a.png",
+        "mime_type": "image/png",
+        "size_bytes": 1024,
+        "sha256": "1" * 64,
+    }
+    payload_retry = {
+        **payload,
+        "storage_key": "uploads/student123/solution-b.png",
+    }
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        first = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "upload-feedback-first"},
+            json=payload,
+        )
+        assert first.status_code == 202
+        first_payload = first.json()
+
+        second = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "upload-feedback-second"},
+            json=payload_retry,
+        )
+        assert second.status_code == 202
+        second_payload = second.json()
+
+    assert second_payload["id"] == first_payload["id"]
+    assert second_payload["attempt_nr"] == first_payload["attempt_nr"]
+    assert second_payload["kind"] == "image"
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available for queue verification.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select count(*)
+                  from public.learning_submissions
+                 where course_id = %s::uuid
+                   and task_id = %s::uuid
+                   and student_sub = %s
+                   and intent = 'feedback'
+                """,
+                (fixture.course_id, fixture.task["id"], fixture.student_sub),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where submission_id = %s::uuid",
+                (first_payload["id"],),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+
+
+@pytest.mark.anyio
+async def test_feedback_request_creates_new_submission_again_after_previous_feedback_completed():
+    """A deliberate re-run after completed feedback must create a fresh submission."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        first = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "completed-feedback-first"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert first.status_code == 202
+        first_payload = first.json()
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available to rewrite submission state.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'completed',
+                       feedback_md = '## Rückmeldung\n\nPasst.',
+                       analysis_json = '{"schema":"criteria.v2","criteria_results":[]}'::jsonb,
+                       error_code = null,
+                       completed_at = now()
+                 where id = %s::uuid
+                """,
+                (first_payload["id"],),
+            )
+        conn.commit()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        second = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "completed-feedback-second"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert second.status_code == 202
+        second_payload = second.json()
+
+    assert second_payload["id"] != first_payload["id"]
+    assert second_payload["attempt_nr"] == first_payload["attempt_nr"] + 1
+    assert second_payload["analysis_status"] == "pending"
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select count(*)
+                  from public.learning_submissions
+                 where course_id = %s::uuid
+                   and task_id = %s::uuid
+                   and student_sub = %s
+                   and intent = 'feedback'
+                """,
+                (fixture.course_id, fixture.task["id"], fixture.student_sub),
+            )
+            assert int(cur.fetchone()[0] or 0) == 2
+
+
+@pytest.mark.anyio
 async def test_finalize_latest_feedback_submission_creates_final_submission_without_worker_job():
     """Finalizing the latest reviewed draft should not enqueue a new worker job."""
 

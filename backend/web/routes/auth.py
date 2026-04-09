@@ -298,7 +298,7 @@ async def auth_password(request: Request, redirect: str | None = None):
 
 
 @auth_router.get("/auth/register")
-async def auth_register(request: Request, login_hint: str | None = None):
+async def auth_register(request: Request, login_hint: str | None = None, redirect: str | None = None):
     """
     Redirect to Keycloak registration by hinting kc_action=register on the auth endpoint.
 
@@ -322,7 +322,8 @@ async def auth_register(request: Request, login_hint: str | None = None):
     code_challenge = OIDCClient.code_challenge_s256(code_verifier)
     # Phase 2: Generate nonce for replay protection and persist in state
     nonce = secrets.token_urlsafe(16)
-    rec = mod.STATE_STORE.create(code_verifier=code_verifier, redirect=None, nonce=nonce)
+    safe_redirect = safe_inapp_path(redirect)
+    rec = mod.STATE_STORE.create(code_verifier=code_verifier, redirect=safe_redirect, nonce=nonce)
     final_state = rec.state
     # Use dynamic redirect_uri only for allowed hosts, else fallback to configured
     current_base = _request_app_base(request).rstrip("/")

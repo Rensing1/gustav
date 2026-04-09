@@ -723,6 +723,57 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.anyio
+async def test_register_callback_redirects_to_safe_in_app_target(monkeypatch: pytest.MonkeyPatch):
+    import main  # type: ignore  # noqa: E402
+    from urllib.parse import parse_qs, urlparse
+
+    class FakeOIDC:
+        def __init__(self):
+            self.cfg = main.OIDC_CFG
+
+        def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
+            assert code == "valid"
+            assert code_verifier
+            return {"id_token": "fake-id-token"}
+
+    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        register_response = await client.get(
+            "/auth/register?login_hint=new%40school.example&redirect=/teaching/courses/course-1",
+            follow_redirects=False,
+        )
+
+        assert register_response.status_code == 302
+        location = register_response.headers.get("location", "")
+        state = parse_qs(urlparse(location).query).get("state", [None])[0]
+        assert state, "state must be present in registration redirect"
+
+        rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+        assert rec is not None
+        assert rec.redirect == "/teaching/courses/course-1"
+
+        expected_nonce = getattr(rec, "nonce", None)
+
+        def fake_verify(id_token: str, cfg: object):
+            return {
+                "sub": "123456",
+                "email": "new@school.example",
+                "realm_access": {"roles": ["student"]},
+                "email_verified": True,
+                "nonce": expected_nonce,
+            }
+
+        monkeypatch.setattr(main, "verify_id_token", fake_verify)
+
+        callback_response = await client.get(f"/auth/callback?code=valid&state={state}", follow_redirects=False)
+
+    assert callback_response.status_code == 302
+    assert callback_response.headers.get("location") == "/teaching/courses/course-1"
+
+
+@pytest.mark.anyio
 async def test_callback_sets_cookie_flags_and_no_max_age(monkeypatch: pytest.MonkeyPatch):
     """Cookie must be HttpOnly; SameSite=lax; Secure; no Max-Age (session)."""
     token = _make_id_token()

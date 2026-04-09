@@ -49,6 +49,9 @@ export const actions: Actions = {
     }
 
     const params = new URLSearchParams({ login_hint: loginHint });
+    if (redirectPath) {
+      params.set("redirect", redirectPath);
+    }
     throw redirect(303, `/auth/register?${params.toString()}`);
   },
 };

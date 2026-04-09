@@ -337,7 +337,7 @@ export function startRegisterFlow(event: RequestEvent): Response {
     );
   }
 
-  const flow = createFlow(event.url, null);
+  const flow = createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect")));
   setFlowCookie(event, flow);
   const extraParams: Record<string, string> = { kc_action: "register" };
   if (loginHint) {

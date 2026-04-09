@@ -63,6 +63,8 @@ def test_frontend_contains_auth_bridge_routes() -> None:
     assert "/auth/register" in register_page_server_src
     assert "invalid_email_domain" in register_page_server_src
     assert "ALLOWED_REGISTRATION_DOMAINS" in register_page_server_src
+    assert 'form.get("redirect")' in register_page_server_src or "form.get('redirect')" in register_page_server_src
+    assert 'params.set("redirect", redirectPath)' in register_page_server_src or "params.set('redirect', redirectPath)" in register_page_server_src
 
     assert 'action="/forgot-password"' in forgot_page_src
     assert "Passwort vergessen" in forgot_page_src

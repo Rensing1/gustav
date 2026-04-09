@@ -1048,6 +1048,8 @@ async def archive_teacher_concern_box_entry(request: Request, entry_id: str):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    if not teaching_routes._is_uuid_like(entry_id):  # type: ignore[attr-defined]
+        return JSONResponse({"error": "bad_request", "detail": "invalid_entry_id"}, status_code=400, headers=_private_headers())
     csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
     if csrf:
         return csrf
@@ -1067,6 +1069,8 @@ async def restore_teacher_concern_box_entry(request: Request, entry_id: str):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    if not teaching_routes._is_uuid_like(entry_id):  # type: ignore[attr-defined]
+        return JSONResponse({"error": "bad_request", "detail": "invalid_entry_id"}, status_code=400, headers=_private_headers())
     csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
     if csrf:
         return csrf

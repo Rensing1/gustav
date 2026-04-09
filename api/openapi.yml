@@ -5837,6 +5837,16 @@ paths:
             type: string
             format: email
           description: Optional email to prefill in the registration form.
+        - in: query
+          name: redirect
+          schema:
+            type: string
+            maxLength: 256
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
+          description: >-
+            Optional in-app absolute path to navigate to after registration.
+            External URLs are rejected; invalid values are ignored. Disallows
+            double-slash and path traversal segments.
       responses:
         '204':
           description: HTMX request — instruct the browser to redirect via header
@@ -6346,7 +6356,21 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_entry_id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '204':
           description: Entry archived
           headers:
@@ -6401,7 +6425,21 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_entry_id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '204':
           description: Entry restored
           headers:

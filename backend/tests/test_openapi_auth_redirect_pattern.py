@@ -55,3 +55,16 @@ def test_auth_logout_redirect_pattern_rejects_double_slash_and_traversal() -> No
     assert rx.fullmatch("/..") is None
     assert rx.fullmatch("/a/../b") is None
 
+
+def test_auth_register_redirect_pattern_rejects_double_slash_and_traversal() -> None:
+    spec = _load_spec()
+    pattern = _redirect_pattern(spec, path="/auth/register")
+    rx = re.compile(pattern)
+
+    assert rx.fullmatch("/") is not None
+    assert rx.fullmatch("/teaching/courses/course-1") is not None
+
+    assert rx.fullmatch("//") is None
+    assert rx.fullmatch("/a//b") is None
+    assert rx.fullmatch("/..") is None
+    assert rx.fullmatch("/a/../b") is None

@@ -319,3 +319,33 @@ async def test_teacher_can_archive_and_restore_concern_box_entry(monkeypatch: py
     assert [entry["id"] for entry in archived_response.json()["entries"]] == [entry_id]
     assert restore_response.status_code == 204
     assert [entry["id"] for entry in reopened_response.json()["entries"]] == [entry_id]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("path_suffix", "detail"),
+    [
+        ("archive", "invalid_entry_id"),
+        ("restore", "invalid_entry_id"),
+    ],
+)
+async def test_teacher_concern_box_mutations_reject_invalid_entry_id(
+    monkeypatch: pytest.MonkeyPatch,
+    path_suffix: str,
+    detail: str,
+) -> None:
+    store = SessionStore()
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+    teacher = store.create(sub=_unique_sub("teacher-concern-bad-entry"), roles=["teacher"], name="Ada", ttl_seconds=60)
+    teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher.sub, roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        response = await client.post(
+            f"/api/teaching/concern-box/entries/not-a-uuid/{path_suffix}",
+            headers={**teacher_headers, "Origin": "http://test"},
+        )
+
+    assert response.status_code == 400
+    assert response.headers.get("Cache-Control") == "private, no-store"
+    assert response.json() == {"error": "bad_request", "detail": detail}

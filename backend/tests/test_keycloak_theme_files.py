@@ -118,6 +118,21 @@ def test_theme_properties_define_explicit_auth_theme_version():
     assert "gustavThemeVersion=" in text, "theme.properties should define an explicit cache-busting version"
 
 
+def test_theme_properties_globalize_keycloak_shell_classes():
+    """Theme properties should map upstream Keycloak layout hooks to global GUSTAV primitives."""
+    props = THEME_ROOT / "theme.properties"
+    text = props.read_text(encoding="utf-8")
+    for marker in [
+        "kcLoginClass=kc-gustav kc-auth-shell",
+        "kcFormCardClass=kc-card kc-auth-card",
+        "kcContentWrapperClass=kc-form-shell",
+        "kcFormClass=kc-form",
+        "kcInputClass=kc-input",
+        "kcButtonClass=workspace-button",
+    ]:
+        assert marker in text, f"theme.properties should include {marker}"
+
+
 def test_theme_css_uses_auth_design_tokens_instead_of_legacy_palette():
     css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
     text = css.read_text(encoding="utf-8")
@@ -134,6 +149,41 @@ def test_theme_css_uses_auth_design_tokens_instead_of_legacy_palette():
         assert token in text, f"Missing new auth design token {token}"
 
     assert "legacy login.css" not in text
+
+
+def test_theme_global_template_and_footer_exist():
+    """Latent Keycloak pages should be captured centrally via template.ftl/footer.ftl."""
+    template = THEME_ROOT / "template.ftl"
+    footer = THEME_ROOT / "footer.ftl"
+    assert template.exists(), "template.ftl missing"
+    assert footer.exists(), "footer.ftl missing"
+    template_text = template.read_text(encoding="utf-8")
+    footer_text = footer.read_text(encoding="utf-8")
+    for marker in [
+        '<#macro registrationLayout',
+        'css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}',
+        'css/gustav.css?v=${properties.gustavThemeVersion!"dev"}',
+        'class="${properties.kcLoginClass!}"',
+        '<@loginFooter.content',
+    ]:
+        assert marker in template_text, f"template.ftl should include {marker}"
+    assert 'id="kc-locale"' not in template_text, "template.ftl should not render a dominant locale dropdown"
+    assert 'class="kc-locale-links"' in footer_text, "footer.ftl should render locale links footer"
+
+
+def test_keycloak_auth_stylesheet_defines_global_primitives_for_latent_pages():
+    """The shared auth stylesheet should define primitives used by inherited Keycloak templates."""
+    css = (THEME_ROOT / "resources" / "css" / "auth-theme.css").read_text(encoding="utf-8")
+    for marker in [
+        ".kc-form-group",
+        ".kc-input-wrapper",
+        ".kc-form-buttons",
+        ".kc-user-chip",
+        ".kc-auth-selection-list",
+        ".kc-choice-list",
+        ".workspace-button--block",
+    ]:
+        assert marker in css, f"auth-theme.css should include {marker}"
 
 
 def test_login_username_input_is_email():

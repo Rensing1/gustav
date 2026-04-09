@@ -243,6 +243,130 @@ select.kc-input:focus {
   gap: 0.75rem;
 }
 
+.kc-form-group {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+}
+
+.kc-input-wrapper,
+.kc-form-buttons,
+.kc-form-options,
+.kc-form-options__wrapper,
+.kc-info {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.kc-input-error-message,
+.kc-input-helper {
+  color: var(--auth-color-text-muted);
+  font-family: var(--auth-font-body);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.kc-input-error-message {
+  color: var(--auth-color-danger);
+}
+
+.kc-user-chip {
+  margin-top: 1rem;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid var(--auth-color-border);
+  background: var(--auth-color-surface-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  font-family: var(--auth-font-mono);
+  font-size: 0.78rem;
+}
+
+.kc-user-chip__value {
+  color: var(--auth-color-text);
+}
+
+.kc-user-chip__reset {
+  color: var(--auth-color-link, var(--auth-color-accent));
+}
+
+.kc-choice-list {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.kc-choice-list__input {
+  accent-color: var(--auth-color-accent);
+}
+
+.kc-choice-list__label {
+  font-family: var(--auth-font-body);
+}
+
+.kc-choice-list__label--disabled {
+  opacity: 0.6;
+}
+
+.kc-auth-selection-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.kc-auth-selection-list__item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 0.9rem;
+  border: 1px solid var(--auth-color-border);
+  background: var(--auth-color-surface);
+  text-align: left;
+  box-shadow: var(--auth-color-button-shadow);
+}
+
+.kc-auth-selection-list__icon-glyph,
+.kc-auth-selection-list__arrow-glyph,
+.kc-feedback-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+}
+
+.kc-auth-selection-list__heading {
+  color: var(--auth-color-text);
+  font-family: var(--auth-font-mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.kc-auth-selection-list__description {
+  margin-top: 0.25rem;
+  color: var(--auth-color-text-muted);
+  font-family: var(--auth-font-body);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.workspace-button--block {
+  width: 100%;
+}
+
+#kc-content-wrapper ul,
+.kc-form-shell ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--auth-color-text-muted);
+}
+
+#kc-content-wrapper iframe {
+  border: 0;
+}
+
 .kc-form-shell .kc-title,
 .kc-form-shell .kc-message,
 .kc-form-shell .kc-form,

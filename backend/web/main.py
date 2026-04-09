@@ -333,7 +333,15 @@ def _set_session_cookie(response: Response, value: str, *, max_age: int | None =
     )
 
 def _is_public_path(path: str) -> bool:
-    return path.startswith(("/auth/", "/static/")) or path in ("/health", "/favicon.ico")
+    return path.startswith(("/auth/", "/static/")) or path in (
+        "/health",
+        "/favicon.ico",
+        # The SvelteKit Browser-BFF reaches this internal route over the
+        # compose network without a browser session. Keep the allowlist exact
+        # so we do not accidentally open the whole `/backend-internal/*`
+        # namespace.
+        "/backend-internal/app/bff-session",
+    )
 
 
 def _bearer_token_from_authorization_header(request: Request) -> str | None:

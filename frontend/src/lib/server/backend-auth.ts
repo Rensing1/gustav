@@ -390,19 +390,39 @@ export async function handleAuthCallback(event: RequestEvent): Promise<Response>
     return createJsonError(400, message);
   }
 
-  await createTokenSession(event.cookies, event.fetch, {
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token ?? null,
-    idToken: tokens.id_token,
-    expiresAt: Math.floor(Date.now() / 1000) + Math.max(60, Number(tokens.expires_in || 300))
-  });
-  clearFlowCookie(event);
-  const appSessionCookie = await syncAppSession(event, tokens.access_token);
-  const response = createRedirectResponse(flow.redirectPath || "/");
-  if (appSessionCookie) {
+  let tokenSessionCreated = false;
+  try {
+    const tokenSession = await createTokenSession(event.cookies, event.fetch, {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+      idToken: tokens.id_token,
+      expiresAt: Math.floor(Date.now() / 1000) + Math.max(60, Number(tokens.expires_in || 300))
+    });
+    if (!tokenSession) {
+      return createJsonError(502, "session_setup_failed");
+    }
+    tokenSessionCreated = true;
+
+    const appSessionCookie = await syncAppSession(event, tokens.access_token);
+    if (!appSessionCookie) {
+      await clearTokenSession(event.cookies, event.fetch);
+      return createJsonError(502, "session_setup_failed");
+    }
+
+    clearFlowCookie(event);
+    const response = createRedirectResponse(flow.redirectPath || "/");
     response.headers.append("set-cookie", appSessionCookie);
+    return response;
+  } catch {
+    if (tokenSessionCreated) {
+      try {
+        await clearTokenSession(event.cookies, event.fetch);
+      } catch {
+        // Keep the original callback failure stable for the caller.
+      }
+    }
+    return createJsonError(502, "session_setup_failed");
   }
-  return response;
 }
 
 export async function handleLogout(event: RequestEvent): Promise<Response> {

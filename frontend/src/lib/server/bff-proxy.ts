@@ -35,9 +35,16 @@ export async function proxyBackendWrite({
 
   const contentType = response.headers.get("content-type") ?? "application/json";
   const text = response.status === 204 ? "" : await response.text();
+  const headers = new Headers({ "content-type": contentType });
+  for (const headerName of ["cache-control", "vary"]) {
+    const headerValue = response.headers.get(headerName);
+    if (headerValue) {
+      headers.set(headerName, headerValue);
+    }
+  }
 
   return new Response(text, {
     status: response.status,
-    headers: { "content-type": contentType }
+    headers
   });
 }

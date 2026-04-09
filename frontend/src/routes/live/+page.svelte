@@ -46,8 +46,15 @@
   function stripSubmissionSchemaHeader(value: string | null | undefined): string {
     const raw = typeof value === "string" ? value : "";
     return raw
-      .replace(/^# scratch\.evidence\.v2\s*\n+/u, "")
-      .replace(/^# makecode\.evidence\.v1\s*\n+/u, "");
+      .replace(/^\uFEFF/u, "")
+      .replace(/^\s*# scratch\.evidence\.v2\s*\r?\n+/u, "")
+      .replace(/^\s*# makecode\.evidence\.v1\s*\r?\n+/u, "")
+      .trimStart();
+  }
+
+  function isSubmissionSchemaPayload(value: string | null | undefined): boolean {
+    const raw = typeof value === "string" ? value.replace(/^\uFEFF/u, "").trimStart() : "";
+    return raw.startsWith("# scratch.evidence.v2") || raw.startsWith("# makecode.evidence.v1");
   }
 
   function taskStripTone(score: number | null, hasSubmission: boolean): string {
@@ -354,6 +361,8 @@
                       <p class="workspace-label">Abgabe</p>
                       {#if selectedArtifact}
                         <LearningSubmissionArtifactView submission={artifactSubmission} />
+                      {:else if isSubmissionSchemaPayload(selectedSubmission.text_body)}
+                        <pre class="learning-task-submission-summary__plain">{stripSubmissionSchemaHeader(selectedSubmission.text_body)}</pre>
                       {:else if selectedSubmission.text_body}
                         <div class="markdown-prose">
                           {@html renderMarkdown(stripSubmissionSchemaHeader(selectedSubmission.text_body))}
@@ -534,6 +543,7 @@
   .live-panel {
     display: grid;
     gap: var(--space-4);
+    min-width: 0;
     position: sticky;
     top: calc(var(--space-5) + 4rem);
   }
@@ -543,6 +553,12 @@
   .live-panel-block {
     display: grid;
     gap: var(--space-2);
+  }
+
+  .live-panel-block,
+  .live-panel-summary,
+  .live-panel-summary__panel {
+    min-width: 0;
   }
 
   .live-panel__copy h3,
@@ -661,6 +677,7 @@
   .live-panel-summary__panel {
     display: grid;
     gap: var(--space-4);
+    min-width: 0;
   }
 
   @media (max-width: 960px) {

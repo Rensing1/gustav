@@ -2842,6 +2842,7 @@ select {
 .learning-submission-artifact {
   display: grid;
   gap: 0.72rem;
+  min-width: 0;
 }
 
 .learning-submission-artifact__header {
@@ -2866,6 +2867,8 @@ select {
 
 .learning-submission-artifact__code {
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   padding: 0.85rem 0.95rem;
   border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);

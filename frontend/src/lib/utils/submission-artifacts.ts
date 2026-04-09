@@ -42,6 +42,10 @@ function submissionText(submission: LearningSubmission): string {
   return analysisText;
 }
 
+function normalizeArtifactMarkdown(raw: string): string {
+  return String(raw || "").replace(/^\uFEFF/u, "").trimStart();
+}
+
 function decodeFileName(raw: string): string {
   try {
     const parsed = JSON.parse(raw);
@@ -52,11 +56,12 @@ function decodeFileName(raw: string): string {
 }
 
 function parseMakecodeCode(markdown: string): { code: string; filename: string; language: "python" | "typescript" } | null {
-  if (!markdown.startsWith("# makecode.evidence.v1")) {
+  const normalized = normalizeArtifactMarkdown(markdown);
+  if (!normalized.startsWith("# makecode.evidence.v1")) {
     return null;
   }
 
-  const files = Array.from(markdown.matchAll(/^### file:\s+(.+)\n(`{3,})([^\n]*)\n([\s\S]*?)\n\2$/gm)).map((match) => ({
+  const files = Array.from(normalized.matchAll(/^### file:\s+(.+)\r?\n(`{3,})([^\n]*)\r?\n([\s\S]*?)\r?\n\2$/gm)).map((match) => ({
     filename: decodeFileName(match[1] ?? ""),
     code: (match[4] ?? "").trimEnd()
   }));
@@ -74,10 +79,11 @@ function parseMakecodeCode(markdown: string): { code: string; filename: string; 
 }
 
 function renderScratchEvidence(markdown: string): string | null {
-  if (!markdown.startsWith("# scratch.evidence.v2")) {
+  const normalized = normalizeArtifactMarkdown(markdown);
+  if (!normalized.startsWith("# scratch.evidence.v2")) {
     return null;
   }
-  const withoutSchemaHeading = markdown.replace(/^# scratch\.evidence\.v2\s*\n+/u, "");
+  const withoutSchemaHeading = normalized.replace(/^# scratch\.evidence\.v2\s*\r?\n+/u, "");
   return renderMarkdown(withoutSchemaHeading);
 }
 

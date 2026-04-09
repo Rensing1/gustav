@@ -55,13 +55,18 @@ def test_frontend_live_page_uses_dashboard_read_model() -> None:
     assert "Aufgabe als Referenz" not in page_source
     assert "formatSubmissionTimestamp" in page_source
     assert "stripSubmissionSchemaHeader" in page_source
+    assert "isSubmissionSchemaPayload" in page_source
     assert "ab " in page_source
     assert "Uhr" in page_source
+    assert ".live-panel {\n    display: grid;\n    gap: var(--space-4);\n    min-width: 0;" in page_source
+    assert ".live-panel-summary__panel {\n    display: grid;\n    gap: var(--space-4);\n    min-width: 0;" in page_source
+    assert ".live-panel-block,\n  .live-panel-summary,\n  .live-panel-summary__panel {\n    min-width: 0;" in page_source
     assert page_source.index("live-panel-summary__meta") < page_source.index("live-panel-summary__instruction")
     assert page_source.index("live-panel-summary__instruction") < page_source.index('role="tablist"')
     assert page_source.index("Abgabe\n                  </button>") < page_source.index("Rückmeldung\n                  </button>")
     assert page_source.index("Rückmeldung\n                  </button>") < page_source.index("Auswertung\n                  </button>")
     assert "Keine Vorschau" in page_source
-    assert 'startsWith("# makecode.evidence.v1")' not in page_source
-    assert 'startsWith("# scratch.evidence.v2")' not in page_source
+    assert 'artifactSubmission.text_body && (artifactSubmission.text_body.startsWith("# makecode.evidence.v1")' not in page_source
+    assert 'artifactSubmission.text_body.startsWith("# scratch.evidence.v2")' not in page_source
     assert "@html renderMarkdown(stripSubmissionSchemaHeader(selectedSubmission.text_body))" in page_source
+    assert '<pre class="learning-task-submission-summary__plain">{stripSubmissionSchemaHeader(selectedSubmission.text_body)}</pre>' in page_source

@@ -108,7 +108,7 @@
     }
 
     if (isActive("/live")) {
-      return "Schnelle Orientierung für Unterrichtsmomente mit hohem Takt.";
+      return "";
     }
 
     return "Ein Produkt, klare Räume, wenig visuelle Ablenkung.";
@@ -320,7 +320,9 @@
           {#if !hidePageHeading()}
             <div class="workspace-heading">
               <h1>{pageTitle()}</h1>
-              <p class="workspace-copy">{pageCopy()}</p>
+              {#if pageCopy()}
+                <p class="workspace-copy">{pageCopy()}</p>
+              {/if}
             </div>
           {/if}
         </header>

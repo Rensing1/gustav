@@ -136,15 +136,6 @@
 </svelte:head>
 
 <div class="workspace-page live-page">
-  <section class="workspace-panel workspace-panel--plain workspace-section workspace-intro">
-    <p class="workspace-kicker">Live</p>
-    <h2>Live-Konsole für den Unterricht.</h2>
-    <p class="workspace-lead">
-      Wähle zuerst einen Kurs und danach eine Lerneinheit. Die Klassenübersicht
-      bleibt in einer gemeinsamen Arbeitsfläche sichtbar.
-    </p>
-  </section>
-
   <section class="workspace-panel workspace-panel--plain workspace-section live-selection-bar">
     {#if data.courses.length}
       <div class="live-selection__stack">
@@ -338,13 +329,6 @@
                 <div class="learning-task-submission-summary__panel live-panel-summary__panel" role="tabpanel" aria-label={tabLabel(activePanelTab)}>
                   {#if activePanelTab === "submission"}
                     <section class="live-panel-block">
-                      <p class="workspace-label">Aufgabe</p>
-                      <div class="markdown-prose">
-                        {@html renderMarkdown(selectedSubmission.instruction_md)}
-                      </div>
-                    </section>
-
-                    <section class="live-panel-block">
                       <p class="workspace-label">Abgabe</p>
                       {#if artifactSubmission.text_body && (artifactSubmission.text_body.startsWith("# makecode.evidence.v1") || artifactSubmission.text_body.startsWith("# scratch.evidence.v2"))}
                         <LearningSubmissionArtifactView submission={artifactSubmission} />
@@ -370,8 +354,16 @@
                           <a class="workspace-link-action" href={selectedFile.url}>Datei öffnen</a>
                         </div>
                       {:else}
-                        <p class="learning-task-submission-summary__plain">Für diese Aufgabe liegt noch keine lesbare Abgabe vor.</p>
+                        <p class="learning-task-submission-summary__plain">Keine Vorschau. Für diese Aufgabe liegt noch keine lesbare Abgabe vor.</p>
                       {/if}
+                    </section>
+
+                    <section class="live-panel-block">
+                      <p class="workspace-label">Aufgabe</p>
+                      <p class="workspace-note">Referenz</p>
+                      <div class="markdown-prose">
+                        {@html renderMarkdown(selectedSubmission.instruction_md)}
+                      </div>
                     </section>
                   {:else if activePanelTab === "evaluation"}
                     <section class="live-panel-block">

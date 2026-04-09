@@ -504,7 +504,6 @@
           <section class="learning-task-inline-editor">
             <header class="learning-task-inline-editor__header">
               <div>
-                <p class="workspace-label">{taskKicker()}</p>
                 <h5 class="learning-task-inline-editor__title">{taskTitle}</h5>
                 {#if usesCompactTaskLayout()}
                   <div class="markdown-prose learning-task-inline-editor__statement">
@@ -514,8 +513,12 @@
                   <p class="learning-task-inline-editor__copy">Die Bearbeitung bleibt Teil derselben Arbeitsfläche.</p>
                 {/if}
               </div>
-              <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onExitSubmissionWorkspace?.()}>
-                Bearbeitung schließen
+              <button
+                class="learning-task-inline-editor__close workspace-top-action workspace-top-action--quiet"
+                type="button"
+                onclick={() => onExitSubmissionWorkspace?.()}
+              >
+                Pausieren
               </button>
             </header>
 

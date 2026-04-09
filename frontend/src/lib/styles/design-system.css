@@ -1458,6 +1458,23 @@ h6,
   gap: var(--space-3);
 }
 
+.learning-task-inline-editor__close {
+  min-height: 1.72rem;
+  padding: 0.24rem 0.58rem;
+  font-size: 0.7rem;
+  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+  border-color: color-mix(in srgb, var(--color-border) 72%, white 28%);
+  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+}
+
+.learning-task-inline-editor__close:hover,
+.learning-task-inline-editor__close:focus-visible {
+  transform: none;
+  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+  color: var(--color-text);
+}
+
 .learning-task-inline-editor__title {
   margin: 0;
   font-family: var(--font-display);

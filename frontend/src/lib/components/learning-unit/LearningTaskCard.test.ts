@@ -36,7 +36,7 @@ describe("LearningTaskCard", () => {
   });
 
   it("opens inline editing controls inside the task flow instead of a separate workspace", () => {
-    render(LearningTaskCard, {
+    const { container } = render(LearningTaskCard, {
       props: {
         courseId: "course-1",
         task,
@@ -47,7 +47,8 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
+    expect(container.querySelector(".learning-task-inline-editor__header .workspace-label")).toBeNull();
     expect(screen.getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
     expect(screen.getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Datei auswählen")).toBeInTheDocument();
@@ -98,7 +99,7 @@ describe("LearningTaskCard", () => {
     expect(document.querySelector(".learning-task-row__copy")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__preview")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__actions")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Bearbeitung schließen" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pausieren" })).toBeNull();
   });
 
   it("keeps the compact task row visible while review and editor open underneath", async () => {
@@ -150,7 +151,7 @@ describe("LearningTaskCard", () => {
     });
 
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByText("Die Bearbeitung bleibt Teil derselben Arbeitsfläche.")).toBeNull();
     expect(document.querySelector(".learning-task-inline-editor__statement")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
@@ -170,6 +171,9 @@ describe("LearningTaskCard", () => {
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*padding:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*border-left:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*background:\s*transparent;/s);
+    expect(designSystemCss).toMatch(/\.learning-task-inline-editor__close\s*\{[^}]*min-height:\s*1\.72rem;[^}]*padding:\s*0\.24rem 0\.58rem;[^}]*font-size:\s*0\.7rem;/s);
+    expect(designSystemCss).toMatch(/\.learning-task-inline-editor__close\s*\{[^}]*box-shadow:\s*1px 1px 0/s);
+    expect(designSystemCss).toMatch(/\.learning-task-inline-editor__close:hover,\s*\.learning-task-inline-editor__close:focus-visible\s*\{[^}]*transform:\s*none;/s);
   });
 
   it("falls back to the task title when the instruction markdown is empty", () => {
@@ -627,7 +631,7 @@ describe("LearningTaskCard", () => {
       }
     });
     expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.getByText("Entwurf wird ausgewertet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
   });
@@ -648,7 +652,7 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
   });
 
@@ -675,7 +679,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.queryByRole("button", { name: "Bearbeitung schließen" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pausieren" })).toBeNull();
     expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
     expect(screen.getByText("Final abgegeben am 2026-04-07T12:10:00+00:00")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();

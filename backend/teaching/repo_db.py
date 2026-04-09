@@ -3400,6 +3400,71 @@ class DBTeachingRepo:
             )
         return aggregates
 
+    def list_unit_latest_submission_aggregates_for_owner(
+        self,
+        *,
+        course_id: str,
+        unit_id: str,
+        owner_sub: str,
+        student_subs: Sequence[str],
+    ) -> List[dict]:
+        """Return latest submission aggregates for one unit and an explicit learner page.
+
+        Why:
+            The live unit summary paginates by learners. Fetching aggregates for
+            the exact learner page avoids truncating later learners when the unit
+            contains many tasks.
+        """
+        normalized_student_subs = [str(student_sub) for student_sub in student_subs if str(student_sub or "").strip()]
+        if not normalized_student_subs:
+            return []
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select student_sub::text,
+                           task_id::text,
+                           submission_id::text,
+                           analysis_status::text,
+                           analysis_json,
+                           score_raw,
+                           score_max,
+                           created_at_iso,
+                           completed_at_iso,
+                           h5p_completed
+                      from public.get_unit_latest_submission_aggregates_for_owner(
+                           %s, %s, %s, %s
+                      )
+                    """,
+                    (owner_sub, course_id, unit_id, normalized_student_subs),
+                )
+                rows = cur.fetchall() or []
+
+        aggregates: List[dict] = []
+        for row in rows:
+            analysis_status = str(row[3] or "")
+            analysis_json = row[4]
+            average_score = None
+            if analysis_status == "completed":
+                average_score = _compute_average_score_from_analysis(analysis_json)
+            aggregates.append(
+                {
+                    "student_sub": str(row[0] or ""),
+                    "task_id": str(row[1] or ""),
+                    "submission_id": str(row[2] or "") if row[2] else None,
+                    "has_submission": bool(row[2]),
+                    "average_score": average_score,
+                    "score_raw": int(row[5]) if row[5] is not None else None,
+                    "score_max": int(row[6]) if row[6] is not None else None,
+                    "created_at_iso": str(row[7] or "") if row[7] else None,
+                    "completed_at_iso": str(row[8] or "") if row[8] else None,
+                    "h5p_completed": bool(row[9]) if row[9] is not None else None,
+                }
+            )
+        return aggregates
+
     def create_course_module_owned(self, course_id: str, owner_sub: str, *, unit_id: str, context_notes: Optional[str]) -> dict:
         """
         Attach a unit as a module within an owned course.

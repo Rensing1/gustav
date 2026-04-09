@@ -753,6 +753,49 @@ select {
   gap: 0.75rem;
 }
 
+.workspace-data-table-wrap {
+  overflow-x: auto;
+}
+
+.workspace-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-bg-surface);
+}
+
+.workspace-data-table th,
+.workspace-data-table td {
+  padding: 0.8rem;
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.workspace-data-table thead th {
+  font-family: var(--font-technical, var(--font-ui));
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.workspace-data-table tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.workspace-data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--color-bg-muted) 72%, transparent 28%);
+}
+
+.workspace-data-table tbody tr.is-selected {
+  background: var(--color-bg-soft);
+}
+
+.workspace-data-table tbody th a,
+.workspace-data-table tbody td a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .workspace-link-card {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-m);

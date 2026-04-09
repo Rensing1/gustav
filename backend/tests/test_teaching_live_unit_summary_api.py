@@ -604,6 +604,112 @@ async def test_summary_includes_average_score_for_completed_analysis():
 
 
 @pytest.mark.anyio
+async def test_summary_keeps_scores_for_later_learners_when_page_contains_more_cells_than_helper_limit():
+    """Regression: learner-page pagination must not truncate score cells.
+
+    Why:
+        The summary endpoint paginates rows by learners. A previous implementation
+        delegated the same `limit/offset` directly to a DB helper that pages by
+        `(student_sub, task_id)` cells. With enough tasks per learner, later
+        learners on the same page silently lost `has_submission` and
+        `average_score`.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for pagination regression test")
+
+    dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
+    if not dsn:
+        pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-page-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    learners = [
+        main.SESSION_STORE.create(sub=f"s-live-page-{index:02d}", name=f"Student {index:02d}", roles=["student"])  # type: ignore
+        for index in range(1, 12)
+    ]
+    late_learner = learners[-1]
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        cid = await _create_course(c_owner, "Live Kurs Pagination")
+        unit = await _create_unit(c_owner, "Live Einheit Pagination")
+        section = await _create_section(c_owner, unit["id"], "Abschnitt")
+        tasks = [
+            await _create_task(c_owner, unit["id"], section["id"], f"### Aufgabe {task_index}")
+            for task_index in range(1, 21)
+        ]
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        for learner in learners:
+            await _add_member(c_owner, cid, learner.sub)
+
+        release = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert release.status_code == 200
+
+    async with (await _client()) as c_student:
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, late_learner.session_id)
+        for task in tasks:
+            submitted = await c_student.post(
+                f"/api/learning/courses/{cid}/tasks/{task['id']}/submissions",
+                json={"kind": "text", "text_body": f"Antwort fuer {task['id']}"},
+            )
+            assert submitted.status_code in (200, 201, 202)
+            submission_id = submitted.json().get("id")
+            assert submission_id
+
+            analysis_payload = {
+                "schema": "criteria.v2",
+                "criteria_results": [
+                    {"criterion": "K1", "score": 4, "max_score": 5},
+                    {"criterion": "K2", "score": 8, "max_score": 10},
+                ],
+            }
+            with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        select public.learning_worker_update_completed(
+                            %s::uuid,
+                            %s,
+                            %s,
+                            %s::jsonb
+                        )
+                        """,
+                        (
+                            submission_id,
+                            "Regression analysis",
+                            "Regression feedback",
+                            json.dumps(analysis_payload),
+                        ),
+                    )
+
+    async with (await _client()) as c_owner:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        response = await c_owner.get(
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary",
+            params={"limit": 11, "offset": 0},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    rows = {row["student"]["sub"]: row for row in body["rows"]}
+    assert late_learner.sub in rows
+    late_cells = {cell["task_id"]: cell for cell in rows[late_learner.sub]["tasks"]}
+    assert len(late_cells) == len(tasks)
+    for task in tasks:
+        assert late_cells[task["id"]]["has_submission"] is True
+        assert late_cells[task["id"]]["average_score"] == pytest.approx(8.0)
+
+
+@pytest.mark.anyio
 async def test_summary_can_skip_student_rows():
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402

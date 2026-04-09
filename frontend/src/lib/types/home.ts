@@ -104,6 +104,21 @@ export type TeacherCourseContextView = {
   members: TeacherCourseContextMember[];
 };
 
+export type LiveCourseUnitsView = {
+  user: SessionBootstrapUser;
+  course: {
+    id: string;
+    title: string;
+    href: string;
+  };
+  units: Array<{
+    id: string;
+    title: string;
+    position: number;
+    href: string;
+  }>;
+};
+
 export type TeacherUnitsCatalogCourse = {
   id: string;
   title: string;
@@ -417,6 +432,53 @@ export type LiveUnitMatrixView = {
   rows: LiveMatrixRow[];
 };
 
+export type LiveDashboardLatestSubmission = {
+  task_id: string;
+  task_position: number;
+  task_label: string;
+  created_at: string;
+  average_score: number | null;
+} | null;
+
+export type LiveUnitDashboardRow = {
+  student: LiveMatrixStudent;
+  progress_percent: number;
+  average_score: number | null;
+  latest_submission: LiveDashboardLatestSubmission;
+  href: string;
+};
+
+export type LiveStudentPanelTask = {
+  task_id: string;
+  task_position: number;
+  task_label: string;
+  has_submission: boolean;
+  average_score: number | null;
+  is_latest_submission: boolean;
+  href: string;
+};
+
+export type LiveStudentPanelView = {
+  student: LiveDetailStudent;
+  tasks: LiveStudentPanelTask[];
+  selected_task_id: string | null;
+  selected_task_detail: LiveDetailSubmission | null;
+} | null;
+
+export type LiveUnitDashboardView = {
+  user: SessionBootstrapUser;
+  course: LiveCourseRef;
+  unit: LiveUnitRef;
+  summary: {
+    learners_count: number;
+    tasks_count: number;
+    completion_rate_percent: number;
+    average_score: number | null;
+  };
+  rows: LiveUnitDashboardRow[];
+  selected_student_panel: LiveStudentPanelView;
+};
+
 export type LiveDetailStudent = {
   sub: string;
   name: string;
@@ -436,8 +498,25 @@ export type LiveDetailSubmission = {
   created_at: string;
   completed_at?: string | null;
   kind: string;
+  score_raw?: number | null;
+  score_max?: number | null;
+  h5p?: {
+    content_id?: string | null;
+    review_token?: string | null;
+  } | null;
   text_body?: string | null;
   feedback_md?: string | null;
+  analysis_json?: {
+    schema: string;
+    score?: number | null;
+    text?: string | null;
+    criteria_results?: Array<{
+      criterion: string;
+      score?: number | null;
+      max_score?: number | null;
+      explanation_md?: string | null;
+    }>;
+  } | null;
   files?: Array<{ mime?: string; size?: number; url?: string }>;
 };
 

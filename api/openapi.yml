@@ -332,6 +332,40 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TeacherCourseContextMember'
+    LiveCourseUnitsCourse:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    LiveCourseUnitsUnit:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    LiveCourseUnitsView:
+      type: object
+      required: [user, course, units]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseUnitsCourse'
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveCourseUnitsUnit'
     TeacherConcernBoxFilterOption:
       type: object
       required: [id, label, active]
@@ -1028,6 +1062,105 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LiveMatrixRow'
+    LiveDashboardLatestSubmission:
+      type: object
+      nullable: true
+      required: [task_id, task_position, task_label, created_at, average_score]
+      properties:
+        task_id:
+          type: string
+        task_position:
+          type: integer
+        task_label:
+          type: string
+        created_at:
+          type: string
+        average_score:
+          type: number
+          nullable: true
+    LiveUnitDashboardSummary:
+      type: object
+      required: [learners_count, tasks_count, completion_rate_percent, average_score]
+      properties:
+        learners_count:
+          type: integer
+        tasks_count:
+          type: integer
+        completion_rate_percent:
+          type: integer
+        average_score:
+          type: number
+          nullable: true
+    LiveUnitDashboardRow:
+      type: object
+      required: [student, progress_percent, average_score, latest_submission, href]
+      properties:
+        student:
+          $ref: '#/components/schemas/LiveMatrixStudent'
+        progress_percent:
+          type: integer
+        average_score:
+          type: number
+          nullable: true
+        latest_submission:
+          $ref: '#/components/schemas/LiveDashboardLatestSubmission'
+        href:
+          type: string
+    LiveStudentPanelTask:
+      type: object
+      required: [task_id, task_position, task_label, has_submission, average_score, is_latest_submission, href]
+      properties:
+        task_id:
+          type: string
+        task_position:
+          type: integer
+        task_label:
+          type: string
+        has_submission:
+          type: boolean
+        average_score:
+          type: number
+          nullable: true
+        is_latest_submission:
+          type: boolean
+        href:
+          type: string
+    LiveStudentPanelView:
+      type: object
+      nullable: true
+      required: [student, tasks, selected_task_id, selected_task_detail]
+      properties:
+        student:
+          $ref: '#/components/schemas/LiveDetailStudent'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveStudentPanelTask'
+        selected_task_id:
+          type: string
+          nullable: true
+        selected_task_detail:
+          allOf:
+            - nullable: true
+            - $ref: '#/components/schemas/TeachingLatestSubmission'
+    LiveUnitDashboardView:
+      type: object
+      required: [user, course, unit, summary, rows, selected_student_panel]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseRef'
+        unit:
+          $ref: '#/components/schemas/LiveUnitRef'
+        summary:
+          $ref: '#/components/schemas/LiveUnitDashboardSummary'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveUnitDashboardRow'
+        selected_student_panel:
+          $ref: '#/components/schemas/LiveStudentPanelView'
     LiveDetailStudent:
       type: object
       required: [sub, name, href]
@@ -7011,6 +7144,145 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiveUnitMatrixView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or unit not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units:
+    get:
+      tags: [App]
+      summary: Return lightweight live unit choices for one course
+      description: >-
+        Returns the course title and attached units needed for the `/live`
+        selection UI without loading the heavier teacher course context view.
+      operationId: getLiveCourseUnits
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live course units payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveCourseUnitsView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units/{unit_id}/dashboard:
+    get:
+      tags: [App]
+      summary: Return the live unit dashboard read-model
+      description: >-
+        Returns one owner-scoped dashboard for a selected course-unit pair with
+        compact per-learner KPIs and an optional detail panel for one learner.
+      operationId: getLiveUnitDashboard
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: student_sub
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: task_id
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live unit dashboard payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveUnitDashboardView'
         '401':
           description: Unauthenticated
           headers:

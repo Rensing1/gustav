@@ -89,6 +89,9 @@ services:
       - APP_DB_PASSWORD=${APP_DB_PASSWORD:-CHANGE_ME_DEV}
       - DATABASE_URL=postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres
       - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
+      - LEARNING_WORKER_DB_USER=${LEARNING_WORKER_DB_USER:-gustav_worker}
+      - LEARNING_WORKER_DB_PASSWORD=${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}
+      - LEARNING_WORKER_DATABASE_URL=${LEARNING_WORKER_DATABASE_URL:-postgresql://${LEARNING_WORKER_DB_USER:-gustav_worker}:${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Teaching repo DSN uses same credentials/host unless overridden.
       - TEACHING_DATABASE_URL=${TEACHING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Sessions DSN (service role; app_sessions policies allow server-side access)
@@ -192,8 +195,11 @@ services:
       # Internal Supabase gateway (Kong) reachable via shared network
       - SUPABASE_URL=http://supabase_kong_gustav-alpha2:8000
       - LOG_LEVEL=${WORKER_LOG_LEVEL:-INFO}
-      # Worker DSN: defaults to the app login role (gustav_app) so RLS stays active.
-      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${APP_DB_USER:-gustav_app}:${APP_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
+      # Worker DSN: use the dedicated worker login role; web/app keep APP_DB_USER.
+      - LEARNING_WORKER_DB_USER=${LEARNING_WORKER_DB_USER:-gustav_worker}
+      - LEARNING_WORKER_DB_PASSWORD=${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}
+      - LEARNING_WORKER_DATABASE_URL=${LEARNING_WORKER_DATABASE_URL:-postgresql://${LEARNING_WORKER_DB_USER:-gustav_worker}:${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
+      - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${LEARNING_WORKER_DB_USER:-gustav_worker}:${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       # Learning AI (DSPy-only via OpenAI-compatible endpoint; no path rules, no implicit "/v1")
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

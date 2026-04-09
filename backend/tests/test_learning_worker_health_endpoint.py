@@ -237,3 +237,74 @@ async def test_learning_worker_health_service_probe_uses_run_in_executor(monkeyp
     assert callable(fn)
     assert getattr(fn, "__name__", "") == "_probe_sync"
     assert getattr(fn, "__self__", None) is service
+
+
+def test_learning_worker_health_service_marks_app_role_as_degraded(monkeypatch: pytest.MonkeyPatch):
+    """The health service must reject app-role drift even when queue visibility is fine."""
+
+    class _Cursor:
+        def __init__(self, rows):
+            self._rows = list(rows)
+
+        def execute(self, _sql):  # noqa: ANN001 - test double mirrors psycopg cursor
+            return None
+
+        def fetchone(self):
+            if not self._rows:
+                return None
+            return self._rows.pop(0)
+
+        def fetchall(self):
+            if not self._rows:
+                return []
+            return self._rows.pop(0)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _Connection:
+        def __init__(self):
+            self._cursor_index = 0
+
+        def cursor(self):
+            self._cursor_index += 1
+            if self._cursor_index == 1:
+                return _Cursor([{"current_user": "gustav_app"}])
+            return _Cursor([[{"check_name": "queue_visibility", "status": "ok", "detail": "visible_jobs=0"}]])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _FakePsy:
+        @staticmethod
+        def connect(*args, **kwargs):  # noqa: ANN001 - test stub mirrors psycopg API
+            return _Connection()
+
+    monkeypatch.setattr(worker_health, "HAVE_PSYCOPG", True, raising=False)
+    monkeypatch.setattr(worker_health, "psycopg", _FakePsy, raising=False)
+    monkeypatch.setattr(worker_health, "dict_row", object(), raising=False)
+
+    service = worker_health.LearningWorkerHealthService(dsn_resolver=lambda: "postgresql://gustav_worker:pw@db:5432/postgres")
+
+    result = service._probe_sync()
+
+    assert result.status == "degraded"
+    assert result.current_role == "gustav_app"
+    assert result.checks == [
+        worker_health.HealthCheckResult(
+            check="db_role",
+            status="failed",
+            detail="expected gustav_worker, got gustav_app",
+        ),
+        worker_health.HealthCheckResult(
+            check="queue_visibility",
+            status="ok",
+            detail="visible_jobs=0",
+        ),
+    ]

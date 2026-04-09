@@ -146,7 +146,7 @@ def run_once(
         batch size is controlled via WORKER_CONCURRENCY (default 1).
 
     Parameters:
-        dsn: Postgres connection string for the worker (service role with function EXECUTE grants).
+        dsn: Postgres connection string for the worker (`gustav_worker` login role).
         vision_adapter: Adapter that turns the queued submission into Markdown text.
         feedback_adapter: Adapter that generates criteria-based feedback for the Markdown text.
         now: Optional UTC timestamp used for deterministic tests; defaults to `datetime.now(timezone.utc)`.
@@ -159,10 +159,10 @@ def run_once(
           (transient errors) or marks the submission `failed` via `learning_worker_update_failed`.
 
     Permissions:
-        The caller must authenticate as the dedicated worker role (`gustav_worker`) which has
-        EXECUTE privileges on the `learning_worker_*` SECURITY DEFINER helpers and DML access
-        to `learning_submission_jobs`. RLS remains active, therefore `app.current_sub` must be
-        set before reading or writing submission rows.
+        The caller must authenticate as the dedicated worker login role (`gustav_worker`).
+        This role has EXECUTE privileges on the `learning_worker_*` SECURITY DEFINER helpers
+        and DML access to `learning_submission_jobs`. RLS remains active, therefore
+        `app.current_sub` must be set before reading or writing submission rows.
     """
     _require_psycopg()
     tick = now or datetime.now(tz=timezone.utc)
@@ -1091,7 +1091,6 @@ def _resolve_worker_dsn() -> str:
     candidates = [
         os.getenv("LEARNING_DATABASE_URL"),
         os.getenv("LEARNING_DB_URL"),
-        os.getenv("DATABASE_URL"),
     ]
     for candidate in candidates:
         if candidate:
@@ -1100,16 +1099,16 @@ def _resolve_worker_dsn() -> str:
     else:
         host = os.getenv("TEST_DB_HOST", "127.0.0.1")
         port = os.getenv("TEST_DB_PORT", "54322")
-        user = os.getenv("APP_DB_USER", "gustav_app")
-        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        user = os.getenv("LEARNING_WORKER_DB_USER", "gustav_worker")
+        password = os.getenv("LEARNING_WORKER_DB_PASSWORD", "CHANGE_ME_DEV")
         dsn = f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
     allow_service = _truthy("ALLOW_SERVICE_DSN_FOR_TESTING") or _truthy("RUN_E2E") or _truthy("RUN_SUPABASE_E2E")
     user = _dsn_username(dsn)
     if user in {"postgres", "service_role", "supabase_admin"} and not allow_service:
         raise RuntimeError(
-            "Learning worker requires the gustav_app (or gustav_worker) login role. "
-            "Override LEARNING_DATABASE_URL with a limited account or set "
+            "Learning worker requires the gustav_worker login role. "
+            "Override LEARNING_DATABASE_URL with the dedicated worker account or set "
             "ALLOW_SERVICE_DSN_FOR_TESTING=true for temporary local debugging."
         )
     return dsn

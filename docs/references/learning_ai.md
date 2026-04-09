@@ -31,7 +31,7 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 | Port / Adapter | Signature (Python typing) | Responsibility | Security Notes |
 | --- | --- | --- | --- |
 | `SubmissionStoragePort` | ```python\nclass SubmissionStoragePort(Protocol):\n    def create_presign(self, *, course_id: UUID, task_id: UUID, student_sub: str,\n                       mime_type: str, size_bytes: int) -> PresignResult: ...\n    def verify_object(self, *, storage_key: str, sha256: str,\n                      size_bytes: int) -> StorageVerifyResult: ...\n    def stream_to_local_tmp(self, *, storage_key: str) -> Iterator[bytes]: ...\n``` | Presigned uploads, verification, optional streaming for local OCR. | Uses service credentials; enforces namespacing `submissions/{course}/{task}/{student}/...`. |
-| `LearningSubmissionQueuePort` | ```python\nclass LearningSubmissionQueuePort(Protocol):\n    def enqueue(self, job: SubmissionJobPayload) -> None: ...\n    def lease_next(self, *, now: datetime) -> Optional[QueuedJob]: ...\n    def ack(self, job_id: UUID) -> None: ...\n    def retry_later(self, job_id: UUID, *, visible_at: datetime) -> None: ...\n``` | Queue backed by `public.learning_submission_jobs`. | Only worker role can lease/ack jobs. |
+| `LearningSubmissionQueuePort` | ```python\nclass LearningSubmissionQueuePort(Protocol):\n    def enqueue(self, job: SubmissionJobPayload) -> None: ...\n    def lease_next(self, *, now: datetime) -> Optional[QueuedJob]: ...\n    def ack(self, job_id: UUID) -> None: ...\n    def retry_later(self, job_id: UUID, *, visible_at: datetime) -> None: ...\n``` | Queue backed by `public.learning_submission_jobs`. | Only the dedicated worker login (`gustav_worker`) should lease/ack jobs. |
 | `VisionAdapterProtocol` | ```python\nclass VisionAdapterProtocol(Protocol):\n    def extract(self, *, submission: dict, job_payload: dict) -> VisionResult: ...\n``` | OCR via DSPy (`VisionOcrSignature` → `VisionResult.text_md`). | Must enforce MIME whitelist, size limits, and never log extracted text. |
 | `FeedbackAdapterProtocol` | ```python\nclass FeedbackAdapterProtocol(Protocol):\n    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult: ...\n``` | DSPy-only feedback for text submissions. | Must not log student text or teacher context; validates required feedback headings. |
 
@@ -87,6 +87,13 @@ Why this matters:
 | `WORKER_BACKOFF_SECONDS` | no | Worker | Base backoff, default `10`. |
 | `WORKER_LEASE_SECONDS` | no | Worker | Default `45` (effective lease window is multiplied internally). |
 | `WORKER_POLL_INTERVAL` | no | Worker | Default `0.5`. |
+| `LEARNING_WORKER_DB_USER` / `LEARNING_WORKER_DB_PASSWORD` | yes for local fallback | Worker | Dedicated DB login for the learning worker; local examples default to `gustav_worker`. |
+| `LEARNING_WORKER_DATABASE_URL` | recommended | Worker + health probe | Dedicated DSN for worker runtime and worker health checks. |
+
+### 5.1.1 Database login roles
+- Web/App uses `APP_DB_USER` (typically `gustav_app`) and must stay separate from the worker.
+- The learning worker uses `LEARNING_WORKER_DATABASE_URL` or the fallback pair `LEARNING_WORKER_DB_USER` / `LEARNING_WORKER_DB_PASSWORD`.
+- The worker health probe treats `current_user != gustav_worker` as degraded, even if queue visibility itself is still okay.
 
 ### 5.2 Operations: OpenAI health probe (UI footer)
 

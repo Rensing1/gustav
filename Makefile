@@ -3,6 +3,8 @@ SHELL := /bin/bash
 # Defaults (can be overridden by environment)
 APP_DB_USER ?= gustav_app
 APP_DB_PASSWORD ?= CHANGE_ME_DEV
+LEARNING_WORKER_DB_USER ?= gustav_worker
+LEARNING_WORKER_DB_PASSWORD ?= CHANGE_ME_DEV
 DB_HOST ?= 127.0.0.1
 DB_PORT ?= 54322
 DB_SUPERUSER ?= postgres
@@ -15,6 +17,7 @@ help:
 	@echo "  ps                 - Show docker compose services"
 	@echo "  reset-local        - Reset local Supabase DB + recreate app services"
 	@echo "  db-login-user      - Create/alter app DB login (IN ROLE gustav_limited, local only)"
+	@echo "  learning-worker-db-login-user - Create/alter worker DB login (IN ROLE gustav_worker, local only)"
 	@echo "  test               - Run test suite (unit/integration)"
 	@echo "  verify-preflight-db - Check DB schema prerequisites for make verify"
 	@echo "  test-e2e           - Run E2E tests (requires running services)"
@@ -78,6 +81,25 @@ db-login-user:
 	  | APP_DB_USER="$(APP_DB_USER)" APP_DB_PASSWORD="$(APP_DB_PASSWORD)" PGPASSWORD="$(DB_SUPERPASSWORD)" \
 	    psql -q -h $(DB_HOST) -p $(DB_PORT) -U $(DB_SUPERUSER) -d postgres -v ON_ERROR_STOP=1 >/dev/null
 	@echo "Done. Example DSN: postgresql://$(APP_DB_USER):<secret>@$(DB_HOST):$(DB_PORT)/postgres"
+
+.PHONY: learning-worker-db-login-user
+learning-worker-db-login-user:
+	@echo "Creating/ensuring role $(LEARNING_WORKER_DB_USER) WITH dedicated worker privileges ..."
+	@set -euo pipefail; \
+	  printf '%s\n' \
+	    "\\getenv worker_db_user LEARNING_WORKER_DB_USER" \
+	    "\\getenv worker_db_password LEARNING_WORKER_DB_PASSWORD" \
+	    "SELECT format('CREATE ROLE %I WITH LOGIN PASSWORD %L IN ROLE gustav_worker', :'worker_db_user', :'worker_db_password')" \
+	    "  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'worker_db_user');" \
+	    "\\gexec" \
+	    "SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'worker_db_user', :'worker_db_password');" \
+	    "\\gexec" \
+	    "SELECT format('GRANT gustav_worker TO %I', :'worker_db_user')" \
+	    "  WHERE :'worker_db_user' <> 'gustav_worker';" \
+	    "\\gexec" \
+	  | LEARNING_WORKER_DB_USER="$(LEARNING_WORKER_DB_USER)" LEARNING_WORKER_DB_PASSWORD="$(LEARNING_WORKER_DB_PASSWORD)" PGPASSWORD="$(DB_SUPERPASSWORD)" \
+	    psql -q -h $(DB_HOST) -p $(DB_PORT) -U $(DB_SUPERUSER) -d postgres -v ON_ERROR_STOP=1 >/dev/null
+	@echo "Done. Example DSN: postgresql://$(LEARNING_WORKER_DB_USER):<secret>@$(DB_HOST):$(DB_PORT)/postgres"
 
 .PHONY: test
 test:

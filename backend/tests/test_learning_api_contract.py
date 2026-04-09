@@ -7,7 +7,9 @@ follow the Red-Green-Refactor cycle after updating the OpenAPI contract.
 """
 from __future__ import annotations
 
+import importlib
 import os
+import sys
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -980,6 +982,44 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
         ]
     finally:
         learning.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_set_storage_adapter_updates_existing_learning_route_globals_after_reload():
+    """A fresh `routes.learning` import must still retarget already-registered route globals."""
+
+    def _find_finalize_endpoint():
+        from fastapi.routing import APIRoute
+
+        for route in main.app.routes:
+            if isinstance(route, APIRoute) and route.path == "/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize":
+                return route.endpoint
+        raise AssertionError("finalize route not registered")
+
+    original_learning = importlib.import_module("routes.learning")
+    original_adapter = original_learning.STORAGE_ADAPTER
+    endpoint = _find_finalize_endpoint()
+    original_globals = endpoint.__globals__
+    assert "STORAGE_ADAPTER" in original_globals
+
+    for name in ("routes.learning", "backend.web.routes.learning"):
+        sys.modules.pop(name, None)
+
+    fresh_learning = importlib.import_module("routes.learning")
+    assert fresh_learning is not original_learning
+
+    class _Adapter:
+        def presign_download(self, *, bucket, key, expires_in, disposition):
+            return {"url": "http://storage.local/reloaded.pdf"}
+
+    adapter = _Adapter()
+    try:
+        fresh_learning.set_storage_adapter(adapter)
+        assert fresh_learning.STORAGE_ADAPTER is adapter
+        assert endpoint.__globals__["STORAGE_ADAPTER"] is adapter
+    finally:
+        fresh_learning.set_storage_adapter(original_adapter)
+        assert endpoint.__globals__["STORAGE_ADAPTER"] is original_adapter
 
 
 @pytest.mark.anyio

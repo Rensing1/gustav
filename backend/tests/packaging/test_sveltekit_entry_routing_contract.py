@@ -30,11 +30,13 @@ def test_root_route_is_public_but_redirects_authenticated_users() -> None:
     root_page_src = root_page_path.read_text(encoding="utf-8")
     guard_src = guard_path.read_text(encoding="utf-8")
 
-    assert "readTypedJsonOrNull" in root_loader_src
+    assert "parent()" in root_loader_src
     assert "redirect(" in root_loader_src
     assert "bootstrap.start_target" in root_loader_src
     assert "if (bootstrap)" in root_loader_src
     assert "return {" in root_loader_src
+    assert '"/api/app/session-bootstrap"' not in root_loader_src
+    assert "readTypedJsonOrNull" not in root_loader_src
 
     for needle in (
         "Anmelden",

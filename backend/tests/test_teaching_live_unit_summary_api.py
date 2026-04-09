@@ -779,6 +779,17 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
     except Exception:
         pytest.skip("DB-backed repos required for helper fallback test")
 
+    monkeypatch.setattr(
+        teaching,
+        "resolve_student_login_labels_by_sub",
+        lambda subs: {str(sid): str(sid).split("@", 1)[0].replace("legacy-email:", "") for sid in subs},
+    )
+    monkeypatch.setattr(
+        teaching.REPO,
+        "list_unit_latest_submission_aggregates_for_owner",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("bulk helper unavailable in compat test")),
+    )
+
     main.SESSION_STORE = SessionStore()
     owner = main.SESSION_STORE.create(sub="t-live-fallback-owner", name="Owner", roles=["teacher"])  # type: ignore
     student = main.SESSION_STORE.create(sub="s-live-fallback", name="Fallback", roles=["student"])  # type: ignore
@@ -856,7 +867,8 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
 
         monkeypatch.setattr(psycopg, "connect", _patched_connect)
 
-        caplog.set_level("WARNING")
+        caplog.clear()
+        caplog.set_level("WARNING", logger="gustav.web.teaching")
         response = await owner_client.get(
             f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary"
         )
@@ -865,8 +877,7 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
         assert body["rows"], "expected rows despite helper failure"
         student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
         assert any(cell["has_submission"] for cell in student_row["tasks"])
-        if caplog.messages:
-            assert any("get_unit_latest_submissions_for_owner" in msg for msg in caplog.messages)
+        assert any("get_unit_latest_submissions_for_owner" in msg for msg in caplog.messages)
 
 
 @pytest.mark.anyio
@@ -881,6 +892,17 @@ async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypa
         assert isinstance(learning.REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required for helper compatibility test")
+
+    monkeypatch.setattr(
+        teaching,
+        "resolve_student_login_labels_by_sub",
+        lambda subs: {str(sid): str(sid).split("@", 1)[0].replace("legacy-email:", "") for sid in subs},
+    )
+    monkeypatch.setattr(
+        teaching.REPO,
+        "list_unit_latest_submission_aggregates_for_owner",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("bulk helper unavailable in compat test")),
+    )
 
     main.SESSION_STORE = SessionStore()
     owner = main.SESSION_STORE.create(sub="t-live-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
@@ -962,7 +984,8 @@ async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypa
 
         monkeypatch.setattr(psycopg, "connect", _patched_connect)
 
-        caplog.set_level("WARNING")
+        caplog.clear()
+        caplog.set_level("WARNING", logger="gustav.web.teaching")
         response = await owner_client.get(
             f"/api/teaching/courses/{cid}/units/{unit['id']}/submissions/summary"
         )
@@ -970,8 +993,7 @@ async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypa
         body = response.json()
         student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
         assert any(cell["has_submission"] for cell in student_row["tasks"])
-        if caplog.messages:
-            assert any("get_unit_latest_submissions_for_owner" in msg for msg in caplog.messages)
+        assert any("get_unit_latest_submissions_for_owner" in msg for msg in caplog.messages)
 
 
 @pytest.mark.anyio

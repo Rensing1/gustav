@@ -146,13 +146,28 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
     entered = threading.Event()
     release = threading.Event()
 
-    class _BlockingVisionAdapter:
+    class _VisionAdapter:
         def extract(self, *, submission: dict, job_payload: dict) -> VisionResult:  # type: ignore[override]
-            entered.set()
-            assert release.wait(timeout=10), "test timeout: vision adapter never released"
-            return VisionResult(text_md="OCR text", raw_metadata={"adapter": "blocking"})
+            return VisionResult(text_md="OCR text", raw_metadata={"adapter": "pass-through"})
 
     class _FeedbackAdapter:
+        def analyze_visual(  # type: ignore[override]
+            self,
+            *,
+            submission: dict,
+            job_payload: dict,
+            criteria,
+            instruction_md=None,
+            teacher_context_md=None,
+        ) -> FeedbackResult:
+            entered.set()
+            assert release.wait(timeout=10), "test timeout: visual feedback adapter never released"
+            return FeedbackResult(
+                feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+                analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+                parse_status="parsed_structured",
+            )
+
         def analyze(self, *, text_md: str, criteria, instruction_md=None, teacher_context_md=None) -> FeedbackResult:  # type: ignore[override]
             return FeedbackResult(
                 feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
@@ -166,7 +181,7 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
         try:
             run_once(
                 dsn=worker_dsn,
-                vision_adapter=_BlockingVisionAdapter(),
+                vision_adapter=_VisionAdapter(),
                 feedback_adapter=_FeedbackAdapter(),
                 now=future_tick,
             )
@@ -176,7 +191,7 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
     t = threading.Thread(target=_run_worker, daemon=True)
     t.start()
 
-    assert entered.wait(timeout=10), "test timeout: worker did not enter vision adapter"
+    assert entered.wait(timeout=10), "test timeout: worker did not enter visual feedback adapter"
 
     # 1) Job row must already be leased and committed (visible to other sessions).
     with psycopg.connect(base_dsn) as conn:  # type: ignore[arg-type]

@@ -20,6 +20,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Request
+from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
 
 from backend.learning.repo_db import DBLearningRepo
@@ -73,12 +74,82 @@ learning_router = APIRouter(tags=["Learning"])
 logger = logging.getLogger("gustav.web.learning")
 
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
+_STORAGE_ADAPTER_OVERRIDE_ACTIVE = False
+
+
+def _current_learning_module() -> object | None:
+    """Return the currently active learning module instance when available."""
+
+    return _sys.modules.get("routes.learning") or _sys.modules.get("backend.web.routes.learning")
+
+
+def _current_storage_adapter() -> StorageAdapterProtocol:
+    """Resolve the active storage adapter from the current learning module."""
+
+    if _STORAGE_ADAPTER_OVERRIDE_ACTIVE:
+        return STORAGE_ADAPTER
+    module = _current_learning_module()
+    adapter = getattr(module, "STORAGE_ADAPTER", None) if module is not None else None
+    if adapter is None:
+        return STORAGE_ADAPTER
+    return adapter
+
+
+def _current_async_forward_upload() -> Any:
+    """Resolve the active upload forwarder from the current learning module."""
+
+    module = _current_learning_module()
+    forwarder = getattr(module, "_async_forward_upload", None) if module is not None else None
+    return forwarder or _async_forward_upload
+
+
+def _current_emit_upload_proxy_telemetry() -> Any:
+    """Resolve the active telemetry emitter from the current learning module."""
+
+    module = _current_learning_module()
+    emitter = getattr(module, "_emit_upload_proxy_telemetry", None) if module is not None else None
+    return emitter or _emit_upload_proxy_telemetry
+
+
+def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol) -> None:
+    """Keep already-registered FastAPI learning routes bound to the latest adapter.
+
+    Why:
+        Some tests deliberately reload `routes.learning` while keeping an older
+        `main.app` instance alive. FastAPI route callables keep the globals from
+        the module instance they were created in, so updating only the freshly
+        imported module would leave old route endpoints pointing at a stale
+        `STORAGE_ADAPTER`.
+    """
+
+    for module_name in ("main", "backend.web.main"):
+        main_module = _sys.modules.get(module_name)
+        app = getattr(main_module, "app", None) if main_module is not None else None
+        routes = getattr(app, "routes", None)
+        if not routes:
+            continue
+        for route in routes:
+            if not isinstance(route, APIRoute):
+                continue
+            if not str(getattr(route, "path", "")).startswith("/api/learning"):
+                continue
+            route_globals = getattr(route.endpoint, "__globals__", None)
+            if isinstance(route_globals, dict) and "STORAGE_ADAPTER" in route_globals:
+                route_globals["STORAGE_ADAPTER"] = adapter
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
-    """Allow tests or startup code to provide a concrete storage adapter."""
-    global STORAGE_ADAPTER
+    """Allow tests or startup code to provide a concrete storage adapter.
+
+    The update also retargets already-registered Learning route globals in
+    existing FastAPI app instances. This keeps reload-heavy tests deterministic
+    when a fresh `routes.learning` module is imported after `main.app` was
+    constructed earlier in the same Python process.
+    """
+    global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
+    _STORAGE_ADAPTER_OVERRIDE_ACTIVE = True
+    _sync_learning_route_globals(adapter=adapter)
 
 
 def _storage_bucket() -> str:
@@ -122,7 +193,7 @@ def _attach_submission_files(submission: dict[str, Any]) -> dict[str, Any]:
         return payload
 
     bucket = _storage_bucket()
-    adapter = STORAGE_ADAPTER
+    adapter = _current_storage_adapter()
     if not bucket or isinstance(adapter, NullStorageAdapter):
         return payload
 
@@ -2011,7 +2082,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     )
 
     bucket = _storage_bucket()
-    adapter = STORAGE_ADAPTER
+    adapter = _current_storage_adapter()
     # Lazy wiring: if adapter is not ready, try wiring once now.
     if isinstance(adapter, NullStorageAdapter):
         try:
@@ -2019,7 +2090,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         except Exception:
             # Non-fatal; fall through to stub/503 handling.
             pass
-        adapter = STORAGE_ADAPTER  # refresh after potential wiring
+        adapter = _current_storage_adapter()  # refresh after potential wiring
 
     # Dev fallback when adapter remains unavailable.
     if not bucket or isinstance(adapter, NullStorageAdapter):
@@ -2139,7 +2210,7 @@ def _verify_storage_object(storage_key: str, sha256: str, size_bytes: int, mime_
 
     config = verification_config_from_env()
     return verify_storage_object_integrity(
-        adapter=STORAGE_ADAPTER,
+        adapter=_current_storage_adapter(),
         storage_key=storage_key,
         expected_sha256=sha256,
         expected_size=size_bytes,
@@ -2314,7 +2385,7 @@ async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int
         return local
 
     bucket = _storage_bucket()
-    adapter = STORAGE_ADAPTER
+    adapter = _current_storage_adapter()
     if not bucket or isinstance(adapter, NullStorageAdapter):
         return None
     try:
@@ -2408,7 +2479,7 @@ async def internal_upload_proxy(request: Request):
     content_type_for_log = request.headers.get("content-type") or "application/octet-stream"
 
     def _proxy_error(payload: dict[str, str], *, status_code: int, reason: str) -> JSONResponse:
-        _emit_upload_proxy_telemetry(
+        _current_emit_upload_proxy_telemetry()(
             outcome="error",
             status_code=status_code,
             reason=reason,
@@ -2420,7 +2491,7 @@ async def internal_upload_proxy(request: Request):
 
     user, error = _require_student(request)
     if error:
-        _emit_upload_proxy_telemetry(
+        _current_emit_upload_proxy_telemetry()(
             outcome="error",
             status_code=int(getattr(error, "status_code", 401)),
             reason="auth",
@@ -2507,7 +2578,7 @@ async def internal_upload_proxy(request: Request):
         return _proxy_error({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, reason="mime_not_allowed")
 
     try:
-        resp = await _async_forward_upload(
+        resp = await _current_async_forward_upload()(
             url=target,
             payload=body,
             content_type=content_type,
@@ -2523,7 +2594,7 @@ async def internal_upload_proxy(request: Request):
 
     import hashlib as _hashlib
     h = _hashlib.sha256(); h.update(body)
-    _emit_upload_proxy_telemetry(
+    _current_emit_upload_proxy_telemetry()(
         outcome="success",
         status_code=200,
         reason="ok",

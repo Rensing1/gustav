@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import uuid
+import importlib
 from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
@@ -68,16 +69,13 @@ class FakeStorageAdapter(StorageAdapterProtocol):
 @contextmanager
 def _use_storage_adapter(adapter):
     """Temporarily override the learning storage adapter for a test."""
-    had_attr = hasattr(learning, "STORAGE_ADAPTER")
-    original = getattr(learning, "STORAGE_ADAPTER", None)
-    setattr(learning, "STORAGE_ADAPTER", adapter)
+    current_learning = importlib.import_module("routes.learning")
+    original = getattr(current_learning, "STORAGE_ADAPTER", None)
+    current_learning.set_storage_adapter(adapter)
     try:
         yield adapter
     finally:
-        if had_attr:
-            setattr(learning, "STORAGE_ADAPTER", original)
-        else:
-            delattr(learning, "STORAGE_ADAPTER")
+        current_learning.set_storage_adapter(original)
 
 
 async def _client() -> httpx.AsyncClient:
@@ -317,6 +315,9 @@ async def test_upload_intent_returns_503_when_storage_missing(monkeypatch):
     student_sid, course_id, task_id = await _prepare_fixture()
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "600")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     with _use_storage_adapter(NullStorageAdapter()):
         async with (await _client()) as c:
             c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)

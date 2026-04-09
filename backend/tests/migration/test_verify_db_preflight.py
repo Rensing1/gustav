@@ -283,6 +283,7 @@ def test_run_preflight_succeeds_when_calliope_is_allowed(monkeypatch) -> None:  
         "fetch_live_h5p_helper_result_signature",
         lambda _conn: "TABLE(student_sub text, task_id uuid, score_raw integer, score_max integer)",
     )
+    monkeypatch.setattr(mod, "has_live_bulk_aggregate_helper", lambda _conn: True)
     out = io.StringIO()
     err = io.StringIO()
     rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)

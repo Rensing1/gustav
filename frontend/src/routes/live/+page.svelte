@@ -3,6 +3,7 @@
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import type { LearningSubmission } from "$lib/types/learning";
   import type { LiveDetailSubmission } from "$lib/types/home";
+  import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { PageData } from "./$types";
 
@@ -13,15 +14,41 @@
   const formatScore = (value: number | null | undefined) =>
     typeof value === "number" ? `Ø ${value.toFixed(1)}` : "Noch unbewertet";
 
+  const submissionTimestampFormatter = new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+
   const tabLabel = (tab: PanelTab) => {
     if (tab === "submission") {
       return "Abgabe";
     }
     if (tab === "evaluation") {
-      return "Bewertung";
+      return "Auswertung";
     }
     return "Rückmeldung";
   };
+
+  function formatSubmissionTimestamp(value: string): string {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    const parts = submissionTimestampFormatter.formatToParts(parsed);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+    return `${get("day")}.${get("month")}.${get("year")}, ab ${get("hour")}:${get("minute")} Uhr`;
+  }
+
+  function stripSubmissionSchemaHeader(value: string | null | undefined): string {
+    const raw = typeof value === "string" ? value : "";
+    return raw
+      .replace(/^# scratch\.evidence\.v2\s*\n+/u, "")
+      .replace(/^# makecode\.evidence\.v1\s*\n+/u, "");
+  }
 
   function taskStripTone(score: number | null, hasSubmission: boolean): string {
     if (!hasSubmission) {
@@ -252,11 +279,7 @@
           {#if data.dashboard.selected_student_panel}
             <header class="live-panel__header">
               <div class="live-panel__copy">
-                <p class="workspace-label">Detailpanel</p>
                 <h3>{data.dashboard.selected_student_panel.student.name}</h3>
-                <p class="workspace-note">
-                  Aufgabe wählen, dann zwischen Abgabe, Bewertung und Rückmeldung wechseln.
-                </p>
               </div>
             </header>
 
@@ -278,18 +301,17 @@
               {@const selectedSubmission = data.dashboard.selected_student_panel.selected_task_detail}
               {@const selectedFile = primaryFile(selectedSubmission)}
               {@const artifactSubmission = detailToLearningSubmission(selectedSubmission)}
+              {@const selectedArtifact = buildSubmissionArtifactView(artifactSubmission)}
 
-              <section class="learning-task-submission-summary live-panel-summary" aria-label="Ausgewählte Aufgabe">
+              <section class="learning-task-submission-summary live-panel-summary" aria-label="Aufgabendetail">
                 <header class="learning-task-submission-summary__header">
                   <div class="learning-task-submission-summary__copy">
-                    <p class="workspace-label">Ausgewählte Aufgabe</p>
-                    <p class="live-panel-summary__title">
-                      {
-                        data.dashboard.selected_student_panel.tasks.find((task) => task.task_id === data.dashboard.selected_student_panel?.selected_task_id)
-                          ?.task_label ?? "Aufgabe"
-                      }
+                    <p class="learning-task-submission-summary__meta live-panel-summary__meta">
+                      {formatSubmissionTimestamp(selectedSubmission.created_at)}
                     </p>
-                    <p class="learning-task-submission-summary__meta">{selectedSubmission.created_at}</p>
+                    <div class="markdown-prose live-panel-summary__instruction">
+                      {@html renderMarkdown(selectedSubmission.instruction_md)}
+                    </div>
                   </div>
                 </header>
 
@@ -306,16 +328,6 @@
                   </button>
                   <button
                     class="workspace-tab"
-                    class:workspace-tab--active={activePanelTab === "evaluation"}
-                    role="tab"
-                    type="button"
-                    aria-selected={activePanelTab === "evaluation"}
-                    onclick={() => (activePanelTab = "evaluation")}
-                  >
-                    Bewertung
-                  </button>
-                  <button
-                    class="workspace-tab"
                     class:workspace-tab--active={activePanelTab === "feedback"}
                     role="tab"
                     type="button"
@@ -324,17 +336,27 @@
                   >
                     Rückmeldung
                   </button>
+                  <button
+                    class="workspace-tab"
+                    class:workspace-tab--active={activePanelTab === "evaluation"}
+                    role="tab"
+                    type="button"
+                    aria-selected={activePanelTab === "evaluation"}
+                    onclick={() => (activePanelTab = "evaluation")}
+                  >
+                    Auswertung
+                  </button>
                 </div>
 
                 <div class="learning-task-submission-summary__panel live-panel-summary__panel" role="tabpanel" aria-label={tabLabel(activePanelTab)}>
                   {#if activePanelTab === "submission"}
                     <section class="live-panel-block">
                       <p class="workspace-label">Abgabe</p>
-                      {#if artifactSubmission.text_body && (artifactSubmission.text_body.startsWith("# makecode.evidence.v1") || artifactSubmission.text_body.startsWith("# scratch.evidence.v2"))}
+                      {#if selectedArtifact}
                         <LearningSubmissionArtifactView submission={artifactSubmission} />
                       {:else if selectedSubmission.text_body}
                         <div class="markdown-prose">
-                          {@html renderMarkdown(selectedSubmission.text_body)}
+                          {@html renderMarkdown(stripSubmissionSchemaHeader(selectedSubmission.text_body))}
                         </div>
                       {:else if selectedFile?.mime?.startsWith("image/")}
                         <div class="learning-task-submission-summary__asset">
@@ -361,15 +383,20 @@
                       {/if}
                     </section>
 
+                  {:else if activePanelTab === "feedback"}
                     <section class="live-panel-block">
-                      <p class="workspace-label">Aufgabe als Referenz</p>
-                      <div class="markdown-prose">
-                        {@html renderMarkdown(selectedSubmission.instruction_md)}
-                      </div>
+                      <p class="workspace-label">Rückmeldung</p>
+                      {#if selectedSubmission.feedback_md}
+                        <div class="markdown-prose">
+                          {@html renderMarkdown(selectedSubmission.feedback_md)}
+                        </div>
+                      {:else}
+                        <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
+                      {/if}
                     </section>
-                  {:else if activePanelTab === "evaluation"}
+                  {:else}
                     <section class="live-panel-block">
-                      <p class="workspace-label">Bewertung</p>
+                      <p class="workspace-label">Auswertung</p>
                       {#if selectedSubmission.analysis_json?.criteria_results?.length}
                         <ul class="learning-unit-criteria">
                           {#each selectedSubmission.analysis_json.criteria_results as criterion}
@@ -394,17 +421,6 @@
                         <p class="learning-task-submission-summary__plain">Es liegt noch keine Auswertung vor.</p>
                       {/if}
                     </section>
-                  {:else}
-                    <section class="live-panel-block">
-                      <p class="workspace-label">Rückmeldung</p>
-                      {#if selectedSubmission.feedback_md}
-                        <div class="markdown-prose">
-                          {@html renderMarkdown(selectedSubmission.feedback_md)}
-                        </div>
-                      {:else}
-                        <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
-                      {/if}
-                    </section>
                   {/if}
                 </div>
               </section>
@@ -418,7 +434,6 @@
             {/if}
           {:else}
             <section class="live-panel-empty">
-              <p class="workspace-label">Detailpanel</p>
               <p class="workspace-empty">
                 Wähle eine Schülerzeile, um Aufgabenleiste und Detailansicht zu öffnen.
               </p>

@@ -41,6 +41,7 @@ def test_frontend_live_page_uses_dashboard_read_model() -> None:
     assert 'name="unit_id"' in page_source
     assert "live-selection__unit-chip" not in page_source
     assert "LearningSubmissionArtifactView" in page_source
+    assert "buildSubmissionArtifactView" in page_source
     assert "renderMarkdown" in page_source
     assert 'role="tablist"' in page_source
     assert "selected_task_detail" in page_source
@@ -48,8 +49,19 @@ def test_frontend_live_page_uses_dashboard_read_model() -> None:
     assert "score-zero" in page_source
     assert "submitted-unscored" in page_source
     assert "<pre>{data.dashboard.selected_student_panel" not in page_source
-    assert page_source.index('<p class="workspace-label">Abgabe</p>') < page_source.index(
-        '<p class="workspace-label">Aufgabe als Referenz</p>'
-    )
-    assert "Referenz" in page_source
+    assert "Detailpanel" not in page_source
+    assert "Aufgabe wählen, dann zwischen Abgabe, Bewertung und Rückmeldung wechseln." not in page_source
+    assert "Ausgewählte Aufgabe" not in page_source
+    assert "Aufgabe als Referenz" not in page_source
+    assert "formatSubmissionTimestamp" in page_source
+    assert "stripSubmissionSchemaHeader" in page_source
+    assert "ab " in page_source
+    assert "Uhr" in page_source
+    assert page_source.index("live-panel-summary__meta") < page_source.index("live-panel-summary__instruction")
+    assert page_source.index("live-panel-summary__instruction") < page_source.index('role="tablist"')
+    assert page_source.index("Abgabe\n                  </button>") < page_source.index("Rückmeldung\n                  </button>")
+    assert page_source.index("Rückmeldung\n                  </button>") < page_source.index("Auswertung\n                  </button>")
     assert "Keine Vorschau" in page_source
+    assert 'startsWith("# makecode.evidence.v1")' not in page_source
+    assert 'startsWith("# scratch.evidence.v2")' not in page_source
+    assert "@html renderMarkdown(stripSubmissionSchemaHeader(selectedSubmission.text_body))" in page_source

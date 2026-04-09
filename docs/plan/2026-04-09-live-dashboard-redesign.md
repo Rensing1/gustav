@@ -51,6 +51,12 @@ Datum: 2026-04-09
 - Das Panel zeigt nicht mehr starr nur die letzte Abgabe, sondern die aktuell gewählte Aufgabe.
 - Die Darstellung orientiert sich an der Lernseite:
   - horizontale Aufgabenleiste mit kompakten Status-Rechtecken
-  - Tabs `Abgabe`, `Bewertung`, `Rückmeldung`
+  - Tabs `Abgabe`, `Rückmeldung`, `Auswertung`
   - Markdown- und Artefakt-Darstellung über Shared-Utilities statt über rohe `pre`-Blöcke
 - Auf Desktop bleibt das Panel als rechte Sidecar-Fläche sticky sichtbar; auf kleineren Displays wandert es unter die Tabelle.
+
+## Nachtrag: Inhaltshierarchie im Detailpanel
+- Im Kopf des Panels bleibt nur der Schülername; Hilfstexte und Meta-Labels entfallen.
+- Oberhalb der Tabs stehen ein subtil formatierter Zeitstempel und direkt darunter die Aufgabenstellung.
+- Die Aufgabenstellung wird als Markdown gerendert und nicht mehr als nachgelagerter Referenzblock gezeigt.
+- Die Tab-Sprache wird an die Schüleransicht angeglichen: `Abgabe`, `Rückmeldung`, `Auswertung`.

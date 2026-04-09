@@ -234,11 +234,20 @@ describe("handleLogout", () => {
 
     expect(clearTokenSessionMock).toHaveBeenCalledWith(cookies, eventFetch);
     expect(eventFetch).toHaveBeenCalledOnce();
+    const [requestUrl, requestInit] = eventFetch.mock.calls[0] || [];
+    expect(String(requestUrl)).toBe("http://backend.test/auth/logout?redirect=%2Fauth%2Flogout%2Fsuccess");
+    expect(requestInit).toMatchObject({
+      method: "GET",
+      redirect: "manual",
+      headers: expect.objectContaining({
+        "x-gustav-id-token-hint": "bff-id-token"
+      })
+    });
     expect(response.status).toBe(302);
     const location = response.headers.get("location") || "";
-    expect(location).toContain("post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fauth%2Flogout%2Fsuccess");
-    expect(location).toContain("id_token_hint=bff-id-token");
-    expect(location).not.toContain("client_id=gustav-web");
+    expect(location).toBe(
+      "https://id.localhost/realms/gustav/protocol/openid-connect/logout?client_id=gustav-web&post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fauth%2Flogout%2Fsuccess"
+    );
     expect(response.headers.get("set-cookie")).toContain("gustav_session=");
   });
 
@@ -259,9 +268,41 @@ describe("handleLogout", () => {
     const response = await handleLogout(createEvent("https://app.localhost/auth/logout?redirect=/courses", cookies, eventFetch));
 
     expect(response.status).toBe(302);
+    const [requestUrl, requestInit] = eventFetch.mock.calls[0] || [];
+    expect(String(requestUrl)).toBe("http://backend.test/auth/logout?redirect=%2Fcourses");
+    expect(requestInit).toMatchObject({
+      headers: expect.not.objectContaining({
+        "x-gustav-id-token-hint": expect.anything()
+      })
+    });
+    const location = response.headers.get("location") || "";
+    expect(location).toBe("http://backend.test/auth/logout?redirect=%2Fcourses");
+  });
+
+  it("keeps the logout success redirect stable when only the backend app session is still present", async () => {
+    readTokenSessionMock.mockResolvedValue(null);
+    clearTokenSessionMock.mockResolvedValue(undefined);
+
+    const cookies = new MemoryCookies();
+    const eventFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: {
+          location:
+            "https://id.localhost/realms/gustav/protocol/openid-connect/logout?client_id=gustav-web&post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fauth%2Flogout%2Fsuccess",
+          "set-cookie": "gustav_session=; Path=/; Max-Age=0; HttpOnly"
+        }
+      })
+    );
+
+    const response = await handleLogout(
+      createEvent("https://app.localhost/auth/logout?redirect=/auth/logout/success", cookies, eventFetch)
+    );
+
+    expect(response.status).toBe(302);
     const location = response.headers.get("location") || "";
     expect(location).toContain("client_id=gustav-web");
-    expect(location).not.toContain("id_token_hint=");
-    expect(location).toContain("post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fcourses");
+    expect(location).toContain("post_logout_redirect_uri=https%3A%2F%2Fapp.localhost%2Fauth%2Flogout%2Fsuccess");
+    expect(response.headers.get("set-cookie")).toContain("gustav_session=");
   });
 });

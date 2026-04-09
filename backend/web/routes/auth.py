@@ -428,13 +428,13 @@ async def auth_logout(request: Request, redirect: str | None = None):
         safe_redirect = safe_inapp_path(redirect)
         # After logout, go to the app success page with a re-login link
         dest = (f"{app_base}{safe_redirect}" if safe_redirect else f"{app_base}/auth/logout/success").rstrip("/")
-        # Build params: prefer id_token_hint (best compatibility), else include client_id
+        # Build params: prefer a forwarded BFF logout hint, then stored app-session
+        # state, and only fall back to client_id when no ID token is available.
         params = {"post_logout_redirect_uri": dest}
-        # Prefer the session's id_token; fall back to request.state (set by middleware)
-        id_tok = None
-        if rec and getattr(rec, "id_token", None):
+        id_tok = (request.headers.get("x-gustav-id-token-hint") or "").strip() or None
+        if not id_tok and rec and getattr(rec, "id_token", None):
             id_tok = rec.id_token
-        else:
+        if not id_tok:
             try:
                 id_tok = getattr(getattr(request, "state", object()), "id_token", None)
             except Exception:

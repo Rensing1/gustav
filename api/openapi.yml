@@ -137,6 +137,16 @@ components:
           type: boolean
         password_change_href:
           type: string
+    AppSessionSyncRequest:
+      type: object
+      properties:
+        id_token:
+          type: string
+          description: >-
+            Optional OIDC ID token from the Svelte BFF login flow. When
+            provided, the backend stores it with the app session so logout can
+            complete the Keycloak end-session flow without falling back to a
+            confirmation page.
     ProfileDisplayNameUpdate:
       type: object
       required: [display_name]
@@ -6102,6 +6112,12 @@ paths:
       x-security-notes:
         - "CSRF: Endpoint is intended for the authenticated same-origin BFF bridge, not cross-site browser forms."
         - "Auth: requires a valid bearer-authenticated BFF context before minting the app cookie."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppSessionSyncRequest'
       responses:
         '204':
           description: App session synchronized successfully

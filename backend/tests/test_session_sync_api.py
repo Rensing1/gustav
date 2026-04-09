@@ -51,7 +51,11 @@ async def test_session_sync_mints_gustav_session_from_bearer_auth(monkeypatch: p
     headers = _mock_bearer_auth(monkeypatch, sub="student-sync", roles=["student"], name="Lena")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        response = await client.post("/api/app/session-sync", headers=headers)
+        response = await client.post(
+            "/api/app/session-sync",
+            headers=headers,
+            json={"id_token": "id-token-sync-1"},
+        )
 
     assert response.status_code == 204
     assert response.headers.get("Cache-Control") == "private, no-store"
@@ -67,6 +71,7 @@ async def test_session_sync_mints_gustav_session_from_bearer_auth(monkeypatch: p
     assert record.sub == "student-sync"
     assert record.roles == ["student"]
     assert getattr(record, "name", "") == "Lena"
+    assert getattr(record, "id_token", None) == "id-token-sync-1"
 
 
 @pytest.mark.anyio
@@ -78,7 +83,11 @@ async def test_session_sync_replaces_existing_gustav_session(monkeypatch: pytest
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, stale.session_id)
-        response = await client.post("/api/app/session-sync", headers=headers)
+        response = await client.post(
+            "/api/app/session-sync",
+            headers=headers,
+            json={"id_token": "id-token-sync-2"},
+        )
 
     assert response.status_code == 204
     assert store.get(stale.session_id) is None, "stale app session should be replaced"
@@ -89,6 +98,7 @@ async def test_session_sync_replaces_existing_gustav_session(monkeypatch: pytest
     assert morsel is not None
     assert morsel.value != stale.session_id
     assert store.get(morsel.value).sub == "teacher-sync"
+    assert getattr(store.get(morsel.value), "id_token", None) == "id-token-sync-2"
 
 
 @pytest.mark.anyio

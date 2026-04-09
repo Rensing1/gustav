@@ -25,6 +25,13 @@ def test_app_session_sync_contract() -> None:
 
     assert post_op.get("security"), "POST /api/app/session-sync must require authentication"
     assert post_op.get("security") == [{"bearerAuth": []}]
+    request_body = post_op.get("requestBody") or {}
+    assert request_body.get("required") is False
+    schema = (
+        ((request_body.get("content") or {}).get("application/json") or {}).get("schema")
+        or {}
+    )
+    assert schema.get("$ref") == "#/components/schemas/AppSessionSyncRequest"
 
     responses = post_op.get("responses") or {}
     assert "204" in responses, "POST /api/app/session-sync must define 204 response"

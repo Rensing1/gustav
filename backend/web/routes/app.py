@@ -52,6 +52,10 @@ class BFFSessionSyncPayload(BaseModel):
     expires_at: int = Field(gt=0)
 
 
+class AppSessionSyncPayload(BaseModel):
+    id_token: str | None = Field(default=None, min_length=1)
+
+
 class ProfileNameLockedError(RuntimeError):
     """Raised when Vorname/Nachname are currently locked."""
 
@@ -730,7 +734,7 @@ async def get_session_bootstrap(request: Request):
 
 
 @app_router.post("/api/app/session-sync")
-async def post_session_sync(request: Request):
+async def post_session_sync(request: Request, payload: AppSessionSyncPayload | None = None):
     """Mint a stable app session from a bearer-authenticated Svelte BFF request."""
     user = _current_user(request)
     if user is None:
@@ -750,7 +754,7 @@ async def post_session_sync(request: Request):
         roles=[str(role) for role in (user.get("roles") or []) if isinstance(role, str)] or ["student"],
         name=str(user.get("name") or ""),
         ttl_seconds=mod._app_session_ttl_seconds(),
-        id_token=getattr(request.state, "id_token", None),
+        id_token=(payload.id_token if payload is not None else None) or getattr(request.state, "id_token", None),
     )
     response = Response(status_code=204, headers=_private_headers())
     mod._set_session_cookie(response, session.session_id, request=request)

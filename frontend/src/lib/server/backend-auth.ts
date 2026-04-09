@@ -76,13 +76,15 @@ function createJsonError(status: number, error: string): Response {
   });
 }
 
-async function syncAppSession(event: RequestEvent, accessToken: string): Promise<string | null> {
+async function syncAppSession(event: RequestEvent, accessToken: string, idToken: string): Promise<string | null> {
   try {
     const response = await event.fetch(buildApiUrl("/api/app/session-sync"), {
       method: "POST",
       headers: {
-        authorization: `Bearer ${accessToken}`
-      }
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ id_token: idToken })
     });
     if (!response.ok) {
       return null;
@@ -403,7 +405,7 @@ export async function handleAuthCallback(event: RequestEvent): Promise<Response>
     }
     tokenSessionCreated = true;
 
-    const appSessionCookie = await syncAppSession(event, tokens.access_token);
+    const appSessionCookie = await syncAppSession(event, tokens.access_token, tokens.id_token);
     if (!appSessionCookie) {
       await clearTokenSession(event.cookies, event.fetch);
       return createJsonError(502, "session_setup_failed");
@@ -430,26 +432,27 @@ export async function handleLogout(event: RequestEvent): Promise<Response> {
   const redirectPath = safeRedirectPath(event.url.searchParams.get("redirect")) || "/auth/logout/success";
   await clearTokenSession(event.cookies, event.fetch);
   const backendLogoutBaseUrl = buildApiUrl("/auth/logout");
+  const backendLogoutHeaders: Record<string, string> = {
+    cookie: event.request.headers.get("cookie") || ""
+  };
+  if (tokenSession?.idToken) {
+    backendLogoutHeaders["x-gustav-id-token-hint"] = tokenSession.idToken;
+  }
 
   const backendLogoutResponse = await event.fetch(
     `${backendLogoutBaseUrl}?redirect=${encodeURIComponent(redirectPath)}`,
     {
       method: "GET",
-      headers: {
-        cookie: event.request.headers.get("cookie") || ""
-      },
+      headers: backendLogoutHeaders,
       redirect: "manual"
     }
   );
 
-  const url = new URL(logoutEndpoint());
-  url.searchParams.set("post_logout_redirect_uri", `${resolveAppBase(event.url)}${redirectPath}`);
-  if (tokenSession?.idToken) {
-    url.searchParams.set("id_token_hint", tokenSession.idToken);
-  } else {
-    url.searchParams.set("client_id", kcClientId());
+  const logoutLocation = backendLogoutResponse.headers.get("location");
+  if (!logoutLocation) {
+    return createJsonError(502, "logout_redirect_missing");
   }
-  const response = createRedirectResponse(url.toString());
+  const response = createRedirectResponse(logoutLocation);
   const clearedAppSession = backendLogoutResponse.headers.get("set-cookie");
   if (clearedAppSession) {
     response.headers.append("set-cookie", clearedAppSession);

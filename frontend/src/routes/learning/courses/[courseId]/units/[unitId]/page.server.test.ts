@@ -146,7 +146,16 @@ describe("learning unit route actions", () => {
   it("keeps final submissions inline and marks them as submit-pending", async () => {
     mockModularLoad();
     backendRequestMock.mockResolvedValue(
-      jsonResponse({ id: "submission-2", intent: "submit", analysis_status: "completed", created_at: "2026-04-07T12:00:00+00:00" }, 201)
+      jsonResponse(
+        {
+          id: "submission-2",
+          intent: "submit",
+          analysis_status: "completed",
+          created_at: "2026-04-07T12:00:00+00:00",
+          files: [{ mime: "application/pdf", size: 2048, url: "http://storage.local/submission.pdf" }]
+        },
+        201
+      )
     );
 
     const form = new FormData();
@@ -179,7 +188,8 @@ describe("learning unit route actions", () => {
         id: "submission-2",
         intent: "submit",
         analysis_status: "completed",
-        created_at: "2026-04-07T12:00:00+00:00"
+        created_at: "2026-04-07T12:00:00+00:00",
+        files: [{ mime: "application/pdf", size: 2048, url: "http://storage.local/submission.pdf" }]
       },
       message: "submitted"
     });

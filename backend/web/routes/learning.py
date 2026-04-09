@@ -1752,7 +1752,8 @@ async def finalize_submission(request: Request, course_id: str, task_id: str, pa
             headers=_cache_headers_error(),
         )
 
-    return JSONResponse(submission, status_code=201, headers=_cache_headers_success())
+    decorated = _attach_submission_files(submission)
+    return JSONResponse(decorated, status_code=201, headers=_cache_headers_success())
 
 
 def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, course_id: str, task_id: str, student_sub: str) -> None:

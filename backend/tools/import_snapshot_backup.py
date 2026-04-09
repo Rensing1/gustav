@@ -912,11 +912,20 @@ def _extract_storage_tar(storage_tar_gz: Path, dest: Path) -> Path:
     return dest
 
 
-def _restore_h5p_storage_tar(h5p_storage_tar_gz: Path, dest: Path) -> Path:
-    """Restore the raw H5P filesystem snapshot into the local storage root."""
-    if dest.exists():
-        shutil.rmtree(dest)
+def _clear_directory_contents(dest: Path) -> Path:
+    """Remove all children from a directory while keeping the directory itself."""
     dest.mkdir(parents=True, exist_ok=True)
+    for child in dest.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+            continue
+        child.unlink()
+    return dest
+
+
+def _restore_h5p_storage_tar(h5p_storage_tar_gz: Path, dest: Path) -> Path:
+    """Restore H5P storage in place so bind-mounted container roots stay stable."""
+    _clear_directory_contents(dest)
     with tarfile.open(h5p_storage_tar_gz, "r:gz") as tar:
         _safe_extract_tar(tar, dest)
     return dest

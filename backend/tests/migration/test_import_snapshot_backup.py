@@ -893,6 +893,31 @@ def test_restore_h5p_storage_tar_extracts_into_target_root(tmp_path: Path) -> No
     assert (target_root / "content" / "2689406715" / "h5p.json").read_text(encoding="utf-8") == "{}"
 
 
+def test_restore_h5p_storage_tar_keeps_existing_root_directory(tmp_path: Path) -> None:
+    archive = tmp_path / "h5p_storage.tar.gz"
+    _write_tar_gz(
+        archive,
+        members={
+            "content/2689406715/content.json": b"{}",
+            "tmp/marker.txt": b"fresh",
+        },
+    )
+
+    target_root = tmp_path / "restored_h5p"
+    target_root.mkdir(parents=True)
+    stale_child = target_root / "stale.txt"
+    stale_child.write_text("obsolete", encoding="utf-8")
+    root_stat_before = target_root.stat()
+
+    restored = mod._restore_h5p_storage_tar(archive, target_root)
+
+    assert restored == target_root
+    assert target_root.stat().st_ino == root_stat_before.st_ino
+    assert not stale_child.exists()
+    assert (target_root / "content" / "2689406715" / "content.json").read_text(encoding="utf-8") == "{}"
+    assert (target_root / "tmp" / "marker.txt").read_text(encoding="utf-8") == "fresh"
+
+
 def test_assert_snapshot_h5p_storage_complete_skips_when_no_h5p_tasks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(mod, "_list_snapshot_h5p_task_refs", lambda _dsn: [])
 
